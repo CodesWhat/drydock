@@ -9,8 +9,16 @@ vi.mock('node:fs', () => ({
   default: { readFileSync: vi.fn().mockReturnValue(Buffer.from('cert-data')) },
 }));
 const mockResolveConfiguredPath = vi.hoisted(() => vi.fn((path) => path));
+const mockOffloadSbomDocuments = vi.hoisted(() => vi.fn());
+const mockCreateSbomStorage = vi.hoisted(() => vi.fn(() => ({ storage: 'controller' })));
 vi.mock('../runtime/paths.js', () => ({
   resolveConfiguredPath: mockResolveConfiguredPath,
+}));
+vi.mock('../security/sbom-migration.js', () => ({
+  offloadSbomDocuments: mockOffloadSbomDocuments,
+}));
+vi.mock('../security/sbom-storage.js', () => ({
+  createSbomStorage: mockCreateSbomStorage,
 }));
 const mockLogChild = vi.hoisted(() => ({
   info: vi.fn(),
@@ -257,6 +265,42 @@ describe('AgentClient', () => {
   });
 
   describe('processContainer', () => {
+    test('offloads agent SBOM documents into controller storage before persistence', async () => {
+      const ref = { key: 'sbom/ref.json', sha256: 'a'.repeat(64), bytes: 2 };
+      mockOffloadSbomDocuments.mockImplementation(async ({ sbom }) => ({
+        ...sbom,
+        documents: undefined,
+        documentRefs: { 'spdx-json': ref },
+      }));
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementationOnce((container) => container);
+      const container = {
+        id: 'c1',
+        name: 'test',
+        image: { digest: { value: `sha256:${'1'.repeat(64)}` } },
+        result: { digest: `sha256:${'2'.repeat(64)}` },
+        security: {
+          sbom: { image: 'app:current', documents: { 'spdx-json': { current: true } } },
+          updateSbom: { image: 'app:update', documents: { 'spdx-json': { update: true } } },
+        },
+      };
+
+      await client.processContainer(container);
+
+      expect(mockOffloadSbomDocuments).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ subjectDigest: `sha256:${'1'.repeat(64)}` }),
+      );
+      expect(mockOffloadSbomDocuments).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ subjectDigest: `sha256:${'2'.repeat(64)}` }),
+      );
+      const persisted = storeContainer.insertContainer.mock.calls[0][0];
+      expect(persisted.security.sbom.documents).toBeUndefined();
+      expect(persisted.security.updateSbom.documents).toBeUndefined();
+      expect(persisted.security.sbom.documentRefs['spdx-json']).toEqual(ref);
+    });
+
     test('should await emitContainerReport before resolving', async () => {
       let resolveEmit;
       const emitPromise = new Promise<void>((resolve) => {

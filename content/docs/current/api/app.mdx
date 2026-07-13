@@ -37,7 +37,7 @@ curl http://drydock:3000/api/v1/server
 
 ## Get security runtime status
 
-Returns the availability status of security tools (Trivy scanner, Cosign signature verification) and SBOM configuration. Use this to check whether the runtime environment has the required binaries before triggering scans.
+Returns backend, provider, scanner-asset, Cosign, and SBOM-generator status. Command mode checks local binaries; Docker/remote modes inspect digest-pinned worker assets.
 
 ```bash
 curl http://drydock:3000/api/v1/server/security/runtime
@@ -45,12 +45,14 @@ curl http://drydock:3000/api/v1/server/security/runtime
 {
   "checkedAt": "2024-12-01T10:00:00.000Z",
   "ready": true,
+  "backend": "docker",
+  "availabilityPolicy": "block",
   "scanner": {
     "enabled": true,
-    "command": "trivy",
+    "command": "aquasec/trivy@sha256:…",
     "commandAvailable": true,
     "status": "ready",
-    "message": "Trivy client is ready",
+    "message": "trivy scanner is ready via docker",
     "scanner": "trivy",
     "server": ""
   },
@@ -63,8 +65,11 @@ curl http://drydock:3000/api/v1/server/security/runtime
   },
   "sbom": {
     "enabled": true,
-    "formats": ["spdx-json", "cyclonedx-json"]
+    "formats": ["spdx-json", "cyclonedx-json"],
+    "generator": "trivy"
   },
+  "providers": [{ "provider": "trivy", "role": "scanner", "status": "ready" }],
+  "assets": [{ "provider": "trivy", "state": "ready", "resolvedDigest": "sha256:…" }],
   "requirements": []
 }
 ```
@@ -74,7 +79,9 @@ curl http://drydock:3000/api/v1/server/security/runtime
 | Field | Type | Description |
 | --- | --- | --- |
 | `checkedAt` | string | ISO 8601 timestamp of the check |
-| `ready` | boolean | `true` when the scanner is enabled and its command is available |
+| `ready` | boolean | `true` when every required scanner/SBOM provider is ready |
+| `backend` | string | `command`, `docker`, or Trivy-only `remote` |
+| `availabilityPolicy` | string | Fail-closed `block` or explicit advisory `warn` |
 | `scanner.enabled` | boolean | Whether vulnerability scanning is configured |
 | `scanner.command` | string | Scanner command (e.g. `trivy`) |
 | `scanner.commandAvailable` | boolean \| null | Whether the command was found in the runtime; `null` when disabled |
@@ -86,9 +93,23 @@ curl http://drydock:3000/api/v1/server/security/runtime
 | `signature.status` | string | `ready`, `missing`, or `disabled` |
 | `sbom.enabled` | boolean | Whether SBOM generation is enabled |
 | `sbom.formats` | string[] | Configured SBOM output formats |
+| `sbom.generator` | string | Effective `trivy` or `syft` generator |
+| `providers` | object[] | Normalized provider health and remediation details |
+| `assets` | object[] | Worker image state, configured/resolved digest, version, cache timestamps, and failures |
 | `requirements` | string[] | Human-readable list of missing dependencies (empty when everything is ready) |
 
 Returns 200 on success, or 500 if the runtime check fails.
+
+## Pull or warm scanner assets
+
+Docker/remote backends expose an audited lifecycle action:
+
+```bash
+curl -X POST http://drydock:3000/api/v1/server/security/assets/grype/pull
+curl -X POST http://drydock:3000/api/v1/server/security/assets/grype/warm
+```
+
+Providers are `trivy`, `grype`, and `syft`; operations are `pull` and `warm`. The response is the resulting asset status. Invalid combinations return 400, while runtime/pull/warm failures return 503 without exposing credentials.
 
 ## Download diagnostic debug dump
 

@@ -8,6 +8,7 @@ const {
   createFsMock,
   createConfigMock,
   createCollectionsMock,
+  createContainerMock,
   createAgentKeysMock,
   createLogMock,
   registerCommonMocks,
@@ -44,6 +45,15 @@ const {
     return { createCollections: vi.fn(), completeStartupInitialization: vi.fn() };
   }
 
+  function createContainerMock(overrides = {}) {
+    return {
+      ...createCollectionsMock(),
+      getContainersRaw: vi.fn(() => []),
+      updateContainer: vi.fn(),
+      ...overrides,
+    };
+  }
+
   function createAgentKeysMock() {
     return {
       createCollections: vi.fn(),
@@ -64,6 +74,8 @@ const {
       lokiInstance?: Parameters<typeof createLokiMock>[2];
       fs?: Record<string, unknown>;
       config?: Record<string, unknown>;
+      container?: Record<string, unknown>;
+      migrateInlineSboms?: (options: Record<string, any>) => Promise<Record<string, number>>;
       portwingAuthorizedKeysPath?: string | undefined;
     } = {},
   ) {
@@ -75,11 +87,19 @@ const {
       ...createConfigMock(overrides.config ?? STORE_CONFIG),
       getPortwingAuthorizedKeysPath: vi.fn(() => overrides.portwingAuthorizedKeysPath),
     }));
+    vi.doMock('../security/sbom-migration.js', async () => {
+      const actual = await vi.importActual<typeof import('../security/sbom-migration.js')>(
+        '../security/sbom-migration.js',
+      );
+      return overrides.migrateInlineSboms
+        ? { ...actual, migrateInlineSboms: vi.fn(overrides.migrateInlineSboms) }
+        : actual;
+    });
     vi.doMock('./agent-keys', createAgentKeysMock);
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
-    vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./container', () => createContainerMock(overrides.container));
     vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./notification-history', createCollectionsMock);
@@ -97,6 +117,7 @@ const {
     createFsMock,
     createConfigMock,
     createCollectionsMock,
+    createContainerMock,
     createAgentKeysMock,
     createLogMock,
     registerCommonMocks,
@@ -114,7 +135,7 @@ vi.mock('../configuration', () => ({
 vi.mock('./app', createCollectionsMock);
 vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
-vi.mock('./container', createCollectionsMock);
+vi.mock('./container', createContainerMock);
 vi.mock('./name-bindings', createCollectionsMock);
 vi.mock('./notification', createCollectionsMock);
 vi.mock('./notification-history', createCollectionsMock);
@@ -188,6 +209,32 @@ describe('Store Module', () => {
     await expect(storeWithError.init()).rejects.toThrow('Database load failed');
   });
 
+  test('should reject initialization when post-load SBOM migration rejects', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+      container: {
+        getContainersRaw: vi.fn(() => {
+          throw new Error('SBOM migration failed');
+        }),
+      },
+    });
+
+    const storeWithMigrationError = await import('./index.js');
+    const initWithDeadline = Promise.race([
+      storeWithMigrationError.init(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Store initialization did not settle')), 100);
+      }),
+    ]);
+
+    await expect(initWithDeadline).rejects.toThrow('SBOM migration failed');
+  });
+
   test('should initialize store in memory mode', async () => {
     vi.resetModules();
     registerCommonMocks({
@@ -197,6 +244,8 @@ describe('Store Module', () => {
 
     const storeMemory = await import('./index.js');
     await storeMemory.init({ memory: true });
+
+    expect(storeMemory.isMemoryStore()).toBe(true);
 
     const app = await import('./app.js');
     const container = await import('./container.js');
@@ -211,6 +260,56 @@ describe('Store Module', () => {
     expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
     expect(app.completeStartupInitialization).toHaveBeenCalled();
+  });
+
+  test('should report an uninitialized store as memory-only and a loaded store as persistent', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeMode = await import('./index.js');
+    expect(storeMode.isMemoryStore()).toBe(true);
+
+    await storeMode.init();
+
+    expect(storeMode.isMemoryStore()).toBe(false);
+  });
+
+  test('should persist migrated SBOM metadata and log partial migration failures', async () => {
+    vi.resetModules();
+    const migratedContainer = { id: 'container-1', security: { sbom: { documentRefs: {} } } };
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+      migrateInlineSboms: vi.fn(async ({ persist }) => {
+        persist(migratedContainer);
+        return { migratedRecords: 1, migratedDocuments: 2, failures: 1 };
+      }),
+    });
+
+    const storeWithMigration = await import('./index.js');
+    await storeWithMigration.init();
+
+    const container = await import('./container.js');
+    const Loki = (await import('lokijs')).default;
+    const logger = (await import('../log/index.js')).default;
+    const scopedLog = logger.child.mock.results[0].value;
+    expect(container.updateContainer).toHaveBeenCalledWith(migratedContainer);
+    expect(Loki.mock.results[0].value.saveDatabase).toHaveBeenCalledOnce();
+    expect(scopedLog.info).toHaveBeenCalledWith(
+      'Migrated 2 inline SBOM document(s) across 1 record(s)',
+    );
+    expect(scopedLog.warn).toHaveBeenCalledWith(
+      'Failed to migrate 1 SBOM record(s); inline data was preserved for retry',
+    );
   });
 
   test('should save database when persistence is enabled', async () => {
@@ -282,7 +381,7 @@ describe('Store Module', () => {
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
-    vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./container', createContainerMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
@@ -522,7 +621,7 @@ describe('Store Module', () => {
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
-    vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./container', createContainerMock);
     vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./notification-history', createCollectionsMock);

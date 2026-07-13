@@ -28,6 +28,7 @@ docker.configuration = configurationValid;
 docker.log = log;
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
+const mockGetStoreConfiguration = vi.hoisted(() => vi.fn());
 const mockGetTrivyDatabaseStatus = vi.hoisted(() => vi.fn());
 const mockGetSchedulerScanIntervalMs = vi.hoisted(() => vi.fn());
 vi.mock('../../../configuration/index.js', async () => {
@@ -37,8 +38,33 @@ vi.mock('../../../configuration/index.js', async () => {
   return {
     ...actual,
     getSecurityConfiguration: (...args: any[]) => mockGetSecurityConfiguration(...args),
+    getStoreConfiguration: (...args: any[]) => mockGetStoreConfiguration(...args),
   };
 });
+
+const mockIsMemoryStore = vi.hoisted(() => vi.fn());
+vi.mock('../../../store/index.js', () => ({
+  isMemoryStore: (...args: any[]) => mockIsMemoryStore(...args),
+}));
+
+const mockOffloadSbomDocuments = vi.hoisted(() => vi.fn());
+vi.mock('../../../security/sbom-migration.js', () => ({
+  offloadSbomDocuments: (...args: any[]) => mockOffloadSbomDocuments(...args),
+}));
+
+const mockSbomStorage = vi.hoisted(() => ({
+  writeDocument: vi.fn(),
+  readDocument: vi.fn(),
+}));
+const mockCreateSbomStorage = vi.hoisted(() => vi.fn(() => mockSbomStorage));
+vi.mock('../../../security/sbom-storage.js', () => ({
+  createSbomStorage: (...args: any[]) => mockCreateSbomStorage(...args),
+}));
+
+const mockResolveConfiguredPath = vi.hoisted(() => vi.fn((value: string) => value));
+vi.mock('../../../runtime/paths.js', () => ({
+  resolveConfiguredPath: (...args: any[]) => mockResolveConfiguredPath(...args),
+}));
 
 vi.mock('../../../security/runtime.js', () => ({
   getTrivyDatabaseStatus: (...args: any[]) => mockGetTrivyDatabaseStatus(...args),
@@ -423,6 +449,11 @@ export function registerCommonDockerBeforeEach() {
         formats: ['spdx-json'],
       },
     });
+    mockGetStoreConfiguration.mockReturnValue({ path: '/test/store' });
+    mockIsMemoryStore.mockReturnValue(true);
+    mockOffloadSbomDocuments.mockImplementation(async ({ sbom }) => sbom);
+    mockCreateSbomStorage.mockReturnValue(mockSbomStorage);
+    mockResolveConfiguredPath.mockImplementation((value: string) => value);
     mockGetTrivyDatabaseStatus.mockResolvedValue(undefined);
     mockGetSchedulerScanIntervalMs.mockReturnValue(86_400_000);
     mockScanImageForVulnerabilities.mockResolvedValue({
@@ -454,6 +485,12 @@ export function getDockerTestMocks() {
   return {
     mockGetState,
     mockGetSecurityConfiguration,
+    mockGetStoreConfiguration,
+    mockIsMemoryStore,
+    mockOffloadSbomDocuments,
+    mockCreateSbomStorage,
+    mockSbomStorage,
+    mockResolveConfiguredPath,
     mockGetTrivyDatabaseStatus,
     mockGetSchedulerScanIntervalMs,
     mockScanImageForVulnerabilities,

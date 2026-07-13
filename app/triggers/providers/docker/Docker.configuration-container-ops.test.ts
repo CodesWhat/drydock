@@ -10,6 +10,14 @@ import {
 
 const { mockGetState } = getDockerTestMocks();
 const { mockGetTrivyDatabaseStatus, mockGetSchedulerScanIntervalMs } = getDockerTestMocks();
+const {
+  mockGetStoreConfiguration,
+  mockIsMemoryStore,
+  mockOffloadSbomDocuments,
+  mockCreateSbomStorage,
+  mockSbomStorage,
+  mockResolveConfiguredPath,
+} = getDockerTestMocks();
 
 registerCommonDockerBeforeEach();
 
@@ -277,6 +285,54 @@ test('getSecurityGate should tolerate missing trivy database status and prune im
   );
   expect(dockerApi.getImage).toHaveBeenCalledWith('ghcr.io/acme/web:2.0.0');
   expect(remove).toHaveBeenCalled();
+});
+
+test('getSecurityGate should keep inline SBOMs for memory-only stores', async () => {
+  const sbom = {
+    image: 'ghcr.io/acme/web:2.0.0',
+    formats: ['spdx-json'],
+    documents: { 'spdx-json': { SPDXID: 'SPDXRef-DOCUMENT' } },
+  };
+  mockIsMemoryStore.mockReturnValue(true);
+  (docker as any).securityGate = undefined;
+
+  const gate = docker.getSecurityGate();
+
+  await expect(gate.offloadSbom(sbom as any, 'sha256:abc123')).resolves.toBe(sbom);
+  expect(mockOffloadSbomDocuments).not.toHaveBeenCalled();
+  expect(mockCreateSbomStorage).not.toHaveBeenCalled();
+});
+
+test.each([
+  [{ path: '/custom/store' }, '/custom/store'],
+  [{}, '/store'],
+])('getSecurityGate should offload SBOMs for persistent store configuration %j', async (config, rootDir) => {
+  const sbom = {
+    image: 'ghcr.io/acme/web:2.0.0',
+    formats: ['spdx-json'],
+    documents: { 'spdx-json': { SPDXID: 'SPDXRef-DOCUMENT' } },
+  };
+  const offloadedSbom = {
+    ...sbom,
+    documents: undefined,
+    documentRefs: { 'spdx-json': { key: 'ref' } },
+  };
+  mockIsMemoryStore.mockReturnValue(false);
+  mockGetStoreConfiguration.mockReturnValue(config);
+  mockResolveConfiguredPath.mockImplementation((value: string) => value);
+  mockOffloadSbomDocuments.mockResolvedValue(offloadedSbom);
+  (docker as any).securityGate = undefined;
+
+  const gate = docker.getSecurityGate();
+
+  await expect(gate.offloadSbom(sbom as any, 'sha256:abc123')).resolves.toBe(offloadedSbom);
+  expect(mockResolveConfiguredPath).toHaveBeenCalledWith(rootDir, { label: 'DD_STORE_PATH' });
+  expect(mockCreateSbomStorage).toHaveBeenCalledWith({ rootDir });
+  expect(mockOffloadSbomDocuments).toHaveBeenCalledWith({
+    sbom,
+    subjectDigest: 'sha256:abc123',
+    storage: mockSbomStorage,
+  });
 });
 
 test('maybeScanAndGateUpdate should delegate to the security gate', async () => {

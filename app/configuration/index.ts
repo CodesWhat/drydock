@@ -15,6 +15,12 @@ export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as co
 const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
+const DEFAULT_TRIVY_WORKER_IMAGE =
+  'aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c';
+const DEFAULT_GRYPE_WORKER_IMAGE =
+  'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1';
+const DEFAULT_SYFT_WORKER_IMAGE =
+  'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36';
 
 export type SecuritySeverity = (typeof SECURITY_SEVERITY_VALUES)[number];
 export type SecuritySbomFormat = (typeof SECURITY_SBOM_FORMAT_VALUES)[number];
@@ -626,6 +632,26 @@ function parseSecuritySbomFormatList(rawValue: string | undefined): SecuritySbom
   );
 }
 
+function parseSecurityExtraArgs(rawValue: string | undefined, envName: string): string[] {
+  if (!rawValue || rawValue.trim() === '') {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (
+      !Array.isArray(parsed) ||
+      parsed.some(
+        (value) => typeof value !== 'string' || value.trim() === '' || value.includes('\0'),
+      )
+    ) {
+      throw new Error('invalid');
+    }
+    return parsed.map((value) => value.trim());
+  } catch {
+    throw new Error(`${envName} must be a JSON array of strings`);
+  }
+}
+
 function parseDelimitedEnumList<T extends string>(
   rawValue: string | undefined,
   defaultRawValue: string,
@@ -702,7 +728,23 @@ function validateCosignKeyPath(rawKeyPath: string): string {
 export function getSecurityConfiguration() {
   const configurationFromEnv = get('dd.security', ddEnvVars);
   const configurationSchema = joi.object().keys({
-    scanner: joi.string().insensitive().valid('trivy').allow('').default(''),
+    scanner: joi.string().insensitive().valid('trivy', 'grype', 'both').allow('').default(''),
+    backend: joi.string().insensitive().valid('command', 'docker', 'remote').default('command'),
+    availability: joi
+      .object({
+        policy: joi.string().insensitive().valid('block', 'warn').default('block'),
+      })
+      .default({}),
+    docker: joi
+      .object({
+        socket: joi.string().default('/var/run/docker.sock'),
+        host: joi.string().allow('').default(''),
+        port: joi.number().integer().min(1).max(65535).default(2375),
+        protocol: joi.string().valid('http', 'https').default('http'),
+        network: joi.string().default('bridge'),
+        cache: joi.object({ volume: joi.string().default('drydock-scanner-cache') }).default({}),
+      })
+      .default({}),
     block: joi
       .object({
         severity: joi.string().allow('').default(DEFAULT_SECURITY_BLOCK_SEVERITY),
@@ -713,9 +755,27 @@ export function getSecurityConfiguration() {
         server: joi.string().allow('').default(''),
         command: joi.string().default('trivy'),
         timeout: joi.number().integer().min(1000).default(600000),
+        args: joi.string().allow('').default('[]'),
         image: joi
           .object({
             src: joi.string().allow('').default(''),
+          })
+          .default({}),
+        worker: joi
+          .object({
+            image: joi.string().default(DEFAULT_TRIVY_WORKER_IMAGE),
+          })
+          .default({}),
+      })
+      .default({}),
+    grype: joi
+      .object({
+        command: joi.string().default('grype'),
+        timeout: joi.number().integer().min(1000).default(600000),
+        args: joi.string().allow('').default('[]'),
+        worker: joi
+          .object({
+            image: joi.string().default(DEFAULT_GRYPE_WORKER_IMAGE),
           })
           .default({}),
       })
@@ -742,6 +802,19 @@ export function getSecurityConfiguration() {
       .object({
         enabled: joi.boolean().default(false),
         formats: joi.string().allow('').default(DEFAULT_SECURITY_SBOM_FORMATS),
+        generator: joi.string().insensitive().valid('auto', 'trivy', 'syft').default('auto'),
+      })
+      .default({}),
+    syft: joi
+      .object({
+        command: joi.string().default('syft'),
+        timeout: joi.number().integer().min(1000).default(600000),
+        args: joi.string().allow('').default('[]'),
+        worker: joi
+          .object({
+            image: joi.string().default(DEFAULT_SYFT_WORKER_IMAGE),
+          })
+          .default({}),
       })
       .default({}),
     gate: joi
@@ -779,6 +852,15 @@ export function getSecurityConfiguration() {
 
   const configuration = configurationToValidate.value;
   const scanner = configuration.scanner ? configuration.scanner.toLowerCase() : '';
+  const backend = configuration.backend.toLowerCase() as 'command' | 'docker' | 'remote';
+  if (
+    backend === 'remote' &&
+    (scanner !== 'trivy' || !`${configuration.trivy?.server || ''}`.trim())
+  ) {
+    throw new Error(
+      'DD_SECURITY_BACKEND=remote requires DD_SECURITY_SCANNER=trivy and DD_SECURITY_TRIVY_SERVER',
+    );
+  }
   const blockSeverities = parseSecuritySeverityList(configuration.block?.severity);
   const sbomFormats = parseSecuritySbomFormatList(configuration.sbom?.formats);
   const cosignKey = validateCosignKeyPath(configuration.cosign?.key || '');
@@ -786,12 +868,32 @@ export function getSecurityConfiguration() {
   return {
     enabled: scanner !== '',
     scanner,
+    backend,
+    availabilityPolicy: (configuration.availability?.policy || 'block').toLowerCase() as
+      | 'block'
+      | 'warn',
+    docker: {
+      socket: configuration.docker?.socket || '/var/run/docker.sock',
+      host: configuration.docker?.host || '',
+      port: configuration.docker?.port || 2375,
+      protocol: (configuration.docker?.protocol || 'http') as 'http' | 'https',
+      network: configuration.docker?.network || 'bridge',
+      cacheVolumePrefix: configuration.docker?.cache?.volume || 'drydock-scanner-cache',
+    },
     blockSeverities,
     trivy: {
       server: configuration.trivy?.server || '',
       command: configuration.trivy?.command || 'trivy',
       timeout: configuration.trivy?.timeout || 600000,
       imageSrc: configuration.trivy?.image?.src || '',
+      extraArgs: parseSecurityExtraArgs(configuration.trivy?.args, 'DD_SECURITY_TRIVY_ARGS'),
+      workerImage: configuration.trivy?.worker?.image || DEFAULT_TRIVY_WORKER_IMAGE,
+    },
+    grype: {
+      command: configuration.grype?.command || 'grype',
+      timeout: configuration.grype?.timeout || 600000,
+      extraArgs: parseSecurityExtraArgs(configuration.grype?.args, 'DD_SECURITY_GRYPE_ARGS'),
+      workerImage: configuration.grype?.worker?.image || DEFAULT_GRYPE_WORKER_IMAGE,
     },
     signature: {
       verify: Boolean(configuration.verify?.signatures),
@@ -806,6 +908,16 @@ export function getSecurityConfiguration() {
     sbom: {
       enabled: Boolean(configuration.sbom?.enabled),
       formats: sbomFormats,
+      generator: (configuration.sbom?.generator || 'auto').toLowerCase() as
+        | 'auto'
+        | 'trivy'
+        | 'syft',
+    },
+    syft: {
+      command: configuration.syft?.command || 'syft',
+      timeout: configuration.syft?.timeout || 600000,
+      extraArgs: parseSecurityExtraArgs(configuration.syft?.args, 'DD_SECURITY_SYFT_ARGS'),
+      workerImage: configuration.syft?.worker?.image || DEFAULT_SYFT_WORKER_IMAGE,
     },
     gate: {
       mode: (configuration.gate?.mode || 'on').toLowerCase() as 'on' | 'off',
@@ -825,8 +937,12 @@ export function getSecurityConfiguration() {
 
 export type SecurityConfiguration = Pick<
   ReturnType<typeof getSecurityConfiguration>,
-  'enabled' | 'scanner' | 'sbom' | 'gate' | 'prune'
+  'enabled' | 'scanner' | 'gate' | 'prune'
 > & {
+  backend?: ReturnType<typeof getSecurityConfiguration>['backend'];
+  availabilityPolicy?: ReturnType<typeof getSecurityConfiguration>['availabilityPolicy'];
+  sbom: Pick<ReturnType<typeof getSecurityConfiguration>['sbom'], 'enabled' | 'formats'> &
+    Partial<Pick<ReturnType<typeof getSecurityConfiguration>['sbom'], 'generator'>>;
   signature: Pick<ReturnType<typeof getSecurityConfiguration>['signature'], 'verify'>;
 };
 

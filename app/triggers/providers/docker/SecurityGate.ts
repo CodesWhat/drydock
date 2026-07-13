@@ -123,6 +123,7 @@ type SecurityGateDependencies = {
   getTrivyDbUpdatedAt?: () => Promise<string | undefined>;
   getScanIntervalMs?: () => number;
   pruneImage?: PruneImageFn;
+  offloadSbom?: (sbom: SbomResult, subjectDigest?: string) => Promise<SbomResult>;
 };
 
 type SecurityGateConstructorOptions = Omit<
@@ -132,12 +133,14 @@ type SecurityGateConstructorOptions = Omit<
   | 'getTrivyDbUpdatedAt'
   | 'getScanIntervalMs'
   | 'pruneImage'
+  | 'offloadSbom'
 > & {
   recordSecurityAudit?: SecurityGateDependencies['recordSecurityAudit'];
   scanImageWithDedup?: SecurityGateDependencies['scanImageWithDedup'];
   getTrivyDbUpdatedAt?: SecurityGateDependencies['getTrivyDbUpdatedAt'];
   getScanIntervalMs?: SecurityGateDependencies['getScanIntervalMs'];
   pruneImage?: SecurityGateDependencies['pruneImage'];
+  offloadSbom?: SecurityGateDependencies['offloadSbom'];
 };
 
 const REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS = [
@@ -206,6 +209,8 @@ class SecurityGate {
     pruneImage?: PruneImageFn;
   };
 
+  offloadSbom: NonNullable<SecurityGateDependencies['offloadSbom']>;
+
   constructor(options: SecurityGateConstructorOptions) {
     const dependencies = resolveFunctionDependencies<SecurityGateDependencies>(options, {
       requiredKeys: REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS,
@@ -238,6 +243,7 @@ class SecurityGate {
       getScanIntervalMs: options.getScanIntervalMs,
       pruneImage: options.pruneImage,
     };
+    this.offloadSbom = options.offloadSbom ?? (async (sbom) => sbom);
   }
 
   createSecurityFailure(code: SecurityFailureCode, message: string): TriggerPipelineError {
@@ -285,7 +291,7 @@ class SecurityGate {
   }
 
   shouldRunSecurityGate(securityConfiguration: SecurityConfiguration): boolean {
-    return securityConfiguration.enabled && securityConfiguration.scanner === 'trivy';
+    return securityConfiguration.enabled;
   }
 
   getContainerGateModeOverride(container: SecurityContainer): 'on' | 'off' | undefined {
@@ -447,11 +453,13 @@ class SecurityGate {
     }
 
     logContainer.info(`Generating SBOM for candidate image ${context.newImage}`);
-    const sbomResult = await this.scanners.generateImageSbom({
+    const generatedSbom = await this.scanners.generateImageSbom({
       image: context.newImage,
       auth: context.auth,
       formats: securityConfiguration.sbom.formats,
     });
+    const subjectDigest = await this.resolveImageDigest(context.newImage, context.dockerApi);
+    const sbomResult = await this.offloadSbom(generatedSbom, subjectDigest);
     await this.persistSecurityState(container, { slot: 'update', sbom: sbomResult }, logContainer);
 
     if (sbomResult.status === 'error') {
@@ -602,6 +610,15 @@ class SecurityGate {
           logContainer,
           securityConfiguration,
         );
+      }
+      if (scanResult.status === 'error' && securityConfiguration.availabilityPolicy === 'warn') {
+        this.telemetry.recordSecurityAudit(
+          'security-scan-skipped',
+          container,
+          'error',
+          `Security scan unavailable; update allowed by DD_SECURITY_AVAILABILITY_POLICY=warn: ${scanResult.error || 'unknown scanner error'}`,
+        );
+        return;
       }
       await this.evaluateScanOutcome(container, scanResult);
     } catch (error: unknown) {

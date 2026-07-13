@@ -5,6 +5,7 @@ const mockGetSecurityVulnerabilityOverview = vi.fn();
 const mockScanContainer = vi.fn();
 const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
+const mockManageSecurityAsset = vi.fn();
 const mockGetAllContainers = vi.fn();
 const mockRouterPush = vi.fn().mockResolvedValue(undefined);
 // Real refs (not plain `{ value }` objects) — the component's template uses bare
@@ -32,6 +33,7 @@ vi.mock('@/services/container', () => ({
 
 vi.mock('@/services/server', () => ({
   getSecurityRuntime: (...args: any[]) => mockGetSecurityRuntime(...args),
+  manageSecurityAsset: (...args: any[]) => mockManageSecurityAsset(...args),
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
@@ -501,6 +503,7 @@ describe('SecurityView', () => {
     mockWindowNarrow.value = false;
     mockUpdateMode.value = 'manual';
     mockGetSecurityRuntime.mockResolvedValue(readyRuntimeStatus());
+    mockManageSecurityAsset.mockResolvedValue(undefined);
     mockGetAllContainers.mockResolvedValue([]);
     mockRouterPush.mockResolvedValue(undefined);
   });
@@ -1059,6 +1062,40 @@ describe('SecurityView', () => {
       expect(scanButton.exists()).toBe(true);
       expect(scanButton.attributes('data-icon')).toBe('restart');
       expect(scanButton.attributes('data-size')).toBe('toolbar');
+    });
+  });
+
+  describe('compact scanner asset controls', () => {
+    it('renders touch-friendly pull and warm controls and runs the selected operation', async () => {
+      mockWindowNarrow.value = true;
+      mockGetSecurityRuntime.mockResolvedValue({
+        ...readyRuntimeStatus(),
+        backend: 'docker',
+        providers: [],
+        assets: [
+          { provider: 'trivy', state: 'ready' },
+          { provider: 'grype', state: 'missing' },
+        ],
+      });
+
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const warmButton = wrapper.find('.app-icon-button-stub[aria-label="Warm trivy"]');
+      const pullButton = wrapper.find('.app-icon-button-stub[aria-label="Pull grype"]');
+      expect(warmButton.exists()).toBe(true);
+      expect(warmButton.attributes('data-icon')).toBe('restart');
+      expect(warmButton.attributes('data-size')).toBe('sm');
+      expect(pullButton.exists()).toBe(true);
+      expect(pullButton.attributes('data-icon')).toBe('cloud-download');
+      expect(pullButton.attributes('data-size')).toBe('sm');
+
+      await pullButton.trigger('click');
+      await vi.waitFor(() => expect(mockManageSecurityAsset).toHaveBeenCalledWith('grype', 'pull'));
+      await flushPromises();
+
+      expect(mockGetSecurityRuntime).toHaveBeenCalledTimes(2);
     });
   });
 

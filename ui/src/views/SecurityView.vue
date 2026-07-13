@@ -21,7 +21,7 @@ import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers } from '../services/container';
-import { getSecurityRuntime } from '../services/server';
+import { getSecurityRuntime, manageSecurityAsset } from '../services/server';
 import type { Container, UpdateEligibility } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
@@ -76,10 +76,7 @@ function runtimeToolTone(status: SecurityRuntimeStatus['scanner']['status']) {
 
 function scannerStatusLabel(scanner: SecurityRuntimeStatus['scanner']): string {
   if (scanner.status === 'disabled') return t('securityView.runtimeTools.scannerDisabled');
-  if (scanner.status === 'missing')
-    return t('securityView.runtimeTools.scannerMissing', { command: scanner.command });
-  if (scanner.server) return t('securityView.runtimeTools.scannerReadyServer');
-  return t('securityView.runtimeTools.scannerReady');
+  return scanner.message;
 }
 
 function signatureStatusLabel(signature: SecurityRuntimeStatus['signature']): string {
@@ -119,6 +116,20 @@ async function fetchContainers() {
 const runtimeLoading = ref(true);
 const runtimeError = ref<string | null>(null);
 const runtimeStatus = ref<SecurityRuntimeStatus | null>(null);
+const assetOperation = ref<string | null>(null);
+
+async function runAssetOperation(provider: 'trivy' | 'grype' | 'syft', operation: 'pull' | 'warm') {
+  assetOperation.value = `${provider}:${operation}`;
+  runtimeError.value = null;
+  try {
+    await manageSecurityAsset(provider, operation);
+    await fetchSecurityRuntimeStatus();
+  } catch (caught: unknown) {
+    runtimeError.value = errorMessage(caught, t('securityView.runtimeTools.assetOperationFailed'));
+  } finally {
+    assetOperation.value = null;
+  }
+}
 
 const scannerReady = computed(() => {
   if (!runtimeStatus.value) {
@@ -626,11 +637,25 @@ onUnmounted(() => {
                 size="xs"
                 uppercase
                 v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
+              <template v-if="runtimeStatus.backend !== 'command'">
+                <AppIconButton
+                  v-for="asset in runtimeStatus.assets"
+                  :key="`compact-asset-${asset.provider}`"
+                  :icon="asset.state === 'ready' ? 'restart' : 'cloud-download'"
+                  size="sm"
+                  variant="muted"
+                  class="shrink-0"
+                  :tooltip="t(asset.state === 'ready' ? 'securityView.runtimeTools.warmAsset' : 'securityView.runtimeTools.pullAsset', { provider: asset.provider })"
+                  :aria-label="t(asset.state === 'ready' ? 'securityView.runtimeTools.warmAsset' : 'securityView.runtimeTools.pullAsset', { provider: asset.provider })"
+                  :loading="assetOperation === `${asset.provider}:${asset.state === 'ready' ? 'warm' : 'pull'}`"
+                  :disabled="assetOperation !== null"
+                  @click="runAssetOperation(asset.provider, asset.state === 'ready' ? 'warm' : 'pull')" />
+              </template>
             </div>
             <template v-else>
               <AppStatusIndicator
                 :tone="runtimeToolTone(runtimeStatus.scanner.status)"
-                :label="t('securityView.runtimeTools.trivy')"
+                :label="runtimeStatus.scanner.scanner || t('securityView.runtimeTools.scanner')"
                 size="xs"
                 v-tooltip.top="runtimeStatus.scanner.server ? t('securityView.runtimeTools.scannerTooltipServer', { message: scannerStatusLabel(runtimeStatus.scanner), server: runtimeStatus.scanner.server }) : t('securityView.runtimeTools.scannerTooltip', { message: scannerStatusLabel(runtimeStatus.scanner) })" />
               <AppStatusIndicator
@@ -643,6 +668,26 @@ onUnmounted(() => {
                 :label="t('securityView.runtimeTools.sbom')"
                 size="xs"
                 v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
+              <template v-if="runtimeStatus.backend !== 'command'">
+                <AppStatusIndicator
+                  v-for="provider in runtimeStatus.providers"
+                  :key="provider.provider"
+                  :tone="runtimeToolTone(provider.status)"
+                  :label="provider.provider"
+                  size="xs"
+                  v-tooltip.top="provider.message" />
+                <AppButton
+                  v-for="asset in runtimeStatus.assets"
+                  :key="`asset-${asset.provider}`"
+                  size="md"
+                  variant="muted"
+                  class="min-h-11"
+                  :loading="assetOperation === `${asset.provider}:${asset.state === 'ready' ? 'warm' : 'pull'}`"
+                  :disabled="assetOperation !== null"
+                  @click="runAssetOperation(asset.provider, asset.state === 'ready' ? 'warm' : 'pull')">
+                  {{ t(asset.state === 'ready' ? 'securityView.runtimeTools.warmAsset' : 'securityView.runtimeTools.pullAsset', { provider: asset.provider }) }}
+                </AppButton>
+              </template>
             </template>
           </template>
         </template>

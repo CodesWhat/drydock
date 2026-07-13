@@ -6,6 +6,8 @@ import {
   getTrivyDatabaseStatus as getTrivyDatabaseStatusDefault,
   type TrivyDatabaseStatus,
 } from '../../security/runtime.js';
+import { offloadSbomDocuments } from '../../security/sbom-migration.js';
+import type { SbomStorage } from '../../security/sbom-storage.js';
 import type {
   ContainerSecuritySbom,
   ContainerSecurityScan,
@@ -61,6 +63,7 @@ interface SecurityHandlerDependencies {
   getErrorMessage: (error: unknown) => string;
   getContainerImageFullName: (container: Container, tagOverride?: string) => string;
   getContainerRegistryAuth: (container: Container) => Promise<RegistryAuth | undefined>;
+  sbomStorage: SbomStorage;
   updateDigestScanCache?: (
     digest: string,
     scanResult: ContainerSecurityScan,
@@ -116,6 +119,18 @@ function resolveSbomFormat(
   return undefined;
 }
 
+async function readStoredSbomDocument(
+  context: ResolvedSecurityHandlerContext,
+  sbom: ContainerSecuritySbom | undefined,
+  format: SecuritySbomFormat,
+): Promise<unknown> {
+  const ref = sbom?.documentRefs?.[format];
+  if (ref) {
+    return context.sbomStorage.readDocument(ref, format);
+  }
+  return sbom?.documents?.[format];
+}
+
 /**
  * Get latest vulnerability scan result for a container.
  * @param req
@@ -162,13 +177,23 @@ async function handleGetContainerSbom(
   }
 
   const securityConfiguration = context.getSecurityConfiguration();
-  if (!securityConfiguration.enabled || securityConfiguration.scanner !== 'trivy') {
+  if (
+    !securityConfiguration.enabled ||
+    !['trivy', 'grype', 'both'].includes(securityConfiguration.scanner || '')
+  ) {
     sendErrorResponse(res, 503, 'Security scanner is not configured');
     return;
   }
 
   const existingSbom = container.security?.sbom;
-  const existingSbomDocument = existingSbom?.documents?.[sbomFormat];
+  let existingSbomDocument: unknown;
+  try {
+    existingSbomDocument = await readStoredSbomDocument(context, existingSbom, sbomFormat);
+  } catch (error: unknown) {
+    context.log.info(
+      `Cached SBOM document is unavailable; regenerating (${context.getErrorMessage(error)})`,
+    );
+  }
   if (existingSbom?.status === 'generated' && existingSbomDocument) {
     res.status(200).json({
       generator: existingSbom.generator,
@@ -184,12 +209,30 @@ async function handleGetContainerSbom(
   try {
     const image = context.getContainerImageFullName(container);
     const auth = await context.getContainerRegistryAuth(container);
-    const sbomResult = await context.generateImageSbom({
+    const generatedSbom = await context.generateImageSbom({
       image,
       auth,
       formats: [sbomFormat],
     });
+    const generatedDocument = generatedSbom.documents?.[sbomFormat];
     const existingSbomState = container.security?.sbom;
+    const combinedSbom: ContainerSecuritySbom = {
+      ...existingSbomState,
+      ...generatedSbom,
+      formats: Array.from(
+        new Set([...(existingSbomState?.formats || []), ...generatedSbom.formats]),
+      ),
+      documentRefs: { ...(existingSbomState?.documentRefs || {}) },
+      documents: {
+        ...(existingSbomState?.documents || {}),
+        ...(generatedSbom.documents || {}),
+      },
+    };
+    const sbomResult = await offloadSbomDocuments({
+      sbom: combinedSbom,
+      storage: context.sbomStorage,
+      subjectDigest: container.image?.digest?.value,
+    });
     const containerToStore = {
       ...container,
       security: {
@@ -197,16 +240,13 @@ async function handleGetContainerSbom(
         sbom: {
           ...existingSbomState,
           ...sbomResult,
-          documents: {
-            ...(existingSbomState?.documents || {}),
-            ...sbomResult.documents,
-          },
+          documentRefs: sbomResult.documentRefs,
+          documents: undefined,
         },
       },
     };
     context.storeContainer.updateContainer(containerToStore);
 
-    const generatedDocument = sbomResult.documents?.[sbomFormat];
     if (sbomResult.status !== 'generated' || !generatedDocument) {
       context.log.info(
         `SBOM generation failed for ${image} (${sbomResult.error || 'unknown SBOM error'})`,
@@ -276,12 +316,16 @@ async function scanCurrentImage(options: {
   }
 
   if (securityConfiguration.sbom.enabled) {
-    const sbomResult = await context.generateImageSbom({
+    const generatedSbom = await context.generateImageSbom({
       image,
       auth,
       formats: securityConfiguration.sbom.formats,
     });
-    securityPatch.sbom = sbomResult;
+    securityPatch.sbom = await offloadSbomDocuments({
+      sbom: generatedSbom,
+      storage: context.sbomStorage,
+      subjectDigest: container.image?.digest?.value,
+    });
   }
 
   return { auth, scanResult, securityPatch, alertCount };
@@ -315,12 +359,16 @@ async function scanUpdateImage(options: {
       }
 
       if (securityConfiguration.sbom.enabled) {
-        const updateSbomResult = await context.generateImageSbom({
+        const generatedUpdateSbom = await context.generateImageSbom({
           image: updateImage,
           auth,
           formats: securityConfiguration.sbom.formats,
         });
-        securityPatch.updateSbom = updateSbomResult;
+        securityPatch.updateSbom = await offloadSbomDocuments({
+          sbom: generatedUpdateSbom,
+          storage: context.sbomStorage,
+          subjectDigest: container.result?.digest,
+        });
       }
     } catch (updateError: unknown) {
       context.log.info(
@@ -372,7 +420,10 @@ async function handleScanContainer(
   }
 
   const securityConfiguration = context.getSecurityConfiguration();
-  if (!securityConfiguration.enabled || securityConfiguration.scanner !== 'trivy') {
+  if (
+    !securityConfiguration.enabled ||
+    !['trivy', 'grype', 'both'].includes(securityConfiguration.scanner || '')
+  ) {
     sendErrorResponse(res, 400, 'Security scanner is not configured');
     return;
   }

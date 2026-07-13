@@ -4,6 +4,8 @@ import joi from 'joi';
 import Loki from 'lokijs';
 import logger from '../log/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../runtime/paths.js';
+import { migrateInlineSboms } from '../security/sbom-migration.js';
+import { createSbomStorage } from '../security/sbom-storage.js';
 
 const log = logger.child({ component: 'store' });
 
@@ -59,6 +61,30 @@ function createCollections() {
   app.completeStartupInitialization();
 }
 
+async function migrateSbomsOffHeap(): Promise<void> {
+  const storeDirectory = resolveConfiguredPath(configuration.path, {
+    label: 'DD_STORE_PATH',
+  });
+  const report = await migrateInlineSboms({
+    containers: container.getContainersRaw(),
+    storage: createSbomStorage({ rootDir: storeDirectory }),
+    persist: (updatedContainer) => {
+      container.updateContainer(updatedContainer);
+    },
+  });
+  if (report.migratedRecords > 0) {
+    await save();
+    log.info(
+      `Migrated ${report.migratedDocuments} inline SBOM document(s) across ${report.migratedRecords} record(s)`,
+    );
+  }
+  if (report.failures > 0) {
+    log.warn(
+      `Failed to migrate ${report.failures} SBOM record(s); inline data was preserved for retry`,
+    );
+  }
+}
+
 /**
  * Load authorized keys from DD_PORTWING_AUTHORIZED_KEYS if set.
  * Errors are logged and swallowed so a bad keys file does not abort startup.
@@ -95,6 +121,7 @@ async function loadDb(
   } else {
     // Create collections
     createCollections();
+    await migrateSbomsOffHeap();
     loadAuthorizedKeysIfConfigured();
     resolve();
   }
@@ -143,8 +170,14 @@ export async function init(options: { memory?: boolean } = {}) {
     fs.mkdirSync(storeDirectory);
   }
   return new Promise<void>((resolve, reject) => {
-    db.loadDatabase({}, (err) => loadDb(err, resolve, reject));
+    db.loadDatabase({}, (err) => {
+      void loadDb(err, resolve, reject).catch(reject);
+    });
   });
+}
+
+export function isMemoryStore(): boolean {
+  return isMemoryMode || !db;
 }
 
 /**

@@ -308,7 +308,7 @@ async function emitPerContainerSecurityAlerts(
 function isScheduledScannerEnabled(
   securityConfig: ReturnType<typeof getSecurityConfiguration>,
 ): boolean {
-  return securityConfig.enabled && securityConfig.scanner === 'trivy';
+  return securityConfig.enabled;
 }
 
 function getContainersWithDigestValues(containers: Container[]): Container[] {
@@ -572,7 +572,7 @@ export function init(): void {
     return;
   }
 
-  if (!securityConfig.enabled || securityConfig.scanner !== 'trivy') {
+  if (!securityConfig.enabled) {
     logScheduler.info('Security scanner not enabled, scheduled scanning disabled');
     return;
   }

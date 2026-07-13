@@ -334,11 +334,28 @@ export const openApiSchemas = {
     required: ['enabled', 'command', 'commandAvailable', 'status', 'message'],
     additionalProperties: true,
   },
+  SecurityRuntimeProviderStatus: {
+    type: 'object',
+    allOf: [
+      { $ref: '#/components/schemas/SecurityRuntimeToolStatus' },
+      {
+        type: 'object',
+        properties: {
+          provider: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+          role: { type: 'string', enum: ['scanner', 'sbom'] },
+        },
+        required: ['provider', 'role'],
+        additionalProperties: true,
+      },
+    ],
+  },
   SecurityRuntimeStatusResponse: {
     type: 'object',
     properties: {
       checkedAt: { type: 'string', format: 'date-time' },
       ready: { type: 'boolean' },
+      backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
+      availabilityPolicy: { type: 'string', enum: ['block', 'warn'] },
       scanner: {
         type: 'object',
         allOf: [
@@ -346,7 +363,7 @@ export const openApiSchemas = {
           {
             type: 'object',
             properties: {
-              scanner: { type: 'string' },
+              scanner: { type: 'string', enum: ['', 'trivy', 'grype', 'both'] },
               server: { type: 'string' },
             },
             required: ['scanner', 'server'],
@@ -363,16 +380,57 @@ export const openApiSchemas = {
             type: 'array',
             items: { type: 'string', enum: ['spdx-json', 'cyclonedx-json'] },
           },
+          generator: { type: 'string', enum: ['trivy', 'syft'] },
         },
-        required: ['enabled', 'formats'],
+        required: ['enabled', 'formats', 'generator'],
         additionalProperties: true,
+      },
+      providers: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/SecurityRuntimeProviderStatus' },
+      },
+      assets: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ScannerAssetStatus' },
       },
       requirements: {
         type: 'array',
         items: { type: 'string' },
       },
     },
-    required: ['checkedAt', 'ready', 'scanner', 'signature', 'sbom', 'requirements'],
+    required: [
+      'checkedAt',
+      'ready',
+      'backend',
+      'availabilityPolicy',
+      'scanner',
+      'signature',
+      'sbom',
+      'providers',
+      'assets',
+      'requirements',
+    ],
+    additionalProperties: true,
+  },
+  ScannerAssetStatus: {
+    type: 'object',
+    properties: {
+      provider: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+      backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
+      configuredImage: { type: 'string' },
+      resolvedDigest: { type: 'string' },
+      version: { type: 'string' },
+      state: { type: 'string', enum: ['missing', 'pulling', 'warming', 'ready', 'error'] },
+      operationId: { type: 'string' },
+      inspectedAt: { type: 'string', format: 'date-time' },
+      startedAt: { type: 'string', format: 'date-time' },
+      completedAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+      cacheUpdatedAt: { type: 'string', format: 'date-time' },
+      databaseUpdatedAt: { type: 'string', format: 'date-time' },
+      lastError: { type: 'string' },
+    },
+    required: ['provider', 'backend', 'configuredImage', 'state'],
     additionalProperties: true,
   },
   ContainerSummaryResponse: {

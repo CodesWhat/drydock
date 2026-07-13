@@ -256,7 +256,7 @@ export function createBulkSecurityHandlers(deps: BulkSecurityHandlerDependencies
   return {
     async scanAll(req: Request, res: Response): Promise<void> {
       const securityConfiguration = deps.getSecurityConfiguration();
-      if (!securityConfiguration.enabled || securityConfiguration.scanner !== 'trivy') {
+      if (!securityConfiguration.enabled) {
         sendErrorResponse(res, 400, 'Security scanner is not configured');
         return;
       }

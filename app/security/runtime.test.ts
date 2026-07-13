@@ -1,6 +1,7 @@
 import { afterEach, vi } from 'vitest';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
+const mockScannerAssetsStatus = vi.hoisted(() => vi.fn());
 
 const childProcessControl = vi.hoisted(() => ({
   execFileImpl: null as null | ((...args: unknown[]) => unknown),
@@ -29,8 +30,13 @@ vi.mock('node:child_process', async () => {
   };
 });
 
+vi.mock('./scanner-runtime.js', () => ({
+  getDefaultScannerRuntime: () => ({ assets: { status: mockScannerAssetsStatus } }),
+}));
+
 import {
   clearTrivyDatabaseStatusCache,
+  getScannerAssetManager,
   getSecurityRuntimeStatus,
   getTrivyDatabaseStatus,
   hasValidCommandPath,
@@ -40,11 +46,24 @@ function createEnabledConfiguration() {
   return {
     enabled: true,
     scanner: 'trivy',
+    backend: 'command',
+    availabilityPolicy: 'block',
     blockSeverities: ['CRITICAL', 'HIGH'],
     trivy: {
       server: '',
       command: 'trivy',
       timeout: 120000,
+      workerImage: `aquasec/trivy@sha256:${'a'.repeat(64)}`,
+    },
+    grype: {
+      command: 'grype',
+      timeout: 120000,
+      workerImage: `anchore/grype@sha256:${'b'.repeat(64)}`,
+    },
+    syft: {
+      command: 'syft',
+      timeout: 120000,
+      workerImage: `anchore/syft@sha256:${'c'.repeat(64)}`,
     },
     signature: {
       verify: true,
@@ -59,6 +78,7 @@ function createEnabledConfiguration() {
     sbom: {
       enabled: false,
       formats: ['spdx-json'],
+      generator: 'auto',
     },
   };
 }
@@ -68,6 +88,7 @@ beforeEach(() => {
   childProcessControl.execFileImpl = null;
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
   clearTrivyDatabaseStatusCache();
+  mockScannerAssetsStatus.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -111,7 +132,7 @@ test('getSecurityRuntimeStatus should report ready when trivy is available', asy
 
   const status = await getSecurityRuntimeStatus();
 
-  expect(status).toEqual({
+  expect(status).toMatchObject({
     checkedAt: expect.any(String),
     ready: true,
     scanner: {
@@ -229,7 +250,7 @@ test('getSecurityRuntimeStatus should report disabled scanner when not configure
   });
 });
 
-test('getSecurityRuntimeStatus should treat non-trivy scanner configuration as disabled', async () => {
+test('getSecurityRuntimeStatus should report Grype command readiness', async () => {
   mockGetSecurityConfiguration.mockReturnValue({
     ...createEnabledConfiguration(),
     scanner: 'grype',
@@ -246,16 +267,19 @@ test('getSecurityRuntimeStatus should treat non-trivy scanner configuration as d
 
   const status = await getSecurityRuntimeStatus();
 
-  expect(execFileMock).not.toHaveBeenCalled();
-  expect(status.ready).toBe(false);
-  expect(status.scanner).toEqual({
-    enabled: false,
-    command: '',
-    commandAvailable: null,
-    status: 'disabled',
-    message: 'Vulnerability scanner is disabled',
+  expect(execFileMock).toHaveBeenCalledWith(
+    'grype',
+    ['--version'],
+    expect.any(Object),
+    expect.any(Function),
+  );
+  expect(status.ready).toBe(true);
+  expect(status.scanner).toMatchObject({
+    enabled: true,
+    command: 'grype',
+    commandAvailable: true,
+    status: 'ready',
     scanner: 'grype',
-    server: '',
   });
   expect(status.signature).toEqual({
     enabled: false,
@@ -265,6 +289,165 @@ test('getSecurityRuntimeStatus should treat non-trivy scanner configuration as d
     message: 'Signature verification is disabled',
   });
   expect(status.requirements).toEqual([]);
+});
+
+test('getSecurityRuntimeStatus reports Docker worker asset health', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'both',
+    backend: 'docker',
+    signature: { ...createEnabledConfiguration().signature, verify: false },
+  });
+  mockScannerAssetsStatus.mockResolvedValue([
+    {
+      provider: 'trivy',
+      backend: 'docker',
+      configuredImage: createEnabledConfiguration().trivy.workerImage,
+      resolvedDigest: `sha256:${'a'.repeat(64)}`,
+      version: '0.69.3',
+      state: 'ready',
+    },
+    {
+      provider: 'grype',
+      backend: 'docker',
+      configuredImage: createEnabledConfiguration().grype.workerImage,
+      resolvedDigest: `sha256:${'b'.repeat(64)}`,
+      version: '0.110.0',
+      state: 'ready',
+    },
+  ]);
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(status).toMatchObject({
+    ready: true,
+    backend: 'docker',
+    scanner: { scanner: 'both', status: 'ready' },
+    providers: [
+      { provider: 'trivy', status: 'ready' },
+      { provider: 'grype', status: 'ready' },
+    ],
+  });
+  expect(status.assets).toHaveLength(2);
+  expect(childProcessControl.execFileImpl).toBeNull();
+});
+
+test('getSecurityRuntimeStatus reports command scanner and SBOM providers with default commands', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+    backend: '',
+    availabilityPolicy: '',
+    syft: { ...createEnabledConfiguration().syft, command: undefined },
+    signature: { ...createEnabledConfiguration().signature, verify: false },
+    sbom: { enabled: true, formats: ['spdx-json'], generator: 'auto' },
+  });
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    callback(null, 'ready', '');
+    return { exitCode: 0 };
+  };
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(status).toMatchObject({
+    ready: true,
+    backend: 'command',
+    availabilityPolicy: 'block',
+    sbom: { enabled: true, generator: 'syft' },
+    providers: [
+      { provider: 'grype', role: 'scanner', command: 'grype', status: 'ready' },
+      { provider: 'syft', role: 'sbom', command: 'syft', status: 'ready' },
+    ],
+  });
+});
+
+test('getSecurityRuntimeStatus explains missing Docker scanner and SBOM assets', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'both',
+    backend: 'docker',
+    signature: { ...createEnabledConfiguration().signature, verify: false },
+    sbom: { enabled: true, formats: ['spdx-json'], generator: 'syft' },
+  });
+  mockScannerAssetsStatus.mockResolvedValue([
+    {
+      provider: 'trivy',
+      backend: 'docker',
+      state: 'ready',
+    },
+    {
+      provider: 'grype',
+      backend: 'docker',
+      configuredImage: 'custom/grype@sha256:abc',
+      state: 'error',
+      lastError: 'Grype database warmup failed',
+    },
+    {
+      provider: 'syft',
+      backend: 'docker',
+      configuredImage: 'custom/syft@sha256:def',
+      state: 'missing',
+    },
+  ]);
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(status.ready).toBe(false);
+  expect(status.scanner).toMatchObject({
+    status: 'missing',
+    message: 'Grype database warmup failed',
+  });
+  expect(status.providers).toEqual([
+    expect.objectContaining({
+      provider: 'trivy',
+      role: 'scanner',
+      command: createEnabledConfiguration().trivy.workerImage,
+      status: 'ready',
+    }),
+    expect.objectContaining({
+      provider: 'grype',
+      role: 'scanner',
+      command: 'custom/grype@sha256:abc',
+      status: 'missing',
+      message: 'Grype database warmup failed',
+    }),
+    expect.objectContaining({
+      provider: 'syft',
+      role: 'sbom',
+      status: 'missing',
+      message: 'syft worker image is not ready',
+    }),
+  ]);
+  expect(status.requirements).toEqual([
+    expect.stringContaining('Pull and warm grype worker'),
+    expect.stringContaining('Pull and warm syft worker'),
+  ]);
+});
+
+test.each([
+  [new Error('Docker daemon unavailable'), 'Docker daemon unavailable'],
+  ['socket closed', 'Docker scanner runtime is unavailable'],
+])('getSecurityRuntimeStatus normalizes Docker runtime status failures', async (failure, message) => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+    backend: 'docker',
+    signature: { ...createEnabledConfiguration().signature, verify: false },
+    sbom: { enabled: true, formats: ['spdx-json'], generator: 'syft' },
+  });
+  mockScannerAssetsStatus.mockRejectedValue(failure);
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(status.ready).toBe(false);
+  expect(status.providers).toEqual([
+    expect.objectContaining({ provider: 'grype', role: 'scanner', message }),
+    expect.objectContaining({ provider: 'syft', role: 'sbom', message }),
+  ]);
+});
+
+test('getScannerAssetManager returns the default runtime manager', () => {
+  expect(getScannerAssetManager().status).toBe(mockScannerAssetsStatus);
 });
 
 test('getSecurityRuntimeStatus should report missing cosign when signature verification is enabled', async () => {
@@ -662,6 +845,82 @@ describe('getTrivyDatabaseStatus', () => {
       }),
       expect.any(Function),
     );
+  });
+
+  test('builds a deterministic Docker asset fingerprint for both scanners', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'both',
+      backend: 'docker',
+    });
+    mockScannerAssetsStatus.mockResolvedValue([
+      {
+        provider: 'trivy',
+        resolvedDigest: 'sha256:trivy',
+        configuredImage: 'trivy:configured',
+        databaseUpdatedAt: '2026-07-12T01:00:00.000Z',
+      },
+      {
+        provider: 'grype',
+        configuredImage: 'grype:configured',
+        cacheUpdatedAt: '2026-07-12T02:00:00.000Z',
+      },
+      {
+        provider: 'trivy',
+        configuredImage: 'trivy:fallback',
+      },
+      { provider: 'syft', configuredImage: 'syft:ignored' },
+    ]);
+
+    await expect(getTrivyDatabaseStatus()).resolves.toEqual({
+      updatedAt: [
+        'grype:grype:configured:2026-07-12T02:00:00.000Z',
+        'trivy:sha256:trivy:2026-07-12T01:00:00.000Z',
+        'trivy:trivy:fallback:unknown',
+      ].join('|'),
+    });
+  });
+
+  test('returns undefined when Docker has no selected scanner assets or status fails', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      backend: 'docker',
+    });
+    mockScannerAssetsStatus.mockResolvedValue([
+      { provider: 'syft', configuredImage: 'syft:ignored' },
+    ]);
+    await expect(getTrivyDatabaseStatus()).resolves.toBeUndefined();
+
+    clearTrivyDatabaseStatusCache();
+    mockScannerAssetsStatus.mockRejectedValue(new Error('daemon unavailable'));
+    await expect(getTrivyDatabaseStatus()).resolves.toBeUndefined();
+  });
+
+  test('uses the configured Grype command as the command-backend fingerprint', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'grype',
+      grype: { ...createEnabledConfiguration().grype, command: 'custom-grype' },
+    });
+
+    await expect(getTrivyDatabaseStatus()).resolves.toEqual({
+      updatedAt: 'grype:custom-grype',
+    });
+    expect(childProcessControl.execFileImpl).toBeNull();
+  });
+
+  test('includes the Grype command in a combined command-backend fingerprint', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'both',
+      grype: { ...createEnabledConfiguration().grype, command: 'custom-grype' },
+    });
+    mockExecFileSuccess(validTrivyVersionOutput);
+
+    await expect(getTrivyDatabaseStatus()).resolves.toEqual({
+      updatedAt: '2025-06-01T00:00:00Z|grype:custom-grype',
+      downloadedAt: '2025-06-02T12:00:00Z',
+    });
   });
 
   test('should treat undefined stdout as empty output', async () => {

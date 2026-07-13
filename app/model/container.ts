@@ -243,6 +243,7 @@ const containerSecurityVulnerabilitySchema = joi.object({
   severity: joi.string().valid('UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
   title: joi.string(),
   primaryUrl: joi.string(),
+  scanners: joi.array().items(joi.string().valid('trivy', 'grype')).unique(),
 });
 
 const containerSecuritySummarySchema = joi.object({
@@ -254,7 +255,7 @@ const containerSecuritySummarySchema = joi.object({
 });
 
 const containerSecurityScanSchema = joi.object({
-  scanner: joi.string().valid('trivy').required(),
+  scanner: joi.string().valid('trivy', 'grype', 'both').required(),
   image: joi.string().required(),
   scannedAt: joi.string().isoDate().required(),
   status: joi.string().valid('passed', 'blocked', 'error').required(),
@@ -278,15 +279,32 @@ const containerSecuritySignatureSchema = joi.object({
   error: joi.string(),
 });
 
-const containerSecuritySbomSchema = joi.object({
-  generator: joi.string().valid('trivy').required(),
-  image: joi.string().required(),
-  generatedAt: joi.string().isoDate().required(),
-  status: joi.string().valid('generated', 'error').required(),
-  formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
-  documents: joi.object().required(),
-  error: joi.string(),
-});
+const containerSecuritySbomSchema = joi
+  .object({
+    generator: joi.string().valid('trivy', 'syft').required(),
+    image: joi.string().required(),
+    subjectDigest: joi.string(),
+    generatedAt: joi.string().isoDate().required(),
+    status: joi.string().valid('generated', 'error').required(),
+    formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
+    documents: joi.object(),
+    documentRefs: joi.object().pattern(
+      joi.string().valid('spdx-json', 'cyclonedx-json'),
+      joi.object({
+        key: joi
+          .string()
+          .pattern(/^sbom\/[a-f0-9]{64}\/(?:spdx-json|cyclonedx-json)\.json$/)
+          .required(),
+        sha256: joi
+          .string()
+          .pattern(/^[a-f0-9]{64}$/)
+          .required(),
+        bytes: joi.number().integer().min(0).required(),
+      }),
+    ),
+    error: joi.string(),
+  })
+  .or('documents', 'documentRefs');
 
 // Container data schema
 const schema = joi.object({

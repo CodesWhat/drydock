@@ -87,6 +87,7 @@ vi.mock('../registry', () => ({
 
 vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
+  getStoreConfiguration: vi.fn(() => ({ path: '/tmp/drydock-test-store' })),
   getServerConfiguration: vi.fn(() => ({
     feature: { delete: true },
   })),
@@ -111,6 +112,17 @@ vi.mock('../security/scan', () => ({
   getDigestScanCacheSize: vi.fn().mockReturnValue(0),
   updateDigestScanCache: vi.fn(),
   scanImageWithDedup: vi.fn(),
+}));
+
+vi.mock('../security/sbom-storage', () => ({
+  createSbomStorage: vi.fn(() => ({
+    writeDocument: vi.fn(async ({ format, document }) => ({
+      key: `sbom/${'a'.repeat(64)}/${'b'.repeat(64)}/${format}.json`,
+      sha256: 'b'.repeat(64),
+      bytes: Buffer.byteLength(JSON.stringify(document)),
+    })),
+    readDocument: vi.fn(),
+  })),
 }));
 
 vi.mock('../triggers/providers/Trigger', () => ({
@@ -1691,7 +1703,7 @@ describe('Container Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
     });
 
-    test('should return 400 when scanner is not trivy', async () => {
+    test('should return 400 when scanner provider is unsupported', async () => {
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });
       getSecurityConfiguration.mockReturnValue({
         enabled: true,
@@ -1964,7 +1976,11 @@ describe('Container Router', () => {
         expect.objectContaining({
           security: expect.objectContaining({
             scan: scanResult,
-            sbom: sbomResult,
+            sbom: expect.objectContaining({
+              status: 'generated',
+              documents: undefined,
+              documentRefs: {},
+            }),
           }),
         }),
       );

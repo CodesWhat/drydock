@@ -112,6 +112,51 @@ function createContext(overrides = {}) {
   };
 }
 
+test('scanner availability warn policy allows update after an unavailable scan', async () => {
+  const harness = createGateHarness({
+    securityConfiguration: { availabilityPolicy: 'warn' },
+  });
+  harness.scanImageForVulnerabilities.mockResolvedValueOnce({
+    status: 'error',
+    error: 'Grype worker is unavailable',
+    summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+    blockingCount: 0,
+    blockSeverities: ['CRITICAL'],
+  });
+
+  await expect(
+    harness.gate.scanAndGatePostPull(createContext(), createContainer(), createLog()),
+  ).resolves.toBeUndefined();
+  expect(harness.recordSecurityAudit).toHaveBeenCalledWith(
+    'security-scan-skipped',
+    expect.any(Object),
+    'error',
+    expect.stringContaining('Grype worker is unavailable'),
+  );
+});
+
+test('scanner availability warn policy uses a stable fallback for missing scanner errors', async () => {
+  const harness = createGateHarness({
+    securityConfiguration: { availabilityPolicy: 'warn' },
+  });
+  harness.scanImageForVulnerabilities.mockResolvedValueOnce({
+    status: 'error',
+    summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+    blockingCount: 0,
+    blockSeverities: ['CRITICAL'],
+  });
+
+  await expect(
+    harness.gate.scanAndGatePostPull(createContext(), createContainer(), createLog()),
+  ).resolves.toBeUndefined();
+  expect(harness.recordSecurityAudit).toHaveBeenCalledWith(
+    'security-scan-skipped',
+    expect.any(Object),
+    'error',
+    expect.stringContaining('unknown scanner error'),
+  );
+});
+
 describe('SecurityGate', () => {
   test('constructor should fail fast when required dependencies are missing', () => {
     expect(() => new SecurityGate({} as any)).toThrow(
@@ -396,7 +441,7 @@ describe('SecurityGate', () => {
     );
   });
 
-  test('maybeScanAndGateUpdate should no-op when security is disabled or scanner is not trivy', async () => {
+  test('maybeScanAndGateUpdate should no-op when disabled and run with Grype', async () => {
     const disabledHarness = createGateHarness({
       securityConfiguration: {
         enabled: false,
@@ -423,7 +468,7 @@ describe('SecurityGate', () => {
       createLog(),
     );
 
-    expect(wrongScannerHarness.scanImageForVulnerabilities).not.toHaveBeenCalled();
+    expect(wrongScannerHarness.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
   });
 
   test('maybeScanAndGateUpdate should rethrow non-pipeline scanner errors without recording failure audit', async () => {
@@ -1635,6 +1680,86 @@ describe('SecurityGate', () => {
       });
 
       expect(generateImageSbom).not.toHaveBeenCalled();
+    });
+
+    test('resolveImageDigest should tolerate image inspection failures', async () => {
+      const { gate } = createGateHarness();
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockRejectedValue(new Error('image disappeared')),
+        })),
+      };
+
+      await expect(
+        gate.resolveImageDigest('ghcr.io/acme/web:2.0.0', dockerApi),
+      ).resolves.toBeUndefined();
+    });
+
+    test('maybeGenerateSbomForUpdate should offload inline documents before persistence', async () => {
+      const generatedSbom = {
+        generator: 'trivy',
+        image: 'ghcr.io/acme/web:2.0.0',
+        generatedAt: '2026-07-12T12:00:00.000Z',
+        status: 'generated',
+        formats: ['spdx-json'],
+        documents: {
+          'spdx-json': { SPDXID: 'SPDXRef-DOCUMENT' },
+        },
+      };
+      const offloadedSbom = {
+        generator: generatedSbom.generator,
+        image: generatedSbom.image,
+        generatedAt: generatedSbom.generatedAt,
+        status: generatedSbom.status,
+        formats: generatedSbom.formats,
+        subjectDigest: 'sha256:abc123',
+        documentRefs: {
+          'spdx-json': {
+            key: 'sbom/abc123/spdx-json.json',
+            sha256: 'checksum',
+            bytes: 42,
+          },
+        },
+      };
+      const offloadSbom = vi.fn().mockResolvedValue(offloadedSbom);
+      const harness = createGateHarness({
+        generateImageSbom: vi.fn().mockResolvedValue(generatedSbom),
+        offloadSbom,
+      });
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockResolvedValue({
+            RepoDigests: ['ghcr.io/acme/web@sha256:abc123'],
+          }),
+        })),
+      };
+
+      await harness.gate.maybeGenerateSbomForUpdate(
+        createContext({ dockerApi }),
+        createContainer(),
+        createLog(),
+        {
+          enabled: true,
+          scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: true, formats: ['spdx-json'] },
+        },
+      );
+
+      expect(offloadSbom).toHaveBeenCalledWith(generatedSbom, 'sha256:abc123');
+      expect(harness.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            updateSbom: offloadedSbom,
+          }),
+        }),
+      );
+      expect(harness.updateContainer.mock.calls[0][0].security.updateSbom).not.toHaveProperty(
+        'documents',
+      );
+      expect(offloadSbom.mock.invocationCallOrder[0]).toBeLessThan(
+        harness.updateContainer.mock.invocationCallOrder[0],
+      );
     });
 
     test('scanImageForUpdate should use dedupe cache without trivy database timestamp provider', async () => {

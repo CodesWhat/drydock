@@ -640,12 +640,32 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: false,
       scanner: '',
+      backend: 'command',
+      availabilityPolicy: 'block',
+      docker: {
+        socket: '/var/run/docker.sock',
+        host: '',
+        port: 2375,
+        protocol: 'http',
+        network: 'bridge',
+        cacheVolumePrefix: 'drydock-scanner-cache',
+      },
       blockSeverities: ['CRITICAL', 'HIGH'],
       trivy: {
         server: '',
         command: 'trivy',
         timeout: 600000,
         imageSrc: '',
+        extraArgs: [],
+        workerImage:
+          'aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c',
+      },
+      grype: {
+        command: 'grype',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
       },
       signature: {
         verify: false,
@@ -660,6 +680,14 @@ describe('getSecurityConfiguration', () => {
       sbom: {
         enabled: false,
         formats: ['spdx-json'],
+        generator: 'auto',
+      },
+      syft: {
+        command: 'syft',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
       },
       gate: {
         mode: 'on',
@@ -699,12 +727,32 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: true,
       scanner: 'trivy',
+      backend: 'command',
+      availabilityPolicy: 'block',
+      docker: {
+        socket: '/var/run/docker.sock',
+        host: '',
+        port: 2375,
+        protocol: 'http',
+        network: 'bridge',
+        cacheVolumePrefix: 'drydock-scanner-cache',
+      },
       blockSeverities: ['CRITICAL', 'MEDIUM'],
       trivy: {
         server: 'http://trivy:4954',
         command: '/usr/local/bin/trivy',
         timeout: 60000,
         imageSrc: '',
+        extraArgs: [],
+        workerImage:
+          'aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c',
+      },
+      grype: {
+        command: 'grype',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
       },
       signature: {
         verify: true,
@@ -719,6 +767,14 @@ describe('getSecurityConfiguration', () => {
       sbom: {
         enabled: true,
         formats: ['cyclonedx-json', 'spdx-json'],
+        generator: 'auto',
+      },
+      syft: {
+        command: 'syft',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
       },
       gate: {
         mode: 'on',
@@ -847,6 +903,136 @@ describe('getSecurityConfiguration', () => {
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
+  });
+
+  test('should parse scanner backend, worker, provider argument, and Docker runtime settings', () => {
+    const values = {
+      DD_SECURITY_SCANNER: 'BoTh',
+      DD_SECURITY_BACKEND: 'Docker',
+      DD_SECURITY_AVAILABILITY_POLICY: 'Warn',
+      DD_SECURITY_DOCKER_SOCKET: '/run/user/1000/podman.sock',
+      DD_SECURITY_DOCKER_HOST: 'scanner-docker',
+      DD_SECURITY_DOCKER_PORT: '2376',
+      DD_SECURITY_DOCKER_PROTOCOL: 'https',
+      DD_SECURITY_DOCKER_NETWORK: 'scanner-net',
+      DD_SECURITY_DOCKER_CACHE_VOLUME: 'scanner-cache',
+      DD_SECURITY_TRIVY_ARGS: '["--skip-dirs", " /tmp/cache "]',
+      DD_SECURITY_TRIVY_WORKER_IMAGE: 'example/trivy@sha256:test',
+      DD_SECURITY_GRYPE_COMMAND: '/usr/local/bin/grype',
+      DD_SECURITY_GRYPE_TIMEOUT: '45000',
+      DD_SECURITY_GRYPE_ARGS: '["--only-fixed"]',
+      DD_SECURITY_GRYPE_WORKER_IMAGE: 'example/grype@sha256:test',
+      DD_SECURITY_SBOM_GENERATOR: 'SyFt',
+      DD_SECURITY_SYFT_COMMAND: '/usr/local/bin/syft',
+      DD_SECURITY_SYFT_TIMEOUT: '46000',
+      DD_SECURITY_SYFT_ARGS: '["--scope", "all-layers"]',
+      DD_SECURITY_SYFT_WORKER_IMAGE: 'example/syft@sha256:test',
+    };
+    Object.assign(configuration.ddEnvVars, values);
+
+    try {
+      const result = configuration.getSecurityConfiguration();
+
+      expect(result).toMatchObject({
+        scanner: 'both',
+        backend: 'docker',
+        availabilityPolicy: 'warn',
+        docker: {
+          socket: '/run/user/1000/podman.sock',
+          host: 'scanner-docker',
+          port: 2376,
+          protocol: 'https',
+          network: 'scanner-net',
+          cacheVolumePrefix: 'scanner-cache',
+        },
+        trivy: {
+          extraArgs: ['--skip-dirs', '/tmp/cache'],
+          workerImage: 'example/trivy@sha256:test',
+        },
+        grype: {
+          command: '/usr/local/bin/grype',
+          timeout: 45000,
+          extraArgs: ['--only-fixed'],
+          workerImage: 'example/grype@sha256:test',
+        },
+        sbom: { generator: 'syft' },
+        syft: {
+          command: '/usr/local/bin/syft',
+          timeout: 46000,
+          extraArgs: ['--scope', 'all-layers'],
+          workerImage: 'example/syft@sha256:test',
+        },
+      });
+    } finally {
+      for (const key of Object.keys(values)) {
+        delete configuration.ddEnvVars[key];
+      }
+    }
+  });
+
+  test('should accept remote Trivy only when a server is configured', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_BACKEND = 'remote';
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER = 'http://trivy:4954';
+
+    try {
+      expect(configuration.getSecurityConfiguration()).toMatchObject({
+        scanner: 'trivy',
+        backend: 'remote',
+        trivy: { server: 'http://trivy:4954' },
+      });
+    } finally {
+      delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+      delete configuration.ddEnvVars.DD_SECURITY_BACKEND;
+      delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
+    }
+  });
+
+  test.each([
+    ['a non-Trivy scanner', 'grype', 'http://trivy:4954'],
+    ['an empty Trivy server', 'trivy', '   '],
+  ])('should reject remote backend with %s', (_label, scanner, server) => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = scanner;
+    configuration.ddEnvVars.DD_SECURITY_BACKEND = 'remote';
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER = server;
+
+    try {
+      expect(() => configuration.getSecurityConfiguration()).toThrow(
+        'DD_SECURITY_BACKEND=remote requires DD_SECURITY_SCANNER=trivy and DD_SECURITY_TRIVY_SERVER',
+      );
+    } finally {
+      delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+      delete configuration.ddEnvVars.DD_SECURITY_BACKEND;
+      delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
+    }
+  });
+
+  test.each([
+    ['malformed JSON', '{', 'DD_SECURITY_TRIVY_ARGS'],
+    ['a non-array value', '{}', 'DD_SECURITY_GRYPE_ARGS'],
+    ['a non-string entry', '[42]', 'DD_SECURITY_GRYPE_ARGS'],
+    ['an empty entry', '["  "]', 'DD_SECURITY_SYFT_ARGS'],
+    ['a NUL byte', '["bad\\u0000arg"]', 'DD_SECURITY_SYFT_ARGS'],
+  ])('should reject %s in provider extra arguments', (_label, value, key) => {
+    configuration.ddEnvVars[key] = value;
+
+    try {
+      expect(() => configuration.getSecurityConfiguration()).toThrow(
+        `${key} must be a JSON array of strings`,
+      );
+    } finally {
+      delete configuration.ddEnvVars[key];
+    }
+  });
+
+  test('should treat an explicitly empty provider argument string as no arguments', () => {
+    configuration.ddEnvVars.DD_SECURITY_GRYPE_ARGS = '';
+
+    try {
+      expect(configuration.getSecurityConfiguration().grype.extraArgs).toEqual([]);
+    } finally {
+      delete configuration.ddEnvVars.DD_SECURITY_GRYPE_ARGS;
+    }
   });
 
   test('should read DD_SECURITY_TRIVY_IMAGE_SRC into trivy.imageSrc', () => {

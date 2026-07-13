@@ -3,12 +3,18 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import { getAgent } from '../agent/manager.js';
-import { getSecurityConfiguration, getServerConfiguration } from '../configuration/index.js';
+import {
+  getSecurityConfiguration,
+  getServerConfiguration,
+  getStoreConfiguration,
+} from '../configuration/index.js';
 import { emitSecurityAlert, emitSecurityScanCycleComplete } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { fullName } from '../model/container.js';
 import * as registry from '../registry/index.js';
+import { resolveConfiguredPath } from '../runtime/paths.js';
+import { createSbomStorage } from '../security/sbom-storage.js';
 import {
   generateImageSbom,
   SECURITY_SBOM_FORMATS,
@@ -47,6 +53,12 @@ import {
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
 const log = logger.child({ component: 'container' });
+const sbomStorage = createSbomStorage({
+  /* v8 ignore next -- Store configuration validation always supplies a path; fallback is defensive. */
+  rootDir: resolveConfiguredPath((getStoreConfiguration() as { path?: string }).path || '/store', {
+    label: 'DD_STORE_PATH',
+  }),
+});
 
 const router = express.Router();
 const RECENT_STATUS_AUDIT_LIMIT = 100;
@@ -222,6 +234,7 @@ const securityHandlers = createSecurityHandlers({
   getContainerImageFullName,
   getContainerRegistryAuth,
   updateDigestScanCache,
+  sbomStorage,
   log,
 });
 

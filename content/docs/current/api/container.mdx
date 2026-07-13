@@ -463,7 +463,7 @@ curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28
 
 This operation triggers a vulnerability scan, optional signature verification, and optional SBOM generation for a container. The scan targets the update candidate image when available, falling back to the current image tag. Results are persisted to `container.security` and the updated container is returned.
 
-Requires `DD_SECURITY_SCANNER=trivy` to be configured.
+Requires `DD_SECURITY_SCANNER=trivy`, `grype`, or `both` to be configured.
 
 ```bash
 curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/scan
@@ -493,7 +493,7 @@ This operation returns the latest SBOM document for a container in the requested
 curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/sbom?format=spdx-json
 ```
 
-Returns 200 with the SBOM document, 404 if the container is not found, or **503** (`"Security scanner is disabled or misconfigured"`) if the Trivy scanner is disabled or not configured. A `503` indicates the feature is intentionally off, not a generation failure.
+Returns 200 with the lazily dereferenced SBOM document, 404 if the container is not found, or **503** if security scanning is disabled. SBOM bodies are stored under `/store/sbom` and are not embedded in the LokiJS container row.
 
 ## Download container logs
 

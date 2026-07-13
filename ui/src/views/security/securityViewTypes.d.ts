@@ -44,6 +44,8 @@ export interface SecurityRuntimeToolStatus {
 export interface SecurityRuntimeStatus {
   checkedAt: string;
   ready: boolean;
+  backend: 'command' | 'docker' | 'remote';
+  availabilityPolicy: 'block' | 'warn';
   scanner: SecurityRuntimeToolStatus & {
     scanner: string;
     server: string;
@@ -52,7 +54,25 @@ export interface SecurityRuntimeStatus {
   sbom: {
     enabled: boolean;
     formats: string[];
+    generator: 'trivy' | 'syft';
   };
+  providers: Array<
+    SecurityRuntimeToolStatus & {
+      provider: 'trivy' | 'grype' | 'syft';
+      role: 'scanner' | 'sbom';
+    }
+  >;
+  assets: Array<{
+    provider: 'trivy' | 'grype' | 'syft';
+    backend: string;
+    configuredImage: string;
+    resolvedDigest?: string;
+    version?: string;
+    state: 'missing' | 'pulling' | 'warming' | 'ready' | 'error';
+    lastError?: string;
+    databaseUpdatedAt?: string;
+    cacheUpdatedAt?: string;
+  }>;
   requirements: string[];
 }
 

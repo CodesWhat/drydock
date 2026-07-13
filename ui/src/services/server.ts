@@ -21,4 +21,18 @@ async function getSecurityRuntime() {
   return response.json();
 }
 
-export { getSecurityRuntime, getServer };
+async function manageSecurityAsset(
+  provider: 'trivy' | 'grype' | 'syft',
+  operation: 'pull' | 'warm',
+) {
+  const response = await fetch(`/api/v1/server/security/assets/${provider}/${operation}`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Scanner asset operation failed: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export { getSecurityRuntime, getServer, manageSecurityAsset };

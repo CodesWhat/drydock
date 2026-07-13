@@ -4,6 +4,7 @@ import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
+import { getStoreConfiguration } from '../configuration/index.js';
 import type {
   BatchUpdateCompletedEventPayload,
   ContainerUpdateAppliedEventPayload,
@@ -43,6 +44,8 @@ import {
 } from '../model/container-update-operation.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
+import { offloadSbomDocuments } from '../security/sbom-migration.js';
+import { createSbomStorage, type SbomStorage } from '../security/sbom-storage.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
@@ -51,6 +54,20 @@ import { uuidv7 } from '../util/uuid.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
+
+let controllerSbomStorage: SbomStorage | undefined;
+
+function getControllerSbomStorage(): SbomStorage {
+  if (!controllerSbomStorage) {
+    controllerSbomStorage = createSbomStorage({
+      rootDir: resolveConfiguredPath(
+        (getStoreConfiguration() as { path?: string }).path || '/store',
+        { label: 'DD_STORE_PATH' },
+      ),
+    });
+  }
+  return controllerSbomStorage;
+}
 
 export interface AgentClientConfig {
   host: string;
@@ -546,7 +563,36 @@ export class AgentClient {
     );
   }
 
-  private buildContainerReport(container: Container, changedOverride?: boolean): ContainerReport {
+  private async buildContainerReport(
+    container: Container,
+    changedOverride?: boolean,
+  ): Promise<ContainerReport> {
+    if (container.security?.sbom?.documents) {
+      container = {
+        ...container,
+        security: {
+          ...container.security,
+          sbom: await offloadSbomDocuments({
+            sbom: container.security.sbom,
+            storage: getControllerSbomStorage(),
+            subjectDigest: container.image?.digest?.value,
+          }),
+        },
+      };
+    }
+    if (container.security?.updateSbom?.documents) {
+      container = {
+        ...container,
+        security: {
+          ...container.security,
+          updateSbom: await offloadSbomDocuments({
+            sbom: container.security.updateSbom,
+            storage: getControllerSbomStorage(),
+            subjectDigest: container.result?.digest,
+          }),
+        },
+      };
+    }
     container.agent = this.name;
     // The container coming from Agent should already be normalized and have results
     // We rely on the Agent to perform Registry checks if configured
@@ -701,7 +747,7 @@ export class AgentClient {
   }
 
   async processContainer(container: Container): Promise<ContainerReport> {
-    const containerReport = this.buildContainerReport(container);
+    const containerReport = await this.buildContainerReport(container);
 
     // Emit report so Triggers can fire if changed
     await emitContainerReport(containerReport);
@@ -939,7 +985,9 @@ export class AgentClient {
       const pendingContainerReport = this.takePendingWatcherCycleReport(watcherName, container);
       if (pendingContainerReport) {
         this.clearPendingFreshState(container.id);
-        containerReports.push(this.buildContainerReport(container, pendingContainerReport.changed));
+        containerReports.push(
+          await this.buildContainerReport(container, pendingContainerReport.changed),
+        );
         continue;
       }
       containerReports.push(await this.processAuthoritativeContainer(container));

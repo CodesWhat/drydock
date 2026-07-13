@@ -53,7 +53,7 @@ export function createTrivyDatabaseWarmup(
         const configuration = options.getConfiguration();
         if (
           !configuration.enabled ||
-          configuration.scanner !== 'trivy' ||
+          !['trivy', 'both'].includes(configuration.scanner) ||
           configuration.trivy.server
         ) {
           return 'skipped';

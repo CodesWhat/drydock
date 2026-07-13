@@ -4,6 +4,14 @@ const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
 
 const mockHasValidCommandPath = vi.hoisted(() => vi.fn());
 const mockWarmTrivyDatabase = vi.hoisted(() => vi.fn(async () => 'ready'));
+const mockDockerRuntime = vi.hoisted(() => ({
+  run: vi.fn(),
+  assets: {
+    get: vi.fn(() => ({ state: 'ready' })),
+    warm: vi.fn(),
+  },
+  sbomGenerator: 'trivy' as 'trivy' | 'syft',
+}));
 const warmupFactoryControl = vi.hoisted(() => ({
   options: undefined as
     | {
@@ -35,6 +43,10 @@ vi.mock('../log/index.js', () => ({
 
 vi.mock('./runtime.js', () => ({
   hasValidCommandPath: (...args: unknown[]) => mockHasValidCommandPath(...args),
+}));
+
+vi.mock('./scanner-runtime.js', () => ({
+  getDefaultScannerRuntime: () => mockDockerRuntime,
 }));
 
 vi.mock('./trivy-warmup.js', async () => {
@@ -80,12 +92,20 @@ function createEnabledConfiguration() {
   return {
     enabled: true,
     scanner: 'trivy',
+    backend: 'command',
+    availabilityPolicy: 'block',
     blockSeverities: ['CRITICAL', 'HIGH'],
     trivy: {
       server: '',
       command: 'trivy',
       timeout: 120000,
       imageSrc: '',
+      workerImage: 'aquasec/trivy@sha256:test',
+    },
+    grype: {
+      command: 'grype',
+      timeout: 120000,
+      workerImage: 'anchore/grype@sha256:test',
     },
     signature: {
       verify: true,
@@ -100,6 +120,12 @@ function createEnabledConfiguration() {
     sbom: {
       enabled: true,
       formats: ['spdx-json'],
+      generator: 'auto',
+    },
+    syft: {
+      command: 'syft',
+      timeout: 120000,
+      workerImage: 'anchore/syft@sha256:test',
     },
   };
 }
@@ -112,6 +138,10 @@ beforeEach(() => {
   _resetErrorRetryFloorForTesting();
   mockHasValidCommandPath.mockReturnValue(true);
   mockWarmTrivyDatabase.mockResolvedValue('ready');
+  mockDockerRuntime.run.mockResolvedValue(JSON.stringify({ Results: [] }));
+  mockDockerRuntime.assets.get.mockReturnValue({ state: 'ready' });
+  mockDockerRuntime.assets.warm.mockResolvedValue({ state: 'ready' });
+  mockDockerRuntime.sbomGenerator = 'trivy';
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
 });
 
@@ -152,6 +182,182 @@ test('scanImageForVulnerabilities should await database warm-up before starting 
 
   expect(result.status).toBe('passed');
   expect(events).toEqual(['warmup-started', 'warmup-finished', 'scan-started']);
+});
+
+test('scanImageForVulnerabilities should run and normalize Grype without warming Trivy', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(
+      null,
+      JSON.stringify({
+        matches: [
+          {
+            artifact: { name: 'openssl', version: '3.0.0', locations: [{ path: '/lib' }] },
+            vulnerability: {
+              id: 'CVE-2026-1',
+              severity: 'Critical',
+              fix: { versions: ['3.0.1'] },
+            },
+          },
+        ],
+      }),
+      '',
+    );
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+  expect(result).toMatchObject({
+    scanner: 'grype',
+    status: 'blocked',
+    blockingCount: 1,
+    vulnerabilities: [
+      expect.objectContaining({
+        id: 'CVE-2026-1',
+        packageName: 'openssl',
+        severity: 'CRITICAL',
+      }),
+    ],
+  });
+  expect(mockWarmTrivyDatabase).not.toHaveBeenCalled();
+  expect(execFileMock).toHaveBeenCalledWith(
+    'grype',
+    ['--output', 'json', 'registry:registry.example/app:1'],
+    expect.objectContaining({ timeout: 120000 }),
+    expect.any(Function),
+  );
+});
+
+test('both provider mode deduplicates findings and records provider provenance', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'both',
+  });
+  childProcessControl.execFileImpl = (command, _args, _options, callback) => {
+    if (command === 'trivy') {
+      callback(
+        null,
+        JSON.stringify({
+          Results: [
+            {
+              Target: '/lib',
+              Vulnerabilities: [
+                {
+                  VulnerabilityID: 'CVE-2026-1',
+                  PkgName: 'openssl',
+                  InstalledVersion: '3.0.0',
+                  Severity: 'HIGH',
+                },
+              ],
+            },
+          ],
+        }),
+        '',
+      );
+    } else {
+      callback(
+        null,
+        JSON.stringify({
+          matches: [
+            {
+              artifact: { name: 'openssl', version: '3.0.0', locations: [{ path: '/lib' }] },
+              vulnerability: { id: 'CVE-2026-1', severity: 'High' },
+            },
+          ],
+        }),
+        '',
+      );
+    }
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+  expect(result).toMatchObject({ scanner: 'both', status: 'blocked', blockingCount: 1 });
+  expect(result.vulnerabilities).toHaveLength(1);
+  expect(result.vulnerabilities[0].scanners).toEqual(['grype', 'trivy']);
+});
+
+test('both provider mode preserves known blocking findings when the other provider fails', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'both',
+  });
+  childProcessControl.execFileImpl = (command, _args, _options, callback) => {
+    if (command === 'trivy') {
+      callback(
+        null,
+        JSON.stringify({
+          Results: [
+            {
+              Vulnerabilities: [
+                { VulnerabilityID: 'CVE-BLOCK', PkgName: 'pkg', Severity: 'CRITICAL' },
+              ],
+            },
+          ],
+        }),
+        '',
+      );
+      return { exitCode: 0 };
+    }
+    const error = Object.assign(new Error('failed'), { code: '1' });
+    callback(error, '', 'database unavailable');
+    return { exitCode: 1 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+  expect(result.status).toBe('blocked');
+  expect(result.blockingCount).toBe(1);
+  expect(result.error).toContain('Grype');
+});
+
+test('Docker backend executes Trivy through the worker runtime without a local command', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    backend: 'docker',
+  });
+  mockDockerRuntime.run.mockResolvedValueOnce(JSON.stringify({ Results: [] }));
+
+  const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+  expect(result.status).toBe('passed');
+  expect(childProcessControl.execFileImpl).toBeNull();
+  expect(mockWarmTrivyDatabase).not.toHaveBeenCalled();
+  expect(mockDockerRuntime.run).toHaveBeenCalledWith(
+    expect.objectContaining({
+      provider: 'trivy',
+      args: expect.arrayContaining(['image', '--format', 'json', 'registry.example/app:1']),
+    }),
+  );
+});
+
+test('Grype-only auto SBOM mode generates documents with Syft', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+    sbom: { enabled: true, formats: ['cyclonedx-json'], generator: 'auto' },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ bomFormat: 'CycloneDX' }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const result = await generateImageSbom({ image: 'registry.example/app:1' });
+
+  expect(result).toMatchObject({ generator: 'syft', status: 'generated' });
+  expect(execFileMock).toHaveBeenCalledWith(
+    'syft',
+    ['registry:registry.example/app:1', '--output', 'cyclonedx-json'],
+    expect.objectContaining({ timeout: 120000 }),
+    expect.any(Function),
+  );
 });
 
 test('Trivy warm-up adapter should serialize and run the database command with process grace', async () => {
@@ -1416,6 +1622,287 @@ test('buildTrivyEnvironment should use empty string for username when password i
   expect(envUsed.TRIVY_PASSWORD).toBe('secret');
 });
 
+test('Docker backend warms missing Trivy assets before scanning', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    backend: 'docker',
+  });
+  mockDockerRuntime.assets.get.mockReturnValue({ state: 'missing' });
+  mockDockerRuntime.run.mockResolvedValueOnce(JSON.stringify({ Results: [] }));
+
+  const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+  expect(result.status).toBe('passed');
+  expect(mockDockerRuntime.assets.warm).toHaveBeenCalledWith('trivy');
+  expect(mockDockerRuntime.run).toHaveBeenCalledWith(
+    expect.objectContaining({ provider: 'trivy' }),
+  );
+});
+
+test('Docker backend warms missing Grype assets and runs Grype without a local command', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+    backend: 'docker',
+  });
+  mockDockerRuntime.assets.get.mockReturnValue({ state: 'missing' });
+  mockDockerRuntime.run.mockResolvedValueOnce(JSON.stringify({ matches: [] }));
+
+  const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+  expect(result.status).toBe('passed');
+  expect(mockDockerRuntime.assets.warm).toHaveBeenCalledWith('grype');
+  expect(mockDockerRuntime.run).toHaveBeenCalledWith(
+    expect.objectContaining({
+      provider: 'grype',
+      args: expect.arrayContaining(['registry:registry.example/app:1']),
+    }),
+  );
+});
+
+test('Docker backend generates an explicit Trivy SBOM through the worker runtime', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    backend: 'docker',
+    sbom: { enabled: true, formats: ['spdx-json'], generator: 'trivy' },
+  });
+  mockDockerRuntime.run.mockResolvedValueOnce(JSON.stringify({ spdxVersion: 'SPDX-2.3' }));
+
+  const result = await generateImageSbom({ image: 'registry.example/app:1' });
+
+  expect(result).toMatchObject({ generator: 'trivy', status: 'generated' });
+  expect(mockDockerRuntime.run).toHaveBeenCalledWith(
+    expect.objectContaining({ provider: 'trivy' }),
+  );
+});
+
+test('Docker backend generates an explicit Syft SBOM with password-only registry auth', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    backend: 'docker',
+    sbom: { enabled: true, formats: ['spdx-json'], generator: 'syft' },
+  });
+  mockDockerRuntime.run.mockResolvedValueOnce(JSON.stringify({ spdxVersion: 'SPDX-2.3' }));
+
+  const result = await generateImageSbom({
+    image: 'registry.example/app:1',
+    auth: { password: 'secret' },
+  });
+
+  expect(result).toMatchObject({ generator: 'syft', status: 'generated' });
+  expect(mockDockerRuntime.run).toHaveBeenCalledWith(
+    expect.objectContaining({
+      provider: 'syft',
+      env: expect.objectContaining({
+        SYFT_REGISTRY_AUTH_USERNAME: '',
+        SYFT_REGISTRY_AUTH_PASSWORD: 'secret',
+      }),
+    }),
+  );
+});
+
+test('rejects Trivy extra arguments that override a protected option', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, extraArgs: ['--format=table'] },
+  });
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('Trivy extra arguments cannot override --format');
+});
+
+test('passes non-protected Trivy extra arguments to the scanner', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: {
+      ...createEnabledConfiguration().trivy,
+      extraArgs: ['--skip-dirs', '/tmp/cache'],
+    },
+  });
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('passed');
+  expect(execFileMock.mock.calls[0][1]).toEqual(
+    expect.arrayContaining(['--skip-dirs', '/tmp/cache']),
+  );
+});
+
+test('rejects Syft extra arguments that override a protected option', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    sbom: { enabled: true, formats: ['spdx-json'], generator: 'syft' },
+    syft: { ...createEnabledConfiguration().syft, extraArgs: ['-o'] },
+  });
+
+  const result = await generateImageSbom({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('Syft extra arguments cannot override -o');
+});
+
+test('rejects invalid Syft command paths before execution', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    sbom: { enabled: true, formats: ['spdx-json'], generator: 'syft' },
+    syft: { ...createEnabledConfiguration().syft, command: '../bin/syft' },
+  });
+  mockHasValidCommandPath.mockReturnValue(false);
+
+  const result = await generateImageSbom({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('Syft command');
+  expect(mockDockerRuntime.run).not.toHaveBeenCalled();
+});
+
+test('falls back to the Syft command for missing and whitespace-only configuration', async () => {
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ spdxVersion: 'SPDX-2.3' }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  for (const command of [undefined, '   ']) {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      sbom: { enabled: true, formats: ['spdx-json'], generator: 'syft' },
+      syft: { ...createEnabledConfiguration().syft, command },
+    });
+
+    await expect(generateImageSbom({ image: 'img:test' })).resolves.toMatchObject({
+      status: 'generated',
+    });
+  }
+
+  expect(execFileMock.mock.calls.map((call) => call[0])).toEqual(['syft', 'syft']);
+});
+
+test('retries a transient Grype command failure once', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+  });
+  let invocations = 0;
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    invocations += 1;
+    if (invocations === 1) {
+      const error = Object.assign(new Error('temporary registry failure'), { code: 'EAI_AGAIN' });
+      callback(error, '', 'temporary failure in name resolution');
+      return { exitCode: 1 };
+    }
+    callback(null, JSON.stringify({ matches: [] }), '');
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({
+    image: 'img:test',
+    retryTransient: true,
+  });
+
+  expect(result.status).toBe('passed');
+  expect(invocations).toBe(2);
+});
+
+test.each([
+  ['a permanent Error', new Error('authentication failed')],
+  ['a non-Error rejection', 'malformed rejection'],
+])('does not retry %s from the Docker scanner runtime', async (_label, failure) => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+    backend: 'docker',
+  });
+  mockDockerRuntime.run.mockRejectedValueOnce(failure);
+
+  const result = await scanImageForVulnerabilities({
+    image: 'img:test',
+    retryTransient: true,
+  });
+
+  expect(result.status).toBe('error');
+  expect(mockDockerRuntime.run).toHaveBeenCalledOnce();
+});
+
+test('retries a transient plain Error from the Docker scanner runtime', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+    backend: 'docker',
+  });
+  mockDockerRuntime.run
+    .mockRejectedValueOnce(new Error('registry connection reset'))
+    .mockResolvedValueOnce(JSON.stringify({ matches: [] }));
+
+  const result = await scanImageForVulnerabilities({
+    image: 'img:test',
+    retryTransient: true,
+  });
+
+  expect(result.status).toBe('passed');
+  expect(mockDockerRuntime.run).toHaveBeenCalledTimes(2);
+});
+
+test('both-provider merge upgrades severity for a duplicate without package metadata', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'both',
+  });
+  childProcessControl.execFileImpl = (command, _args, _options, callback) => {
+    if (command === 'trivy') {
+      callback(
+        null,
+        JSON.stringify({
+          Results: [{ Vulnerabilities: [{ VulnerabilityID: 'CVE-1', Severity: 'HIGH' }] }],
+        }),
+        '',
+      );
+    } else {
+      callback(
+        null,
+        JSON.stringify({
+          matches: [{ artifact: {}, vulnerability: { id: 'CVE-1', severity: 'Critical' } }],
+        }),
+        '',
+      );
+    }
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.vulnerabilities).toEqual([
+    expect.objectContaining({ severity: 'CRITICAL', scanners: ['grype', 'trivy'] }),
+  ]);
+});
+
+test('both-provider errors identify a failed Trivy provider', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'both',
+  });
+  childProcessControl.execFileImpl = (command, _args, _options, callback) => {
+    if (command === 'trivy') {
+      callback(Object.assign(new Error('failed'), { code: '1' }), '', 'database unavailable');
+      return { exitCode: 1 };
+    }
+    callback(null, JSON.stringify({ matches: [] }), '');
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('Trivy:');
+});
+
 test('parseCosignSignaturesCount should return 0 for JSON primitive (non-object, non-array)', async () => {
   childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
     // JSON.parse('42') is a number — not array, not object → falls through to line-delimited parsing
@@ -1447,6 +1934,33 @@ function createMockScanResult(image = 'registry.example.com/app:1.2.3') {
 }
 
 describe('scanImageWithDedup', () => {
+  test('does not reuse a digest cache entry after the scanner provider changes', async () => {
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+    await scanImageWithDedup(
+      { image: 'registry/app:1', digest: 'sha256:provider', trivyDbUpdatedAt: 'db-1' },
+      3_600_000,
+    );
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'grype',
+    });
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ matches: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    const result = await scanImageWithDedup(
+      { image: 'registry/app:1', digest: 'sha256:provider', trivyDbUpdatedAt: 'db-1' },
+      3_600_000,
+    );
+
+    expect(result.fromCache).toBe(false);
+    expect(result.scanResult.scanner).toBe('grype');
+  });
+
   test('should run a fresh scan on cache miss when trivyDbUpdatedAt is provided', async () => {
     childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
       callback(null, JSON.stringify({ Results: [] }), '');
@@ -1718,6 +2232,49 @@ describe('scanImageWithDedup', () => {
     expect(third.fromCache).toBe(true);
     expect(third.scanResult.status).toBe('passed');
     expect(execFileMockThird).not.toHaveBeenCalled();
+  });
+
+  test('does not cache a blocked partial result that still contains a provider error', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'both',
+    });
+    let invocations = 0;
+    childProcessControl.execFileImpl = (command, _args, _options, callback) => {
+      invocations += 1;
+      if (command === 'trivy') {
+        callback(
+          null,
+          JSON.stringify({
+            Results: [
+              {
+                Vulnerabilities: [{ VulnerabilityID: 'CVE-BLOCK', Severity: 'CRITICAL' }],
+              },
+            ],
+          }),
+          '',
+        );
+        return { exitCode: 0 };
+      }
+      callback(Object.assign(new Error('failed'), { code: '1' }), '', 'database unavailable');
+      return { exitCode: 1 };
+    };
+
+    const options = {
+      image: 'registry.example.com/app:1.2.3',
+      digest: 'sha256:partial-block',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+    const first = await scanImageWithDedup(options, 3_600_000);
+    const second = await scanImageWithDedup(options, 3_600_000);
+
+    expect(first).toMatchObject({
+      fromCache: false,
+      scanResult: { status: 'blocked', error: expect.stringContaining('Grype') },
+    });
+    expect(second.fromCache).toBe(false);
+    expect(invocations).toBe(4);
+    expect(getDigestScanCacheSize()).toBe(0);
   });
 });
 

@@ -18,6 +18,8 @@ export const serverInfo = {
 export const securityRuntime = {
   checkedAt: new Date(Date.now() - 3600000).toISOString(),
   ready: true,
+  backend: 'command',
+  availabilityPolicy: 'block',
   scanner: {
     enabled: true,
     command: 'trivy',
@@ -37,6 +39,9 @@ export const securityRuntime = {
   sbom: {
     enabled: true,
     formats: ['spdx-json', 'cyclonedx-json'],
+    generator: 'trivy',
   },
+  providers: [],
+  assets: [],
   requirements: [],
 };
