@@ -486,6 +486,26 @@ describe('ContainersGroupedViews — update button states', () => {
     );
   });
 
+  it('icons mode: renders a soft update button for a suppressed raw candidate', () => {
+    const container = makeContainer({
+      id: 'c-suppressed',
+      name: 'suppressed',
+      newTag: null,
+      newDigest: null,
+      updateEligibility: makeEligibility([
+        { reason: 'snoozed', message: 'Snoozed.', actionable: true },
+      ]),
+    });
+    const { wrapper } = mountWithSingleContainer(container, 'icons');
+    const row = rowByName(wrapper, 'suppressed');
+    const cloudBtn = row
+      .findAll('button')
+      .find((button: any) => button.find('[data-icon="cloud-download"]').exists());
+
+    expect(cloudBtn).toBeDefined();
+    expect(cloudBtn?.classes()).toContain('dd-text-warning');
+  });
+
   // -------------------------------------------------------------------------
   // icons mode — ready (no blockers)
   // -------------------------------------------------------------------------

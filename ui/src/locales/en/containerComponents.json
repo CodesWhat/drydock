@@ -375,7 +375,7 @@
         "notify": "Notifications only — Drydock won't apply updates.",
         "autoFiltered": "Update available — auto-dispatch is filtered (manual works).",
         "manualFiltered": "Update available — a policy condition will require confirmation.",
-        "autoReady": "Update available — will dispatch automatically.",
+        "autoReady": "Update available — eligible for automatic dispatch.",
         "manualReady": "Update available — ready to apply manually."
       },
       "conditions": {
@@ -398,12 +398,15 @@
       },
       "actions": {
         "editPolicy": "Edit update policy",
-        "reviewLabels": "Review container labels",
+        "configureLabels": "Configure trigger labels",
         "viewOperation": "View update operation",
         "reviewSecurity": "Review scan results",
         "viewRollback": "View rollback context",
-        "reviewTriggers": "Review update triggers",
-        "reviewWatchers": "Review watchers"
+        "configureAgent": "Configure trigger agent",
+        "configureTriggers": "Configure update triggers",
+        "configureThreshold": "Configure trigger threshold",
+        "configureSelfUpdate": "Configure self-update",
+        "configureMaintenance": "Configure maintenance window"
       }
     },
     "maturityBadge": {

@@ -17,7 +17,7 @@ import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
 import type { Container, UpdateEligibility } from '../../types/container';
-import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
+import { getPrimaryHardBlocker, hasRawUpdateCandidate } from '../../utils/update-eligibility';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
@@ -698,18 +698,18 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           @click="runContainerPreview">
                     {{ previewLoading ? t('containerComponents.fullPageActions.previewing') : t('containerComponents.fullPageActions.previewUpdate') }}
                   </AppButton>
-	                  <AppButton v-if="updateMode !== 'notify' && isUpdateHardBlocked(selectedContainer)" size="sm" variant="danger"
+	                  <AppButton v-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && isUpdateHardBlocked(selectedContainer)" size="sm" variant="danger"
 	                          :disabled="true">
 	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageDetail.blockedButton') }}
 	                  </AppButton>
-	                  <AppButton v-else-if="updateMode !== 'notify' && selectedContainer.bouncer === 'blocked'" size="sm" variant="danger"
+	                  <AppButton v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && selectedContainer.bouncer === 'blocked'" size="sm" variant="danger"
 	                          :disabled="isActionInProgress(selectedContainer)"
 	                          @click="confirmForceUpdate(selectedContainer)">
 	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
                   </AppButton>
                   <AppButton v-else-if="updateMode !== 'notify'"
                           size="sm" variant="outlined"
-                          :disabled="!selectedContainer.newTag || isActionInProgress(selectedContainer)"
+                          :disabled="!hasRawUpdateCandidate(selectedContainer) || isActionInProgress(selectedContainer)"
                           @click="confirmUpdate(selectedContainer)">
                     {{ t('containerComponents.fullPageActions.updateNow') }}
                   </AppButton>

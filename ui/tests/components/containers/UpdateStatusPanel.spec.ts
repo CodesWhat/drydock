@@ -9,7 +9,9 @@ vi.mock('vue-router', async () => {
   return { ...actual, useRouter: () => ({ push: routerPush }) };
 });
 
-function eligibility(reason?: 'snoozed' | 'security-scan-blocked'): UpdateEligibility {
+function eligibility(
+  reason?: 'snoozed' | 'security-scan-blocked' | 'trigger-not-included',
+): UpdateEligibility {
   return {
     eligible: reason === undefined,
     blockers: reason
@@ -26,7 +28,7 @@ function eligibility(reason?: 'snoozed' | 'security-scan-blocked'): UpdateEligib
   };
 }
 
-function container(reason?: 'snoozed' | 'security-scan-blocked') {
+function container(reason?: 'snoozed' | 'security-scan-blocked' | 'trigger-not-included') {
   return {
     id: 'container-1',
     name: 'nginx',
@@ -81,6 +83,22 @@ describe('UpdateStatusPanel', () => {
 
     await wrapper.get('[data-test="update-status-action-security-scan-blocked"]').trigger('click');
     expect(routerPush).toHaveBeenCalledWith({ path: '/security' });
+  });
+
+  it('renders configuration docs actions as safe accessible external links', () => {
+    const wrapper = mount(UpdateStatusPanel, {
+      props: { container: container('trigger-not-included'), mode: 'manual' },
+      global: { stubs: { AppIcon: { template: '<span />' } } },
+    });
+
+    const action = wrapper.get('[data-test="update-status-action-trigger-not-included"]');
+    expect(action.element.tagName).toBe('A');
+    expect(action.attributes('href')).toBe(
+      'https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference',
+    );
+    expect(action.attributes('target')).toBe('_blank');
+    expect(action.attributes('rel')).toBe('noopener noreferrer');
+    expect(action.text()).toBe('Configure trigger labels');
   });
 
   it('renders each condition with its own severity tone', () => {

@@ -5,6 +5,7 @@ import {
   type UpdateStatusInput,
 } from '@/composables/useUpdateStatus';
 import type { UpdateBlocker, UpdateEligibility } from '@/types/container';
+import { mapApiContainer } from '@/utils/container-mapper';
 
 function blocker(overrides: Partial<UpdateBlocker> = {}): UpdateBlocker {
   return {
@@ -55,7 +56,7 @@ describe('deriveUpdateStatus', () => {
   it('describes automatic dispatch when auto mode is eligible', () => {
     const status = deriveUpdateStatus(input({ mode: 'auto' }));
 
-    expect(status.summary).toBe('Update available — will dispatch automatically.');
+    expect(status.summary).toBe('Update available — eligible for automatic dispatch.');
   });
 
   it('keeps hard blockers ahead of soft blockers and disables manual update', () => {
@@ -85,9 +86,9 @@ describe('deriveUpdateStatus', () => {
       'snoozed',
     ]);
     expect(status.conditions[0].action).toEqual({
-      kind: 'route',
-      label: 'Review update triggers',
-      to: { path: '/triggers', query: { q: 'edge.docker.local' } },
+      kind: 'external',
+      label: 'Configure trigger agent',
+      href: 'https://getdrydock.com/docs/configuration/actions/update-eligibility#update-status-says-agent-mismatch',
     });
   });
 
@@ -108,6 +109,27 @@ describe('deriveUpdateStatus', () => {
 
     expect(status.conditions).toEqual([]);
     expect(status.state).toBe('in-progress');
+  });
+
+  it('reports in progress from the external operation badge without a visible candidate', () => {
+    const status = deriveUpdateStatus(
+      input({
+        hasActiveOperationBadge: true,
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: null,
+          newDigest: null,
+          updateEligibility: eligibility([
+            blocker({ reason: 'no-update-available', severity: 'hard', actionable: false }),
+          ]),
+        },
+      }),
+    );
+
+    expect(status.state).toBe('in-progress');
+    expect(status.summary).toBe('Update in progress.');
+    expect(status.hasUpdate).toBe(true);
   });
 
   it('collapses policy details and disables updates in notify mode', () => {
@@ -148,6 +170,23 @@ describe('deriveUpdateStatus', () => {
     expect(status.manualUpdateDisabled).toBe(true);
   });
 
+  it('describes a soft-filtered automatic candidate without promising dispatch', () => {
+    const status = deriveUpdateStatus(
+      input({
+        mode: 'auto',
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: eligibility([blocker({ reason: 'snoozed', severity: 'soft' })]),
+        },
+      }),
+    );
+
+    expect(status.state).toBe('soft-blocked');
+    expect(status.summary).toBe('Update available — auto-dispatch is filtered (manual works).');
+  });
+
   it('maps policy, security, label, rollback, and trigger conditions to honest destinations', () => {
     const status = deriveUpdateStatus(
       input({
@@ -181,9 +220,9 @@ describe('deriveUpdateStatus', () => {
       to: { path: '/security' },
     });
     expect(actions['trigger-not-included']).toEqual({
-      kind: 'tab',
-      label: 'Review container labels',
-      tab: 'labels',
+      kind: 'external',
+      label: 'Configure trigger labels',
+      href: 'https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference',
     });
     expect(actions['last-update-rolled-back']).toEqual({
       kind: 'route',
@@ -194,10 +233,66 @@ describe('deriveUpdateStatus', () => {
       },
     });
     expect(actions['no-update-trigger-configured']).toEqual({
-      kind: 'route',
-      label: 'Review update triggers',
-      to: { path: '/triggers' },
+      kind: 'external',
+      label: 'Configure update triggers',
+      href: 'https://getdrydock.com/docs/configuration/triggers',
     });
+  });
+
+  it.each([
+    {
+      label: 'snoozed tag',
+      reason: 'snoozed' as const,
+      result: { tag: '1.3.0' },
+      updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.3.0' },
+      updatePolicy: { snoozeUntil: '2099-07-13T00:00:00.000Z' },
+    },
+    {
+      label: 'skipped tag',
+      reason: 'skip-tag' as const,
+      result: { tag: '1.3.0' },
+      updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.3.0' },
+      updatePolicy: { skipTags: ['1.3.0'] },
+    },
+    {
+      label: 'skipped digest',
+      reason: 'skip-digest' as const,
+      result: { tag: '1.2.2', digest: 'sha256:new' },
+      updateKind: { kind: 'digest', semverDiff: 'unknown', remoteValue: 'sha256:new' },
+      updatePolicy: { skipDigests: ['sha256:new'] },
+    },
+  ])('preserves a mapper-backed $label update when tag and digest are hidden', (scenario) => {
+    const mapped = mapApiContainer({
+      id: 'container-1',
+      name: 'nginx',
+      status: 'running',
+      watcher: 'local',
+      agent: null,
+      image: { name: 'nginx', tag: { value: '1.2.2' } },
+      result: scenario.result,
+      updateAvailable: false,
+      updateKind: scenario.updateKind,
+      updatePolicy: scenario.updatePolicy,
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-07-12T00:00:00.000Z',
+        blockers: [
+          {
+            reason: scenario.reason,
+            severity: 'soft',
+            message: 'Snoozed until tomorrow.',
+            actionable: true,
+          },
+        ],
+      },
+    });
+
+    expect(mapped.newTag).toBeNull();
+    expect(mapped.newDigest).toBeNull();
+    const status = deriveUpdateStatus(input({ container: mapped }));
+    expect(status.hasUpdate).toBe(true);
+    expect(status.state).toBe('soft-blocked');
+    expect(status.summary).not.toBe('Up to date.');
   });
 
   it('reports up to date without rendering no-update-available as a condition', () => {
@@ -245,13 +340,13 @@ describe('deriveUpdateStatus', () => {
     ['skip-tag', 'soft', 'warning', 'tab'],
     ['skip-digest', 'soft', 'warning', 'tab'],
     ['maturity-not-reached', 'soft', 'warning', 'tab'],
-    ['threshold-not-reached', 'soft', 'warning', 'route'],
-    ['trigger-excluded', 'soft', 'warning', 'tab'],
-    ['trigger-not-included', 'soft', 'warning', 'tab'],
-    ['agent-mismatch', 'hard', 'danger', 'route'],
-    ['no-update-trigger-configured', 'hard', 'danger', 'route'],
-    ['self-update-unavailable', 'hard', 'danger', 'route'],
-    ['maintenance-window-closed', 'soft', 'warning', 'route'],
+    ['threshold-not-reached', 'soft', 'warning', 'external'],
+    ['trigger-excluded', 'soft', 'warning', 'external'],
+    ['trigger-not-included', 'soft', 'warning', 'external'],
+    ['agent-mismatch', 'hard', 'danger', 'external'],
+    ['no-update-trigger-configured', 'hard', 'danger', 'external'],
+    ['self-update-unavailable', 'hard', 'danger', 'external'],
+    ['maintenance-window-closed', 'soft', 'warning', 'external'],
   ] as const)('maps %s to a localized presentation and safe action', (reason, severity, tone, actionKind) => {
     const status = deriveUpdateStatus(
       input({
@@ -280,5 +375,11 @@ describe('deriveUpdateStatus', () => {
     expect(
       formatLiftCountdown('2026-07-12T13:05:00.000Z', Date.parse('2026-07-12T12:00:00.000Z')),
     ).toBe('1h 5m');
+    expect(
+      formatLiftCountdown('2026-07-12T12:05:00.000Z', Date.parse('2026-07-12T12:00:00.000Z')),
+    ).toBe('5m');
+    expect(
+      formatLiftCountdown('not-a-date', Date.parse('2026-07-12T12:00:00.000Z')),
+    ).toBeUndefined();
   });
 });

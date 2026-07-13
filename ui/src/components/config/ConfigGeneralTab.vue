@@ -28,6 +28,7 @@ const props = defineProps<{
   webhookExample: string;
   internetlessMode: boolean;
   updateMode: UpdateMode;
+  updateModeLoaded: boolean;
   settingsLoading: boolean;
   cacheClearing: boolean;
   cacheCleared: number | null;
@@ -130,7 +131,7 @@ function isStaticTableRow() {
               borderColor: props.updateMode === option.id ? 'var(--dd-primary)' : 'var(--dd-border)',
             }"
             :aria-pressed="String(props.updateMode === option.id)"
-            :disabled="props.settingsLoading"
+            :disabled="props.settingsLoading || !props.updateModeLoaded"
             :data-test="`update-mode-${option.id}`"
             @click="emit('update-mode', option.id)"
           >

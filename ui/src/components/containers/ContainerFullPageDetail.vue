@@ -11,7 +11,7 @@ import {
   UPDATE_IN_PROGRESS_PHASE_I18N,
 } from '../../utils/container-update';
 import type { Container, UpdateEligibility } from '../../types/container';
-import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
+import { getPrimaryHardBlocker, hasRawUpdateCandidate } from '../../utils/update-eligibility';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -240,7 +240,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             {{ t('containerComponents.fullPageDetail.recheckButton') }}
           </AppButton>
 	          <AppButton
-	            v-if="updateMode !== 'notify' && selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"
+	            v-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && isUpdateHardBlocked(selectedContainer)"
 	            size="md"
 	            variant="danger"
 	            weight="bold"
@@ -251,7 +251,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
 	            {{ t('containerComponents.fullPageDetail.blockedButton') }}
 	          </AppButton>
 	          <AppButton
-	            v-else-if="updateMode !== 'notify' && selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
+	            v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && selectedContainer.bouncer === 'blocked'"
 	            size="md"
 	            variant="danger"
 	            weight="bold"
@@ -263,7 +263,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             {{ t('containerComponents.fullPageDetail.blockedButton') }}
           </AppButton>
           <AppButton
-            v-else-if="updateMode !== 'notify' && selectedContainer.newTag"
+            v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer)"
             size="md"
             variant="success"
             weight="bold"

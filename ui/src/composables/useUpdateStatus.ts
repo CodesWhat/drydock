@@ -7,7 +7,7 @@ import type {
   UpdateBlockerSeverity,
   UpdateEligibility,
 } from '../types/container';
-import { severityOf } from '../utils/update-eligibility';
+import { hasRawUpdateCandidate, severityOf } from '../utils/update-eligibility';
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;
 
@@ -25,7 +25,8 @@ export type UpdateStatusAction =
       kind: 'route';
       label: string;
       to: { path: string; query?: Record<string, string> };
-    };
+    }
+  | { kind: 'external'; label: string; href: string };
 
 export interface UpdateStatusCondition {
   reason: UpdateBlockerReason;
@@ -71,13 +72,8 @@ const POLICY_REASONS = new Set<UpdateBlockerReason>([
   'maturity-not-reached',
 ]);
 
-const LABEL_REASONS = new Set<UpdateBlockerReason>(['trigger-excluded', 'trigger-not-included']);
-
-const TRIGGER_REASONS = new Set<UpdateBlockerReason>([
-  'agent-mismatch',
-  'no-update-trigger-configured',
-  'threshold-not-reached',
-]);
+const ELIGIBILITY_DOCS =
+  'https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference';
 
 function conditionAction(
   blocker: UpdateBlocker,
@@ -92,11 +88,11 @@ function conditionAction(
       section: 'update-policy',
     };
   }
-  if (LABEL_REASONS.has(blocker.reason)) {
+  if (blocker.reason === 'trigger-excluded' || blocker.reason === 'trigger-not-included') {
     return {
-      kind: 'tab',
-      label: t('containerComponents.updateStatus.actions.reviewLabels'),
-      tab: 'labels',
+      kind: 'external',
+      label: t('containerComponents.updateStatus.actions.configureLabels'),
+      href: ELIGIBILITY_DOCS,
     };
   }
   if (blocker.reason === 'active-operation') {
@@ -124,63 +120,64 @@ function conditionAction(
       },
     };
   }
-  if (TRIGGER_REASONS.has(blocker.reason)) {
-    const triggerId = blocker.details?.triggerId;
+  if (blocker.reason === 'agent-mismatch') {
     return {
-      kind: 'route',
-      label: t('containerComponents.updateStatus.actions.reviewTriggers'),
-      to: {
-        path: '/triggers',
-        ...(typeof triggerId === 'string' && triggerId ? { query: { q: triggerId } } : {}),
-      },
+      kind: 'external',
+      label: t('containerComponents.updateStatus.actions.configureAgent'),
+      href: 'https://getdrydock.com/docs/configuration/actions/update-eligibility#update-status-says-agent-mismatch',
+    };
+  }
+  if (blocker.reason === 'no-update-trigger-configured') {
+    return {
+      kind: 'external',
+      label: t('containerComponents.updateStatus.actions.configureTriggers'),
+      href: 'https://getdrydock.com/docs/configuration/triggers',
+    };
+  }
+  if (blocker.reason === 'threshold-not-reached') {
+    return {
+      kind: 'external',
+      label: t('containerComponents.updateStatus.actions.configureThreshold'),
+      href: ELIGIBILITY_DOCS,
     };
   }
   if (blocker.reason === 'maintenance-window-closed') {
     return {
-      kind: 'route',
-      label: t('containerComponents.updateStatus.actions.reviewWatchers'),
-      to: { path: '/watchers' },
+      kind: 'external',
+      label: t('containerComponents.updateStatus.actions.configureMaintenance'),
+      href: ELIGIBILITY_DOCS,
     };
   }
+  /* v8 ignore next -- final visible reason; no-update-available is filtered before this mapper */
   if (blocker.reason === 'self-update-unavailable') {
     return {
-      kind: 'route',
-      label: t('containerComponents.updateStatus.actions.reviewWatchers'),
-      to: { path: '/watchers' },
+      kind: 'external',
+      label: t('containerComponents.updateStatus.actions.configureSelfUpdate'),
+      href: 'https://getdrydock.com/docs/configuration/self-update',
     };
   }
+  /* v8 ignore next -- every runtime blocker reason is handled above; retained for forward safety */
   return undefined;
 }
 
-function conditionIcon(reason: UpdateBlockerReason): string {
-  switch (reason) {
-    case 'security-scan-blocked':
-      return 'security';
-    case 'last-update-rolled-back':
-    case 'rollback-container':
-      return 'restart';
-    case 'snoozed':
-      return 'clock';
-    case 'skip-tag':
-    case 'skip-digest':
-      return 'skip-forward';
-    case 'maturity-not-reached':
-    case 'maintenance-window-closed':
-      return 'uptime';
-    case 'active-operation':
-      return 'spinner';
-    case 'agent-mismatch':
-    case 'no-update-trigger-configured':
-    case 'threshold-not-reached':
-    case 'trigger-excluded':
-    case 'trigger-not-included':
-      return 'triggers';
-    case 'self-update-unavailable':
-      return 'containers';
-    default:
-      return 'warning';
-  }
-}
+const CONDITION_ICONS: Record<UpdateBlockerReason, string> = {
+  'security-scan-blocked': 'security',
+  'last-update-rolled-back': 'restart',
+  'rollback-container': 'restart',
+  snoozed: 'clock',
+  'skip-tag': 'skip-forward',
+  'skip-digest': 'skip-forward',
+  'maturity-not-reached': 'uptime',
+  'maintenance-window-closed': 'uptime',
+  'active-operation': 'spinner',
+  'agent-mismatch': 'triggers',
+  'no-update-trigger-configured': 'triggers',
+  'threshold-not-reached': 'triggers',
+  'trigger-excluded': 'triggers',
+  'trigger-not-included': 'triggers',
+  'self-update-unavailable': 'containers',
+  'no-update-available': 'up-to-date',
+};
 
 function conditionHeading(reason: UpdateBlockerReason, t: Translate): string {
   return t(`containerComponents.updateStatus.conditions.${reason}`);
@@ -203,7 +200,7 @@ function toCondition(
     severity,
     tone:
       blocker.reason === 'active-operation' ? 'info' : severity === 'hard' ? 'danger' : 'warning',
-    icon: conditionIcon(blocker.reason),
+    icon: CONDITION_ICONS[blocker.reason],
     heading: conditionHeading(blocker.reason, t),
     body: blocker.message,
     liftableAt: blocker.liftableAt,
@@ -225,9 +222,11 @@ export function formatLiftCountdown(liftableAt: string, nowMs: number): string |
 
 export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewModel {
   const { container, mode, t } = input;
-  const hasUpdate = Boolean(container.newTag || container.newDigest);
   const allBlockers = container.updateEligibility?.blockers ?? [];
-  const activeOperation = allBlockers.some((blocker) => blocker.reason === 'active-operation');
+  const activeOperation =
+    Boolean(input.hasActiveOperationBadge) ||
+    allBlockers.some((blocker) => blocker.reason === 'active-operation');
+  const hasUpdate = activeOperation || hasRawUpdateCandidate(container);
   const visibleBlockers = allBlockers
     .filter((blocker) => blocker.reason !== 'no-update-available')
     .filter((blocker) => !(input.hasActiveOperationBadge && blocker.reason === 'active-operation'))

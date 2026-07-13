@@ -162,7 +162,13 @@ const webhookExample = computed(
 const internetlessMode = ref(false);
 const settingsLoading = ref(false);
 const settingsError = ref('');
-const { updateMode, saving: updateModeSaving, setUpdateMode } = useUpdateMode();
+const {
+  updateMode,
+  loaded: updateModeLoaded,
+  saving: updateModeSaving,
+  error: updateModeError,
+  setUpdateMode,
+} = useUpdateMode();
 
 // Preference sync state
 const syncLoading = ref(false);
@@ -450,7 +456,7 @@ function handleSelectIconLibrary(library: string) {
       v-if="activeSettingsTab === 'general'"
       :loading="loading"
       :server-error="serverError"
-      :settings-error="settingsError"
+      :settings-error="settingsError || updateModeError || ''"
       :server-fields="serverFields"
       :store-fields="storeFields"
       :webhook-enabled="webhookEnabled"
@@ -458,6 +464,7 @@ function handleSelectIconLibrary(library: string) {
       :webhook-example="webhookExample"
       :internetless-mode="internetlessMode"
       :update-mode="updateMode"
+      :update-mode-loaded="updateModeLoaded"
       :settings-loading="settingsLoading || updateModeSaving"
       :cache-clearing="cacheClearing"
       :cache-cleared="cacheCleared"

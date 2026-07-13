@@ -18,6 +18,7 @@ import { useColumnVisibility } from '../../composables/useColumnVisibility';
 import {
   getPrimaryHardBlocker,
   getPrimarySoftBlocker,
+  hasRawUpdateCandidate,
   updateButtonState,
   type UpdateButtonState,
 } from '../../utils/update-eligibility';
@@ -259,13 +260,14 @@ function getInProgressBadgeLabel(c: { updateOperation?: { phase?: string } }): s
 
 function updateBtnState(c: {
   newTag?: string | null;
+  newDigest?: string | null;
   updateEligibility?: Container['updateEligibility'];
   id?: unknown;
   name?: unknown;
 }): UpdateButtonState {
   return updateButtonState(
     c.updateEligibility,
-    Boolean(c.newTag),
+    hasRawUpdateCandidate(c),
     isContainerUpdateInProgress(c) || isContainerUpdateQueued(c),
     updateMode.value,
   );
@@ -855,7 +857,7 @@ onScopeDispose(() => {
                       @click.stop="cancelUpdate(c)">
                 <AppIcon name="x" :size="12" class="mr-1" /> {{ t('containerComponents.groupedViews.cancelButton') }}
               </AppButton>
-            <div v-if="c.newTag && updateBtnState(c) !== 'none'" class="inline-flex items-center gap-1">
+            <div v-if="hasRawUpdateCandidate(c) && updateBtnState(c) !== 'none'" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button (any hard eligibility blocker) -->
               <div v-if="updateBtnState(c) === 'hard'" class="inline-flex min-w-[110px] dd-rounded overflow-hidden border dd-border-strong"
                    v-tooltip.top="tt(updateBtnTooltip(c))">
@@ -1225,7 +1227,7 @@ onScopeDispose(() => {
               {{ t('containerComponents.groupedViews.forceUpdateAction') }}
             </AppButton>
           </template>
-          <template v-if="openActionsContainer.newTag && updateBtnState(openActionsContainer) !== 'none'">
+          <template v-if="hasRawUpdateCandidate(openActionsContainer) && updateBtnState(openActionsContainer) !== 'none'">
             <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
             <AppButton
                     v-if="isUpdateHardBlocked(openActionsContainer)"

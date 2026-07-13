@@ -49,6 +49,7 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
     emit('open-tab', action.tab, action.section);
     return;
   }
+  if (action.kind === 'external') return;
   await router.push(action.to);
 }
 </script>
@@ -109,8 +110,18 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
               </template>
               {{ $t('containerComponents.updateStatus.liftsAt', { date: new Date(condition.liftableAt).toLocaleString() }) }}
             </div>
+            <a
+              v-if="condition.action?.kind === 'external'"
+              :href="condition.action.href"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center mt-1.5 min-h-9 text-2xs font-semibold underline underline-offset-2"
+              :data-test="`update-status-action-${condition.reason}`"
+            >
+              {{ condition.action.label }}
+            </a>
             <AppButton
-              v-if="condition.action"
+              v-else-if="condition.action"
               size="xs"
               variant="link-secondary"
               weight="semibold"

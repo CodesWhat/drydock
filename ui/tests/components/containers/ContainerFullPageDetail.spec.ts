@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils';
 import { ref } from 'vue';
 import ContainerFullPageDetail from '@/components/containers/ContainerFullPageDetail.vue';
 
-const selectedContainer = ref({
+const selectedContainer = ref<any>({
   id: 'container-1',
   name: 'nginx',
   image: 'nginx',
@@ -128,6 +128,23 @@ describe('ContainerFullPageDetail', () => {
     expect(wrapper.find('button[aria-label="Update blocked by security scan"]').exists()).toBe(
       false,
     );
+  });
+
+  it('shows the header update control for a suppressed raw candidate', () => {
+    selectedContainer.value = {
+      ...selectedContainer.value,
+      newTag: null,
+      newDigest: null,
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-07-12T00:00:00.000Z',
+        blockers: [{ reason: 'skip-tag', severity: 'soft', message: 'Skipped.', actionable: true }],
+      },
+    };
+
+    const wrapper = factory();
+
+    expect(wrapper.find('button[aria-label="Update container"]').exists()).toBe(true);
   });
 
   it('shows Updating when the selected container is still mid-update', () => {

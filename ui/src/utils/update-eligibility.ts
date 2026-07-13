@@ -55,6 +55,28 @@ export function hasSoftBlocker(eligibility: UpdateEligibility | undefined): bool
   return getSoftBlockers(eligibility).length > 0;
 }
 
+export interface RawUpdateCandidate {
+  newTag?: string | null;
+  newDigest?: string | null;
+  updateEligibility?: UpdateEligibility;
+}
+
+/**
+ * Candidate identity may be intentionally hidden after snooze/skip filtering.
+ * Eligibility blockers other than the internal no-update short-circuit prove
+ * that the backend still evaluated a real candidate.
+ */
+export function hasRawUpdateCandidate(container: RawUpdateCandidate): boolean {
+  return (
+    Boolean(container.newTag || container.newDigest) ||
+    Boolean(
+      container.updateEligibility?.blockers.some(
+        (blocker) => blocker.reason !== 'no-update-available',
+      ),
+    )
+  );
+}
+
 export function getPrimaryHardBlocker(
   eligibility: UpdateEligibility | undefined,
 ): UpdateBlocker | undefined {

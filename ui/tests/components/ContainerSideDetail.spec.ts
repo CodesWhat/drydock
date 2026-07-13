@@ -4,7 +4,7 @@ import { nextTick, ref } from 'vue';
 import ContainerSideDetail from '@/components/containers/ContainerSideDetail.vue';
 import DetailPanel from '@/components/DetailPanel.vue';
 
-const selectedContainer = ref({
+const selectedContainer = ref<any>({
   id: 'container-1',
   name: 'nginx',
   image: 'nginx',
@@ -171,6 +171,32 @@ describe('ContainerSideDetail', () => {
 
     expect(wrapper.find('button[aria-label="Update"]').exists()).toBe(false);
     expect(wrapper.find('button[aria-label="Blocked — Force Update"]').exists()).toBe(false);
+  });
+
+  it('shows the header update control for a suppressed raw candidate', () => {
+    selectedContainer.value = {
+      ...selectedContainer.value,
+      newTag: null,
+      newDigest: null,
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-07-12T00:00:00.000Z',
+        blockers: [{ reason: 'snoozed', severity: 'soft', message: 'Snoozed.', actionable: true }],
+      },
+    };
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.find('button[aria-label="Update"]').exists()).toBe(true);
   });
 
   it('caps the subtitle and server badge so long values do not widen the panel', () => {
