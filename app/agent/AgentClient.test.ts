@@ -1485,6 +1485,40 @@ describe('AgentClient', () => {
   });
 
   describe('stop', () => {
+    test('should not reconnect when an in-flight SSE request fails after stop', async () => {
+      let rejectConnection: (error: Error) => void = () => {};
+      axios.mockRejectedValue(new Error('unexpected reconnect'));
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectConnection = reject;
+          }),
+      );
+
+      client.startSse();
+      client.stop();
+      rejectConnection(new Error('connection refused'));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect((client as any).reconnectTimer).toBeNull();
+    });
+
+    test('should not reconnect when an established SSE stream ends after stop', async () => {
+      const stream = new EventEmitter();
+      axios.mockRejectedValue(new Error('unexpected reconnect'));
+      axios.mockResolvedValueOnce({ data: stream });
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      client.stop();
+      stream.emit('end');
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect((client as any).reconnectTimer).toBeNull();
+    });
+
     test('should clear an armed stableConnectionTimer', async () => {
       const stream = new EventEmitter();
       axios.mockResolvedValue({ data: stream });

@@ -2959,9 +2959,7 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        error: expect.stringContaining('Error fetching logs from agent'),
-      });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to fetch container logs' });
     });
 
     test('should return 500 when watcher not found', async () => {
@@ -2995,9 +2993,7 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        error: expect.stringContaining('Error fetching container logs'),
-      });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to fetch container logs' });
     });
 
     test('should use first id when logs route param id is an array', async () => {

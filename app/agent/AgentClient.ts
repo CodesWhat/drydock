@@ -225,6 +225,7 @@ export class AgentClient {
   private reconnectTimer: NodeJS.Timeout | null;
   private reconnectAttempts: number;
   private stableConnectionTimer: NodeJS.Timeout | null;
+  private stopped: boolean;
   private hasConnectedOnce: boolean;
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
@@ -256,6 +257,7 @@ export class AgentClient {
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
     this.stableConnectionTimer = null;
+    this.stopped = false;
     this.hasConnectedOnce = false;
     this.pendingFreshStateAfterRemoteUpdate = new Set();
     this.pendingWatcherCycleReports = new Map();
@@ -418,6 +420,7 @@ export class AgentClient {
 
   async init() {
     this.log.info(`Connecting to agent ${this.name} at ${this.baseUrl}`);
+    this.stopped = false;
     this.startSse();
   }
 
@@ -762,6 +765,7 @@ export class AgentClient {
   }
 
   stop() {
+    this.stopped = true;
     this.clearStableConnectionTimer();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -799,7 +803,7 @@ export class AgentClient {
 
   scheduleReconnect(delay?: number) {
     this.clearStableConnectionTimer();
-    if (this.reconnectTimer) {
+    if (this.stopped || this.reconnectTimer) {
       return;
     }
     const reconnectDelay = delay ?? this.getNextReconnectDelayMs();
@@ -883,6 +887,9 @@ export class AgentClient {
   }
 
   startSse() {
+    if (this.stopped) {
+      return;
+    }
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -894,6 +901,9 @@ export class AgentClient {
       ...this.buildRequestConfig('GET', '/api/events'),
     })
       .then((response) => {
+        if (this.stopped) {
+          return;
+        }
         // Reset the backoff only after the stream stays open long enough to be
         // considered healthy. A stream that returns 200 then ends immediately
         // must not reset the backoff, or reconnects loop at a flat 1s (#362).

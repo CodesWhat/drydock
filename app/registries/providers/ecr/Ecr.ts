@@ -1,4 +1,5 @@
 import { ECRClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-ecr';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import axios from 'axios';
 import { requireAuthString, withAuthorizationHeader } from '../../../security/auth.js';
 import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
@@ -130,12 +131,15 @@ class Ecr extends BaseRegistry<EcrRegistryConfiguration> {
 
   async requestPrivateEcrAuthToken(cacheKey = this.getPrivateEcrAuthTokenCacheKey()) {
     const { accesskeyid, region, secretaccesskey } = this.configuration;
+    const httpsAgent = this.withTlsRequestOptions({}).httpsAgent;
+    const requestHandler = httpsAgent ? new NodeHttpHandler({ httpsAgent }) : undefined;
     const ecr = new ECRClient({
       credentials: {
         accessKeyId: accesskeyid,
         secretAccessKey: secretaccesskey,
       },
       region,
+      ...(requestHandler ? { requestHandler } : {}),
     });
     const command = new GetAuthorizationTokenCommand({});
     const authorizationToken = await ecr.send(command);

@@ -24,7 +24,7 @@ function getTrimmedString(value: unknown): string | undefined {
 function getIpRateLimitKey(
   request: Pick<IdentityAwareRateLimitRequestLike, 'ip' | 'socket'>,
 ): string {
-  const requestIp = getTrimmedString(request.socket?.remoteAddress) || getTrimmedString(request.ip);
+  const requestIp = getTrimmedString(request.ip) || getTrimmedString(request.socket?.remoteAddress);
   if (!requestIp) {
     return 'ip:unknown';
   }

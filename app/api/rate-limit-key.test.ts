@@ -77,7 +77,7 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     expect(secondKey).toBe(firstKey);
   });
 
-  test('should prefer socket remote address over request ip for unauthenticated requests', async () => {
+  test('should prefer normalized request ip over proxy socket address for unauthenticated requests', async () => {
     const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
     expect(keyGenerator).toBeDefined();
 
@@ -103,7 +103,26 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     );
 
     expect(firstKey).toMatch(/^ip:/);
-    expect(secondKey).toBe(firstKey);
+    expect(secondKey).not.toBe(firstKey);
+  });
+
+  test('should fall back to socket remote address when normalized request ip is unavailable', async () => {
+    const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
+    expect(keyGenerator).toBeDefined();
+
+    const key = await keyGenerator!(
+      createRequest({
+        ip: undefined,
+        socket: {
+          remoteAddress: '198.51.100.7',
+        } as Request['socket'],
+        isAuthenticated: () => false,
+      }),
+      response,
+    );
+
+    expect(key).toMatch(/^ip:/);
+    expect(key).not.toBe('ip:unknown');
   });
 
   test('should return unknown ip key when unauthenticated request ip is undefined', async () => {

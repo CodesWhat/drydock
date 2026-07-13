@@ -52,7 +52,9 @@ function extractCommandToken(command: string): string {
  *   a one-time warning recommending the allowlist).
  * - When DD_HOOKS_ALLOWED_COMMANDS is SET: the first token of the command must
  *   match an entry. For entries containing '/', an exact match is required.
- *   For entries without '/', the basename of the first token is compared.
+ *   Entries without '/' authorize only an unqualified command token. This
+ *   prevents an arbitrary path containing a lookalike basename from bypassing
+ *   the allowlist; path-qualified commands require an exact path entry.
  *
  * Returns null if allowed, or an error message string if denied.
  */
@@ -83,9 +85,8 @@ function checkAllowedCommand(command: string, hookLog: HookLogger): string | nul
         return null;
       }
     } else {
-      // Name entry: basename match
-      const tokenBasename = firstToken.includes('/') ? firstToken.split('/').pop()! : firstToken;
-      if (tokenBasename === entry) {
+      // Name entry: only an unqualified command token is allowed.
+      if (firstToken === entry) {
         return null;
       }
     }

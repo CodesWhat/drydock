@@ -8238,6 +8238,121 @@ describe('security digest mode (SECURITYMODE=digest)', () => {
     expect(cycleBuffer.size).toBe(2);
   });
 
+  test('security digest buffering evicts the oldest inactive cycle at the cycle limit', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+    (trigger as any).securityDigestBufferMaxCycles = 2;
+    vi.useFakeTimers();
+
+    try {
+      for (const [time, cycleId, id] of [
+        [1_000, 'cycle-A', 'c1'],
+        [2_000, 'cycle-B', 'c2'],
+        [3_000, 'cycle-C', 'c3'],
+      ] as const) {
+        vi.setSystemTime(time);
+        await trigger.handleSecurityAlertEvent({
+          containerName: `local_${id}`,
+          details: 'high=1',
+          container: { id, watcher: 'local', name: id },
+          cycleId,
+          summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+        });
+      }
+
+      expect((trigger as any).securityDigestBuffer.has('cycle-A')).toBe(false);
+      expect((trigger as any).securityDigestBuffer.has('cycle-B')).toBe(true);
+      expect((trigger as any).securityDigestBuffer.has('cycle-C')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('security digest buffering evicts the oldest finding at the per-cycle limit', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+    (trigger as any).securityDigestCycleMaxEntries = 2;
+
+    for (const id of ['c1', 'c2', 'c3']) {
+      await trigger.handleSecurityAlertEvent({
+        containerName: `local_${id}`,
+        details: 'high=1',
+        container: { id, watcher: 'local', name: id },
+        cycleId: 'cycle-001',
+        summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+      });
+    }
+
+    expect([...(trigger as any).securityDigestBuffer.get('cycle-001').keys()]).toEqual([
+      'c2',
+      'c3',
+    ]);
+  });
+
+  test('security digest buffering can be disabled with a zero per-cycle limit', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+    (trigger as any).securityDigestCycleMaxEntries = 0;
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_c1',
+      details: 'high=1',
+      container: { id: 'c1', watcher: 'local', name: 'c1' },
+      cycleId: 'cycle-001',
+      summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+    });
+
+    expect((trigger as any).securityDigestBuffer.has('cycle-001')).toBe(false);
+  });
+
+  test('security digest buffering prunes stale findings before adding a new alert', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+    (trigger as any).bufferEntryRetentionMs = 500;
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(1_000);
+      await trigger.handleSecurityAlertEvent({
+        containerName: 'local_old',
+        details: 'high=1',
+        container: { id: 'old', watcher: 'local', name: 'old' },
+        cycleId: 'cycle-old',
+        summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+      });
+
+      vi.setSystemTime(2_000);
+      await trigger.handleSecurityAlertEvent({
+        containerName: 'local_new',
+        details: 'high=1',
+        container: { id: 'new', watcher: 'local', name: 'new' },
+        cycleId: 'cycle-new',
+        summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+      });
+
+      expect((trigger as any).securityDigestBuffer.has('cycle-old')).toBe(false);
+      expect((trigger as any).securityDigestBuffer.get('cycle-new').has('new')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('handleSecurityAlertEvent last-write-wins within same cycle for same container', async () => {
     await trigger.register('trigger', 'test', 'smtp', {
       ...configurationValid,

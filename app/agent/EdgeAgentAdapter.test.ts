@@ -145,7 +145,7 @@ function createHello(overrides: Partial<HelloMessage> = {}): HelloMessage {
   };
 }
 
-function createAdapter(hello?: Partial<HelloMessage>) {
+function createAdapter(hello?: Partial<HelloMessage>, options: { reconnected?: boolean } = {}) {
   const ws = createMockWs();
   const helloMsg = createHello(hello);
   const client = new AgentClient(`portwing-edge-${helloMsg.agentId}`, {
@@ -153,7 +153,7 @@ function createAdapter(hello?: Partial<HelloMessage>) {
     port: 0,
     secret: '',
   });
-  const adapter = new EdgeAgentAdapter(client, ws);
+  const adapter = new EdgeAgentAdapter(client, ws, options);
   return { adapter, ws, client, hello: helloMsg };
 }
 
@@ -541,6 +541,16 @@ describe('EdgeAgentAdapter — dd:container_sync sets connected state', () => {
     expect(emitAgentConnected).toHaveBeenCalledWith(
       expect.objectContaining({ reconnected: false }),
     );
+  });
+
+  test('emits agentConnected as a reconnect when the gateway recognizes the identity', async () => {
+    const { adapter, ws } = createAdapter(undefined, { reconnected: true });
+    adapter.activate();
+
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(emitAgentConnected).toHaveBeenCalledWith(expect.objectContaining({ reconnected: true }));
   });
 
   test('does not emit agentConnected twice', async () => {

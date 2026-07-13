@@ -291,7 +291,7 @@ class BaseRegistry<
     return Array.from(hosts);
   }
 
-  private validateAuthUrlHost(authUrl: string, requestOptions: RegistryRequestOptions): void {
+  protected validateAuthUrlHost(authUrl: string, requestOptions: RegistryRequestOptions): void {
     let requestScheme: string;
     try {
       requestScheme = new URL(requestOptions?.url ?? '').protocol;

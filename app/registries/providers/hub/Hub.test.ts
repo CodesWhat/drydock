@@ -206,6 +206,7 @@ describe('Docker Hub Registry', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://hub.docker.com/v2/repositories/library/nginx/tags/1.26.0',
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       },

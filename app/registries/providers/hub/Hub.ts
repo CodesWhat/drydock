@@ -118,6 +118,7 @@ class Hub extends Custom<HubRegistryConfiguration> {
       url: `https://hub.docker.com/v2/repositories/${image.name}/tags/${encodeURIComponent(
         tagToLookup,
       )}`,
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       },

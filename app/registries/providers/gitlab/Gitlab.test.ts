@@ -121,6 +121,27 @@ test('authenticate should encode scope query parameter', async () => {
   });
 });
 
+test('authenticate should reject a plaintext token endpoint before sending the configured PAT', async () => {
+  axios.mockResolvedValue({ data: { token: 'must-not-be-used' } });
+  const plaintextGitlab = new Gitlab();
+  plaintextGitlab.configuration = {
+    url: 'https://registry.gitlab.example.com',
+    authurl: 'http://gitlab.example.com',
+    token: TEST_TOKEN,
+  };
+
+  await expect(
+    plaintextGitlab.authenticate(
+      { name: 'group/project' },
+      {
+        headers: {},
+        url: 'https://registry.gitlab.example.com/v2/group/project/manifests/latest',
+      },
+    ),
+  ).rejects.toThrow('uses plaintext HTTP');
+  expect(axios).not.toHaveBeenCalled();
+});
+
 test('resolveBearerChallengeOptions should use configured token credentials', async () => {
   axios.mockImplementation(() => ({
     data: {

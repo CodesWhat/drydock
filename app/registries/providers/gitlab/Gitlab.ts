@@ -79,9 +79,11 @@ class Gitlab<
   async authenticate(image, requestOptions) {
     const scope = encodeURIComponent(`repository:${image.name}:pull`);
     const credentials = this.getTokenRequestCredentials();
+    const authUrl = `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`;
+    this.validateAuthUrlHost(authUrl, requestOptions);
     const request = {
       method: 'GET',
-      url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`,
+      url: authUrl,
       maxRedirects: 0,
       headers: {
         Accept: 'application/json',

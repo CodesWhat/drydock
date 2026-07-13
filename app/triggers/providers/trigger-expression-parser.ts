@@ -15,6 +15,7 @@ function resolvePath(obj: unknown, path: string): unknown {
 
 /** Simple identifier segment test -- no nested groups, linear time. */
 const IDENT_RE = /^[a-zA-Z_]\w*$/;
+const FORBIDDEN_PROPERTY_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 
 /**
  * Validate a dotted property path (e.g. "container.updateKind.kind")
@@ -23,7 +24,10 @@ const IDENT_RE = /^[a-zA-Z_]\w*$/;
  */
 function isValidPropertyPath(str: string): boolean {
   const parts = str.split('.');
-  return parts.length > 0 && parts.every((p) => IDENT_RE.test(p));
+  return (
+    parts.length > 0 &&
+    parts.every((part) => IDENT_RE.test(part) && !FORBIDDEN_PROPERTY_SEGMENTS.has(part))
+  );
 }
 
 /**
