@@ -15,9 +15,9 @@ When implementation, release, or live GitHub state changes, update this file in 
 ## Release and branch state
 
 - **Latest GA:** `v1.5.1`, released 2026-07-09.
-- **Patch candidate:** `v1.5.2-rc.4`, released 2026-07-12. It includes the #496 maturity-retention fix and the #498 pinned-tag detection/visibility work; the matching v1.6 UI forward-port still needs reconciliation.
-- **v1.6 branch:** local `dev/v1.6` contains the unpushed v1.6 stack through the final #325 review fixes (`3abdfa0c`); `origin/dev/v1.6` remains at `87baa455`. Use `git status` for the live ahead/behind count rather than copying a self-invalidating local HEAD here.
-- **Verification:** backend 11,689 tests and UI 4,136 tests at 100% coverage; backend/UI lint, typecheck/build, and website build (262 pages) pass. The `v1.6.0` release precheck correctly blocks on the four still-open unchecked Discussion follow-ups below instead of passing vacuously.
+- **Patch candidate:** `v1.5.2-rc.4`, released 2026-07-12. It includes the #496 maturity-retention fix and the #498 pinned-tag detection/visibility work; v1.6's fuller stacked UI treatment is implemented locally but not released.
+- **v1.6 branch:** local `dev/v1.6` contains the unpushed v1.6 stack through the #325 review fixes and #498 stacked pinned-tag UI integration; `origin/dev/v1.6` remains at `87baa455`. Use `git status` for the live ahead/behind count rather than copying a self-invalidating local HEAD here.
+- **Verification:** backend 11,691 tests and UI 4,137 tests at 100% coverage; backend/UI lint, typecheck/build, and website build (262 pages) pass. The `v1.6.0` release precheck correctly blocks on the four still-open unchecked Discussion follow-ups below instead of passing vacuously.
 - **GitHub metadata:** this repository has no GitHub milestones configured. “v1.6” assignments are release promises and tracker state, not GitHub milestone membership.
 
 ## v1.6 implemented and verified locally
@@ -31,7 +31,7 @@ These are code-complete on the local `dev/v1.6` branch but are not released yet:
 - Bidirectional Home Assistant MQTT ([#210](https://github.com/CodesWhat/drydock/discussions/210), `5183e6cb`, `87baa455`).
 - Declarative update-policy precedence, source metadata, override/revert UI, and audit ([#320](https://github.com/CodesWhat/drydock/issues/320), [#307](https://github.com/CodesWhat/drydock/discussions/307), `25c99055`, `1ad12dfb`, `0c3c99d9`).
 - Maturity stabilization countdown and override ([#406](https://github.com/CodesWhat/drydock/discussions/406), `fe6c4a4f`).
-- Pinned-tag policy inheritance and informational insight backend ([#498](https://github.com/CodesWhat/drydock/issues/498)); see the remaining UI item below.
+- Pinned-tag policy inheritance and informational insight UI ([#498](https://github.com/CodesWhat/drydock/issues/498)): stacked grey current → blue newer tags across list, card, and detail surfaces; neutral `Pinned` state; Major/Minor/Patch chip; and non-actionable filter/metric/button guards.
 - Health-status notification delivery and audit ([#198](https://github.com/CodesWhat/drydock/discussions/198), `7abd671f`); full auto-heal remains v2.1.
 - Trigger-taxonomy Phase 3 error-level migration signals (`3211666e`).
 - Bucket C named work: registry tag-list dedupe, lightweight aggregate reads, virtualized log viewer with immutable rollover, auth-bootstrap timeout, sequential preference migration, stale-chunk self-heal, and CI nits (`792a3ebc` through `b38a8f6b`, plus `518851ec`).
@@ -42,11 +42,10 @@ These are code-complete on the local `dev/v1.6` branch but are not released yet:
 
 ## v1.6 release gates — do next
 
-1. **[#498](https://github.com/CodesWhat/drydock/issues/498) stacked current→newer Tag-column UI — partial.** Backend insight and inheritance are present. The requested at-a-glance UI and rc.4 polish exist only on `origin/feat/v1.6-pin-insight-view`; rebase/cherry-pick deliberately onto current `dev/v1.6`, rerun full UI gates, and keep the issue open for the reported `v3.0.2 Major` anomaly.
-2. **[#321](https://github.com/CodesWhat/drydock/discussions/321) remaining slices — decision required.** SBOM off-heap storage, collection byte attribution/audit dedupe, dry-run UX, typed preview errors, relative-severity gating, and the rolling-RC-tag decision are not implemented. Explicitly re-lane any item not shipping in v1.6; do not lose them behind the already-fixed original bugs.
-3. **[#295](https://github.com/CodesWhat/drydock/discussions/295) cross-view link/action consistency — partial.** Source/release/registry links already work; the remaining v1.6 promise is consistent icon placement and touch-friendly behavior across card, list, table, and detail surfaces. Finish that design pass or publish a clear re-lane; do not describe the underlying link capability as new.
-4. **Health/bell integration hardening — partial.** The later UI pass added `container-unhealthy` to bell rules and refreshes the bell on agent-status SSE. The backend audit dedupe is still keyed only by container name; scope it by agent + watcher + container and add a same-name/different-agent regression test. Verify the existing agent-status event covers health-only transitions; add a dedicated post-audit invalidation only if that verification fails.
-5. **Release convergence.** Resolve the gates above, push the local commit stack, run the full release cut verification, and perform the GitHub follow-ups below.
+1. **[#321](https://github.com/CodesWhat/drydock/discussions/321) remaining slices — decision required.** SBOM off-heap storage, collection byte attribution/audit dedupe, dry-run UX, typed preview errors, relative-severity gating, and the rolling-RC-tag decision are not implemented. Explicitly re-lane any item not shipping in v1.6; do not lose them behind the already-fixed original bugs.
+2. **[#295](https://github.com/CodesWhat/drydock/discussions/295) cross-view link/action consistency — partial.** Source/release/registry links already work; the remaining v1.6 promise is consistent icon placement and touch-friendly behavior across card, list, table, and detail surfaces. Finish that design pass or publish a clear re-lane; do not describe the underlying link capability as new.
+3. **Health/bell integration hardening — partial.** The later UI pass added `container-unhealthy` to bell rules and refreshes the bell on agent-status SSE. The backend audit dedupe is still keyed only by container name; scope it by agent + watcher + container and add a same-name/different-agent regression test. Verify the existing agent-status event covers health-only transitions; add a dedicated post-audit invalidation only if that verification fails.
+4. **Release convergence.** Resolve the gates above, push the local commit stack, run the full release cut verification, and perform the GitHub follow-ups below.
 
 Scanner runtime decoupling, Grype, scanner asset lifecycle, and SBOM off-heap storage are not completed v1.6 scope. If they do not land before GA, move them to an explicit later lane in both the roadmap and public summaries.
 
@@ -69,7 +68,7 @@ Scanner runtime decoupling, Grype, scanner asset lifecycle, and SBOM off-heap st
 | [#490](https://github.com/CodesWhat/drydock/issues/490) | Fix package implemented and verified locally | Reply/close when released |
 | [#491](https://github.com/CodesWhat/drydock/issues/491) | Core template/root-cause fixes implemented locally | Replace the stale debug-output hold with “fixed on v1.6”; close/reply at release if no secondary repro remains |
 | [#494](https://github.com/CodesWhat/drydock/issues/494) | Fix implemented locally (`cd8c11e6`, `f1f040b0`) | Reply/close when released |
-| [#498](https://github.com/CodesWhat/drydock/issues/498) | Partial; backend/policy work landed locally, stacked UI not on current HEAD | Reconcile feature branch, investigate anomaly, keep open |
+| [#498](https://github.com/CodesWhat/drydock/issues/498) | Backend/policy and stacked informational UI implemented locally; the reported actionable `v3.0.2 Major` state was caused by `dd.tag.family=loose`, while the historical cross-suffix loose-mode bug is regression-covered | Keep open; post the accurate explanation and shipped-in-v1.6 follow-up at release, then close |
 | [PR #486](https://github.com/CodesWhat/drydock/pull/486) | Current workflow-comment drift fixed locally by `b38a8f6b` | Allow default-branch convergence to close/supersede PR; version-agnostic wording is optional hardening |
 | [PR #489](https://github.com/CodesWhat/drydock/pull/489) | Dead `@types/node-cron` removed locally by `b38a8f6b` | Allow default-branch convergence to close/supersede PR |
 
