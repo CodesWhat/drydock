@@ -292,6 +292,19 @@ describe('hasRawUpdateCandidate', () => {
     expect(hasRawUpdateCandidate({ newTag: null, newDigest: null })).toBe(false);
   });
 
+  it('#498: does not promote updateInsight into the manual-update path', () => {
+    const pinnedWithInsight = {
+      newTag: null,
+      newDigest: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'minor' as const },
+      updateEligibility: undefined,
+    };
+
+    const hasCandidate = hasRawUpdateCandidate(pinnedWithInsight);
+    expect(hasCandidate).toBe(false);
+    expect(updateButtonState(pinnedWithInsight.updateEligibility, hasCandidate)).toBe('none');
+  });
+
   it.each([
     {
       reason: 'snoozed' as const,

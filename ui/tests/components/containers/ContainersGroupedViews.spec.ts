@@ -1172,12 +1172,14 @@ describe('ContainersGroupedViews', () => {
 
     const wrapper = mountSubject();
 
-    const updateState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
-    const badge = updateState.get('[data-test="update-insight-badge"]');
-    expect(badge.text()).toBe('Newer available');
-    // The insight tag must only surface via the badge'''s tooltip binding, never as
-    // bare unlabeled text — it is pure information, not an actionable update.
+    const row = rowByName(wrapper, 'alpha');
+    const updateState = row.get('[data-test="container-update-state"]');
+    expect(updateState.text()).toContain('Pinned');
+    expect(updateState.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    const kindBadge = updateState.get('[data-test="update-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
     expect(updateState.text()).not.toContain('v1.46.1');
+    expect(row.text()).toContain('v1.46.1');
   });
 
   it('renders the informational update-insight badge in card mode (#498)', async () => {
@@ -1196,9 +1198,84 @@ describe('ContainersGroupedViews', () => {
     const { wrapper } = await mountCardsWithContainers([pinned], 800);
     const card = cardByName(wrapper, 'alpha');
 
-    const cardBadge = card.get('[data-test="update-insight-badge"]');
-    expect(cardBadge.text()).toBe('Newer available');
-    expect(card.text()).not.toContain('v1.46.1');
+    expect(card.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    const cardBadge = card.get('[data-test="update-insight-kind-badge"]');
+    expect(cardBadge.text()).toBe('Minor');
+    expect(card.text()).toContain('v1.13.3');
+    expect(card.text()).toContain('v1.46.1');
+    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Pinned');
+  });
+
+  it('keeps the stacked pinned-tag insight visible beside an actionable digest update (#498)', async () => {
+    const digestAndInsight = makeContainer({
+      id: 'c-digest-and-insight',
+      name: 'alpha',
+      currentTag: 'v2.7.5-openvino',
+      newTag: null,
+      updateKind: 'digest',
+      currentDigest: `sha256:${'a'.repeat(64)}`,
+      newDigest: `sha256:${'b'.repeat(64)}`,
+      isDigestPinned: false,
+      status: 'running',
+      server: 'local-main',
+      registry: 'ghcr',
+      updateInsight: { tag: 'v3.0.2-openvino', kind: 'major' },
+    });
+
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [digestAndInsight];
+    refs.displayContainers.value = [digestAndInsight];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [digestAndInsight],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const tableWrapper = mountSubject();
+    const row = rowByName(tableWrapper, 'alpha');
+    expect(row.text()).toContain('v2.7.5-openvino');
+    expect(row.text()).toContain('v3.0.2-openvino');
+    expect(row.get('[data-test="container-update-state"]').text()).toContain('Digest');
+    expect(row.get('[data-test="update-insight-kind-badge"]').text()).toBe('Major');
+
+    const { wrapper: cardWrapper } = await mountCardsWithContainers([digestAndInsight], 800);
+    const card = cardByName(cardWrapper, 'alpha');
+    expect(card.text()).toContain('v2.7.5-openvino');
+    expect(card.text()).toContain('v3.0.2-openvino');
+    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Digest');
+    expect(card.get('[data-test="update-insight-kind-badge"]').text()).toBe('Major');
+  });
+
+  it('keeps the actionable no-update reason alongside pinned insight in card mode (#498)', async () => {
+    const remedy =
+      'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
+    const pinnedDigestOff = makeContainer({
+      id: 'c-insight-plus-reason-card',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      noUpdateReason: `Pinned tag "v1.13.3": digest watching is disabled for this container, so no actionable update detection is running (a newer same-family tag is still shown for information). ${remedy}`,
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    });
+
+    const { wrapper } = await mountCardsWithContainers([pinnedDigestOff], 800);
+    const card = cardByName(wrapper, 'alpha');
+
+    expect(card.get('[data-test="update-insight-kind-badge"]').text()).toBe('Minor');
+    expect(card.text()).toContain('v1.46.1');
+    const reasonText = card.get('[data-test="no-update-reason-badge"]').attributes('aria-label');
+    expect(reasonText).toContain('no actionable update detection is running');
+    expect(reasonText).not.toContain('so no update detection is running');
   });
 
   it('renders the no-update-reason and update-insight badges together without contradictory copy when digest watching is off (#498)', async () => {
@@ -1237,8 +1314,9 @@ describe('ContainersGroupedViews', () => {
 
     const row = rowByName(wrapper, 'alpha');
 
-    const insightBadge = row.get('[data-test="update-insight-badge"]');
-    expect(insightBadge.text()).toBe('Newer available');
+    const kindBadge = row.get('[data-test="update-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
+    expect(row.text()).toContain('v1.46.1');
 
     const reasonBadge = row.get('[data-test="no-update-reason-badge"]');
     const reasonText = reasonBadge.attributes('aria-label');
@@ -1246,6 +1324,50 @@ describe('ContainersGroupedViews', () => {
     // still real, so the reason copy must not claim no detection at all runs.
     expect(reasonText).toContain('no actionable update detection is running');
     expect(reasonText).not.toContain('so no update detection is running');
+  });
+
+  it('reserves Pinned for insight and labels version-skip policy as Skipped (#498)', () => {
+    const skipped = makeContainer({
+      id: 'c-skip-label',
+      name: 'gamma',
+      newTag: null,
+      updateKind: null,
+    });
+    const pinnedInsight = makeContainer({
+      id: 'c-pin-label',
+      name: 'alpha',
+      newTag: null,
+      updateKind: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'patch' },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [skipped, pinnedInsight];
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const skippedState = rowByName(wrapper, 'gamma').get('[data-test="container-update-state"]');
+    expect(skippedState.text()).toContain('Skipped');
+    expect(skippedState.text()).not.toContain('Pinned');
+
+    const pinnedState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
+    expect(pinnedState.text()).toContain('Pinned');
+    const pinnedLabel = pinnedState.find('.font-semibold');
+    expect(pinnedLabel.attributes('style')).toContain('var(--dd-info)');
+    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-warning)');
+    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-success)');
   });
 
   it('covers dropdown menu actions across blocked/updateable states', async () => {
