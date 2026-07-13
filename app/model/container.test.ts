@@ -2961,6 +2961,30 @@ test.each(['trivy', 'syft'])('model should validate %s SBOM document references'
   expect(validated.security?.sbom?.documentRefs?.['spdx-json']?.bytes).toBe(123);
 });
 
+test('model should validate content-addressed SBOM document references', () => {
+  const validated = container.validate(
+    createContainerWithSecurity({
+      sbom: {
+        generator: 'trivy',
+        image: 'organization/image:1.0.1',
+        subjectDigest: `sha256:${'a'.repeat(64)}`,
+        generatedAt: '2026-07-13T15:24:28.934Z',
+        status: 'generated',
+        formats: ['spdx-json'],
+        documentRefs: {
+          'spdx-json': {
+            key: `sbom/${'b'.repeat(64)}/${'c'.repeat(64)}/spdx-json.json`,
+            sha256: 'c'.repeat(64),
+            bytes: 456,
+          },
+        },
+      },
+    }),
+  );
+
+  expect(validated.security?.sbom?.documentRefs?.['spdx-json']?.bytes).toBe(456);
+});
+
 test('model should reject invalid updateScan schema payloads', async () => {
   expect(() => {
     container.validate(
