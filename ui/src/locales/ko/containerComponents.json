@@ -338,6 +338,12 @@
       "tooltip": "사용 가능한 최적 안정 semver 태그 — 고정을 고려하세요",
       "tooltipWithTag": "추천: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltipMajor": "Newer major version: {tag}. This tag is pinned — drydock won't update it automatically.",
+      "tooltipMinor": "Newer minor version: {tag}. This tag is pinned — drydock won't update it automatically.",
+      "tooltipPatch": "Newer patch version: {tag}. This tag is pinned — drydock won't update it automatically."
+    },
     "eligibilityBadges": {
       "securityBlocked": "보안으로 인해 차단됨",
       "rolledBack": "롤백됨",

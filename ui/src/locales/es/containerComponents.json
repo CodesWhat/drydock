@@ -338,6 +338,12 @@
       "tooltip": "Mejor tag semver estable disponible - considera fijarlo",
       "tooltipWithTag": "Sugerido: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltipMajor": "Newer major version: {tag}. This tag is pinned — drydock won't update it automatically.",
+      "tooltipMinor": "Newer minor version: {tag}. This tag is pinned — drydock won't update it automatically.",
+      "tooltipPatch": "Newer patch version: {tag}. This tag is pinned — drydock won't update it automatically."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Bloqueado por seguridad",
       "rolledBack": "Rollback completado",

@@ -338,6 +338,12 @@
       "tooltip": "Beste stabiele semver-tag die beschikbaar is – overweeg vastzetten",
       "tooltipWithTag": "Voorgesteld: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltipMajor": "Newer major version: {tag}. This tag is pinned — drydock won't update it automatically.",
+      "tooltipMinor": "Newer minor version: {tag}. This tag is pinned — drydock won't update it automatically.",
+      "tooltipPatch": "Newer patch version: {tag}. This tag is pinned — drydock won't update it automatically."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Beveiliging geblokkeerd",
       "rolledBack": "Teruggedraaid",
