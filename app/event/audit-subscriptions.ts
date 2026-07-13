@@ -15,6 +15,7 @@ const AUDIT_HANDLER_OPTIONS = { id: 'audit', order: 200 };
 const SECURITY_ALERT_AUDIT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
 const AGENT_DISCONNECT_AUDIT_DEDUPE_WINDOW_MS = 60 * 1000;
 const CONTAINER_UNHEALTHY_AUDIT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
+const CONTAINER_LIFECYCLE_AUDIT_STATE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 type OrderedEventHandlerFn<TPayload> = (payload: TPayload) => void | Promise<void>;
 
@@ -44,7 +45,121 @@ const securityAlertAuditSeenAt = new Map<string, number>();
 const agentDisconnectedAuditSeenAt = new Map<string, number>();
 const containerUnhealthyAuditSeenAt = new Map<string, number>();
 const updateAvailableAuditState = new Map<string, { signature: string; seenAt: number }>();
+const containerLifecycleAuditState = new Map<string, { signature: string; lastSeenAt: number }>();
 let updateAvailableAuditDedupeWindowMs: number | undefined;
+
+function normalizeLifecyclePolicy(
+  policy:
+    | {
+        skipTags?: string[];
+        skipDigests?: string[];
+        maturityMode?: 'all' | 'mature';
+        maturityMinAgeDays?: number;
+        snoozeUntil?: string;
+      }
+    | undefined,
+) {
+  // Mirrors store/container.ts policy comparison without importing the store
+  // module back into the event layer (which would create a dependency cycle).
+  return {
+    maturityMode: policy?.maturityMode ?? null,
+    maturityMinAgeDays: policy?.maturityMinAgeDays ?? null,
+    skipTags: policy?.skipTags ? [...policy.skipTags].sort() : null,
+    skipDigests: policy?.skipDigests ? [...policy.skipDigests].sort() : null,
+    snoozeUntil: policy?.snoozeUntil ?? null,
+  };
+}
+
+function getContainerLifecycleAuditSignature(container: ContainerLifecycleEventPayload): string {
+  return JSON.stringify({
+    status: container.status ?? null,
+    health: container.health ?? null,
+    error: container.error?.message ?? null,
+    image: {
+      name: container.image?.name ?? null,
+      tag: container.image?.tag?.value ?? null,
+      digest: container.image?.digest?.value ?? null,
+    },
+    result: {
+      tag: container.result?.tag ?? null,
+      digest: container.result?.digest ?? null,
+    },
+    updateAvailable: container.updateAvailable ?? null,
+    updateKind: {
+      kind: container.updateKind?.kind ?? null,
+      localValue: container.updateKind?.localValue ?? null,
+      remoteValue: container.updateKind?.remoteValue ?? null,
+      semverDiff: container.updateKind?.semverDiff ?? null,
+    },
+    policy: {
+      hasEffective: Object.hasOwn(container, 'updatePolicy'),
+      effective: normalizeLifecyclePolicy(container.updatePolicy),
+      hasDeclarative: Object.hasOwn(container, 'updatePolicyDeclarative'),
+      declarative: {
+        env: normalizeLifecyclePolicy(container.updatePolicyDeclarative?.env),
+        label: normalizeLifecyclePolicy(container.updatePolicyDeclarative?.label),
+      },
+      hasOverrides: Object.hasOwn(container, 'updatePolicyOverrides'),
+      overrides: normalizeLifecyclePolicy(container.updatePolicyOverrides),
+      sources: {
+        skipTags: container.updatePolicySources?.skipTags ?? null,
+        skipDigests: container.updatePolicySources?.skipDigests ?? null,
+        maturityMode: container.updatePolicySources?.maturityMode ?? null,
+        maturityMinAgeDays: container.updatePolicySources?.maturityMinAgeDays ?? null,
+      },
+    },
+  });
+}
+
+function getContainerLifecycleAuditIdentity(
+  container: ContainerLifecycleEventPayload,
+): string | undefined {
+  if (typeof container.identityKey === 'string' && container.identityKey.length > 0) {
+    return container.identityKey;
+  }
+  return getContainerIdentityKey(container);
+}
+
+function pruneContainerLifecycleAuditState(now: number): void {
+  const staleBefore = now - CONTAINER_LIFECYCLE_AUDIT_STATE_TTL_MS;
+  for (const [identity, state] of containerLifecycleAuditState.entries()) {
+    if (state.lastSeenAt >= staleBefore) {
+      break;
+    }
+    containerLifecycleAuditState.delete(identity);
+  }
+}
+
+function setContainerLifecycleAuditState(
+  identity: string,
+  signature: string,
+  now = Date.now(),
+): void {
+  // Delete before set so Map insertion order remains a cheap LRU ordering.
+  containerLifecycleAuditState.delete(identity);
+  containerLifecycleAuditState.set(identity, { signature, lastSeenAt: now });
+  pruneContainerLifecycleAuditState(now);
+}
+
+function shouldRecordContainerLifecycleUpdate(container: ContainerLifecycleEventPayload): {
+  record: boolean;
+  identity?: string;
+  signature?: string;
+} {
+  const identity = getContainerLifecycleAuditIdentity(container);
+  if (!identity) {
+    // Preserve the historical fail-open behavior for malformed event payloads.
+    return { record: true };
+  }
+
+  const signature = getContainerLifecycleAuditSignature(container);
+  const previousState = containerLifecycleAuditState.get(identity);
+  if (previousState?.signature === signature) {
+    setContainerLifecycleAuditState(identity, signature);
+    return { record: false, identity };
+  }
+  return { record: true, identity, signature };
+}
 
 function getUpdateAvailableAuditDedupeWindowMs(): number {
   updateAvailableAuditDedupeWindowMs ??= getAuditUpdateAvailableDedupeMs();
@@ -262,36 +377,59 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
   }, AUDIT_HANDLER_OPTIONS);
 
   registrars.registerContainerAdded((containerAdded) => {
+    const containerIdentityKey = getContainerLifecycleAuditIdentity(containerAdded);
     auditStore.insertAudit({
       id: '',
       timestamp: new Date().toISOString(),
       action: 'container-added',
       containerName: containerAdded.name || containerAdded.id || '',
+      ...(containerIdentityKey !== undefined ? { containerIdentityKey } : {}),
       containerImage: containerAdded.image?.name,
       status: 'info',
     });
+    if (containerIdentityKey) {
+      setContainerLifecycleAuditState(
+        containerIdentityKey,
+        getContainerLifecycleAuditSignature(containerAdded),
+      );
+    }
     getAuditCounter()?.inc({ action: 'container-added' });
   });
 
   registrars.registerContainerUpdated((containerUpdated) => {
+    const lifecycleUpdate = shouldRecordContainerLifecycleUpdate(containerUpdated);
+    if (!lifecycleUpdate.record) {
+      return;
+    }
     auditStore.insertAudit({
       id: '',
       timestamp: new Date().toISOString(),
       action: 'container-update',
       containerName: containerUpdated.name || containerUpdated.id || '',
+      ...(lifecycleUpdate.identity !== undefined
+        ? { containerIdentityKey: lifecycleUpdate.identity }
+        : {}),
       containerImage: containerUpdated.image?.name,
       status: 'info',
       details: containerUpdated.status ? `status: ${containerUpdated.status}` : undefined,
     });
+    if (lifecycleUpdate.identity && lifecycleUpdate.signature) {
+      setContainerLifecycleAuditState(lifecycleUpdate.identity, lifecycleUpdate.signature);
+    }
     getAuditCounter()?.inc({ action: 'container-update' });
   });
 
   registrars.registerContainerRemoved((containerRemoved) => {
+    const containerIdentityKey = getContainerLifecycleAuditIdentity(containerRemoved);
+    if (containerIdentityKey) {
+      containerLifecycleAuditState.delete(containerIdentityKey);
+    }
     auditStore.insertAudit({
       id: '',
       timestamp: new Date().toISOString(),
       action: 'container-removed',
       containerName: containerRemoved.name || containerRemoved.id || '',
+      ...(containerIdentityKey !== undefined ? { containerIdentityKey } : {}),
       containerImage: containerRemoved.image?.name,
       status: 'info',
     });
@@ -313,5 +451,6 @@ export function clearAuditSubscriptionCachesForTests(): void {
   agentDisconnectedAuditSeenAt.clear();
   containerUnhealthyAuditSeenAt.clear();
   updateAvailableAuditState.clear();
+  containerLifecycleAuditState.clear();
   updateAvailableAuditDedupeWindowMs = undefined;
 }

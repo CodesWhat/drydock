@@ -43,7 +43,9 @@ function setupAuditSubscriptions(): {
   securityAlertHandler: OrderedEventHandlerFn<SecurityAlertEventPayload>;
   containerHealthTransitionHandler: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
   agentDisconnectedHandler: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
+  containerAddedHandler: (payload: ContainerLifecycleEventPayload) => void;
   containerUpdatedHandler: (payload: ContainerLifecycleEventPayload) => void;
+  containerRemovedHandler: (payload: ContainerLifecycleEventPayload) => void;
 } {
   const handlers: {
     containerReport?: OrderedEventHandlerFn<ContainerReport>;
@@ -51,7 +53,9 @@ function setupAuditSubscriptions(): {
     securityAlert?: OrderedEventHandlerFn<SecurityAlertEventPayload>;
     containerHealthTransition?: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
     agentDisconnected?: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
+    containerAdded?: (payload: ContainerLifecycleEventPayload) => void;
     containerUpdated?: (payload: ContainerLifecycleEventPayload) => void;
+    containerRemoved?: (payload: ContainerLifecycleEventPayload) => void;
   } = {};
 
   const registerOrdered =
@@ -86,11 +90,15 @@ function setupAuditSubscriptions(): {
     registerAgentDisconnected: registerOrdered<AgentDisconnectedEventPayload>((handler) => {
       handlers.agentDisconnected = handler;
     }),
-    registerContainerAdded: registerEvent<ContainerLifecycleEventPayload>(() => {}),
+    registerContainerAdded: registerEvent<ContainerLifecycleEventPayload>((handler) => {
+      handlers.containerAdded = handler;
+    }),
     registerContainerUpdated: registerEvent<ContainerLifecycleEventPayload>((handler) => {
       handlers.containerUpdated = handler;
     }),
-    registerContainerRemoved: registerEvent<ContainerLifecycleEventPayload>(() => {}),
+    registerContainerRemoved: registerEvent<ContainerLifecycleEventPayload>((handler) => {
+      handlers.containerRemoved = handler;
+    }),
   };
 
   registerAuditLogSubscriptions(registrars);
@@ -101,7 +109,9 @@ function setupAuditSubscriptions(): {
     !handlers.securityAlert ||
     !handlers.containerHealthTransition ||
     !handlers.agentDisconnected ||
-    !handlers.containerUpdated
+    !handlers.containerAdded ||
+    !handlers.containerUpdated ||
+    !handlers.containerRemoved
   ) {
     throw new Error('Expected audit handlers to be registered');
   }
@@ -112,8 +122,25 @@ function setupAuditSubscriptions(): {
     securityAlertHandler: handlers.securityAlert,
     containerHealthTransitionHandler: handlers.containerHealthTransition,
     agentDisconnectedHandler: handlers.agentDisconnected,
+    containerAddedHandler: handlers.containerAdded,
     containerUpdatedHandler: handlers.containerUpdated,
+    containerRemovedHandler: handlers.containerRemoved,
   };
+}
+
+function makeLifecyclePayload(
+  overrides: Partial<ContainerLifecycleEventPayload> = {},
+): ContainerLifecycleEventPayload {
+  return {
+    id: 'container-1',
+    name: 'web',
+    watcher: 'docker',
+    agent: 'edge-a',
+    status: 'running',
+    image: { name: 'library/nginx' },
+    result: { tag: '1.27.0', digest: 'sha256:one' },
+    ...overrides,
+  } as unknown as ContainerLifecycleEventPayload;
 }
 
 describe('audit-subscriptions dedupe windows', () => {
@@ -595,6 +622,338 @@ describe('audit-subscriptions dedupe windows', () => {
       }),
     );
     expect(mockInc).toHaveBeenCalledWith({ action: 'container-update' });
+  });
+
+  test('suppresses security-only container updates after the lifecycle baseline', () => {
+    const { containerAddedHandler, containerUpdatedHandler } = setupAuditSubscriptions();
+    const baseline = makeLifecyclePayload({
+      security: { scan: { scannedAt: '2026-01-01T00:00:00.000Z' } },
+    });
+
+    containerAddedHandler(baseline);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+
+    containerUpdatedHandler({
+      ...baseline,
+      security: { scan: { scannedAt: '2026-01-01T00:10:00.000Z' } },
+    } as unknown as ContainerLifecycleEventPayload);
+
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+    expect(mockInc).not.toHaveBeenCalled();
+  });
+
+  test('retries a changed lifecycle audit after persistence fails', () => {
+    const { containerAddedHandler, containerUpdatedHandler } = setupAuditSubscriptions();
+    const baseline = makeLifecyclePayload({ result: undefined });
+
+    containerAddedHandler(baseline);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+    mockInsertAudit.mockImplementationOnce(() => {
+      throw new Error('audit write failed');
+    });
+
+    expect(() => containerUpdatedHandler({ ...baseline, status: 'stopped' })).toThrow(
+      'audit write failed',
+    );
+    containerUpdatedHandler({ ...baseline, status: 'stopped' });
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    expect(mockInc).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not seed lifecycle state when the container-added audit fails', () => {
+    const { containerAddedHandler, containerUpdatedHandler } = setupAuditSubscriptions();
+    const baseline = makeLifecyclePayload({ result: undefined });
+    mockInsertAudit.mockImplementationOnce(() => {
+      throw new Error('audit write failed');
+    });
+
+    expect(() => containerAddedHandler(baseline)).toThrow('audit write failed');
+    containerUpdatedHandler(baseline);
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    expect(mockInc).toHaveBeenCalledTimes(1);
+  });
+
+  test('suppresses security-only updates for a valid partial lifecycle baseline', () => {
+    const { containerAddedHandler, containerUpdatedHandler } = setupAuditSubscriptions();
+    const baseline = {
+      id: 'container-1',
+      name: 'web',
+      watcher: 'docker',
+      agent: 'edge-a',
+    } as ContainerLifecycleEventPayload;
+
+    containerAddedHandler(baseline);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+    containerUpdatedHandler({
+      ...baseline,
+      security: { scan: { scannedAt: '2026-01-01T00:10:00.000Z' } },
+    } as unknown as ContainerLifecycleEventPayload);
+
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+    expect(mockInc).not.toHaveBeenCalled();
+  });
+
+  test('records status transitions while suppressing repeated security refreshes', () => {
+    const { containerAddedHandler, containerUpdatedHandler } = setupAuditSubscriptions();
+    const baseline = makeLifecyclePayload();
+
+    containerAddedHandler(baseline);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+
+    containerUpdatedHandler({ ...baseline, status: 'stopped' });
+    containerUpdatedHandler({
+      ...baseline,
+      status: 'stopped',
+      security: { scan: { scannedAt: '2026-01-01T00:10:00.000Z' } },
+    } as unknown as ContainerLifecycleEventPayload);
+    containerUpdatedHandler({ ...baseline, status: 'running' });
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ details: 'status: stopped' }),
+    );
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ details: 'status: running' }),
+    );
+    expect(mockInc).toHaveBeenCalledTimes(2);
+  });
+
+  test('records a changed image result even when container status is unchanged', () => {
+    const { containerAddedHandler, containerUpdatedHandler } = setupAuditSubscriptions();
+    const baseline = makeLifecyclePayload();
+
+    containerAddedHandler(baseline);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+    containerUpdatedHandler({
+      ...baseline,
+      result: { tag: '1.27.1', digest: 'sha256:two' },
+    } as unknown as ContainerLifecycleEventPayload);
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ containerIdentityKey: 'edge-a::docker::web' }),
+    );
+    expect(mockInc).toHaveBeenCalledTimes(1);
+  });
+
+  test('records update availability, health, error, and policy transitions', () => {
+    const { containerAddedHandler, containerUpdatedHandler } = setupAuditSubscriptions();
+    const baseline = makeLifecyclePayload({
+      health: 'healthy',
+      image: { name: 'library/nginx', tag: { value: '1.27.0' } },
+      updateAvailable: false,
+      updatePolicy: { skipTags: ['beta', 'alpha'] },
+    } as unknown as Partial<ContainerLifecycleEventPayload>);
+
+    containerAddedHandler(baseline);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+
+    const updateAvailable = {
+      ...baseline,
+      updateAvailable: true,
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.27.0',
+        remoteValue: '1.27.1',
+        semverDiff: 'patch',
+      },
+    } as unknown as ContainerLifecycleEventPayload;
+    containerUpdatedHandler(updateAvailable);
+    containerUpdatedHandler({ ...updateAvailable, health: 'unhealthy' });
+    containerUpdatedHandler({
+      ...updateAvailable,
+      health: 'unhealthy',
+      error: { message: 'boom' },
+    });
+    containerUpdatedHandler({
+      ...updateAvailable,
+      health: 'unhealthy',
+      error: { message: 'boom' },
+      updatePolicy: { skipTags: ['stable'] },
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(4);
+    expect(mockInc).toHaveBeenCalledTimes(4);
+  });
+
+  test('normalizes policy list ordering before comparing lifecycle state', () => {
+    const { containerAddedHandler, containerUpdatedHandler } = setupAuditSubscriptions();
+    const baseline = makeLifecyclePayload({
+      updatePolicy: { skipTags: ['alpha', 'beta'], skipDigests: ['two', 'one'] },
+    } as unknown as Partial<ContainerLifecycleEventPayload>);
+
+    containerAddedHandler(baseline);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+    containerUpdatedHandler({
+      ...baseline,
+      updatePolicy: { skipTags: ['beta', 'alpha'], skipDigests: ['one', 'two'] },
+      security: { scan: { scannedAt: '2026-01-01T00:10:00.000Z' } },
+    } as unknown as ContainerLifecycleEventPayload);
+
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+    expect(mockInc).not.toHaveBeenCalled();
+  });
+
+  test('scopes lifecycle audit state by agent and watcher', () => {
+    const { containerUpdatedHandler } = setupAuditSubscriptions();
+    const updateFor = (agent: string, watcher: string, scannedAt: string) =>
+      makeLifecyclePayload({
+        id: `${agent}-${watcher}`,
+        watcher,
+        agent,
+        security: { scan: { scannedAt } },
+      });
+
+    containerUpdatedHandler(updateFor('edge-a', 'docker', '2026-01-01T00:00:00.000Z'));
+    containerUpdatedHandler(updateFor('edge-b', 'docker', '2026-01-01T00:00:00.000Z'));
+    containerUpdatedHandler(updateFor('edge-a', 'podman', '2026-01-01T00:00:00.000Z'));
+    containerUpdatedHandler(updateFor('edge-a', 'docker', '2026-01-01T00:10:00.000Z'));
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(3);
+    expect(mockInc).toHaveBeenCalledTimes(3);
+  });
+
+  test('scopes same-name lifecycle state by compose-aware identity', () => {
+    const { containerAddedHandler, containerUpdatedHandler } = setupAuditSubscriptions();
+    const siblingFor = (identityKey: string, status: string, scannedAt: string) =>
+      makeLifecyclePayload({
+        id: identityKey,
+        identityKey,
+        status,
+        result: undefined,
+        security: { scan: { scannedAt } },
+      });
+
+    containerAddedHandler(siblingFor('edge-a::docker::web::compose-a', 'running', 'baseline'));
+    containerAddedHandler(siblingFor('edge-a::docker::web::compose-b', 'stopped', 'baseline'));
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+
+    containerUpdatedHandler(
+      siblingFor('edge-a::docker::web::compose-a', 'running', '2026-01-01T00:10:00.000Z'),
+    );
+    containerUpdatedHandler(
+      siblingFor('edge-a::docker::web::compose-b', 'stopped', '2026-01-01T00:10:00.000Z'),
+    );
+
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+    expect(mockInc).not.toHaveBeenCalled();
+  });
+
+  test('removing one compose sibling preserves the other sibling lifecycle state', () => {
+    const { containerAddedHandler, containerUpdatedHandler, containerRemovedHandler } =
+      setupAuditSubscriptions();
+    const siblingFor = (identityKey: string, scannedAt: string) =>
+      makeLifecyclePayload({
+        id: identityKey,
+        identityKey,
+        result: undefined,
+        security: { scan: { scannedAt } },
+      });
+
+    const firstSibling = siblingFor('edge-a::docker::web::compose-a', 'baseline');
+    const secondSibling = siblingFor('edge-a::docker::web::compose-b', 'baseline');
+    containerAddedHandler(firstSibling);
+    containerAddedHandler(secondSibling);
+    containerRemovedHandler(firstSibling);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+
+    containerUpdatedHandler(
+      siblingFor('edge-a::docker::web::compose-b', '2026-01-01T00:10:00.000Z'),
+    );
+
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+    expect(mockInc).not.toHaveBeenCalled();
+  });
+
+  test('does not churn a stable fleet when lifecycle state exceeds ten thousand containers', () => {
+    const { containerUpdatedHandler } = setupAuditSubscriptions();
+    const updateFor = (index: number) =>
+      makeLifecyclePayload({
+        id: `container-${index}`,
+        name: `web-${index}`,
+        result: undefined,
+        security: { scan: { scannedAt: '2026-01-01T00:00:00.000Z' } },
+      });
+
+    for (let index = 0; index < 10_001; index += 1) {
+      containerUpdatedHandler(updateFor(index));
+    }
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+
+    for (let index = 0; index < 10_001; index += 1) {
+      containerUpdatedHandler(updateFor(index));
+    }
+
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+    expect(mockInc).not.toHaveBeenCalled();
+  });
+
+  test('prunes orphaned lifecycle state after thirty days without activity', () => {
+    const { containerUpdatedHandler } = setupAuditSubscriptions();
+    const updateFor = (name: string) =>
+      makeLifecyclePayload({
+        id: name,
+        name,
+        result: undefined,
+      });
+
+    containerUpdatedHandler(updateFor('orphaned'));
+    vi.advanceTimersByTime(30 * 24 * 60 * 60 * 1000 + 1);
+    containerUpdatedHandler(updateFor('active'));
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+
+    containerUpdatedHandler(updateFor('orphaned'));
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledTimes(1);
+  });
+
+  test('forgets lifecycle audit state when a container is removed', () => {
+    const { containerUpdatedHandler, containerRemovedHandler } = setupAuditSubscriptions();
+    const update = makeLifecyclePayload();
+
+    containerUpdatedHandler(update);
+    containerRemovedHandler(update);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+    containerUpdatedHandler(update);
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledTimes(1);
+  });
+
+  test('fails open for repeated lifecycle updates without a stable identity', () => {
+    const { containerUpdatedHandler } = setupAuditSubscriptions();
+    const malformed = {
+      id: 'container-1',
+      name: 'web',
+      status: 'running',
+      security: { scan: { scannedAt: '2026-01-01T00:00:00.000Z' } },
+    } as unknown as ContainerLifecycleEventPayload;
+
+    containerUpdatedHandler(malformed);
+    containerUpdatedHandler({
+      ...malformed,
+      security: { scan: { scannedAt: '2026-01-01T00:10:00.000Z' } },
+    } as unknown as ContainerLifecycleEventPayload);
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    expect(mockInc).toHaveBeenCalledTimes(2);
   });
 
   test('records update-applied audits for valid string payloads', async () => {
