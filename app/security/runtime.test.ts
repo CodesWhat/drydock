@@ -341,7 +341,11 @@ test('getSecurityRuntimeStatus reports Docker worker asset health', async () => 
   expect(status).toMatchObject({
     ready: true,
     backend: 'docker',
-    scanner: { scanner: 'both', status: 'ready' },
+    scanner: {
+      scanner: 'both',
+      status: 'ready',
+      message: 'Both scanners are ready via docker',
+    },
     providers: [
       { provider: 'trivy', status: 'ready' },
       { provider: 'grype', status: 'ready' },
@@ -1253,6 +1257,14 @@ describe('getTrivyDatabaseStatus', () => {
 
   test('should return undefined when execFile returns non-JSON output', async () => {
     mockExecFileSuccess('this is not json');
+
+    const result = await getTrivyDatabaseStatus();
+
+    expect(result).toBeUndefined();
+  });
+
+  test('should return undefined when execFile returns valid non-object JSON', async () => {
+    mockExecFileSuccess(JSON.stringify('not a database status'));
 
     const result = await getTrivyDatabaseStatus();
 
