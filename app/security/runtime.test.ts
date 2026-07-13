@@ -937,6 +937,52 @@ describe('getTrivyDatabaseStatus', () => {
     );
   });
 
+  test.each([
+    ['', { database: { built: '2026-07-12T05:00:00.000Z' } }],
+    ['   ', { db: { built: '2026-07-12T05:00:00.000Z' } }],
+  ])('normalizes an empty Grype command and nested DB metadata (%j)', async (command, output) => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'grype',
+      grype: { ...createEnabledConfiguration().grype, command },
+    });
+    const execFileMock = mockExecFileSuccess(JSON.stringify(output));
+
+    await expect(getTrivyDatabaseStatus()).resolves.toEqual({
+      updatedAt: 'grype:2026-07-12T05:00:00.000Z',
+    });
+    expect(execFileMock).toHaveBeenCalledWith(
+      'grype',
+      ['db', 'status', '-o', 'json'],
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
+
+  test.each([
+    ['blank metadata', JSON.stringify({ built: '   ' })],
+    ['missing metadata', JSON.stringify({ schemaVersion: 6 })],
+    ['malformed output', 'not json'],
+  ])('returns undefined for Grype %s', async (_label, output) => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'grype',
+    });
+    mockExecFileSuccess(output);
+
+    await expect(getTrivyDatabaseStatus()).resolves.toBeUndefined();
+  });
+
+  test('returns undefined when Grype DB status exits with an error', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'grype',
+    });
+    mockExecFileError();
+
+    await expect(getTrivyDatabaseStatus()).resolves.toBeUndefined();
+  });
+
   test('includes Grype database metadata in a combined command-backend fingerprint', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
@@ -960,6 +1006,89 @@ describe('getTrivyDatabaseStatus', () => {
       downloadedAt: '2025-06-02T12:00:00Z',
     });
     expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('returns undefined when a combined fingerprint cannot read Grype metadata', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'both',
+      grype: { ...createEnabledConfiguration().grype, command: '   ' },
+    });
+    const execFileMock = vi.fn((command, _args, _options, callback) => {
+      callback(
+        null,
+        command === 'grype' ? JSON.stringify({ schemaVersion: 6 }) : validTrivyVersionOutput,
+        '',
+      );
+      return { exitCode: 0 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+
+    await expect(getTrivyDatabaseStatus()).resolves.toBeUndefined();
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('normalizes an empty combined Grype command and missing stdout', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'both',
+      grype: { ...createEnabledConfiguration().grype, command: '' },
+    });
+    const execFileMock = vi.fn((command, _args, _options, callback) => {
+      if (command === 'grype') {
+        callback(null, undefined, '');
+      } else {
+        callback(null, validTrivyVersionOutput, '');
+      }
+      return { exitCode: 0 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+
+    await expect(getTrivyDatabaseStatus()).resolves.toBeUndefined();
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+    expect(execFileMock).toHaveBeenLastCalledWith(
+      'grype',
+      ['db', 'status', '-o', 'json'],
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
+
+  test('keeps a newer Grype lookup registered when an earlier lookup resolves', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'grype',
+    });
+    const callbacks: Array<(error: unknown, stdout?: string, stderr?: string) => void> = [];
+    const execFileMock = vi.fn(
+      (
+        _command: unknown,
+        _args: unknown,
+        _options: unknown,
+        callback: (error: unknown, stdout?: string, stderr?: string) => void,
+      ) => {
+        callbacks.push(callback);
+        return { exitCode: 0 };
+      },
+    );
+    childProcessControl.execFileImpl = execFileMock;
+
+    const first = getTrivyDatabaseStatus();
+    clearTrivyDatabaseStatusCache();
+    const second = getTrivyDatabaseStatus();
+
+    callbacks[0](null, JSON.stringify({ built: '2026-07-12T06:00:00.000Z' }), '');
+    await expect(first).resolves.toEqual({
+      updatedAt: 'grype:2026-07-12T06:00:00.000Z',
+    });
+
+    const third = getTrivyDatabaseStatus();
+    callbacks[1](null, JSON.stringify({ built: '2026-07-12T07:00:00.000Z' }), '');
+    const [secondResult, thirdResult] = await Promise.all([second, third]);
+
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+    expect(secondResult).toEqual({ updatedAt: 'grype:2026-07-12T07:00:00.000Z' });
+    expect(thirdResult).toEqual(secondResult);
   });
 
   test('should treat undefined stdout as empty output', async () => {

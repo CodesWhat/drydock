@@ -340,6 +340,36 @@ describe('createScannerAssetManager', () => {
     });
   });
 
+  test('discards an inspection failure after a concurrent lifecycle state change', async () => {
+    const staleInspection = createDeferred<ScannerAssetInspection | undefined>();
+    const provider = createProvider({
+      id: 'trivy',
+      inspect: vi
+        .fn()
+        .mockImplementationOnce(() => staleInspection.promise)
+        .mockResolvedValueOnce({ resolvedDigest: 'sha256:fresh', version: 'fresh' }),
+    });
+    const manager = createScannerAssetManager({ providers: [provider] });
+
+    const statusRefresh = manager.status();
+    await vi.waitFor(() => expect(provider.inspect).toHaveBeenCalledOnce());
+    await expect(manager.pull('trivy')).resolves.toMatchObject({
+      state: 'ready',
+      resolvedDigest: 'sha256:fresh',
+    });
+    staleInspection.reject(new Error('stale inspection failed'));
+
+    await expect(statusRefresh).resolves.toEqual([
+      expect.objectContaining({ state: 'ready', resolvedDigest: 'sha256:fresh', version: 'fresh' }),
+    ]);
+    expect(manager.get('trivy')).toMatchObject({
+      state: 'ready',
+      resolvedDigest: 'sha256:fresh',
+      version: 'fresh',
+      lastError: undefined,
+    });
+  });
+
   test('clears stale inspection metadata when an asset becomes missing', async () => {
     const provider = createProvider({
       id: 'grype',

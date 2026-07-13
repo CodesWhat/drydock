@@ -309,6 +309,86 @@ describe('computeUpdateEligibility', () => {
       expect(result.blockers.find((b) => b.reason === 'security-scan-blocked')).toBeUndefined();
     });
 
+    test.each([
+      ['matching digest metadata', { image: 'nginx:candidate', imageDigest: 'sha256:bbb' }],
+      ['matching pinned image', { image: 'nginx@sha256:bbb' }],
+    ])('relative pass accepts a digest candidate via %s', (_label, updateScanIdentity) => {
+      const summary = { unknown: 0, low: 0, medium: 0, high: 1, critical: 1 };
+      const container = makeContainerWithDigestUpdate({
+        security: {
+          scan: {
+            scanner: 'trivy',
+            image: 'nginx@sha256:aaa',
+            imageDigest: 'sha256:aaa',
+            scannedAt: new Date().toISOString(),
+            status: 'blocked',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+          },
+          updateScan: {
+            scanner: 'trivy',
+            ...updateScanIdentity,
+            scannedAt: new Date().toISOString(),
+            status: 'passed',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+            relativeGate: {
+              decision: 'passed',
+              reason: 'no-worse-than-current',
+              currentSummary: summary,
+            },
+          },
+        },
+      });
+
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+
+      expect(result.blockers.find((b) => b.reason === 'security-scan-blocked')).toBeUndefined();
+    });
+
+    test('stale relative pass does not match a different digest candidate', () => {
+      const summary = { unknown: 0, low: 0, medium: 0, high: 1, critical: 1 };
+      const container = makeContainerWithDigestUpdate({
+        security: {
+          scan: {
+            scanner: 'trivy',
+            image: 'nginx@sha256:aaa',
+            imageDigest: 'sha256:aaa',
+            scannedAt: new Date().toISOString(),
+            status: 'blocked',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+          },
+          updateScan: {
+            scanner: 'trivy',
+            image: 'nginx@sha256:ccc',
+            imageDigest: 'sha256:ccc',
+            scannedAt: new Date().toISOString(),
+            status: 'passed',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+            relativeGate: {
+              decision: 'passed',
+              reason: 'no-worse-than-current',
+              currentSummary: summary,
+            },
+          },
+        },
+      });
+
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+
+      expect(result.blockers.find((b) => b.reason === 'security-scan-blocked')).toBeDefined();
+    });
+
     test('stale relative pass does not override a blocked current scan for a newer candidate', () => {
       const summary = { unknown: 0, low: 0, medium: 0, high: 1, critical: 1 };
       const container = makeContainerWithTagUpdate({

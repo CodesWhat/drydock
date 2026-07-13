@@ -561,6 +561,37 @@ describe('createDockerScannerBackend', () => {
     expect((outcome as Error).message).toBe('Scanner worker timed out after 10ms');
   });
 
+  test.each([
+    ['successful cleanup', undefined],
+    ['failed cleanup', new Error('remove failed')],
+  ])('removes a container that is created after the deadline (%s)', async (_scenario, failure) => {
+    const harness = createHarness();
+    let resolveCreated!: (container: typeof harness.container) => void;
+    harness.client.createContainer.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCreated = resolve;
+        }),
+    );
+    if (failure) {
+      harness.container.remove.mockRejectedValueOnce(failure);
+    }
+
+    await expect(
+      harness.backend.run({
+        image: PINNED_IMAGE,
+        args: ['scan'],
+        timeoutMs: 10,
+        maxOutputBytes: 1_024,
+      }),
+    ).rejects.toThrow('timed out after 10ms');
+
+    resolveCreated(harness.container);
+    await vi.waitFor(() => {
+      expect(harness.container.remove).toHaveBeenCalledWith({ force: true });
+    });
+  });
+
   test('kills a timed-out worker when stopping fails', async () => {
     const { backend, container } = createHarness({ wait: () => new Promise(() => undefined) });
     container.stop.mockRejectedValueOnce(new Error('stop failed'));

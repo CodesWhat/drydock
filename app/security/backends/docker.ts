@@ -367,12 +367,8 @@ function waitForTimeout(timeoutMs: number): {
   };
 }
 
-function parseDigest(image: string, repoDigests: string[] | undefined): string {
-  const requestedDigest = image.match(/@((?:sha256):[a-fA-F0-9]{64})$/)?.[1];
-  const inspectedDigest = repoDigests
-    ?.map((repoDigest) => repoDigest.match(/@((?:sha256):[a-fA-F0-9]{64})$/)?.[1])
-    .find((digest): digest is string => digest !== undefined);
-  return requestedDigest ?? inspectedDigest ?? image.slice(image.lastIndexOf('@') + 1);
+function parseDigest(image: string): string {
+  return image.slice(image.lastIndexOf('@') + 1);
 }
 
 export function createDockerScannerBackend(options: DockerScannerBackendOptions) {
@@ -555,7 +551,7 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
     return {
       image,
       ...(typeof inspected.Id === 'string' && inspected.Id ? { id: inspected.Id } : {}),
-      digest: parseDigest(image, inspected.RepoDigests),
+      digest: parseDigest(image),
       ...(typeof version === 'string' && version ? { version } : {}),
     };
   }
