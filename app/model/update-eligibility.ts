@@ -89,6 +89,25 @@ export function getPrimaryHardBlocker(
   return getHardBlockers(eligibility)[0];
 }
 
+function updateScanMatchesCandidate(container: Container): boolean {
+  const updateScan = container.security?.updateScan;
+  const candidateDigest = container.result?.digest;
+  if (!updateScan) {
+    return false;
+  }
+  if (candidateDigest) {
+    return (
+      updateScan.imageDigest === candidateDigest || updateScan.image.endsWith(`@${candidateDigest}`)
+    );
+  }
+
+  const candidateTag = container.result?.tag;
+  return Boolean(
+    candidateTag &&
+      (updateScan.image === candidateTag || updateScan.image.endsWith(`:${candidateTag}`)),
+  );
+}
+
 function makeBlocker(blocker: Omit<UpdateBlocker, 'severity'>): UpdateBlocker {
   return { ...blocker, severity: BLOCKER_SEVERITY[blocker.reason] };
 }
@@ -245,7 +264,8 @@ export function computeUpdateEligibility(
   // Either is grounds to halt an update until the operator triages.
   const candidatePassedRelative =
     container.security?.updateScan?.status === 'passed' &&
-    container.security.updateScan.relativeGate?.decision === 'passed';
+    container.security.updateScan.relativeGate?.decision === 'passed' &&
+    updateScanMatchesCandidate(container);
   if (
     container.security?.updateScan?.status === 'blocked' ||
     (container.security?.scan?.status === 'blocked' && !candidatePassedRelative)

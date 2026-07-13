@@ -73,7 +73,11 @@ function shouldRecordUpdateAvailableAudit(containerReport: ContainerReport): boo
   const now = Date.now();
   const dedupeWindowMs = getUpdateAvailableAuditDedupeWindowMs();
   const updateKind = containerReport.container.updateKind;
-  const signature = JSON.stringify([updateKind?.localValue ?? '', updateKind?.remoteValue ?? '']);
+  const signature = JSON.stringify([
+    updateKind?.kind ?? '',
+    updateKind?.localValue ?? '',
+    updateKind?.remoteValue ?? '',
+  ]);
   const previousState = updateAvailableAuditState.get(identity);
   if (previousState?.signature === signature && now - previousState.seenAt < dedupeWindowMs) {
     return false;

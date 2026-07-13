@@ -237,6 +237,34 @@ describe('audit-subscriptions dedupe windows', () => {
     expect(mockInc).toHaveBeenCalledTimes(2);
   });
 
+  test('does not deduplicate different update kinds with the same displayed values', async () => {
+    const { containerReportHandler } = setupAuditSubscriptions();
+    const container = {
+      name: 'api',
+      watcher: 'docker',
+      agent: 'edge-a',
+      updateAvailable: true,
+    };
+
+    await containerReportHandler({
+      container: {
+        ...container,
+        updateKind: { kind: 'tag', localValue: 'stable', remoteValue: 'candidate' },
+      },
+      changed: true,
+    } as ContainerReport);
+    await containerReportHandler({
+      container: {
+        ...container,
+        updateKind: { kind: 'digest', localValue: 'stable', remoteValue: 'candidate' },
+      },
+      changed: true,
+    } as ContainerReport);
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    expect(mockInc).toHaveBeenCalledTimes(2);
+  });
+
   test('deduplicates incomplete update signatures without conflating distinct values', async () => {
     const { containerReportHandler } = setupAuditSubscriptions();
     const reportFor = (name: string, updateKind?: ContainerReport['container']['updateKind']) =>
