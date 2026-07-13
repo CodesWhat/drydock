@@ -124,6 +124,16 @@ function normalizeInspection(inspection: ScannerAssetInspection): ScannerAssetIn
   };
 }
 
+function clearedInspectionMetadata(): ScannerAssetInspection {
+  return {
+    resolvedDigest: undefined,
+    version: undefined,
+    updatedAt: undefined,
+    cacheUpdatedAt: undefined,
+    databaseUpdatedAt: undefined,
+  };
+}
+
 function getErrorMessage(error: unknown, auth?: ScannerAssetAuth): string {
   let message =
     error instanceof Error ? error.message : String(error ?? 'Unknown scanner asset error');
@@ -219,7 +229,10 @@ export function createScannerAssetManager(
     const inspectedAt = now().toISOString();
     try {
       const inspection = await provider.inspect();
-      const metadata = inspection ? normalizeInspection(inspection) : {};
+      if (states.get(id) !== existing || inFlight.has(id)) {
+        return cloneStatus(requireStatus(id));
+      }
+      const metadata = inspection ? normalizeInspection(inspection) : clearedInspectionMetadata();
       return setStatus(id, {
         ...existing,
         ...metadata,
@@ -228,6 +241,9 @@ export function createScannerAssetManager(
         lastError: undefined,
       });
     } catch (error: unknown) {
+      if (states.get(id) !== existing || inFlight.has(id)) {
+        return cloneStatus(requireStatus(id));
+      }
       return setStatus(id, {
         ...existing,
         state: 'error',
@@ -275,7 +291,7 @@ export function createScannerAssetManager(
       const completedAt = now().toISOString();
       const completedStatus = setStatus(id, {
         ...requireStatus(id),
-        ...(inspection ? normalizeInspection(inspection) : {}),
+        ...(inspection ? normalizeInspection(inspection) : clearedInspectionMetadata()),
         state: inspection ? 'ready' : 'missing',
         operationId,
         completedAt,

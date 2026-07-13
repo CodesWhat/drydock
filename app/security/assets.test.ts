@@ -311,6 +311,62 @@ describe('createScannerAssetManager', () => {
     await pulling;
   });
 
+  test('discards an inspection result after a concurrent lifecycle state change', async () => {
+    const staleInspection = createDeferred<ScannerAssetInspection | undefined>();
+    const provider = createProvider({
+      id: 'trivy',
+      inspect: vi
+        .fn()
+        .mockImplementationOnce(() => staleInspection.promise)
+        .mockResolvedValueOnce({ resolvedDigest: 'sha256:fresh', version: 'fresh' }),
+    });
+    const manager = createScannerAssetManager({ providers: [provider] });
+
+    const statusRefresh = manager.status();
+    await vi.waitFor(() => expect(provider.inspect).toHaveBeenCalledOnce());
+    await expect(manager.pull('trivy')).resolves.toMatchObject({
+      state: 'ready',
+      resolvedDigest: 'sha256:fresh',
+    });
+    staleInspection.resolve({ resolvedDigest: 'sha256:stale', version: 'stale' });
+
+    await expect(statusRefresh).resolves.toEqual([
+      expect.objectContaining({ state: 'ready', resolvedDigest: 'sha256:fresh', version: 'fresh' }),
+    ]);
+    expect(manager.get('trivy')).toMatchObject({
+      state: 'ready',
+      resolvedDigest: 'sha256:fresh',
+      version: 'fresh',
+    });
+  });
+
+  test('clears stale inspection metadata when an asset becomes missing', async () => {
+    const provider = createProvider({
+      id: 'grype',
+      inspect: vi
+        .fn()
+        .mockResolvedValueOnce({
+          resolvedDigest: 'sha256:present',
+          version: '1.0.0',
+          updatedAt: '2026-07-12T01:00:00.000Z',
+          cacheUpdatedAt: '2026-07-12T02:00:00.000Z',
+          databaseUpdatedAt: '2026-07-12T03:00:00.000Z',
+        })
+        .mockResolvedValueOnce(undefined),
+    });
+    const manager = createScannerAssetManager({ providers: [provider] });
+
+    await manager.status();
+    const [missing] = await manager.status();
+
+    expect(missing).toMatchObject({ provider: 'grype', state: 'missing' });
+    expect(missing.resolvedDigest).toBeUndefined();
+    expect(missing.version).toBeUndefined();
+    expect(missing.updatedAt).toBeUndefined();
+    expect(missing.cacheUpdatedAt).toBeUndefined();
+    expect(missing.databaseUpdatedAt).toBeUndefined();
+  });
+
   test('records inspection failures and missing post-operation assets', async () => {
     const provider = createProvider({
       id: 'grype',
