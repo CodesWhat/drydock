@@ -732,6 +732,20 @@ describe('createDockerScannerBackend', () => {
     ).rejects.toThrow('invalid exit status');
   });
 
+  test('reports the digest from the requested pinned reference', async () => {
+    const { backend } = createHarness({
+      inspect: {
+        Id: `sha256:${'c'.repeat(64)}`,
+        RepoDigests: [`registry.example.com/security/trivy@sha256:${'b'.repeat(64)}`],
+        Config: { Labels: {} },
+      },
+    });
+
+    await expect(backend.inspectImage(PINNED_IMAGE)).resolves.toMatchObject({
+      digest: `sha256:${'a'.repeat(64)}`,
+    });
+  });
+
   test('does not hide a successful result when best-effort removal fails', async () => {
     const { backend, container } = createHarness();
     container.remove.mockRejectedValueOnce(new Error('remove failed'));

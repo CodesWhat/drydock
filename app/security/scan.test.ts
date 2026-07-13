@@ -1713,6 +1713,25 @@ test('rejects Trivy extra arguments that override a protected option', async () 
   expect(result.error).toContain('Trivy extra arguments cannot override --format');
 });
 
+test.each([
+  ['-f', '-f'],
+  ['-f=table', '-f'],
+  ['-o', '-o'],
+  ['-o=report.json', '-o'],
+  ['-s', '-s'],
+  ['-s=LOW', '-s'],
+])('rejects Trivy short alias %s for a protected option', async (argument, flag) => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, extraArgs: [argument] },
+  });
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain(`Trivy extra arguments cannot override ${flag}`);
+});
+
 test('passes non-protected Trivy extra arguments to the scanner', async () => {
   mockGetSecurityConfiguration.mockReturnValue({
     ...createEnabledConfiguration(),

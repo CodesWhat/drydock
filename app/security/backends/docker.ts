@@ -368,10 +368,11 @@ function waitForTimeout(timeoutMs: number): {
 }
 
 function parseDigest(image: string, repoDigests: string[] | undefined): string {
+  const requestedDigest = image.match(/@((?:sha256):[a-fA-F0-9]{64})$/)?.[1];
   const inspectedDigest = repoDigests
     ?.map((repoDigest) => repoDigest.match(/@((?:sha256):[a-fA-F0-9]{64})$/)?.[1])
     .find((digest): digest is string => digest !== undefined);
-  return inspectedDigest ?? image.slice(image.lastIndexOf('@') + 1);
+  return requestedDigest ?? inspectedDigest ?? image.slice(image.lastIndexOf('@') + 1);
 }
 
 export function createDockerScannerBackend(options: DockerScannerBackendOptions) {

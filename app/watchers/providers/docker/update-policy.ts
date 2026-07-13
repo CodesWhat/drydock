@@ -1,3 +1,4 @@
+import { sanitizeLogParam } from '../../../log/sanitize.js';
 import type {
   Container,
   ContainerDeclarativeUpdatePolicy,
@@ -51,10 +52,10 @@ export function resolveDockerDeclarativeUpdatePolicy(
   const labelDays = parseMaturityMinAgeDays(labels[ddUpdatePolicyMaturityMinAgeDays]);
   if (typeof rawLabelMode === 'string' && rawLabelMode.trim() !== '' && !labelMode) {
     const containerContext = options.containerName
-      ? `Container "${options.containerName}" has`
+      ? `Container "${sanitizeLogParam(options.containerName)}" has`
       : 'Container has';
     options.logger?.warn(
-      `${containerContext} invalid ${ddUpdatePolicyMaturityMode} value "${rawLabelMode}"; expected "all" or "mature". Ignoring label.`,
+      `${containerContext} invalid ${ddUpdatePolicyMaturityMode} value "${sanitizeLogParam(rawLabelMode)}"; expected "all" or "mature". Ignoring label.`,
     );
   }
   if (envMode) env.maturityMode = envMode;

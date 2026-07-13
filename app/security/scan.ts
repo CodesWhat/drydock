@@ -426,6 +426,9 @@ function buildTrivyArgs(
 
   args.push(
     ...validateProviderExtraArgs('Trivy', configuration.trivy.extraArgs || [], [
+      '-f',
+      '-o',
+      '-s',
       '--format',
       '--output',
       '--timeout',

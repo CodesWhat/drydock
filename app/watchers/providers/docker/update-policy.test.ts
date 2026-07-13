@@ -72,6 +72,20 @@ describe('Docker declarative update policy', () => {
     );
   });
 
+  test('sanitizes untrusted container and label values in maturity warnings', () => {
+    const logger = { warn: vi.fn() };
+
+    resolveDockerDeclarativeUpdatePolicy(
+      { 'dd.updatePolicy.maturityMode': 'fresh\nforged-label' },
+      {},
+      { logger, containerName: 'web\r\nforged-container' },
+    );
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Container "webforged-container" has invalid dd.updatePolicy.maturityMode value "freshforged-label"; expected "all" or "mature". Ignoring label.',
+    );
+  });
+
   test('applies declarations while preserving a controller override', () => {
     const container = createContainerFixture({
       updatePolicyOverrides: { maturityMode: 'all' },

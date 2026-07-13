@@ -668,11 +668,14 @@ describe('Docker Watcher', () => {
       const containerLog = createMockLog(['warn', 'debug']);
       docker.log = containerLog;
 
-      await docker.addImageDetailsToContainer(container);
+      const result = await docker.addImageDetailsToContainer(container);
 
       expect(containerLog.warn).toHaveBeenCalledWith(
         'Container "nginx" has invalid dd.updatePolicy.maturityMode value "fresh"; expected "all" or "mature". Ignoring label.',
       );
+      expect(result.updatePolicy?.maturityMode).toBeUndefined();
+      expect(result.updatePolicyDeclarative?.label.maturityMode).toBeUndefined();
+      expect(result.updatePolicySources?.maturityMode).toBeUndefined();
     });
 
     test('should apply imgset watchDigest when label is missing', async () => {
