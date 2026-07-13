@@ -93,9 +93,11 @@ useFocusTrap(panelRef, trapActive);
          }">
 
     <!-- Panel toolbar: size + full page + close -->
-    <div class="shrink-0 px-4 py-2.5 flex items-center justify-between"
+    <div
+         data-test="detail-panel-toolbar"
+         class="shrink-0 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2"
          :style="{ borderBottom: '1px solid var(--dd-border)' }">
-      <div class="flex items-center gap-2">
+      <div data-test="detail-panel-toolbar-leading" class="flex flex-1 flex-wrap items-center gap-2 min-w-0">
         <div v-if="(showSizeControls && !isMobile) || showFullPage" class="flex items-center dd-rounded overflow-hidden">
           <AppIconButton v-if="showFullPage"
                   icon="frame-corners" size="sm" variant="muted"

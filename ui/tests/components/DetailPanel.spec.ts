@@ -74,6 +74,17 @@ describe('DetailPanel', () => {
       expect(classes).toContain('end-0');
       expect(classes).not.toContain('right-0');
     });
+
+    it('allows the mobile toolbar and its leading controls to wrap without widening the panel', () => {
+      const w = factory({ open: true, isMobile: true });
+      const toolbar = w.get('[data-test="detail-panel-toolbar"]');
+      const leading = w.get('[data-test="detail-panel-toolbar-leading"]');
+
+      expect(toolbar.classes()).toContain('flex-wrap');
+      expect(leading.classes()).toContain('flex-wrap');
+      expect(leading.classes()).toContain('min-w-0');
+      expect(leading.classes()).toContain('flex-1');
+    });
   });
 
   describe('close button', () => {

@@ -166,18 +166,18 @@ describe('AppTabBar', () => {
     expect(buttons[2].attributes('aria-label')).toBe('Logs');
   });
 
-  it('iconOnly compact mode uses toolbar-sized hit targets and icons', () => {
+  it('iconOnly compact mode uses 44px touch targets and icons', () => {
     const wrapper = factory({ iconOnly: true, size: 'compact' });
     const overviewButton = wrapper.findAll('button')[0];
     const iconEl = overviewButton.find('iconify-icon');
 
-    expect(overviewButton.classes()).toContain('w-8');
-    expect(overviewButton.classes()).toContain('h-8');
+    expect(overviewButton.classes()).toContain('w-11');
+    expect(overviewButton.classes()).toContain('h-11');
     expect(overviewButton.classes()).toContain('inline-flex');
     expect(overviewButton.classes()).toContain('items-center');
     expect(overviewButton.classes()).toContain('justify-center');
-    expect(iconEl.attributes('width')).toBe('15');
-    expect(iconEl.attributes('height')).toBe('15');
+    expect(iconEl.attributes('width')).toBe('18');
+    expect(iconEl.attributes('height')).toBe('18');
   });
 
   it('non-iconOnly mode does not set aria-label on tabs', () => {

@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import ContainerSideDetail from '@/components/containers/ContainerSideDetail.vue';
 import DetailPanel from '@/components/DetailPanel.vue';
 
@@ -64,6 +65,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 describe('ContainerSideDetail', () => {
   afterEach(() => {
     detailPanelOpen.value = true;
+    isMobile.value = false;
     panelSize.value = 'sm';
     activeDetailTab.value = 'overview';
     updateMode.value = 'manual';
@@ -92,6 +94,33 @@ describe('ContainerSideDetail', () => {
     isContainerUpdateQueued.mockReturnValue(false);
     getContainerUpdateSequenceLabel.mockReset();
     getContainerUpdateSequenceLabel.mockReturnValue(null);
+  });
+
+  it('uses wrapping 44px controls for mobile container actions', () => {
+    isMobile.value = true;
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.get('[data-test="container-side-detail-actions"]').classes()).toContain(
+      'flex-wrap',
+    );
+    const actionLabels = new Set(['Stop', 'Restart', 'Scan', 'Recheck for updates', 'Delete']);
+    const actionButtons = wrapper
+      .findAllComponents(AppIconButton)
+      .filter((button) => actionLabels.has(button.attributes('aria-label') ?? ''));
+
+    expect(actionButtons).toHaveLength(actionLabels.size);
+    expect(actionButtons.map((button) => button.props('size'))).toEqual(
+      Array(actionLabels.size).fill('sm'),
+    );
   });
 
   it('updates panel width when size controls are clicked', async () => {
