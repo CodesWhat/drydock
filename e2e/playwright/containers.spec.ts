@@ -97,7 +97,7 @@ function readContainerActionsFeatureFlag(payload: unknown): boolean | undefined 
 }
 
 test.describe('Containers', () => {
-  test('container list loads and supports table/cards/list view toggles', async ({ page }) => {
+  test('container list loads and supports table/cards view toggles', async ({ page }) => {
     await openContainersView(page);
 
     await page.getByRole('button', { name: 'Table view' }).click();
@@ -105,9 +105,7 @@ test.describe('Containers', () => {
 
     await page.getByRole('button', { name: 'Cards view' }).click();
     await expect(page.getByRole('button', { name: /Select / }).first()).toBeVisible();
-
-    await page.getByRole('button', { name: 'List view' }).click();
-    await expect(page.getByRole('button', { name: /Select / }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'List view' })).toHaveCount(0);
   });
 
   test('stack grouping and search filtering narrow the container list', async ({ page }) => {
