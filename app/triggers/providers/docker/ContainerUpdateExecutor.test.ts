@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { attachCreatedContainerCandidate } from './created-container-candidate.js';
 
 const {
   mockGetInProgressOperationByContainerName,
@@ -609,6 +610,62 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute fails cleanly without renaming or creating when the container is already a rollback-orphan name', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/web-old-1781107685468',
+      }),
+    });
+    const executor = createExecutor();
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      /web-old-1781107685468/,
+    );
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: expect.stringContaining('web'),
+      }),
+    );
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(executor.createContainer).not.toHaveBeenCalled();
+    expect(executor.pullImage).not.toHaveBeenCalled();
+  });
+
+  test('execute resolves the true canonical name through a doubly-nested rollback rename', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/web-old-1781107685468-old-1781107699999',
+      }),
+    });
+    const executor = createExecutor();
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      /web-old-1781107685468-old-1781107699999/,
+    );
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: expect.stringContaining('squatting web '),
+      }),
+    );
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        lastError: expect.not.stringContaining('squatting web-old-1781107685468 '),
+      }),
+    );
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(executor.createContainer).not.toHaveBeenCalled();
+    expect(executor.pullImage).not.toHaveBeenCalled();
+  });
+
   test('execute returns false for dry-run mode after image pull', async () => {
     const pullImage = vi.fn().mockResolvedValue(undefined);
     const log = createLog();
@@ -1126,6 +1183,75 @@ describe('ContainerUpdateExecutor', () => {
         details: expect.stringContaining('Rollback completed after create_new_failed'),
         fromVersion: '1.0.1',
         toVersion: '1.0.0',
+      }),
+    );
+  });
+
+  test('execute cleans up the orphaned candidate attached to a post-create network connect failure', async () => {
+    const context = createContext();
+    const orphanCandidate = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const connectError = new Error('connect EACCES: denied by socket proxy');
+    attachCreatedContainerCandidate(connectError, orphanCandidate);
+    const executor = createExecutor({
+      // Simulates Docker.createContainer: the container was created, but the
+      // additional-network connect failed, so createContainer itself rejects
+      // with the candidate attached to the error (attemptState.newContainer
+      // never gets assigned since createContainer never resolved).
+      createContainer: vi.fn().mockRejectedValue(connectError),
+      buildRuntimeConfigCompatibilityError: vi.fn(() => undefined),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toBe(
+      connectError,
+    );
+
+    expect(orphanCandidate.stop).toHaveBeenCalledTimes(1);
+    expect(orphanCandidate.remove).toHaveBeenCalledWith({ force: true });
+    // Orphan cleanup happens before the rename-back restores the original name.
+    expect(orphanCandidate.remove.mock.invocationCallOrder[0]).toBeLessThan(
+      context.currentContainer.rename.mock.invocationCallOrder[1],
+    );
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'rolled-back',
+        rollbackReason: 'create_new_failed',
+      }),
+    );
+  });
+
+  test('execute warns and still rolls back when orphaned-candidate cleanup itself fails', async () => {
+    const context = createContext();
+    const orphanCandidate = {
+      stop: vi.fn().mockRejectedValue(new Error('stop exploded')),
+      remove: vi.fn().mockRejectedValue('remove exploded as string'),
+    };
+    const connectError = new Error('connect EACCES: denied by socket proxy');
+    attachCreatedContainerCandidate(connectError, orphanCandidate);
+    const executor = createExecutor({
+      createContainer: vi.fn().mockRejectedValue(connectError),
+      buildRuntimeConfigCompatibilityError: vi.fn(() => undefined),
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).rejects.toBe(connectError);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to stop failed candidate container web during rollback (stop exploded)',
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to remove failed candidate container web during rollback (remove exploded as string)',
+    );
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'rolled-back',
+        rollbackReason: 'create_new_failed',
       }),
     );
   });

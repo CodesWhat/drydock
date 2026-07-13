@@ -1039,6 +1039,16 @@ test('isRollbackContainerName rejects non-string values', () => {
   expect(container.isRollbackContainerName(1234567890)).toBe(false);
 });
 
+test.each([
+  ['service', 'service'],
+  ['service-old-0123456789', 'service'],
+  ['service-old-0123456789-old-9876543210', 'service'],
+  ['service-old-0123456789-old-9876543210-old-1111111111', 'service'],
+  ['service-old-012345678', 'service-old-012345678'],
+])('getCanonicalContainerName(%s) returns %s', (name, expected) => {
+  expect(container.getCanonicalContainerName(name)).toBe(expected);
+});
+
 test('isRollbackContainer delegates to the container name matcher', () => {
   expect(container.isRollbackContainer({ name: 'service-old-0123456789' })).toBe(true);
   expect(container.isRollbackContainer({ name: 'service-old-012345678' })).toBe(false);

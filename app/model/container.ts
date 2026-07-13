@@ -66,6 +66,11 @@ export interface ContainerImage {
     value?: string;
     repo?: string;
   };
+  // True when the live Docker image inspect had no RepoDigests (built locally
+  // or `docker load`ed) — derived once at discovery/refresh time, independent
+  // of digest.repo/digest.watch, so watchContainer can skip registry lookups
+  // that would otherwise 401/404 and get counted as watch errors.
+  isLocalImage?: boolean;
   architecture: string;
   os: string;
   variant?: string;
@@ -430,6 +435,7 @@ const schema = joi.object({
           repo: joi.string(),
         })
         .required(),
+      isLocalImage: joi.boolean(),
       architecture: joi.string().min(1).required(),
       os: joi.string().min(1).required(),
       variant: joi.string(),
@@ -1088,6 +1094,20 @@ export function isRollbackContainerName(name: unknown) {
 
 export function isRollbackContainer(container: { name?: unknown }) {
   return isRollbackContainerName(container?.name);
+}
+
+// Strip a trailing "-old-<epoch-ms>" rollback rename suffix repeatedly, not
+// just once — a container that was renamed, recreated, and failed again
+// (nesting a second rollback rename on top of the first, e.g.
+// "app-old-<ms1>-old-<ms2>") would otherwise resolve to "app-old-<ms1>",
+// which still matches isRollbackContainerName and just trips the same guard
+// again on the next attempt.
+export function getCanonicalContainerName(name: string): string {
+  let canonicalName = name;
+  while (isRollbackContainerName(canonicalName)) {
+    canonicalName = canonicalName.replace(OLD_ROLLBACK_CONTAINER_NAME_PATTERN, '');
+  }
+  return canonicalName;
 }
 
 // Production export: needed by store/container.ts to gate lifecycle timestamps

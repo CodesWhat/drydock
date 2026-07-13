@@ -1,4 +1,10 @@
+import { isRollbackContainerName } from '../../../model/container.js';
 import { getErrorMessage } from '../../../util/error.js';
+import {
+  cleanupCreatedContainerCandidate,
+  getCreatedContainerCandidate,
+} from './created-container-candidate.js';
+import { buildRollbackCascadeGuardError } from './rollback-cascade-guard.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
@@ -145,6 +151,21 @@ async function executeSelfUpdateTransition(
 ) {
   const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
 
+  const oldName = currentContainerSpec.Name.replace(/^\//, '');
+
+  // Cascade guard: a container already carries the "-old-<epoch-ms>" rollback
+  // rename suffix, meaning a previous self-update attempt failed mid-transition
+  // and was never restored (see created-container-candidate.ts / the macvlan
+  // incident). Renaming again from this name would nest a second rollback
+  // rename on top of the first and could strand drydock's own updater.
+  // Fail terminally — before the dry-run short-circuit, or any rename, pull,
+  // or create — instead of compounding the mess, mirroring
+  // ContainerUpdateExecutor's guard for regular (non-self) updates, which
+  // also runs its cascade check ahead of its dry-run check.
+  if (isRollbackContainerName(oldName)) {
+    throw buildRollbackCascadeGuardError(oldName);
+  }
+
   if (dependencies.getConfiguration()?.dryrun) {
     logContainer.info('Do not replace the existing container because dry-run mode is enabled');
     return false;
@@ -167,7 +188,6 @@ async function executeSelfUpdateTransition(
     logContainer,
   );
 
-  const oldName = currentContainerSpec.Name.replace(/^\//, '');
   const tempName = `${oldName}-old-${Date.now()}`;
 
   logContainer.info(`Rename container ${oldName} to ${tempName}`);
@@ -190,6 +210,10 @@ async function executeSelfUpdateTransition(
     logContainer.warn(
       `Failed to create new container, rolling back rename: ${getErrorMessage(e, String(e))}`,
     );
+    // The container may have been created before a later step (e.g. an
+    // additional-network connect) failed — reclaim it off the error before
+    // renaming back so it doesn't orphan and squat the canonical name.
+    await cleanupCreatedContainerCandidate(getCreatedContainerCandidate(e), oldName, logContainer);
     await currentContainer.rename({ name: oldName });
     throw e;
   }
