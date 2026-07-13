@@ -114,7 +114,8 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const rootOverflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
+        const rootOverflow =
+          document.documentElement.scrollWidth - document.documentElement.clientWidth;
         const bodyOverflow = document.body.scrollWidth - window.innerWidth;
         return Math.max(rootOverflow, bodyOverflow);
       }),
@@ -166,22 +167,26 @@ test.describe('v1.6 mobile release promises', () => {
     await expectNoHorizontalOverflow(page);
   });
 
-  test('#295 keeps resource actions ordered and the release dialog touch-safe', async ({ page }) => {
+  test('#295 keeps resource actions ordered and the release dialog touch-safe', async ({
+    page,
+  }) => {
     await openMobileContainers(page);
 
     const cards = FIXTURE_NAMES.map((name) => cardFor(page, name));
     const resourceGroups = cards.map((card) =>
-      card.locator('[data-test="container-card-resource-actions"] [data-test="container-quick-links"]'),
+      card.locator(
+        '[data-test="container-card-resource-actions"] [data-test="container-quick-links"]',
+      ),
     );
     const firstActions = resourceGroups[0].locator(
       '[data-test="project-link"], [data-test="current-release-notes-link"], [data-test="registry-link"]',
     );
     await expect(firstActions).toHaveCount(3);
-    expect(await firstActions.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-test')))).toEqual([
-      'project-link',
-      'current-release-notes-link',
-      'registry-link',
-    ]);
+    expect(
+      await firstActions.evaluateAll((nodes) =>
+        nodes.map((node) => node.getAttribute('data-test')),
+      ),
+    ).toEqual(['project-link', 'current-release-notes-link', 'registry-link']);
     for (let index = 0; index < 3; index += 1) {
       await expectTouchTarget(firstActions.nth(index));
     }
