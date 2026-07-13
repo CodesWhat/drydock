@@ -8,11 +8,9 @@ interface QuayRegistryConfiguration extends BaseRegistryConfiguration {
 }
 
 function encodePaginationCursor(value: string): string {
-  try {
-    return encodeURIComponent(decodeURIComponent(value));
-  } catch {
-    return encodeURIComponent(value);
-  }
+  return value.replace(/%[0-9a-f]{2}|[^%]+|%/gi, (segment) =>
+    /^%[0-9a-f]{2}$/i.test(segment) ? segment : encodeURIComponent(segment),
+  );
 }
 
 /**

@@ -343,6 +343,23 @@ test('getTagsPage should safely encode a malformed cursor escape', async () => {
   });
 });
 
+test('getTagsPage should preserve valid escapes alongside a malformed cursor escape', async () => {
+  const quayInstance = new Quay();
+  quayInstance.configuration = {};
+  quayInstance.callRegistry = vi.fn().mockResolvedValue({ data: { tags: [] } });
+  await quayInstance.getTagsPage(
+    { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    'sometag',
+    '/v2/test/image/tags/list?next_page=good%26value%cursor',
+  );
+
+  expect(quayInstance.callRegistry).toHaveBeenCalledWith({
+    image: { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    url: 'https://quay.io/v2/test/image/tags/list?n=1000&next_page=good%26value%25cursor',
+    resolveWithFullResponse: true,
+  });
+});
+
 test('getTagsPage should capture next_page token from second query param (&next_page=cursor99)', async () => {
   const quayInstance = new Quay();
   quayInstance.configuration = {};

@@ -126,9 +126,9 @@ class Hub extends Custom<HubRegistryConfiguration> {
         Accept: 'application/json',
       },
     });
-    await acquireToken(getBucketForUrl(metadataUrl));
     const response = await withRetry<HubTagMetadataResponse>(
       async () => {
+        await acquireToken(getBucketForUrl(metadataUrl));
         const result = await axios<HubTagMetadataResponse>(request);
         return {
           status: result.status,

@@ -224,6 +224,23 @@ describe('Docker Hub Registry', () => {
     expect(publishedAt).toBe('2026-03-01T12:34:56.000Z');
   });
 
+  test('should acquire a rate-limit token for every metadata retry attempt', async () => {
+    const { default: axios } = await import('axios');
+    const { withRetry } = await import('../../http-retry.js');
+    const { acquireToken } = await import('../../token-bucket.js');
+    axios
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValueOnce({ data: { last_updated: '2026-03-01T12:34:56.000Z' } });
+    withRetry.mockImplementationOnce(async (requestFn) => {
+      await requestFn().catch(() => undefined);
+      return requestFn();
+    });
+
+    await hub.getImagePublishedAt({ name: 'library/nginx', tag: { value: 'latest' } }, '1.26.0');
+
+    expect(acquireToken).toHaveBeenCalledTimes(2);
+  });
+
   test('should return undefined when Docker Hub tag metadata has no last_updated', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });

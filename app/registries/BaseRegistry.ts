@@ -69,6 +69,7 @@ class BaseRegistry<
   private tagListCache = new Map<string, string[]>();
   private tagListCacheInFlight = new Map<string, Promise<string[]>>();
   private digestCachePollCycleActive = false;
+  private digestCachePollCycleGeneration = 0;
   private digestCacheHits = 0;
   private digestCacheMisses = 0;
 
@@ -184,6 +185,7 @@ class BaseRegistry<
   }
 
   public startDigestCachePollCycle() {
+    this.digestCachePollCycleGeneration += 1;
     this.digestCachePollCycleActive = true;
     this.digestManifestCache.clear();
     this.digestManifestCacheInFlight.clear();
@@ -212,16 +214,24 @@ class BaseRegistry<
       return [...(await inFlightLookup)];
     }
 
+    const pollCycleGeneration = this.digestCachePollCycleGeneration;
     const tagLookup = super.getTags(image).then((tags) => {
       const cachedCopy = [...tags];
-      this.tagListCache.set(cacheKey, cachedCopy);
+      if (
+        this.digestCachePollCycleActive &&
+        this.digestCachePollCycleGeneration === pollCycleGeneration
+      ) {
+        this.tagListCache.set(cacheKey, cachedCopy);
+      }
       return cachedCopy;
     });
     this.tagListCacheInFlight.set(cacheKey, tagLookup);
     try {
       return [...(await tagLookup)];
     } finally {
-      this.tagListCacheInFlight.delete(cacheKey);
+      if (this.tagListCacheInFlight.get(cacheKey) === tagLookup) {
+        this.tagListCacheInFlight.delete(cacheKey);
+      }
     }
   }
 
@@ -233,6 +243,7 @@ class BaseRegistry<
         `${this.getId()} digest cache hit rate ${hitRate.toFixed(2)}% (${this.digestCacheHits} hits, ${this.digestCacheMisses} misses)`,
       );
     }
+    this.digestCachePollCycleGeneration += 1;
     this.digestCachePollCycleActive = false;
     this.digestManifestCache.clear();
     this.digestManifestCacheInFlight.clear();
@@ -476,9 +487,15 @@ class BaseRegistry<
     }
 
     this.recordDigestCacheMiss();
+    const pollCycleGeneration = this.digestCachePollCycleGeneration;
     const manifestLookup = (async () => {
       const manifest = await super.getImageManifestDigest(image, digest);
-      if (typeof manifest?.digest === 'string' && manifest.digest.length > 0) {
+      if (
+        this.digestCachePollCycleActive &&
+        this.digestCachePollCycleGeneration === pollCycleGeneration &&
+        typeof manifest?.digest === 'string' &&
+        manifest.digest.length > 0
+      ) {
         this.digestManifestCache.set(cacheKey, {
           digest: manifest.digest,
           created: manifest.created,
@@ -493,7 +510,9 @@ class BaseRegistry<
     try {
       return await manifestLookup;
     } finally {
-      this.digestManifestCacheInFlight.delete(cacheKey);
+      if (this.digestManifestCacheInFlight.get(cacheKey) === manifestLookup) {
+        this.digestManifestCacheInFlight.delete(cacheKey);
+      }
     }
   }
 

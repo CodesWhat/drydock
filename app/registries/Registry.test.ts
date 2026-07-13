@@ -1859,6 +1859,19 @@ describe('getImagePublishedAt', () => {
     expect(manifestSpy).toHaveBeenCalledTimes(1);
   });
 
+  test('should create tag metadata when an explicit tag is provided for an untagged image', async () => {
+    const registryMocked = createMockedRegistry();
+    const manifestSpy = vi.spyOn(registryMocked, 'getImageManifestDigest').mockResolvedValue({
+      digest: 'sha256:x',
+      created: '2026-01-01T00:00:00.000Z',
+      version: 2,
+    });
+
+    await registryMocked.getImagePublishedAt(imageInput({ tag: undefined }) as any, '2.0.0');
+
+    expect(manifestSpy.mock.calls[0][0]).toMatchObject({ tag: { value: '2.0.0' } });
+  });
+
   test('should return undefined when manifest created is not a string (line 260 check)', async () => {
     // Kill line 260 optional chaining mutant: manifest?.created vs manifest.created
     // Also kills [BlockStatement] {} for the if(typeof manifest?.created !== 'string') body
