@@ -302,7 +302,7 @@ const containerSecuritySbomSchema = joi
       joi.object({
         key: joi
           .string()
-          .pattern(/^sbom\/[a-f0-9]{64}\/(?:spdx-json|cyclonedx-json)\.json$/)
+          .pattern(/^sbom\/[a-f0-9]{64}(?:\/[a-f0-9]{64})?\/(?:spdx-json|cyclonedx-json)\.json$/)
           .required(),
         sha256: joi
           .string()
