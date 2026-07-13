@@ -58,7 +58,7 @@ function viewModeLabel(id: string): string {
       <div class="flex items-center gap-2.5 relative">
         <!-- Filter toggle button -->
         <div v-if="!hideFilter" class="relative" v-tooltip.top="t('sharedComponents.dataFilterBar.filters')">
-          <AppIconButton icon="filter" size="toolbar" variant="plain" class="text-2xs-plus"
+          <AppIconButton icon="filter" size="sm" variant="plain" class="text-2xs-plus"
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                   :aria-label="t('sharedComponents.dataFilterBar.toggleFilters')"
                   :aria-expanded="String(showFilters)"
@@ -92,7 +92,7 @@ function viewModeLabel(id: string): string {
                role="group"
                :aria-label="t('sharedComponents.dataFilterBar.viewMode')">
             <AppIconButton v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
-                    :icon="vm.icon" size="toolbar" variant="plain"
+                    :icon="vm.icon" size="sm" variant="plain"
                     :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                     :tooltip="viewModeLabel(vm.id)"
                     :aria-label="viewModeLabel(vm.id)"

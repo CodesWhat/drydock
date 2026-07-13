@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import DetailPanel from '@/components/DetailPanel.vue';
 
 const mountedWrappers: Array<ReturnType<typeof mount>> = [];
@@ -76,9 +77,18 @@ describe('DetailPanel', () => {
   });
 
   describe('close button', () => {
+    it('uses the 44px icon-button size for the close control', () => {
+      const w = factory({ isMobile: true });
+      const closeButton = w
+        .findAllComponents(AppIconButton)
+        .find((button) => button.attributes('aria-label') === 'Close details panel');
+
+      expect(closeButton?.props('size')).toBe('sm');
+    });
+
     it('emits update:open false when close button is clicked', async () => {
       const w = factory();
-      // Close button is the w-8 h-8 AppIconButton in the toolbar
+      // Close button is the 44px AppIconButton in the panel toolbar.
       const closeBtn = w
         .findAll('button')
         .find((b) => b.attributes('aria-label') === 'Close details panel');
@@ -235,6 +245,15 @@ describe('DetailPanel', () => {
   });
 
   describe('full page button', () => {
+    it('uses the 44px icon-button size for the full-page control', () => {
+      const w = factory({ showFullPage: true });
+      const fullPageButton = w
+        .findAllComponents(AppIconButton)
+        .find((button) => button.attributes('aria-label') === 'Open full page view');
+
+      expect(fullPageButton?.props('size')).toBe('sm');
+    });
+
     it('renders full page button when showFullPage is true', () => {
       const w = factory({ showFullPage: true });
       const fpBtn = w

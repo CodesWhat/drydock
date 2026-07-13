@@ -38,7 +38,7 @@ function toggleDirection(): void {
   <div class="flex items-center gap-1" role="group" :aria-label="t('sharedComponents.dataTable.sortBy')">
     <select
       data-test="dd-toolbar-sort-select"
-      class="h-8 min-w-0 max-w-[9rem] px-2 dd-rounded dd-bg-elevated dd-text text-2xs font-medium outline-none cursor-pointer"
+      class="min-h-[44px] min-w-0 max-w-[9rem] px-2 dd-rounded dd-bg-elevated dd-text text-2xs font-medium outline-none cursor-pointer"
       :aria-label="t('sharedComponents.dataTable.sortBy')"
       :value="sortKey ?? ''"
       @change="onFieldChange">
@@ -48,7 +48,7 @@ function toggleDirection(): void {
     <AppIconButton
       data-test="dd-toolbar-sort-direction"
       :icon="sortAsc === false ? 'sort-desc' : 'sort-asc'"
-      size="toolbar"
+      size="sm"
       variant="plain"
       :disabled="!sortKey"
       class="dd-text-secondary hover:dd-text hover:dd-bg-elevated"

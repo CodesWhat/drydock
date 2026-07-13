@@ -1,5 +1,6 @@
 import type { VueWrapper } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import DataTableColumnPicker from '@/components/DataTableColumnPicker.vue';
 import type { PickerColumn } from '@/composables/useViewColumnVisibility';
 import { mountWithPlugins } from '../helpers/mount';
@@ -51,6 +52,11 @@ describe('DataTableColumnPicker', () => {
     it('renders exactly one trigger button', () => {
       const w = factory();
       expect(w.findAll('button')).toHaveLength(1);
+    });
+
+    it('uses the 44px icon-button size for the picker trigger', () => {
+      const w = factory();
+      expect(w.getComponent(AppIconButton).props('size')).toBe('sm');
     });
   });
 

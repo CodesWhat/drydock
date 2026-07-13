@@ -157,10 +157,10 @@ describe('ContainersListContent', () => {
       global: {
         stubs: {
           AppIconButton: {
-            props: ['icon', 'tooltip', 'disabled', 'ariaLabel'],
+            props: ['icon', 'tooltip', 'disabled', 'ariaLabel', 'size'],
             emits: ['click'],
             template:
-              '<button v-bind="$attrs" type="button" class="app-icon-button-stub" :disabled="disabled" :data-icon="icon" :aria-label="ariaLabel" @click="$emit(\'click\', $event)">{{ tooltip?.value ?? tooltip }}</button>',
+              '<button v-bind="$attrs" type="button" class="app-icon-button-stub" :disabled="disabled" :data-icon="icon" :data-size="size" :aria-label="ariaLabel" @click="$emit(\'click\', $event)">{{ tooltip?.value ?? tooltip }}</button>',
           },
           ContainersGroupedViews: {
             template: '<div data-test="grouped-views-stub" />',
@@ -177,6 +177,14 @@ describe('ContainersListContent', () => {
     wrapper = mountWithContext(context);
 
     expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+  });
+
+  it('uses 44px icon-button sizes for group and recheck toolbar actions', () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+
+    expect(wrapper.get('[data-icon="stack"]').attributes('data-size')).toBe('sm');
+    expect(wrapper.get('[data-icon="restart"]').attributes('data-size')).toBe('sm');
   });
 
   it('hides the column picker in cards mode and shows it in table mode', async () => {

@@ -98,7 +98,7 @@ useFocusTrap(panelRef, trapActive);
       <div class="flex items-center gap-2">
         <div v-if="(showSizeControls && !isMobile) || showFullPage" class="flex items-center dd-rounded overflow-hidden">
           <AppIconButton v-if="showFullPage"
-                  icon="frame-corners" size="toolbar" variant="muted"
+                  icon="frame-corners" size="sm" variant="muted"
                   :tooltip="t('sharedComponents.detailPanel.openFullPage')"
                   @click="$emit('full-page')" />
           <AppButton size="none" variant="plain" weight="none" v-if="showSizeControls && !isMobile"
@@ -113,7 +113,7 @@ useFocusTrap(panelRef, trapActive);
         </div>
         <slot name="toolbar" />
       </div>
-      <AppIconButton icon="xmark" size="toolbar" variant="muted"
+      <AppIconButton icon="xmark" size="sm" variant="muted"
               :aria-label="t('sharedComponents.detailPanel.closePanel')"
               @click="closePanel" />
     </div>
