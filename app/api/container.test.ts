@@ -10,6 +10,20 @@ const mockBroadcastScanStarted = vi.hoisted(() => vi.fn());
 const mockBroadcastScanCompleted = vi.hoisted(() => vi.fn());
 const mockEmitSecurityAlert = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockEmitSecurityScanCycleComplete = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const capturedSbomStorageRoot = vi.hoisted(() => ({ current: undefined as string | undefined }));
+const mockCreateSbomStorage = vi.hoisted(() =>
+  vi.fn((options: { rootDir: string }) => {
+    capturedSbomStorageRoot.current = options.rootDir;
+    return {
+      writeDocument: vi.fn(async ({ format, document }) => ({
+        key: `sbom/${'a'.repeat(64)}/${'b'.repeat(64)}/${format}.json`,
+        sha256: 'b'.repeat(64),
+        bytes: Buffer.byteLength(JSON.stringify(document)),
+      })),
+      readDocument: vi.fn(),
+    };
+  }),
+);
 const mockGetOperationsByContainerName = vi.hoisted(() => vi.fn());
 const mockCreateAuthenticatedRouteRateLimitKeyGenerator = vi.hoisted(() => vi.fn(() => undefined));
 const mockIsIdentityAwareRateLimitKeyingEnabled = vi.hoisted(() => vi.fn(() => false));
@@ -78,6 +92,10 @@ vi.mock('../store/update-operation', () => ({
   },
 }));
 
+vi.mock('../store/index', () => ({
+  getConfiguration: vi.fn(() => ({ path: '/tmp/drydock-validated-store', file: 'dd.json' })),
+}));
+
 vi.mock('../registry', () => ({
   getState: vi.fn(() => ({
     watcher: {},
@@ -87,7 +105,7 @@ vi.mock('../registry', () => ({
 
 vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
-  getStoreConfiguration: vi.fn(() => ({ path: '/tmp/drydock-test-store' })),
+  getStoreConfiguration: vi.fn(() => ({ path: '/tmp/drydock-unvalidated-store' })),
   getServerConfiguration: vi.fn(() => ({
     feature: { delete: true },
   })),
@@ -115,14 +133,7 @@ vi.mock('../security/scan', () => ({
 }));
 
 vi.mock('../security/sbom-storage', () => ({
-  createSbomStorage: vi.fn(() => ({
-    writeDocument: vi.fn(async ({ format, document }) => ({
-      key: `sbom/${'a'.repeat(64)}/${'b'.repeat(64)}/${format}.json`,
-      sha256: 'b'.repeat(64),
-      bytes: Buffer.byteLength(JSON.stringify(document)),
-    })),
-    readDocument: vi.fn(),
-  })),
+  createSbomStorage: mockCreateSbomStorage,
 }));
 
 vi.mock('../triggers/providers/Trigger', () => ({
@@ -262,6 +273,10 @@ async function waitForBulkScanCycleComplete() {
 }
 
 describe('Container Router', () => {
+  test('uses the validated store path for SBOM storage', () => {
+    expect(capturedSbomStorageRoot.current).toBe('/tmp/drydock-validated-store');
+  });
+
   beforeEach(async () => {
     vi.clearAllMocks();
     mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);

@@ -3107,6 +3107,31 @@ describe('replaceSecrets – secret file hardening', () => {
   // emits a logWarn naming the file and recommending chmod 600.
   // The check is skipped on non-POSIX platforms (Windows) where mode bits are synthetic.
 
+  test('should reject non-regular secret paths before attempting to read them', async () => {
+    const handle = {
+      stat: vi.fn().mockResolvedValue({
+        size: 0,
+        mode: 0o600,
+        isFile: () => false,
+      }),
+      read: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const openSpy = vi
+      .spyOn(fs.promises, 'open')
+      .mockResolvedValue(handle as unknown as Awaited<ReturnType<typeof fs.promises.open>>);
+
+    try {
+      await expect(
+        configuration.replaceSecrets({ DD_DEVICE__FILE: '/dev/not-a-regular-file' }),
+      ).rejects.toThrow('Secret file for DD_DEVICE__FILE must be a regular file');
+      expect(handle.read).not.toHaveBeenCalled();
+      expect(handle.close).toHaveBeenCalledOnce();
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
   test('should inspect and read a secret through the same open file handle', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-handle-'));
     const secretPath = path.join(tempDir, 'secret.txt');
@@ -3114,7 +3139,14 @@ describe('replaceSecrets – secret file hardening', () => {
     fs.chmodSync(secretPath, 0o600);
     const handle = {
       stat: vi.fn().mockResolvedValue(fs.statSync(secretPath)),
-      readFile: vi.fn().mockResolvedValue('descriptor-secret'),
+      read: vi
+        .fn()
+        .mockImplementationOnce(async (buffer: Buffer) => {
+          const value = Buffer.from('descriptor-secret');
+          value.copy(buffer);
+          return { bytesRead: value.length, buffer };
+        })
+        .mockImplementationOnce(async (buffer: Buffer) => ({ bytesRead: 0, buffer })),
       close: vi.fn().mockResolvedValue(undefined),
     };
     const openSpy = vi
@@ -3127,9 +3159,9 @@ describe('replaceSecrets – secret file hardening', () => {
 
       expect(openSpy).toHaveBeenCalledWith(secretPath, 'r');
       expect(handle.stat).toHaveBeenCalledOnce();
-      expect(handle.readFile).toHaveBeenCalledWith('utf-8');
+      expect(handle.read).toHaveBeenCalled();
       expect(handle.stat.mock.invocationCallOrder[0]).toBeLessThan(
-        handle.readFile.mock.invocationCallOrder[0],
+        handle.read.mock.invocationCallOrder[0],
       );
       expect(handle.close).toHaveBeenCalledOnce();
       expect(vars.DD_HANDLE).toBe('descriptor-secret');
@@ -3145,8 +3177,11 @@ describe('replaceSecrets – secret file hardening', () => {
     fs.writeFileSync(secretPath, 'x');
     const secretStats = fs.statSync(secretPath);
     const handle = {
-      stat: vi.fn().mockResolvedValue({ ...secretStats, size: 1 }),
-      readFile: vi.fn().mockResolvedValue('x'.repeat(1024 * 1024 + 1)),
+      stat: vi.fn().mockResolvedValue({ ...secretStats, size: 1, isFile: () => true }),
+      read: vi.fn().mockImplementation(async (buffer: Buffer, _offset: number, length: number) => {
+        buffer.fill('x', 0, length);
+        return { bytesRead: length, buffer };
+      }),
       close: vi.fn().mockResolvedValue(undefined),
     };
     const openSpy = vi

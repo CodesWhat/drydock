@@ -3,11 +3,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import { getAgent } from '../agent/manager.js';
-import {
-  getSecurityConfiguration,
-  getServerConfiguration,
-  getStoreConfiguration,
-} from '../configuration/index.js';
+import { getSecurityConfiguration, getServerConfiguration } from '../configuration/index.js';
 import { emitSecurityAlert, emitSecurityScanCycleComplete } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
@@ -25,6 +21,7 @@ import {
 import { createContainerStatsCollector } from '../stats/collector.js';
 import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
+import { getConfiguration as getValidatedStoreConfiguration } from '../store/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
@@ -55,8 +52,7 @@ import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
 const log = logger.child({ component: 'container' });
 const sbomStorage = createSbomStorage({
-  /* v8 ignore next -- Store configuration validation always supplies a path; fallback is defensive. */
-  rootDir: resolveConfiguredPath((getStoreConfiguration() as { path?: string }).path || '/store', {
+  rootDir: resolveConfiguredPath(getValidatedStoreConfiguration().path, {
     label: 'DD_STORE_PATH',
   }),
 });

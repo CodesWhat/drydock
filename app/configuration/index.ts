@@ -9,6 +9,7 @@ import { resolveConfiguredPath } from '../runtime/paths.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
 const MAX_SECRET_FILE_SIZE_BYTES = 1024 * 1024;
+const SECRET_FILE_READ_CHUNK_BYTES = 64 * 1024;
 export const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as const;
 const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
@@ -42,6 +43,36 @@ export function get(prop: string, env: Record<string, string | undefined> = proc
   return object;
 }
 
+function secretFileTooLargeError(secretFileEnvVar: string): Error {
+  return new Error(
+    `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
+  );
+}
+
+async function readBoundedSecretFile(
+  secretFile: fs.promises.FileHandle,
+  secretFileEnvVar: string,
+): Promise<string> {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  while (totalBytes <= MAX_SECRET_FILE_SIZE_BYTES) {
+    const bytesRemaining = MAX_SECRET_FILE_SIZE_BYTES + 1 - totalBytes;
+    const buffer = Buffer.allocUnsafe(Math.min(SECRET_FILE_READ_CHUNK_BYTES, bytesRemaining));
+    const { bytesRead } = await secretFile.read(buffer, 0, buffer.length, null);
+    if (bytesRead === 0) {
+      break;
+    }
+    chunks.push(buffer.subarray(0, bytesRead));
+    totalBytes += bytesRead;
+  }
+
+  if (totalBytes > MAX_SECRET_FILE_SIZE_BYTES) {
+    throw secretFileTooLargeError(secretFileEnvVar);
+  }
+  return Buffer.concat(chunks, totalBytes).toString('utf-8');
+}
+
 /**
  * Lookup external secrets defined in files.
  * @param ddEnvVars
@@ -60,10 +91,11 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
     let secretFileValue: string;
     try {
       const secretStats = await secretFile.stat();
+      if (!secretStats.isFile()) {
+        throw new Error(`Secret file for ${secretFileEnvVar} must be a regular file`);
+      }
       if (secretStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
-        throw new Error(
-          `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
-        );
+        throw secretFileTooLargeError(secretFileEnvVar);
       }
 
       // Permission check: warn if the opened file is readable by group or others.
@@ -77,12 +109,7 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
         );
       }
 
-      secretFileValue = await secretFile.readFile('utf-8');
-      if (Buffer.byteLength(secretFileValue, 'utf-8') > MAX_SECRET_FILE_SIZE_BYTES) {
-        throw new Error(
-          `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
-        );
-      }
+      secretFileValue = await readBoundedSecretFile(secretFile, secretFileEnvVar);
     } finally {
       await secretFile.close();
     }
