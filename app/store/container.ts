@@ -701,6 +701,9 @@ function hasContainerChangedWithSecurityHashes(
   if (existing.status !== incoming.status) {
     return true;
   }
+  if (existing.health !== incoming.health) {
+    return true;
+  }
   if (existing.error?.message !== incoming.error?.message) {
     return true;
   }

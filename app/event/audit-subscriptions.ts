@@ -1,4 +1,4 @@
-import type { ContainerReport } from '../model/container.js';
+import { type ContainerReport, getContainerIdentityKey } from '../model/container.js';
 import { getAuditCounter } from '../prometheus/audit.js';
 import * as auditStore from '../store/audit.js';
 import type {
@@ -159,7 +159,10 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
   }, AUDIT_HANDLER_OPTIONS);
 
   registrars.registerContainerHealthTransition(async (payload) => {
-    const dedupeKey = payload.containerName;
+    const containerIdentityKey = payload.container
+      ? getContainerIdentityKey(payload.container)
+      : undefined;
+    const dedupeKey = containerIdentityKey ?? payload.containerName;
     if (
       isDuplicateAuditEvent(
         containerUnhealthyAuditSeenAt,
@@ -174,6 +177,7 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
       timestamp: new Date().toISOString(),
       action: 'container-unhealthy',
       containerName: payload.containerName,
+      ...(containerIdentityKey !== undefined ? { containerIdentityKey } : {}),
       status: 'error',
       details: payload.previousHealth ? `(was ${payload.previousHealth})` : undefined,
     });

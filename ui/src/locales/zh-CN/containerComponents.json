@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "查看项目"
     },
+    "registryLink": { "viewRegistry": "查看镜像仓库" },
     "releaseNotesLink": {
       "releaseNotes": "发布说明",
       "viewFullNotes": "查看完整说明",

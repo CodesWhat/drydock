@@ -290,7 +290,7 @@ export const roadmap: Milestone[] = [
     items: [
       "Notification templates and preferences",
       "Declarative and maturity policy workflows",
-      "Dashboard, responsive-list, and release hardening",
+      "Dashboard, responsive table/card views, and consistent resource-action toolbars",
     ],
   },
   {

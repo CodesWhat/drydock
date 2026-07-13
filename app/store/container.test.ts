@@ -3541,12 +3541,19 @@ describe('container unhealthy transition emission', () => {
   test('healthy to unhealthy emits even when health is the only changed field', () => {
     const existing = healthFixture({ health: 'healthy', details: { startedAt: '2026-01-01' } });
     initialize(existing);
-    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    const emittedHealthTransition = vi.spyOn(event, 'emitContainerHealthTransition');
+    const emittedContainerUpdate = vi.spyOn(event, 'emitContainerUpdated');
     container.updateContainer({ ...existing, health: 'unhealthy' });
-    expect(emitted).toHaveBeenCalledWith(
+    expect(emittedHealthTransition).toHaveBeenCalledWith(
       expect.objectContaining({
         containerName: existing.name,
         previousHealth: 'healthy',
+        health: 'unhealthy',
+      }),
+    );
+    expect(emittedContainerUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: existing.id,
         health: 'unhealthy',
       }),
     );

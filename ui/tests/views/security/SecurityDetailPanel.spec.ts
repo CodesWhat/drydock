@@ -68,6 +68,34 @@ const sbomState: SbomState = {
   showDocument: true,
 };
 
+const containerLinkActionsStub = defineComponent({
+  inheritAttrs: false,
+  props: [
+    'sourceRepo',
+    'releaseNotes',
+    'currentReleaseNotes',
+    'releaseLink',
+    'registry',
+    'registryName',
+    'registryUrl',
+    'iconSize',
+  ],
+  template: `
+    <div
+      data-test="container-link-actions-stub"
+      :data-source-repo="sourceRepo"
+      :data-registry="registry"
+      :data-registry-name="registryName"
+      :data-registry-url="registryUrl"
+      :data-icon-size="iconSize"
+      v-bind="$attrs">
+      <button type="button" data-link-action="source" @click.stop>Source</button>
+      <button type="button" data-link-action="release" @click.stop>Release notes</button>
+      <button type="button" data-link-action="registry" @click.stop>Registry</button>
+    </div>
+  `,
+});
+
 function factory(overrides: Partial<InstanceType<typeof SecurityDetailPanel>['$props']> = {}) {
   const props = {
     open: true,
@@ -91,6 +119,7 @@ function factory(overrides: Partial<InstanceType<typeof SecurityDetailPanel>['$p
           template: '<span class="app-icon-stub" :data-icon="name" />',
         }),
         DetailPanel: detailPanelStub,
+        ContainerLinkActions: containerLinkActionsStub,
         ProjectLink: defineComponent({
           props: ['sourceRepo', 'iconOnly', 'iconSize'],
           template: '<span v-if="sourceRepo" class="project-link-stub" />',
@@ -158,7 +187,7 @@ describe('SecurityDetailPanel', () => {
     expect(wrapper.find('[data-test="security-detail-containers-link"]').exists()).toBe(false);
   });
 
-  it('renders ReleaseNotesLink for a no-update image with currentReleaseNotes', () => {
+  it('renders the shared resource-link cluster for a no-update image with current release notes', () => {
     const wrapper = factory({
       selectedImage: {
         ...selectedImage,
@@ -172,11 +201,12 @@ describe('SecurityDetailPanel', () => {
         },
       },
     });
-    expect(wrapper.find('[data-test="security-detail-release-notes"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="security-detail-resource-actions"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="container-link-actions-stub"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
   });
 
-  it('renders ProjectLink stub for a no-update image with sourceRepo', () => {
+  it('renders the shared resource-link cluster for a no-update image with sourceRepo', () => {
     const wrapper = factory({
       selectedImage: {
         ...selectedImage,
@@ -184,11 +214,11 @@ describe('SecurityDetailPanel', () => {
         sourceRepo: 'github.com/acme/web',
       },
     });
-    expect(wrapper.find('.project-link-stub').exists()).toBe(true);
+    expect(wrapper.find('[data-test="container-link-actions-stub"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
   });
 
-  it('renders both ReleaseNotesLink and ProjectLink alongside update buttons when hasUpdate is true', () => {
+  it('keeps resource links in a distinct group from lifecycle actions', () => {
     const wrapper = factory({
       selectedImage: {
         ...selectedImage,
@@ -204,8 +234,10 @@ describe('SecurityDetailPanel', () => {
       },
     });
     expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(true);
-    expect(wrapper.find('[data-test="security-detail-release-notes"]').exists()).toBe(true);
-    expect(wrapper.find('.project-link-stub').exists()).toBe(true);
+    const resourceActions = wrapper.get('[data-test="security-detail-resource-actions"]');
+    const updateButton = wrapper.get('[data-test="security-detail-update-btn"]');
+    expect(resourceActions.find('[data-test="container-link-actions-stub"]').exists()).toBe(true);
+    expect(resourceActions.element.parentElement).not.toBe(updateButton.element.parentElement);
   });
 
   it('does not render the action row when selectedImage has none of the relevant fields', () => {
@@ -220,7 +252,28 @@ describe('SecurityDetailPanel', () => {
       },
     });
     expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
-    expect(wrapper.find('[data-test="release-notes-stub"]').exists()).toBe(false);
-    expect(wrapper.find('.project-link-stub').exists()).toBe(false);
+    expect(wrapper.find('[data-test="container-link-actions-stub"]').exists()).toBe(false);
+  });
+
+  it('forwards all resource metadata to one touch-friendly link cluster, including registry-only images', () => {
+    const wrapper = factory({
+      selectedImage: {
+        ...selectedImage,
+        hasUpdate: false,
+        sourceRepo: 'github.com/acme/web',
+        releaseLink: 'https://github.com/acme/web/releases',
+        registry: 'ghcr',
+        registryName: 'GitHub Container Registry',
+        registryUrl: 'https://ghcr.io/v2',
+      },
+    });
+
+    const cluster = wrapper.get('[data-test="container-link-actions-stub"]');
+    expect(wrapper.findAll('[data-test="container-link-actions-stub"]')).toHaveLength(1);
+    expect(cluster.attributes('data-source-repo')).toBe('github.com/acme/web');
+    expect(cluster.attributes('data-registry')).toBe('ghcr');
+    expect(cluster.attributes('data-registry-name')).toBe('GitHub Container Registry');
+    expect(cluster.attributes('data-registry-url')).toBe('https://ghcr.io/v2');
+    expect(cluster.attributes('data-icon-size')).toBe('sm');
   });
 });

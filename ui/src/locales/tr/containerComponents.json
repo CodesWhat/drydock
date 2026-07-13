@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "Projeyi görüntüle"
     },
+    "registryLink": { "viewRegistry": "Kayıt defterini görüntüle" },
     "releaseNotesLink": {
       "releaseNotes": "Sürüm notları",
       "viewFullNotes": "Notların tamamını görüntüle",

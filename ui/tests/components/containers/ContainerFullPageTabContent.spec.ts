@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import ContainerFullPageTabContent from '@/components/containers/ContainerFullPageTabContent.vue';
 import type { ApiContainerUpdateOperation } from '@/types/api';
+import { expectContainerQuickLinks } from '../../helpers/containerQuickLinks';
 
 type Trigger = {
   type: string;
@@ -891,7 +892,7 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('#1');
     expect(wrapper.text()).toContain('/stack/compose.yml');
     expect(wrapper.text()).toContain('Latest:');
-    expect(wrapper.text()).toContain('Release notes');
+    expect(wrapper.find('[data-test="release-link"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('Registry warning');
     expect(wrapper.text()).toContain('Entrypoint differs from desired config');
     expect(wrapper.text()).toContain('Abort on pre-update failure');
@@ -919,6 +920,21 @@ describe('ContainerFullPageTabContent', () => {
     await refreshSbomButton?.trigger('click');
     expect(mockLoadDetailSecurityData).toHaveBeenCalledTimes(1);
     expect(mockLoadDetailSbom).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the standardized source, release, and registry quick-link group in full-page detail (#295)', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      sourceRepo: 'github.com/example/nginx',
+      releaseLink: 'https://example.test/releases/nginx-1.1',
+      registry: 'custom',
+      registryName: 'registry.example.com',
+      registryUrl: 'https://registry.example.com/v2',
+    });
+
+    const wrapper = mountComponent();
+    const group = wrapper.get('[data-test="container-quick-links"]');
+    expectContainerQuickLinks(group, 'registry.example.com');
   });
 
   it('renders overview fallback, loading, and error branches', () => {
@@ -963,6 +979,22 @@ describe('ContainerFullPageTabContent', () => {
     const errorWrapper = mountComponent();
     expect(errorWrapper.text()).toContain('Vulnerability scan failed');
     expect(errorWrapper.text()).toContain('SBOM refresh failed');
+  });
+
+  it('shows pinned-tag insight as an informational latest row without replacing #325 status (#498)', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      updateKind: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'minor' },
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.get('[data-test="container-fullpage-insight-tag"]').text()).toBe('v2.0.0');
+    expect(wrapper.get('[data-test="container-fullpage-insight-kind-badge"]').text()).toBe('Minor');
+    expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="update-status-panel-stub"]').exists()).toBe(true);
   });
 
   it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {

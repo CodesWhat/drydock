@@ -8,10 +8,8 @@ import ContainerStats from './ContainerStats.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import UpdateStatusPanel from './UpdateStatusPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
-import UpdateInsightBadge from './UpdateInsightBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
-import ReleaseNotesLink from './ReleaseNotesLink.vue';
-import ProjectLink from './ProjectLink.vue';
+import ContainerLinkActions from './ContainerLinkActions.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
@@ -21,6 +19,7 @@ import { getPrimaryHardBlocker, hasRawUpdateCandidate } from '../../utils/update
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
+import { updateInsightColor } from '../../utils/display';
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
@@ -267,6 +266,15 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
                   <CopyableTag :tag="selectedContainer.newTag" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
                 </template>
+                <template v-else-if="selectedContainer.updateInsight">
+                  <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
+                  <CopyableTag
+                    :tag="selectedContainer.updateInsight.tag"
+                    class="font-bold"
+                    :style="{ color: updateInsightColor().text }"
+                    data-test="container-side-insight-tag"
+                  >{{ selectedContainer.updateInsight.tag }}</CopyableTag>
+                </template>
               </div>
               <div v-if="!selectedContainer.isDigestPinned && selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
                    class="mt-1.5 flex items-center gap-2 px-2.5 py-1 dd-rounded text-3xs font-mono dd-text-muted"
@@ -300,9 +308,16 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <AppBadge v-if="selectedContainer.updateKind" size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
                   {{ getUpdateKindLabel(selectedContainer.updateKind) }}
                 </AppBadge>
+                <AppBadge
+                  v-else-if="selectedContainer.updateInsight"
+                  size="xs"
+                  :custom="updateInsightColor()"
+                  data-test="container-side-insight-kind-badge"
+                >
+                  {{ getUpdateKindLabel(selectedContainer.updateInsight.kind) }}
+                </AppBadge>
                 <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
-                <UpdateInsightBadge :insight="selectedContainer.updateInsight" />
                 <FloatingTagBadge
                   :tag-precision="selectedContainer.tagPrecision"
                   :image-digest-watch="selectedContainer.imageDigestWatch"
@@ -332,15 +347,19 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 @open-tab="openUpdateStatusTab"
               />
               <div class="mt-2">
-                <ReleaseNotesLink
+                <ContainerLinkActions
+                  :source-repo="selectedContainer.sourceRepo"
                   :release-notes="selectedContainer.releaseNotes"
                   :current-release-notes="selectedContainer.currentReleaseNotes"
                   :release-link="selectedContainer.releaseLink"
                   :container-id="selectedContainer.id"
                   :from-tag="selectedContainer.currentTag"
                   :to-tag="selectedContainer.newTag"
+                  :registry="selectedContainer.registry"
+                  :registry-name="selectedContainer.registryName"
+                  :registry-url="selectedContainer.registryUrl"
+                  icon-size="sm"
                 />
-                <ProjectLink :source-repo="selectedContainer.sourceRepo" />
               </div>
             </div>
 

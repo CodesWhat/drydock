@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "Bekijk project"
     },
+    "registryLink": { "viewRegistry": "Registry bekijken" },
     "releaseNotesLink": {
       "releaseNotes": "Release-opmerkingen",
       "viewFullNotes": "Bekijk de volledige notities",

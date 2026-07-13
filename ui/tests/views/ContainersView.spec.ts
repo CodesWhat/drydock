@@ -1533,6 +1533,44 @@ describe('ContainersView', () => {
   });
 
   describe('tableColumns', () => {
+    it('keeps Resources out of table-header and card-mode sorting', async () => {
+      const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
+      const mockedVisibility = vi.mocked(useColumnVisibility);
+      const prevImpl = mockedVisibility.getMockImplementation();
+      mockedVisibility.mockReturnValueOnce({
+        allColumns: [
+          { key: 'icon', label: '', align: 'text-center', required: true },
+          { key: 'name', label: 'Container', align: 'text-left', required: true },
+          {
+            key: 'links',
+            label: 'Resources',
+            align: 'text-center',
+            required: true,
+            px: 'px-1',
+            size: 152,
+            minSize: 152,
+            maxSize: 152,
+            autoSize: 'fixed',
+          },
+        ],
+        visibleColumns: mockVisibleColumns,
+        autoHiddenColumns: computed(() => []),
+        hiddenColumnKeys: computed(() => []),
+        toggleColumn: vi.fn(),
+        resetColumns: vi.fn(),
+      } as any);
+
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      expect(vm.tableColumns.find((column: any) => column.key === 'links')).toMatchObject({
+        sortable: false,
+        px: 'px-1',
+      });
+
+      if (prevImpl) mockedVisibility.mockImplementation(prevImpl);
+    });
+
     it('maps headerTooltip from headerTooltipKey when present in allColumns', async () => {
       const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
       const mockedVisibility = vi.mocked(useColumnVisibility);

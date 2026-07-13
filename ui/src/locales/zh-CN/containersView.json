@@ -40,6 +40,7 @@
       "status": "状态",
       "host": "主机",
       "registry": "仓库",
+      "resources": "资源",
       "uptime": "Uptime"
     },
     "status": {

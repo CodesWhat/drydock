@@ -1077,6 +1077,48 @@ describe('docker tag candidates module', () => {
     expect(result.tags).toEqual(['1.2.4-ls133']);
   });
 
+  describe('Immich OpenVINO pinned-tag matrix (#498)', () => {
+    const registryTags = ['v2.7.5-openvino', 'v3.0.2', 'v3.0.2-openvino'];
+
+    test('strict mode reports the same-variant major as informational only', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v2.7.5-openvino',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, registryTags, log);
+
+      expect(result.tags).toEqual([]);
+      expect(result.insight).toEqual({ tag: 'v3.0.2-openvino', kind: 'major' });
+    });
+
+    test('loose mode makes only the same-variant major actionable', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v2.7.5-openvino',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, registryTags, log);
+
+      expect(result.tags).toEqual(['v3.0.2-openvino']);
+      expect(result.insight).toBeUndefined();
+    });
+  });
+
   // #498: sortSemverDescending() previously ranked by raw semver precedence, where
   // semver treats a suffix as a prerelease — so a bare "3.0.2" would outrank
   // "3.0.2-alpine" even for an "-alpine" reference. Fixed to prefer the candidate

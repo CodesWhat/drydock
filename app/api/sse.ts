@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import express from 'express';
 import type {
   BatchUpdateCompletedEventPayload,
+  ContainerHealthTransitionEventPayload,
   ContainerLifecycleEventPayload,
   ContainerUpdateAppliedEvent,
   ContainerUpdateAppliedEventPayload,
@@ -16,6 +17,7 @@ import {
   registerAgentStatsChanged,
   registerBatchUpdateCompleted,
   registerContainerAdded,
+  registerContainerHealthTransition,
   registerContainerRemoved,
   registerContainerUpdateApplied,
   registerContainerUpdated,
@@ -64,6 +66,7 @@ const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:agent-disconnected',
   'dd:agent-stats-changed',
   'dd:container-added',
+  'dd:container-unhealthy',
   'dd:container-removed',
   'dd:container-updated',
   'dd:resync-required',
@@ -563,6 +566,14 @@ export function init(): express.Router {
         enrichContainerLifecyclePayloadWithEligibility(payload),
       );
     }),
+  );
+  trackEventListenerDeregistration(
+    registerContainerHealthTransition(
+      (payload: ContainerHealthTransitionEventPayload) => {
+        broadcastContainerEvent('dd:container-unhealthy', payload);
+      },
+      { id: 'sse', order: 1000 },
+    ),
   );
   trackEventListenerDeregistration(
     registerContainerRemoved((payload: unknown) => {

@@ -5,11 +5,10 @@ import { useRouter } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
 import AppStatusIndicator from '../components/AppStatusIndicator.vue';
+import ContainerLinkActions from '../components/containers/ContainerLinkActions.vue';
 import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
 import DataSortControl from '../components/DataSortControl.vue';
 import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
-import ProjectLink from '../components/containers/ProjectLink.vue';
-import ReleaseNotesLink from '../components/containers/ReleaseNotesLink.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
@@ -693,7 +692,7 @@ onUnmounted(() => {
                  @update:card-reflow-forced="cardReflowForced = $event"
                  @row-click="openDetail($event)">
         <template #cell-image="{ row }">
-          <div class="flex items-center gap-2 min-w-0">
+          <div class="flex flex-wrap items-center gap-2 min-w-0">
             <AppIcon :name="severityIcon(highestSeverity(row))" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: severityColor(highestSeverity(row)).text }"
                      v-tooltip.top="localizedSeverity(highestSeverity(row))" />
@@ -713,7 +712,7 @@ onUnmounted(() => {
                   v-tooltip.top="t('securityView.deltaTooltips.both', { fixed: row.delta.fixed, new: row.delta.new })">
               {{ t('securityView.delta.both', { fixed: row.delta.fixed, new: row.delta.new }) }}
             </AppBadge>
-            <template v-if="row.hasUpdate">
+            <div v-if="row.hasUpdate" class="flex items-center gap-1.5 shrink-0">
               <AppButton
                 v-if="managedUpdatesAllowed"
                 size="xs"
@@ -738,21 +737,24 @@ onUnmounted(() => {
                 @click.stop="navigateToContainerUpdate(row)">
                 {{ t('securityView.viewInContainers') }}
               </AppButton>
-            </template>
-            <ReleaseNotesLink
-              v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
-              :release-notes="row.releaseNotes"
-              :current-release-notes="row.currentReleaseNotes"
-              :release-link="row.releaseLink"
-              icon-only
-              icon-size="toolbar"
-              data-test="security-release-notes" />
-            <ProjectLink
-              v-if="row.sourceRepo"
-              :source-repo="row.sourceRepo"
-              icon-only
-              icon-size="toolbar"
-              data-test="security-project-link" />
+            </div>
+            <div
+              v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink || row.sourceRepo || row.registry || row.registryName || row.registryUrl"
+              class="basis-full flex justify-end shrink-0"
+              data-test="security-resource-actions">
+              <ContainerLinkActions
+                :source-repo="row.sourceRepo"
+                :release-notes="row.releaseNotes"
+                :current-release-notes="row.currentReleaseNotes"
+                :release-link="row.releaseLink"
+                :container-id="row.containerId"
+                :from-tag="row.fromTag"
+                :to-tag="row.toTag"
+                :registry="row.registry"
+                :registry-name="row.registryName"
+                :registry-url="row.registryUrl"
+                icon-size="sm" />
+            </div>
           </div>
         </template>
         <template #cell-critical="{ row }">
@@ -840,16 +842,36 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- Footer: fixable state + action cluster (mirrors #cell-image's buttons/handlers) -->
-            <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
+            <div
+              v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink || row.sourceRepo || row.registry || row.registryName || row.registryUrl"
+              class="px-4 pt-2.5 flex flex-wrap w-full justify-end mt-auto"
+              :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+              <div class="shrink-0" data-test="security-card-resource-actions">
+                <ContainerLinkActions
+                  :source-repo="row.sourceRepo"
+                  :release-notes="row.releaseNotes"
+                  :current-release-notes="row.currentReleaseNotes"
+                  :release-link="row.releaseLink"
+                  :container-id="row.containerId"
+                  :from-tag="row.fromTag"
+                  :to-tag="row.toTag"
+                  :registry="row.registry"
+                  :registry-name="row.registryName"
+                  :registry-url="row.registryUrl"
+                  icon-size="sm" />
+              </div>
+            </div>
+
+            <!-- Footer: fixable state + lifecycle actions (resources use their own row above). -->
+            <div class="px-4 py-2.5 flex items-center justify-between"
                  :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
               <span v-if="row.fixable > 0" class="text-2xs-plus font-semibold"
                     :style="{ color: fixableColor(row.fixable, row.total) }">
                 {{ fixablePercent(row.fixable, row.total) }}% {{ t('securityView.columns.fixable') }}
               </span>
               <span v-else class="text-2xs-plus font-medium dd-text-muted">{{ t('securityView.columns.fixable') }}</span>
-              <div class="flex items-center gap-1.5 shrink-0">
-                <template v-if="row.hasUpdate">
+              <div class="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                <div v-if="row.hasUpdate" class="flex items-center gap-1.5 shrink-0">
                   <AppButton
                     v-if="managedUpdatesAllowed"
                     size="xs"
@@ -874,21 +896,7 @@ onUnmounted(() => {
                     @click.stop="navigateToContainerUpdate(row)">
                     {{ t('securityView.viewInContainers') }}
                   </AppButton>
-                </template>
-                <ReleaseNotesLink
-                  v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
-                  :release-notes="row.releaseNotes"
-                  :current-release-notes="row.currentReleaseNotes"
-                  :release-link="row.releaseLink"
-                  icon-only
-                  icon-size="toolbar"
-                  data-test="security-card-release-notes" />
-                <ProjectLink
-                  v-if="row.sourceRepo"
-                  :source-repo="row.sourceRepo"
-                  icon-only
-                  icon-size="toolbar"
-                  data-test="security-card-project-link" />
+                </div>
               </div>
             </div>
           </div>

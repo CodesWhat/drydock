@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "Projekt anzeigen"
     },
+    "registryLink": { "viewRegistry": "Registry anzeigen" },
     "releaseNotesLink": {
       "releaseNotes": "Release Notes",
       "viewFullNotes": "Vollständige Notes anzeigen",

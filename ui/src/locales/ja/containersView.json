@@ -40,6 +40,7 @@
       "status": "ステータス",
       "host": "ホスト",
       "registry": "レジストリ",
+      "resources": "リソース",
       "uptime": "Uptime"
     },
     "status": {

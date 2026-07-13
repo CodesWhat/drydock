@@ -1601,9 +1601,15 @@ describe('AgentClient', () => {
       expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
     });
 
-    test('should emit emitAgentStatsChanged after dd:container-updated', async () => {
+    test('should emit agent stats after a health-only container update', async () => {
       vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
-      await client.handleEvent('dd:container-updated', { id: 'c1', name: 'web', watcher: 'local' });
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        status: 'running',
+        health: 'unhealthy',
+      });
       await vi.runAllTimersAsync();
       expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
     });

@@ -5,6 +5,11 @@ import DataTable from '@/components/DataTable.vue';
 import { useToast } from '@/composables/useToast';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { Container } from '@/types/container';
+import {
+  expectContainerQuickLinks,
+  QUICK_LINK_SELECTOR,
+  quickLinkTestIds,
+} from '../../helpers/containerQuickLinks';
 import { mountWithPlugins } from '../../helpers/mount';
 
 const mocked = vi.hoisted(() => ({
@@ -74,7 +79,8 @@ const DataTableStub = defineComponent({
         :class="[
           isFullWidth(row) ? 'full-row-stub' : 'table-row-stub',
           !isFullWidth(row) && typeof rowClass === 'function' ? rowClass(row) : '',
-        ]">
+        ]"
+        @click="!isFullWidth(row) && isClickable(row) && $emit('row-click', row)">
         <template v-if="isFullWidth(row)">
           <slot name="full-row" :row="row" />
         </template>
@@ -90,6 +96,7 @@ const DataTableStub = defineComponent({
             <slot name="cell-server" :row="row" />
             <slot name="cell-registry" :row="row" />
             <slot name="cell-uptime" :row="row" />
+            <div class="links-cell-stub"><slot name="cell-links" :row="row" /></div>
             <slot name="actions" :row="row" />
           </div>
         </template>
@@ -706,6 +713,37 @@ describe('ContainersGroupedViews', () => {
     );
   });
 
+  it('uses the same ordered 44px quick-link group in cards without selecting the card (#295)', async () => {
+    const linked = makeContainer({
+      id: 'c-card-quick-links',
+      name: 'quick-links',
+      sourceRepo: 'github.com/example/quick-links',
+      releaseLink: 'https://example.test/releases/2.0.0',
+      registry: 'custom',
+      registryName: 'registry.example.com',
+      registryUrl: 'https://registry.example.com/v2',
+    });
+
+    const { wrapper, spies } = await mountCardsWithContainers([linked], 800);
+    const card = cardByName(wrapper, 'quick-links');
+    const group = card.get('[data-test="container-quick-links"]');
+    expectContainerQuickLinks(group, 'registry.example.com');
+
+    const lifecycleAction = cardIconButton(card, 'more');
+    const resourceRow = group.element.parentElement;
+    const lifecycleRow = lifecycleAction.element.parentElement;
+    expect(resourceRow).not.toBe(lifecycleRow);
+    expect(resourceRow?.classList.contains('flex-wrap')).toBe(true);
+    expect(resourceRow?.classList.contains('w-full')).toBe(true);
+
+    const rowSelectionsBeforeLinkClicks = spies.selectContainer.mock.calls.length;
+    for (const action of group.findAll(QUICK_LINK_SELECTOR)) {
+      action.element.addEventListener('click', (event) => event.preventDefault(), { once: true });
+      await action.trigger('click');
+    }
+    expect(spies.selectContainer).toHaveBeenCalledTimes(rowSelectionsBeforeLinkClicks);
+  });
+
   it('keeps registry in the card subtitle, moves update state to the header, and leaves release/project links in the footer', async () => {
     const linked = makeContainer({
       id: 'c-card-body-layout',
@@ -1172,12 +1210,14 @@ describe('ContainersGroupedViews', () => {
 
     const wrapper = mountSubject();
 
-    const updateState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
-    const badge = updateState.get('[data-test="update-insight-badge"]');
-    expect(badge.text()).toBe('Newer available');
-    // The insight tag must only surface via the badge'''s tooltip binding, never as
-    // bare unlabeled text — it is pure information, not an actionable update.
+    const row = rowByName(wrapper, 'alpha');
+    const updateState = row.get('[data-test="container-update-state"]');
+    expect(updateState.text()).toContain('Pinned');
+    expect(updateState.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    const kindBadge = updateState.get('[data-test="update-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
     expect(updateState.text()).not.toContain('v1.46.1');
+    expect(row.text()).toContain('v1.46.1');
   });
 
   it('renders the informational update-insight badge in card mode (#498)', async () => {
@@ -1196,9 +1236,84 @@ describe('ContainersGroupedViews', () => {
     const { wrapper } = await mountCardsWithContainers([pinned], 800);
     const card = cardByName(wrapper, 'alpha');
 
-    const cardBadge = card.get('[data-test="update-insight-badge"]');
-    expect(cardBadge.text()).toBe('Newer available');
-    expect(card.text()).not.toContain('v1.46.1');
+    expect(card.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    const cardBadge = card.get('[data-test="update-insight-kind-badge"]');
+    expect(cardBadge.text()).toBe('Minor');
+    expect(card.text()).toContain('v1.13.3');
+    expect(card.text()).toContain('v1.46.1');
+    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Pinned');
+  });
+
+  it('keeps the stacked pinned-tag insight visible beside an actionable digest update (#498)', async () => {
+    const digestAndInsight = makeContainer({
+      id: 'c-digest-and-insight',
+      name: 'alpha',
+      currentTag: 'v2.7.5-openvino',
+      newTag: null,
+      updateKind: 'digest',
+      currentDigest: `sha256:${'a'.repeat(64)}`,
+      newDigest: `sha256:${'b'.repeat(64)}`,
+      isDigestPinned: false,
+      status: 'running',
+      server: 'local-main',
+      registry: 'ghcr',
+      updateInsight: { tag: 'v3.0.2-openvino', kind: 'major' },
+    });
+
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [digestAndInsight];
+    refs.displayContainers.value = [digestAndInsight];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [digestAndInsight],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const tableWrapper = mountSubject();
+    const row = rowByName(tableWrapper, 'alpha');
+    expect(row.text()).toContain('v2.7.5-openvino');
+    expect(row.text()).toContain('v3.0.2-openvino');
+    expect(row.get('[data-test="container-update-state"]').text()).toContain('Digest');
+    expect(row.get('[data-test="update-insight-kind-badge"]').text()).toBe('Major');
+
+    const { wrapper: cardWrapper } = await mountCardsWithContainers([digestAndInsight], 800);
+    const card = cardByName(cardWrapper, 'alpha');
+    expect(card.text()).toContain('v2.7.5-openvino');
+    expect(card.text()).toContain('v3.0.2-openvino');
+    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Digest');
+    expect(card.get('[data-test="update-insight-kind-badge"]').text()).toBe('Major');
+  });
+
+  it('keeps the actionable no-update reason alongside pinned insight in card mode (#498)', async () => {
+    const remedy =
+      'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
+    const pinnedDigestOff = makeContainer({
+      id: 'c-insight-plus-reason-card',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      noUpdateReason: `Pinned tag "v1.13.3": digest watching is disabled for this container, so no actionable update detection is running (a newer same-family tag is still shown for information). ${remedy}`,
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    });
+
+    const { wrapper } = await mountCardsWithContainers([pinnedDigestOff], 800);
+    const card = cardByName(wrapper, 'alpha');
+
+    expect(card.get('[data-test="update-insight-kind-badge"]').text()).toBe('Minor');
+    expect(card.text()).toContain('v1.46.1');
+    const reasonText = card.get('[data-test="no-update-reason-badge"]').attributes('aria-label');
+    expect(reasonText).toContain('no actionable update detection is running');
+    expect(reasonText).not.toContain('so no update detection is running');
   });
 
   it('renders the no-update-reason and update-insight badges together without contradictory copy when digest watching is off (#498)', async () => {
@@ -1237,8 +1352,9 @@ describe('ContainersGroupedViews', () => {
 
     const row = rowByName(wrapper, 'alpha');
 
-    const insightBadge = row.get('[data-test="update-insight-badge"]');
-    expect(insightBadge.text()).toBe('Newer available');
+    const kindBadge = row.get('[data-test="update-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
+    expect(row.text()).toContain('v1.46.1');
 
     const reasonBadge = row.get('[data-test="no-update-reason-badge"]');
     const reasonText = reasonBadge.attributes('aria-label');
@@ -1246,6 +1362,50 @@ describe('ContainersGroupedViews', () => {
     // still real, so the reason copy must not claim no detection at all runs.
     expect(reasonText).toContain('no actionable update detection is running');
     expect(reasonText).not.toContain('so no update detection is running');
+  });
+
+  it('reserves Pinned for insight and labels version-skip policy as Skipped (#498)', () => {
+    const skipped = makeContainer({
+      id: 'c-skip-label',
+      name: 'gamma',
+      newTag: null,
+      updateKind: null,
+    });
+    const pinnedInsight = makeContainer({
+      id: 'c-pin-label',
+      name: 'alpha',
+      newTag: null,
+      updateKind: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'patch' },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [skipped, pinnedInsight];
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const skippedState = rowByName(wrapper, 'gamma').get('[data-test="container-update-state"]');
+    expect(skippedState.text()).toContain('Skipped');
+    expect(skippedState.text()).not.toContain('Pinned');
+
+    const pinnedState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
+    expect(pinnedState.text()).toContain('Pinned');
+    const pinnedLabel = pinnedState.find('.font-semibold');
+    expect(pinnedLabel.attributes('style')).toContain('var(--dd-info)');
+    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-warning)');
+    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-success)');
   });
 
   it('covers dropdown menu actions across blocked/updateable states', async () => {
@@ -2157,11 +2317,7 @@ describe('ContainersGroupedViews', () => {
     expect(batch?.succeededCount).toBe(0);
   });
 
-  it('renders icon-only ReleaseNotesLink and ProjectLink inside the table actions column (#295)', async () => {
-    // rc.10 wired project/release-notes links into the cards + detail panel
-    // only. Table rows never showed them. We surface them as icon-style
-    // AppIconButton links in the actions column itself so they match the
-    // existing action icons and give finger-friendly tap targets.
+  it('renders the standardized source, release, and registry quick-link group in table rows (#295)', async () => {
     const container = makeContainer({
       id: 'c-table-actions-links',
       name: 'grafana',
@@ -2169,8 +2325,11 @@ describe('ContainersGroupedViews', () => {
       updateKind: 'patch',
       sourceRepo: 'github.com/grafana/grafana',
       releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
+      registry: 'custom',
+      registryName: 'registry.example.com',
+      registryUrl: 'https://registry.example.com/v2',
     });
-    const { context, refs } = makeContext();
+    const { context, refs, spies } = makeContext();
     refs.filteredContainers.value = [container];
     refs.displayContainers.value = [container];
     refs.renderGroups.value = [
@@ -2188,16 +2347,68 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     await nextTick();
 
-    const projectLink = wrapper.find('[data-test="project-link"]');
-    const releaseLink = wrapper.find('[data-test="release-link"]');
-    expect(projectLink.exists()).toBe(true);
-    expect(releaseLink.exists()).toBe(true);
-    expect(projectLink.element.tagName).toBe('A');
-    // releaseLink is the popover trigger (button) — clicking it opens the
-    // unified release-notes popover; the external link lives inside the
-    // popover body. See discussion #295.
-    expect(releaseLink.element.tagName).toBe('BUTTON');
-    expect(releaseLink.attributes('aria-haspopup')).toBe('dialog');
+    const group = wrapper.get('.links-cell-stub').get('[data-test="container-quick-links"]');
+    expectContainerQuickLinks(group, 'registry.example.com');
+
+    const rowSelectionsBeforeLinkClicks = spies.selectContainer.mock.calls.length;
+    for (const action of group.findAll(QUICK_LINK_SELECTOR)) {
+      action.element.addEventListener('click', (event) => event.preventDefault(), { once: true });
+      await action.trigger('click');
+    }
+    expect(spies.selectContainer).toHaveBeenCalledTimes(rowSelectionsBeforeLinkClicks);
+  });
+
+  it('renders each table quick link independently when the other link data is absent (#295)', async () => {
+    const sourceOnly = makeContainer({
+      id: 'c-source-only',
+      name: 'source-only',
+      sourceRepo: 'github.com/example/source-only',
+      registry: 'dockerhub',
+    });
+    const releaseOnly = makeContainer({
+      id: 'c-release-only',
+      name: 'release-only',
+      releaseLink: 'https://example.test/releases/1.0.0',
+      registry: 'dockerhub',
+    });
+    const registryOnly = makeContainer({
+      id: 'c-registry-only',
+      name: 'registry-only',
+      registry: 'ghcr',
+      registryName: 'ghcr.io',
+      registryUrl: 'https://ghcr.io/v2',
+    });
+    const containers = [sourceOnly, releaseOnly, registryOnly];
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const rows = wrapper.findAll('.table-row-stub');
+    expect(quickLinkTestIds(rows[0].get('[data-test="container-quick-links"]'))).toEqual([
+      'project-link',
+      'registry-link',
+    ]);
+    expect(quickLinkTestIds(rows[1].get('[data-test="container-quick-links"]'))).toEqual([
+      'release-link',
+      'registry-link',
+    ]);
+    expect(quickLinkTestIds(rows[2].get('[data-test="container-quick-links"]'))).toEqual([
+      'registry-link',
+    ]);
   });
 
   it('flat-mode tableRows reads from renderGroups[0].containers, not displayContainers', async () => {

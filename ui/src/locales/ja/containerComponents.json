@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "プロジェクトを表示"
     },
+    "registryLink": { "viewRegistry": "レジストリを表示" },
     "releaseNotesLink": {
       "releaseNotes": "リリースノート",
       "viewFullNotes": "全文を表示",

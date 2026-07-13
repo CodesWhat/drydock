@@ -102,11 +102,12 @@ export const CONTAINER_TABLE_COLUMN_KEYS = [
   'status',
   'server',
   'registry',
+  'links',
 ] as const;
 
 export const CONTAINER_TABLE_OPT_IN_COLUMN_KEYS = ['uptime'] as const;
 
-export const CONTAINER_TABLE_REQUIRED_COLUMN_KEYS = ['icon', 'name'] as const;
+export const CONTAINER_TABLE_REQUIRED_COLUMN_KEYS = ['icon', 'name', 'links'] as const;
 
 export const DEFAULTS: PreferencesSchema = {
   schemaVersion: CURRENT_SCHEMA_VERSION,

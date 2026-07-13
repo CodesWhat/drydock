@@ -225,4 +225,111 @@ describe('useNotificationStore', () => {
       vi.useRealTimers();
     }
   });
+
+  it('refetches after the post-audit unhealthy event', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useNotificationStore();
+      const eventStream = useEventStreamStore();
+
+      store.start();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+
+      eventStream.publish('container-unhealthy', {
+        containerName: 'web',
+        health: 'unhealthy',
+      });
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not let an older lifecycle refresh overwrite a newer unhealthy refresh', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useNotificationStore();
+      const eventStream = useEventStreamStore();
+
+      store.start();
+      await Promise.resolve();
+      await Promise.resolve();
+      mockGetAuditLog.mockClear();
+
+      let resolveOlder!: (value: { entries: typeof entries }) => void;
+      let resolveNewer!: (value: { entries: typeof entries }) => void;
+      const olderRequest = new Promise<{ entries: typeof entries }>((resolve) => {
+        resolveOlder = resolve;
+      });
+      const newerRequest = new Promise<{ entries: typeof entries }>((resolve) => {
+        resolveNewer = resolve;
+      });
+      mockGetAuditLog.mockReturnValueOnce(olderRequest).mockReturnValueOnce(newerRequest);
+
+      eventStream.publish('container-changed');
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      eventStream.publish('container-unhealthy');
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
+
+      const unhealthyEntries = [
+        {
+          id: 'health',
+          timestamp: '2026-04-29T12:02:00.000Z',
+          action: 'container-unhealthy',
+          containerName: 'web',
+          status: 'error' as const,
+        },
+      ];
+      resolveNewer({ entries: unhealthyEntries });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(store.visibleEntries.map((entry) => entry.id)).toEqual(['health']);
+
+      resolveOlder({ entries: [] });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(store.visibleEntries.map((entry) => entry.id)).toEqual(['health']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores a stale refresh failure after a newer request succeeds', async () => {
+    let rejectOlder!: (reason: Error) => void;
+    let resolveNewer!: (value: { entries: typeof entries }) => void;
+    const olderRequest = new Promise<{ entries: typeof entries }>((_resolve, reject) => {
+      rejectOlder = reject;
+    });
+    const newerRequest = new Promise<{ entries: typeof entries }>((resolve) => {
+      resolveNewer = resolve;
+    });
+    mockGetAuditLog.mockReturnValueOnce(olderRequest).mockReturnValueOnce(newerRequest);
+    const store = useNotificationStore();
+
+    const olderFetch = store.fetchEntries();
+    const newerFetch = store.fetchEntries();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    resolveNewer({ entries });
+    await newerFetch;
+    rejectOlder(new Error('stale network failure'));
+    await olderFetch;
+
+    expect(store.visibleEntries).toEqual(entries);
+    expect(store.error).toBeNull();
+    expect(store.loading).toBe(false);
+  });
 });

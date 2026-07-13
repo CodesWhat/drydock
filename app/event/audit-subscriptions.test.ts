@@ -205,6 +205,66 @@ describe('audit-subscriptions dedupe windows', () => {
     expect(mockInc).toHaveBeenCalledTimes(3);
   });
 
+  test('scopes same-name unhealthy dedupe by agent and watcher', async () => {
+    const { containerHealthTransitionHandler } = setupAuditSubscriptions();
+
+    await containerHealthTransitionHandler({
+      containerName: 'web',
+      container: {
+        id: 'edge-a-web',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'edge-a',
+      },
+      health: 'unhealthy',
+    });
+    await containerHealthTransitionHandler({
+      containerName: 'web',
+      container: {
+        id: 'edge-b-web',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'edge-b',
+      },
+      health: 'unhealthy',
+    });
+    await containerHealthTransitionHandler({
+      containerName: 'web',
+      container: {
+        id: 'edge-a-podman-web',
+        name: 'web',
+        watcher: 'podman',
+        agent: 'edge-a',
+      },
+      health: 'unhealthy',
+    });
+    await containerHealthTransitionHandler({
+      containerName: 'web',
+      container: {
+        id: 'edge-a-web-repeated',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'edge-a',
+      },
+      health: 'unhealthy',
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(3);
+    expect(mockInc).toHaveBeenCalledTimes(3);
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ containerIdentityKey: 'edge-a::docker::web' }),
+    );
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ containerIdentityKey: 'edge-b::docker::web' }),
+    );
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ containerIdentityKey: 'edge-a::podman::web' }),
+    );
+  });
+
   test('records the previous health in container unhealthy audit details', async () => {
     const { containerHealthTransitionHandler } = setupAuditSubscriptions();
 

@@ -162,7 +162,7 @@ Notification rules control which events fire which triggers. Each rule correspon
 | `agent-reconnect` | No | A remote agent reconnected after losing connection |
 | `container-unhealthy` | No | A container's Docker health check entered the unhealthy state |
 
-The in-app bell has audit-backed controls for `update-available`, `update-applied`, `update-failed`, `security-alert`, `agent-disconnect`, and `container-unhealthy`. `agent-reconnect` remains a delivery rule but does not expose a bell toggle because that action is not part of the bell's audit query. Notification-delivery failures are always included. Agent status-change events refresh the bell so disconnect and unhealthy entries appear without waiting for another container event.
+The in-app bell has audit-backed controls for `update-available`, `update-applied`, `update-failed`, `security-alert`, `agent-disconnect`, and `container-unhealthy`. `agent-reconnect` remains a delivery rule but does not expose a bell toggle because that action is not part of the bell's audit query. Notification-delivery failures are always included. Agent status changes refresh disconnect entries; health-only container changes propagate across local and agent paths, and a replayable health-transition event is ordered after audit processing so the bell refetch sees any newly inserted unhealthy row.
 
 **Dispatch behavior:**
 

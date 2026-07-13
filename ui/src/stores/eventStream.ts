@@ -9,6 +9,7 @@ export type SseBusEvent =
   | 'container-added'
   | 'container-updated'
   | 'container-removed'
+  | 'container-unhealthy'
   | 'update-operation-changed'
   | 'update-applied'
   | 'update-failed'
@@ -318,6 +319,15 @@ export const useEventStreamStore = defineStore('eventStream', () => {
       const payload = parseContainerLifecyclePayload(event);
       emit('container-removed', payload, (event as MessageEvent)?.lastEventId || undefined, true);
       emit('container-changed', payload, (event as MessageEvent)?.lastEventId || undefined, true);
+    });
+
+    source.addEventListener('dd:container-unhealthy', (event: MessageEvent) => {
+      emit(
+        'container-unhealthy',
+        parseJsonPayload(event?.data),
+        event?.lastEventId || undefined,
+        true,
+      );
     });
 
     source.addEventListener('dd:update-operation-changed', (event) => {

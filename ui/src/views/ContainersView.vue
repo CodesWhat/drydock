@@ -1265,7 +1265,7 @@ const tableColumns = computed(() =>
     key: column.key,
     label: column.labelKey ? t(column.labelKey) : column.label,
     align: column.align,
-    sortable: column.key !== 'icon',
+    sortable: column.key !== 'icon' && column.key !== 'links',
     size: column.size,
     minSize: column.minSize,
     maxSize: column.maxSize,

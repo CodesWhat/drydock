@@ -46,6 +46,7 @@ function bellActionsForRules(rules: NotificationRule[]): string[] {
 
 const BELL_REFRESH_EVENTS: SseBusEvent[] = [
   'container-changed',
+  'container-unhealthy',
   'scan-completed',
   'sse:connected',
   'resync-required',
@@ -69,6 +70,7 @@ export const useNotificationStore = defineStore('notifications', () => {
 
   let sseDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   let unsubscribeEventStream: Array<() => void> = [];
+  let fetchSequence = 0;
 
   const visibleEntries = computed(() => {
     const dismissed = new Set(dismissedIds.value);
@@ -93,11 +95,15 @@ export const useNotificationStore = defineStore('notifications', () => {
   }
 
   async function fetchEntries(): Promise<void> {
+    const requestSequence = ++fetchSequence;
     loading.value = true;
     try {
       const rules = await getAllNotificationRules().catch(() => null);
       const actions = rules ? bellActionsForRules(rules) : BELL_ACTIONS;
       const data = await getAuditLog({ limit: 20, actions });
+      if (requestSequence !== fetchSequence) {
+        return;
+      }
       const updateAvailableRule = rules?.find((rule) => rule.id === 'update-available');
       entries.value = (data.entries ?? []).filter(
         (entry: AuditEntry) =>
@@ -107,9 +113,13 @@ export const useNotificationStore = defineStore('notifications', () => {
       );
       error.value = null;
     } catch (caught) {
-      error.value = normalizeFetchError(caught);
+      if (requestSequence === fetchSequence) {
+        error.value = normalizeFetchError(caught);
+      }
     } finally {
-      loading.value = false;
+      if (requestSequence === fetchSequence) {
+        loading.value = false;
+      }
     }
   }
 

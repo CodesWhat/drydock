@@ -144,6 +144,9 @@ export interface RecentUpdateRow {
   sourceRepo?: string;
   releaseNotes?: ContainerReleaseNotes | null;
   currentReleaseNotes?: ContainerReleaseNotes | null;
+  registry?: Container['registry'];
+  registryName?: string;
+  registryUrl?: string;
   batchId?: string;
   queuePosition?: number;
   queueTotal?: number;

@@ -3,6 +3,7 @@ var {
   mockRegisterSelfUpdateStarting,
   mockRegisterContainerAdded,
   mockRegisterContainerUpdated,
+  mockRegisterContainerHealthTransition,
   mockRegisterContainerRemoved,
   mockRegisterUpdateOperationChanged,
   mockRegisterAgentConnected,
@@ -51,6 +52,7 @@ var {
     mockRegisterSelfUpdateStarting: vi.fn(),
     mockRegisterContainerAdded: vi.fn(),
     mockRegisterContainerUpdated: vi.fn(),
+    mockRegisterContainerHealthTransition: vi.fn(),
     mockRegisterContainerRemoved: vi.fn(),
     mockRegisterUpdateOperationChanged: vi.fn(),
     mockRegisterAgentConnected: vi.fn(),
@@ -123,6 +125,7 @@ vi.mock('../event/index', () => ({
   registerSelfUpdateStarting: mockRegisterSelfUpdateStarting,
   registerContainerAdded: mockRegisterContainerAdded,
   registerContainerUpdated: mockRegisterContainerUpdated,
+  registerContainerHealthTransition: mockRegisterContainerHealthTransition,
   registerContainerRemoved: mockRegisterContainerRemoved,
   registerUpdateOperationChanged: mockRegisterUpdateOperationChanged,
   registerAgentConnected: mockRegisterAgentConnected,
@@ -289,6 +292,7 @@ describe('SSE Router', () => {
       expect(mockRegisterSelfUpdateStarting).toHaveBeenCalledTimes(1);
       expect(mockRegisterContainerAdded).toHaveBeenCalledTimes(1);
       expect(mockRegisterContainerUpdated).toHaveBeenCalledTimes(1);
+      expect(mockRegisterContainerHealthTransition).toHaveBeenCalledTimes(1);
       expect(mockRegisterContainerRemoved).toHaveBeenCalledTimes(1);
       expect(mockRegisterUpdateOperationChanged).toHaveBeenCalledTimes(1);
       expect(mockRegisterAgentConnected).toHaveBeenCalledTimes(1);
@@ -299,6 +303,7 @@ describe('SSE Router', () => {
       const deregisterSelfUpdateStarting = vi.fn();
       const deregisterContainerAdded = vi.fn();
       const deregisterContainerUpdated = vi.fn();
+      const deregisterContainerHealthTransition = vi.fn();
       const deregisterContainerRemoved = vi.fn();
       const deregisterUpdateOperationChanged = vi.fn();
       const deregisterAgentConnected = vi.fn();
@@ -308,6 +313,9 @@ describe('SSE Router', () => {
       mockRegisterSelfUpdateStarting.mockReturnValueOnce(deregisterSelfUpdateStarting);
       mockRegisterContainerAdded.mockReturnValueOnce(deregisterContainerAdded);
       mockRegisterContainerUpdated.mockReturnValueOnce(deregisterContainerUpdated);
+      mockRegisterContainerHealthTransition.mockReturnValueOnce(
+        deregisterContainerHealthTransition,
+      );
       mockRegisterContainerRemoved.mockReturnValueOnce(deregisterContainerRemoved);
       mockRegisterUpdateOperationChanged.mockReturnValueOnce(deregisterUpdateOperationChanged);
       mockRegisterAgentConnected.mockReturnValueOnce(deregisterAgentConnected);
@@ -321,6 +329,7 @@ describe('SSE Router', () => {
       expect(deregisterSelfUpdateStarting).toHaveBeenCalledTimes(1);
       expect(deregisterContainerAdded).toHaveBeenCalledTimes(1);
       expect(deregisterContainerUpdated).toHaveBeenCalledTimes(1);
+      expect(deregisterContainerHealthTransition).toHaveBeenCalledTimes(1);
       expect(deregisterContainerRemoved).toHaveBeenCalledTimes(1);
       expect(deregisterUpdateOperationChanged).toHaveBeenCalledTimes(1);
       expect(deregisterAgentConnected).toHaveBeenCalledTimes(1);
@@ -330,6 +339,7 @@ describe('SSE Router', () => {
       expect(mockRegisterSelfUpdateStarting).toHaveBeenCalledTimes(2);
       expect(mockRegisterContainerAdded).toHaveBeenCalledTimes(2);
       expect(mockRegisterContainerUpdated).toHaveBeenCalledTimes(2);
+      expect(mockRegisterContainerHealthTransition).toHaveBeenCalledTimes(2);
       expect(mockRegisterContainerRemoved).toHaveBeenCalledTimes(2);
       expect(mockRegisterUpdateOperationChanged).toHaveBeenCalledTimes(2);
       expect(mockRegisterAgentConnected).toHaveBeenCalledTimes(2);
@@ -341,6 +351,7 @@ describe('SSE Router', () => {
       const deregisterSelfUpdateStarting = vi.fn();
       const deregisterContainerAdded = vi.fn();
       const deregisterContainerUpdated = vi.fn();
+      const deregisterContainerHealthTransition = vi.fn();
       const deregisterContainerRemoved = vi.fn();
       const deregisterUpdateOperationChanged = vi.fn();
       const deregisterAgentConnected = vi.fn();
@@ -350,6 +361,9 @@ describe('SSE Router', () => {
       mockRegisterSelfUpdateStarting.mockReturnValueOnce(deregisterSelfUpdateStarting);
       mockRegisterContainerAdded.mockReturnValueOnce(deregisterContainerAdded);
       mockRegisterContainerUpdated.mockReturnValueOnce(deregisterContainerUpdated);
+      mockRegisterContainerHealthTransition.mockReturnValueOnce(
+        deregisterContainerHealthTransition,
+      );
       mockRegisterContainerRemoved.mockReturnValueOnce(deregisterContainerRemoved);
       mockRegisterUpdateOperationChanged.mockReturnValueOnce(deregisterUpdateOperationChanged);
       mockRegisterAgentConnected.mockReturnValueOnce(deregisterAgentConnected);
@@ -362,6 +376,7 @@ describe('SSE Router', () => {
       expect(deregisterSelfUpdateStarting).toHaveBeenCalledTimes(1);
       expect(deregisterContainerAdded).toHaveBeenCalledTimes(1);
       expect(deregisterContainerUpdated).toHaveBeenCalledTimes(1);
+      expect(deregisterContainerHealthTransition).toHaveBeenCalledTimes(1);
       expect(deregisterContainerRemoved).toHaveBeenCalledTimes(1);
       expect(deregisterUpdateOperationChanged).toHaveBeenCalledTimes(1);
       expect(deregisterAgentConnected).toHaveBeenCalledTimes(1);
@@ -391,6 +406,10 @@ describe('SSE Router', () => {
       sseRouter.init();
       expect(mockRegisterContainerAdded).toHaveBeenCalledWith(expect.any(Function));
       expect(mockRegisterContainerUpdated).toHaveBeenCalledWith(expect.any(Function));
+      expect(mockRegisterContainerHealthTransition).toHaveBeenCalledWith(expect.any(Function), {
+        id: 'sse',
+        order: 1000,
+      });
       expect(mockRegisterContainerRemoved).toHaveBeenCalledWith(expect.any(Function));
       expect(mockRegisterUpdateOperationChanged).toHaveBeenCalledWith(expect.any(Function));
     });
@@ -1672,6 +1691,33 @@ describe('SSE Router', () => {
         expect.stringContaining(
           'event: dd:update-operation-changed\ndata: {"operationId":"op-1","containerName":"nginx","status":"failed","phase":"failed"}',
         ),
+      );
+    });
+
+    test('should broadcast unhealthy invalidation after audit subscribers', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const [onContainerUnhealthy, options] =
+        mockRegisterContainerHealthTransition.mock.calls.at(-1);
+
+      onContainerUnhealthy({
+        containerName: 'nginx',
+        container: { id: 'container-1', name: 'nginx', watcher: 'docker' },
+        previousHealth: 'healthy',
+        health: 'unhealthy',
+      });
+
+      expect(options).toEqual({ id: 'sse', order: 1000 });
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'event: dd:container-unhealthy\ndata: {"containerName":"nginx","container":{"id":"container-1","name":"nginx","watcher":"docker"},"previousHealth":"healthy","health":"unhealthy"}',
+        ),
+      );
+      expect(mockSseEventBuffer.push).toHaveBeenCalledWith(
+        expect.any(String),
+        'dd:container-unhealthy',
+        expect.objectContaining({ containerName: 'nginx', health: 'unhealthy' }),
+        expect.any(Number),
       );
     });
 
