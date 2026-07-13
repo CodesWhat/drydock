@@ -43,7 +43,7 @@ describe('created-container-candidate', () => {
       expect(getCreatedContainerCandidate(undefined)).toBeUndefined();
     });
 
-    test('uses a field name distinct from the compose channel', () => {
+    test('uses the shared candidate field without a legacy compose channel', () => {
       const error = new Error('connect failed');
       const candidate = { id: 'orphan' };
 

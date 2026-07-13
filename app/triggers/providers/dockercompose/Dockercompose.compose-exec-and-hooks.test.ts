@@ -2,6 +2,7 @@ import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getState } from '../../../registry/index.js';
+import { getCreatedContainerCandidate } from '../docker/created-container-candidate.js';
 import Dockercompose from './Dockercompose.js';
 import {
   makeCompose,
@@ -468,6 +469,37 @@ describe('Dockercompose Trigger', () => {
     expect(failedCandidate.remove.mock.invocationCallOrder[0]).toBeLessThan(
       mockDockerApi.createContainer.mock.invocationCallOrder[1],
     );
+  });
+
+  test('createContainer exposes a network-attach candidate through the shared rollback channel only', async () => {
+    const failedCandidate = makeDockerContainerHandle();
+    const networkError = new Error('network attach failed');
+    mockDockerApi.createContainer.mockResolvedValue(failedCandidate);
+    mockDockerApi.getNetwork.mockReturnValue({
+      connect: vi.fn().mockRejectedValue(networkError),
+    });
+
+    await expect(
+      trigger.createContainer(
+        mockDockerApi,
+        {
+          NetworkingConfig: {
+            EndpointsConfig: {
+              bridge: {},
+              sidecar: {},
+            },
+          },
+        },
+        'nginx',
+        mockLog,
+      ),
+    ).rejects.toBe(networkError);
+
+    expect(getCreatedContainerCandidate(networkError)).toBe(failedCandidate);
+    expect(
+      (networkError as Error & { composeCreatedContainerCandidate?: unknown })
+        .composeCreatedContainerCandidate,
+    ).toBeUndefined();
   });
 
   test('[#391] updateContainerWithCompose should rethrow original error even when rollback restore also fails', async () => {

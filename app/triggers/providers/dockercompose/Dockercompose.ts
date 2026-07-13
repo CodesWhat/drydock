@@ -9,6 +9,7 @@ import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../..
 import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
 import {
+  attachCreatedContainerCandidate,
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from '../docker/created-container-candidate.js';
@@ -179,7 +180,6 @@ type ComposeRollbackOutcome = {
 
 type ComposeRollbackError = Error & {
   composeRollbackOutcome?: ComposeRollbackOutcome;
-  composeCreatedContainerCandidate?: unknown;
 };
 
 function hasDefinedComposeRuntimeContextValue(runtimeContext: ComposeRuntimeContext): boolean {
@@ -2149,7 +2149,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       logContainer.info(`Container ${containerName} recreated on new image with success`);
       return newContainer;
     } catch (error: unknown) {
-      Dockercompose.attachComposeCreatedContainerCandidate(error, newContainer);
+      attachCreatedContainerCandidate(error, newContainer);
       logContainer.warn(
         `Error when creating container ${containerName} (${getErrorMessage(error)})`,
       );
@@ -2201,25 +2201,6 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       /* v8 ignore next -- Docker info failures skip the architecture gate. */
       return undefined;
     }
-  }
-
-  private static attachComposeCreatedContainerCandidate(
-    error: unknown,
-    candidateContainer: unknown,
-  ): void {
-    /* v8 ignore next 3 -- helper only receives object errors from compose rollback paths. */
-    if (!candidateContainer || !error || typeof error !== 'object') {
-      return;
-    }
-    (error as ComposeRollbackError).composeCreatedContainerCandidate = candidateContainer;
-  }
-
-  private static getComposeCreatedContainerCandidate(error: unknown): unknown {
-    /* v8 ignore next 3 -- helper only receives object errors from compose rollback paths. */
-    if (!error || typeof error !== 'object') {
-      return undefined;
-    }
-    return (error as ComposeRollbackError).composeCreatedContainerCandidate;
   }
 
   private static attachComposeRollbackOutcome(
@@ -2332,9 +2313,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       // Cleanup is best-effort (cleanupFailedReplacementCandidate swallows
       // its own stop/remove errors) so it never changes the rollback-failed
       // status returned below.
-      const orphanCandidate =
-        getCreatedContainerCandidate(rollbackError) ??
-        Dockercompose.getComposeCreatedContainerCandidate(rollbackError);
+      const orphanCandidate = getCreatedContainerCandidate(rollbackError);
       await this.cleanupFailedReplacementCandidate(orphanCandidate, containerName, logContainer);
       return {
         status: 'rollback-failed',
@@ -2388,7 +2367,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       }
     } catch (recreateError: unknown) {
       await this.cleanupFailedReplacementCandidate(
-        newContainer || Dockercompose.getComposeCreatedContainerCandidate(recreateError),
+        newContainer || getCreatedContainerCandidate(recreateError),
         container.name,
         logContainer,
       );
