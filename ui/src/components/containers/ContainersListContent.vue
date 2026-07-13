@@ -237,9 +237,10 @@ const activeFilterChips = computed(() => {
           @reset="resetColumns" />
       </template>
       <template #left>
-        <AppIconButton icon="stack" size="toolbar" variant="secondary"
+        <AppIconButton icon="stack" size="sm" variant="secondary" class="shrink-0"
           :class="groupByStack ? 'dd-text dd-bg-elevated' : ''"
           :tooltip="tt(t('containerComponents.listContent.groupByStackTooltip'))"
+          :aria-label="t('containerComponents.listContent.groupByStackTooltip')"
           @click="groupByStack = !groupByStack" />
         <AppButton
           v-if="groupByStack"
@@ -251,11 +252,12 @@ const activeFilterChips = computed(() => {
           @click="allGroupsCollapsed ? expandAllGroups() : collapseAllGroups()">
           {{ allGroupsCollapsed ? t('containerComponents.listContent.expandAll') : t('containerComponents.listContent.collapseAll') }}
         </AppButton>
-        <AppIconButton icon="restart" size="toolbar" variant="secondary"
+        <AppIconButton icon="restart" size="sm" variant="secondary" class="shrink-0"
           :class="rechecking ? 'dd-text-muted cursor-wait' : ''"
           :disabled="rechecking"
           :loading="rechecking"
           :tooltip="tt(t('containerComponents.listContent.recheckTooltip'))"
+          :aria-label="t('containerComponents.listContent.recheckTooltip')"
           @click="recheckAll" />
       </template>
       <template #center>

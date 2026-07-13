@@ -55,10 +55,10 @@ function viewModeLabel(id: string): string {
          :style="{
            backgroundColor: 'var(--dd-bg-card)',
          }">
-      <div class="flex items-center gap-2.5 relative">
+      <div data-test="data-filter-bar-controls" class="flex flex-wrap items-center gap-2.5 relative">
         <!-- Filter toggle button -->
-        <div v-if="!hideFilter" class="relative" v-tooltip.top="t('sharedComponents.dataFilterBar.filters')">
-          <AppIconButton icon="filter" size="toolbar" variant="plain" class="text-2xs-plus"
+        <div v-if="!hideFilter" class="relative shrink-0" v-tooltip.top="t('sharedComponents.dataFilterBar.filters')">
+          <AppIconButton icon="filter" size="sm" variant="plain" class="text-2xs-plus shrink-0"
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                   :aria-label="t('sharedComponents.dataFilterBar.toggleFilters')"
                   :aria-expanded="String(showFilters)"
@@ -81,18 +81,19 @@ function viewModeLabel(id: string): string {
         <slot name="center" />
 
         <!-- Right side: count + view mode switcher -->
-        <div class="flex items-center gap-2 ml-auto">
+        <div data-test="data-filter-bar-trailing" class="flex flex-wrap items-center gap-2 ml-auto min-w-0">
           <span class="text-2xs font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
             {{ filteredCount }}/{{ totalCount }}<template v-if="countLabel"> {{ countLabel }}</template>
           </span>
           <!-- Sort control (card mode only — table mode sorts via column headers) -->
           <slot name="sort" />
           <div v-if="modelValue !== undefined && !hideViewToggle"
-               class="flex items-center dd-rounded overflow-hidden"
+               data-test="data-filter-bar-view-modes"
+               class="flex items-center dd-rounded overflow-hidden shrink-0"
                role="group"
                :aria-label="t('sharedComponents.dataFilterBar.viewMode')">
             <AppIconButton v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
-                    :icon="vm.icon" size="toolbar" variant="plain"
+                    :icon="vm.icon" size="sm" variant="plain"
                     :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                     :tooltip="viewModeLabel(vm.id)"
                     :aria-label="viewModeLabel(vm.id)"

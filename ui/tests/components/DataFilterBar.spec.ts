@@ -15,9 +15,9 @@ function factory(props: Record<string, any> = {}, slots: Record<string, any> = {
       stubs: {
         AppIcon: { template: '<span class="app-icon-stub" />' },
         AppIconButton: {
-          props: ['icon', 'variant', 'tooltip', 'ariaLabel'],
+          props: ['icon', 'variant', 'tooltip', 'ariaLabel', 'size'],
           template:
-            '<button class="app-icon-button-stub" :data-icon="icon" :data-variant="variant" :aria-label="ariaLabel"><slot /></button>',
+            '<button class="app-icon-button-stub" :data-icon="icon" :data-variant="variant" :data-size="size" :aria-label="ariaLabel"><slot /></button>',
         },
       },
       directives: { tooltip: {} },
@@ -49,6 +49,14 @@ function factoryWithTooltip(props: Record<string, any> = {}, slots: Record<strin
 }
 
 describe('DataFilterBar', () => {
+  it('wraps toolbar control groups instead of compressing their touch targets', () => {
+    const w = factory({ modelValue: 'table' });
+
+    expect(w.get('[data-test="data-filter-bar-controls"]').classes()).toContain('flex-wrap');
+    expect(w.get('[data-test="data-filter-bar-trailing"]').classes()).toContain('flex-wrap');
+    expect(w.get('[data-test="data-filter-bar-view-modes"]').classes()).toContain('shrink-0');
+  });
+
   describe('count display', () => {
     it('renders filtered/total count', () => {
       const w = factory({ filteredCount: 3, totalCount: 12 });
@@ -75,6 +83,11 @@ describe('DataFilterBar', () => {
       expect(filterBtn.exists()).toBe(true);
       expect(filterBtn.attributes('data-icon')).toBe('filter');
       expect(filterBtn.attributes('data-variant')).toBe('plain');
+    });
+
+    it('uses the 44px icon-button size for the filter toggle', () => {
+      const w = factory();
+      expect(w.get('button[aria-label="Toggle filters"]').attributes('data-size')).toBe('sm');
     });
 
     it('renders filter button when hideFilter is not set', () => {
@@ -151,6 +164,15 @@ describe('DataFilterBar', () => {
       expect(buttons[1].attributes('aria-label')).toBe('Cards view');
       expect(buttons[1].attributes('aria-pressed')).toBe('false');
       expect(buttons[1].attributes('data-icon')).toBe('grid');
+    });
+
+    it('uses the 44px icon-button size for each view mode', () => {
+      const w = factory({ modelValue: 'table' });
+
+      expect(viewModeButtons(w).map((button) => button.attributes('data-size'))).toEqual([
+        'sm',
+        'sm',
+      ]);
     });
 
     it('renders custom view modes when provided', () => {

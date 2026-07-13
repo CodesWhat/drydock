@@ -9,7 +9,7 @@ const columns = [
 
 const AppIconButtonStub = defineComponent({
   inheritAttrs: false,
-  props: ['icon', 'disabled', 'tooltip', 'ariaLabel'],
+  props: ['icon', 'disabled', 'tooltip', 'ariaLabel', 'size'],
   emits: ['click'],
   template: `
     <button
@@ -17,6 +17,7 @@ const AppIconButtonStub = defineComponent({
       type="button"
       :disabled="disabled"
       :data-icon="icon"
+      :data-size="size"
       :data-tooltip="tooltip"
       :aria-label="ariaLabel"
       @click="$emit('click', $event)" />
@@ -38,6 +39,17 @@ function factory(props: Record<string, unknown> = {}) {
 }
 
 describe('DataSortControl', () => {
+  it('uses 44px targets for both sort controls', () => {
+    const wrapper = factory({ sortKey: 'name', sortAsc: true });
+    const select = wrapper.get('[data-test="dd-toolbar-sort-select"]');
+    const button = wrapper.get('[data-test="dd-toolbar-sort-direction"]');
+
+    expect(select.classes()).toContain('min-h-[44px]');
+    expect(button.attributes('data-size')).toBe('sm');
+    expect(wrapper.get('[role="group"]').classes()).toContain('shrink-0');
+    expect(button.classes()).toContain('shrink-0');
+  });
+
   it('renders the unset disabled state with the ascending icon and inactive press state', () => {
     const wrapper = factory({ sortAsc: true });
     const select = wrapper.get('[data-test="dd-toolbar-sort-select"]');

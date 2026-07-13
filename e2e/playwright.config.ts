@@ -25,9 +25,21 @@ export default defineConfig({
     {
       name: 'chromium',
       testMatch: /.*\.spec\.ts/,
-      testIgnore: /login\.spec\.ts/,
+      testIgnore: [/login\.spec\.ts/, /v16-mobile\.spec\.ts/],
       use: {
         storageState: 'playwright/.auth/user.json',
+      },
+      dependencies: ['setup'],
+    },
+    {
+      name: 'mobile-chromium',
+      testMatch: /v16-mobile\.spec\.ts/,
+      use: {
+        storageState: 'playwright/.auth/user.json',
+        viewport: { width: 390, height: 844 },
+        deviceScaleFactor: 3,
+        hasTouch: true,
+        isMobile: true,
       },
       dependencies: ['setup'],
     },

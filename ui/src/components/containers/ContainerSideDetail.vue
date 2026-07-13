@@ -115,11 +115,11 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
       @update:size="panelSize = $event"
       @full-page="openFullPage">
       <template #toolbar>
-        <div class="flex items-center gap-0.5">
+        <div class="flex flex-wrap items-center gap-0.5" data-test="container-side-detail-actions">
           <AppIconButton
             v-if="selectedContainer.status === 'running'"
             icon="stop"
-            size="xs"
+            size="sm"
             variant="danger"
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.stopTooltip')"
@@ -127,28 +127,28 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           <AppIconButton
             v-else
             icon="play"
-            size="xs"
+            size="sm"
             variant="success"
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.startTooltip')"
             @click="startContainer(selectedContainer)" />
           <AppIconButton
             icon="restart"
-            size="xs"
+            size="sm"
             variant="muted"
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.restartTooltip')"
             @click="confirmRestart(selectedContainer)" />
           <AppIconButton
             icon="security"
-            size="xs"
+            size="sm"
             variant="secondary"
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.scanTooltip')"
             @click="scanContainer(selectedContainer)" />
           <AppIconButton
             icon="restart"
-            size="xs"
+            size="sm"
             variant="secondary"
             :loading="recheckingContainerId === selectedContainer.id"
             :disabled="recheckingContainerId === selectedContainer.id || isActionBlocked(selectedContainer)"
@@ -157,14 +157,14 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
 	          <AppIconButton
 	            v-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && isUpdateHardBlocked(selectedContainer)"
 	            icon="lock"
-	            size="xs"
+	            size="sm"
 	            variant="danger"
 	            :disabled="true"
 	            :tooltip="getUpdateBlockedTooltip(selectedContainer)" />
 	          <AppIconButton
 	            v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && selectedContainer.bouncer === 'blocked'"
 	            icon="lock"
-	            size="xs"
+	            size="sm"
 	            variant="danger"
 	            :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.blockedForceUpdateTooltip')"
@@ -172,14 +172,14 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
           <AppIconButton
             v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer)"
             icon="cloud-download"
-            size="xs"
+            size="sm"
             variant="success"
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.updateTooltip')"
             @click="confirmUpdate(selectedContainer)" />
           <AppIconButton
             icon="trash"
-            size="xs"
+            size="sm"
             variant="danger"
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.deleteTooltip')"

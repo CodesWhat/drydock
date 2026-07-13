@@ -103,10 +103,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="hidden sm:flex relative items-center" data-test="data-table-column-picker">
+  <div class="hidden sm:flex relative items-center shrink-0" data-test="data-table-column-picker">
     <AppIconButton
       icon="config"
-      size="toolbar"
+      size="sm"
       variant="secondary"
       :class="showPicker ? 'dd-text dd-bg-elevated' : ''"
       :tooltip="t('sharedComponents.columnPicker.toggleTooltip')"
