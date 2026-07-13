@@ -12,7 +12,10 @@ import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from '../docker/created-container-candidate.js';
-import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
+import Docker, {
+  type DockerContainerHandle,
+  type DockerTriggerConfiguration,
+} from '../docker/Docker.js';
 import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
 import ComposeFileParser, {
@@ -2104,7 +2107,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 
   async createContainer(dockerApi, containerToCreate, containerName, logContainer) {
     logContainer.info(`Create container ${containerName}`);
-    let newContainer: unknown;
+    let newContainer: DockerContainerHandle | undefined;
     try {
       let containerToCreatePayload = containerToCreate;
       /* v8 ignore next -- Docker create payloads normally include NetworkingConfig.EndpointsConfig. */

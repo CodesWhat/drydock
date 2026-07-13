@@ -78,6 +78,8 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   backupcount: number;
 }
 
+export type DockerContainerHandle = Awaited<ReturnType<ContainerUpdateExecutor['createContainer']>>;
+
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
 
 type ContainerFullNameReference = {
@@ -923,7 +925,7 @@ class Docker<
    */
   async createContainer(dockerApi, containerToCreate, containerName, logContainer) {
     logContainer.info(`Create container ${containerName}`);
-    let newContainer;
+    let newContainer: DockerContainerHandle | undefined;
     try {
       let containerToCreatePayload = containerToCreate;
       const endpointsConfig = containerToCreate.NetworkingConfig?.EndpointsConfig || {};
