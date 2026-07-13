@@ -210,6 +210,106 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.image.created).toBe('2026-03-01T00:00:00.000Z');
   });
 
+  test('marks a repaired stored image reference as isLocalImage when the fresh image has no RepoDigests', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      error: undefined,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+      },
+      image: {
+        id: 'image-old',
+        name: 'acme/service',
+        registry: { name: 'unknown', url: '' },
+        tag: {
+          value: 'unknown',
+          semver: false,
+        },
+        digest: {
+          repo: 'sha256:old',
+          value: 'sha256:old',
+          watch: false,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectContainer, inspectImage } = createWatcher();
+    inspectContainer.mockResolvedValue({
+      Config: {
+        Image: 'portwing:0.3.0-qa',
+      },
+    });
+    inspectImage.mockResolvedValue({
+      Id: 'image-new',
+      RepoDigests: [],
+      Architecture: 'amd64',
+      Os: 'linux',
+      Created: '2026-03-01T00:00:00.000Z',
+    });
+    const helpers = createHelpers({
+      resolveImageName: vi.fn().mockReturnValue({
+        domain: undefined,
+        path: 'portwing',
+      }),
+      resolveTagName: vi.fn().mockReturnValue('0.3.0-qa'),
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      helpers as any,
+    );
+
+    expect(containerInStore.image.isLocalImage).toBe(true);
+  });
+
+  test('refresh keeps isLocalImage in sync every cycle without repairing the stored reference', async () => {
+    const containerInStore = {
+      id: 'container-1',
+      error: undefined,
+      details: {
+        ports: ['cached-port'],
+        volumes: ['cached-volume'],
+        env: [{ key: 'CACHED', value: '1' }],
+      },
+      image: {
+        id: 'image-old',
+        digest: {
+          repo: 'sha256:old',
+          value: undefined,
+        },
+        created: '2024-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+    const { watcher, inspectImage } = createWatcher();
+    inspectImage.mockResolvedValue({
+      Id: 'image-new',
+      RepoDigests: [],
+      Created: '2026-03-01T00:00:00.000Z',
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(containerInStore.image.isLocalImage).toBe(true);
+  });
+
   test('re-normalizes stored digest-only image references from container inspect', async () => {
     const containerInStore = {
       id: 'container-1',
@@ -960,6 +1060,51 @@ describe('docker image details orchestration module', () => {
       },
       result: {
         tag: 'latest',
+      },
+    });
+  });
+
+  test('marks a newly discovered container as isLocalImage when the image has no RepoDigests', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+
+    const { watcher, inspectImage } = createWatcher();
+    inspectImage.mockResolvedValue({
+      Id: 'image-local',
+      RepoDigests: [],
+      Architecture: 'amd64',
+      Os: 'linux',
+      Created: '2026-02-01T00:00:00.000Z',
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result).toMatchObject({
+      image: {
+        isLocalImage: true,
+      },
+    });
+  });
+
+  test('does not mark a newly discovered container as isLocalImage when the image has RepoDigests', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+
+    const { watcher } = createWatcher();
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result).toMatchObject({
+      image: {
+        isLocalImage: false,
       },
     });
   });

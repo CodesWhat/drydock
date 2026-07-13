@@ -46,7 +46,7 @@ describe('ContainerRuntimeConfigManager', () => {
     ).toEqual({});
   });
 
-  test('sanitizeEndpointConfig should keep supported fields and remove self aliases', () => {
+  test('sanitizeEndpointConfig should keep supported fields, drop the auto-assigned MacAddress, and remove self aliases', () => {
     const manager = createManager();
 
     const sanitized = manager.sanitizeEndpointConfig(
@@ -65,9 +65,78 @@ describe('ContainerRuntimeConfigManager', () => {
       IPAMConfig: { IPv4Address: '10.0.0.8' },
       Links: ['a:b'],
       DriverOpts: { mtu: '1450' },
-      MacAddress: '02:42:ac:11:00:02',
       Aliases: ['peer'],
     });
+  });
+
+  test('sanitizeEndpointConfig should drop an auto-assigned-only MacAddress (no DesiredMacAddress, no legacy Config.MacAddress)', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+      },
+      'container-123',
+    );
+
+    expect(sanitized).not.toHaveProperty('MacAddress');
+  });
+
+  test('sanitizeEndpointConfig should forward DesiredMacAddress when present', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+        DesiredMacAddress: '02:42:ac:11:00:99',
+      },
+      'container-123',
+    );
+
+    expect(sanitized.MacAddress).toBe('02:42:ac:11:00:99');
+  });
+
+  test('sanitizeEndpointConfig should fall back to the legacy container-wide Config.MacAddress when non-empty', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+      },
+      'container-123',
+      '02:42:ac:11:00:77',
+    );
+
+    expect(sanitized.MacAddress).toBe('02:42:ac:11:00:77');
+  });
+
+  test('sanitizeEndpointConfig should prefer DesiredMacAddress over the legacy Config.MacAddress when both are present', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+        DesiredMacAddress: '02:42:ac:11:00:99',
+      },
+      'container-123',
+      '02:42:ac:11:00:77',
+    );
+
+    expect(sanitized.MacAddress).toBe('02:42:ac:11:00:99');
+  });
+
+  test('sanitizeEndpointConfig should drop MacAddress when legacy Config.MacAddress is an empty string', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+      },
+      'container-123',
+      '',
+    );
+
+    expect(sanitized).not.toHaveProperty('MacAddress');
   });
 
   test('getPrimaryNetworkName should honor explicit network mode and fallback to first network', () => {
@@ -83,6 +152,33 @@ describe('ContainerRuntimeConfigManager', () => {
     expect(
       manager.getPrimaryNetworkName({ HostConfig: { NetworkMode: 'missing-net' } }, ['bridge']),
     ).toBe('bridge');
+  });
+
+  test('getPrimaryNetworkName should translate NetworkMode "default" to "bridge" when present', () => {
+    const manager = createManager();
+
+    // A container created on the default bridge network reports
+    // HostConfig.NetworkMode: "default" in docker inspect, not "bridge" (moby
+    // special-cases this at create time). Without the translation, the
+    // alphabetically-first network name would win instead — which for an
+    // 'app-net' + 'bridge' container is 'app-net', the wrong network.
+    expect(
+      manager.getPrimaryNetworkName({ HostConfig: { NetworkMode: 'default' } }, [
+        'app-net',
+        'bridge',
+      ]),
+    ).toBe('bridge');
+  });
+
+  test('getPrimaryNetworkName should fall back to the first network when NetworkMode "default" has no bridge network', () => {
+    const manager = createManager();
+
+    expect(
+      manager.getPrimaryNetworkName({ HostConfig: { NetworkMode: 'default' } }, [
+        'app-net',
+        'other-net',
+      ]),
+    ).toBe('app-net');
   });
 
   test('normalizeContainerProcessArgs and areContainerProcessArgsEqual should normalize scalar and array values', () => {

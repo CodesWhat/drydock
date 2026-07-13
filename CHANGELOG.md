@@ -10,6 +10,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2-rc.5] — 2026-07-13
+
+### Fixed
+
+- **Orphaned replacement container after a failed post-create network connect.** `createContainer` created the replacement container and then connected it to any additional networks in the same `try`; if a network connect failed (for example a static-IP endpoint config rejected by a socket proxy), the error was rethrown without exposing the created container, so nothing could clean it up. The renamed original (`<name>-old-<timestamp>`) stayed parked while the orphaned `Created`-state replacement squatted the real name. Every rollback consumer — the regular Docker update executor, self-update, health-monitor auto-rollback, the backup-restore API, and Docker Compose rollback restore — now recovers the created container from the error and best-effort stops + force-removes it before restoring the original container's name, tolerating cleanup failures with a warning rather than masking the original error. The same recovery applies when the replacement is created successfully but then fails to start.
+- **Repeated failed updates could cascade into a second rename.** If a container was already left renamed `-old-<timestamp>` by a prior failed update, a subsequent update attempt against it now fails immediately with a clear "needs manual cleanup" error naming the true canonical name (even through nested renames) instead of renaming and recreating again on top of the unresolved failure. The same guard protects drydock's own self-update.
+- **Replacement containers no longer inherit the previous container's auto-assigned MAC address.** The recreate path copied each network endpoint's operational `MacAddress` straight from `docker inspect`, permanently re-pinning a MAC the daemon had generated (stale once the endpoint's IP changes, and rejected outright by MAC-denying socket proxies such as sockguard's default policy). A MAC is now carried over only when it was configured container-wide (`docker run --mac-address` / compose's service-level `mac_address:`, i.e. `Config.MacAddress`), and only onto the container's primary network; daemon-assigned MACs are left for the daemon to regenerate.
+- **Locally-built images no longer spam nightly error counts.** Containers running an image with no registry-hosted digest (built locally or `docker load`ed) were still queried against the registry on every watch cycle, producing a 401 that got counted as a watch error. Drydock now detects images with no `RepoDigests` at discovery/refresh time and skips the registry lookup for them entirely.
+- The digest-watch throttling warning no longer prints `with domain undefined` for unprefixed Docker Hub image references (e.g. `nginx`); it now shows `docker.io`.
+
+### Changed
+
+- **Docs:** documented the socket-proxy requirements for recreating containers with a static IP or MAC address (macvlan, custom networks). Tecnativa/docker-socket-proxy needs both `POST=1` and `NETWORKS=1` for containers on more than one network (the extra `POST /networks/{id}/connect` calls); sockguard needs `request_body.network.allow_endpoint_config: true` to permit endpoint configs that specify a static IP or MAC address — and as of sockguard v1.5.0 and later (forthcoming at the time of this release), that requirement also applies to `POST /containers/create`, so single-network macvlan/static-IP containers need the policy set too, not just multi-network ones (older sockguard versions enforce the policy only at network-connect time). Added a matching FAQ entry for containers left renamed `-old-<timestamp>` after a failed update, including a note for operators who intentionally name a container in a way that collides with drydock's own rollback naming convention.
+
+### Known limitations
+
+- If the rollback itself fails (for example the backup image can't be pulled, or the replacement container never becomes healthy), that failure is recorded in the update-operations store and audit log but does not yet trigger a push notification — check the container's operation history or the audit log after a failed update to confirm whether the rollback actually succeeded.
+- A per-network `mac_address` (compose `networks.<net>.mac_address`) set on a non-primary network cannot be distinguished from a daemon-assigned MAC via the Docker API today — the daemon persists the desired MAC internally but never exposes it in `docker inspect` output — so it is not preserved across recreates; the daemon assigns a fresh MAC for that network instead.
+
 ## [1.5.2-rc.4] — 2026-07-12
 
 ### Fixed
