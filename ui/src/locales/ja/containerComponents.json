@@ -550,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "固定済み — 参考情報として新しいバージョンがあります。"
+      }
     }
   }
 }

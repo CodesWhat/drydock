@@ -550,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Angeheftet — eine neuere Version ist zur Information verfügbar."
+      }
     }
   }
 }

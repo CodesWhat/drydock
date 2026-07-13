@@ -402,7 +402,7 @@
         "no-update-trigger-configured": "No update trigger configured",
         "self-update-unavailable": "Self-update unavailable",
         "maintenance-window-closed": "Maintenance window closed",
-        "dry-run-trigger": "Trigger configuration"
+        "dry-run-trigger": "Dry-run trigger configuration"
       },
       "actions": {
         "editPolicy": "Edit update policy",

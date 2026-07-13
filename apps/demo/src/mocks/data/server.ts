@@ -41,7 +41,17 @@ export const securityRuntime = {
     formats: ['spdx-json', 'cyclonedx-json'],
     generator: 'trivy',
   },
-  providers: [],
+  providers: [
+    {
+      provider: 'trivy',
+      role: 'scanner',
+      enabled: true,
+      command: 'trivy',
+      commandAvailable: true,
+      status: 'ready',
+      message: 'Trivy client is ready',
+    },
+  ],
   assets: [],
   requirements: [],
 };

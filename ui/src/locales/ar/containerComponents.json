@@ -550,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "مثبّت — يتوفر إصدار أحدث للعلم فقط."
+      }
     }
   }
 }

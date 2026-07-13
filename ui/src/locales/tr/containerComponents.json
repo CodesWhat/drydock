@@ -550,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Sabitlendi — bilgilendirme amacıyla daha yeni bir sürüm mevcut."
+      }
     }
   }
 }

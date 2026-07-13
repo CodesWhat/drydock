@@ -330,6 +330,21 @@ describe('buildMessages', () => {
       }
     }
   });
+
+  it('localizes the pinned update-status summary in every supported locale', () => {
+    const messages = buildMessages();
+    const path = 'containerComponents.updateStatus.summary.pinned';
+    const englishSummary = getMessagePath(messages.en, path);
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const localizedSummary = getMessagePath(messages[locale], path);
+      expect(localizedSummary, `${locale} missing ${path}`).toBeTypeOf('string');
+      expect(localizedSummary, `${locale} ${path} should not be empty`).not.toBe('');
+      if (locale !== 'en') {
+        expect(localizedSummary, `${locale} should localize ${path}`).not.toBe(englishSummary);
+      }
+    }
+  });
 });
 
 describe('setI18nLocale', () => {
