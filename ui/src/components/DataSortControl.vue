@@ -35,7 +35,7 @@ function toggleDirection(): void {
 </script>
 
 <template>
-  <div class="flex items-center gap-1" role="group" :aria-label="t('sharedComponents.dataTable.sortBy')">
+  <div class="flex shrink-0 items-center gap-1" role="group" :aria-label="t('sharedComponents.dataTable.sortBy')">
     <select
       data-test="dd-toolbar-sort-select"
       class="min-h-[44px] min-w-0 max-w-[9rem] px-2 dd-rounded dd-bg-elevated dd-text text-2xs font-medium outline-none cursor-pointer"
@@ -51,7 +51,7 @@ function toggleDirection(): void {
       size="sm"
       variant="plain"
       :disabled="!sortKey"
-      class="dd-text-secondary hover:dd-text hover:dd-bg-elevated"
+      class="shrink-0 dd-text-secondary hover:dd-text hover:dd-bg-elevated"
       :aria-pressed="String(!!sortKey && sortAsc !== false)"
       :tooltip="sortAsc === false
         ? t('sharedComponents.dataTable.sortDirectionDescending')

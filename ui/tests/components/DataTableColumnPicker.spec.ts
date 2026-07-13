@@ -47,6 +47,7 @@ describe('DataTableColumnPicker', () => {
       const root = w.find('[data-test="data-table-column-picker"]');
       expect(root.classes()).toContain('hidden');
       expect(root.classes()).toContain('sm:flex');
+      expect(root.classes()).toContain('shrink-0');
     });
 
     it('renders exactly one trigger button', () => {

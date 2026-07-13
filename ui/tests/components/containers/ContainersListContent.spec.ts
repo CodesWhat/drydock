@@ -185,6 +185,8 @@ describe('ContainersListContent', () => {
 
     expect(wrapper.get('[data-icon="stack"]').attributes('data-size')).toBe('sm');
     expect(wrapper.get('[data-icon="restart"]').attributes('data-size')).toBe('sm');
+    expect(wrapper.get('[data-icon="stack"]').classes()).toContain('shrink-0');
+    expect(wrapper.get('[data-icon="restart"]').classes()).toContain('shrink-0');
   });
 
   it('gives group and recheck toolbar actions stable accessible names', () => {

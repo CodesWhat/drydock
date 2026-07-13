@@ -46,6 +46,8 @@ describe('DataSortControl', () => {
 
     expect(select.classes()).toContain('min-h-[44px]');
     expect(button.attributes('data-size')).toBe('sm');
+    expect(wrapper.get('[role="group"]').classes()).toContain('shrink-0');
+    expect(button.classes()).toContain('shrink-0');
   });
 
   it('renders the unset disabled state with the ascending icon and inactive press state', () => {

@@ -49,6 +49,14 @@ function factoryWithTooltip(props: Record<string, any> = {}, slots: Record<strin
 }
 
 describe('DataFilterBar', () => {
+  it('wraps toolbar control groups instead of compressing their touch targets', () => {
+    const w = factory({ modelValue: 'table' });
+
+    expect(w.get('[data-test="data-filter-bar-controls"]').classes()).toContain('flex-wrap');
+    expect(w.get('[data-test="data-filter-bar-trailing"]').classes()).toContain('flex-wrap');
+    expect(w.get('[data-test="data-filter-bar-view-modes"]').classes()).toContain('shrink-0');
+  });
+
   describe('count display', () => {
     it('renders filtered/total count', () => {
       const w = factory({ filteredCount: 3, totalCount: 12 });
