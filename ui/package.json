@@ -1,6 +1,6 @@
 {
   "name": "drydock-ui",
-  "version": "1.5.3-rc.1",
+  "version": "1.5.2",
   "description": "Drydock dashboard — Vue 3 + Tailwind CSS 4 SPA",
   "repository": "CodesWhat/drydock",
   "engines": {
