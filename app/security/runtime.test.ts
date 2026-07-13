@@ -485,7 +485,7 @@ test('getSecurityRuntimeStatus should report missing cosign when signature verif
 
   const status = await getSecurityRuntimeStatus();
 
-  expect(status.ready).toBe(true);
+  expect(status.ready).toBe(false);
   expect(status.signature).toEqual({
     enabled: true,
     command: 'cosign',
@@ -733,7 +733,7 @@ test.each([
 
   const status = await getSecurityRuntimeStatus();
 
-  expect(status.ready).toBe(true);
+  expect(status.ready).toBe(false);
   expect(status.signature.status).toBe('missing');
   expect(status.signature.commandAvailable).toBe(false);
   expect(status.signature.message).toContain('not available');
@@ -916,31 +916,50 @@ describe('getTrivyDatabaseStatus', () => {
     await expect(getTrivyDatabaseStatus()).resolves.toBeUndefined();
   });
 
-  test('uses the configured Grype command as the command-backend fingerprint', async () => {
+  test('uses Grype database metadata as the command-backend fingerprint', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
       scanner: 'grype',
       grype: { ...createEnabledConfiguration().grype, command: 'custom-grype' },
     });
+    const execFileMock = mockExecFileSuccess(
+      JSON.stringify({ built: '2026-07-12T04:00:00.000Z', schemaVersion: 6 }),
+    );
 
     await expect(getTrivyDatabaseStatus()).resolves.toEqual({
-      updatedAt: 'grype:custom-grype',
+      updatedAt: 'grype:2026-07-12T04:00:00.000Z',
     });
-    expect(childProcessControl.execFileImpl).toBeNull();
+    expect(execFileMock).toHaveBeenCalledWith(
+      'custom-grype',
+      ['db', 'status', '-o', 'json'],
+      expect.objectContaining({ timeout: 10_000, maxBuffer: 512 * 1024, env: process.env }),
+      expect.any(Function),
+    );
   });
 
-  test('includes the Grype command in a combined command-backend fingerprint', async () => {
+  test('includes Grype database metadata in a combined command-backend fingerprint', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
       scanner: 'both',
       grype: { ...createEnabledConfiguration().grype, command: 'custom-grype' },
     });
-    mockExecFileSuccess(validTrivyVersionOutput);
+    const execFileMock = vi.fn((command, _args, _options, callback) => {
+      callback(
+        null,
+        command === 'custom-grype'
+          ? JSON.stringify({ built: '2026-07-12T04:00:00.000Z', schemaVersion: 6 })
+          : validTrivyVersionOutput,
+        '',
+      );
+      return { exitCode: 0 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
 
     await expect(getTrivyDatabaseStatus()).resolves.toEqual({
-      updatedAt: '2025-06-01T00:00:00Z|grype:custom-grype',
+      updatedAt: '2025-06-01T00:00:00Z|grype:2026-07-12T04:00:00.000Z',
       downloadedAt: '2025-06-02T12:00:00Z',
     });
+    expect(execFileMock).toHaveBeenCalledTimes(2);
   });
 
   test('should treat undefined stdout as empty output', async () => {

@@ -223,6 +223,34 @@ export function clearTrivyDatabaseStatusCache(): void {
   trivyDbStatusInFlight = undefined;
 }
 
+async function getGrypeDatabaseUpdatedAt(command: string): Promise<string | undefined> {
+  try {
+    const output = await new Promise<string>((resolve, reject) => {
+      execFile(
+        command,
+        ['db', 'status', '-o', 'json'],
+        {
+          timeout: TRIVY_DB_STATUS_TIMEOUT_MS,
+          maxBuffer: TRIVY_DB_STATUS_MAX_BUFFER,
+          env: process.env,
+        },
+        (error, stdout) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(`${stdout || ''}`);
+        },
+      );
+    });
+    const parsed = JSON.parse(output);
+    const built = parsed?.built ?? parsed?.database?.built ?? parsed?.db?.built;
+    return typeof built === 'string' && built.trim() ? built.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getTrivyDatabaseStatus(): Promise<TrivyDatabaseStatus | undefined> {
   const now = Date.now();
   if (trivyDbStatusCache && trivyDbStatusCache.expiresAt > now) {
@@ -258,7 +286,30 @@ export async function getTrivyDatabaseStatus(): Promise<TrivyDatabaseStatus | un
     }
   }
   if (configuration.scanner === 'grype') {
-    return { updatedAt: `grype:${configuration.grype.command}` };
+    let inFlightEntry: TrivyDatabaseStatusInFlight;
+    inFlightEntry = {
+      promise: (async (): Promise<TrivyDatabaseStatus | undefined> => {
+        const grypeUpdatedAt = await getGrypeDatabaseUpdatedAt(
+          `${configuration.grype.command || 'grype'}`.trim() || 'grype',
+        );
+        if (!grypeUpdatedAt) {
+          return undefined;
+        }
+        const status = { updatedAt: `grype:${grypeUpdatedAt}` };
+        if (trivyDbStatusInFlight === inFlightEntry) {
+          trivyDbStatusCache = { status, expiresAt: now + TRIVY_DB_STATUS_CACHE_TTL_MS };
+        }
+        return status;
+      })(),
+    };
+    trivyDbStatusInFlight = inFlightEntry;
+    try {
+      return await inFlightEntry.promise;
+    } finally {
+      if (trivyDbStatusInFlight === inFlightEntry) {
+        trivyDbStatusInFlight = undefined;
+      }
+    }
   }
   const trivyCommand = configuration.trivy.command || 'trivy';
 
@@ -290,12 +341,19 @@ export async function getTrivyDatabaseStatus(): Promise<TrivyDatabaseStatus | un
         if (typeof updatedAt !== 'string' || updatedAt === '') {
           return undefined;
         }
+        const grypeUpdatedAt =
+          configuration.scanner === 'both'
+            ? await getGrypeDatabaseUpdatedAt(
+                `${configuration.grype.command || 'grype'}`.trim() || 'grype',
+              )
+            : undefined;
+        if (configuration.scanner === 'both' && !grypeUpdatedAt) {
+          return undefined;
+        }
 
         const status: TrivyDatabaseStatus = {
           updatedAt:
-            configuration.scanner === 'both'
-              ? `${updatedAt}|grype:${configuration.grype.command}`
-              : updatedAt,
+            configuration.scanner === 'both' ? `${updatedAt}|grype:${grypeUpdatedAt}` : updatedAt,
           downloadedAt:
             typeof parsed?.VulnerabilityDB?.DownloadedAt === 'string'
               ? parsed.VulnerabilityDB.DownloadedAt
@@ -452,7 +510,9 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
   ].filter(isDefinedValue);
 
   const ready =
-    configuration.enabled && providerStatuses.every((provider) => provider.status === 'ready');
+    configuration.enabled &&
+    providerStatuses.every((provider) => provider.status === 'ready') &&
+    (!configuration.signature.verify || signatureStatus.status === 'ready');
 
   return {
     checkedAt: new Date().toISOString(),

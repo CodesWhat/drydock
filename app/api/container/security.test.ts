@@ -1044,5 +1044,33 @@ describe('api/container/security', () => {
 
       expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
     });
+
+    test.each([
+      'grype',
+      'both',
+    ])('does not populate the Trivy digest cache for %s on-demand scans', async (scanner) => {
+      const harness = createHarness({
+        container: createContainer({
+          image: {
+            registry: { name: 'hub', url: 'my-registry' },
+            name: 'test/app',
+            tag: { value: '1.2.3' },
+            digest: { watch: true, value: 'sha256:abc123' },
+          },
+        }),
+        securityConfiguration: {
+          enabled: true,
+          scanner,
+          signature: { verify: false },
+          sbom: { enabled: false, formats: [] },
+        },
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(createScanResult({ scanner }));
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.getTrivyDatabaseStatus).not.toHaveBeenCalled();
+      expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
+    });
   });
 });

@@ -293,8 +293,10 @@ async function scanCurrentImage(options: {
 
   // Populate the digest scan cache so scheduled scans can benefit
   if (context.updateDigestScanCache && containerDigest && scanResult.status !== 'error') {
-    const trivyDbStatus = await context.getTrivyDatabaseStatus();
-    context.updateDigestScanCache(containerDigest, scanResult, trivyDbStatus?.updatedAt || '');
+    if (securityConfiguration.scanner === 'trivy') {
+      const trivyDbStatus = await context.getTrivyDatabaseStatus();
+      context.updateDigestScanCache(containerDigest, scanResult, trivyDbStatus?.updatedAt || '');
+    }
   }
 
   let alertCount = 0;
