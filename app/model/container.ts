@@ -257,6 +257,7 @@ const containerSecuritySummarySchema = joi.object({
 const containerSecurityScanSchema = joi.object({
   scanner: joi.string().valid('trivy', 'grype', 'both').required(),
   image: joi.string().required(),
+  imageDigest: joi.string(),
   scannedAt: joi.string().isoDate().required(),
   status: joi.string().valid('passed', 'blocked', 'error').required(),
   blockSeverities: joi
@@ -266,6 +267,14 @@ const containerSecurityScanSchema = joi.object({
   blockingCount: joi.number().integer().min(0).required(),
   summary: containerSecuritySummarySchema.required(),
   vulnerabilities: joi.array().items(containerSecurityVulnerabilitySchema).required(),
+  relativeGate: joi.object({
+    decision: joi.string().valid('passed', 'blocked').required(),
+    reason: joi
+      .string()
+      .valid('no-worse-than-current', 'candidate-worse', 'current-scan-unavailable')
+      .required(),
+    currentSummary: containerSecuritySummarySchema,
+  }),
   error: joi.string(),
 });
 

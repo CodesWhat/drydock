@@ -10,7 +10,10 @@ import {
 } from '@/views/containers/useContainerBackups';
 import { useContainerPolicy } from '@/views/containers/useContainerPolicy';
 import { useContainerPreview } from '@/views/containers/useContainerPreview';
-import { useContainerTriggers } from '@/views/containers/useContainerTriggers';
+import {
+  findDryRunActionTrigger,
+  useContainerTriggers,
+} from '@/views/containers/useContainerTriggers';
 
 describe('formatTimestamp (standalone, no t)', () => {
   it('returns "Unknown" when timestamp is undefined and t is not provided', () => {
@@ -50,6 +53,25 @@ describe('formatOperationPhase / formatOperationStatus / formatRollbackReason (m
 });
 
 describe('container action focused composables', () => {
+  it('finds only effective docker action triggers with dry-run explicitly enabled', () => {
+    expect(
+      findDryRunActionTrigger([
+        { type: 'slack', name: 'alerts', configuration: { dryrun: true } },
+        { type: 'docker', name: 'live', configuration: { dryrun: false } },
+        { type: 'dockercompose', name: 'preview', configuration: { dryrun: true } },
+      ]),
+    ).toEqual({
+      type: 'dockercompose',
+      name: 'preview',
+      configuration: { dryrun: true },
+    });
+    expect(
+      findDryRunActionTrigger([
+        { type: 'docker', name: 'string-value', configuration: { dryrun: 'true' } },
+      ]),
+    ).toBeUndefined();
+  });
+
   it('exports policy, preview, triggers, and backups composables', () => {
     expect(typeof useContainerPolicy).toBe('function');
     expect(typeof useContainerPreview).toBe('function');

@@ -10,6 +10,45 @@ export const openApiSchemas = {
     required: ['error'],
     additionalProperties: true,
   },
+  PreviewErrorResponse: {
+    type: 'object',
+    properties: {
+      code: {
+        type: 'string',
+        enum: [
+          'container-not-found',
+          'container-runtime-not-found',
+          'manifest-fetch-failed',
+          'no-trigger-configured',
+          'preview-runtime-error',
+          'registry-auth-failed',
+          'registry-network-error',
+          'registry-not-found',
+        ],
+      },
+      message: { type: 'string' },
+      details: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' },
+          registry: { type: 'string' },
+        },
+        required: ['reason'],
+        additionalProperties: false,
+      },
+      action: {
+        type: 'object',
+        properties: {
+          label: { type: 'string' },
+          href: { type: 'string', enum: ['/registries', '/triggers'] },
+        },
+        required: ['label', 'href'],
+        additionalProperties: false,
+      },
+    },
+    required: ['code', 'message'],
+    additionalProperties: false,
+  },
   GenericObject: genericObjectSchema,
   GenericArray: genericArraySchema,
   PaginationLinks: {
@@ -356,6 +395,15 @@ export const openApiSchemas = {
       ready: { type: 'boolean' },
       backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
       availabilityPolicy: { type: 'string', enum: ['block', 'warn'] },
+      gate: {
+        type: 'object',
+        properties: {
+          mode: { type: 'string', enum: ['on', 'off'] },
+          allowNoWorse: { type: 'boolean' },
+        },
+        required: ['mode', 'allowNoWorse'],
+        additionalProperties: false,
+      },
       scanner: {
         type: 'object',
         allOf: [
@@ -403,6 +451,7 @@ export const openApiSchemas = {
       'ready',
       'backend',
       'availabilityPolicy',
+      'gate',
       'scanner',
       'signature',
       'sbom',
@@ -620,6 +669,7 @@ export const openApiSchemas = {
     properties: {
       scanner: { type: 'string' },
       image: { type: 'string' },
+      imageDigest: { type: 'string' },
       scannedAt: { type: 'string', format: 'date-time' },
       status: { type: 'string', enum: ['not-scanned', 'passed', 'blocked', 'error'] },
       blockSeverities: {
@@ -631,6 +681,19 @@ export const openApiSchemas = {
       vulnerabilities: {
         type: 'array',
         items: { ...genericObjectSchema },
+      },
+      relativeGate: {
+        type: 'object',
+        properties: {
+          decision: { type: 'string', enum: ['passed', 'blocked'] },
+          reason: {
+            type: 'string',
+            enum: ['no-worse-than-current', 'candidate-worse', 'current-scan-unavailable'],
+          },
+          currentSummary: { $ref: '#/components/schemas/VulnerabilitySummary' },
+        },
+        required: ['decision', 'reason'],
+        additionalProperties: false,
       },
       error: { type: 'string' },
     },

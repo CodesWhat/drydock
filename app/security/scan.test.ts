@@ -1993,6 +1993,7 @@ describe('scanImageWithDedup', () => {
     expect(fromCache).toBe(false);
     expect(scanResult.status).toBe('passed');
     expect(scanResult.image).toBe('registry.example.com/app:1.2.3');
+    expect(scanResult.imageDigest).toBe('sha256:abc123');
   });
 
   test('should return cached result when DB is unchanged and interval not expired', async () => {
@@ -2012,7 +2013,7 @@ describe('scanImageWithDedup', () => {
     );
 
     expect(fromCache).toBe(true);
-    expect(scanResult).toBe(cachedResult);
+    expect(scanResult).toEqual({ ...cachedResult, imageDigest: 'sha256:abc123' });
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
@@ -2344,7 +2345,7 @@ describe('updateDigestScanCache', () => {
     );
 
     expect(fromCache).toBe(true);
-    expect(scanResult).toBe(cachedResult);
+    expect(scanResult).toEqual({ ...cachedResult, imageDigest: 'sha256:manual' });
     expect(execFileMock).not.toHaveBeenCalled();
   });
 });

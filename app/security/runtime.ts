@@ -22,6 +22,10 @@ export interface SecurityRuntimeStatus {
   ready: boolean;
   backend: string;
   availabilityPolicy: string;
+  gate: {
+    mode: 'on' | 'off';
+    allowNoWorse: boolean;
+  };
   scanner: SecurityRuntimeToolStatus & {
     scanner: string;
     server: string;
@@ -455,6 +459,10 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
     ready,
     backend,
     availabilityPolicy: configuration.availabilityPolicy || 'block',
+    gate: {
+      mode: configuration.gate?.mode || 'on',
+      allowNoWorse: configuration.gate?.allowNoWorse === true,
+    },
     scanner: scannerStatus,
     signature: signatureStatus,
     sbom: {

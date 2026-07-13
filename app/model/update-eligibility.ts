@@ -243,9 +243,12 @@ export function computeUpdateEligibility(
   // current container's existing scan is blocked. The candidate scan reflects the
   // image we'd pull; the current scan reflects vulnerabilities we're already running.
   // Either is grounds to halt an update until the operator triages.
+  const candidatePassedRelative =
+    container.security?.updateScan?.status === 'passed' &&
+    container.security.updateScan.relativeGate?.decision === 'passed';
   if (
     container.security?.updateScan?.status === 'blocked' ||
-    container.security?.scan?.status === 'blocked'
+    (container.security?.scan?.status === 'blocked' && !candidatePassedRelative)
   ) {
     blockers.push(
       makeBlocker({

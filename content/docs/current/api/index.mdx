@@ -581,6 +581,8 @@ Returns the list of configured authentication strategies. This endpoint is unaut
 curl http://drydock:3000/auth/strategies
 ```
 
+The `{ strategies, warnings }` response shape from `GET /auth/strategies` is deprecated and scheduled for removal in v1.8.0. Migrate to `GET /api/v1/auth/status`; see [Deprecations](/docs/deprecations#legacy-auth-strategies-shape).
+
 A legacy alias is available at `GET /api/auth/methods` (rate-limited), deprecated and scheduled for removal in v1.7.0 — see [Deprecations](/docs/deprecations#api-auth-methods).
 
 ### Login

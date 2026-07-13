@@ -7,6 +7,9 @@
       "previewUpdate": "Preview Update",
       "forceUpdate": "Force Update",
       "updateNow": "Update Now",
+      "previewOnly": "Preview only",
+      "dryRunUpdateTooltip": "This trigger is in dry-run mode — clicking will pull the new image but not replace the container.",
+      "dryRunCondition": "Action trigger {trigger} is in dry-run mode — updates are previewed only and containers are not replaced.",
       "scanNow": "Scan Now",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -398,7 +401,8 @@
         "agent-mismatch": "Trigger agent mismatch",
         "no-update-trigger-configured": "No update trigger configured",
         "self-update-unavailable": "Self-update unavailable",
-        "maintenance-window-closed": "Maintenance window closed"
+        "maintenance-window-closed": "Maintenance window closed",
+        "dry-run-trigger": "Trigger configuration"
       },
       "actions": {
         "editPolicy": "Edit update policy",

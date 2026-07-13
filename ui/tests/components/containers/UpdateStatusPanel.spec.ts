@@ -159,4 +159,21 @@ describe('UpdateStatusPanel', () => {
     );
     expect(wrapper.get('[data-reason="snoozed"]').attributes('data-tone')).toBe('warning');
   });
+
+  it('shows the effective dry-run trigger and labels the update action as preview-only', () => {
+    const wrapper = mount(UpdateStatusPanel, {
+      props: {
+        container: container(),
+        mode: 'manual',
+        dryRunTriggerId: 'docker.local',
+      },
+      global: { stubs: { AppIcon: { template: '<span />' } } },
+    });
+
+    expect(wrapper.get('[data-reason="dry-run-trigger"]').text()).toContain(
+      'Action trigger docker.local is in dry-run mode',
+    );
+    expect(wrapper.get('[data-test="update-status-manual-cta"]').text()).toBe('Preview only');
+    expect(wrapper.get('[data-test="update-status-manual-cta"]').classes()).toContain('min-h-11');
+  });
 });

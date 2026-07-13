@@ -211,6 +211,7 @@ export function getConfiguration() {
 export interface StoreDebugCollectionStats {
   name: string;
   documents: number;
+  serializedBytes: number;
 }
 
 export interface StoreDebugSnapshot {
@@ -218,6 +219,7 @@ export interface StoreDebugSnapshot {
   path?: string;
   collectionCount: number;
   documentCount: number;
+  serializedBytes: number;
   lastPersistAt?: string;
   collections: StoreDebugCollectionStats[];
 }
@@ -233,6 +235,15 @@ function getCollectionDocumentCount(collection: unknown): number {
 
   const data = (collection as { data?: unknown }).data;
   return Array.isArray(data) ? data.length : 0;
+}
+
+function getSerializedByteSize(value: unknown): number {
+  try {
+    const serializedValue = JSON.stringify(value);
+    return serializedValue === undefined ? 0 : Buffer.byteLength(serializedValue, 'utf8');
+  } catch {
+    return 0;
+  }
 }
 
 function getStoreLastPersistAt(): string | undefined {
@@ -257,14 +268,20 @@ export function getDebugSnapshot(): StoreDebugSnapshot {
         ? ((collection as { name: string }).name as string)
         : 'unknown',
     documents: getCollectionDocumentCount(collection),
+    serializedBytes: getSerializedByteSize(collection),
   }));
   const documentCount = collectionStats.reduce((total, stats) => total + stats.documents, 0);
+  const serializedBytes = collectionStats.reduce(
+    (total, stats) => total + stats.serializedBytes,
+    0,
+  );
 
   return {
     memoryMode: isMemoryMode,
     path: storePathResolved,
     collectionCount: collectionStats.length,
     documentCount,
+    serializedBytes,
     lastPersistAt: getStoreLastPersistAt(),
     collections: collectionStats,
   };

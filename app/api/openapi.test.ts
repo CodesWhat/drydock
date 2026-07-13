@@ -285,6 +285,40 @@ describe('OpenAPI document', () => {
     });
   });
 
+  test('should document typed actionable update preview errors', () => {
+    const previewPath = openApiDocument.paths['/api/v1/containers/{id}/preview'].post;
+
+    expect(openApiDocument.components.schemas.PreviewErrorResponse).toMatchObject({
+      type: 'object',
+      required: ['code', 'message'],
+      properties: {
+        code: {
+          enum: expect.arrayContaining([
+            'no-trigger-configured',
+            'registry-auth-failed',
+            'registry-not-found',
+            'manifest-fetch-failed',
+            'registry-network-error',
+          ]),
+        },
+        action: {
+          properties: {
+            href: { enum: ['/registries', '/triggers'] },
+          },
+        },
+      },
+    });
+    expect(previewPath.responses[401].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/PreviewErrorResponse',
+    });
+    expect(previewPath.responses[422].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/PreviewErrorResponse',
+    });
+    expect(previewPath.responses[503].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/PreviewErrorResponse',
+    });
+  });
+
   test('should keep agent-scoped component routes with agent as the final path segment', () => {
     expect(openApiDocument.paths['/api/v1/triggers/{type}/{name}/{agent}']?.get).toBeDefined();
     expect(openApiDocument.paths['/api/v1/triggers/{agent}/{type}/{name}']).toBeUndefined();

@@ -463,6 +463,8 @@ curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28
 
 This operation triggers a vulnerability scan, optional signature verification, and optional SBOM generation for a container. The scan targets the update candidate image when available, falling back to the current image tag. Results are persisted to `container.security` and the updated container is returned.
 
+Candidate scans that pass through `DD_SECURITY_GATE_RELATIVE=true` include `relativeGate: { decision, reason, currentSummary }`. `decision=passed` means every candidate severity count was less than or equal to the exact running image's saved scan. Missing, failed, or stale current scans return a blocked decision with `reason=current-scan-unavailable`; a higher candidate count returns `reason=candidate-worse`.
+
 Requires `DD_SECURITY_SCANNER=trivy`, `grype`, or `both` to be configured.
 
 ```bash
@@ -630,6 +632,25 @@ This operation returns a dry-run preview of what an update would change, without
 ```bash
 curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/preview
 ```
+
+Preview failures return an actionable typed object:
+
+```json
+{
+  "code": "registry-auth-failed",
+  "message": "Authentication failed for ghcr.io: 401 Unauthorized",
+  "details": {
+    "reason": "request failed: 401 Unauthorized",
+    "registry": "ghcr.io"
+  },
+  "action": {
+    "label": "Open registry settings",
+    "href": "/registries"
+  }
+}
+```
+
+Stable codes are `container-not-found`, `container-runtime-not-found`, `no-trigger-configured`, `registry-auth-failed`, `registry-not-found`, `manifest-fetch-failed`, `registry-network-error`, and `preview-runtime-error`. `details.reason` is sanitized before it is returned. `action` is present only when the UI has a safe trigger or registry settings destination.
 
 ## List all backups
 

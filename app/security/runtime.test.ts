@@ -48,6 +48,7 @@ function createEnabledConfiguration() {
     scanner: 'trivy',
     backend: 'command',
     availabilityPolicy: 'block',
+    gate: { mode: 'on', allowNoWorse: true },
     blockSeverities: ['CRITICAL', 'HIGH'],
     trivy: {
       server: '',
@@ -172,6 +173,24 @@ test('getSecurityRuntimeStatus should report ready when trivy is available', asy
     expect.objectContaining({ timeout: 4000, maxBuffer: 256 * 1024, env: process.env }),
     expect.any(Function),
   );
+});
+
+test('getSecurityRuntimeStatus should default an absent gate configuration to on', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    gate: undefined,
+  });
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    callback(null, 'version', '');
+    return { exitCode: 0 };
+  };
+
+  const status = await getSecurityRuntimeStatus();
+
+  expect(status.gate).toEqual({
+    mode: 'on',
+    allowNoWorse: false,
+  });
 });
 
 test('getSecurityRuntimeStatus should report missing trivy command', async () => {
@@ -353,6 +372,7 @@ test('getSecurityRuntimeStatus reports command scanner and SBOM providers with d
     ready: true,
     backend: 'command',
     availabilityPolicy: 'block',
+    gate: { mode: 'on', allowNoWorse: true },
     sbom: { enabled: true, generator: 'syft' },
     providers: [
       { provider: 'grype', role: 'scanner', command: 'grype', status: 'ready' },

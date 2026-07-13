@@ -151,12 +151,15 @@ function clearFilters() {
 }
 
 function mapTrigger(trigger: ApiComponent, status = 'active') {
+  const config = trigger.configuration ?? {};
   return {
     id: trigger.id,
     name: trigger.name,
     type: trigger.type,
     status,
-    config: trigger.configuration ?? {},
+    config,
+    dryRun:
+      (trigger.type === 'docker' || trigger.type === 'dockercompose') && config.dryrun === true,
     agent: trigger.agent,
   };
 }
@@ -260,7 +263,18 @@ onMounted(async () => {
       @row-click="openDetail($event)"
     >
       <template #cell-name="{ row }">
-        <span class="font-medium dd-text">{{ row.name }}</span>
+        <span class="inline-flex flex-wrap items-center gap-2 font-medium dd-text">
+          {{ row.name }}
+          <AppBadge
+            v-if="row.dryRun"
+            tone="warning"
+            size="xs"
+            data-test="trigger-dry-run-badge"
+            :title="t('triggersView.dryRun.tooltip')"
+          >
+            {{ t('triggersView.dryRun.badge') }}
+          </AppBadge>
+        </span>
       </template>
       <template #cell-type="{ row }">
         <AppBadge :custom="{ bg: triggerTypeBadge(row.type).bg, text: triggerTypeBadge(row.type).text }" size="xs">
@@ -305,9 +319,20 @@ onMounted(async () => {
           </div>
           <!-- Body: provider type -->
           <div class="px-4 py-3">
-            <AppBadge :custom="{ bg: triggerTypeBadge(row.type).bg, text: triggerTypeBadge(row.type).text }" size="xs">
-              {{ triggerTypeBadge(row.type).label }}
-            </AppBadge>
+            <div class="flex flex-wrap items-center gap-2">
+              <AppBadge :custom="{ bg: triggerTypeBadge(row.type).bg, text: triggerTypeBadge(row.type).text }" size="xs">
+                {{ triggerTypeBadge(row.type).label }}
+              </AppBadge>
+              <AppBadge
+                v-if="row.dryRun"
+                tone="warning"
+                size="xs"
+                data-test="trigger-dry-run-badge"
+                :title="t('triggersView.dryRun.tooltip')"
+              >
+                {{ t('triggersView.dryRun.badge') }}
+              </AppBadge>
+            </div>
           </div>
           <!-- Footer: test action -->
           <div class="px-4 py-2.5 flex items-center justify-end mt-auto"
@@ -359,6 +384,16 @@ onMounted(async () => {
                  class="px-3 py-2 text-2xs-plus dd-rounded"
                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
               {{ detailError }}
+            </div>
+
+            <div
+              v-if="selectedTrigger.dryRun"
+              class="px-3 py-2.5 dd-rounded text-xs"
+              :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+              data-test="trigger-detail-dry-run-warning"
+            >
+              <div class="font-semibold">{{ t('triggersView.dryRun.badge') }}</div>
+              <div class="mt-0.5">{{ t('triggersView.dryRun.tooltip') }}</div>
             </div>
 
             <DetailField v-for="(val, key) in selectedTrigger.config" :key="key" :label="String(key)" mono>{{ val }}</DetailField>

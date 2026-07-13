@@ -162,6 +162,21 @@ export function getLogLevel() {
   return ddEnvVars.DD_LOG_LEVEL || 'info';
 }
 
+const DEFAULT_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = 60 * 60 * 1000;
+
+export function getAuditUpdateAvailableDedupeMs(): number {
+  const rawValue = ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS?.trim();
+  if (rawValue === undefined || rawValue === '') {
+    return DEFAULT_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+  }
+
+  const parsedValue = Number(rawValue);
+  if (!Number.isSafeInteger(parsedValue) || parsedValue < 0) {
+    throw new Error('DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS must be a non-negative integer');
+  }
+  return parsedValue;
+}
+
 export function getLogFormat() {
   return ddEnvVars.DD_LOG_FORMAT?.toLowerCase() === 'json' ? 'json' : 'text';
 }
@@ -820,6 +835,7 @@ export function getSecurityConfiguration() {
     gate: joi
       .object({
         mode: joi.string().insensitive().valid('on', 'off').default('on'),
+        relative: joi.boolean().default(false),
       })
       .default({}),
     prune: joi
@@ -921,6 +937,7 @@ export function getSecurityConfiguration() {
     },
     gate: {
       mode: (configuration.gate?.mode || 'on').toLowerCase() as 'on' | 'off',
+      allowNoWorse: Boolean(configuration.gate?.relative),
     },
     prune: {
       onBlock: configuration.prune?.onblock !== false,

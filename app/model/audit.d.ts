@@ -4,6 +4,7 @@ export interface AuditEntry {
   action:
     | 'update-available'
     | 'update-applied'
+    | 'update-applied-dryrun'
     | 'update-failed'
     | 'notification-delivery-failed'
     | 'container-update'

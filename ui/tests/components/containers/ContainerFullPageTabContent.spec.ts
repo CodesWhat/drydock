@@ -9,6 +9,7 @@ type Trigger = {
   type: string;
   name: string;
   agent?: string;
+  configuration?: Record<string, unknown>;
 };
 
 type Backup = {
@@ -118,6 +119,7 @@ const detailComposePreview = ref<{
   patch?: string;
 } | null>(null);
 const previewError = ref<string | null>(null);
+const previewErrorAction = ref<{ label: string; href: '/registries' | '/triggers' } | null>(null);
 const triggersLoading = ref(false);
 const detailTriggers = ref<Trigger[]>([]);
 const triggerRunInProgress = ref<string | null>(null);
@@ -249,6 +251,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     detailPreview,
     detailComposePreview,
     previewError,
+    previewErrorAction,
     triggersLoading,
     detailTriggers,
     getTriggerKey: mockGetTriggerKey,
@@ -344,6 +347,7 @@ function resetState() {
   detailPreview.value = null;
   detailComposePreview.value = null;
   previewError.value = null;
+  previewErrorAction.value = null;
   triggersLoading.value = false;
   detailTriggers.value = [];
   triggerRunInProgress.value = null;
@@ -687,11 +691,26 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('reason:manual');
   });
 
+  it('marks a dry-run action as preview-only and explains the trigger condition', () => {
+    detailTriggers.value = [{ type: 'docker', name: 'local', configuration: { dryrun: true } }];
+
+    const wrapper = mountComponent();
+    const action = wrapper.get('[data-test="dry-run-update-action"]');
+    expect(action.text()).toContain('Preview only');
+    expect(action.attributes('title')).toContain(
+      'pull the new image but not replace the container',
+    );
+    expect(wrapper.get('[data-test="dry-run-trigger-condition"]').text()).toContain(
+      'Action trigger docker.local is in dry-run mode',
+    );
+  });
+
   it('renders action-tab status/error messages and running-state branches', () => {
     policyMessage.value = 'Policy saved';
     policyError.value = 'Policy failed';
     detailPreview.value = { error: 'Preview generation failed' };
     previewError.value = 'Preview API error';
+    previewErrorAction.value = { label: 'Open registry settings', href: '/registries' };
     detailTriggers.value = [{ type: 'docker', name: 'deploy', agent: 'watchtower' }];
     triggerRunInProgress.value = 'docker.deploy';
     triggerMessage.value = 'Trigger started';
@@ -728,6 +747,10 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('Policy failed');
     expect(wrapper.text()).toContain('Preview generation failed');
     expect(wrapper.text()).toContain('Preview API error');
+    const previewAction = wrapper.get('[data-test="preview-error-action"]');
+    expect(previewAction.text()).toBe('Open registry settings');
+    expect(previewAction.attributes('href')).toBe('/registries');
+    expect(previewAction.classes()).toContain('min-h-11');
     expect(wrapper.text()).toContain('Running...');
     expect(wrapper.text()).toContain('Trigger started');
     expect(wrapper.text()).toContain('Trigger failed');

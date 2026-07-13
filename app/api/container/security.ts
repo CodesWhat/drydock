@@ -284,11 +284,14 @@ async function scanCurrentImage(options: {
   const image = context.getContainerImageFullName(container);
   context.log.info(`Running on-demand security scan for ${image}`);
   const auth = await context.getContainerRegistryAuth(container);
-  const scanResult = await context.scanImageForVulnerabilities({ image, auth });
+  const rawScanResult = await context.scanImageForVulnerabilities({ image, auth });
+  const containerDigest = container.image?.digest?.value;
+  const scanResult = containerDigest
+    ? { ...rawScanResult, imageDigest: containerDigest }
+    : rawScanResult;
   const securityPatch: Partial<ContainerSecurityState> = { scan: scanResult };
 
   // Populate the digest scan cache so scheduled scans can benefit
-  const containerDigest = container.image?.digest?.value;
   if (context.updateDigestScanCache && containerDigest && scanResult.status !== 'error') {
     const trivyDbStatus = await context.getTrivyDatabaseStatus();
     context.updateDigestScanCache(containerDigest, scanResult, trivyDbStatus?.updatedAt || '');

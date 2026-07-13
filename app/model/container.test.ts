@@ -2841,6 +2841,7 @@ test('model should validate security update schemas', async () => {
       updateScan: {
         scanner: 'trivy',
         image: 'organization/image:1.0.1',
+        imageDigest: 'sha256:current',
         scannedAt: '2026-03-04T12:00:00.000Z',
         status: 'blocked',
         blockSeverities: ['CRITICAL', 'HIGH'],
@@ -2853,6 +2854,17 @@ test('model should validate security update schemas', async () => {
           critical: 5,
         },
         vulnerabilities: [{ id: 'CVE-2026-0001', severity: 'CRITICAL' }],
+        relativeGate: {
+          decision: 'passed',
+          reason: 'no-worse-than-current',
+          currentSummary: {
+            unknown: 1,
+            low: 2,
+            medium: 3,
+            high: 4,
+            critical: 5,
+          },
+        },
       },
       updateSignature: {
         verifier: 'cosign',
@@ -2881,6 +2893,18 @@ test('model should validate security update schemas', async () => {
     medium: 3,
     high: 4,
     critical: 5,
+  });
+  expect(containerValidated.security?.updateScan?.imageDigest).toBe('sha256:current');
+  expect(containerValidated.security?.updateScan?.relativeGate).toEqual({
+    decision: 'passed',
+    reason: 'no-worse-than-current',
+    currentSummary: {
+      unknown: 1,
+      low: 2,
+      medium: 3,
+      high: 4,
+      critical: 5,
+    },
   });
   expect(containerValidated.security?.updateSignature?.status).toBe('verified');
   expect(containerValidated.security?.updateSbom?.formats).toEqual(['spdx-json', 'cyclonedx-json']);

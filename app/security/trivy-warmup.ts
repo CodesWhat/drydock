@@ -88,7 +88,9 @@ export function createTrivyDatabaseWarmup(
 
     inFlight = attempt;
     void attempt.then(() => {
-      inFlight = undefined;
+      if (inFlight === attempt) {
+        inFlight = undefined;
+      }
     });
     return attempt;
   };

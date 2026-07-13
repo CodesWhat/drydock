@@ -44,12 +44,18 @@ export interface ContainerVulnerability {
 export interface ContainerSecurityScan {
   scanner: SecurityScanner;
   image: string;
+  imageDigest?: string;
   scannedAt: string;
   status: SecurityScanStatus;
   blockSeverities: SecuritySeverity[];
   blockingCount: number;
   summary: ContainerVulnerabilitySummary;
   vulnerabilities: ContainerVulnerability[];
+  relativeGate?: {
+    decision: 'passed' | 'blocked';
+    reason: 'no-worse-than-current' | 'candidate-worse' | 'current-scan-unavailable';
+    currentSummary?: ContainerVulnerabilitySummary;
+  };
   error?: string;
 }
 
@@ -1106,7 +1112,7 @@ export function updateDigestScanCache(
   scanResult: ContainerSecurityScan,
   assetUpdatedAt: string,
 ): void {
-  setDigestScanCacheEntry(digest, scanResult, assetUpdatedAt);
+  setDigestScanCacheEntry(digest, { ...scanResult, imageDigest: digest }, assetUpdatedAt);
 }
 
 function getScannerFingerprint(assetUpdatedAt: string): string {
@@ -1128,7 +1134,10 @@ export async function scanImageWithDedup(
     Date.now() - cached.cachedAt < scanIntervalMs
   ) {
     markDigestScanCacheEntryAsRecentlyUsed(options.digest, cached);
-    return { scanResult: cached.scanResult, fromCache: true };
+    return {
+      scanResult: { ...cached.scanResult, imageDigest: options.digest },
+      fromCache: true,
+    };
   }
 
   // If the last scan for this digest errored and we're still within the retry
@@ -1141,10 +1150,14 @@ export async function scanImageWithDedup(
     floorEntry.scannerFingerprint === scannerFingerprint &&
     Date.now() - floorEntry.errorAt < ERROR_RETRY_FLOOR_MS
   ) {
-    return { scanResult: floorEntry.scanResult, fromCache: true };
+    return {
+      scanResult: { ...floorEntry.scanResult, imageDigest: options.digest },
+      fromCache: true,
+    };
   }
 
-  const scanResult = await scanImageForVulnerabilities(options);
+  const rawScanResult = await scanImageForVulnerabilities(options);
+  const scanResult = { ...rawScanResult, imageDigest: options.digest };
 
   if (scanResult.status === 'error') {
     // Record the error so we can enforce the retry floor on subsequent calls.

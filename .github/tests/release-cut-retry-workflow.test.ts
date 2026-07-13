@@ -141,6 +141,7 @@ test('release-cut delegates image tags and labels to docker metadata-action', ()
   expect(metadataStep?.with?.flavor?.trim()).toBe('latest=false');
   expect(blockLines(metadataStep?.with?.tags)).toStrictEqual([
     'type=semver,pattern={{version}},value=${{ steps.next.outputs.release_tag }}',
+    'type=match,pattern=^v(\\d+\\.\\d+)\\.\\d+-rc\\.\\d+$,group=1,suffix=-rc,value=${{ steps.next.outputs.release_tag }}',
     "type=semver,pattern={{major}}.{{minor}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}",
     "type=semver,pattern={{major}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}",
     "type=raw,value=latest,enable=${{ steps.tag.outputs.is_prerelease == 'false' }}",

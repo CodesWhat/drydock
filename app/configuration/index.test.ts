@@ -38,6 +38,29 @@ test('getLogLevel should return info by default', async () => {
   expect(configuration.getLogLevel()).toStrictEqual('info');
 });
 
+test('getAuditUpdateAvailableDedupeMs should default to one hour', () => {
+  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+  expect(configuration.getAuditUpdateAvailableDedupeMs()).toBe(60 * 60 * 1000);
+});
+
+test('getAuditUpdateAvailableDedupeMs should accept a non-negative integer', () => {
+  configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = '120000';
+  expect(configuration.getAuditUpdateAvailableDedupeMs()).toBe(120_000);
+  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+});
+
+test.each([
+  '-1',
+  '1.5',
+  'not-a-number',
+])('getAuditUpdateAvailableDedupeMs should reject invalid values (%s)', (value) => {
+  configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = value;
+  expect(() => configuration.getAuditUpdateAvailableDedupeMs()).toThrow(
+    'DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS must be a non-negative integer',
+  );
+  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+});
+
 test('getLogLevel should return debug when overridden', async () => {
   configuration.ddEnvVars.DD_LOG_LEVEL = 'debug';
   expect(configuration.getLogLevel()).toStrictEqual('debug');
@@ -691,6 +714,7 @@ describe('getSecurityConfiguration', () => {
       },
       gate: {
         mode: 'on',
+        allowNoWorse: false,
       },
       prune: {
         onBlock: true,
@@ -778,6 +802,7 @@ describe('getSecurityConfiguration', () => {
       },
       gate: {
         mode: 'on',
+        allowNoWorse: false,
       },
       prune: {
         onBlock: true,

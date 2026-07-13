@@ -2230,11 +2230,41 @@ describe('useContainerActions', () => {
       writableFile: undefined,
     });
 
-    mocks.previewContainer.mockRejectedValueOnce(new Error('preview failed'));
+    mocks.previewContainer.mockRejectedValueOnce(
+      Object.assign(new Error('Authentication failed for ghcr.io: 401 Unauthorized'), {
+        code: 'registry-auth-failed',
+        action: { label: 'Open registry settings', href: '/registries' },
+      }),
+    );
     await composable.runContainerPreview();
     expect(composable.detailPreview.value).toBeNull();
     expect(composable.detailComposePreview.value).toBeNull();
-    expect(composable.previewError.value).toBe('preview failed');
+    expect(composable.previewError.value).toBe(
+      'Authentication failed for ghcr.io: 401 Unauthorized',
+    );
+    expect(composable.previewErrorAction.value).toEqual({
+      label: 'Open registry settings',
+      href: '/registries',
+    });
+
+    mocks.previewContainer.mockRejectedValueOnce(new Error('runtime unavailable'));
+    await composable.runContainerPreview();
+    expect(composable.previewErrorAction.value).toBeNull();
+
+    for (const action of [
+      null,
+      'invalid',
+      { href: '/registries' },
+      { label: 42, href: '/registries' },
+      { label: 'Open settings' },
+      { label: 'Unsafe', href: 'https://attacker.example' },
+    ]) {
+      mocks.previewContainer.mockRejectedValueOnce(
+        Object.assign(new Error('typed error'), { action }),
+      );
+      await composable.runContainerPreview();
+      expect(composable.previewErrorAction.value).toBeNull();
+    }
   });
 
   it('covers rollback guard and failure/latest-backup branches', async () => {

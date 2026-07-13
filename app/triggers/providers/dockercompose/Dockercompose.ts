@@ -1366,7 +1366,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
 
     if (this.configuration.dryrun) {
-      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
+      logContainer.warn('Do not replace the existing container because dry-run mode is enabled');
       return false;
     }
 
@@ -1777,7 +1777,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
 
     if (this.configuration.dryrun) {
-      this.log.info(
+      this.log.warn(
         `Do not replace existing docker-compose file ${composeFileChainSummary} (dry-run mode enabled)`,
       );
       return [];
@@ -2427,7 +2427,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const { shouldStart = undefined, skipPull = false, forceRecreate = false } = options;
 
     if (this.configuration.dryrun) {
-      logContainer.info(
+      logContainer.warn(
         `Do not refresh compose service ${service} from ${composeFile} because dry-run mode is enabled`,
       );
       return;

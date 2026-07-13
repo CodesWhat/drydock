@@ -1,5 +1,6 @@
 import type { SecurityConfiguration, SecuritySbomFormat } from '../../../configuration/index.js';
 import type { Container } from '../../../model/container.js';
+import { buildImageReference } from '../../../registries/image-reference.js';
 import type {
   ContainerSecuritySbom,
   ContainerSecurityScan,
@@ -484,6 +485,72 @@ class SecurityGate {
     return `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
   }
 
+  getCurrentImageReference(container: SecurityContainer): string | undefined {
+    const image = container.image;
+    if (!image?.registry?.url || !image.name || !image.tag?.value) {
+      return undefined;
+    }
+    return buildImageReference(image.registry.url, image.name, image.tag.value);
+  }
+
+  isNoWorseThanCurrent(candidate: VulnerabilitySummary, current: VulnerabilitySummary): boolean {
+    return (['critical', 'high', 'medium', 'low', 'unknown'] as const).every(
+      (severity) => candidate[severity] <= current[severity],
+    );
+  }
+
+  applyRelativeGate(
+    container: SecurityContainer,
+    scanResult: VulnerabilityScanResult,
+    securityConfiguration: SecurityConfiguration,
+  ): VulnerabilityScanResult {
+    if (!securityConfiguration.gate?.allowNoWorse || scanResult.status !== 'blocked') {
+      return scanResult;
+    }
+
+    const currentContainer = this.stateStore.getContainer(container.id) || container;
+    const currentScan = currentContainer.security?.scan || container.security?.scan;
+    const currentImage =
+      this.getCurrentImageReference(currentContainer) || this.getCurrentImageReference(container);
+    const currentDigest = currentContainer.image?.digest?.value || container.image?.digest?.value;
+    if (
+      !currentScan ||
+      currentScan.status === 'error' ||
+      !currentImage ||
+      currentScan.image !== currentImage ||
+      (currentDigest !== undefined && currentScan.imageDigest !== currentDigest)
+    ) {
+      return {
+        ...scanResult,
+        relativeGate: {
+          decision: 'blocked',
+          reason: 'current-scan-unavailable',
+        },
+      };
+    }
+
+    if (!this.isNoWorseThanCurrent(scanResult.summary, currentScan.summary)) {
+      return {
+        ...scanResult,
+        relativeGate: {
+          decision: 'blocked',
+          reason: 'candidate-worse',
+          currentSummary: currentScan.summary,
+        },
+      };
+    }
+
+    return {
+      ...scanResult,
+      status: 'passed',
+      relativeGate: {
+        decision: 'passed',
+        reason: 'no-worse-than-current',
+        currentSummary: currentScan.summary,
+      },
+    };
+  }
+
   maybeEmitHighSeverityAlert(
     container: SecurityContainer,
     scanResult: VulnerabilityScanResult,
@@ -539,12 +606,21 @@ class SecurityGate {
     const details = this.formatScanSummary(scanResult.summary);
     this.maybeEmitHighSeverityAlert(container, scanResult, details);
     this.throwIfScanBlocked(scanResult, details);
-    this.telemetry.recordSecurityAudit(
-      'security-scan-passed',
-      container,
-      'success',
-      `Security scan passed. Summary: ${details}`,
-    );
+    if (scanResult.relativeGate?.decision === 'passed') {
+      this.telemetry.recordSecurityAudit(
+        'security-scan-passed-relative',
+        container,
+        'success',
+        `Security scan passed because the candidate is no worse than current. Candidate: ${details}. Current: ${this.formatScanSummary(scanResult.relativeGate.currentSummary as VulnerabilitySummary)}`,
+      );
+    } else {
+      this.telemetry.recordSecurityAudit(
+        'security-scan-passed',
+        container,
+        'success',
+        `Security scan passed. Summary: ${details}`,
+      );
+    }
   }
 
   async verifySignaturePreUpdate(
@@ -601,7 +677,15 @@ class SecurityGate {
 
     try {
       options.setPhase?.('scanning');
-      const scanResult = await this.scanImageForUpdate(context, container, logContainer);
+      const rawScanResult = await this.scanImageForUpdate(context, container, logContainer);
+      const scanResult = this.applyRelativeGate(container, rawScanResult, securityConfiguration);
+      if (scanResult !== rawScanResult) {
+        await this.persistSecurityState(
+          container,
+          { slot: 'update', scan: scanResult },
+          logContainer,
+        );
+      }
       if (securityConfiguration.sbom.enabled) {
         options.setPhase?.('sbom-generating');
         await this.maybeGenerateSbomForUpdate(

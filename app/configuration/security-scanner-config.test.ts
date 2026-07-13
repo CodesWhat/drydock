@@ -15,6 +15,7 @@ const SECURITY_KEYS = [
   'DD_SECURITY_TRIVY_ARGS',
   'DD_SECURITY_GRYPE_ARGS',
   'DD_SECURITY_SYFT_ARGS',
+  'DD_SECURITY_GATE_RELATIVE',
 ] as const;
 
 afterEach(() => {
@@ -22,6 +23,15 @@ afterEach(() => {
 });
 
 describe('scanner provider and execution backend configuration', () => {
+  test('enables no-worse-than-current gating explicitly', () => {
+    configuration.ddEnvVars.DD_SECURITY_GATE_RELATIVE = 'true';
+
+    expect(configuration.getSecurityConfiguration().gate).toEqual({
+      mode: 'on',
+      allowNoWorse: true,
+    });
+  });
+
   test('keeps the command Trivy runtime as the compatibility default', () => {
     expect(configuration.getSecurityConfiguration()).toMatchObject({
       enabled: false,

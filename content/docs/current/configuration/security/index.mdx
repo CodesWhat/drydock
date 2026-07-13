@@ -51,6 +51,7 @@ DD_SECURITY_SCANNER=trivy
 | `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (LRU eviction -- least recently used entries are removed when the limit is reached) | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
 | `DD_SECURITY_SCAN_NOTIFICATIONS` | ⚪ | When `true`, findings from **scheduled** (cron) scans are routed through notification triggers. On-demand scans always notify. | `true` / `false` | `false` |
 | `DD_SECURITY_GATE_MODE` | ⚪ | Override the security gate globally. `off` disables the gate for all containers (audit row still fires); `on` enables normal gating. Per-container label `dd.security.gate=off` also works but only for that container. | `on`, `off` | `on` |
+| `DD_SECURITY_GATE_RELATIVE` | ⚪ | When an absolute severity threshold would block a candidate, allow it only if every severity count is less than or equal to the current image's saved scan. Missing, failed, or stale current-image scans remain blocked. | `true` / `false` | `false` |
 | `DD_SECURITY_PRUNE_ONBLOCK` | ⚪ | Prune a pulled candidate image when Update Bouncer blocks it | `true` / `false` | `true` |
 
 ## Trivy modes
@@ -131,6 +132,21 @@ services:
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_BLOCK_SEVERITY=NONE
 ```
+
+## No-worse-than-current gate
+
+Set `DD_SECURITY_GATE_RELATIVE=true` to keep the absolute severity threshold while allowing a candidate that does not worsen the running image's vulnerability profile. Drydock compares `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, and `UNKNOWN` independently; every candidate count must be less than or equal to the corresponding current-image count.
+
+```yaml
+services:
+  drydock:
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+      - DD_SECURITY_GATE_RELATIVE=true
+```
+
+The comparison is fail-closed. A relative pass requires a successful saved scan for the exact running image. If that scan is missing, failed, belongs to an older image, or any severity count increased, the normal absolute block remains in force. The candidate scan is persisted with `relativeGate.decision`, `relativeGate.reason`, and the current summary used for a successful comparison, so API clients and audit logs can explain why the update passed.
 
 ## Blocked candidate cleanup
 

@@ -1310,7 +1310,7 @@ export class AgentClient {
       containerName: payload.containerName,
       status: 'succeeded',
       ...(containerId !== undefined ? { containerId } : {}),
-      phase: 'succeeded',
+      phase: payload.phase === 'dryrun' ? 'dryrun' : 'succeeded',
       ...(agentContainer !== undefined ? { container: agentContainer } : {}),
     });
     return this.resolveAgentOperationId(remoteOperationId);
@@ -1507,6 +1507,7 @@ export class AgentClient {
                     agent: this.name,
                   }
                 : undefined,
+            ...(data.phase === 'dryrun' ? { phase: 'dryrun' } : {}),
           });
         }
         return;

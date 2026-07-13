@@ -47,6 +47,7 @@ curl http://drydock:3000/api/v1/server/security/runtime
   "ready": true,
   "backend": "docker",
   "availabilityPolicy": "block",
+  "gate": { "mode": "on", "allowNoWorse": true },
   "scanner": {
     "enabled": true,
     "command": "aquasec/trivy@sha256:…",
@@ -82,6 +83,8 @@ curl http://drydock:3000/api/v1/server/security/runtime
 | `ready` | boolean | `true` when every required scanner/SBOM provider is ready |
 | `backend` | string | `command`, `docker`, or Trivy-only `remote` |
 | `availabilityPolicy` | string | Fail-closed `block` or explicit advisory `warn` |
+| `gate.mode` | string | Effective global gate mode: `on` or `off` |
+| `gate.allowNoWorse` | boolean | Whether blocked candidates can pass a fail-closed severity-by-severity comparison with the current image scan |
 | `scanner.enabled` | boolean | Whether vulnerability scanning is configured |
 | `scanner.command` | string | Scanner command (e.g. `trivy`) |
 | `scanner.commandAvailable` | boolean \| null | Whether the command was found in the runtime; `null` when disabled |
@@ -115,7 +118,7 @@ Providers are `trivy`, `grype`, and `syft`; operations are `pull` and `warm`. Th
 
 Downloads a comprehensive, redacted diagnostic dump of the running drydock instance as a JSON file. Useful for troubleshooting and support requests.
 
-The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. Values whose keys contain sensitive tokens such as `password`, `passwd`, `pass`, `token`, `secret`, `credential`, `hash`, `key`, `apikey`, `accesskey`, or `privatekey` are automatically redacted. Environment-style keys containing `AUTH`, `BEARER`, `LOGIN`, or `URL` are also redacted, which covers webhook URLs with embedded secrets.
+The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. Store statistics include document counts and UTF-8 serialized byte attribution for the whole LokiJS store and each collection, making unexpected persistence growth traceable without exposing raw store contents. Values whose keys contain sensitive tokens such as `password`, `passwd`, `pass`, `token`, `secret`, `credential`, `hash`, `key`, `apikey`, `accesskey`, or `privatekey` are automatically redacted. Environment-style keys containing `AUTH`, `BEARER`, `LOGIN`, or `URL` are also redacted, which covers webhook URLs with embedded secrets.
 
 ```bash
 curl -O -J "http://drydock:3000/api/v1/debug/dump?minutes=30"
@@ -138,7 +141,7 @@ The response is a JSON attachment with a timestamped filename (e.g. `drydock-deb
 | `mqttHomeAssistant` | Home Assistant MQTT sensor discovery topics and definitions |
 | `dockerEvents` | Active Docker event subscriptions and recent events within the time window |
 | `aliasFiltering` | Recent container alias filter decisions |
-| `store` | LokiJS collection statistics |
+| `store` | LokiJS collection document counts and serialized byte attribution, including per-collection `serializedBytes` |
 | `dockerApi` | Docker daemon version and info per watcher (connection errors captured gracefully) |
 | `environment` | All `DD_*` environment variable names with values redacted |
 

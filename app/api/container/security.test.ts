@@ -969,9 +969,17 @@ describe('api/container/security', () => {
 
       await callScanContainer(harness.handlers);
 
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            scan: expect.objectContaining({ imageDigest: 'sha256:abc123' }),
+          }),
+        }),
+      );
+
       expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
         'sha256:abc123',
-        scanResult,
+        expect.objectContaining({ ...scanResult, imageDigest: 'sha256:abc123' }),
         '2026-03-04T11:55:00.000Z',
       );
     });
@@ -995,7 +1003,7 @@ describe('api/container/security', () => {
 
       expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
         'sha256:abc123',
-        scanResult,
+        expect.objectContaining({ ...scanResult, imageDigest: 'sha256:abc123' }),
         '',
       );
     });

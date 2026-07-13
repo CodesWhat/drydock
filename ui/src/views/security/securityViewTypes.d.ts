@@ -46,6 +46,10 @@ export interface SecurityRuntimeStatus {
   ready: boolean;
   backend: 'command' | 'docker' | 'remote';
   availabilityPolicy: 'block' | 'warn';
+  gate: {
+    mode: 'on' | 'off';
+    allowNoWorse: boolean;
+  };
   scanner: SecurityRuntimeToolStatus & {
     scanner: string;
     server: string;

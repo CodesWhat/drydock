@@ -740,9 +740,21 @@ export const containerPaths = {
         200: jsonResponse('Preview result', {
           $ref: '#/components/schemas/PreviewResponse',
         }),
-        401: errorResponse('Authentication required'),
-        404: errorResponse('Container or docker trigger not found'),
-        500: errorResponse('Preview failed'),
+        401: jsonResponse('Authentication required or registry credentials rejected', {
+          $ref: '#/components/schemas/PreviewErrorResponse',
+        }),
+        404: jsonResponse('Container, runtime container, or action trigger not found', {
+          $ref: '#/components/schemas/PreviewErrorResponse',
+        }),
+        422: jsonResponse('Registry configuration or image manifest cannot satisfy the preview', {
+          $ref: '#/components/schemas/PreviewErrorResponse',
+        }),
+        500: jsonResponse('Container runtime could not prepare the preview', {
+          $ref: '#/components/schemas/PreviewErrorResponse',
+        }),
+        503: jsonResponse('Registry or container runtime is unreachable', {
+          $ref: '#/components/schemas/PreviewErrorResponse',
+        }),
       },
     },
   },

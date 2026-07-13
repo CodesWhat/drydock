@@ -2018,6 +2018,19 @@ describe('AgentClient', () => {
       );
     });
 
+    test('should preserve dry-run phase when terminalizing agent update operations', async () => {
+      await client.handleEvent('dd:update-applied', {
+        operationId: 'remote-op-dryrun',
+        containerName: 'local_nginx',
+        phase: 'dryrun',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-dryrun',
+        expect.objectContaining({ status: 'succeeded', phase: 'dryrun' }),
+      );
+    });
+
     test('should omit non-object container payloads for update-applied events', async () => {
       await client.handleEvent('dd:update-applied', {
         operationId: 'remote-op-no-container',
@@ -2044,6 +2057,19 @@ describe('AgentClient', () => {
       });
       expect(updateOperationStore.getOperationById).not.toHaveBeenCalled();
       expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('should preserve dry-run phase when forwarding update-applied without an operation id', async () => {
+      await client.handleEvent('dd:update-applied', {
+        containerName: 'local_nginx',
+        phase: 'dryrun',
+      });
+
+      expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith({
+        containerName: 'local_nginx',
+        container: undefined,
+        phase: 'dryrun',
+      });
     });
 
     test('should scope batch ids and tag container objects for update-applied payloads without operation ids', async () => {

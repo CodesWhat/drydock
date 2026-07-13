@@ -464,14 +464,46 @@ describe('Store Module', () => {
       path: '/test/store/test.json',
       collectionCount: 6,
       documentCount: 8,
+      serializedBytes: 91,
       lastPersistAt: '2026-03-18T12:34:56.000Z',
       collections: [
-        { name: 'unknown', documents: 0 },
-        { name: 'unknown', documents: 0 },
-        { name: 'unknown', documents: 0 },
-        { name: 'bad-data', documents: 0 },
-        { name: 'data', documents: 3 },
-        { name: 'named', documents: 5 },
+        { name: 'unknown', documents: 0, serializedBytes: 3 },
+        { name: 'unknown', documents: 0, serializedBytes: 2 },
+        { name: 'unknown', documents: 0, serializedBytes: 2 },
+        { name: 'bad-data', documents: 0, serializedBytes: 38 },
+        { name: 'data', documents: 3, serializedBytes: 30 },
+        { name: 'named', documents: 5, serializedBytes: 16 },
+      ],
+    });
+  });
+
+  test('should attribute UTF-8 serialized bytes and tolerate an unserializable collection', async () => {
+    vi.resetModules();
+
+    const circularCollection: Record<string, unknown> = { name: 'circular', data: [] };
+    circularCollection.self = circularCollection;
+    registerCommonMocks({
+      lokiInstance: () => ({
+        collections: [
+          Symbol('unserializable'),
+          { name: 'unicode', data: [{ label: 'café 🚢' }] },
+          circularCollection,
+        ],
+        loadDatabase: vi.fn((options, callback) => callback(null)),
+        saveDatabase: vi.fn((callback) => callback(null)),
+      }),
+      fs: { existsSync: vi.fn(() => true), mkdirSync: vi.fn(), renameSync: vi.fn() },
+    });
+
+    const storeWithByteStats = await import('./index.js');
+    await storeWithByteStats.init();
+
+    expect(storeWithByteStats.getDebugSnapshot()).toMatchObject({
+      serializedBytes: 50,
+      collections: [
+        { name: 'unknown', documents: 0, serializedBytes: 0 },
+        { name: 'unicode', documents: 1, serializedBytes: 50 },
+        { name: 'circular', documents: 0, serializedBytes: 0 },
       ],
     });
   });
@@ -501,6 +533,7 @@ describe('Store Module', () => {
       path: '/test/store/test.json',
       collectionCount: 0,
       documentCount: 0,
+      serializedBytes: 0,
       lastPersistAt: undefined,
       collections: [],
     });
@@ -530,6 +563,7 @@ describe('Store Module', () => {
       path: undefined,
       collectionCount: 0,
       documentCount: 0,
+      serializedBytes: 0,
       lastPersistAt: undefined,
       collections: [],
     });
@@ -564,8 +598,9 @@ describe('Store Module', () => {
       path: '/test/store/test.json',
       collectionCount: 1,
       documentCount: 1,
+      serializedBytes: 15,
       lastPersistAt: undefined,
-      collections: [{ name: 'only', documents: 1 }],
+      collections: [{ name: 'only', documents: 1, serializedBytes: 15 }],
     });
   });
 

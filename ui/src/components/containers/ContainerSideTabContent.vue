@@ -20,6 +20,7 @@ import { useContainersViewTemplateContext } from './containersViewTemplateContex
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
 import { updateInsightColor } from '../../utils/display';
+import { findDryRunActionTrigger } from '../../views/containers/useContainerTriggers';
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
@@ -128,6 +129,7 @@ const {
   detailPreview,
   detailComposePreview,
   previewError,
+  previewErrorAction,
   triggersLoading,
   detailTriggers,
   getTriggerKey,
@@ -159,6 +161,11 @@ const {
   registryLabel,
   updateMode,
 } = useContainersViewTemplateContext();
+
+const dryRunTrigger = computed(() => findDryRunActionTrigger(detailTriggers.value));
+const dryRunTriggerId = computed(() =>
+  dryRunTrigger.value ? getTriggerKey(dryRunTrigger.value) : undefined,
+);
 
 function openUpdateStatusTab(tab: string, section?: string) {
   activeDetailTab.value = tab;
@@ -341,6 +348,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 :container="selectedContainer"
                 :mode="updateMode"
                 :has-active-operation-badge="Boolean(selectedContainer.updateOperation)"
+                :dry-run-trigger-id="dryRunTriggerId"
                 class="mt-2"
                 :busy="isActionInProgress(selectedContainer)"
                 @update="confirmUpdate(selectedContainer)"
@@ -729,8 +737,10 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   <AppButton v-else-if="updateMode !== 'notify'"
                           size="sm" variant="outlined"
                           :disabled="!hasRawUpdateCandidate(selectedContainer) || isActionInProgress(selectedContainer)"
+                          :title="dryRunTrigger ? t('containerComponents.fullPageActions.dryRunUpdateTooltip') : undefined"
+                          :data-test="dryRunTrigger ? 'dry-run-update-action' : undefined"
                           @click="confirmUpdate(selectedContainer)">
-                    {{ t('containerComponents.fullPageActions.updateNow') }}
+                    {{ dryRunTrigger ? t('containerComponents.fullPageActions.previewOnly') : t('containerComponents.fullPageActions.updateNow') }}
                   </AppButton>
                   <AppButton size="sm" variant="outlined"
                           :disabled="isActionInProgress(selectedContainer)"
@@ -742,6 +752,14 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           @click="recheckContainer(selectedContainer)">
                     {{ recheckingContainerId === selectedContainer.id ? t('containerComponents.fullPageActions.rechecking') : t('containerComponents.fullPageActions.recheckNow') }}
                   </AppButton>
+                </div>
+                <div
+                  v-if="dryRunTriggerId"
+                  class="mt-2 px-3 py-2 dd-rounded text-2xs"
+                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+                  data-test="dry-run-trigger-condition"
+                >
+                  {{ t('containerComponents.fullPageActions.dryRunCondition', { trigger: dryRunTriggerId }) }}
                 </div>
               </div>
               <!-- Skip & Snooze group -->
@@ -957,7 +975,18 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   {{ t('containerComponents.sideTabContent.previewEmptyState') }}
                 </div>
               </div>
-              <p v-if="previewError" class="mt-2 text-2xs" style="color: var(--dd-danger);">{{ previewError }}</p>
+              <div v-if="previewError" class="mt-2 space-y-2">
+                <p class="text-2xs" style="color: var(--dd-danger);">{{ previewError }}</p>
+                <a
+                  v-if="previewErrorAction"
+                  :href="previewErrorAction.href"
+                  class="inline-flex min-h-11 items-center px-3 dd-rounded text-2xs-plus font-semibold"
+                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+                  data-test="preview-error-action"
+                >
+                  {{ previewErrorAction.label }}
+                </a>
+              </div>
             </div>
 
             <div>
