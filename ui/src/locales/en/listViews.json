@@ -54,6 +54,7 @@
       "closed": "Closed",
       "update-available": "Update Available",
       "update-applied": "Update Applied",
+      "update-applied-dryrun": "Update Previewed (Dry Run)",
       "update-failed": "Update Failed",
       "auto-update-blocked": "Auto-Update Blocked",
       "update-policy-override-set": "Update Policy Override Set",
@@ -240,6 +241,10 @@
       "cancel": "Cancel"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "Pull {provider}",
+      "warmAsset": "Warm {provider}",
+      "assetOperationFailed": "Scanner asset operation failed",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -345,6 +350,10 @@
     "status": {
       "active": "Active",
       "inactive": "Inactive"
+    },
+    "dryRun": {
+      "badge": "Dry-run mode",
+      "tooltip": "Updates are previewed only — containers will not be replaced. Set DRYRUN=false to apply."
     },
     "test": {
       "testing": "Testing...",

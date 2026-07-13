@@ -214,7 +214,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'container already started' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
 
     test('should stringify non-Error Docker API failures', async () => {
@@ -230,7 +230,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'start failed as string' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
 
     test('should insert audit entry on success', async () => {
@@ -362,7 +362,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'stop failed' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
   });
 
@@ -430,7 +430,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'restart failed' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
   });
 

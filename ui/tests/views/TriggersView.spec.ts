@@ -416,4 +416,28 @@ describe('TriggersView', () => {
       }),
     );
   });
+
+  it('surfaces dry-run mode on action trigger cards and details', async () => {
+    preferences.views.triggers.mode = 'cards';
+    const dryRunTrigger = makeTrigger({
+      id: 'docker.local',
+      name: 'local',
+      type: 'docker',
+      configuration: { dryrun: true, prune: true },
+    });
+    mockGetAllTriggers.mockResolvedValue([dryRunTrigger]);
+    mockGetTrigger.mockResolvedValue(dryRunTrigger);
+
+    const wrapper = await mountTriggersCardView();
+    const card = wrapper.get('[data-card-id="docker.local"]');
+    const badge = card.get('[data-test="trigger-dry-run-badge"]');
+    expect(badge.text()).toBe('Dry-run mode');
+    expect(badge.attributes('title')).toContain('containers will not be replaced');
+
+    await (wrapper.vm as any).openDetail((wrapper.vm as any).triggersData[0]);
+    await flushPromises();
+    expect(wrapper.get('[data-test="trigger-detail-dry-run-warning"]').text()).toContain(
+      'Updates are previewed only',
+    );
+  });
 });

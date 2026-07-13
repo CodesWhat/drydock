@@ -55,8 +55,11 @@ export function handleVitePreloadError(
   event: Event,
   reload: () => void = () => globalThis.location.reload(),
 ): boolean {
-  event.preventDefault();
-  return requestStaleChunkReload('vite:preloadError', reload);
+  const recoveryRequested = requestStaleChunkReload('vite:preloadError', reload);
+  if (recoveryRequested) {
+    event.preventDefault();
+  }
+  return recoveryRequested;
 }
 
 export function installVitePreloadErrorHandler(

@@ -155,8 +155,8 @@
       "defaultLinkLabel": "عرض دليل الترحيل"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy trigger input detected",
-      "legacyConfigTitlePlural": "{total} legacy trigger inputs detected",
+      "legacyConfigTitleSingular": "تم اكتشاف {total} اسم مستعار قديم للإعداد",
+      "legacyConfigTitlePlural": "تم اكتشاف {total} اسم مستعار قديم للإعداد",
       "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "لا تُظهر مجدداً",
       "curlHealthcheckTitle": "تم اكتشاف تجاوز مخصص لفحص صحة curl",

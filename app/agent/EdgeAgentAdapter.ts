@@ -77,6 +77,10 @@ export type WebSocketLike = {
   off?: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
+export interface EdgeAgentAdapterOptions {
+  reconnected?: boolean;
+}
+
 const log = logger.child({ component: 'edge-agent-adapter' });
 
 /**
@@ -96,6 +100,7 @@ export class EdgeAgentAdapter {
   private readonly client: AgentClient;
   private readonly ws: WebSocketLike;
   private readonly agentName: string;
+  private readonly reconnected: boolean;
   private readonly execSessions: Map<string, ExecSession>;
   private readonly pendingRequests: Map<string, PendingRequest>;
   private pingInterval: ReturnType<typeof setInterval> | undefined;
@@ -127,10 +132,11 @@ export class EdgeAgentAdapter {
   private readonly closeListener: () => void;
   private readonly errorListener: (err: unknown) => void;
 
-  constructor(client: AgentClient, ws: WebSocketLike) {
+  constructor(client: AgentClient, ws: WebSocketLike, options: EdgeAgentAdapterOptions = {}) {
     this.client = client;
     this.ws = ws;
     this.agentName = client.name;
+    this.reconnected = options.reconnected ?? false;
     this.execSessions = new Map();
     this.pendingRequests = new Map();
     this.containerRequestQueues = new Map();
@@ -381,10 +387,11 @@ export class EdgeAgentAdapter {
     if (!this.connected) {
       this.connected = true;
       this.client.isConnected = true;
-      const reconnected = false; // edge agents always do a fresh hello
-      void emitAgentConnected({ agentName: this.agentName, reconnected }).catch((err: unknown) => {
-        log.debug(`Failed to emit agentConnected: ${getErrorMessage(err)}`);
-      });
+      void emitAgentConnected({ agentName: this.agentName, reconnected: this.reconnected }).catch(
+        (err: unknown) => {
+          log.debug(`Failed to emit agentConnected: ${getErrorMessage(err)}`);
+        },
+      );
     }
   }
 

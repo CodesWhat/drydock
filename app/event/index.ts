@@ -131,6 +131,8 @@ export interface ContainerUpdateAppliedEventPayload {
   container?: Container;
   operationId?: string;
   batchId?: string | null;
+  /** `dryrun` means the image was pulled but the container was intentionally not replaced. */
+  phase?: 'dryrun';
 }
 
 export type ContainerUpdateAppliedEvent = string | ContainerUpdateAppliedEventPayload;

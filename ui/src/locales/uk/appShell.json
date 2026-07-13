@@ -155,8 +155,8 @@
       "defaultLinkLabel": "Переглянути інструкцію з міграції"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy trigger input detected",
-      "legacyConfigTitlePlural": "{total} legacy trigger inputs detected",
+      "legacyConfigTitleSingular": "Виявлено {total} застарілий псевдонім конфігурації",
+      "legacyConfigTitlePlural": "Виявлено {total} застарілих псевдонімів конфігурації",
       "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "Більше не показувати",
       "curlHealthcheckTitle": "Виявлено користувацький healthcheck на основі curl",

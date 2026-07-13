@@ -104,6 +104,7 @@ const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEnt
 interface ContainerListPaginationOptions {
   limit?: number;
   offset?: number;
+  sort?: (containers: container.Container[]) => container.Container[];
 }
 
 function toCacheKey(watcher, name) {
@@ -266,9 +267,10 @@ export function cloneContainer(containerToClone) {
   return clonedContainer;
 }
 
-function normalizeContainerListPaginationOptions(
-  pagination: ContainerListPaginationOptions = {},
-): Required<ContainerListPaginationOptions> {
+function normalizeContainerListPaginationOptions(pagination: ContainerListPaginationOptions = {}): {
+  limit: number;
+  offset: number;
+} {
   const rawLimit = pagination.limit;
   const rawOffset = pagination.offset;
   const limit =
@@ -288,14 +290,17 @@ function applyContainerListPagination(
   pagination: ContainerListPaginationOptions = {},
 ): container.Container[] {
   const { limit, offset } = normalizeContainerListPaginationOptions(pagination);
+  const orderedContainers = pagination.sort
+    ? pagination.sort([...containersToPaginate])
+    : containersToPaginate;
 
   if (limit === 0 && offset === 0) {
-    return containersToPaginate;
+    return orderedContainers;
   }
   if (limit === 0) {
-    return containersToPaginate.slice(offset);
+    return orderedContainers.slice(offset);
   }
-  return containersToPaginate.slice(offset, offset + limit);
+  return orderedContainers.slice(offset, offset + limit);
 }
 
 function getValueByPath(source, path) {
@@ -701,6 +706,9 @@ function hasContainerChangedWithSecurityHashes(
   if (existing.status !== incoming.status) {
     return true;
   }
+  if (existing.health !== incoming.health) {
+    return true;
+  }
   if (existing.error?.message !== incoming.error?.message) {
     return true;
   }
@@ -969,9 +977,13 @@ function restoreRetainedUpdatePolicy(container) {
   if (entry.expiresAt <= Date.now()) {
     return;
   }
-  // An explicit incoming controller layer is authoritative. A fresh watcher declaration is not:
-  // merge the retained controller state onto it and derive a new effective policy.
-  if (Object.hasOwn(container, 'updatePolicyOverrides')) {
+  // A non-empty incoming controller layer is authoritative. Watcher normalization also stamps
+  // updatePolicyOverrides={} on fresh declarative data; that empty layer carries no controller
+  // intent and must not discard the retained overrides from the container being replaced.
+  if (
+    container.updatePolicyOverrides !== undefined &&
+    Object.keys(container.updatePolicyOverrides).length > 0
+  ) {
     return;
   }
   if (container.updatePolicyDeclarative !== undefined) {

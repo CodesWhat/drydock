@@ -218,6 +218,64 @@ describe('SSE event listener: dd:agent-stats-changed', () => {
   });
 });
 
+describe('SSE event listener: dd:container-unhealthy', () => {
+  let originalEventSource: typeof EventSource;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    MockEventSource.instances = [];
+    originalEventSource = globalThis.EventSource;
+    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+  });
+
+  afterEach(() => {
+    globalThis.EventSource = originalEventSource;
+  });
+
+  it('maps the post-audit health event to a bell invalidation event', () => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+
+    const source = MockEventSource.instances[0];
+    const registeredCall = source.addEventListener.mock.calls.find(
+      (call) => call[0] === 'dd:container-unhealthy',
+    );
+    expect(registeredCall).toBeDefined();
+
+    const healthEvent = new MessageEvent('dd:container-unhealthy', {
+      data: JSON.stringify({ containerName: 'web', health: 'unhealthy' }),
+      lastEventId: 'boot:health-1',
+    });
+    registeredCall![1](healthEvent);
+    registeredCall![1](healthEvent);
+
+    expect(bus.emit).toHaveBeenCalledWith('container-unhealthy', {
+      containerName: 'web',
+      health: 'unhealthy',
+    });
+    expect(bus.emit).toHaveBeenCalledTimes(1);
+    store.connect(bus);
+    expect(MockEventSource.instances[1].url).toBe(
+      '/api/v1/events/ui?last-event-id=boot%3Ahealth-1',
+    );
+
+    const replayedSource = MockEventSource.instances[1];
+    const replayedListener = replayedSource.addEventListener.mock.calls.find(
+      (call) => call[0] === 'dd:container-unhealthy',
+    );
+    replayedListener![1](
+      new MessageEvent('dd:container-unhealthy', {
+        data: JSON.stringify({ containerName: 'api', health: 'unhealthy' }),
+      }),
+    );
+    expect(bus.emit).toHaveBeenLastCalledWith('container-unhealthy', {
+      containerName: 'api',
+      health: 'unhealthy',
+    });
+  });
+});
+
 describe('SSE event listener: dd:preferences-updated', () => {
   let originalEventSource: typeof EventSource;
   beforeEach(() => {

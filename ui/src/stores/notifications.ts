@@ -22,6 +22,8 @@ export const BELL_ACTIONS = [
 ];
 
 const ALWAYS_BELL_ACTIONS = ['notification-delivery-failed'];
+const BELL_ENTRY_LIMIT = 20;
+const BELL_BACKFILL_MAX_PAGES = 10;
 
 export function isBellRuleSupported(ruleId: string): boolean {
   return BELL_ACTIONS.includes(ruleId) && !ALWAYS_BELL_ACTIONS.includes(ruleId);
@@ -30,8 +32,10 @@ export function isBellRuleSupported(ruleId: string): boolean {
 function updateMeetsBellThreshold(
   semverDiff: AuditEntry['semverDiff'],
   threshold: NotificationBellThreshold,
+  updateKind: AuditEntry['updateKind'],
 ): boolean {
   if (threshold === 'all') return true;
+  if (updateKind === 'digest') return true;
   if (threshold === 'major') return semverDiff === 'major';
   if (threshold === 'minor') return semverDiff === 'major' || semverDiff === 'minor';
   return semverDiff === 'major' || semverDiff === 'minor' || semverDiff === 'patch';
@@ -46,6 +50,7 @@ function bellActionsForRules(rules: NotificationRule[]): string[] {
 
 const BELL_REFRESH_EVENTS: SseBusEvent[] = [
   'container-changed',
+  'container-unhealthy',
   'scan-completed',
   'sse:connected',
   'resync-required',
@@ -69,6 +74,7 @@ export const useNotificationStore = defineStore('notifications', () => {
 
   let sseDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   let unsubscribeEventStream: Array<() => void> = [];
+  let fetchSequence = 0;
 
   const visibleEntries = computed(() => {
     const dismissed = new Set(dismissedIds.value);
@@ -93,23 +99,57 @@ export const useNotificationStore = defineStore('notifications', () => {
   }
 
   async function fetchEntries(): Promise<void> {
+    const requestSequence = ++fetchSequence;
     loading.value = true;
     try {
       const rules = await getAllNotificationRules().catch(() => null);
       const actions = rules ? bellActionsForRules(rules) : BELL_ACTIONS;
-      const data = await getAuditLog({ limit: 20, actions });
       const updateAvailableRule = rules?.find((rule) => rule.id === 'update-available');
-      entries.value = (data.entries ?? []).filter(
-        (entry: AuditEntry) =>
-          entry.action !== 'update-available' ||
-          !updateAvailableRule ||
-          updateMeetsBellThreshold(entry.semverDiff, updateAvailableRule.bellThreshold),
-      );
+      const matchingEntries: AuditEntry[] = [];
+      let offset = 0;
+
+      for (
+        let page = 0;
+        page < BELL_BACKFILL_MAX_PAGES && matchingEntries.length < BELL_ENTRY_LIMIT;
+        page += 1
+      ) {
+        const data = await getAuditLog({
+          limit: BELL_ENTRY_LIMIT,
+          ...(offset > 0 ? { offset } : {}),
+          actions,
+        });
+        if (requestSequence !== fetchSequence) {
+          return;
+        }
+        const pageEntries: AuditEntry[] = data.entries ?? [];
+        matchingEntries.push(
+          ...pageEntries.filter(
+            (entry) =>
+              entry.action !== 'update-available' ||
+              !updateAvailableRule ||
+              updateMeetsBellThreshold(
+                entry.semverDiff,
+                updateAvailableRule.bellThreshold,
+                entry.updateKind,
+              ),
+          ),
+        );
+        if (data.hasMore !== true || pageEntries.length === 0) {
+          break;
+        }
+        offset += pageEntries.length;
+      }
+
+      entries.value = matchingEntries.slice(0, BELL_ENTRY_LIMIT);
       error.value = null;
     } catch (caught) {
-      error.value = normalizeFetchError(caught);
+      if (requestSequence === fetchSequence) {
+        error.value = normalizeFetchError(caught);
+      }
     } finally {
-      loading.value = false;
+      if (requestSequence === fetchSequence) {
+        loading.value = false;
+      }
     }
   }
 

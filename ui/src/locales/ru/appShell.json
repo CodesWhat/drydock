@@ -155,8 +155,8 @@
       "defaultLinkLabel": "Открыть руководство по миграции"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy trigger input detected",
-      "legacyConfigTitlePlural": "{total} legacy trigger inputs detected",
+      "legacyConfigTitleSingular": "Обнаружен {total} устаревший псевдоним конфигурации",
+      "legacyConfigTitlePlural": "Обнаружено {total} устаревших псевдонимов конфигурации",
       "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "Больше не показывать",
       "curlHealthcheckTitle": "Обнаружено переопределение healthcheck через curl",

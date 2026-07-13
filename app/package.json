@@ -24,6 +24,7 @@
   "dependencies": {
     "@aws-sdk/client-ecr": "3.1079.0",
     "@slack/web-api": "7.18.0",
+    "@smithy/node-http-handler": "4.9.3",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "axios": "1.18.1",

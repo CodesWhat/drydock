@@ -243,6 +243,7 @@ const containerSecurityVulnerabilitySchema = joi.object({
   severity: joi.string().valid('UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
   title: joi.string(),
   primaryUrl: joi.string(),
+  scanners: joi.array().items(joi.string().valid('trivy', 'grype')).unique(),
 });
 
 const containerSecuritySummarySchema = joi.object({
@@ -254,8 +255,9 @@ const containerSecuritySummarySchema = joi.object({
 });
 
 const containerSecurityScanSchema = joi.object({
-  scanner: joi.string().valid('trivy').required(),
+  scanner: joi.string().valid('trivy', 'grype', 'both').required(),
   image: joi.string().required(),
+  imageDigest: joi.string(),
   scannedAt: joi.string().isoDate().required(),
   status: joi.string().valid('passed', 'blocked', 'error').required(),
   blockSeverities: joi
@@ -265,6 +267,14 @@ const containerSecurityScanSchema = joi.object({
   blockingCount: joi.number().integer().min(0).required(),
   summary: containerSecuritySummarySchema.required(),
   vulnerabilities: joi.array().items(containerSecurityVulnerabilitySchema).required(),
+  relativeGate: joi.object({
+    decision: joi.string().valid('passed', 'blocked').required(),
+    reason: joi
+      .string()
+      .valid('no-worse-than-current', 'candidate-worse', 'current-scan-unavailable')
+      .required(),
+    currentSummary: containerSecuritySummarySchema,
+  }),
   error: joi.string(),
 });
 
@@ -278,15 +288,32 @@ const containerSecuritySignatureSchema = joi.object({
   error: joi.string(),
 });
 
-const containerSecuritySbomSchema = joi.object({
-  generator: joi.string().valid('trivy').required(),
-  image: joi.string().required(),
-  generatedAt: joi.string().isoDate().required(),
-  status: joi.string().valid('generated', 'error').required(),
-  formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
-  documents: joi.object().required(),
-  error: joi.string(),
-});
+const containerSecuritySbomSchema = joi
+  .object({
+    generator: joi.string().valid('trivy', 'syft').required(),
+    image: joi.string().required(),
+    subjectDigest: joi.string(),
+    generatedAt: joi.string().isoDate().required(),
+    status: joi.string().valid('generated', 'error').required(),
+    formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
+    documents: joi.object(),
+    documentRefs: joi.object().pattern(
+      joi.string().valid('spdx-json', 'cyclonedx-json'),
+      joi.object({
+        key: joi
+          .string()
+          .pattern(/^sbom\/[a-f0-9]{64}\/(?:spdx-json|cyclonedx-json)\.json$/)
+          .required(),
+        sha256: joi
+          .string()
+          .pattern(/^[a-f0-9]{64}$/)
+          .required(),
+        bytes: joi.number().integer().min(0).required(),
+      }),
+    ),
+    error: joi.string(),
+  })
+  .or('documents', 'documentRefs');
 
 // Container data schema
 const schema = joi.object({
@@ -329,13 +356,21 @@ const schema = joi.object({
       skipTags: joi.array().items(joi.string()),
       skipDigests: joi.array().items(joi.string()),
       maturityMode: joi.string().valid('all', 'mature'),
-      maturityMinAgeDays: joi.number().integer().min(1).max(365),
+      maturityMinAgeDays: joi
+        .number()
+        .integer()
+        .min(MATURITY_MIN_AGE_DAYS_MIN)
+        .max(MATURITY_MIN_AGE_DAYS_MAX),
     }),
     label: joi.object({
       skipTags: joi.array().items(joi.string()),
       skipDigests: joi.array().items(joi.string()),
       maturityMode: joi.string().valid('all', 'mature'),
-      maturityMinAgeDays: joi.number().integer().min(1).max(365),
+      maturityMinAgeDays: joi
+        .number()
+        .integer()
+        .min(MATURITY_MIN_AGE_DAYS_MIN)
+        .max(MATURITY_MIN_AGE_DAYS_MAX),
     }),
   }),
   updatePolicyOverrides: joi.object({
@@ -343,7 +378,11 @@ const schema = joi.object({
     skipDigests: joi.array().items(joi.string()),
     snoozeUntil: joi.string().isoDate(),
     maturityMode: joi.string().valid('all', 'mature'),
-    maturityMinAgeDays: joi.number().integer().min(1).max(365),
+    maturityMinAgeDays: joi
+      .number()
+      .integer()
+      .min(MATURITY_MIN_AGE_DAYS_MIN)
+      .max(MATURITY_MIN_AGE_DAYS_MAX),
   }),
   updatePolicySources: joi.object({
     skipTags: joi.string().valid('env', 'label', 'override'),

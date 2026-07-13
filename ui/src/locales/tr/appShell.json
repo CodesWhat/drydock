@@ -155,8 +155,8 @@
       "defaultLinkLabel": "Taşıma kılavuzunu görüntüle"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy trigger input detected",
-      "legacyConfigTitlePlural": "{total} legacy trigger inputs detected",
+      "legacyConfigTitleSingular": "{total} eski yapılandırma takma adı algılandı",
+      "legacyConfigTitlePlural": "{total} eski yapılandırma takma adı algılandı",
       "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "Bir daha gösterme",
       "curlHealthcheckTitle": "Özel kıvrılma durumu denetimini geçersiz kılma algılandı",

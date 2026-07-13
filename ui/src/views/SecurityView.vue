@@ -5,11 +5,10 @@ import { useRouter } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
 import AppStatusIndicator from '../components/AppStatusIndicator.vue';
+import ContainerLinkActions from '../components/containers/ContainerLinkActions.vue';
 import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
 import DataSortControl from '../components/DataSortControl.vue';
 import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
-import ProjectLink from '../components/containers/ProjectLink.vue';
-import ReleaseNotesLink from '../components/containers/ReleaseNotesLink.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
@@ -22,7 +21,7 @@ import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers } from '../services/container';
-import { getSecurityRuntime } from '../services/server';
+import { getSecurityRuntime, manageSecurityAsset } from '../services/server';
 import type { Container, UpdateEligibility } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
@@ -77,10 +76,7 @@ function runtimeToolTone(status: SecurityRuntimeStatus['scanner']['status']) {
 
 function scannerStatusLabel(scanner: SecurityRuntimeStatus['scanner']): string {
   if (scanner.status === 'disabled') return t('securityView.runtimeTools.scannerDisabled');
-  if (scanner.status === 'missing')
-    return t('securityView.runtimeTools.scannerMissing', { command: scanner.command });
-  if (scanner.server) return t('securityView.runtimeTools.scannerReadyServer');
-  return t('securityView.runtimeTools.scannerReady');
+  return scanner.message;
 }
 
 function signatureStatusLabel(signature: SecurityRuntimeStatus['signature']): string {
@@ -88,6 +84,18 @@ function signatureStatusLabel(signature: SecurityRuntimeStatus['signature']): st
   if (signature.status === 'missing')
     return t('securityView.runtimeTools.signatureMissing', { command: signature.command });
   return t('securityView.runtimeTools.signatureReady');
+}
+
+type SecurityAsset = SecurityRuntimeStatus['assets'][number];
+
+function assetLifecycleOperation(asset: SecurityAsset): 'pull' | 'warm' {
+  return asset.state === 'ready' ? 'warm' : 'pull';
+}
+
+function assetLifecycleLabelKey(asset: SecurityAsset): string {
+  return asset.state === 'ready'
+    ? 'securityView.runtimeTools.warmAsset'
+    : 'securityView.runtimeTools.pullAsset';
 }
 
 function severityTone(severity: string) {
@@ -120,6 +128,20 @@ async function fetchContainers() {
 const runtimeLoading = ref(true);
 const runtimeError = ref<string | null>(null);
 const runtimeStatus = ref<SecurityRuntimeStatus | null>(null);
+const assetOperation = ref<string | null>(null);
+
+async function runAssetOperation(provider: 'trivy' | 'grype' | 'syft', operation: 'pull' | 'warm') {
+  assetOperation.value = `${provider}:${operation}`;
+  runtimeError.value = null;
+  try {
+    await manageSecurityAsset(provider, operation);
+    await fetchSecurityRuntimeStatus();
+  } catch (caught: unknown) {
+    runtimeError.value = errorMessage(caught, t('securityView.runtimeTools.assetOperationFailed'));
+  } finally {
+    assetOperation.value = null;
+  }
+}
 
 const scannerReady = computed(() => {
   if (!runtimeStatus.value) {
@@ -627,11 +649,25 @@ onUnmounted(() => {
                 size="xs"
                 uppercase
                 v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
+              <template v-if="runtimeStatus.backend !== 'command'">
+                <AppIconButton
+                  v-for="asset in runtimeStatus.assets"
+                  :key="`compact-asset-${asset.provider}`"
+                  :icon="assetLifecycleOperation(asset) === 'warm' ? 'restart' : 'cloud-download'"
+                  size="sm"
+                  variant="muted"
+                  class="shrink-0"
+                  :tooltip="t(assetLifecycleLabelKey(asset), { provider: asset.provider })"
+                  :aria-label="t(assetLifecycleLabelKey(asset), { provider: asset.provider })"
+                  :loading="assetOperation === `${asset.provider}:${assetLifecycleOperation(asset)}`"
+                  :disabled="assetOperation !== null"
+                  @click="runAssetOperation(asset.provider, assetLifecycleOperation(asset))" />
+              </template>
             </div>
             <template v-else>
               <AppStatusIndicator
                 :tone="runtimeToolTone(runtimeStatus.scanner.status)"
-                :label="t('securityView.runtimeTools.trivy')"
+                :label="runtimeStatus.scanner.scanner || t('securityView.runtimeTools.scanner')"
                 size="xs"
                 v-tooltip.top="runtimeStatus.scanner.server ? t('securityView.runtimeTools.scannerTooltipServer', { message: scannerStatusLabel(runtimeStatus.scanner), server: runtimeStatus.scanner.server }) : t('securityView.runtimeTools.scannerTooltip', { message: scannerStatusLabel(runtimeStatus.scanner) })" />
               <AppStatusIndicator
@@ -644,6 +680,26 @@ onUnmounted(() => {
                 :label="t('securityView.runtimeTools.sbom')"
                 size="xs"
                 v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
+              <template v-if="runtimeStatus.backend !== 'command'">
+                <AppStatusIndicator
+                  v-for="provider in runtimeStatus.providers"
+                  :key="provider.provider"
+                  :tone="runtimeToolTone(provider.status)"
+                  :label="provider.provider"
+                  size="xs"
+                  v-tooltip.top="provider.message" />
+                <AppButton
+                  v-for="asset in runtimeStatus.assets"
+                  :key="`asset-${asset.provider}`"
+                  size="md"
+                  variant="muted"
+                  class="min-h-11"
+                  :loading="assetOperation === `${asset.provider}:${assetLifecycleOperation(asset)}`"
+                  :disabled="assetOperation !== null"
+                  @click="runAssetOperation(asset.provider, assetLifecycleOperation(asset))">
+                  {{ t(assetLifecycleLabelKey(asset), { provider: asset.provider }) }}
+                </AppButton>
+              </template>
             </template>
           </template>
         </template>
@@ -693,7 +749,7 @@ onUnmounted(() => {
                  @update:card-reflow-forced="cardReflowForced = $event"
                  @row-click="openDetail($event)">
         <template #cell-image="{ row }">
-          <div class="flex items-center gap-2 min-w-0">
+          <div class="flex flex-wrap items-center gap-2 min-w-0">
             <AppIcon :name="severityIcon(highestSeverity(row))" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: severityColor(highestSeverity(row)).text }"
                      v-tooltip.top="localizedSeverity(highestSeverity(row))" />
@@ -713,7 +769,7 @@ onUnmounted(() => {
                   v-tooltip.top="t('securityView.deltaTooltips.both', { fixed: row.delta.fixed, new: row.delta.new })">
               {{ t('securityView.delta.both', { fixed: row.delta.fixed, new: row.delta.new }) }}
             </AppBadge>
-            <template v-if="row.hasUpdate">
+            <div v-if="row.hasUpdate" class="flex items-center gap-1.5 shrink-0">
               <AppButton
                 v-if="managedUpdatesAllowed"
                 size="xs"
@@ -738,21 +794,24 @@ onUnmounted(() => {
                 @click.stop="navigateToContainerUpdate(row)">
                 {{ t('securityView.viewInContainers') }}
               </AppButton>
-            </template>
-            <ReleaseNotesLink
-              v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
-              :release-notes="row.releaseNotes"
-              :current-release-notes="row.currentReleaseNotes"
-              :release-link="row.releaseLink"
-              icon-only
-              icon-size="toolbar"
-              data-test="security-release-notes" />
-            <ProjectLink
-              v-if="row.sourceRepo"
-              :source-repo="row.sourceRepo"
-              icon-only
-              icon-size="toolbar"
-              data-test="security-project-link" />
+            </div>
+            <div
+              v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink || row.sourceRepo || row.registry || row.registryName || row.registryUrl"
+              class="basis-full flex justify-end shrink-0"
+              data-test="security-resource-actions">
+              <ContainerLinkActions
+                :source-repo="row.sourceRepo"
+                :release-notes="row.releaseNotes"
+                :current-release-notes="row.currentReleaseNotes"
+                :release-link="row.releaseLink"
+                :container-id="row.containerId"
+                :from-tag="row.fromTag"
+                :to-tag="row.toTag"
+                :registry="row.registry"
+                :registry-name="row.registryName"
+                :registry-url="row.registryUrl"
+                icon-size="sm" />
+            </div>
           </div>
         </template>
         <template #cell-critical="{ row }">
@@ -840,16 +899,36 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <!-- Footer: fixable state + action cluster (mirrors #cell-image's buttons/handlers) -->
-            <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
+            <div
+              v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink || row.sourceRepo || row.registry || row.registryName || row.registryUrl"
+              class="px-4 pt-2.5 flex flex-wrap w-full justify-end mt-auto"
+              :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+              <div class="shrink-0" data-test="security-card-resource-actions">
+                <ContainerLinkActions
+                  :source-repo="row.sourceRepo"
+                  :release-notes="row.releaseNotes"
+                  :current-release-notes="row.currentReleaseNotes"
+                  :release-link="row.releaseLink"
+                  :container-id="row.containerId"
+                  :from-tag="row.fromTag"
+                  :to-tag="row.toTag"
+                  :registry="row.registry"
+                  :registry-name="row.registryName"
+                  :registry-url="row.registryUrl"
+                  icon-size="sm" />
+              </div>
+            </div>
+
+            <!-- Footer: fixable state + lifecycle actions (resources use their own row above). -->
+            <div class="px-4 py-2.5 flex items-center justify-between"
                  :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
               <span v-if="row.fixable > 0" class="text-2xs-plus font-semibold"
                     :style="{ color: fixableColor(row.fixable, row.total) }">
                 {{ fixablePercent(row.fixable, row.total) }}% {{ t('securityView.columns.fixable') }}
               </span>
               <span v-else class="text-2xs-plus font-medium dd-text-muted">{{ t('securityView.columns.fixable') }}</span>
-              <div class="flex items-center gap-1.5 shrink-0">
-                <template v-if="row.hasUpdate">
+              <div class="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                <div v-if="row.hasUpdate" class="flex items-center gap-1.5 shrink-0">
                   <AppButton
                     v-if="managedUpdatesAllowed"
                     size="xs"
@@ -874,21 +953,7 @@ onUnmounted(() => {
                     @click.stop="navigateToContainerUpdate(row)">
                     {{ t('securityView.viewInContainers') }}
                   </AppButton>
-                </template>
-                <ReleaseNotesLink
-                  v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
-                  :release-notes="row.releaseNotes"
-                  :current-release-notes="row.currentReleaseNotes"
-                  :release-link="row.releaseLink"
-                  icon-only
-                  icon-size="toolbar"
-                  data-test="security-card-release-notes" />
-                <ProjectLink
-                  v-if="row.sourceRepo"
-                  :source-repo="row.sourceRepo"
-                  icon-only
-                  icon-size="toolbar"
-                  data-test="security-card-project-link" />
+                </div>
               </div>
             </div>
           </div>

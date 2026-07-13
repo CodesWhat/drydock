@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "Переглянути проект"
     },
+    "registryLink": { "viewRegistry": "Відкрити реєстр" },
     "releaseNotesLink": {
       "releaseNotes": "Примітки до випуску",
       "viewFullNotes": "Переглянути повні примітки",
@@ -549,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Закріплено — для інформації доступна новіша версія."
+      }
     }
   }
 }

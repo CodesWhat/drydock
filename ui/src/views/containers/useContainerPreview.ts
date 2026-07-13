@@ -1,7 +1,11 @@
 import { computed, type Ref, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
-import type { ContainerComposePreview, ContainerPreviewPayload } from '../../services/preview';
+import type {
+  ContainerComposePreview,
+  ContainerPreviewPayload,
+  PreviewErrorAction,
+} from '../../services/preview';
 import { previewContainer } from '../../services/preview';
 import { errorMessage } from '../../utils/error';
 
@@ -62,6 +66,7 @@ async function runContainerPreviewState(args: {
   containerId: string | undefined;
   previewLoading: Ref<boolean>;
   previewError: Ref<string | null>;
+  previewErrorAction: Ref<PreviewErrorAction | null>;
   detailPreview: Ref<ContainerPreviewPayload | null>;
   t: (key: string) => string;
 }) {
@@ -70,12 +75,26 @@ async function runContainerPreviewState(args: {
   }
   args.previewLoading.value = true;
   args.previewError.value = null;
+  args.previewErrorAction.value = null;
   try {
     args.detailPreview.value = await previewContainer(args.containerId);
   } catch (e: unknown) {
     args.detailPreview.value = null;
     const msg = errorMessage(e, args.t('containerComponents.preview.toasts.failedDetail'));
     args.previewError.value = msg;
+    if (e && typeof e === 'object' && 'action' in e) {
+      const action = (e as { action?: unknown }).action;
+      if (
+        action &&
+        typeof action === 'object' &&
+        'label' in action &&
+        typeof action.label === 'string' &&
+        'href' in action &&
+        (action.href === '/registries' || action.href === '/triggers')
+      ) {
+        args.previewErrorAction.value = { label: action.label, href: action.href };
+      }
+    }
     const toast = useToast();
     toast.error(args.t('containerComponents.preview.toasts.failedTitle'), msg);
   } finally {
@@ -91,10 +110,12 @@ export function useContainerPreview(input: UseContainerPreviewInput) {
   );
   const previewLoading = ref(false);
   const previewError = ref<string | null>(null);
+  const previewErrorAction = ref<PreviewErrorAction | null>(null);
 
   function resetPreview() {
     detailPreview.value = null;
     previewError.value = null;
+    previewErrorAction.value = null;
   }
 
   async function runContainerPreview() {
@@ -102,6 +123,7 @@ export function useContainerPreview(input: UseContainerPreviewInput) {
       containerId: input.selectedContainerId.value,
       previewLoading,
       previewError,
+      previewErrorAction,
       detailPreview,
       t,
     });
@@ -111,6 +133,7 @@ export function useContainerPreview(input: UseContainerPreviewInput) {
     detailComposePreview,
     detailPreview,
     previewError,
+    previewErrorAction,
     previewLoading,
     resetPreview,
     runContainerPreview,

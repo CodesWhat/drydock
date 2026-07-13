@@ -1495,6 +1495,38 @@ test('getContainers should apply pagination options', async () => {
   expect(results[0].name).toEqual('container2');
 });
 
+test('getContainers should apply a caller sort before pagination and cloning', async () => {
+  const containerExample = createContainerFixture();
+  const containers = [
+    { data: { ...containerExample, name: 'container3' } },
+    { data: { ...containerExample, name: 'container2' } },
+    { data: { ...containerExample, name: 'container1' } },
+  ];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const results = container.getContainers(
+    {},
+    {
+      limit: 1,
+      offset: 0,
+      sort: (items) => [...items].reverse(),
+    },
+  );
+
+  expect(results).toHaveLength(1);
+  expect(results[0].name).toEqual('container3');
+});
+
 test('getContainers should support offset-only pagination when limit is zero', async () => {
   const containerExample = createContainerFixture();
   const containers = [
@@ -3541,12 +3573,19 @@ describe('container unhealthy transition emission', () => {
   test('healthy to unhealthy emits even when health is the only changed field', () => {
     const existing = healthFixture({ health: 'healthy', details: { startedAt: '2026-01-01' } });
     initialize(existing);
-    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    const emittedHealthTransition = vi.spyOn(event, 'emitContainerHealthTransition');
+    const emittedContainerUpdate = vi.spyOn(event, 'emitContainerUpdated');
     container.updateContainer({ ...existing, health: 'unhealthy' });
-    expect(emitted).toHaveBeenCalledWith(
+    expect(emittedHealthTransition).toHaveBeenCalledWith(
       expect.objectContaining({
         containerName: existing.name,
         previousHealth: 'healthy',
+        health: 'unhealthy',
+      }),
+    );
+    expect(emittedContainerUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: existing.id,
         health: 'unhealthy',
       }),
     );
@@ -4502,6 +4541,60 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     );
 
     expect(inserted.updatePolicyOverrides).toEqual({ maturityMode: 'all', skipTags: ['ui-tag'] });
+    expect(inserted.updatePolicy).toEqual({
+      maturityMode: 'all',
+      maturityMinAgeDays: 14,
+      skipTags: ['ui-tag'],
+    });
+    expect(inserted.updatePolicyDeclarative?.label).toEqual({
+      maturityMinAgeDays: 14,
+      skipTags: ['new-label'],
+    });
+  });
+
+  test('restores retained overrides when a replacement watcher stamps an empty override layer', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-layered-agent-old',
+      agent: 'remote1',
+      updatePolicy: { maturityMode: 'all', maturityMinAgeDays: 7, skipTags: ['ui-tag'] },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: { skipTags: ['old-label'] },
+      },
+      updatePolicyOverrides: { maturityMode: 'all', skipTags: ['ui-tag'] },
+      updatePolicySources: {
+        maturityMode: 'override',
+        maturityMinAgeDays: 'env',
+        skipTags: 'override',
+      },
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-layered-agent-old', { replacementExpected: true });
+    const inserted = container.insertContainer(
+      makePolicyFixture({
+        id: 'policy-layered-agent-new',
+        agent: 'remote1',
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 14, skipTags: ['new-label'] },
+        updatePolicyDeclarative: {
+          env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          label: { maturityMinAgeDays: 14, skipTags: ['new-label'] },
+        },
+        // applyDeclarativeUpdatePolicy() materializes this empty object on fresh watcher data.
+        updatePolicyOverrides: {},
+        updatePolicySources: {
+          maturityMode: 'env',
+          maturityMinAgeDays: 'label',
+          skipTags: 'label',
+        },
+      }),
+    );
+
+    expect(inserted.id).toBe('policy-layered-agent-new');
+    expect(inserted.updatePolicyOverrides).toEqual({
+      maturityMode: 'all',
+      skipTags: ['ui-tag'],
+    });
     expect(inserted.updatePolicy).toEqual({
       maturityMode: 'all',
       maturityMinAgeDays: 14,

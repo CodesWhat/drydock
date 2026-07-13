@@ -1,5 +1,3 @@
-import axios from 'axios';
-import { withAuthorizationHeader } from '../../../security/auth.js';
 import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
 
 interface GarRegistryConfiguration extends BaseRegistryConfiguration {
@@ -76,22 +74,13 @@ class Gar extends BaseRegistry<GarRegistryConfiguration> {
     tokenUrl.searchParams.set('scope', `repository:${image.name}:pull`);
     tokenUrl.searchParams.set('service', registryHostname);
 
-    const request = {
-      method: 'GET',
-      url: tokenUrl.toString(),
-      maxRedirects: 0,
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Basic ${this.getServiceAccountCredentials()}`,
-      },
-    };
-
-    const response = await axios(this.withTlsRequestOptions(request));
-    return withAuthorizationHeader(
-      this.withTlsRequestOptions(requestOptions),
-      'Bearer',
-      this.extractToken(response),
+    return this.authenticateBearerFromAuthUrl(
+      requestOptions,
+      tokenUrl.toString(),
+      this.getServiceAccountCredentials(),
+      (response) => this.extractToken(response),
       `Unable to authenticate registry ${this.getId()}: GAR token endpoint response does not contain token`,
+      `https://${registryHostname}`,
     );
   }
 

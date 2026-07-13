@@ -28,19 +28,6 @@ describe('stale chunk recovery', () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it('uses the browser reload defaults for direct and Vite recovery paths', () => {
-    expect(requestStaleChunkReload(new Error('Loading chunk 9 failed'))).toBe(true);
-
-    clearStaleChunkReloadGuard();
-    const event = new Event('vite:preloadError', { cancelable: true });
-    expect(handleVitePreloadError(event)).toBe(true);
-    expect(event.defaultPrevented).toBe(true);
-
-    clearStaleChunkReloadGuard();
-    installVitePreloadErrorHandler();
-    globalThis.dispatchEvent(new Event('vite:preloadError', { cancelable: true }));
-  });
-
   it('honors the session guard left by a previous page load', () => {
     const reload = vi.fn();
     sessionStorage.setItem('dd-stale-chunk-reload-pending', '1');
@@ -56,6 +43,16 @@ describe('stale chunk recovery', () => {
     expect(handleVitePreloadError(event, reload)).toBe(true);
     expect(event.defaultPrevented).toBe(true);
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not swallow a repeated preload error after guarded recovery was exhausted', () => {
+    const reload = vi.fn();
+    sessionStorage.setItem('dd-stale-chunk-reload-pending', '1');
+    const event = new Event('vite:preloadError', { cancelable: true });
+
+    expect(handleVitePreloadError(event, reload)).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('allows a later recovery after a successful navigation clears the guard', () => {

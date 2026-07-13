@@ -81,6 +81,40 @@ function triggerResize(height: number) {
   );
 }
 
+const containerLinkActionsStub = defineComponent({
+  inheritAttrs: false,
+  props: [
+    'sourceRepo',
+    'releaseNotes',
+    'currentReleaseNotes',
+    'releaseLink',
+    'containerId',
+    'fromTag',
+    'toTag',
+    'registry',
+    'registryName',
+    'registryUrl',
+    'iconSize',
+  ],
+  template: `
+    <div
+      data-test="container-link-actions-stub"
+      :data-source-repo="sourceRepo"
+      :data-container-id="containerId"
+      :data-from-tag="fromTag"
+      :data-to-tag="toTag"
+      :data-registry="registry"
+      :data-registry-name="registryName"
+      :data-registry-url="registryUrl"
+      :data-icon-size="iconSize"
+      v-bind="$attrs">
+      <button type="button" data-link-action="source" @click.stop>Source</button>
+      <button type="button" data-link-action="release" @click.stop>Release notes</button>
+      <button type="button" data-link-action="registry" @click.stop>Registry</button>
+    </div>
+  `,
+});
+
 function mountWidget(
   overrides: Partial<InstanceType<typeof DashboardRecentUpdatesWidget>['$props']> = {},
 ) {
@@ -113,11 +147,11 @@ function mountWidget(
                 class="dashboard-row-stub"
                 :class="typeof rowClass === 'function' ? rowClass(row) : ''"
                 @click="$emit('row-click', row)">
-                <slot name="cell-icon" :row="row" />
-                <slot name="cell-container" :row="row" />
-                <slot name="cell-version" :row="row" />
-                <slot name="cell-type" :row="row" />
-                <slot name="cell-actions" :row="row" />
+                <div data-slot="icon"><slot name="cell-icon" :row="row" /></div>
+                <div data-slot="container"><slot name="cell-container" :row="row" /></div>
+                <div data-slot="version"><slot name="cell-version" :row="row" /></div>
+                <div data-slot="type"><slot name="cell-type" :row="row" /></div>
+                <div data-slot="actions"><slot name="cell-actions" :row="row" /></div>
               </div>
             </div>
           `,
@@ -130,6 +164,7 @@ function mountWidget(
           props: ['sourceRepo', 'iconOnly'],
           template: '<span data-test="project-link-stub" />',
         }),
+        ContainerLinkActions: containerLinkActionsStub,
       },
     },
   });
@@ -345,19 +380,19 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(emitted?.[0]?.[0]).toEqual(row);
   });
 
-  it('renders ReleaseNotesLink when row has a releaseLink and no ReleaseNotesLink when it does not', () => {
+  it('renders a resource-link cluster when a row has a releaseLink and omits it when it does not', () => {
     const withLink = mountWidget({
       recentUpdates: [makeRecentUpdate({ releaseLink: 'https://example.com/releases' })],
     });
-    expect(withLink.find('[data-test="release-notes-link-stub"]').exists()).toBe(true);
+    expect(withLink.find('[data-test="container-link-actions-stub"]').exists()).toBe(true);
 
     const withoutLink = mountWidget({
       recentUpdates: [makeRecentUpdate()],
     });
-    expect(withoutLink.find('[data-test="release-notes-link-stub"]').exists()).toBe(false);
+    expect(withoutLink.find('[data-test="container-link-actions-stub"]').exists()).toBe(false);
   });
 
-  it('renders ReleaseNotesLink when row has structured releaseNotes', () => {
+  it('renders a resource-link cluster when a row has structured releaseNotes', () => {
     const notes = {
       title: 'v2.0.0',
       body: 'changes',
@@ -368,22 +403,22 @@ describe('DashboardRecentUpdatesWidget', () => {
     const wrapper = mountWidget({
       recentUpdates: [makeRecentUpdate({ releaseNotes: notes })],
     });
-    expect(wrapper.find('[data-test="release-notes-link-stub"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="container-link-actions-stub"]').exists()).toBe(true);
   });
 
-  it('renders ProjectLink when row has a sourceRepo and omits it when sourceRepo is absent', () => {
+  it('renders a resource-link cluster when a row has a sourceRepo and omits it when resources are absent', () => {
     const withRepo = mountWidget({
       recentUpdates: [makeRecentUpdate({ sourceRepo: 'github.com/example/app' })],
     });
-    expect(withRepo.find('[data-test="project-link-stub"]').exists()).toBe(true);
+    expect(withRepo.find('[data-test="container-link-actions-stub"]').exists()).toBe(true);
 
     const withoutRepo = mountWidget({
       recentUpdates: [makeRecentUpdate()],
     });
-    expect(withoutRepo.find('[data-test="project-link-stub"]').exists()).toBe(false);
+    expect(withoutRepo.find('[data-test="container-link-actions-stub"]').exists()).toBe(false);
   });
 
-  it('renders ReleaseNotesLink when row has only currentReleaseNotes (no releaseNotes or releaseLink)', () => {
+  it('renders a resource-link cluster when a row has only currentReleaseNotes', () => {
     const currentNotes = {
       title: 'v1.0.0',
       body: 'Current release notes',
@@ -394,7 +429,44 @@ describe('DashboardRecentUpdatesWidget', () => {
     const wrapper = mountWidget({
       recentUpdates: [makeRecentUpdate({ currentReleaseNotes: currentNotes })],
     });
-    expect(wrapper.find('[data-test="release-notes-link-stub"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="container-link-actions-stub"]').exists()).toBe(true);
+  });
+
+  it('forwards resource metadata to one 44px cluster in the actions cell', async () => {
+    const wrapper = mountWidget({
+      recentUpdates: [
+        makeRecentUpdate({
+          sourceRepo: 'github.com/example/app',
+          releaseLink: 'https://github.com/example/app/releases',
+          registry: 'ghcr',
+          registryName: 'GitHub Container Registry',
+          registryUrl: 'https://ghcr.io/v2',
+        }),
+      ],
+    });
+
+    const cluster = wrapper.get('[data-test="container-link-actions-stub"]');
+    expect(wrapper.findAll('[data-test="container-link-actions-stub"]')).toHaveLength(1);
+    expect(cluster.attributes('data-source-repo')).toBe('github.com/example/app');
+    expect(cluster.attributes('data-container-id')).toBe('c1');
+    expect(cluster.attributes('data-from-tag')).toBe('1.0.0');
+    expect(cluster.attributes('data-to-tag')).toBe('2.0.0');
+    expect(cluster.attributes('data-registry')).toBe('ghcr');
+    expect(cluster.attributes('data-registry-name')).toBe('GitHub Container Registry');
+    expect(cluster.attributes('data-registry-url')).toBe('https://ghcr.io/v2');
+    expect(cluster.attributes('data-icon-size')).toBe('sm');
+    expect(
+      wrapper.find('[data-slot="actions"] [data-test="container-link-actions-stub"]').exists(),
+    ).toBe(true);
+    expect(
+      wrapper.find('[data-slot="container"] [data-test="container-link-actions-stub"]').exists(),
+    ).toBe(false);
+
+    const actionLayout = wrapper.get('[data-slot="actions"] > div');
+    expect(actionLayout.classes()).toContain('flex-wrap');
+
+    await cluster.get('[data-link-action="registry"]').trigger('click');
+    expect(wrapper.emitted('openContainer')).toBeUndefined();
   });
 
   it('renders persisted backend queue rows with phase-only labels', () => {

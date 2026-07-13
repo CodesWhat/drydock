@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { getContainerIntermediateReleaseNotes } from '../../services/container';
 import type { ContainerReleaseNotes } from '../../types/container';
@@ -30,6 +30,9 @@ const currentExpanded = ref(false);
 const updateExpanded = ref(false);
 const iconPopoverOpen = ref(false);
 const iconPopoverStyle = ref<Record<string, string>>({});
+const iconPopoverElement = ref<HTMLElement | null>(null);
+let iconPopoverTrigger: HTMLElement | null = null;
+let intermediateGeneration = 0;
 
 const intermediateNotes = ref<ContainerReleaseNotes[]>([]);
 const intermediateHiddenCount = ref(0);
@@ -84,6 +87,15 @@ const canFetchIntermediate = computed(() =>
 );
 
 const hasIntermediateNotes = computed(() => intermediateNotes.value.length > 0);
+const intermediateRequestIdentity = computed(() =>
+  JSON.stringify([
+    props.containerId,
+    props.fromTag,
+    props.toTag,
+    props.releaseNotes?.url,
+    props.currentReleaseNotes?.url,
+  ]),
+);
 
 function truncateBody(body: string, maxLength: number = 200): string {
   if (body.length <= maxLength) return body;
@@ -104,43 +116,94 @@ function buildIconPopoverStyle(rect: DOMRect): Record<string, string> {
     POPOVER_ESTIMATED_HEIGHT_PX + Math.min(intermediateNotes.value.length * 44, 132),
     viewportHeight - POPOVER_MARGIN_PX * 2,
   );
-  const top =
-    spaceBelow < estimatedHeight && spaceAbove > spaceBelow
-      ? Math.max(POPOVER_MARGIN_PX, rect.top - estimatedHeight - POPOVER_GAP_PX)
-      : Math.min(rect.bottom + POPOVER_GAP_PX, viewportHeight - POPOVER_MARGIN_PX);
+  const placeAbove = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
+  const vertical = placeAbove
+    ? { bottom: `${viewportHeight - rect.top + POPOVER_GAP_PX}px` }
+    : {
+        top: `${Math.min(rect.bottom + POPOVER_GAP_PX, viewportHeight - POPOVER_MARGIN_PX)}px`,
+      };
+  const maxHeight = placeAbove
+    ? Math.max(0, rect.top - POPOVER_GAP_PX - POPOVER_MARGIN_PX)
+    : Math.max(
+        0,
+        viewportHeight -
+          Math.min(rect.bottom + POPOVER_GAP_PX, viewportHeight - POPOVER_MARGIN_PX) -
+          POPOVER_MARGIN_PX,
+      );
 
   return {
     position: 'fixed',
-    top: `${top}px`,
+    ...vertical,
     left: `${left}px`,
     width: `${width}px`,
-    maxHeight: `calc(100vh - ${POPOVER_MARGIN_PX * 2}px)`,
+    maxHeight: `${maxHeight}px`,
   };
 }
 
 function removeIconPopoverListeners() {
-  globalThis.removeEventListener('click', closeIconPopover);
+  globalThis.removeEventListener('click', handleIconPopoverOutsideClick, true);
   globalThis.removeEventListener('keydown', handleIconPopoverKeydown);
-  globalThis.removeEventListener('scroll', closeIconPopover, true);
+  globalThis.removeEventListener('scroll', handleIconPopoverScroll, true);
 }
 
-function closeIconPopover() {
+function closeIconPopover(restoreTriggerFocus = false) {
   // c8 ignore next -- defensive guard; listener is removed after first invocation so re-entry is unreachable
   if (!iconPopoverOpen.value) {
     return;
   }
   iconPopoverOpen.value = false;
   removeIconPopoverListeners();
+  if (restoreTriggerFocus) {
+    iconPopoverTrigger?.focus();
+  }
+}
+
+function handleIconPopoverOutsideClick(event: Event) {
+  if (
+    event.target instanceof Node &&
+    (iconPopoverElement.value?.contains(event.target) || iconPopoverTrigger?.contains(event.target))
+  ) {
+    return;
+  }
+  closeIconPopover();
+}
+
+function handleIconPopoverScroll(event: Event) {
+  if (event.target instanceof Node && iconPopoverElement.value?.contains(event.target)) {
+    return;
+  }
+  closeIconPopover();
 }
 
 function handleIconPopoverKeydown(event: Event) {
-  if (event instanceof KeyboardEvent && event.key === 'Escape') {
-    closeIconPopover();
+  if (!(event instanceof KeyboardEvent)) return;
+  if (event.key === 'Escape') {
+    closeIconPopover(true);
+    return;
+  }
+  if (event.key !== 'Tab') return;
+
+  const focusable = Array.from(
+    iconPopoverElement.value?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) ?? [],
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+  if (event.shiftKey && (active === first || !iconPopoverElement.value?.contains(active))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (active === last || !iconPopoverElement.value?.contains(active))) {
+    event.preventDefault();
+    first.focus();
   }
 }
 
 async function ensureIntermediateNotesLoaded() {
   if (!canFetchIntermediate.value || intermediateLoaded.value || intermediateLoading.value) return;
+  const generation = intermediateGeneration;
   intermediateLoading.value = true;
   try {
     const result = await getContainerIntermediateReleaseNotes(
@@ -148,6 +211,7 @@ async function ensureIntermediateNotesLoaded() {
       props.fromTag!,
       props.toTag!,
     );
+    if (generation !== intermediateGeneration) return;
     if (result) {
       intermediateNotes.value = result.releaseNotes;
       intermediateHiddenCount.value = result.hiddenCount;
@@ -156,8 +220,22 @@ async function ensureIntermediateNotesLoaded() {
   } catch {
     // best-effort: leave the section empty and let the two-panel view stand
   } finally {
-    intermediateLoading.value = false;
+    if (generation === intermediateGeneration) {
+      intermediateLoading.value = false;
+    }
   }
+}
+
+function resetIntermediateNotes() {
+  intermediateGeneration += 1;
+  intermediateNotes.value = [];
+  intermediateHiddenCount.value = 0;
+  intermediateLoading.value = false;
+  intermediateLoaded.value = false;
+  intermediateExpanded.value = new Set();
+  currentExpanded.value = false;
+  updateExpanded.value = false;
+  closeIconPopover();
 }
 
 function openIconPopover(event: MouseEvent) {
@@ -166,12 +244,18 @@ function openIconPopover(event: MouseEvent) {
   if (!trigger) {
     return;
   }
+  iconPopoverTrigger = trigger;
   iconPopoverStyle.value = buildIconPopoverStyle(trigger.getBoundingClientRect());
   iconPopoverOpen.value = true;
-  globalThis.addEventListener('click', closeIconPopover);
+  globalThis.addEventListener('click', handleIconPopoverOutsideClick, true);
   globalThis.addEventListener('keydown', handleIconPopoverKeydown);
-  globalThis.addEventListener('scroll', closeIconPopover, true);
+  globalThis.addEventListener('scroll', handleIconPopoverScroll, true);
   void ensureIntermediateNotesLoaded();
+  void nextTick(() => {
+    iconPopoverElement.value
+      ?.querySelector<HTMLElement>('button:not([disabled]), a[href]')
+      ?.focus();
+  });
 }
 
 function toggleIconPopover(event: MouseEvent) {
@@ -196,6 +280,11 @@ onMounted(() => {
   if (!props.iconOnly) ensureIntermediateNotesLoaded();
 });
 
+watch(intermediateRequestIdentity, () => {
+  resetIntermediateNotes();
+  if (!props.iconOnly) void ensureIntermediateNotesLoaded();
+});
+
 onBeforeUnmount(removeIconPopoverListeners);
 </script>
 
@@ -217,7 +306,8 @@ onBeforeUnmount(removeIconPopoverListeners);
       <Transition name="menu-fade">
         <div
           v-if="iconPopoverOpen"
-          class="dd-rounded shadow-lg overflow-y-auto text-left"
+          ref="iconPopoverElement"
+          class="dd-rounded shadow-lg overflow-y-auto overscroll-contain text-left"
           :style="{
             ...iconPopoverStyle,
             zIndex: 'var(--z-popover)',
@@ -239,11 +329,11 @@ onBeforeUnmount(removeIconPopoverListeners);
             </span>
             <AppIconButton
               icon="xmark"
-              size="xs"
+              size="sm"
               variant="muted"
               :tooltip="t('common.close')"
               :aria-label="t('common.close')"
-              @click.stop="closeIconPopover"
+              @click.stop="closeIconPopover(true)"
             />
           </div>
           <div class="p-2.5 space-y-2">
@@ -252,7 +342,7 @@ onBeforeUnmount(removeIconPopoverListeners);
                 size="compact"
                 variant="plain"
                 weight="medium"
-                class="w-full min-w-0 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
+                class="w-full min-w-0 min-h-11 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
                 @click.stop="currentExpanded = !currentExpanded"
               >
                 <span class="min-w-0 inline-flex items-center gap-1.5">
@@ -278,7 +368,7 @@ onBeforeUnmount(removeIconPopoverListeners);
                   :href="props.currentReleaseNotes.url"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-flex items-center gap-1 text-2xs underline hover:no-underline dd-text-info"
+                  class="inline-flex min-h-11 items-center gap-1 text-2xs underline hover:no-underline dd-text-info"
                 >
                   {{ t('containerComponents.releaseNotesLink.viewFullNotes') }}
                   <AppIcon name="external-link" :size="10" />
@@ -290,7 +380,7 @@ onBeforeUnmount(removeIconPopoverListeners);
                 size="compact"
                 variant="plain"
                 weight="medium"
-                class="w-full min-w-0 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
+                class="w-full min-w-0 min-h-11 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
                 @click.stop="updateExpanded = !updateExpanded"
               >
                 <span class="min-w-0 inline-flex items-center gap-1.5">
@@ -316,7 +406,7 @@ onBeforeUnmount(removeIconPopoverListeners);
                   :href="props.releaseNotes.url"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-flex items-center gap-1 text-2xs underline hover:no-underline dd-text-info"
+                  class="inline-flex min-h-11 items-center gap-1 text-2xs underline hover:no-underline dd-text-info"
                 >
                   {{ t('containerComponents.releaseNotesLink.viewFullNotes') }}
                   <AppIcon name="external-link" :size="10" />
@@ -347,7 +437,7 @@ onBeforeUnmount(removeIconPopoverListeners);
                   size="compact"
                   variant="plain"
                   weight="medium"
-                  class="w-full min-w-0 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
+                  class="w-full min-w-0 min-h-11 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
                   @click.stop="toggleIntermediate(idx)"
                 >
                   <span class="min-w-0 inline-flex items-center gap-1.5">
@@ -373,7 +463,7 @@ onBeforeUnmount(removeIconPopoverListeners);
                     :href="note.url"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="inline-flex items-center gap-1 text-2xs underline hover:no-underline dd-text-info"
+                    class="inline-flex min-h-11 items-center gap-1 text-2xs underline hover:no-underline dd-text-info"
                   >
                     {{ t('containerComponents.releaseNotesLink.viewFullNotes') }}
                     <AppIcon name="external-link" :size="10" />
@@ -416,7 +506,8 @@ onBeforeUnmount(removeIconPopoverListeners);
       <Transition name="menu-fade">
         <div
           v-if="iconPopoverOpen"
-          class="dd-rounded shadow-lg overflow-y-auto text-left"
+          ref="iconPopoverElement"
+          class="dd-rounded shadow-lg overflow-y-auto overscroll-contain text-left"
           :style="{
             ...iconPopoverStyle,
             zIndex: 'var(--z-popover)',
@@ -438,11 +529,11 @@ onBeforeUnmount(removeIconPopoverListeners);
             </span>
             <AppIconButton
               icon="xmark"
-              size="xs"
+              size="sm"
               variant="muted"
               :tooltip="t('common.close')"
               :aria-label="t('common.close')"
-              @click.stop="closeIconPopover"
+              @click.stop="closeIconPopover(true)"
             />
           </div>
           <div class="p-2.5">
@@ -450,7 +541,7 @@ onBeforeUnmount(removeIconPopoverListeners);
               :href="props.releaseLink"
               target="_blank"
               rel="noopener noreferrer"
-              class="w-full min-w-0 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
+              class="w-full min-w-0 min-h-11 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
               data-test="release-link-row"
               @click="closeIconPopover"
             >

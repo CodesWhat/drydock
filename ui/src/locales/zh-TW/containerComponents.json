@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "檢視專案"
     },
+    "registryLink": { "viewRegistry": "查看映像檔倉庫" },
     "releaseNotesLink": {
       "releaseNotes": "發行說明",
       "viewFullNotes": "檢視完整說明",
@@ -549,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "已固定 — 有較新版本可供參考。"
+      }
     }
   }
 }

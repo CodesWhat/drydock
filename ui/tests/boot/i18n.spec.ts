@@ -314,6 +314,37 @@ describe('buildMessages', () => {
       }
     }
   });
+
+  it('keeps legacy-trigger banner titles localized in every non-English locale', () => {
+    const messages = buildMessages();
+    const titleKeys = ['legacyConfigTitleSingular', 'legacyConfigTitlePlural'];
+
+    for (const locale of SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en')) {
+      for (const key of titleKeys) {
+        const path = `appShell.banners.${key}`;
+        const localizedTitle = getMessagePath(messages[locale], path);
+        const englishTitle = getMessagePath(messages.en, path);
+
+        expect(localizedTitle, `${locale} missing ${path}`).toBeTypeOf('string');
+        expect(localizedTitle, `${locale} should localize ${path}`).not.toBe(englishTitle);
+      }
+    }
+  });
+
+  it('localizes the pinned update-status summary in every supported locale', () => {
+    const messages = buildMessages();
+    const path = 'containerComponents.updateStatus.summary.pinned';
+    const englishSummary = getMessagePath(messages.en, path);
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const localizedSummary = getMessagePath(messages[locale], path);
+      expect(localizedSummary, `${locale} missing ${path}`).toBeTypeOf('string');
+      expect(localizedSummary, `${locale} ${path} should not be empty`).not.toBe('');
+      if (locale !== 'en') {
+        expect(localizedSummary, `${locale} should localize ${path}`).not.toBe(englishSummary);
+      }
+    }
+  });
 });
 
 describe('setI18nLocale', () => {

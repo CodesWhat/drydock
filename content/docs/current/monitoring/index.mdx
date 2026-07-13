@@ -294,6 +294,7 @@ Operational notes:
 
 Use the audit API (`/api/v1/audit`) and Audit UI view to track runtime events alongside metrics. Current event coverage includes:
 
+- `update-available` on a new update transition or changed target. Repeated identical watcher reports are deduplicated for one hour by default; configure the window with `DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS`.
 - `security-alert` when security scans detect high/critical issues.
 - `agent-disconnect` when a connected agent transitions to disconnected state.
 

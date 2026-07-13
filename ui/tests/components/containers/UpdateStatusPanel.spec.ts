@@ -53,6 +53,30 @@ describe('UpdateStatusPanel', () => {
     expect(wrapper.emitted('update')).toHaveLength(1);
   });
 
+  it('renders an informational pinned state without an update CTA (#498)', () => {
+    const wrapper = mount(UpdateStatusPanel, {
+      props: {
+        container: {
+          id: 'container-1',
+          name: 'immich-machine-learning',
+          newTag: null,
+          updateInsight: { tag: 'v3.0.2-openvino', kind: 'major' as const },
+          updateEligibility: eligibility(),
+        },
+        mode: 'manual',
+      },
+      global: { stubs: { AppIcon: { template: '<span />' } } },
+    });
+
+    expect(wrapper.get('[data-test="update-status-panel"]').attributes('data-state')).toBe(
+      'pinned',
+    );
+    expect(wrapper.get('[data-test="update-status-summary"]').text()).toBe(
+      'Pinned — a newer version is available for information.',
+    );
+    expect(wrapper.find('[data-test="update-status-manual-cta"]').exists()).toBe(false);
+  });
+
   it('keeps notify-mode conditions collapsed and disables the CTA', () => {
     const wrapper = mount(UpdateStatusPanel, {
       props: { container: container('snoozed'), mode: 'notify' },
@@ -134,5 +158,22 @@ describe('UpdateStatusPanel', () => {
       'danger',
     );
     expect(wrapper.get('[data-reason="snoozed"]').attributes('data-tone')).toBe('warning');
+  });
+
+  it('shows the effective dry-run trigger and labels the update action as preview-only', () => {
+    const wrapper = mount(UpdateStatusPanel, {
+      props: {
+        container: container(),
+        mode: 'manual',
+        dryRunTriggerId: 'docker.local',
+      },
+      global: { stubs: { AppIcon: { template: '<span />' } } },
+    });
+
+    expect(wrapper.get('[data-reason="dry-run-trigger"]').text()).toContain(
+      'Action trigger docker.local is in dry-run mode',
+    );
+    expect(wrapper.get('[data-test="update-status-manual-cta"]').text()).toBe('Preview only');
+    expect(wrapper.get('[data-test="update-status-manual-cta"]').classes()).toContain('min-h-11');
   });
 });

@@ -64,6 +64,18 @@ The update action triggers the Docker or Docker Compose trigger for the selected
 
 See [Lifecycle Hooks](/docs/configuration/hooks) and [Backup & Rollback](/docs/configuration/rollback) for related configuration.
 
+### Dry-run mode
+
+Set `DD_ACTION_DOCKER_<name>_DRYRUN=true` (or the equivalent Docker Compose action variable) to pull and validate candidate images without replacing containers. Dry-run is intentionally conspicuous:
+
+- the Triggers view marks the action with a yellow **Dry-run mode** badge;
+- the container Update Status panel names the effective dry-run trigger;
+- **Update now** is relabeled **Preview only** with an explanation of the remaining pull side effect;
+- each prevented replacement is logged at `WARN`; and
+- History records `update-applied-dryrun`, distinct from a completed replacement.
+
+<Callout type="warn">Dry-run still pulls the candidate image. It does not stop or replace the running container. Set the action trigger's `DRYRUN=false` and recreate Drydock before expecting updates to be applied.</Callout>
+
 ## Global concurrency cap
 
 By default, drydock runs updates concurrently across containers. Two existing layers of serialization apply:
@@ -163,7 +175,7 @@ Before updating, you can preview what will change using the dry-run endpoint:
 
 `POST /api/v1/containers/:id/preview`
 
-This returns the proposed changes without executing them.
+This returns the proposed changes without executing them. Preview failures use stable `code` and `message` fields instead of a generic failure. Registry and trigger configuration errors also include an in-app `action` link when Drydock can identify a safe next step.
 
 ## Metrics
 

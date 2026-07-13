@@ -655,6 +655,9 @@ function toPendingRecentUpdateCandidate(
       sourceRepo: container.sourceRepo,
       releaseNotes: container.releaseNotes,
       currentReleaseNotes: container.currentReleaseNotes,
+      registry: container.registry,
+      registryName: container.registryName,
+      registryUrl: container.registryUrl,
       status: deriveRecentUpdateStatus(
         container,
         context.containers,

@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "Xem dự án"
     },
+    "registryLink": { "viewRegistry": "Xem registry" },
     "releaseNotesLink": {
       "releaseNotes": "Ghi chú phát hành",
       "viewFullNotes": "Xem toàn bộ ghi chú",
@@ -549,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Đã ghim — có phiên bản mới hơn để tham khảo."
+      }
     }
   }
 }

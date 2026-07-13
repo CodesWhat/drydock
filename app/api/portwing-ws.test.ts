@@ -58,8 +58,14 @@ vi.mock('../log/index.js', () => ({
 // works in portwing-ws.ts. Arrow-factory implementations are not usable as
 // constructors in newer Vitest versions — use vi.hoisted() exactly like
 // EdgeAgentAdapter.test.ts does.
-const { MockAgentClient, MockEdgeAgentAdapter, getLastAgentClientInstance } = vi.hoisted(() => {
+const {
+  MockAgentClient,
+  MockEdgeAgentAdapter,
+  getLastAgentClientInstance,
+  getLastEdgeAgentAdapterInstance,
+} = vi.hoisted(() => {
   let lastInstance: InstanceType<typeof _MockAgentClient> | undefined;
+  let lastAdapterInstance: InstanceType<typeof _MockEdgeAgentAdapter> | undefined;
 
   class _MockAgentClient {
     name: string;
@@ -87,6 +93,7 @@ const { MockAgentClient, MockEdgeAgentAdapter, getLastAgentClientInstance } = vi
     };
     activate = vi.fn();
     onDisconnect = vi.fn().mockResolvedValue(undefined);
+    readonly reconnected: boolean;
     // Mirrors the real EdgeAgentAdapter.terminate(): sends an error frame in
     // the same shape as sendErrorAndClose (`{ type: 'error', data: { message,
     // code } }`), then closes with (closeCode, errorCode) — so
@@ -104,8 +111,11 @@ const { MockAgentClient, MockEdgeAgentAdapter, getLastAgentClientInstance } = vi
     constructor(
       _client: unknown,
       ws: { send: (data: string) => void; close: (code?: number, reason?: string) => void },
+      options: { reconnected?: boolean } = {},
     ) {
       this.ws = ws;
+      this.reconnected = options.reconnected ?? false;
+      lastAdapterInstance = this;
     }
   }
 
@@ -113,6 +123,7 @@ const { MockAgentClient, MockEdgeAgentAdapter, getLastAgentClientInstance } = vi
     MockAgentClient: _MockAgentClient,
     MockEdgeAgentAdapter: _MockEdgeAgentAdapter,
     getLastAgentClientInstance: () => lastInstance,
+    getLastEdgeAgentAdapterInstance: () => lastAdapterInstance,
   };
 });
 
@@ -1101,6 +1112,7 @@ describe('name-binding durability — immediate flush on new bind (Fix 1: hard-k
 
     expect((JSON.parse(ws2.sentMessages[0]) as { type: string }).type).toBe('welcome');
     expect(mockSaveStore).not.toHaveBeenCalled();
+    expect(getLastEdgeAgentAdapterInstance()?.reconnected).toBe(true);
   });
 
   test('a save failure on new-bind flush denies the hello and rolls back all reserved state', async () => {

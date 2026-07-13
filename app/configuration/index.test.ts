@@ -38,6 +38,29 @@ test('getLogLevel should return info by default', async () => {
   expect(configuration.getLogLevel()).toStrictEqual('info');
 });
 
+test('getAuditUpdateAvailableDedupeMs should default to one hour', () => {
+  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+  expect(configuration.getAuditUpdateAvailableDedupeMs()).toBe(60 * 60 * 1000);
+});
+
+test('getAuditUpdateAvailableDedupeMs should accept a non-negative integer', () => {
+  configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = '120000';
+  expect(configuration.getAuditUpdateAvailableDedupeMs()).toBe(120_000);
+  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+});
+
+test.each([
+  '-1',
+  '1.5',
+  'not-a-number',
+])('getAuditUpdateAvailableDedupeMs should reject invalid values (%s)', (value) => {
+  configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = value;
+  expect(() => configuration.getAuditUpdateAvailableDedupeMs()).toThrow(
+    'DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS must be a non-negative integer',
+  );
+  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+});
+
 test('getLogLevel should return debug when overridden', async () => {
   configuration.ddEnvVars.DD_LOG_LEVEL = 'debug';
   expect(configuration.getLogLevel()).toStrictEqual('debug');
@@ -640,12 +663,32 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: false,
       scanner: '',
+      backend: 'command',
+      availabilityPolicy: 'block',
+      docker: {
+        socket: '/var/run/docker.sock',
+        host: '',
+        port: 2375,
+        protocol: 'http',
+        network: 'bridge',
+        cacheVolumePrefix: 'drydock-scanner-cache',
+      },
       blockSeverities: ['CRITICAL', 'HIGH'],
       trivy: {
         server: '',
         command: 'trivy',
         timeout: 600000,
         imageSrc: '',
+        extraArgs: [],
+        workerImage:
+          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+      },
+      grype: {
+        command: 'grype',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
       },
       signature: {
         verify: false,
@@ -660,9 +703,18 @@ describe('getSecurityConfiguration', () => {
       sbom: {
         enabled: false,
         formats: ['spdx-json'],
+        generator: 'auto',
+      },
+      syft: {
+        command: 'syft',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
       },
       gate: {
         mode: 'on',
+        allowNoWorse: false,
       },
       prune: {
         onBlock: true,
@@ -699,12 +751,32 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: true,
       scanner: 'trivy',
+      backend: 'command',
+      availabilityPolicy: 'block',
+      docker: {
+        socket: '/var/run/docker.sock',
+        host: '',
+        port: 2375,
+        protocol: 'http',
+        network: 'bridge',
+        cacheVolumePrefix: 'drydock-scanner-cache',
+      },
       blockSeverities: ['CRITICAL', 'MEDIUM'],
       trivy: {
         server: 'http://trivy:4954',
         command: '/usr/local/bin/trivy',
         timeout: 60000,
         imageSrc: '',
+        extraArgs: [],
+        workerImage:
+          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+      },
+      grype: {
+        command: 'grype',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
       },
       signature: {
         verify: true,
@@ -719,9 +791,18 @@ describe('getSecurityConfiguration', () => {
       sbom: {
         enabled: true,
         formats: ['cyclonedx-json', 'spdx-json'],
+        generator: 'auto',
+      },
+      syft: {
+        command: 'syft',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
       },
       gate: {
         mode: 'on',
+        allowNoWorse: false,
       },
       prune: {
         onBlock: true,
@@ -847,6 +928,136 @@ describe('getSecurityConfiguration', () => {
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
+  });
+
+  test('should parse scanner backend, worker, provider argument, and Docker runtime settings', () => {
+    const values = {
+      DD_SECURITY_SCANNER: 'BoTh',
+      DD_SECURITY_BACKEND: 'Docker',
+      DD_SECURITY_AVAILABILITY_POLICY: 'Warn',
+      DD_SECURITY_DOCKER_SOCKET: '/run/user/1000/podman.sock',
+      DD_SECURITY_DOCKER_HOST: 'scanner-docker',
+      DD_SECURITY_DOCKER_PORT: '2376',
+      DD_SECURITY_DOCKER_PROTOCOL: 'https',
+      DD_SECURITY_DOCKER_NETWORK: 'scanner-net',
+      DD_SECURITY_DOCKER_CACHE_VOLUME: 'scanner-cache',
+      DD_SECURITY_TRIVY_ARGS: '["--skip-dirs", " /tmp/cache "]',
+      DD_SECURITY_TRIVY_WORKER_IMAGE: 'example/trivy@sha256:test',
+      DD_SECURITY_GRYPE_COMMAND: '/usr/local/bin/grype',
+      DD_SECURITY_GRYPE_TIMEOUT: '45000',
+      DD_SECURITY_GRYPE_ARGS: '["--only-fixed"]',
+      DD_SECURITY_GRYPE_WORKER_IMAGE: 'example/grype@sha256:test',
+      DD_SECURITY_SBOM_GENERATOR: 'SyFt',
+      DD_SECURITY_SYFT_COMMAND: '/usr/local/bin/syft',
+      DD_SECURITY_SYFT_TIMEOUT: '46000',
+      DD_SECURITY_SYFT_ARGS: '["--scope", "all-layers"]',
+      DD_SECURITY_SYFT_WORKER_IMAGE: 'example/syft@sha256:test',
+    };
+    Object.assign(configuration.ddEnvVars, values);
+
+    try {
+      const result = configuration.getSecurityConfiguration();
+
+      expect(result).toMatchObject({
+        scanner: 'both',
+        backend: 'docker',
+        availabilityPolicy: 'warn',
+        docker: {
+          socket: '/run/user/1000/podman.sock',
+          host: 'scanner-docker',
+          port: 2376,
+          protocol: 'https',
+          network: 'scanner-net',
+          cacheVolumePrefix: 'scanner-cache',
+        },
+        trivy: {
+          extraArgs: ['--skip-dirs', '/tmp/cache'],
+          workerImage: 'example/trivy@sha256:test',
+        },
+        grype: {
+          command: '/usr/local/bin/grype',
+          timeout: 45000,
+          extraArgs: ['--only-fixed'],
+          workerImage: 'example/grype@sha256:test',
+        },
+        sbom: { generator: 'syft' },
+        syft: {
+          command: '/usr/local/bin/syft',
+          timeout: 46000,
+          extraArgs: ['--scope', 'all-layers'],
+          workerImage: 'example/syft@sha256:test',
+        },
+      });
+    } finally {
+      for (const key of Object.keys(values)) {
+        delete configuration.ddEnvVars[key];
+      }
+    }
+  });
+
+  test('should accept remote Trivy only when a server is configured', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_BACKEND = 'remote';
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER = 'http://trivy:4954';
+
+    try {
+      expect(configuration.getSecurityConfiguration()).toMatchObject({
+        scanner: 'trivy',
+        backend: 'remote',
+        trivy: { server: 'http://trivy:4954' },
+      });
+    } finally {
+      delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+      delete configuration.ddEnvVars.DD_SECURITY_BACKEND;
+      delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
+    }
+  });
+
+  test.each([
+    ['a non-Trivy scanner', 'grype', 'http://trivy:4954'],
+    ['an empty Trivy server', 'trivy', '   '],
+  ])('should reject remote backend with %s', (_label, scanner, server) => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = scanner;
+    configuration.ddEnvVars.DD_SECURITY_BACKEND = 'remote';
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER = server;
+
+    try {
+      expect(() => configuration.getSecurityConfiguration()).toThrow(
+        'DD_SECURITY_BACKEND=remote requires DD_SECURITY_SCANNER=trivy and DD_SECURITY_TRIVY_SERVER',
+      );
+    } finally {
+      delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+      delete configuration.ddEnvVars.DD_SECURITY_BACKEND;
+      delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
+    }
+  });
+
+  test.each([
+    ['malformed JSON', '{', 'DD_SECURITY_TRIVY_ARGS'],
+    ['a non-array value', '{}', 'DD_SECURITY_GRYPE_ARGS'],
+    ['a non-string entry', '[42]', 'DD_SECURITY_GRYPE_ARGS'],
+    ['an empty entry', '["  "]', 'DD_SECURITY_SYFT_ARGS'],
+    ['a NUL byte', '["bad\\u0000arg"]', 'DD_SECURITY_SYFT_ARGS'],
+  ])('should reject %s in provider extra arguments', (_label, value, key) => {
+    configuration.ddEnvVars[key] = value;
+
+    try {
+      expect(() => configuration.getSecurityConfiguration()).toThrow(
+        `${key} must be a JSON array of strings`,
+      );
+    } finally {
+      delete configuration.ddEnvVars[key];
+    }
+  });
+
+  test('should treat an explicitly empty provider argument string as no arguments', () => {
+    configuration.ddEnvVars.DD_SECURITY_GRYPE_ARGS = '';
+
+    try {
+      expect(configuration.getSecurityConfiguration().grype.extraArgs).toEqual([]);
+    } finally {
+      delete configuration.ddEnvVars.DD_SECURITY_GRYPE_ARGS;
+    }
   });
 
   test('should read DD_SECURITY_TRIVY_IMAGE_SRC into trivy.imageSrc', () => {
@@ -2895,6 +3106,98 @@ describe('replaceSecrets – secret file hardening', () => {
   // When a secret file's permissions allow group or others to read it, replaceSecrets
   // emits a logWarn naming the file and recommending chmod 600.
   // The check is skipped on non-POSIX platforms (Windows) where mode bits are synthetic.
+
+  test('should reject non-regular secret paths before attempting to read them', async () => {
+    const handle = {
+      stat: vi.fn().mockResolvedValue({
+        size: 0,
+        mode: 0o600,
+        isFile: () => false,
+      }),
+      read: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const openSpy = vi
+      .spyOn(fs.promises, 'open')
+      .mockResolvedValue(handle as unknown as Awaited<ReturnType<typeof fs.promises.open>>);
+
+    try {
+      await expect(
+        configuration.replaceSecrets({ DD_DEVICE__FILE: '/dev/not-a-regular-file' }),
+      ).rejects.toThrow('Secret file for DD_DEVICE__FILE must be a regular file');
+      expect(handle.read).not.toHaveBeenCalled();
+      expect(handle.close).toHaveBeenCalledOnce();
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
+  test('should inspect and read a secret through the same open file handle', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-handle-'));
+    const secretPath = path.join(tempDir, 'secret.txt');
+    fs.writeFileSync(secretPath, 'descriptor-secret');
+    fs.chmodSync(secretPath, 0o600);
+    const handle = {
+      stat: vi.fn().mockResolvedValue(fs.statSync(secretPath)),
+      read: vi
+        .fn()
+        .mockImplementationOnce(async (buffer: Buffer) => {
+          const value = Buffer.from('descriptor-secret');
+          value.copy(buffer);
+          return { bytesRead: value.length, buffer };
+        })
+        .mockImplementationOnce(async (buffer: Buffer) => ({ bytesRead: 0, buffer })),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const openSpy = vi
+      .spyOn(fs.promises, 'open')
+      .mockResolvedValue(handle as unknown as Awaited<ReturnType<typeof fs.promises.open>>);
+
+    try {
+      const vars: Record<string, string | undefined> = { DD_HANDLE__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+
+      expect(openSpy).toHaveBeenCalledWith(secretPath, 'r');
+      expect(handle.stat).toHaveBeenCalledOnce();
+      expect(handle.read).toHaveBeenCalled();
+      expect(handle.stat.mock.invocationCallOrder[0]).toBeLessThan(
+        handle.read.mock.invocationCallOrder[0],
+      );
+      expect(handle.close).toHaveBeenCalledOnce();
+      expect(vars.DD_HANDLE).toBe('descriptor-secret');
+    } finally {
+      openSpy.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should enforce the size limit again if an opened secret grows before it is read', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-growth-'));
+    const secretPath = path.join(tempDir, 'secret.txt');
+    fs.writeFileSync(secretPath, 'x');
+    const secretStats = fs.statSync(secretPath);
+    const handle = {
+      stat: vi.fn().mockResolvedValue({ ...secretStats, size: 1, isFile: () => true }),
+      read: vi.fn().mockImplementation(async (buffer: Buffer, _offset: number, length: number) => {
+        buffer.fill('x', 0, length);
+        return { bytesRead: length, buffer };
+      }),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const openSpy = vi
+      .spyOn(fs.promises, 'open')
+      .mockResolvedValue(handle as unknown as Awaited<ReturnType<typeof fs.promises.open>>);
+
+    try {
+      await expect(configuration.replaceSecrets({ DD_GROWING__FILE: secretPath })).rejects.toThrow(
+        'exceeds maximum size of 1048576 bytes',
+      );
+      expect(handle.close).toHaveBeenCalledOnce();
+    } finally {
+      openSpy.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 
   test('should warn when secret file has world-readable permissions (0644)', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-perms-'));

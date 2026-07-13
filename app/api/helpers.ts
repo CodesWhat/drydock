@@ -12,6 +12,7 @@ const log = logger.child({ component: 'api-helpers' });
 
 const INVALID_REQUEST_PARAMETERS_MESSAGE = 'Invalid request parameters';
 const INTERNAL_SERVER_ERROR_MESSAGE = 'Internal server error';
+const CONTAINER_ACTION_ERROR_MESSAGE = 'Unable to complete container action';
 
 interface JoiValidationErrorLike {
   isJoi?: unknown;
@@ -78,7 +79,7 @@ export function handleContainerActionError({
     details: message,
   });
 
-  sendErrorResponse(res, 500, message);
+  sendErrorResponse(res, 500, CONTAINER_ACTION_ERROR_MESSAGE);
 
   return message;
 }

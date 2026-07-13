@@ -437,6 +437,7 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     containerInStore,
     container.Labels || {},
     watcher.configuration,
+    { logger: watcher.log, containerName: dockerContainerName },
   );
 
   // Health is read unconditionally (decoupled from shouldInspectContainer /
@@ -846,7 +847,10 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
-  applyDockerDeclarativeUpdatePolicy(containerToReturn, containerLabels, watcher.configuration);
+  applyDockerDeclarativeUpdatePolicy(containerToReturn, containerLabels, watcher.configuration, {
+    logger: watcher.log,
+    containerName: dockerContainerName,
+  });
   removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
 
   return containerToReturn;

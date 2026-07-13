@@ -158,7 +158,8 @@ function previewNotificationTemplates(req, res) {
   }
 
   try {
-    if (!notificationStore.getNotificationRule(req.params.id)) {
+    const ruleId = req.params.id?.toLowerCase();
+    if (!notificationStore.getNotificationRule(ruleId)) {
       sendErrorResponse(res, 404, 'Notification rule not found');
       return;
     }
@@ -173,7 +174,7 @@ function previewNotificationTemplates(req, res) {
       sendErrorResponse(res, 400, `Notification trigger cannot render previews: ${triggerId}`);
       return;
     }
-    res.status(200).json(trigger.previewNotificationTemplates(req.params.id, templates));
+    res.status(200).json(trigger.previewNotificationTemplates(ruleId, templates));
   } catch (e: unknown) {
     sendErrorResponse(res, 500, sanitizeApiError(e));
   }

@@ -145,6 +145,9 @@ const displayEntries = shallowRef<AppLogEntry[]>(props.entries);
 let cachedNewestFirstSource: AppLogEntry[] | null = null;
 let cachedNewestFirstLength = 0;
 let cachedNewestFirstEntries: AppLogEntry[] = [];
+let pendingPrependScrollTop: number | null = null;
+let pendingPrependHeight = 0;
+let prependAdjustmentScheduled = false;
 
 function setDisplayEntries(entries: AppLogEntry[]): void {
   if (displayEntries.value === entries) {
@@ -169,6 +172,38 @@ function canAppendToNewestFirstCache(entries: AppLogEntry[]): boolean {
   return true;
 }
 
+function preserveUnpinnedPrependPosition(entries: AppLogEntry[]): void {
+  const viewport = logViewport.value;
+  if (entries.length === 0 || !viewport || props.autoScrollPinned) {
+    return;
+  }
+
+  pendingPrependScrollTop ??= viewport.scrollTop;
+  pendingPrependHeight += entries.reduce(
+    (total, entry) => total + (measuredRowHeights.value.get(entry.id) ?? estimateRowHeight(entry)),
+    0,
+  );
+  virtualScrollTop.value = pendingPrependScrollTop + pendingPrependHeight;
+  if (prependAdjustmentScheduled) {
+    return;
+  }
+
+  prependAdjustmentScheduled = true;
+  void nextTick(() => {
+    const nextScrollTop = (pendingPrependScrollTop ?? 0) + pendingPrependHeight;
+    pendingPrependScrollTop = null;
+    pendingPrependHeight = 0;
+    prependAdjustmentScheduled = false;
+
+    const currentViewport = logViewport.value;
+    if (!currentViewport || !props.newestFirst || props.autoScrollPinned) {
+      return;
+    }
+    currentViewport.scrollTop = nextScrollTop;
+    virtualScrollTop.value = currentViewport.scrollTop;
+  });
+}
+
 function syncDisplayEntries(): void {
   if (searchFilterMode.value && searchQuery.value) {
     const filteredEntries = props.entries.filter((entry) => matchedEntryIdSet.value.has(entry.id));
@@ -184,6 +219,7 @@ function syncDisplayEntries(): void {
   if (canAppendToNewestFirstCache(props.entries)) {
     const appendedEntries = props.entries.slice(cachedNewestFirstLength).reverse();
     if (appendedEntries.length > 0) {
+      preserveUnpinnedPrependPosition(appendedEntries);
       cachedNewestFirstEntries.splice(0, 0, ...appendedEntries);
     }
 
@@ -665,6 +701,12 @@ function toggleSortOrder(): void {
     </div>
 
     <div class="relative flex-1 min-h-[120px] flex flex-col">
+      <span
+        v-if="virtualizationEnabled"
+        data-test="app-log-virtual-status"
+        class="sr-only"
+        role="status"
+      >{{ displayEntries.length }} {{ t('appShell.logViewer.footer.lines') }}</span>
       <AppIconButton
         :icon="copyFailed ? 'xmark' : copySuccess ? 'check' : 'copy'"
         size="xs"

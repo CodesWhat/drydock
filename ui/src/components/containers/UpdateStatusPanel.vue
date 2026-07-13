@@ -17,6 +17,7 @@ const props = withDefaults(
     mode: UpdateMode;
     hasActiveOperationBadge?: boolean;
     busy?: boolean;
+    dryRunTriggerId?: string;
   }>(),
   { hasActiveOperationBadge: false, busy: false },
 );
@@ -77,7 +78,7 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
     </div>
 
     <details
-      v-if="status.conditions.length > 0"
+      v-if="status.conditions.length > 0 || dryRunTriggerId"
       class="px-3 pb-3"
       :open="!status.detailsCollapsed"
     >
@@ -85,6 +86,28 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
         {{ $t('containerComponents.updateStatus.showDetails') }}
       </summary>
       <div class="mt-2 space-y-2" role="list">
+        <div
+          v-if="dryRunTriggerId"
+          class="flex items-start gap-2 px-2.5 py-2 dd-rounded dd-bg-card"
+          role="listitem"
+          data-reason="dry-run-trigger"
+          data-severity="soft"
+          data-tone="warning"
+          :style="{
+            backgroundColor: 'var(--dd-warning-muted)',
+            color: 'var(--dd-warning)',
+          }"
+        >
+          <AppIcon name="info" :size="12" class="shrink-0 mt-0.5" />
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-semibold">
+              {{ $t('containerComponents.updateStatus.conditions.dry-run-trigger') }}
+            </div>
+            <div class="text-2xs-plus mt-0.5 whitespace-normal break-words dd-text-secondary">
+              {{ $t('containerComponents.fullPageActions.dryRunCondition', { trigger: dryRunTriggerId }) }}
+            </div>
+          </div>
+        </div>
         <div
           v-for="condition in status.conditions"
           :key="condition.reason"
@@ -148,6 +171,8 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
         {{
           mode === 'notify'
             ? $t('containerComponents.updateStatus.notificationsOnlyButton')
+            : dryRunTriggerId
+              ? $t('containerComponents.fullPageActions.previewOnly')
             : status.state === 'hard-blocked'
               ? $t('containerComponents.updateStatus.blockedButton')
               : $t('containerComponents.updateStatus.updateButton')

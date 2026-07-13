@@ -2,8 +2,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '../../components/AppBadge.vue';
-import ProjectLink from '../../components/containers/ProjectLink.vue';
-import ReleaseNotesLink from '../../components/containers/ReleaseNotesLink.vue';
+import ContainerLinkActions from '../../components/containers/ContainerLinkActions.vue';
 import type { ImageSummary } from '../../composables/useVulnerabilities';
 import type { SbomFormat, SbomState, Vulnerability } from './securityViewTypes';
 import {
@@ -90,9 +89,10 @@ const showSbomDocumentModel = computed({
         </AppBadge>
         <span class="text-2xs dd-text-muted ml-auto">{{ selectedImage?.total }} {{ t('securityView.card.total') }}</span>
       </div>
-      <div v-if="selectedImage && (selectedImage.hasUpdate || selectedImage.releaseNotes || selectedImage.currentReleaseNotes || selectedImage.releaseLink || selectedImage.sourceRepo)"
-           class="mt-2 flex items-center gap-2 flex-wrap">
-        <template v-if="selectedImage.hasUpdate">
+      <div
+        v-if="selectedImage && (selectedImage.hasUpdate || selectedImage.releaseNotes || selectedImage.currentReleaseNotes || selectedImage.releaseLink || selectedImage.sourceRepo || selectedImage.registry || selectedImage.registryName || selectedImage.registryUrl)"
+        class="mt-2 flex items-center gap-2 flex-wrap">
+        <div v-if="selectedImage.hasUpdate" class="flex items-center gap-2 flex-wrap">
           <AppButton
             v-if="updatesAllowed"
             size="xs"
@@ -113,16 +113,23 @@ const showSbomDocumentModel = computed({
             @click="emit('navigateToContainerUpdate')">
             {{ t('securityView.viewInContainers') }}
           </AppButton>
-        </template>
-        <ReleaseNotesLink
-          v-if="selectedImage.releaseNotes || selectedImage.currentReleaseNotes || selectedImage.releaseLink"
-          :release-notes="selectedImage.releaseNotes"
-          :current-release-notes="selectedImage.currentReleaseNotes"
-          :release-link="selectedImage.releaseLink"
-          data-test="security-detail-release-notes" />
-        <ProjectLink
-          :source-repo="selectedImage.sourceRepo"
-          data-test="security-detail-project-link" />
+        </div>
+        <div
+          v-if="selectedImage.releaseNotes || selectedImage.currentReleaseNotes || selectedImage.releaseLink || selectedImage.sourceRepo || selectedImage.registry || selectedImage.registryName || selectedImage.registryUrl"
+          data-test="security-detail-resource-actions">
+          <ContainerLinkActions
+            :source-repo="selectedImage.sourceRepo"
+            :release-notes="selectedImage.releaseNotes"
+            :current-release-notes="selectedImage.currentReleaseNotes"
+            :release-link="selectedImage.releaseLink"
+            :container-id="selectedImage.containerId"
+            :from-tag="selectedImage.fromTag"
+            :to-tag="selectedImage.toTag"
+            :registry="selectedImage.registry"
+            :registry-name="selectedImage.registryName"
+            :registry-url="selectedImage.registryUrl"
+            icon-size="sm" />
+        </div>
       </div>
     </template>
 

@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "Vedi progetto"
     },
+    "registryLink": { "viewRegistry": "Visualizza registry" },
     "releaseNotesLink": {
       "releaseNotes": "Note di rilascio",
       "viewFullNotes": "Vedi note complete",
@@ -549,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Fissata — è disponibile una versione più recente a titolo informativo."
+      }
     }
   }
 }

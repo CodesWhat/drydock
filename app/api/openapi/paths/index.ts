@@ -373,6 +373,50 @@ export const openApiPaths = {
       },
     },
   },
+  '/api/v1/server/security/assets/{provider}/{operation}': {
+    post: {
+      tags: ['System'],
+      summary: 'Pull or warm a Docker-backed scanner asset',
+      operationId: 'manageScannerAsset',
+      parameters: [
+        {
+          name: 'provider',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+        },
+        {
+          name: 'operation',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', enum: ['pull', 'warm'] },
+        },
+      ],
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                username: { type: 'string' },
+                password: { type: 'string' },
+              },
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Scanner asset status', {
+          $ref: '#/components/schemas/ScannerAssetStatus',
+        }),
+        400: errorResponse('Unsupported provider or operation'),
+        401: errorResponse('Authentication required'),
+        503: errorResponse('Scanner asset operation failed'),
+      },
+    },
+  },
   ...containerPaths,
   ...statsPaths,
   '/api/v1/operations/{id}/cancel': {

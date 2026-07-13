@@ -9,10 +9,8 @@ import ContainerStats from './ContainerStats.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import UpdateStatusPanel from './UpdateStatusPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
-import UpdateInsightBadge from './UpdateInsightBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
-import ReleaseNotesLink from './ReleaseNotesLink.vue';
-import ProjectLink from './ProjectLink.vue';
+import ContainerLinkActions from './ContainerLinkActions.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
@@ -24,6 +22,8 @@ import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
 import { useNow } from '../../composables/useNow';
 import { formatUptimeFromIso } from '../../utils/uptime';
+import { updateInsightColor } from '../../utils/display';
+import { findDryRunActionTrigger } from '../../views/containers/useContainerTriggers';
 
 interface RevealEnvResponse {
   env?: Array<{ key: string; value: string }>;
@@ -135,6 +135,7 @@ const {
   detailPreview,
   detailComposePreview,
   previewError,
+  previewErrorAction,
   triggersLoading,
   detailTriggers,
   getTriggerKey,
@@ -166,6 +167,11 @@ const {
   updateKindColor,
   updateMode,
 } = useContainersViewTemplateContext();
+
+const dryRunTrigger = computed(() => findDryRunActionTrigger(detailTriggers.value));
+const dryRunTriggerId = computed(() =>
+  dryRunTrigger.value ? getTriggerKey(dryRunTrigger.value) : undefined,
+);
 
 function openUpdateStatusTab(tab: string, section?: string) {
   activeDetailTab.value = tab;
@@ -324,6 +330,31 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   {{ getUpdateKindLabel(selectedContainer.updateKind) }}
                 </AppBadge>
               </div>
+              <div
+                v-else-if="selectedContainer.updateInsight"
+                class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
+                :style="{ backgroundColor: updateInsightColor().bg }"
+              >
+                <span :style="{ color: updateInsightColor().text }">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
+                <CopyableTag
+                  :tag="selectedContainer.updateInsight.tag"
+                  class="font-bold"
+                  :style="{ color: updateInsightColor().text }"
+                  data-test="container-fullpage-insight-tag"
+                >{{ selectedContainer.updateInsight.tag }}</CopyableTag>
+                <AppBadge
+                  size="xs"
+                  :custom="updateInsightColor()"
+                  data-test="container-fullpage-insight-kind-badge"
+                >
+                  {{ getUpdateKindLabel(selectedContainer.updateInsight.kind) }}
+                </AppBadge>
+              </div>
+              <div v-else-if="!selectedContainer.newDigest" class="flex items-center gap-2 px-3 py-2 dd-rounded text-xs"
+                   :style="{ backgroundColor: 'var(--dd-success-muted)' }">
+                <AppIcon name="up-to-date" :size="11" style="color: var(--dd-success);" />
+                <span class="font-medium" style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.upToDate') }}</span>
+              </div>
               <div v-if="!selectedContainer.isDigestPinned && selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
                    class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono dd-text-muted"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
@@ -333,20 +364,14 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
                 <CopyableTag :tag="selectedContainer.newDigest" class="font-semibold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
               </div>
-              <div v-else class="flex items-center gap-2 px-3 py-2 dd-rounded text-xs"
-                   :style="{ backgroundColor: 'var(--dd-success-muted)' }">
-                <AppIcon name="up-to-date" :size="11" style="color: var(--dd-success);" />
-                <span class="font-medium" style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.upToDate') }}</span>
-              </div>
               <NoUpdateReasonBadge
                 v-if="!selectedContainer.newTag && !selectedContainer.newDigest && selectedContainer.noUpdateReason"
                 :reason="selectedContainer.noUpdateReason"
                 variant="inline"
               />
-              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || selectedContainer.updateInsight || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="flex items-center gap-1.5 flex-wrap">
+              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="flex items-center gap-1.5 flex-wrap">
                 <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
-                <UpdateInsightBadge :insight="selectedContainer.updateInsight" />
                 <FloatingTagBadge
                   :tag-precision="selectedContainer.tagPrecision"
                   :image-digest-watch="selectedContainer.imageDigestWatch"
@@ -370,19 +395,24 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 :container="selectedContainer"
                 :mode="updateMode"
                 :has-active-operation-badge="Boolean(selectedContainer.updateOperation)"
+                :dry-run-trigger-id="dryRunTriggerId"
                 :busy="isActionInProgress(selectedContainer)"
                 @update="confirmUpdate(selectedContainer)"
                 @open-tab="openUpdateStatusTab"
               />
-              <ReleaseNotesLink
+              <ContainerLinkActions
+                :source-repo="selectedContainer.sourceRepo"
                 :release-notes="selectedContainer.releaseNotes"
                 :current-release-notes="selectedContainer.currentReleaseNotes"
                 :release-link="selectedContainer.releaseLink"
                 :container-id="selectedContainer.id"
                 :from-tag="selectedContainer.currentTag"
-                :to-tag="selectedContainer.newTag"
+                :to-tag="selectedContainer.newTag || selectedContainer.updateInsight?.tag"
+                :registry="selectedContainer.registry"
+                :registry-name="selectedContainer.registryName"
+                :registry-url="selectedContainer.registryUrl"
+                icon-size="sm"
               />
-              <ProjectLink :source-repo="selectedContainer.sourceRepo" />
               <div class="pt-1 space-y-1.5">
                 <div class="dd-text-label dd-text-muted">{{ t('containerComponents.fullPageOverview.tagFilters') }}</div>
                 <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"
@@ -761,8 +791,10 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <AppButton v-else-if="updateMode !== 'notify'"
                             size="md"
                             :disabled="!hasRawUpdateCandidate(selectedContainer) || isActionInProgress(selectedContainer)"
+                            :title="dryRunTrigger ? t('containerComponents.fullPageActions.dryRunUpdateTooltip') : undefined"
+                            :data-test="dryRunTrigger ? 'dry-run-update-action' : undefined"
                             @click="confirmUpdate(selectedContainer)">
-                      {{ t('containerComponents.fullPageActions.updateNow') }}
+                      {{ dryRunTrigger ? t('containerComponents.fullPageActions.previewOnly') : t('containerComponents.fullPageActions.updateNow') }}
                     </AppButton>
                     <AppButton size="md" variant="outlined" :disabled="isActionInProgress(selectedContainer)"
                             @click="scanContainer(selectedContainer)">
@@ -773,6 +805,14 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                             @click="recheckContainer(selectedContainer)">
                       {{ recheckingContainerId === selectedContainer.id ? t('containerComponents.fullPageActions.rechecking') : t('containerComponents.fullPageActions.recheckNow') }}
                     </AppButton>
+                  </div>
+                  <div
+                    v-if="dryRunTriggerId"
+                    class="mt-2 px-3 py-2 dd-rounded text-2xs-plus"
+                    :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+                    data-test="dry-run-trigger-condition"
+                  >
+                    {{ t('containerComponents.fullPageActions.dryRunCondition', { trigger: dryRunTriggerId }) }}
                   </div>
                 </div>
                 <!-- Skip & Snooze group -->
@@ -977,7 +1017,18 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <div v-else class="dd-text-muted italic">
                   {{ t('containerComponents.fullPageActions.previewEmptyState') }}
                 </div>
-                <p v-if="previewError" class="text-2xs-plus" style="color: var(--dd-danger);">{{ previewError }}</p>
+                <div v-if="previewError" class="space-y-2">
+                  <p class="text-2xs-plus" style="color: var(--dd-danger);">{{ previewError }}</p>
+                  <a
+                    v-if="previewErrorAction"
+                    :href="previewErrorAction.href"
+                    class="inline-flex min-h-11 items-center px-3 dd-rounded text-2xs-plus font-semibold"
+                    :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+                    data-test="preview-error-action"
+                  >
+                    {{ previewErrorAction.label }}
+                  </a>
+                </div>
               </div>
             </div>
           </div>

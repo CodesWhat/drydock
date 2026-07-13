@@ -1,5 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
+import { setI18nLocale } from '@/boot/i18n';
 import {
   OPERATION_DISPLAY_HOLD_MS,
   useOperationDisplayHold,
@@ -218,6 +219,7 @@ async function mountActionsHarness(
 
 describe('useContainerActions', () => {
   beforeEach(() => {
+    setI18nLocale('en');
     vi.useRealTimers();
     vi.resetAllMocks();
     _resetScanLifecycleStateForTests();
@@ -665,6 +667,21 @@ describe('useContainerActions', () => {
       'revert-to-declarative',
       {},
     );
+  });
+
+  it('uses a translated policy-field label in single-field revert feedback', async () => {
+    setI18nLocale('fr');
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+    });
+
+    await composable.revertPolicySelected('skipTags');
+
+    expect(composable.policyMessage.value).toContain('Tags ignorés');
+    expect(composable.policyMessage.value).not.toContain('skipTags');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(expect.stringContaining('Tags ignorés'));
   });
 
   it('deletes selected container and closes detail views', async () => {
@@ -2230,11 +2247,41 @@ describe('useContainerActions', () => {
       writableFile: undefined,
     });
 
-    mocks.previewContainer.mockRejectedValueOnce(new Error('preview failed'));
+    mocks.previewContainer.mockRejectedValueOnce(
+      Object.assign(new Error('Authentication failed for ghcr.io: 401 Unauthorized'), {
+        code: 'registry-auth-failed',
+        action: { label: 'Open registry settings', href: '/registries' },
+      }),
+    );
     await composable.runContainerPreview();
     expect(composable.detailPreview.value).toBeNull();
     expect(composable.detailComposePreview.value).toBeNull();
-    expect(composable.previewError.value).toBe('preview failed');
+    expect(composable.previewError.value).toBe(
+      'Authentication failed for ghcr.io: 401 Unauthorized',
+    );
+    expect(composable.previewErrorAction.value).toEqual({
+      label: 'Open registry settings',
+      href: '/registries',
+    });
+
+    mocks.previewContainer.mockRejectedValueOnce(new Error('runtime unavailable'));
+    await composable.runContainerPreview();
+    expect(composable.previewErrorAction.value).toBeNull();
+
+    for (const action of [
+      null,
+      'invalid',
+      { href: '/registries' },
+      { label: 42, href: '/registries' },
+      { label: 'Open settings' },
+      { label: 'Unsafe', href: 'https://attacker.example' },
+    ]) {
+      mocks.previewContainer.mockRejectedValueOnce(
+        Object.assign(new Error('typed error'), { action }),
+      );
+      await composable.runContainerPreview();
+      expect(composable.previewErrorAction.value).toBeNull();
+    }
   });
 
   it('covers rollback guard and failure/latest-backup branches', async () => {

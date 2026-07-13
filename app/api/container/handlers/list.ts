@@ -439,16 +439,18 @@ export function buildContainerListResponse(
     ...(validatedQuery.watcher ? { watcher: validatedQuery.watcher } : {}),
   };
   const pagination = normalizeContainerListPagination(query);
+  const hasExplicitSort =
+    getFirstNonEmptyQueryValue(query.sort) !== undefined ||
+    getFirstNonEmptyQueryValue(query.order) !== undefined;
 
-  // Sort/order, maturity, and watched-kind filters require loading the full
-  // collection before pagination because they inspect in-memory properties
-  // (container labels, update age) that cannot be pushed down to the store.
+  // Maturity and watched-kind filters require loading the full collection
+  // before pagination because they inspect in-memory properties that cannot
+  // be pushed down to the store. Explicit sorting is delegated to the store,
+  // which orders cached live objects before cloning only the requested page.
   // status and update-kind are already pushed down to filteredQuery as
   // store-level filters (updateAvailable, updateKind.*), so the store handles
   // those efficiently without loading everything into memory first.
   const needsFullCollection =
-    getFirstNonEmptyQueryValue(query.sort) !== undefined ||
-    getFirstNonEmptyQueryValue(query.order) !== undefined ||
     maturityFilter !== undefined ||
     (watchedKindFilter !== undefined && watchedKindFilter !== 'all');
   let pagedContainers: Container[];
@@ -471,8 +473,13 @@ export function buildContainerListResponse(
     total = sortedContainers.length;
     pagedContainers = paginateCollection(sortedContainers, pagination);
   } else {
-    pagedContainers = context.getContainersFromStore(filteredQuery, pagination);
-    const sortedPagedContainers = sortContainers(pagedContainers, sortMode);
+    pagedContainers = context.getContainersFromStore(filteredQuery, {
+      ...pagination,
+      ...(hasExplicitSort ? { sort: sortMode } : {}),
+    });
+    const sortedPagedContainers = hasExplicitSort
+      ? pagedContainers
+      : sortContainers(pagedContainers, sortMode);
     total =
       pagination.limit === 0 && pagination.offset === 0
         ? sortedPagedContainers.length

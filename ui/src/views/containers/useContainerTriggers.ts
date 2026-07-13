@@ -22,6 +22,19 @@ export function getTriggerKey(trigger: ApiContainerTrigger): string {
   return `${prefix}${trigger.type}.${trigger.name}`;
 }
 
+export function findDryRunActionTrigger(
+  triggers: readonly ApiContainerTrigger[],
+): ApiContainerTrigger | undefined {
+  return triggers.find(isDryRunActionTrigger);
+}
+
+export function isDryRunActionTrigger(trigger: ApiContainerTrigger): boolean {
+  return (
+    (trigger.type === 'docker' || trigger.type === 'dockercompose') &&
+    trigger.configuration?.dryrun === true
+  );
+}
+
 async function runAssociatedTriggerState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
@@ -75,7 +88,7 @@ async function runAssociatedTriggerState(args: {
 
 export function useContainerTriggers(input: UseContainerTriggersInput) {
   const { t } = useI18n();
-  const detailTriggers = ref<Record<string, unknown>[]>([]);
+  const detailTriggers = ref<ApiContainerTrigger[]>([]);
   const triggersLoading = ref(false);
   const triggerRunInProgress = ref<string | null>(null);
   const triggerMessage = ref<string | null>(null);

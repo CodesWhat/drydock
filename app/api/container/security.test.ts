@@ -114,6 +114,14 @@ function createHarness(
       updatedAt: '2026-03-04T11:55:00.000Z',
     })),
     updateDigestScanCache: vi.fn(),
+    sbomStorage: {
+      writeDocument: vi.fn(async ({ format }: { format: string }) => ({
+        key: `sbom/${'a'.repeat(64)}/${format}.json`,
+        sha256: 'b'.repeat(64),
+        bytes: 123,
+      })),
+      readDocument: vi.fn(),
+    },
     log: { info: vi.fn() },
   };
 
@@ -160,6 +168,19 @@ async function callGetContainerSbom(
 describe('api/container/security', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  test('creates handlers with the default Trivy database status provider', () => {
+    const harness = createHarness();
+    const { getTrivyDatabaseStatus: _getTrivyDatabaseStatus, ...dependencies } = harness.deps;
+
+    const handlers = createSecurityHandlers(dependencies);
+
+    expect(handlers).toEqual({
+      getContainerVulnerabilities: expect.any(Function),
+      getContainerSbom: expect.any(Function),
+      scanContainer: expect.any(Function),
+    });
   });
 
   describe('getContainerVulnerabilities', () => {
@@ -258,6 +279,23 @@ describe('api/container/security', () => {
       expect(harness.deps.generateImageSbom).not.toHaveBeenCalled();
     });
 
+    test('returns 503 when the configured scanner provider is invalid', async () => {
+      const harness = createHarness({
+        securityConfiguration: {
+          enabled: true,
+          scanner: '',
+          signature: { verify: false },
+          sbom: { enabled: true, formats: ['spdx-json'] },
+        },
+      });
+
+      const res = await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
+      expect(harness.deps.generateImageSbom).not.toHaveBeenCalled();
+    });
+
     test('returns cached generated sbom document when requested format exists', async () => {
       const cachedSbom = createSbomResult(CURRENT_IMAGE, {
         status: 'generated',
@@ -284,6 +322,105 @@ describe('api/container/security', () => {
         document: { SPDXID: 'SPDXRef-CACHED' },
         error: cachedSbom.error,
       });
+    });
+
+    test('dereferences a cached off-heap SBOM document', async () => {
+      const documentRef = {
+        key: `sbom/${'a'.repeat(64)}/spdx-json.json`,
+        sha256: 'b'.repeat(64),
+        bytes: 123,
+      };
+      const cachedSbom = createSbomResult(CURRENT_IMAGE, {
+        subjectDigest: 'sha256:abc',
+        documents: undefined,
+        documentRefs: { 'spdx-json': documentRef },
+      });
+      const harness = createHarness({
+        container: createContainer({ security: { sbom: cachedSbom } }),
+      });
+      harness.deps.sbomStorage.readDocument.mockResolvedValueOnce({ SPDXID: 'SPDXRef-BLOB' });
+
+      const res = await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      expect(harness.deps.sbomStorage.readDocument).toHaveBeenCalledWith(documentRef, 'spdx-json');
+      expect(harness.deps.generateImageSbom).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ document: { SPDXID: 'SPDXRef-BLOB' } }),
+      );
+    });
+
+    test('regenerates and replaces an unavailable cached off-heap SBOM document', async () => {
+      const documentRef = {
+        key: `sbom/${'a'.repeat(64)}/spdx-json.json`,
+        sha256: 'b'.repeat(64),
+        bytes: 123,
+      };
+      const cachedSbom = createSbomResult(CURRENT_IMAGE, {
+        documents: undefined,
+        documentRefs: { 'spdx-json': documentRef },
+      });
+      const generatedSbom = createSbomResult(CURRENT_IMAGE);
+      const harness = createHarness({
+        container: createContainer({ security: { sbom: cachedSbom } }),
+      });
+      harness.deps.sbomStorage.readDocument.mockRejectedValueOnce(
+        new Error('SBOM document checksum mismatch'),
+      );
+      harness.deps.generateImageSbom.mockResolvedValueOnce(generatedSbom);
+
+      const res = await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      expect(harness.deps.log.info).toHaveBeenCalledWith(
+        'Cached SBOM document is unavailable; regenerating (SBOM document checksum mismatch)',
+      );
+      expect(harness.deps.generateImageSbom).toHaveBeenCalledWith({
+        image: CURRENT_IMAGE,
+        auth: AUTH,
+        formats: ['spdx-json'],
+      });
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            sbom: expect.objectContaining({
+              documents: undefined,
+              documentRefs: { 'spdx-json': expect.objectContaining({ bytes: 123 }) },
+            }),
+          }),
+        }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ document: generatedSbom.documents['spdx-json'] }),
+      );
+    });
+
+    test('writes newly generated SBOM documents off-heap before persisting metadata', async () => {
+      const generatedSbom = createSbomResult(CURRENT_IMAGE);
+      const harness = createHarness({
+        container: createContainer({
+          security: undefined,
+          image: {
+            registry: { name: 'hub', url: 'my-registry' },
+            name: 'test/app',
+            tag: { value: '1.2.3' },
+            digest: { value: 'sha256:abc' },
+          },
+        }),
+      });
+      harness.deps.generateImageSbom.mockResolvedValueOnce(generatedSbom);
+
+      await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      expect(harness.deps.sbomStorage.writeDocument).toHaveBeenCalledWith({
+        subjectDigest: 'sha256:abc',
+        image: CURRENT_IMAGE,
+        format: 'spdx-json',
+        document: generatedSbom.documents['spdx-json'],
+      });
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0].security.sbom;
+      expect(persisted.documents).toBeUndefined();
+      expect(persisted.documentRefs['spdx-json']).toEqual(expect.objectContaining({ bytes: 123 }));
     });
 
     test('generates sbom and persists merged documents when requested format is missing', async () => {
@@ -323,9 +460,10 @@ describe('api/container/security', () => {
         expect.objectContaining({
           security: expect.objectContaining({
             sbom: expect.objectContaining({
-              documents: {
-                'spdx-json': { SPDXID: 'SPDXRef-CACHED' },
-                'cyclonedx-json': { bomFormat: 'CycloneDX', specVersion: '1.6' },
+              documents: undefined,
+              documentRefs: {
+                'spdx-json': expect.objectContaining({ bytes: 123 }),
+                'cyclonedx-json': expect.objectContaining({ bytes: 123 }),
               },
             }),
           }),
@@ -342,12 +480,15 @@ describe('api/container/security', () => {
       });
     });
 
-    test('returns 500 when sbom generation succeeds without requested document', async () => {
+    test.each([
+      {},
+      undefined,
+    ])('returns 500 when sbom generation succeeds without requested document (%j)', async (documents) => {
       const harness = createHarness();
       harness.deps.generateImageSbom.mockResolvedValueOnce(
         createSbomResult(CURRENT_IMAGE, {
           status: 'generated',
-          documents: {},
+          documents,
         }),
       );
 
@@ -391,6 +532,24 @@ describe('api/container/security', () => {
         securityConfiguration: {
           enabled: false,
           scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: false, formats: [] },
+        },
+      });
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
+      expect(harness.deps.broadcastScanStarted).not.toHaveBeenCalled();
+      expect(harness.deps.scanImageForVulnerabilities).not.toHaveBeenCalled();
+    });
+
+    test('returns 400 when the configured scan provider is invalid', async () => {
+      const harness = createHarness({
+        securityConfiguration: {
+          enabled: true,
+          scanner: '',
           signature: { verify: false },
           sbom: { enabled: false, formats: [] },
         },
@@ -487,7 +646,11 @@ describe('api/container/security', () => {
           security: expect.objectContaining({
             scan: currentScan,
             signature: currentSignature,
-            sbom: currentSbom,
+            sbom: expect.objectContaining({
+              image: CURRENT_IMAGE,
+              documents: undefined,
+              documentRefs: { 'spdx-json': expect.objectContaining({ bytes: 123 }) },
+            }),
             updateScan: undefined,
             updateSignature: undefined,
             updateSbom: undefined,
@@ -635,9 +798,17 @@ describe('api/container/security', () => {
         expect.objectContaining({
           security: expect.objectContaining({
             scan: currentScan,
-            sbom: currentSbom,
+            sbom: expect.objectContaining({
+              image: CURRENT_IMAGE,
+              documents: undefined,
+              documentRefs: { 'spdx-json': expect.objectContaining({ bytes: 123 }) },
+            }),
             updateScan: updateScan,
-            updateSbom,
+            updateSbom: expect.objectContaining({
+              image: UPDATE_IMAGE,
+              documents: undefined,
+              documentRefs: { 'spdx-json': expect.objectContaining({ bytes: 123 }) },
+            }),
           }),
         }),
       );
@@ -670,7 +841,11 @@ describe('api/container/security', () => {
         expect.objectContaining({
           security: expect.objectContaining({
             scan: currentScan,
-            sbom: currentSbom,
+            sbom: expect.objectContaining({
+              image: CURRENT_IMAGE,
+              documents: undefined,
+              documentRefs: { 'spdx-json': expect.objectContaining({ bytes: 123 }) },
+            }),
             updateScan: updateScan,
           }),
         }),
@@ -688,7 +863,11 @@ describe('api/container/security', () => {
   describe('scanContainer cycle-complete emission', () => {
     test('emits cycle-complete with 0 alerts on a clean scan', async () => {
       const harness = createHarness({
-        container: createContainer({ updateAvailable: false, result: undefined }),
+        container: createContainer({
+          updateAvailable: false,
+          result: undefined,
+          security: undefined,
+        }),
       });
       harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(createScanResult());
 
@@ -790,9 +969,17 @@ describe('api/container/security', () => {
 
       await callScanContainer(harness.handlers);
 
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            scan: expect.objectContaining({ imageDigest: 'sha256:abc123' }),
+          }),
+        }),
+      );
+
       expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
         'sha256:abc123',
-        scanResult,
+        expect.objectContaining({ ...scanResult, imageDigest: 'sha256:abc123' }),
         '2026-03-04T11:55:00.000Z',
       );
     });
@@ -816,7 +1003,7 @@ describe('api/container/security', () => {
 
       expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
         'sha256:abc123',
-        scanResult,
+        expect.objectContaining({ ...scanResult, imageDigest: 'sha256:abc123' }),
         '',
       );
     });
@@ -855,6 +1042,34 @@ describe('api/container/security', () => {
 
       await callScanContainer(harness.handlers);
 
+      expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      'grype',
+      'both',
+    ])('does not populate the Trivy digest cache for %s on-demand scans', async (scanner) => {
+      const harness = createHarness({
+        container: createContainer({
+          image: {
+            registry: { name: 'hub', url: 'my-registry' },
+            name: 'test/app',
+            tag: { value: '1.2.3' },
+            digest: { watch: true, value: 'sha256:abc123' },
+          },
+        }),
+        securityConfiguration: {
+          enabled: true,
+          scanner,
+          signature: { verify: false },
+          sbom: { enabled: false, formats: [] },
+        },
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(createScanResult({ scanner }));
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.getTrivyDatabaseStatus).not.toHaveBeenCalled();
       expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
     });
   });

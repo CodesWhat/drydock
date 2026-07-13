@@ -1,12 +1,17 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import logger from '../log/index.js';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { recordAuditEvent } from './audit-events.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
-import { sendErrorResponse } from './error-response.js';
-import { handleContainerActionError } from './helpers.js';
+import {
+  classifyPreviewError,
+  sanitizePreviewErrorReason,
+  sendPreviewError,
+  TRIGGER_ACTION,
+} from './preview-errors.js';
 
 const log = logger.child({ component: 'preview' });
 
@@ -20,7 +25,10 @@ async function previewContainer(req: Request, res: Response) {
 
   const container = storeContainer.getContainer(id);
   if (!container) {
-    sendErrorResponse(res, 404, 'Container not found');
+    sendPreviewError(res, 404, {
+      code: 'container-not-found',
+      message: 'Container not found',
+    });
     return;
   }
 
@@ -28,12 +36,35 @@ async function previewContainer(req: Request, res: Response) {
     triggerTypes: ['docker', 'dockercompose'],
   });
   if (!trigger) {
-    sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
+    log.warn(`${NO_DOCKER_TRIGGER_FOUND_ERROR} (${sanitizeLogParam(id)})`);
+    sendPreviewError(res, 404, {
+      code: 'no-trigger-configured',
+      message: 'No action trigger configured for this container',
+      action: TRIGGER_ACTION,
+    });
     return;
   }
 
   try {
     const preview = await trigger.preview(container);
+
+    if (typeof preview?.error === 'string') {
+      const reason = sanitizePreviewErrorReason(preview.error);
+      log.warn(
+        `Container ${sanitizeLogParam(id)} was not found by its configured watcher (${sanitizeLogParam(reason)})`,
+      );
+      recordAuditEvent({
+        action: 'preview',
+        container,
+        status: 'error',
+        details: `container-runtime-not-found: ${reason}`,
+      });
+      sendPreviewError(res, 404, {
+        code: 'container-runtime-not-found',
+        message: 'Container was not found by the configured Docker watcher',
+      });
+      return;
+    }
 
     recordAuditEvent({
       action: 'preview',
@@ -43,15 +74,18 @@ async function previewContainer(req: Request, res: Response) {
 
     res.status(200).json(preview);
   } catch (e: unknown) {
-    handleContainerActionError({
-      error: e,
+    const classified = classifyPreviewError(e, container);
+    const diagnosticReason = classified.payload.details?.reason ?? sanitizePreviewErrorReason(e);
+    log.warn(
+      `Error previewing container ${sanitizeLogParam(id)} (${sanitizeLogParam(diagnosticReason)})`,
+    );
+    recordAuditEvent({
       action: 'preview',
-      actionLabel: 'previewing',
-      id,
       container,
-      log,
-      res,
+      status: 'error',
+      details: `${classified.payload.code}: ${diagnosticReason}`,
     });
+    sendPreviewError(res, classified.status, classified.payload);
   }
 }
 

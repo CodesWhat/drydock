@@ -9,8 +9,22 @@ vi.mock('node:fs', () => ({
   default: { readFileSync: vi.fn().mockReturnValue(Buffer.from('cert-data')) },
 }));
 const mockResolveConfiguredPath = vi.hoisted(() => vi.fn((path) => path));
+const mockGetValidatedStoreConfiguration = vi.hoisted(() =>
+  vi.fn(() => ({ path: '/validated/store', file: 'dd.json' })),
+);
+const mockOffloadSbomDocuments = vi.hoisted(() => vi.fn());
+const mockCreateSbomStorage = vi.hoisted(() => vi.fn(() => ({ storage: 'controller' })));
 vi.mock('../runtime/paths.js', () => ({
   resolveConfiguredPath: mockResolveConfiguredPath,
+}));
+vi.mock('../security/sbom-migration.js', () => ({
+  offloadSbomDocuments: mockOffloadSbomDocuments,
+}));
+vi.mock('../security/sbom-storage.js', () => ({
+  createSbomStorage: mockCreateSbomStorage,
+}));
+vi.mock('../store/index.js', () => ({
+  getConfiguration: mockGetValidatedStoreConfiguration,
 }));
 const mockLogChild = vi.hoisted(() => ({
   info: vi.fn(),
@@ -257,6 +271,43 @@ describe('AgentClient', () => {
   });
 
   describe('processContainer', () => {
+    test('offloads agent SBOM documents into controller storage before persistence', async () => {
+      const ref = { key: 'sbom/ref.json', sha256: 'a'.repeat(64), bytes: 2 };
+      mockOffloadSbomDocuments.mockImplementation(async ({ sbom }) => ({
+        ...sbom,
+        documents: undefined,
+        documentRefs: { 'spdx-json': ref },
+      }));
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementationOnce((container) => container);
+      const container = {
+        id: 'c1',
+        name: 'test',
+        image: { digest: { value: `sha256:${'1'.repeat(64)}` } },
+        result: { digest: `sha256:${'2'.repeat(64)}` },
+        security: {
+          sbom: { image: 'app:current', documents: { 'spdx-json': { current: true } } },
+          updateSbom: { image: 'app:update', documents: { 'spdx-json': { update: true } } },
+        },
+      };
+
+      await client.processContainer(container);
+
+      expect(mockOffloadSbomDocuments).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ subjectDigest: `sha256:${'1'.repeat(64)}` }),
+      );
+      expect(mockOffloadSbomDocuments).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ subjectDigest: `sha256:${'2'.repeat(64)}` }),
+      );
+      expect(mockCreateSbomStorage).toHaveBeenCalledWith({ rootDir: '/validated/store' });
+      const persisted = storeContainer.insertContainer.mock.calls[0][0];
+      expect(persisted.security.sbom.documents).toBeUndefined();
+      expect(persisted.security.updateSbom.documents).toBeUndefined();
+      expect(persisted.security.sbom.documentRefs['spdx-json']).toEqual(ref);
+    });
+
     test('should await emitContainerReport before resolving', async () => {
       let resolveEmit;
       const emitPromise = new Promise<void>((resolve) => {
@@ -1023,6 +1074,38 @@ describe('AgentClient', () => {
   });
 
   describe('startSse', () => {
+    test('should not start a new SSE request after stop', () => {
+      client.stop();
+
+      client.startSse();
+
+      expect(axios).not.toHaveBeenCalled();
+    });
+
+    test('should ignore an in-flight SSE response that resolves after stop', async () => {
+      const stream = new EventEmitter();
+      const destroy = vi.fn();
+      Object.assign(stream, { destroy });
+      let resolveConnection: (value: { data: EventEmitter }) => void = () => {};
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveConnection = resolve;
+          }),
+      );
+      const attachStreamHandlersSpy = vi.spyOn(client as any, 'attachStreamHandlers');
+
+      client.startSse();
+      client.stop();
+      resolveConnection({ data: stream });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(attachStreamHandlersSpy).not.toHaveBeenCalled();
+      expect((client as any).stableConnectionTimer).toBeNull();
+      expect(destroy).toHaveBeenCalledOnce();
+    });
+
     test('should clear existing reconnect timer', () => {
       const spy = vi.spyOn(client, 'startSse');
       client.scheduleReconnect(5000);
@@ -1441,6 +1524,40 @@ describe('AgentClient', () => {
   });
 
   describe('stop', () => {
+    test('should not reconnect when an in-flight SSE request fails after stop', async () => {
+      let rejectConnection: (error: Error) => void = () => {};
+      axios.mockRejectedValue(new Error('unexpected reconnect'));
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectConnection = reject;
+          }),
+      );
+
+      client.startSse();
+      client.stop();
+      rejectConnection(new Error('connection refused'));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect((client as any).reconnectTimer).toBeNull();
+    });
+
+    test('should not reconnect when an established SSE stream ends after stop', async () => {
+      const stream = new EventEmitter();
+      axios.mockRejectedValue(new Error('unexpected reconnect'));
+      axios.mockResolvedValueOnce({ data: stream });
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      client.stop();
+      stream.emit('end');
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect((client as any).reconnectTimer).toBeNull();
+    });
+
     test('should clear an armed stableConnectionTimer', async () => {
       const stream = new EventEmitter();
       axios.mockResolvedValue({ data: stream });
@@ -1601,9 +1718,15 @@ describe('AgentClient', () => {
       expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
     });
 
-    test('should emit emitAgentStatsChanged after dd:container-updated', async () => {
+    test('should emit agent stats after a health-only container update', async () => {
       vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
-      await client.handleEvent('dd:container-updated', { id: 'c1', name: 'web', watcher: 'local' });
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        status: 'running',
+        health: 'unhealthy',
+      });
       await vi.runAllTimersAsync();
       expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
     });
@@ -1968,6 +2091,19 @@ describe('AgentClient', () => {
       );
     });
 
+    test('should preserve dry-run phase when terminalizing agent update operations', async () => {
+      await client.handleEvent('dd:update-applied', {
+        operationId: 'remote-op-dryrun',
+        containerName: 'local_nginx',
+        phase: 'dryrun',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-dryrun',
+        expect.objectContaining({ status: 'succeeded', phase: 'dryrun' }),
+      );
+    });
+
     test('should omit non-object container payloads for update-applied events', async () => {
       await client.handleEvent('dd:update-applied', {
         operationId: 'remote-op-no-container',
@@ -1994,6 +2130,19 @@ describe('AgentClient', () => {
       });
       expect(updateOperationStore.getOperationById).not.toHaveBeenCalled();
       expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('should preserve dry-run phase when forwarding update-applied without an operation id', async () => {
+      await client.handleEvent('dd:update-applied', {
+        containerName: 'local_nginx',
+        phase: 'dryrun',
+      });
+
+      expect(event.emitContainerUpdateApplied).toHaveBeenCalledWith({
+        containerName: 'local_nginx',
+        container: undefined,
+        phase: 'dryrun',
+      });
     });
 
     test('should scope batch ids and tag container objects for update-applied payloads without operation ids', async () => {
@@ -2864,6 +3013,38 @@ describe('AgentClient', () => {
           container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
         }),
       ]);
+    });
+
+    test('should isolate SBOM offload failures within a watcher snapshot', async () => {
+      mockOffloadSbomDocuments.mockRejectedValueOnce(new Error('controller storage unavailable'));
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((container) => ({
+        ...container,
+        updateAvailable: true,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [
+          {
+            id: 'c1',
+            name: 'broken-sbom',
+            watcher: 'local',
+            security: { sbom: { documents: { 'spdx-json': { broken: true } } } },
+          },
+          { id: 'c2', name: 'healthy', watcher: 'local' },
+        ],
+      });
+
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
+        }),
+      ]);
+      expect(mockLogChild.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to process watcher snapshot container c1'),
+      );
     });
 
     test('should preserve changed=true for remote container updates when watcher snapshot closes the same cycle', async () => {

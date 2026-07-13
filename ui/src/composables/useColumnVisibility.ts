@@ -116,6 +116,17 @@ const allColumns: ColumnDef[] = [
     required: false,
   },
   {
+    key: 'links',
+    label: 'Resources',
+    labelKey: 'containersView.columns.resources',
+    px: 'px-1',
+    size: 152,
+    minSize: 152,
+    maxSize: 152,
+    autoSize: 'fixed',
+    required: true,
+  },
+  {
     key: 'uptime',
     label: 'Uptime',
     labelKey: 'containersView.columns.uptime',
@@ -131,7 +142,7 @@ const allColumns: ColumnDef[] = [
 // hand-authored `#card` template (ContainersGroupedViews.vue) instead of DataTable's generic
 // cardPriority-driven card composition, so those annotations would be inert and misleading.
 
-const visibleColumns = ref<Set<string>>(new Set(preferences.containers.columns));
+const visibleColumns = ref<Set<string>>(new Set([...preferences.containers.columns, 'links']));
 watch(
   visibleColumns,
   (v) => {

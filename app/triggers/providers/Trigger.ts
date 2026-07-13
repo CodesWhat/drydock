@@ -683,9 +683,12 @@ class Trigger<
   private readonly securityDigestBuffer: Map<string, Map<string, SecurityDigestEntry>> = new Map();
   private digestBufferUpdatedAt: Map<string, number> = new Map();
   private batchRetryBufferUpdatedAt: Map<string, number> = new Map();
+  private securityDigestBufferUpdatedAt: Map<string, number> = new Map();
   private bufferEntryRetentionMs = BUFFER_ENTRY_RETENTION_MS;
   private digestBufferMaxEntries = 5_000;
   private batchRetryBufferMaxEntries = 5_000;
+  private securityDigestBufferMaxCycles = 100;
+  private securityDigestCycleMaxEntries = 5_000;
   private readonly digestBufferStore = new DigestBuffer<Container>({
     name: 'digest buffer',
     entries: this.digestBuffer,
@@ -703,6 +706,17 @@ class Trigger<
     timestamps: this.batchRetryBufferUpdatedAt,
     retentionMs: () => this.bufferEntryRetentionMs,
     maxEntries: () => this.batchRetryBufferMaxEntries,
+    log: {
+      debug: (message) => this.log.debug(message),
+      warn: (message) => this.log.warn(message),
+    },
+  });
+  private readonly securityDigestBufferStore = new DigestBuffer<Map<string, SecurityDigestEntry>>({
+    name: 'security digest cycle buffer',
+    entries: this.securityDigestBuffer,
+    timestamps: this.securityDigestBufferUpdatedAt,
+    retentionMs: () => this.bufferEntryRetentionMs,
+    maxEntries: () => this.securityDigestBufferMaxCycles,
     log: {
       debug: (message) => this.log.debug(message),
       warn: (message) => this.log.warn(message),
@@ -772,6 +786,10 @@ class Trigger<
 
   private getCategory() {
     return getTriggerCategoryForType(this.type);
+  }
+
+  private isAutomaticActionDispatchBlocked() {
+    return this.getCategory() === 'action' && getUpdateMode() !== 'auto';
   }
 
   private getAutoMode() {
@@ -955,6 +973,37 @@ class Trigger<
 
   private pruneBatchRetryBuffer(now = Date.now()) {
     this.batchRetryBufferStore.prune(now);
+  }
+
+  private pruneSecurityDigestBuffer(now = Date.now()) {
+    this.securityDigestBufferStore.prune(now);
+  }
+
+  private bufferSecurityDigestEntry(
+    cycleId: string,
+    containerKey: string,
+    entry: Omit<SecurityDigestEntry, 'bufferedAt'>,
+  ): number {
+    const now = Date.now();
+    const cycleEntries = this.securityDigestBuffer.get(cycleId) ?? new Map();
+    cycleEntries.delete(containerKey);
+    cycleEntries.set(containerKey, {
+      ...entry,
+      bufferedAt: new Date(now).toISOString(),
+    });
+    this.securityDigestBufferStore.set(cycleId, cycleEntries, now);
+
+    while (cycleEntries.size > this.securityDigestCycleMaxEntries) {
+      const oldestContainerKey = cycleEntries.keys().next().value as string;
+      cycleEntries.delete(oldestContainerKey);
+      this.log.warn(
+        `Evicted oldest security digest entry ${cycleId}/${oldestContainerKey} after reaching the ${this.securityDigestCycleMaxEntries}-entry cycle limit`,
+      );
+    }
+    if (cycleEntries.size === 0) {
+      this.securityDigestBufferStore.delete(cycleId);
+    }
+    return cycleEntries.size;
   }
 
   private shouldDispatchNotificationEventInBatch(
@@ -1197,18 +1246,14 @@ class Trigger<
         (container ? getContainerNotificationKey(container) : undefined) ?? payload.containerName;
       const containerName = (container ? fullName(container) : undefined) ?? payload.containerName;
 
-      if (!this.securityDigestBuffer.has(cycleId)) {
-        this.securityDigestBuffer.set(cycleId, new Map());
-      }
       // Last-write-wins within same cycle.
-      this.securityDigestBuffer.get(cycleId)!.set(containerKey, {
+      const cycleBufferSize = this.bufferSecurityDigestEntry(cycleId, containerKey, {
         containerName,
         summary: payload.summary ?? { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
         status: payload.status,
-        bufferedAt: new Date().toISOString(),
       });
       this.log.debug(
-        `Buffered security alert for ${containerName} in cycle ${cycleId} (cycle buffer size: ${this.securityDigestBuffer.get(cycleId)!.size})`,
+        `Buffered security alert for ${containerName} in cycle ${cycleId} (cycle buffer size: ${cycleBufferSize})`,
       );
       return;
     }
@@ -1878,11 +1923,11 @@ class Trigger<
     }
 
     logContainer.debug('Run');
+    if (this.isAutomaticActionDispatchBlocked()) {
+      logContainer.debug('Global update mode does not allow automatic actions => ignore');
+      return;
+    }
     if (this.isUpdateActionTrigger()) {
-      if (getUpdateMode() !== 'auto') {
-        logContainer.debug('Global update mode does not allow automatic updates => ignore');
-        return;
-      }
       if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
         logContainer.debug(
           'Outside maintenance window, deferring auto update until the window opens',
@@ -1956,8 +2001,8 @@ class Trigger<
       this.liftSuppressionIfConfirmed(containerReport.container, 'update confirmed');
     }
 
-    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
-      this.log.debug('Global update mode does not allow automatic updates => ignore');
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug('Global update mode does not allow automatic actions => ignore');
       return;
     }
 
@@ -2020,8 +2065,8 @@ class Trigger<
       }
     }
 
-    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
-      this.log.debug('Global update mode does not allow automatic batch updates => ignore');
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug('Global update mode does not allow automatic batch actions => ignore');
       return;
     }
 
@@ -2127,8 +2172,8 @@ class Trigger<
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
-    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
-      this.log.debug('Global update mode does not allow automatic digest updates => ignore');
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug('Global update mode does not allow automatic digest actions => ignore');
       return;
     }
     if (!this.shouldHandleDigestContainerReport(containerReport)) {
@@ -2224,9 +2269,9 @@ class Trigger<
       this.log.debug('Digest cron fired — buffer empty, nothing to send');
       return;
     }
-    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
+    if (this.isAutomaticActionDispatchBlocked()) {
       this.log.debug(
-        'Global update mode does not allow automatic digest flushes => preserve buffer',
+        'Global update mode does not allow automatic digest action flushes => preserve buffer',
       );
       return;
     }
@@ -2324,6 +2369,7 @@ class Trigger<
     cycleId: string,
     cyclePayload: event.SecurityScanCycleCompleteEventPayload,
   ): Promise<void> {
+    this.pruneSecurityDigestBuffer();
     const cycleEntries = this.securityDigestBuffer.get(cycleId);
     if (!cycleEntries || cycleEntries.size === 0) {
       this.log.debug(
@@ -2399,7 +2445,7 @@ class Trigger<
       });
       status = 'success';
       // Drain the cycle's entries after successful flush.
-      this.securityDigestBuffer.delete(cycleId);
+      this.securityDigestBufferStore.delete(cycleId);
     } catch (e: unknown) {
       const errorMessage = Trigger.getErrorMessage(e);
       this.log.warn(`Security digest flush failed for cycle ${cycleId} (${errorMessage})`);
@@ -2648,6 +2694,7 @@ class Trigger<
     this.digestBuffer.clear();
     this.digestBufferUpdatedAt.clear();
     this.securityDigestBuffer.clear();
+    this.securityDigestBufferUpdatedAt.clear();
     this.batchRetryBuffer.clear();
     this.batchRetryBufferUpdatedAt.clear();
     this.clearEventBatchDispatches();

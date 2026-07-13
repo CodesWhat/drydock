@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import { describe, expect, test, vi } from 'vitest';
 import { createTrivyDatabaseWarmup } from './trivy-warmup.js';
 
@@ -67,6 +68,59 @@ describe('createTrivyDatabaseWarmup', () => {
 
     finish();
     await expect(Promise.all([first, second])).resolves.toEqual(['ready', 'ready']);
+  });
+
+  test('does not let a stale completion clear a newer in-flight retry', async () => {
+    let finishRetry!: () => void;
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('registry unavailable'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishRetry = resolve;
+          }),
+      );
+    const warmup = createTrivyDatabaseWarmup({
+      getConfiguration: enabledLocalConfiguration,
+      run,
+      timeoutMs: 300_000,
+    });
+
+    const nativeThen = runInNewContext('Promise.prototype.then') as typeof Promise.prototype.then;
+    const originalThen = Promise.prototype.then;
+    let replayStaleCleanup: (() => unknown) | undefined;
+    Promise.prototype.then = function (
+      this: Promise<unknown>,
+      onFulfilled?: ((value: unknown) => unknown) | null,
+      onRejected?: ((reason: unknown) => unknown) | null,
+    ) {
+      return Reflect.apply(nativeThen, this, [
+        (value: unknown) => {
+          const result = onFulfilled?.(value);
+          replayStaleCleanup = () => onFulfilled?.(value);
+          return result;
+        },
+        onRejected,
+      ]);
+    } as typeof Promise.prototype.then;
+
+    let failedAttempt: Promise<'ready' | 'skipped' | 'failed'>;
+    try {
+      failedAttempt = warmup();
+    } finally {
+      Promise.prototype.then = originalThen;
+    }
+    await expect(failedAttempt).resolves.toBe('failed');
+    expect(replayStaleCleanup).toBeTypeOf('function');
+
+    const retry = warmup();
+    replayStaleCleanup?.();
+    const concurrent = warmup();
+
+    expect(run).toHaveBeenCalledTimes(2);
+    finishRetry();
+    await expect(Promise.all([retry, concurrent])).resolves.toEqual(['ready', 'ready']);
   });
 
   test('keeps the successful result ready without downloading again', async () => {

@@ -468,7 +468,7 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Pull failed' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
 
     test('should stringify non-Error rollback failures', async () => {
@@ -503,7 +503,7 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'pull failed as string' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
   });
 });

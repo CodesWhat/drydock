@@ -43,6 +43,9 @@ import {
 } from '../model/container-update-operation.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
+import { createConfiguredSbomStorage } from '../security/configured-sbom-storage.js';
+import { offloadSbomDocuments } from '../security/sbom-migration.js';
+import type { SbomStorage } from '../security/sbom-storage.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
@@ -51,6 +54,15 @@ import { uuidv7 } from '../util/uuid.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
+
+let controllerSbomStorage: SbomStorage | undefined;
+
+function getControllerSbomStorage(): SbomStorage {
+  if (!controllerSbomStorage) {
+    controllerSbomStorage = createConfiguredSbomStorage();
+  }
+  return controllerSbomStorage;
+}
 
 export interface AgentClientConfig {
   host: string;
@@ -208,6 +220,7 @@ export class AgentClient {
   private reconnectTimer: NodeJS.Timeout | null;
   private reconnectAttempts: number;
   private stableConnectionTimer: NodeJS.Timeout | null;
+  private stopped: boolean;
   private hasConnectedOnce: boolean;
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
@@ -239,6 +252,7 @@ export class AgentClient {
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
     this.stableConnectionTimer = null;
+    this.stopped = false;
     this.hasConnectedOnce = false;
     this.pendingFreshStateAfterRemoteUpdate = new Set();
     this.pendingWatcherCycleReports = new Map();
@@ -401,6 +415,7 @@ export class AgentClient {
 
   async init() {
     this.log.info(`Connecting to agent ${this.name} at ${this.baseUrl}`);
+    this.stopped = false;
     this.startSse();
   }
 
@@ -546,7 +561,36 @@ export class AgentClient {
     );
   }
 
-  private buildContainerReport(container: Container, changedOverride?: boolean): ContainerReport {
+  private async buildContainerReport(
+    container: Container,
+    changedOverride?: boolean,
+  ): Promise<ContainerReport> {
+    if (container.security?.sbom?.documents) {
+      container = {
+        ...container,
+        security: {
+          ...container.security,
+          sbom: await offloadSbomDocuments({
+            sbom: container.security.sbom,
+            storage: getControllerSbomStorage(),
+            subjectDigest: container.image?.digest?.value,
+          }),
+        },
+      };
+    }
+    if (container.security?.updateSbom?.documents) {
+      container = {
+        ...container,
+        security: {
+          ...container.security,
+          updateSbom: await offloadSbomDocuments({
+            sbom: container.security.updateSbom,
+            storage: getControllerSbomStorage(),
+            subjectDigest: container.result?.digest,
+          }),
+        },
+      };
+    }
     container.agent = this.name;
     // The container coming from Agent should already be normalized and have results
     // We rely on the Agent to perform Registry checks if configured
@@ -701,7 +745,7 @@ export class AgentClient {
   }
 
   async processContainer(container: Container): Promise<ContainerReport> {
-    const containerReport = this.buildContainerReport(container);
+    const containerReport = await this.buildContainerReport(container);
 
     // Emit report so Triggers can fire if changed
     await emitContainerReport(containerReport);
@@ -716,6 +760,7 @@ export class AgentClient {
   }
 
   stop() {
+    this.stopped = true;
     this.clearStableConnectionTimer();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -753,7 +798,7 @@ export class AgentClient {
 
   scheduleReconnect(delay?: number) {
     this.clearStableConnectionTimer();
-    if (this.reconnectTimer) {
+    if (this.stopped || this.reconnectTimer) {
       return;
     }
     const reconnectDelay = delay ?? this.getNextReconnectDelayMs();
@@ -837,6 +882,9 @@ export class AgentClient {
   }
 
   startSse() {
+    if (this.stopped) {
+      return;
+    }
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -848,6 +896,10 @@ export class AgentClient {
       ...this.buildRequestConfig('GET', '/api/events'),
     })
       .then((response) => {
+        if (this.stopped) {
+          response.data?.destroy?.();
+          return;
+        }
         // Reset the backoff only after the stream stays open long enough to be
         // considered healthy. A stream that returns 200 then ends immediately
         // must not reset the backoff, or reconnects loop at a flat 1s (#362).
@@ -936,13 +988,21 @@ export class AgentClient {
 
     const containerReports: ContainerReport[] = [];
     for (const container of containers) {
-      const pendingContainerReport = this.takePendingWatcherCycleReport(watcherName, container);
-      if (pendingContainerReport) {
-        this.clearPendingFreshState(container.id);
-        containerReports.push(this.buildContainerReport(container, pendingContainerReport.changed));
-        continue;
+      try {
+        const pendingContainerReport = this.takePendingWatcherCycleReport(watcherName, container);
+        if (pendingContainerReport) {
+          this.clearPendingFreshState(container.id);
+          containerReports.push(
+            await this.buildContainerReport(container, pendingContainerReport.changed),
+          );
+          continue;
+        }
+        containerReports.push(await this.processAuthoritativeContainer(container));
+      } catch (error: unknown) {
+        this.log.error(
+          `Failed to process watcher snapshot container ${sanitizeLogParam(container.id)} (${sanitizeLogParam(getErrorMessage(error))})`,
+        );
       }
-      containerReports.push(await this.processAuthoritativeContainer(container));
     }
     this.clearPendingWatcherCycleReports(watcherName);
     await emitContainerReports(containerReports);
@@ -1262,7 +1322,7 @@ export class AgentClient {
       containerName: payload.containerName,
       status: 'succeeded',
       ...(containerId !== undefined ? { containerId } : {}),
-      phase: 'succeeded',
+      phase: payload.phase === 'dryrun' ? 'dryrun' : 'succeeded',
       ...(agentContainer !== undefined ? { container: agentContainer } : {}),
     });
     return this.resolveAgentOperationId(remoteOperationId);
@@ -1459,6 +1519,7 @@ export class AgentClient {
                     agent: this.name,
                   }
                 : undefined,
+            ...(data.phase === 'dryrun' ? { phase: 'dryrun' } : {}),
           });
         }
         return;

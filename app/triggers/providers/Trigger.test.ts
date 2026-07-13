@@ -619,6 +619,27 @@ test.each([
   expect(notificationSpy).toHaveBeenCalledWith(report.container);
 });
 
+test.each([
+  'manual',
+  'notify',
+] as const)('%s mode suppresses automatic Command triggers in simple mode', async (updateMode) => {
+  mockGetUpdateMode.mockReturnValue(updateMode);
+  trigger.type = 'command';
+  const commandSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      id: 'c1',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  } as any);
+
+  expect(commandSpy).not.toHaveBeenCalled();
+});
+
 test('simple action dispatch rechecks mode before enqueueing when mode changes mid-report', async () => {
   mockGetUpdateMode.mockReturnValueOnce('auto').mockReturnValueOnce('manual');
   trigger.type = 'docker';
@@ -6694,6 +6715,53 @@ describe('digest mode', () => {
     expect((trigger as any).digestBuffer.size).toBe(0);
   });
 
+  test.each([
+    'manual',
+    'notify',
+  ] as const)('Command digest reports are not buffered in %s mode', async (updateMode) => {
+    mockGetUpdateMode.mockReturnValue(updateMode);
+    trigger.type = 'command';
+    trigger.configuration.mode = 'digest';
+
+    await trigger.handleContainerReportDigest({
+      changed: true,
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    } as any);
+
+    expect((trigger as any).digestBuffer.size).toBe(0);
+  });
+
+  test.each([
+    'manual',
+    'notify',
+  ] as const)('Command digest flush preserves buffered updates in %s mode', async (updateMode) => {
+    mockGetUpdateMode.mockReturnValue(updateMode);
+    trigger.type = 'command';
+    trigger.configuration.mode = 'digest';
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    (trigger as any).digestBuffer.set(container.id, container);
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    expect((trigger as any).digestBuffer.size).toBe(1);
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
   test('handleContainerReports should use the accepted update batch path for action triggers', async () => {
     trigger.configuration.mode = 'batch';
     vi.spyOn(trigger as any, 'isUpdateActionTrigger').mockReturnValue(true);
@@ -6740,6 +6808,32 @@ describe('digest mode', () => {
     ]);
 
     expect(runAcceptedUpdateBatchSpy).not.toHaveBeenCalled();
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'manual',
+    'notify',
+  ] as const)('Command batches are not dispatched or recorded in %s mode', async (updateMode) => {
+    mockGetUpdateMode.mockReturnValue(updateMode);
+    trigger.type = 'command';
+    trigger.configuration.mode = 'batch';
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReports([
+      {
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        },
+        changed: true,
+      } as any,
+    ]);
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
     expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
   });
 
@@ -8142,6 +8236,121 @@ describe('security digest mode (SECURITYMODE=digest)', () => {
 
     const cycleBuffer = (trigger as any).securityDigestBuffer.get('cycle-001');
     expect(cycleBuffer.size).toBe(2);
+  });
+
+  test('security digest buffering evicts the oldest inactive cycle at the cycle limit', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+    (trigger as any).securityDigestBufferMaxCycles = 2;
+    vi.useFakeTimers();
+
+    try {
+      for (const [time, cycleId, id] of [
+        [1_000, 'cycle-A', 'c1'],
+        [2_000, 'cycle-B', 'c2'],
+        [3_000, 'cycle-C', 'c3'],
+      ] as const) {
+        vi.setSystemTime(time);
+        await trigger.handleSecurityAlertEvent({
+          containerName: `local_${id}`,
+          details: 'high=1',
+          container: { id, watcher: 'local', name: id },
+          cycleId,
+          summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+        });
+      }
+
+      expect((trigger as any).securityDigestBuffer.has('cycle-A')).toBe(false);
+      expect((trigger as any).securityDigestBuffer.has('cycle-B')).toBe(true);
+      expect((trigger as any).securityDigestBuffer.has('cycle-C')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('security digest buffering evicts the oldest finding at the per-cycle limit', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+    (trigger as any).securityDigestCycleMaxEntries = 2;
+
+    for (const id of ['c1', 'c2', 'c3']) {
+      await trigger.handleSecurityAlertEvent({
+        containerName: `local_${id}`,
+        details: 'high=1',
+        container: { id, watcher: 'local', name: id },
+        cycleId: 'cycle-001',
+        summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+      });
+    }
+
+    expect([...(trigger as any).securityDigestBuffer.get('cycle-001').keys()]).toEqual([
+      'c2',
+      'c3',
+    ]);
+  });
+
+  test('security digest buffering can be disabled with a zero per-cycle limit', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+    (trigger as any).securityDigestCycleMaxEntries = 0;
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_c1',
+      details: 'high=1',
+      container: { id: 'c1', watcher: 'local', name: 'c1' },
+      cycleId: 'cycle-001',
+      summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+    });
+
+    expect((trigger as any).securityDigestBuffer.has('cycle-001')).toBe(false);
+  });
+
+  test('security digest buffering prunes stale findings before adding a new alert', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+    (trigger as any).bufferEntryRetentionMs = 500;
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(1_000);
+      await trigger.handleSecurityAlertEvent({
+        containerName: 'local_old',
+        details: 'high=1',
+        container: { id: 'old', watcher: 'local', name: 'old' },
+        cycleId: 'cycle-old',
+        summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+      });
+
+      vi.setSystemTime(2_000);
+      await trigger.handleSecurityAlertEvent({
+        containerName: 'local_new',
+        details: 'high=1',
+        container: { id: 'new', watcher: 'local', name: 'new' },
+        cycleId: 'cycle-new',
+        summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+      });
+
+      expect((trigger as any).securityDigestBuffer.has('cycle-old')).toBe(false);
+      expect((trigger as any).securityDigestBuffer.get('cycle-new').has('new')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('handleSecurityAlertEvent last-write-wins within same cycle for same container', async () => {

@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "عرض المشروع"
     },
+    "registryLink": { "viewRegistry": "عرض السجل" },
     "releaseNotesLink": {
       "releaseNotes": "ملاحظات الإصدار",
       "viewFullNotes": "عرض الملاحظات الكاملة",
@@ -549,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "مثبّت — يتوفر إصدار أحدث للعلم فقط."
+      }
     }
   }
 }

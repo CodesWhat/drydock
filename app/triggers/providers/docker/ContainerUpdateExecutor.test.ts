@@ -611,15 +611,20 @@ describe('ContainerUpdateExecutor', () => {
 
   test('execute returns false for dry-run mode after image pull', async () => {
     const pullImage = vi.fn().mockResolvedValue(undefined);
+    const log = createLog();
     const executor = createExecutor({
       getConfiguration: () => ({ dryrun: true }),
       pullImage,
     });
 
-    await expect(executor.execute(createContext(), createContainer(), createLog())).resolves.toBe(
-      false,
-    );
+    await expect(executor.execute(createContext(), createContainer(), log)).resolves.toBe(false);
     expect(pullImage).toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledWith(
+      'Do not replace the existing container because dry-run mode is enabled',
+    );
+    expect(log.info).not.toHaveBeenCalledWith(
+      'Do not replace the existing container because dry-run mode is enabled',
+    );
   });
 
   test('execute records pull failures before rethrowing the error', async () => {

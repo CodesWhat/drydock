@@ -250,20 +250,19 @@ describe('init', () => {
     );
   });
 
-  test('should no-op when scanner is not trivy', () => {
+  test('should schedule scans when Grype is configured', () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
-      scanner: 'other',
+      scanner: 'grype',
       scan: { cron: '0 3 * * *', jitter: 60000 },
     });
+    mockCronValidate.mockReturnValue(true);
+    mockCronSchedule.mockReturnValue({ stop: vi.fn() });
 
     init();
 
-    expect(mockCronSchedule).not.toHaveBeenCalled();
-    expect(isRunning()).toBe(false);
-    expect(mockLogInfo).toHaveBeenCalledWith(
-      'Security scanner not enabled, scheduled scanning disabled',
-    );
+    expect(mockCronSchedule).toHaveBeenCalled();
+    expect(isRunning()).toBe(true);
   });
 
   test('should invoke runScheduledScans when cron fires', async () => {
@@ -953,18 +952,17 @@ describe('runScheduledScans', () => {
     );
   });
 
-  test('should skip when scanner is not trivy', async () => {
+  test('should run an empty scheduled Grype batch', async () => {
     mockGetSecurityConfiguration.mockReturnValue({
       ...createEnabledConfiguration(),
-      scanner: 'other',
+      scanner: 'grype',
     });
+    setMockContainersRaw([]);
 
     await runScheduledScans();
 
-    expect(mockGetContainers).not.toHaveBeenCalled();
-    expect(mockLogInfo).toHaveBeenCalledWith(
-      'Security scanner not enabled, skipping scheduled scan',
-    );
+    expect(mockGetContainersRaw).toHaveBeenCalled();
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalled();
   });
 
   test('should filter out containers with non-string digest values', async () => {

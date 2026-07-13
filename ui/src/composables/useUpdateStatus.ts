@@ -2,6 +2,7 @@ import { type ComputedRef, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { UpdateMode } from '../services/settings';
 import type {
+  Container,
   UpdateBlocker,
   UpdateBlockerReason,
   UpdateBlockerSeverity,
@@ -16,6 +17,7 @@ export interface UpdateStatusContainer {
   name: string;
   newTag?: string | null;
   newDigest?: string | null;
+  updateInsight?: Container['updateInsight'];
   updateEligibility?: UpdateEligibility;
 }
 
@@ -41,6 +43,7 @@ export interface UpdateStatusCondition {
 
 export type UpdateStatusState =
   | 'up-to-date'
+  | 'pinned'
   | 'ready'
   | 'soft-blocked'
   | 'hard-blocked'
@@ -242,7 +245,12 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
   let icon: string;
   let summary: string;
 
-  if (!hasUpdate) {
+  if (!hasUpdate && container.updateInsight) {
+    state = 'pinned';
+    tone = 'info';
+    icon = 'info';
+    summary = t('containerComponents.updateStatus.summary.pinned');
+  } else if (!hasUpdate) {
     state = 'up-to-date';
     tone = 'success';
     icon = 'up-to-date';

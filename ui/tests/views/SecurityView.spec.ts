@@ -5,6 +5,7 @@ const mockGetSecurityVulnerabilityOverview = vi.fn();
 const mockScanContainer = vi.fn();
 const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
+const mockManageSecurityAsset = vi.fn();
 const mockGetAllContainers = vi.fn();
 const mockRouterPush = vi.fn().mockResolvedValue(undefined);
 // Real refs (not plain `{ value }` objects) — the component's template uses bare
@@ -32,6 +33,7 @@ vi.mock('@/services/container', () => ({
 
 vi.mock('@/services/server', () => ({
   getSecurityRuntime: (...args: any[]) => mockGetSecurityRuntime(...args),
+  manageSecurityAsset: (...args: any[]) => mockManageSecurityAsset(...args),
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
@@ -68,6 +70,7 @@ vi.mock('@/views/security/securityViewUtils', async () => {
 });
 
 import { mount } from '@vue/test-utils';
+import ContainerLinkActions from '@/components/containers/ContainerLinkActions.vue';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
@@ -283,7 +286,8 @@ function makeSecurityCardDataTableStub(extraRows: any[] = []) {
           v-for="row in renderedRows"
           :key="row[rowKey || 'image']"
           class="security-card"
-          :data-card-id="row[rowKey || 'image']">
+          :data-card-id="row[rowKey || 'image']"
+          @click="$emit('row-click', row)">
           <slot name="card" :row="row" />
         </article>
         <slot name="empty" v-if="!rows || rows.length === 0" />
@@ -302,6 +306,56 @@ const projectLinkStub = defineComponent({
   inheritAttrs: false,
   props: ['sourceRepo', 'iconOnly', 'iconSize'],
   template: '<a class="project-link-stub" v-bind="$attrs">{{ sourceRepo }}</a>',
+});
+
+const containerLinkActionsStub = defineComponent({
+  inheritAttrs: false,
+  props: [
+    'sourceRepo',
+    'releaseNotes',
+    'currentReleaseNotes',
+    'releaseLink',
+    'containerId',
+    'fromTag',
+    'toTag',
+    'registry',
+    'registryName',
+    'registryUrl',
+    'iconSize',
+  ],
+  template: `
+    <div
+      data-test="container-link-actions-stub"
+      :data-source-repo="sourceRepo"
+      :data-container-id="containerId"
+      :data-from-tag="fromTag"
+      :data-to-tag="toTag"
+      :data-registry="registry"
+      :data-registry-name="registryName"
+      :data-registry-url="registryUrl"
+      :data-icon-size="iconSize"
+      v-bind="$attrs">
+      <button type="button" data-link-action="source" @click.stop>Source</button>
+      <button type="button" data-link-action="release" @click.stop>Release notes</button>
+      <button type="button" data-link-action="registry" @click.stop>Registry</button>
+    </div>
+  `,
+});
+
+const securityLinkTableStub = defineComponent({
+  props: ['rows', 'rowKey'],
+  emits: ['row-click'],
+  template: `
+    <div data-test="security-link-table-stub">
+      <div
+        v-for="row in rows"
+        :key="row[rowKey || 'image']"
+        class="security-link-table-row"
+        @click="$emit('row-click', row)">
+        <slot name="cell-image" :row="row" />
+      </div>
+    </div>
+  `,
 });
 
 const securityCardAppButtonStub = defineComponent({
@@ -324,6 +378,7 @@ function securityCardStubs(extraRows: any[] = []) {
     DataTable: makeSecurityCardDataTableStub(extraRows),
     ReleaseNotesLink: releaseNotesLinkStub,
     ProjectLink: projectLinkStub,
+    ContainerLinkActions: containerLinkActionsStub,
     AppButton: securityCardAppButtonStub,
     ContainerUpdateDialog: containerUpdateDialogStub,
   };
@@ -449,6 +504,7 @@ describe('SecurityView', () => {
     mockWindowNarrow.value = false;
     mockUpdateMode.value = 'manual';
     mockGetSecurityRuntime.mockResolvedValue(readyRuntimeStatus());
+    mockManageSecurityAsset.mockResolvedValue(undefined);
     mockGetAllContainers.mockResolvedValue([]);
     mockRouterPush.mockResolvedValue(undefined);
   });
@@ -1010,6 +1066,40 @@ describe('SecurityView', () => {
     });
   });
 
+  describe('compact scanner asset controls', () => {
+    it('renders touch-friendly pull and warm controls and runs the selected operation', async () => {
+      mockWindowNarrow.value = true;
+      mockGetSecurityRuntime.mockResolvedValue({
+        ...readyRuntimeStatus(),
+        backend: 'docker',
+        providers: [],
+        assets: [
+          { provider: 'trivy', state: 'ready' },
+          { provider: 'grype', state: 'missing' },
+        ],
+      });
+
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const warmButton = wrapper.find('.app-icon-button-stub[aria-label="Warm trivy"]');
+      const pullButton = wrapper.find('.app-icon-button-stub[aria-label="Pull grype"]');
+      expect(warmButton.exists()).toBe(true);
+      expect(warmButton.attributes('data-icon')).toBe('restart');
+      expect(warmButton.attributes('data-size')).toBe('sm');
+      expect(pullButton.exists()).toBe(true);
+      expect(pullButton.attributes('data-icon')).toBe('cloud-download');
+      expect(pullButton.attributes('data-size')).toBe('sm');
+
+      await pullButton.trigger('click');
+      await vi.waitFor(() => expect(mockManageSecurityAsset).toHaveBeenCalledWith('grype', 'pull'));
+      await flushPromises();
+
+      expect(mockGetSecurityRuntime).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('scan coverage display', () => {
     it('shows 0/N scanned when no containers have been scanned', async () => {
       mockContainers([makeContainer({ security: null }), makeContainer({ security: null })]);
@@ -1375,6 +1465,7 @@ describe('SecurityView', () => {
           name: 'nginx',
           displayName: 'nginx',
           image: { name: 'nginx', tag: { value: '1.25' } },
+          currentTag: '1.25',
           newTag: '1.26',
           status: 'running',
           registry: 'dockerhub',
@@ -1414,6 +1505,7 @@ describe('SecurityView', () => {
           name: 'nginx',
           displayName: 'nginx',
           image: { name: 'nginx', tag: { value: '1.25' } },
+          currentTag: '1.25',
           newTag: null,
           status: 'running',
           registry: 'dockerhub',
@@ -1820,9 +1912,11 @@ describe('SecurityView', () => {
       await flushPromises();
 
       expect(w.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
-      // Fallthrough attr from SecurityDetailPanel overrides the component's own data-test
-      expect(w.find('[data-test="security-detail-release-notes"]').exists()).toBe(true);
-      expect(w.find('[data-test="security-detail-project-link"]').exists()).toBe(true);
+      const resources = w.get('[data-test="container-quick-links"]');
+      expect(resources.find('[data-test="project-link"]').exists()).toBe(true);
+      expect(resources.find('[data-test="current-release-notes-link"]').exists()).toBe(true);
+      expect(resources.find('[data-test="registry-link"]').exists()).toBe(true);
+      expect(resources.findAll('[data-size="sm"]')).toHaveLength(3);
     });
 
     it('navigateToContainerUpdate joins multiple container IDs with comma', async () => {
@@ -1890,6 +1984,64 @@ describe('SecurityView', () => {
         path: '/containers',
         query: { containerIds: 'c1,c2' },
       });
+    });
+  });
+
+  describe('resource link actions', () => {
+    it('forwards table-row resources to one 44px cluster without triggering the row action', async () => {
+      preferences.views.security.mode = 'table';
+      mockContainers([makeContainer({ id: 'c1', name: 'nginx', displayName: 'nginx' })]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: '1.26',
+          currentTag: '1.25',
+          status: 'running',
+          registry: 'ghcr',
+          registryName: 'GitHub Container Registry',
+          registryUrl: 'https://ghcr.io/v2',
+          sourceRepo: 'github.com/nginx/nginx',
+          releaseLink: 'https://github.com/nginx/nginx/releases',
+        },
+      ]);
+
+      const w = factory({
+        DataTable: securityLinkTableStub,
+        ContainerLinkActions,
+        ContainerUpdateDialog: containerUpdateDialogStub,
+      });
+      await flushPromises();
+
+      const cluster = w.get('[data-test="container-quick-links"]');
+      const actions = w.getComponent(ContainerLinkActions);
+      expect(w.findAll('[data-test="container-quick-links"]')).toHaveLength(1);
+      expect(actions.props()).toMatchObject({
+        sourceRepo: 'github.com/nginx/nginx',
+        containerId: 'c1',
+        fromTag: '1.25',
+        toTag: '1.26',
+        registry: 'ghcr',
+        registryName: 'GitHub Container Registry',
+        registryUrl: 'https://ghcr.io/v2',
+        iconSize: 'sm',
+      });
+
+      const resourceLayout = w.get('[data-test="security-resource-actions"]');
+      const tableImageLayout = resourceLayout.element.parentElement;
+      const canWrapAtNarrowWidths =
+        tableImageLayout?.classList.contains('flex-wrap') ||
+        resourceLayout
+          .classes()
+          .some((className) =>
+            ['w-full', 'basis-full', 'max-sm:w-full', 'max-sm:basis-full'].includes(className),
+          );
+      expect(canWrapAtNarrowWidths).toBe(true);
+
+      await cluster.get('[data-test="registry-link"]').trigger('click');
+      expect((w.vm as any).selectedImage).toBeNull();
     });
   });
 
@@ -2041,8 +2193,8 @@ describe('SecurityView', () => {
       expect(nginxCard.text()).toContain('50%');
       expect(nginxCard.find('[data-test="security-card-update-btn"]').exists()).toBe(true);
       expect(nginxCard.find('[data-test="security-card-containers-link"]').exists()).toBe(true);
-      expect(nginxCard.find('[data-test="security-card-release-notes"]').exists()).toBe(true);
-      expect(nginxCard.find('[data-test="security-card-project-link"]').exists()).toBe(true);
+      expect(nginxCard.find('[data-test="security-card-resource-actions"]').exists()).toBe(true);
+      expect(nginxCard.find('[data-test="container-link-actions-stub"]').exists()).toBe(true);
 
       await nginxCard.get('[data-test="security-card-update-btn"]').trigger('click');
       await nextTick();
@@ -2067,8 +2219,58 @@ describe('SecurityView', () => {
       expect(cleanCard.text()).toContain('0 total');
       expect(cleanCard.text()).toContain('0%');
       expect(cleanCard.find('[data-test="security-card-update-btn"]').exists()).toBe(false);
-      expect(cleanCard.find('[data-test="security-card-release-notes"]').exists()).toBe(false);
-      expect(cleanCard.find('[data-test="security-card-project-link"]').exists()).toBe(false);
+      expect(cleanCard.find('[data-test="container-link-actions-stub"]').exists()).toBe(false);
+    });
+
+    it('forwards card resources to one 44px cluster without triggering the card row action', async () => {
+      preferences.views.security.mode = 'cards';
+      mockContainers([makeContainer({ id: 'c1', name: 'nginx', displayName: 'nginx' })]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: '1.26',
+          currentTag: '1.25',
+          status: 'running',
+          registry: 'ghcr',
+          registryName: 'GitHub Container Registry',
+          registryUrl: 'https://ghcr.io/v2',
+          sourceRepo: 'github.com/nginx/nginx',
+          releaseLink: 'https://github.com/nginx/nginx/releases',
+        },
+      ]);
+
+      const w = factory({ ...securityCardStubs(), ContainerLinkActions });
+      await flushPromises();
+
+      const cluster = w.get('[data-test="container-quick-links"]');
+      const actions = w.getComponent(ContainerLinkActions);
+      expect(w.findAll('[data-test="container-quick-links"]')).toHaveLength(1);
+      expect(actions.props()).toMatchObject({
+        sourceRepo: 'github.com/nginx/nginx',
+        containerId: 'c1',
+        fromTag: '1.25',
+        toTag: '1.26',
+        registry: 'ghcr',
+        registryName: 'GitHub Container Registry',
+        registryUrl: 'https://ghcr.io/v2',
+        iconSize: 'sm',
+      });
+
+      const resourceLayout = w.get('[data-test="security-card-resource-actions"]');
+      const actionLayout = resourceLayout.element.parentElement;
+      const footerLayout = actionLayout?.parentElement;
+      const canWrapAtNarrowWidths =
+        actionLayout?.classList.contains('flex-wrap') ||
+        actionLayout?.classList.contains('flex-col') ||
+        footerLayout?.classList.contains('flex-wrap') ||
+        footerLayout?.classList.contains('flex-col');
+      expect(canWrapAtNarrowWidths).toBe(true);
+
+      await cluster.get('[data-test="registry-link"]').trigger('click');
+      expect((w.vm as any).selectedImage).toBeNull();
     });
 
     it('hoists security sorting when card reflow is forced in table mode', async () => {

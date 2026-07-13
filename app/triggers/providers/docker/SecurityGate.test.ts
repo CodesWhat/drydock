@@ -112,6 +112,51 @@ function createContext(overrides = {}) {
   };
 }
 
+test('scanner availability warn policy allows update after an unavailable scan', async () => {
+  const harness = createGateHarness({
+    securityConfiguration: { availabilityPolicy: 'warn' },
+  });
+  harness.scanImageForVulnerabilities.mockResolvedValueOnce({
+    status: 'error',
+    error: 'Grype worker is unavailable',
+    summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+    blockingCount: 0,
+    blockSeverities: ['CRITICAL'],
+  });
+
+  await expect(
+    harness.gate.scanAndGatePostPull(createContext(), createContainer(), createLog()),
+  ).resolves.toBeUndefined();
+  expect(harness.recordSecurityAudit).toHaveBeenCalledWith(
+    'security-scan-skipped',
+    expect.any(Object),
+    'error',
+    expect.stringContaining('Grype worker is unavailable'),
+  );
+});
+
+test('scanner availability warn policy uses a stable fallback for missing scanner errors', async () => {
+  const harness = createGateHarness({
+    securityConfiguration: { availabilityPolicy: 'warn' },
+  });
+  harness.scanImageForVulnerabilities.mockResolvedValueOnce({
+    status: 'error',
+    summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+    blockingCount: 0,
+    blockSeverities: ['CRITICAL'],
+  });
+
+  await expect(
+    harness.gate.scanAndGatePostPull(createContext(), createContainer(), createLog()),
+  ).resolves.toBeUndefined();
+  expect(harness.recordSecurityAudit).toHaveBeenCalledWith(
+    'security-scan-skipped',
+    expect.any(Object),
+    'error',
+    expect.stringContaining('unknown scanner error'),
+  );
+});
+
 describe('SecurityGate', () => {
   test('constructor should fail fast when required dependencies are missing', () => {
     expect(() => new SecurityGate({} as any)).toThrow(
@@ -396,7 +441,7 @@ describe('SecurityGate', () => {
     );
   });
 
-  test('maybeScanAndGateUpdate should no-op when security is disabled or scanner is not trivy', async () => {
+  test('maybeScanAndGateUpdate should no-op when disabled and run with Grype', async () => {
     const disabledHarness = createGateHarness({
       securityConfiguration: {
         enabled: false,
@@ -423,7 +468,7 @@ describe('SecurityGate', () => {
       createLog(),
     );
 
-    expect(wrongScannerHarness.scanImageForVulnerabilities).not.toHaveBeenCalled();
+    expect(wrongScannerHarness.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
   });
 
   test('maybeScanAndGateUpdate should rethrow non-pipeline scanner errors without recording failure audit', async () => {
@@ -769,6 +814,274 @@ describe('SecurityGate', () => {
       harness.gate.maybeScanAndGateUpdate(createContext(), createContainer(), createLog()),
     ).rejects.toMatchObject({
       code: 'security-scan-blocked',
+    });
+  });
+
+  describe('no-worse-than-current relative gate', () => {
+    const currentSummary = { critical: 3, high: 2, medium: 1, low: 4, unknown: 0 };
+
+    function createPreviouslyScannedContainer(summary = currentSummary) {
+      return createContainer({
+        image: {
+          id: 'image-id',
+          registry: { name: 'ghcr', url: 'https://ghcr.io/v2' },
+          name: 'acme/web',
+          tag: { value: '1.0.0', semver: true },
+          digest: { watch: true, value: 'sha256:current' },
+          architecture: 'amd64',
+          os: 'linux',
+        },
+        security: {
+          scan: {
+            scanner: 'trivy',
+            image: 'ghcr.io/acme/web:1.0.0',
+            imageDigest: 'sha256:current',
+            scannedAt: '2026-07-12T00:00:00.000Z',
+            status: 'blocked',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: summary.critical + summary.high,
+            summary,
+            vulnerabilities: [],
+          },
+        },
+      });
+    }
+
+    test('allows a blocked candidate when every severity count is no worse than current', async () => {
+      const container = createPreviouslyScannedContainer();
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'on', allowNoWorse: true } },
+        scanImageForVulnerabilities: vi.fn().mockResolvedValue({
+          scanner: 'trivy',
+          image: 'ghcr.io/acme/web:2.0.0',
+          scannedAt: '2026-07-12T01:00:00.000Z',
+          status: 'blocked',
+          summary: { critical: 3, high: 1, medium: 1, low: 4, unknown: 0 },
+          blockingCount: 4,
+          blockSeverities: ['CRITICAL', 'HIGH'],
+          vulnerabilities: [],
+        }),
+      });
+
+      await expect(
+        harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog()),
+      ).resolves.toBeUndefined();
+
+      expect(harness.updateContainer).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            updateScan: expect.objectContaining({
+              status: 'passed',
+              relativeGate: expect.objectContaining({
+                decision: 'passed',
+                reason: 'no-worse-than-current',
+                currentSummary,
+              }),
+            }),
+          }),
+        }),
+      );
+      expect(harness.recordSecurityAudit).toHaveBeenCalledWith(
+        'security-scan-passed-relative',
+        container,
+        'success',
+        expect.stringContaining('no worse than current'),
+      );
+    });
+
+    test('uses the passed container scan when the persisted lookup misses', async () => {
+      const container = createPreviouslyScannedContainer();
+      const getContainer = vi.fn(() => undefined);
+      const harness = createGateHarness({
+        getContainer,
+        securityConfiguration: { gate: { mode: 'on', allowNoWorse: true } },
+        scanImageForVulnerabilities: vi.fn().mockResolvedValue({
+          scanner: 'trivy',
+          image: 'ghcr.io/acme/web:2.0.0',
+          scannedAt: '2026-07-12T01:00:00.000Z',
+          status: 'blocked',
+          summary: { critical: 2, high: 2, medium: 1, low: 4, unknown: 0 },
+          blockingCount: 4,
+          blockSeverities: ['CRITICAL', 'HIGH'],
+          vulnerabilities: [],
+        }),
+      });
+
+      await expect(
+        harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog()),
+      ).resolves.toBeUndefined();
+
+      expect(getContainer).toHaveBeenCalledWith(container.id);
+      expect(harness.updateContainer).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            updateScan: expect.objectContaining({
+              status: 'passed',
+              relativeGate: expect.objectContaining({
+                decision: 'passed',
+                reason: 'no-worse-than-current',
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    test('blocks when any severity count is worse than current', async () => {
+      const container = createPreviouslyScannedContainer();
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'on', allowNoWorse: true } },
+        scanImageForVulnerabilities: vi.fn().mockResolvedValue({
+          scanner: 'trivy',
+          image: 'ghcr.io/acme/web:2.0.0',
+          scannedAt: '2026-07-12T01:00:00.000Z',
+          status: 'blocked',
+          summary: { critical: 2, high: 3, medium: 1, low: 4, unknown: 0 },
+          blockingCount: 5,
+          blockSeverities: ['CRITICAL', 'HIGH'],
+          vulnerabilities: [],
+        }),
+      });
+
+      await expect(
+        harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog()),
+      ).rejects.toMatchObject({ code: 'security-scan-blocked' });
+      expect(harness.updateContainer).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            updateScan: expect.objectContaining({
+              status: 'blocked',
+              relativeGate: expect.objectContaining({
+                decision: 'blocked',
+                reason: 'candidate-worse',
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    test.each([
+      ['missing', undefined],
+      [
+        'failed',
+        {
+          scanner: 'trivy',
+          image: 'ghcr.io/acme/web:1.0.0',
+          scannedAt: '2026-07-12T00:00:00.000Z',
+          status: 'error',
+          blockSeverities: ['CRITICAL'],
+          blockingCount: 0,
+          summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+          vulnerabilities: [],
+          error: 'scanner unavailable',
+        },
+      ],
+    ])('fails closed when the current scan is %s', async (_label, currentScan) => {
+      const container = createPreviouslyScannedContainer();
+      container.security = currentScan ? { scan: currentScan as never } : {};
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'on', allowNoWorse: true } },
+        scanImageForVulnerabilities: vi.fn().mockResolvedValue({
+          scanner: 'trivy',
+          image: 'ghcr.io/acme/web:2.0.0',
+          scannedAt: '2026-07-12T01:00:00.000Z',
+          status: 'blocked',
+          summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+          blockingCount: 1,
+          blockSeverities: ['CRITICAL'],
+          vulnerabilities: [],
+        }),
+      });
+
+      await expect(
+        harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog()),
+      ).rejects.toMatchObject({ code: 'security-scan-blocked' });
+      expect(harness.updateContainer).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            updateScan: expect.objectContaining({
+              status: 'blocked',
+              relativeGate: expect.objectContaining({
+                decision: 'blocked',
+                reason: 'current-scan-unavailable',
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    test('fails closed when the saved current scan belongs to a different image', async () => {
+      const container = createPreviouslyScannedContainer();
+      if (container.security?.scan) {
+        container.security.scan.image = 'ghcr.io/acme/web:0.9.0';
+      }
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'on', allowNoWorse: true } },
+        scanImageForVulnerabilities: vi.fn().mockResolvedValue({
+          scanner: 'trivy',
+          image: 'ghcr.io/acme/web:2.0.0',
+          scannedAt: '2026-07-12T01:00:00.000Z',
+          status: 'blocked',
+          summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+          blockingCount: 1,
+          blockSeverities: ['CRITICAL'],
+          vulnerabilities: [],
+        }),
+      });
+
+      await expect(
+        harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog()),
+      ).rejects.toMatchObject({ code: 'security-scan-blocked' });
+      expect(harness.updateContainer).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            updateScan: expect.objectContaining({
+              relativeGate: expect.objectContaining({
+                decision: 'blocked',
+                reason: 'current-scan-unavailable',
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    test('fails closed when the saved current scan belongs to an older digest of the same tag', async () => {
+      const container = createPreviouslyScannedContainer();
+      if (container.security?.scan) {
+        container.security.scan.imageDigest = 'sha256:older';
+      }
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'on', allowNoWorse: true } },
+        scanImageForVulnerabilities: vi.fn().mockResolvedValue({
+          scanner: 'trivy',
+          image: 'ghcr.io/acme/web:2.0.0',
+          scannedAt: '2026-07-12T01:00:00.000Z',
+          status: 'blocked',
+          summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+          blockingCount: 1,
+          blockSeverities: ['CRITICAL'],
+          vulnerabilities: [],
+        }),
+      });
+
+      await expect(
+        harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog()),
+      ).rejects.toMatchObject({ code: 'security-scan-blocked' });
+      expect(harness.updateContainer).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            updateScan: expect.objectContaining({
+              relativeGate: expect.objectContaining({
+                decision: 'blocked',
+                reason: 'current-scan-unavailable',
+              }),
+            }),
+          }),
+        }),
+      );
     });
   });
 
@@ -1635,6 +1948,86 @@ describe('SecurityGate', () => {
       });
 
       expect(generateImageSbom).not.toHaveBeenCalled();
+    });
+
+    test('resolveImageDigest should tolerate image inspection failures', async () => {
+      const { gate } = createGateHarness();
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockRejectedValue(new Error('image disappeared')),
+        })),
+      };
+
+      await expect(
+        gate.resolveImageDigest('ghcr.io/acme/web:2.0.0', dockerApi),
+      ).resolves.toBeUndefined();
+    });
+
+    test('maybeGenerateSbomForUpdate should offload inline documents before persistence', async () => {
+      const generatedSbom = {
+        generator: 'trivy',
+        image: 'ghcr.io/acme/web:2.0.0',
+        generatedAt: '2026-07-12T12:00:00.000Z',
+        status: 'generated',
+        formats: ['spdx-json'],
+        documents: {
+          'spdx-json': { SPDXID: 'SPDXRef-DOCUMENT' },
+        },
+      };
+      const offloadedSbom = {
+        generator: generatedSbom.generator,
+        image: generatedSbom.image,
+        generatedAt: generatedSbom.generatedAt,
+        status: generatedSbom.status,
+        formats: generatedSbom.formats,
+        subjectDigest: 'sha256:abc123',
+        documentRefs: {
+          'spdx-json': {
+            key: 'sbom/abc123/spdx-json.json',
+            sha256: 'checksum',
+            bytes: 42,
+          },
+        },
+      };
+      const offloadSbom = vi.fn().mockResolvedValue(offloadedSbom);
+      const harness = createGateHarness({
+        generateImageSbom: vi.fn().mockResolvedValue(generatedSbom),
+        offloadSbom,
+      });
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockResolvedValue({
+            RepoDigests: ['ghcr.io/acme/web@sha256:abc123'],
+          }),
+        })),
+      };
+
+      await harness.gate.maybeGenerateSbomForUpdate(
+        createContext({ dockerApi }),
+        createContainer(),
+        createLog(),
+        {
+          enabled: true,
+          scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: true, formats: ['spdx-json'] },
+        },
+      );
+
+      expect(offloadSbom).toHaveBeenCalledWith(generatedSbom, 'sha256:abc123');
+      expect(harness.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            updateSbom: offloadedSbom,
+          }),
+        }),
+      );
+      expect(harness.updateContainer.mock.calls[0][0].security.updateSbom).not.toHaveProperty(
+        'documents',
+      );
+      expect(offloadSbom.mock.invocationCallOrder[0]).toBeLessThan(
+        harness.updateContainer.mock.invocationCallOrder[0],
+      );
     });
 
     test('scanImageForUpdate should use dedupe cache without trivy database timestamp provider', async () => {

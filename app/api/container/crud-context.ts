@@ -3,6 +3,7 @@ import type { Container, ContainerReport } from '../../model/container.js';
 import type Trigger from '../../triggers/providers/Trigger.js';
 import type { ContainerDashboardLike } from '../../util/container-summary.js';
 import type { PaginationLinks } from '../pagination-links.js';
+import type { ContainerSortMode } from './sorting.js';
 
 export interface CrudStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
@@ -12,6 +13,7 @@ export interface CrudStoreContainerApi {
 export interface ContainerListPagination {
   limit: number;
   offset: number;
+  sort?: ContainerSortMode;
 }
 
 export interface ContainerListResponse {

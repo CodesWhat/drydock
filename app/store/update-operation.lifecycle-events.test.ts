@@ -101,6 +101,29 @@ describe('update operation lifecycle events', () => {
     expect(mockEmitContainerUpdateFailed).not.toHaveBeenCalled();
   });
 
+  test('markOperationTerminal identifies dry-run success without claiming replacement', async () => {
+    const inserted = updateOperation.insertOperation({
+      id: 'op-dryrun',
+      containerId: 'container-1',
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    updateOperation.markOperationTerminal(inserted.id, {
+      status: 'succeeded',
+      phase: 'dryrun',
+    });
+    await flushAsyncLifecycleEvents();
+
+    expect(mockEmitContainerUpdateApplied).toHaveBeenCalledWith({
+      operationId: 'op-dryrun',
+      containerId: 'container-1',
+      containerName: 'web',
+      phase: 'dryrun',
+    });
+  });
+
   test('markOperationTerminal emits update-failed for failed and rolled-back terminals', async () => {
     const failed = updateOperation.insertOperation({
       id: 'op-failed',

@@ -177,6 +177,30 @@ describe('image-comparison', () => {
     expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('16-alpine');
   });
 
+  test('passes explicit poll-cycle cache scope through registry lookups', async () => {
+    const getTags = vi.fn().mockResolvedValue(['16-alpine']);
+    const getImageManifestDigest = createManifestLookup();
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags,
+          getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    await findNewVersion(createFloatingAliasContainer() as never, log, {
+      useRegistryPollCache: true,
+    });
+
+    expect(getTags).toHaveBeenCalledWith(expect.any(Object), { usePollCycleCache: true });
+    expect(getImageManifestDigest).toHaveBeenCalledWith(expect.any(Object), undefined, {
+      usePollCycleCache: true,
+    });
+  });
+
   test('sets publishedAtTrusted=true in result when provider.publishedAtIsPushDate is true', async () => {
     const publishedAt = '2026-04-01T00:00:00.000Z';
     mockGetState.mockReturnValue({
@@ -350,7 +374,9 @@ describe('image-comparison', () => {
 
     expect(result.publishedAt).toBe(publishedAt);
     expect(result.publishedAtTrusted).toBe(true);
-    expect(getImagePublishedAt).toHaveBeenCalledWith(expect.any(Object), 'latest');
+    expect(getImagePublishedAt).toHaveBeenCalledWith(expect.any(Object), 'latest', {
+      usePollCycleCache: false,
+    });
   });
 
   test('digest-only with comparisonTag on untrusted provider sets publishedAt but not publishedAtTrusted', async () => {

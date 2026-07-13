@@ -5,6 +5,7 @@ describe('Docker Watcher', () => {
   let docker;
   let mockDockerApi;
   let hRegistry: any;
+  let hMockParse: any;
   let hMockTag: any;
 
   setupDockerWatcherContainerSuite((state) => {
@@ -14,6 +15,7 @@ describe('Docker Watcher', () => {
 
   beforeEach(async () => {
     hRegistry = await import('../../../registry/index.js');
+    hMockParse = (await import('parse-docker-image-name')).default;
     hMockTag = await import('../../../tag/index.js');
   });
 
@@ -147,7 +149,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image);
+      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image, {
+        usePollCycleCache: false,
+      });
       expect(result).toEqual({ tag: '1.0.0' });
     });
 
@@ -171,7 +175,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '1.0.0');
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '1.0.0', {
+        usePollCycleCache: false,
+      });
       expect(result).toEqual({
         tag: '1.0.0',
         publishedAt: '2026-03-10T10:00:00.000Z',
@@ -198,7 +204,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '');
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '', {
+        usePollCycleCache: false,
+      });
       expect(result.publishedAt).toEqual('2026-03-01T10:00:00.000Z');
       expect(result.tag).toEqual('');
     });
@@ -658,6 +666,52 @@ describe('Docker Watcher', () => {
       });
 
       expect(result).toEqual({ tag: '1.2.4-ls133' });
+    });
+
+    test('matching imgset tag.family overrides a strict watcher default without labels (#498)', async () => {
+      hMockParse.mockImplementation((image: string) => {
+        if (image === 'ghcr.io/team/service') {
+          return { domain: 'ghcr.io', path: 'team/service' };
+        }
+        return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
+      });
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { family: 'strict' },
+        imgset: {
+          service: {
+            image: 'ghcr.io/team/service',
+            tag: { family: 'loose' },
+          },
+        },
+      });
+      const container = {
+        image: {
+          name: 'team/service',
+          registry: { name: 'hub', url: 'ghcr.io' },
+          tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+          digest: { watch: true },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['v1.13.3', 'v1.46.1']),
+      };
+      hRegistry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      const rank = { 'v1.13.3': 100, 'v1.46.1': 200 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => rank[version1] > rank[version2],
+      );
+
+      expect(
+        docker.getMatchingImgsetConfiguration({ path: 'team/service', domain: 'ghcr.io' }),
+      ).toMatchObject({ tagFamily: 'loose' });
+
+      const result = await docker.findNewVersion(container, {
+        error: vi.fn(),
+        warn: vi.fn(),
+      });
+
+      expect(result).toEqual({ tag: 'v1.46.1' });
     });
 
     test('should fall back to strict mode when tagFamily is invalid', async () => {

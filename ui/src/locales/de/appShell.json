@@ -155,8 +155,8 @@
       "defaultLinkLabel": "Migrationsanleitung anzeigen"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy trigger input detected",
-      "legacyConfigTitlePlural": "{total} legacy trigger inputs detected",
+      "legacyConfigTitleSingular": "{total} Legacy-Konfigurationsalias erkannt",
+      "legacyConfigTitlePlural": "{total} Legacy-Konfigurationsaliasse erkannt",
       "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "Nicht erneut anzeigen",
       "curlHealthcheckTitle": "Benutzerdefinierter curl-Healthcheck-Override erkannt",

@@ -47,6 +47,11 @@ const {
         },
         'smtp.ops': { type: 'smtp', name: 'ops' },
         'docker.update': { type: 'docker', name: 'update' },
+        'command.cleanup': {
+          type: 'command',
+          name: 'cleanup',
+          previewNotificationTemplates,
+        },
       },
     })),
     mockPreviewNotificationTemplates: previewNotificationTemplates,
@@ -304,6 +309,28 @@ describe('Notification Router', () => {
     });
   });
 
+  test('should reject Command trigger ids when updating a notification rule', () => {
+    notificationRouter.init();
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];
+    const res = createMockResponse();
+
+    handler(
+      {
+        params: { id: 'update-available' },
+        body: {
+          triggers: ['command.cleanup'],
+        },
+      },
+      res,
+    );
+
+    expect(mockUpdateNotificationRule).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Unsupported notification triggers: command.cleanup',
+    });
+  });
+
   test('should update bell preferences and per-trigger templates', () => {
     notificationRouter.init();
     const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];
@@ -351,6 +378,26 @@ describe('Notification Router', () => {
     });
   });
 
+  test('should reject template overrides for Command triggers', () => {
+    notificationRouter.init();
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];
+    const res = createMockResponse();
+
+    handler(
+      {
+        params: { id: 'update-available' },
+        body: { templates: { 'command.cleanup': { simpleTitle: 'Nope' } } },
+      },
+      res,
+    );
+
+    expect(mockUpdateNotificationRule).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Unsupported notification triggers: command.cleanup',
+    });
+  });
+
   test('should preview draft templates with the selected notification trigger', () => {
     notificationRouter.init();
     const handler = mockRouter.post.mock.calls.find((call) => call[0] === '/:id/preview')[1];
@@ -373,6 +420,58 @@ describe('Notification Router', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
       simpleTitle: 'Preview ${container.name}',
+      simpleBody: 'Default body',
+      batchTitle: 'Default batch',
+    });
+  });
+
+  test('should reject Command triggers when previewing templates', () => {
+    notificationRouter.init();
+    const handler = mockRouter.post.mock.calls.find((call) => call[0] === '/:id/preview')[1];
+    const res = createMockResponse();
+
+    handler(
+      {
+        params: { id: 'update-available' },
+        body: { triggerId: 'command.cleanup', templates: {} },
+      },
+      res,
+    );
+
+    expect(mockPreviewNotificationTemplates).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Unsupported notification trigger: command.cleanup',
+    });
+  });
+
+  test('should normalize preview notification rule ids before rendering', () => {
+    mockPreviewNotificationTemplates.mockImplementationOnce((ruleId, templates) => {
+      if (ruleId !== 'update-available') {
+        throw new Error(`Unsupported notification rule: ${ruleId}`);
+      }
+      return {
+        simpleTitle: templates.simpleTitle ?? `Default ${ruleId}`,
+        simpleBody: templates.simpleBody ?? 'Default body',
+        batchTitle: templates.batchTitle ?? 'Default batch',
+      };
+    });
+    notificationRouter.init();
+    const handler = mockRouter.post.mock.calls.find((call) => call[0] === '/:id/preview')[1];
+    const res = createMockResponse();
+
+    handler(
+      {
+        params: { id: 'Update-Available' },
+        body: { triggerId: 'slack.ops', templates: {} },
+      },
+      res,
+    );
+
+    expect(mockPreviewNotificationTemplates).toHaveBeenCalledWith('update-available', {});
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      simpleTitle: 'Default update-available',
       simpleBody: 'Default body',
       batchTitle: 'Default batch',
     });

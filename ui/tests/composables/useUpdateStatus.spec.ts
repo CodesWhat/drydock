@@ -314,6 +314,30 @@ describe('deriveUpdateStatus', () => {
     expect(status.conditions).toEqual([]);
   });
 
+  it('describes a pinned-tag insight without turning it into an actionable update (#498)', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'immich-machine-learning',
+          newTag: null,
+          newDigest: null,
+          updateInsight: { tag: 'v3.0.2-openvino', kind: 'major' },
+          updateEligibility: eligibility([
+            blocker({ reason: 'no-update-available', severity: 'hard', actionable: false }),
+          ]),
+        },
+      }),
+    );
+
+    expect(status.state).toBe('pinned');
+    expect(status.summary).toBe('Pinned — a newer version is available for information.');
+    expect(status.tone).toBe('info');
+    expect(status.hasUpdate).toBe(false);
+    expect(status.manualUpdateDisabled).toBe(true);
+    expect(status.conditions).toEqual([]);
+  });
+
   it('detects digest-only updates', () => {
     const status = deriveUpdateStatus(
       input({

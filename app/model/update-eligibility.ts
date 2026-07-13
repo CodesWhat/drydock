@@ -89,6 +89,23 @@ export function getPrimaryHardBlocker(
   return getHardBlockers(eligibility)[0];
 }
 
+type UpdateSecurityScan = NonNullable<NonNullable<Container['security']>['updateScan']>;
+
+function updateScanMatchesCandidate(container: Container, updateScan: UpdateSecurityScan): boolean {
+  const candidateDigest = container.result?.digest;
+  if (candidateDigest) {
+    return (
+      updateScan.imageDigest === candidateDigest || updateScan.image.endsWith(`@${candidateDigest}`)
+    );
+  }
+
+  const candidateTag = container.result?.tag;
+  return Boolean(
+    candidateTag &&
+      (updateScan.image === candidateTag || updateScan.image.endsWith(`:${candidateTag}`)),
+  );
+}
+
 function makeBlocker(blocker: Omit<UpdateBlocker, 'severity'>): UpdateBlocker {
   return { ...blocker, severity: BLOCKER_SEVERITY[blocker.reason] };
 }
@@ -243,9 +260,14 @@ export function computeUpdateEligibility(
   // current container's existing scan is blocked. The candidate scan reflects the
   // image we'd pull; the current scan reflects vulnerabilities we're already running.
   // Either is grounds to halt an update until the operator triages.
+  const updateScan = container.security?.updateScan;
+  const candidatePassedRelative =
+    updateScan?.status === 'passed' &&
+    updateScan.relativeGate?.decision === 'passed' &&
+    updateScanMatchesCandidate(container, updateScan);
   if (
     container.security?.updateScan?.status === 'blocked' ||
-    container.security?.scan?.status === 'blocked'
+    (container.security?.scan?.status === 'blocked' && !candidatePassedRelative)
   ) {
     blockers.push(
       makeBlocker({

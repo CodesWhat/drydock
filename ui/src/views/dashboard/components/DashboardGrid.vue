@@ -112,6 +112,7 @@ function stopTouchDrag(event?: PointerEvent) {
 }
 
 function startTouchDrag(sourceId: DashboardWidgetId, event: PointerEvent) {
+  if (touchDragState) return;
   touchDragState = {
     sourceId,
     pointerId: event.pointerId,

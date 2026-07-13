@@ -155,8 +155,8 @@
       "defaultLinkLabel": "檢視遷移指南"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy trigger input detected",
-      "legacyConfigTitlePlural": "{total} legacy trigger inputs detected",
+      "legacyConfigTitleSingular": "偵測到 {total} 個舊配置別名",
+      "legacyConfigTitlePlural": "偵測到 {total} 個舊配置別名",
       "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "不再顯示",
       "curlHealthcheckTitle": "偵測到自訂 curl 健康檢查覆蓋",

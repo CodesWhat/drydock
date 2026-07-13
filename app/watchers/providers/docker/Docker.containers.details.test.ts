@@ -656,6 +656,28 @@ describe('Docker Watcher', () => {
       });
     });
 
+    test('warns with the container name when a maturity-mode label is invalid', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'docker.io/library/nginx:1.0.0',
+          Names: ['/nginx'],
+          Labels: { 'dd.updatePolicy.maturityMode': 'fresh' },
+        },
+        parsedImage: { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' },
+      });
+      const containerLog = createMockLog(['warn', 'debug']);
+      docker.log = containerLog;
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(containerLog.warn).toHaveBeenCalledWith(
+        'Container "nginx" has invalid dd.updatePolicy.maturityMode value "fresh"; expected "all" or "mature". Ignoring label.',
+      );
+      expect(result.updatePolicy?.maturityMode).toBeUndefined();
+      expect(result.updatePolicyDeclarative?.label.maturityMode).toBeUndefined();
+      expect(result.updatePolicySources?.maturityMode).toBeUndefined();
+    });
+
     test('should apply imgset watchDigest when label is missing', async () => {
       const watchDigestImgset = {
         customregistry: {

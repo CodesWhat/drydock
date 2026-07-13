@@ -24,12 +24,26 @@ DD_SECURITY_SCANNER=trivy
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_SECURITY_SCANNER` | 🔴 | Enable scanner provider | `trivy` | disabled |
+| `DD_SECURITY_SCANNER` | 🔴 | Enable one scanner or run both and merge duplicate findings | `trivy`, `grype`, `both` | disabled |
+| `DD_SECURITY_BACKEND` | ⚪ | Scanner execution backend | `command`, `docker`, `remote` | `command` |
+| `DD_SECURITY_AVAILABILITY_POLICY` | ⚪ | Behavior when a scan cannot complete. `block` is fail-closed; `warn` records an audit warning and permits the update. Detected blocking findings always block. | `block`, `warn` | `block` |
+| `DD_SECURITY_DOCKER_SOCKET` | ⚪ | Docker/Podman socket used to create scanner workers when no host is set | absolute socket path | `/var/run/docker.sock` |
+| `DD_SECURITY_DOCKER_HOST` | ⚪ | Docker API/socket-proxy host for scanner workers | hostname/IP | empty |
+| `DD_SECURITY_DOCKER_PORT` | ⚪ | Docker API/socket-proxy port | `1..65535` | `2375` |
+| `DD_SECURITY_DOCKER_PROTOCOL` | ⚪ | Docker API protocol | `http`, `https` | `http` |
+| `DD_SECURITY_DOCKER_NETWORK` | ⚪ | Docker network joined by workers. Set this to the Compose network when a `remote` worker must resolve a Trivy service name. | Docker network name | `bridge` |
+| `DD_SECURITY_DOCKER_CACHE_VOLUME` | ⚪ | Named-volume prefix for daemon-side provider caches | safe Docker volume prefix | `drydock-scanner-cache` |
 | `DD_SECURITY_BLOCK_SEVERITY` | ⚪ | Blocking severities (comma-separated). Set to `NONE` for advisory-only mode (scan without blocking updates) | `NONE`, or any of `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL` | `CRITICAL,HIGH` |
 | `DD_SECURITY_TRIVY_SERVER` | ⚪ | Trivy server URL (enables client/server mode) | URL | empty (local CLI mode) |
 | `DD_SECURITY_TRIVY_COMMAND` | ⚪ | Trivy command path for local CLI mode (must not contain shell metacharacters or `..` path traversal) | executable path | `trivy` |
 | `DD_SECURITY_TRIVY_TIMEOUT` | ⚪ | Trivy command timeout in milliseconds | integer (`>=1000`) | `600000` |
+| `DD_SECURITY_TRIVY_ARGS` | ⚪ | Additional Trivy arguments as a JSON string array. Output, timeout, server, scanner, and severity flags cannot be overridden. | JSON string array | `[]` |
 | `DD_SECURITY_TRIVY_IMAGE_SRC` | ⚪ | Override Trivy's image source order. Any value Trivy accepts (e.g. `remote`, `docker`, or comma-separated `remote,docker`). When unset, Trivy uses its default source order (`docker`, `containerd`, `podman`, `remote`) and falls back to a registry pull when the local daemon is unreachable. | string | empty (Trivy auto-detects) |
+| `DD_SECURITY_TRIVY_WORKER_IMAGE` | ⚪ | Digest-pinned Trivy worker used by `docker`/`remote` backends | OCI image pinned with `@sha256:` | release-pinned Trivy image |
+| `DD_SECURITY_GRYPE_COMMAND` | ⚪ | Grype command for `command` backend | executable path | `grype` |
+| `DD_SECURITY_GRYPE_TIMEOUT` | ⚪ | Grype scan timeout in milliseconds | integer (`>=1000`) | `600000` |
+| `DD_SECURITY_GRYPE_ARGS` | ⚪ | Additional Grype arguments as a JSON string array. JSON/file output flags cannot be overridden. | JSON string array | `[]` |
+| `DD_SECURITY_GRYPE_WORKER_IMAGE` | ⚪ | Digest-pinned Grype worker used by Docker backend | OCI image pinned with `@sha256:` | release-pinned Grype image |
 | `DD_SECURITY_SCAN_CRON` | ⚪ | Cron expression for scheduled background security scans | cron expression | disabled |
 | `DD_SECURITY_SCAN_JITTER` | ⚪ | Random jitter delay (ms) before each scheduled scan starts | integer (`>=0`) | `60000` |
 | `DD_SECURITY_SCAN_CONCURRENCY` | ⚪ | Max digest scans processed in parallel during scheduled scans | integer (`>=1`) | `4` |
@@ -37,6 +51,7 @@ DD_SECURITY_SCANNER=trivy
 | `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (LRU eviction -- least recently used entries are removed when the limit is reached) | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
 | `DD_SECURITY_SCAN_NOTIFICATIONS` | ⚪ | When `true`, findings from **scheduled** (cron) scans are routed through notification triggers. On-demand scans always notify. | `true` / `false` | `false` |
 | `DD_SECURITY_GATE_MODE` | ⚪ | Override the security gate globally. `off` disables the gate for all containers (audit row still fires); `on` enables normal gating. Per-container label `dd.security.gate=off` also works but only for that container. | `on`, `off` | `on` |
+| `DD_SECURITY_GATE_RELATIVE` | ⚪ | When an absolute severity threshold would block a candidate, allow it only if every severity count is less than or equal to the current image's saved scan. Missing, failed, or stale current-image scans remain blocked. | `true` / `false` | `false` |
 | `DD_SECURITY_PRUNE_ONBLOCK` | ⚪ | Prune a pulled candidate image when Update Bouncer blocks it | `true` / `false` | `true` |
 
 ## Trivy modes
@@ -78,10 +93,32 @@ services:
       - trivy
     environment:
       - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BACKEND=remote
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
       - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
       - DD_SECURITY_TRIVY_TIMEOUT=600000
 ```
+
+`remote` is a Trivy-only backend. Drydock still needs a Trivy client to prepare and submit image data, so it runs that client in the pinned ephemeral Docker worker instead of pretending the server is a direct image-scan HTTP API. The worker requires access to the local Docker API, while the Trivy server owns the vulnerability database.
+
+## Docker worker backend and Grype
+
+Set `DD_SECURITY_BACKEND=docker` to keep scanner binaries out of the Drydock process image. Each scan runs in an ephemeral, digest-pinned worker with a read-only root filesystem, all Linux capabilities dropped, bounded memory/PIDs/output, no Docker socket inside the worker, and a provider-only cache mount.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_SECURITY_SCANNER=both
+      - DD_SECURITY_BACKEND=docker
+      - DD_SECURITY_AVAILABILITY_POLICY=block
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - drydock-store:/store
+```
+
+The Security toolbar shows each configured provider's worker digest/version and offers touch-friendly **Pull** and **Warm** actions. The equivalent API is `POST /api/v1/server/security/assets/{provider}/{operation}`, with `provider=trivy|grype|syft` and `operation=pull|warm`. Pull/warm start, success, and failure are written to the audit log.
 
 ## Advisory-Only Mode
 
@@ -95,6 +132,21 @@ services:
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_BLOCK_SEVERITY=NONE
 ```
+
+## No-worse-than-current gate
+
+Set `DD_SECURITY_GATE_RELATIVE=true` to keep the absolute severity threshold while allowing a candidate that does not worsen the running image's vulnerability profile. Drydock compares `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, and `UNKNOWN` independently; every candidate count must be less than or equal to the corresponding current-image count.
+
+```yaml
+services:
+  drydock:
+    environment:
+      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
+      - DD_SECURITY_GATE_RELATIVE=true
+```
+
+The comparison is fail-closed. A relative pass requires a successful saved scan for the exact running image. If that scan is missing, failed, belongs to an older image, or any severity count increased, the normal absolute block remains in force. The candidate scan is persisted with `relativeGate.decision`, `relativeGate.reason`, and the current summary used for a successful comparison, so API clients and audit logs can explain why the update passed.
 
 ## Blocked candidate cleanup
 
@@ -149,12 +201,17 @@ services:
 
 ## SBOM Generation
 
-When enabled, Trivy generates Software Bill of Materials (SBOM) documents for candidate images during the Update Bouncer flow. SBOMs are persisted in `container.security.sbom` and available via the API.
+When enabled, Trivy or Syft generates Software Bill of Materials (SBOM) documents for candidate images during the Update Bouncer flow. `auto` uses Trivy when available and Syft for Grype-only scanning.
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_SECURITY_SBOM_ENABLED` | ⚪ | Enable SBOM generation | `true` / `false` | `false` |
 | `DD_SECURITY_SBOM_FORMATS` | ⚪ | Comma-separated list of SBOM formats | `spdx-json`, `cyclonedx-json` | `spdx-json` |
+| `DD_SECURITY_SBOM_GENERATOR` | ⚪ | Provider-neutral SBOM generator | `auto`, `trivy`, `syft` | `auto` |
+| `DD_SECURITY_SYFT_COMMAND` | ⚪ | Syft command for command backend | executable path | `syft` |
+| `DD_SECURITY_SYFT_TIMEOUT` | ⚪ | Syft generation timeout in milliseconds | integer (`>=1000`) | `600000` |
+| `DD_SECURITY_SYFT_ARGS` | ⚪ | Additional Syft arguments as a JSON string array. Output/file flags cannot be overridden. | JSON string array | `[]` |
+| `DD_SECURITY_SYFT_WORKER_IMAGE` | ⚪ | Digest-pinned Syft worker for Docker backend | OCI image pinned with `@sha256:` | release-pinned Syft image |
 
 ```yaml
 services:
@@ -169,6 +226,8 @@ services:
 ```
 
 <Callout type="info">SBOM documents are retrievable per-container via `GET /api/v1/containers/:id/sbom?format=\{format\}` where `format` is one of `spdx-json` or `cyclonedx-json`.</Callout>
+
+SBOM bodies are stored off-heap at `/store/sbom/<digest-key>/<document-sha>/<format>.json`; LokiJS container rows retain only validated checksum/size references. Identical canonical documents for the same image digest share a blob, while divergent regenerations remain independently readable. On startup, Drydock atomically migrates legacy inline current/update SBOM records and preserves the original row for retry if any write fails.
 
 ## Scheduled scanning
 

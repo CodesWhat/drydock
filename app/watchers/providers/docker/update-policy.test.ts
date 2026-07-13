@@ -27,6 +27,18 @@ describe('Docker declarative update policy', () => {
     });
   });
 
+  test('normalizes maturity mode case and whitespace for watcher and label tiers', () => {
+    expect(
+      resolveDockerDeclarativeUpdatePolicy(
+        { 'dd.updatePolicy.maturityMode': ' Mature ' },
+        { maturitymode: ' ALL ' },
+      ),
+    ).toEqual({
+      env: { maturityMode: 'all' },
+      label: { maturityMode: 'mature' },
+    });
+  });
+
   test('ignores malformed values, empty CSV labels, and wrong value types', () => {
     expect(
       resolveDockerDeclarativeUpdatePolicy(
@@ -43,6 +55,35 @@ describe('Docker declarative update policy', () => {
         'dd.updatePolicy.skipDigests': undefined as unknown as string,
       }),
     ).toEqual({ env: {}, label: {} });
+  });
+
+  test('warns with container context when a non-empty maturity label is invalid', () => {
+    const logger = { warn: vi.fn() };
+
+    expect(
+      resolveDockerDeclarativeUpdatePolicy(
+        { 'dd.updatePolicy.maturityMode': 'fresh' },
+        {},
+        { logger, containerName: 'web' },
+      ),
+    ).toEqual({ env: {}, label: {} });
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Container "web" has invalid dd.updatePolicy.maturityMode value "fresh"; expected "all" or "mature". Ignoring label.',
+    );
+  });
+
+  test('sanitizes untrusted container and label values in maturity warnings', () => {
+    const logger = { warn: vi.fn() };
+
+    resolveDockerDeclarativeUpdatePolicy(
+      { 'dd.updatePolicy.maturityMode': 'fresh\nforged-label' },
+      {},
+      { logger, containerName: 'web\r\nforged-container' },
+    );
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Container "webforged-container" has invalid dd.updatePolicy.maturityMode value "freshforged-label"; expected "all" or "mature". Ignoring label.',
+    );
   });
 
   test('applies declarations while preserving a controller override', () => {

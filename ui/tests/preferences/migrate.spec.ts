@@ -538,6 +538,22 @@ describe('preferences migration', () => {
       );
     });
 
+    it.each([
+      1, 2,
+    ] as const)('cascades released schema v%s preferences through the softwareVersion migration', (schemaVersion) => {
+      const result = migrate({
+        schemaVersion,
+        containers: {
+          columns: ['icon', 'name', 'version', 'kind', 'status', 'server', 'registry'],
+        },
+      });
+
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.containers.columns.indexOf('softwareVersion')).toBe(
+        result.containers.columns.indexOf('version') + 1,
+      );
+    });
+
     it('should add softwareVersion column when migrating from schemaVersion 6', () => {
       const result = migrate({
         schemaVersion: 6,
@@ -822,7 +838,7 @@ describe('preferences migration', () => {
         const columns = ['name', 'status', 'registry'];
         localStorage.setItem('dd-table-cols-v1', JSON.stringify(columns));
         const result = migrateFromLegacyKeys();
-        expect(result.containers.columns).toEqual(['icon', ...columns]);
+        expect(result.containers.columns).toEqual(['icon', ...columns, 'links']);
       });
 
       it('should drop stale columns that no longer exist in the table', () => {
@@ -831,7 +847,7 @@ describe('preferences migration', () => {
           JSON.stringify(['icon', 'name', 'bouncer', 'status', 'registry']),
         );
         const result = migrateFromLegacyKeys();
-        expect(result.containers.columns).toEqual(['icon', 'name', 'status', 'registry']);
+        expect(result.containers.columns).toEqual(['icon', 'name', 'status', 'registry', 'links']);
       });
     });
 

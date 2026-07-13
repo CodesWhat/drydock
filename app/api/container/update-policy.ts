@@ -43,6 +43,12 @@ const SAFE_CLIENT_ERRORS = new Set([
 
 type UpdatePolicyActionResult = { policy: ContainerUpdatePolicy } | { error: string };
 type UniqStringsFn = UpdatePolicyHandlerDependencies['uniqStrings'];
+type AuditedUpdatePolicyField = DeclarativeUpdatePolicyField | 'snoozeUntil';
+
+const AUDITED_UPDATE_POLICY_FIELDS: readonly AuditedUpdatePolicyField[] = [
+  ...DECLARATIVE_UPDATE_POLICY_FIELDS,
+  'snoozeUntil',
+];
 
 function normalizeUpdatePolicy(
   updatePolicy: ContainerUpdatePolicy = {},
@@ -159,7 +165,12 @@ function applyLayeredPolicyAction(
       }
       return { policy: overrides };
     case 'clear':
-      return { policy: {} };
+      overrides.maturityMode = 'all';
+      delete overrides.maturityMinAgeDays;
+      overrides.skipTags = [];
+      overrides.skipDigests = [];
+      delete overrides.snoozeUntil;
+      return { policy: overrides };
     default:
       return { error: `Unknown action ${action}` };
   }
@@ -314,7 +325,7 @@ function getActionBody(body: unknown): Record<string, unknown> {
 function policyFieldChanged(
   before: ContainerUpdatePolicy,
   after: ContainerUpdatePolicy,
-  field: DeclarativeUpdatePolicyField,
+  field: AuditedUpdatePolicyField,
 ) {
   const beforeHasField = Object.hasOwn(before, field);
   const afterHasField = Object.hasOwn(after, field);
@@ -324,16 +335,23 @@ function policyFieldChanged(
 
 function getPolicyFieldAuditValue(
   policy: ContainerUpdatePolicy | undefined,
-  field: DeclarativeUpdatePolicyField,
+  field: AuditedUpdatePolicyField,
 ) {
   return policy && Object.hasOwn(policy, field) ? (policy[field] ?? null) : null;
+}
+
+function getPolicyFieldAuditSource(container: Container, field: AuditedUpdatePolicyField) {
+  if (field === 'snoozeUntil') {
+    return getPolicyFieldAuditValue(container.updatePolicy, field) === null ? null : 'override';
+  }
+  return container.updatePolicySources?.[field] ?? null;
 }
 
 function createOverrideAuditDetails(
   operation: string,
   container: Container,
   overrides: ContainerUpdatePolicy,
-  fields: DeclarativeUpdatePolicyField[],
+  fields: AuditedUpdatePolicyField[],
 ) {
   return JSON.stringify({
     operation,
@@ -341,11 +359,17 @@ function createOverrideAuditDetails(
       fields.map((field) => [
         field,
         {
-          env: getPolicyFieldAuditValue(container.updatePolicyDeclarative?.env, field),
-          label: getPolicyFieldAuditValue(container.updatePolicyDeclarative?.label, field),
+          env:
+            field === 'snoozeUntil'
+              ? null
+              : getPolicyFieldAuditValue(container.updatePolicyDeclarative?.env, field),
+          label:
+            field === 'snoozeUntil'
+              ? null
+              : getPolicyFieldAuditValue(container.updatePolicyDeclarative?.label, field),
           override: getPolicyFieldAuditValue(overrides, field),
           effective: getPolicyFieldAuditValue(container.updatePolicy, field),
-          source: container.updatePolicySources?.[field] ?? null,
+          source: getPolicyFieldAuditSource(container, field),
         },
       ]),
     ),
@@ -359,7 +383,7 @@ function recordOverrideAuditEvents(
   before: ContainerUpdatePolicy,
   after: ContainerUpdatePolicy,
 ) {
-  const changedFields = DECLARATIVE_UPDATE_POLICY_FIELDS.filter((field) =>
+  const changedFields = AUDITED_UPDATE_POLICY_FIELDS.filter((field) =>
     policyFieldChanged(before, after, field),
   );
   const setFields = changedFields.filter((field) => Object.hasOwn(after, field));

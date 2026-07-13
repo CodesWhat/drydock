@@ -198,6 +198,20 @@ describe('trigger-expression-parser', () => {
     expect(output).toBe('');
   });
 
+  test.each([
+    ['${container.__proto__.toString()}', baseContainer],
+    ['${container.constructor.name}', baseContainer],
+    [
+      '${container.prototype.secret}',
+      {
+        ...baseContainer,
+        prototype: { secret: 'must-not-render' },
+      },
+    ],
+  ])('rejects prototype-chain traversal expression %s', (template, container) => {
+    expect(renderSimple(template, container as any)).toBe('');
+  });
+
   // ---- isValidPropertyPath (line 32): parts.length > 0, parts.every vs some ----
   test('isValidPropertyPath: single valid identifier is accepted', () => {
     // parts.length > 0 ensures at least one part; single segment should work

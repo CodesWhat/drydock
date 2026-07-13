@@ -374,6 +374,7 @@ function buildTerminalLifecycleEventBase(operation: UpdateOperation, batchId?: s
     ...(batchId ? { batchId } : {}),
     ...(operation.container ? { container: operation.container } : {}),
     ...(operation.newContainerId ? { newContainerId: operation.newContainerId } : {}),
+    ...(operation.phase === 'dryrun' ? { phase: 'dryrun' as const } : {}),
   };
 }
 

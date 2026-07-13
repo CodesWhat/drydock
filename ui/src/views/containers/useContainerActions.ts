@@ -1500,6 +1500,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     policyInProgress: policy.policyInProgress,
     policyMessage: policy.policyMessage,
     previewError: preview.previewError,
+    previewErrorAction: preview.previewErrorAction,
     previewLoading: preview.previewLoading,
     removeSkipDigestSelected: policy.removeSkipDigestSelected,
     removeSkipTagSelected: policy.removeSkipTagSelected,

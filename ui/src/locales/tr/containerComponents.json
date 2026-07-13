@@ -320,6 +320,7 @@
     "projectLink": {
       "viewProject": "Projeyi görüntüle"
     },
+    "registryLink": { "viewRegistry": "Kayıt defterini görüntüle" },
     "releaseNotesLink": {
       "releaseNotes": "Sürüm notları",
       "viewFullNotes": "Notların tamamını görüntüle",
@@ -549,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Sabitlendi — bilgilendirme amacıyla daha yeni bir sürüm mevcut."
+      }
     }
   }
 }

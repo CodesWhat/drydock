@@ -10,6 +10,45 @@ export const openApiSchemas = {
     required: ['error'],
     additionalProperties: true,
   },
+  PreviewErrorResponse: {
+    type: 'object',
+    properties: {
+      code: {
+        type: 'string',
+        enum: [
+          'container-not-found',
+          'container-runtime-not-found',
+          'manifest-fetch-failed',
+          'no-trigger-configured',
+          'preview-runtime-error',
+          'registry-auth-failed',
+          'registry-network-error',
+          'registry-not-found',
+        ],
+      },
+      message: { type: 'string' },
+      details: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' },
+          registry: { type: 'string' },
+        },
+        required: ['reason'],
+        additionalProperties: false,
+      },
+      action: {
+        type: 'object',
+        properties: {
+          label: { type: 'string' },
+          href: { type: 'string', enum: ['/registries', '/triggers'] },
+        },
+        required: ['label', 'href'],
+        additionalProperties: false,
+      },
+    },
+    required: ['code', 'message'],
+    additionalProperties: false,
+  },
   GenericObject: genericObjectSchema,
   GenericArray: genericArraySchema,
   PaginationLinks: {
@@ -334,11 +373,37 @@ export const openApiSchemas = {
     required: ['enabled', 'command', 'commandAvailable', 'status', 'message'],
     additionalProperties: true,
   },
+  SecurityRuntimeProviderStatus: {
+    type: 'object',
+    allOf: [
+      { $ref: '#/components/schemas/SecurityRuntimeToolStatus' },
+      {
+        type: 'object',
+        properties: {
+          provider: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+          role: { type: 'string', enum: ['scanner', 'sbom'] },
+        },
+        required: ['provider', 'role'],
+        additionalProperties: true,
+      },
+    ],
+  },
   SecurityRuntimeStatusResponse: {
     type: 'object',
     properties: {
       checkedAt: { type: 'string', format: 'date-time' },
       ready: { type: 'boolean' },
+      backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
+      availabilityPolicy: { type: 'string', enum: ['block', 'warn'] },
+      gate: {
+        type: 'object',
+        properties: {
+          mode: { type: 'string', enum: ['on', 'off'] },
+          allowNoWorse: { type: 'boolean' },
+        },
+        required: ['mode', 'allowNoWorse'],
+        additionalProperties: false,
+      },
       scanner: {
         type: 'object',
         allOf: [
@@ -346,7 +411,7 @@ export const openApiSchemas = {
           {
             type: 'object',
             properties: {
-              scanner: { type: 'string' },
+              scanner: { type: 'string', enum: ['', 'trivy', 'grype', 'both'] },
               server: { type: 'string' },
             },
             required: ['scanner', 'server'],
@@ -363,16 +428,58 @@ export const openApiSchemas = {
             type: 'array',
             items: { type: 'string', enum: ['spdx-json', 'cyclonedx-json'] },
           },
+          generator: { type: 'string', enum: ['trivy', 'syft'] },
         },
-        required: ['enabled', 'formats'],
+        required: ['enabled', 'formats', 'generator'],
         additionalProperties: true,
+      },
+      providers: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/SecurityRuntimeProviderStatus' },
+      },
+      assets: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ScannerAssetStatus' },
       },
       requirements: {
         type: 'array',
         items: { type: 'string' },
       },
     },
-    required: ['checkedAt', 'ready', 'scanner', 'signature', 'sbom', 'requirements'],
+    required: [
+      'checkedAt',
+      'ready',
+      'backend',
+      'availabilityPolicy',
+      'gate',
+      'scanner',
+      'signature',
+      'sbom',
+      'providers',
+      'assets',
+      'requirements',
+    ],
+    additionalProperties: true,
+  },
+  ScannerAssetStatus: {
+    type: 'object',
+    properties: {
+      provider: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+      backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
+      configuredImage: { type: 'string' },
+      resolvedDigest: { type: 'string' },
+      version: { type: 'string' },
+      state: { type: 'string', enum: ['missing', 'pulling', 'warming', 'ready', 'error'] },
+      operationId: { type: 'string' },
+      inspectedAt: { type: 'string', format: 'date-time' },
+      startedAt: { type: 'string', format: 'date-time' },
+      completedAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+      cacheUpdatedAt: { type: 'string', format: 'date-time' },
+      databaseUpdatedAt: { type: 'string', format: 'date-time' },
+      lastError: { type: 'string' },
+    },
+    required: ['provider', 'backend', 'configuredImage', 'state'],
     additionalProperties: true,
   },
   ContainerSummaryResponse: {
@@ -562,6 +669,7 @@ export const openApiSchemas = {
     properties: {
       scanner: { type: 'string' },
       image: { type: 'string' },
+      imageDigest: { type: 'string' },
       scannedAt: { type: 'string', format: 'date-time' },
       status: { type: 'string', enum: ['not-scanned', 'passed', 'blocked', 'error'] },
       blockSeverities: {
@@ -573,6 +681,19 @@ export const openApiSchemas = {
       vulnerabilities: {
         type: 'array',
         items: { ...genericObjectSchema },
+      },
+      relativeGate: {
+        type: 'object',
+        properties: {
+          decision: { type: 'string', enum: ['passed', 'blocked'] },
+          reason: {
+            type: 'string',
+            enum: ['no-worse-than-current', 'candidate-worse', 'current-scan-unavailable'],
+          },
+          currentSummary: { $ref: '#/components/schemas/VulnerabilitySummary' },
+        },
+        required: ['decision', 'reason'],
+        additionalProperties: false,
       },
       error: { type: 'string' },
     },
