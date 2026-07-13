@@ -413,9 +413,9 @@ If the container ends up stopped, check `docker logs drydock-old-*` for the help
 
 Before recreating a container, Drydock renames the running container to `<name>-old-<timestamp>` so the original name is free for the replacement. If container creation fails partway through — for example a network connect call rejected by a socket proxy — Drydock rolls back by renaming the container back to its original name.
 
-In versions prior to 1.5.2, a failure that happened *after* the replacement container was created (but before it was confirmed healthy) could leave that orphaned "Created" container squatting the original name, with the old container still parked under the `-old-<timestamp>` suffix. A subsequent update attempt against the renamed container would then fail cleanly rather than compounding the problem.
+In versions prior to 1.5.2, a failure that happened *after* the replacement container was created (but before it was confirmed healthy) could leave that orphaned "Created" container squatting the original name, with the old container still parked under the `-old-<timestamp>` suffix. A subsequent update attempt against the renamed container could compound the problem by appending another rollback suffix.
 
-As of 1.5.2, Drydock detects and removes the orphaned replacement container as part of rollback, so the rename back to the original name succeeds automatically. If you're on an older version and hit this:
+As of 1.5.2, Drydock detects and removes the orphaned replacement container as part of rollback, so the rename back to the original name succeeds automatically. Its rollback-cascade guard also rejects an update for a container that already has a rollback suffix, so that attempt fails cleanly instead of nesting another suffix. If you're on an older version and hit this:
 
 1. List every matching container and note the IDs of the `Created` replacement and the stopped rollback container: `docker ps -a --filter name=<name> --format '{{.ID}}\t{{.Names}}\t{{.Status}}'`
 2. If the `Created` replacement is squatting the original name, remove it: `docker rm <replacement-container-id>`
