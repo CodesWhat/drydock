@@ -836,6 +836,37 @@ test('authenticateBearerFromAuthUrl should reuse cached token within configured 
   vi.useRealTimers();
 });
 
+test('authenticateBearerFromAuthUrl should refresh when the token expires before the configured ttl', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'short-lived', expires_in: 2 } })
+    .mockResolvedValueOnce({ data: { token: 'refreshed', expires_in: 2 } });
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(startedAtMs);
+    const firstResult = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/short-lived-token',
+      'dXNlcjpwYXNz',
+    );
+
+    vi.setSystemTime(startedAtMs + 2000);
+    const secondResult = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/short-lived-token',
+      'dXNlcjpwYXNz',
+    );
+
+    expect(axios).toHaveBeenCalledTimes(2);
+    expect(firstResult.headers.Authorization).toBe('Bearer short-lived');
+    expect(secondResult.headers.Authorization).toBe('Bearer refreshed');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('authenticateBearerFromAuthUrl should cache tokens separately per credentials', async () => {
   const { default: axios } = await import('axios');
   vi.useFakeTimers();

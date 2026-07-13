@@ -14,6 +14,7 @@ vi.mock('../../event/index.js', () => ({
 
 import { isRollbackContainer } from '../../model/container.js';
 import { createCrudHandlers } from './crud.js';
+import { sortContainers } from './sorting.js';
 
 type CrudDependencies = Parameters<typeof createCrudHandlers>[0];
 
@@ -137,7 +138,10 @@ function createHarness(options: { containers?: any[] } = {}) {
 
   const deps = {
     getContainersFromStore: vi.fn((query: Record<string, unknown> = {}, pagination?: any) => {
-      const matchingContainers = filterAndSortContainers(containers, query);
+      const filteredContainers = filterAndSortContainers(containers, query);
+      const matchingContainers = pagination?.sort
+        ? sortContainers(filteredContainers, pagination.sort)
+        : filteredContainers;
       const limit =
         typeof pagination?.limit === 'number' && Number.isFinite(pagination.limit)
           ? Math.max(0, Math.trunc(pagination.limit))
@@ -690,7 +694,7 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery(),
-        { limit: 0, offset: 0 },
+        { limit: 0, offset: 0, sort: 'age' },
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -995,7 +999,7 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery(),
-        { limit: 0, offset: 0 },
+        { limit: 0, offset: 0, sort: 'name' },
       );
     });
 
@@ -1196,7 +1200,7 @@ describe('api/container/crud', () => {
       expect(payload.hasMore).toBe(true);
     });
 
-    test('status filter with sort still requires full-collection load', () => {
+    test('status filter with sort delegates ordered pagination to the store', () => {
       const containers = Array.from({ length: 10 }, (_, i) =>
         createContainer({
           id: `c${i + 1}`,
@@ -1212,13 +1216,13 @@ describe('api/container/crud', () => {
         limit: '3',
       });
 
-      // Sort requires full collection for correct pagination order
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery({ updateAvailable: true }),
-        { limit: 0, offset: 0 },
+        { limit: 3, offset: 0, sort: 'status' },
       );
-      // Should NOT call getContainerCountFromStore — total comes from the sorted array
-      expect(harness.deps.getContainerCountFromStore).not.toHaveBeenCalled();
+      expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith(
+        buildVisibleContainersStoreQuery({ updateAvailable: true }),
+      );
     });
 
     test('filters by update maturity buckets', () => {

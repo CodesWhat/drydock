@@ -1067,6 +1067,35 @@ describe('AgentClient', () => {
   });
 
   describe('startSse', () => {
+    test('should not start a new SSE request after stop', () => {
+      client.stop();
+
+      client.startSse();
+
+      expect(axios).not.toHaveBeenCalled();
+    });
+
+    test('should ignore an in-flight SSE response that resolves after stop', async () => {
+      const stream = new EventEmitter();
+      let resolveConnection: (value: { data: EventEmitter }) => void = () => {};
+      axios.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveConnection = resolve;
+          }),
+      );
+      const attachStreamHandlersSpy = vi.spyOn(client as any, 'attachStreamHandlers');
+
+      client.startSse();
+      client.stop();
+      resolveConnection({ data: stream });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(attachStreamHandlersSpy).not.toHaveBeenCalled();
+      expect((client as any).stableConnectionTimer).toBeNull();
+    });
+
     test('should clear existing reconnect timer', () => {
       const spy = vi.spyOn(client, 'startSse');
       client.scheduleReconnect(5000);

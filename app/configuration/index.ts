@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import type { Request } from 'express';
 import joi from 'joi';
@@ -16,7 +15,7 @@ const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
 const DEFAULT_TRIVY_WORKER_IMAGE =
-  'aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c';
+  'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f';
 const DEFAULT_GRYPE_WORKER_IMAGE =
   'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1';
 const DEFAULT_SYFT_WORKER_IMAGE =
@@ -57,25 +56,35 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
       label: `${secretFileEnvVar} path`,
     });
 
-    const secretFileValue = await readFile(secretFilePath, 'utf-8');
-    if (Buffer.byteLength(secretFileValue, 'utf-8') > MAX_SECRET_FILE_SIZE_BYTES) {
-      throw new Error(
-        `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
-      );
-    }
+    const secretFile = await fs.promises.open(secretFilePath, 'r');
+    let secretFileValue: string;
+    try {
+      const secretStats = await secretFile.stat();
+      if (secretStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
+        throw new Error(
+          `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
+        );
+      }
 
-    // Permission check: warn if the file is readable by group or others.
-    // On non-POSIX platforms (Windows), mode bits are synthetic and do not reflect
-    // ACL-based access control, so we skip the check there to avoid false warnings.
-    if (os.platform() !== 'win32') {
-      const secretStats = await stat(secretFilePath);
-      if ((secretStats.mode & 0o077) !== 0) {
+      // Permission check: warn if the opened file is readable by group or others.
+      // On non-POSIX platforms (Windows), mode bits are synthetic and do not reflect
+      // ACL-based access control, so we skip the check there to avoid false warnings.
+      if (os.platform() !== 'win32' && (secretStats.mode & 0o077) !== 0) {
         logWarn(
           `Secret file "${secretFilePath}" (${secretFileEnvVar}) is readable by group or others ` +
             `(mode 0${(secretStats.mode & 0o777).toString(8).padStart(3, '0')}). ` +
             `Restrict permissions with: chmod 600 "${secretFilePath}"`,
         );
       }
+
+      secretFileValue = await secretFile.readFile('utf-8');
+      if (Buffer.byteLength(secretFileValue, 'utf-8') > MAX_SECRET_FILE_SIZE_BYTES) {
+        throw new Error(
+          `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
+        );
+      }
+    } finally {
+      await secretFile.close();
     }
 
     delete ddEnvVars[secretFileEnvVar];

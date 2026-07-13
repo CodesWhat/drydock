@@ -1113,15 +1113,15 @@ describe('buildContainerListResponse', () => {
     expect(response.hasMore).toBe(false);
   });
 
-  test('uses the full-collection path when sorting requires in-memory processing', () => {
+  test('pushes explicit sorting and pagination into the store', () => {
     const containers = [
       createContainer({ id: 'c1', name: 'beta' }),
       createContainer({ id: 'c2', name: 'alpha' }),
     ];
     const context: CrudHandlerContext = {
       ...createMockContext(),
-      getContainersFromStore: vi.fn(() => containers),
-      getContainerCountFromStore: vi.fn(),
+      getContainersFromStore: vi.fn(() => [containers[1]!]),
+      getContainerCountFromStore: vi.fn(() => 2),
       redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
     };
 
@@ -1133,15 +1133,18 @@ describe('buildContainerListResponse', () => {
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
       { excludeRollbackContainers: true },
-      { limit: 0, offset: 0 },
+      { limit: 1, offset: 0, sort: 'name' },
     );
-    expect(context.getContainerCountFromStore).not.toHaveBeenCalled();
+    expect(context.getContainerCountFromStore).toHaveBeenCalledWith({
+      excludeRollbackContainers: true,
+    });
     expect(response.total).toBe(2);
     expect(response.data).toHaveLength(1);
+    expect(response.data[0]?.name).toBe('alpha');
     expect(response.hasMore).toBe(true);
   });
 
-  test('uses the full-collection path without count lookup when pagination is zeroed', () => {
+  test('delegates sorting without count lookup when pagination is zeroed', () => {
     const containers = [
       createContainer({ id: 'c1', name: 'beta' }),
       createContainer({ id: 'c2', name: 'alpha' }),
@@ -1161,7 +1164,7 @@ describe('buildContainerListResponse', () => {
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
       { excludeRollbackContainers: true },
-      { limit: 0, offset: 0 },
+      { limit: 0, offset: 0, sort: 'name' },
     );
     expect(context.getContainerCountFromStore).not.toHaveBeenCalled();
     expect(response.total).toBe(2);

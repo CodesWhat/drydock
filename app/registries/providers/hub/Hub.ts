@@ -1,5 +1,7 @@
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { ContainerImage } from '../../../model/container.js';
+import { withRetry } from '../../http-retry.js';
+import { acquireToken, getBucketForUrl } from '../../token-bucket.js';
 import Custom, { type CustomRegistryConfiguration } from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
 
@@ -113,17 +115,33 @@ class Hub extends Custom<HubRegistryConfiguration> {
       return undefined;
     }
 
-    const response = await axios<HubTagMetadataResponse>({
+    const metadataUrl = `https://hub.docker.com/v2/repositories/${image.name}/tags/${encodeURIComponent(
+      tagToLookup,
+    )}`;
+    const request = this.withTlsRequestOptions({
       method: 'GET',
-      url: `https://hub.docker.com/v2/repositories/${image.name}/tags/${encodeURIComponent(
-        tagToLookup,
-      )}`,
+      url: metadataUrl,
       maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       },
     });
-    const publishedAt = response?.data?.last_updated;
+    await acquireToken(getBucketForUrl(metadataUrl));
+    const response = await withRetry<HubTagMetadataResponse>(
+      async () => {
+        const result = await axios<HubTagMetadataResponse>(request);
+        return {
+          status: result.status,
+          headers: result.headers as Record<string, string | undefined>,
+          data: result.data,
+        };
+      },
+      {
+        logger: this.log,
+        requestLabel: `Docker Hub metadata ${metadataUrl}`,
+      },
+    );
+    const publishedAt = response.data?.last_updated;
     if (typeof publishedAt !== 'string') {
       return undefined;
     }

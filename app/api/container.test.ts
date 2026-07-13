@@ -934,6 +934,31 @@ describe('Container Router', () => {
       );
       expect(result).toEqual([{ id: 'c1' }]);
     });
+
+    test('should translate an API sort mode into a store sort callback', () => {
+      storeContainer.getContainers.mockReturnValue([{ id: 'c2', name: 'beta' }]);
+
+      containerRouter.getContainersFromStore(
+        { watcher: 'docker' },
+        { limit: 1, offset: 0, sort: '-name' },
+      );
+
+      const storePagination = storeContainer.getContainers.mock.calls[0][1];
+      expect(storePagination).toEqual({
+        limit: 1,
+        offset: 0,
+        sort: expect.any(Function),
+      });
+      expect(
+        storePagination.sort([
+          { id: 'c1', name: 'alpha' },
+          { id: 'c2', name: 'beta' },
+        ]),
+      ).toEqual([
+        { id: 'c2', name: 'beta' },
+        { id: 'c1', name: 'alpha' },
+      ]);
+    });
   });
 
   describe('getContainerCountFromStore', () => {

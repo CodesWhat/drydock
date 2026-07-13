@@ -164,7 +164,7 @@ test('release-cut generates the container SBOM with a pinned Trivy image', () =>
 
   expect(sbomStep?.env).toMatchObject({
     TRIVY_IMAGE:
-      'aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c',
+      'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
   });
   expect(sbomStep?.run).toContain('"${TRIVY_IMAGE}"');
   expect(sbomStep?.run).not.toContain('--entrypoint trivy');

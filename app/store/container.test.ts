@@ -1495,6 +1495,38 @@ test('getContainers should apply pagination options', async () => {
   expect(results[0].name).toEqual('container2');
 });
 
+test('getContainers should apply a caller sort before pagination and cloning', async () => {
+  const containerExample = createContainerFixture();
+  const containers = [
+    { data: { ...containerExample, name: 'container3' } },
+    { data: { ...containerExample, name: 'container2' } },
+    { data: { ...containerExample, name: 'container1' } },
+  ];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const results = container.getContainers(
+    {},
+    {
+      limit: 1,
+      offset: 0,
+      sort: (items) => [...items].reverse(),
+    },
+  );
+
+  expect(results).toHaveLength(1);
+  expect(results[0].name).toEqual('container3');
+});
+
 test('getContainers should support offset-only pagination when limit is zero', async () => {
   const containerExample = createContainerFixture();
   const containers = [

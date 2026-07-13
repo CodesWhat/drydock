@@ -1,5 +1,3 @@
-import axios, { type AxiosRequestConfig } from 'axios';
-import { withAuthorizationHeader } from '../../../security/auth.js';
 import Gitlab, { type GitlabRegistryConfiguration } from '../gitlab/Gitlab.js';
 
 interface MauRegistryConfiguration extends GitlabRegistryConfiguration {
@@ -68,25 +66,17 @@ class Mau extends Gitlab<MauRegistryConfiguration> {
    */
   async authenticate(image, requestOptions) {
     const scope = encodeURIComponent(`repository:${image.name}:pull`);
-    const request: AxiosRequestConfig & { headers: Record<string, string> } = {
-      method: 'GET',
-      url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`,
-      maxRedirects: 0,
-      headers: {
-        Accept: 'application/json',
-      },
-    };
-
-    if (this.configuration.token) {
-      request.headers.Authorization = `Basic ${Mau.base64Encode('', this.configuration.token)}`;
-    }
-
-    const response = await axios(this.withTlsRequestOptions(request));
-    return withAuthorizationHeader(
-      this.withTlsRequestOptions(requestOptions),
-      'Bearer',
-      response.data.token,
+    const authUrl = `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`;
+    const credentials = this.configuration.token
+      ? Mau.base64Encode('', this.configuration.token)
+      : undefined;
+    return this.authenticateBearerFromAuthUrl(
+      requestOptions,
+      authUrl,
+      credentials,
+      undefined,
       `Unable to authenticate registry ${this.getId()}: dock.mau.dev token endpoint response does not contain token`,
+      this.configuration.url,
     );
   }
 

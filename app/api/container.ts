@@ -42,6 +42,7 @@ import {
   resolveContainerImageFullName,
   resolveContainerRegistryAuth,
 } from './container/shared.js';
+import { type ContainerSortMode, sortContainers } from './container/sorting.js';
 import { createStatsHandlers } from './container/stats.js';
 import { createTriggerHandlers } from './container/triggers.js';
 import { createUpdatePolicyHandlers } from './container/update-policy.js';
@@ -139,10 +140,14 @@ function getTriggers() {
  */
 export function getContainersFromStore(
   query: Record<string, unknown>,
-  pagination?: { limit: number; offset: number },
+  pagination?: { limit: number; offset: number; sort?: ContainerSortMode },
 ) {
   if (pagination) {
-    return storeContainer.getContainers(query, pagination);
+    const { sort, ...normalizedPagination } = pagination;
+    return storeContainer.getContainers(query, {
+      ...normalizedPagination,
+      ...(sort ? { sort: (containers) => sortContainers(containers, sort) } : {}),
+    });
   }
   return storeContainer.getContainers(query);
 }

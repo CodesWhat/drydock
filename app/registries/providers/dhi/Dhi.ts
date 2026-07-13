@@ -1,5 +1,3 @@
-import axios from 'axios';
-import { withAuthorizationHeader } from '../../../security/auth.js';
 import Custom, { type CustomRegistryConfiguration } from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
 
@@ -51,26 +49,14 @@ class Dhi extends Custom<DhiRegistryConfiguration> {
    */
   async authenticate(image, requestOptions) {
     const scope = encodeURIComponent(`repository:${image.name}:pull`);
-    const axiosConfig = {
-      method: 'GET',
-      url: `https://dhi.io/token?service=registry.docker.io&scope=${scope}&grant_type=password`,
-      maxRedirects: 0,
-      headers: {
-        Accept: 'application/json',
-      } as Record<string, string>,
-    };
-
     const credentials = this.getAuthCredentials();
-    if (credentials) {
-      axiosConfig.headers.Authorization = `Basic ${credentials}`;
-    }
-
-    const response = await axios(this.withTlsRequestOptions(axiosConfig));
-    return withAuthorizationHeader(
-      this.withTlsRequestOptions(requestOptions),
-      'Bearer',
-      response.data.token,
+    return this.authenticateBearerFromAuthUrl(
+      requestOptions,
+      `https://dhi.io/token?service=registry.docker.io&scope=${scope}&grant_type=password`,
+      credentials,
+      undefined,
       `Unable to authenticate registry ${this.getId()}: DHI token endpoint response does not contain token`,
+      'https://dhi.io',
     );
   }
 }

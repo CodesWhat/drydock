@@ -681,7 +681,7 @@ describe('getSecurityConfiguration', () => {
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c',
+          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
       },
       grype: {
         command: 'grype',
@@ -769,7 +769,7 @@ describe('getSecurityConfiguration', () => {
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c',
+          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
       },
       grype: {
         command: 'grype',
@@ -3106,6 +3106,63 @@ describe('replaceSecrets – secret file hardening', () => {
   // When a secret file's permissions allow group or others to read it, replaceSecrets
   // emits a logWarn naming the file and recommending chmod 600.
   // The check is skipped on non-POSIX platforms (Windows) where mode bits are synthetic.
+
+  test('should inspect and read a secret through the same open file handle', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-handle-'));
+    const secretPath = path.join(tempDir, 'secret.txt');
+    fs.writeFileSync(secretPath, 'descriptor-secret');
+    fs.chmodSync(secretPath, 0o600);
+    const handle = {
+      stat: vi.fn().mockResolvedValue(fs.statSync(secretPath)),
+      readFile: vi.fn().mockResolvedValue('descriptor-secret'),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const openSpy = vi
+      .spyOn(fs.promises, 'open')
+      .mockResolvedValue(handle as unknown as Awaited<ReturnType<typeof fs.promises.open>>);
+
+    try {
+      const vars: Record<string, string | undefined> = { DD_HANDLE__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+
+      expect(openSpy).toHaveBeenCalledWith(secretPath, 'r');
+      expect(handle.stat).toHaveBeenCalledOnce();
+      expect(handle.readFile).toHaveBeenCalledWith('utf-8');
+      expect(handle.stat.mock.invocationCallOrder[0]).toBeLessThan(
+        handle.readFile.mock.invocationCallOrder[0],
+      );
+      expect(handle.close).toHaveBeenCalledOnce();
+      expect(vars.DD_HANDLE).toBe('descriptor-secret');
+    } finally {
+      openSpy.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should enforce the size limit again if an opened secret grows before it is read', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-growth-'));
+    const secretPath = path.join(tempDir, 'secret.txt');
+    fs.writeFileSync(secretPath, 'x');
+    const secretStats = fs.statSync(secretPath);
+    const handle = {
+      stat: vi.fn().mockResolvedValue({ ...secretStats, size: 1 }),
+      readFile: vi.fn().mockResolvedValue('x'.repeat(1024 * 1024 + 1)),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const openSpy = vi
+      .spyOn(fs.promises, 'open')
+      .mockResolvedValue(handle as unknown as Awaited<ReturnType<typeof fs.promises.open>>);
+
+    try {
+      await expect(configuration.replaceSecrets({ DD_GROWING__FILE: secretPath })).rejects.toThrow(
+        'exceeds maximum size of 1048576 bytes',
+      );
+      expect(handle.close).toHaveBeenCalledOnce();
+    } finally {
+      openSpy.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 
   test('should warn when secret file has world-readable permissions (0644)', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-perms-'));

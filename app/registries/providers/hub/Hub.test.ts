@@ -196,6 +196,8 @@ describe('Docker Hub Registry', () => {
 
   test('should fetch published date from Docker Hub tag metadata', async () => {
     const { default: axios } = await import('axios');
+    const { withRetry } = await import('../../http-retry.js');
+    const { acquireToken, getBucketForUrl } = await import('../../token-bucket.js');
     axios.mockResolvedValue({ data: { last_updated: '2026-03-01T12:34:56.000Z' } });
 
     const publishedAt = await hub.getImagePublishedAt(
@@ -211,6 +213,14 @@ describe('Docker Hub Registry', () => {
         Accept: 'application/json',
       },
     });
+    expect(getBucketForUrl).toHaveBeenCalledWith(
+      'https://hub.docker.com/v2/repositories/library/nginx/tags/1.26.0',
+    );
+    expect(acquireToken).toHaveBeenCalledWith(expect.objectContaining({ key: 'mock-host' }));
+    expect(withRetry).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ requestLabel: expect.stringContaining('Docker Hub metadata') }),
+    );
     expect(publishedAt).toBe('2026-03-01T12:34:56.000Z');
   });
 

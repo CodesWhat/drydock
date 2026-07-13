@@ -84,6 +84,15 @@ class BaseRegistry<
     }
   }
 
+  private getBearerTokenCacheTtlMs(responseData: Record<string, unknown> | undefined): number {
+    const expiresInSeconds = responseData?.expires_in;
+    if (typeof expiresInSeconds !== 'number' || !Number.isFinite(expiresInSeconds)) {
+      return REGISTRY_BEARER_TOKEN_CACHE_TTL_MS;
+    }
+
+    return Math.min(REGISTRY_BEARER_TOKEN_CACHE_TTL_MS, Math.max(0, expiresInSeconds * 1000));
+  }
+
   private getCanonicalRegistryHost(registryUrl: string | undefined): string {
     if (!registryUrl || registryUrl.trim().length === 0) {
       return 'docker.io';
@@ -496,6 +505,7 @@ class BaseRegistry<
    * @param authUrl - the URL to fetch the bearer token from
    * @param credentials - optional Base64 credentials for Basic auth on the token request
    * @param tokenExtractor - function to extract the token from the axios response (default: response.data.token || response.data.access_token)
+   * @param validationUrl - optional known registry URL used only when the outgoing request options do not carry their destination URL
    * @returns the request options with Authorization header set
    */
   async authenticateBearerFromAuthUrl(
@@ -505,8 +515,12 @@ class BaseRegistry<
     tokenExtractor: (response: { data?: Record<string, unknown> }) => unknown = (response) =>
       response.data?.token || response.data?.access_token,
     tokenFailureMessage = `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`,
+    validationUrl?: string,
   ) {
-    this.validateAuthUrlHost(authUrl, requestOptions);
+    this.validateAuthUrlHost(authUrl, {
+      ...requestOptions,
+      url: requestOptions.url || validationUrl,
+    });
 
     const requestOptionsWithAuth = this.withTlsRequestOptions({
       ...requestOptions,
@@ -562,10 +576,13 @@ class BaseRegistry<
     }
 
     const token = requireAuthString(tokenExtractor(response), tokenFailureMessage);
-    this.bearerTokenCache.set(cacheKey, {
-      token,
-      expiresAt: Date.now() + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS,
-    });
+    const cacheTtlMs = this.getBearerTokenCacheTtlMs(response?.data);
+    if (cacheTtlMs > 0) {
+      this.bearerTokenCache.set(cacheKey, {
+        token,
+        expiresAt: Date.now() + cacheTtlMs,
+      });
+    }
 
     return withAuthorizationHeader(requestOptionsWithAuth, 'Bearer', token, tokenFailureMessage);
   }

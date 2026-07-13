@@ -4,16 +4,17 @@ import Gitlab from './Gitlab.js';
 // Test fixture credentials - not real secrets
 const TEST_TOKEN = 'abcdef';
 
-const gitlab = new Gitlab();
-gitlab.configuration = {
-  url: 'https://registry.gitlab.com',
-  authurl: 'https://gitlab.com',
-  token: TEST_TOKEN,
-};
+let gitlab: Gitlab;
 
 vi.mock('axios');
 
 beforeEach(() => {
+  gitlab = new Gitlab();
+  gitlab.configuration = {
+    url: 'https://registry.gitlab.com',
+    authurl: 'https://gitlab.com',
+    token: TEST_TOKEN,
+  };
   vi.clearAllMocks();
 });
 
@@ -94,6 +95,15 @@ test('authenticate should perform authenticate request', async () => {
       },
     ),
   ).resolves.toEqual({ headers: { Authorization: 'Bearer token' } });
+});
+
+test('authenticate should reuse the GitLab token until it expires', async () => {
+  axios.mockResolvedValue({ data: { token: 'token' } });
+
+  await gitlab.authenticate({ name: 'group/project' }, { headers: {} });
+  await gitlab.authenticate({ name: 'group/project' }, { headers: {} });
+
+  expect(axios).toHaveBeenCalledTimes(1);
 });
 
 test('authenticate should encode scope query parameter', async () => {
@@ -213,7 +223,7 @@ test('authenticate should propagate 401 errors', async () => {
 
 test('authenticate should propagate 429 rate limit errors', async () => {
   const error = new Error('Request failed with status code 429');
-  (error as any).response = { status: 429 };
+  (error as any).response = { status: 429, headers: { 'retry-after': '0' } };
   axios.mockRejectedValue(error);
 
   await expect(gitlab.authenticate({}, { headers: {} })).rejects.toThrow(

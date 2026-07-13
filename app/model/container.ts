@@ -356,13 +356,21 @@ const schema = joi.object({
       skipTags: joi.array().items(joi.string()),
       skipDigests: joi.array().items(joi.string()),
       maturityMode: joi.string().valid('all', 'mature'),
-      maturityMinAgeDays: joi.number().integer().min(1).max(365),
+      maturityMinAgeDays: joi
+        .number()
+        .integer()
+        .min(MATURITY_MIN_AGE_DAYS_MIN)
+        .max(MATURITY_MIN_AGE_DAYS_MAX),
     }),
     label: joi.object({
       skipTags: joi.array().items(joi.string()),
       skipDigests: joi.array().items(joi.string()),
       maturityMode: joi.string().valid('all', 'mature'),
-      maturityMinAgeDays: joi.number().integer().min(1).max(365),
+      maturityMinAgeDays: joi
+        .number()
+        .integer()
+        .min(MATURITY_MIN_AGE_DAYS_MIN)
+        .max(MATURITY_MIN_AGE_DAYS_MAX),
     }),
   }),
   updatePolicyOverrides: joi.object({
@@ -370,7 +378,11 @@ const schema = joi.object({
     skipDigests: joi.array().items(joi.string()),
     snoozeUntil: joi.string().isoDate(),
     maturityMode: joi.string().valid('all', 'mature'),
-    maturityMinAgeDays: joi.number().integer().min(1).max(365),
+    maturityMinAgeDays: joi
+      .number()
+      .integer()
+      .min(MATURITY_MIN_AGE_DAYS_MIN)
+      .max(MATURITY_MIN_AGE_DAYS_MAX),
   }),
   updatePolicySources: joi.object({
     skipTags: joi.string().valid('env', 'label', 'override'),

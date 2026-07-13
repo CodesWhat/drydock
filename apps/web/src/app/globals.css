@@ -285,8 +285,7 @@
 }
 [data-aurora-motion="true"] .aurora-mesh {
   transform-origin: 50% 0%;
-  will-change: transform;
-  animation: aurora-drift 30s ease-in-out infinite;
+  animation: aurora-drift 30s ease-in-out 2;
 }
 
 /* Reveal-on-scroll: .reveal is visible by default (fail-open). The hidden state

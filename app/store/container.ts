@@ -104,6 +104,7 @@ const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEnt
 interface ContainerListPaginationOptions {
   limit?: number;
   offset?: number;
+  sort?: (containers: container.Container[]) => container.Container[];
 }
 
 function toCacheKey(watcher, name) {
@@ -266,9 +267,10 @@ export function cloneContainer(containerToClone) {
   return clonedContainer;
 }
 
-function normalizeContainerListPaginationOptions(
-  pagination: ContainerListPaginationOptions = {},
-): Required<ContainerListPaginationOptions> {
+function normalizeContainerListPaginationOptions(pagination: ContainerListPaginationOptions = {}): {
+  limit: number;
+  offset: number;
+} {
   const rawLimit = pagination.limit;
   const rawOffset = pagination.offset;
   const limit =
@@ -288,14 +290,17 @@ function applyContainerListPagination(
   pagination: ContainerListPaginationOptions = {},
 ): container.Container[] {
   const { limit, offset } = normalizeContainerListPaginationOptions(pagination);
+  const orderedContainers = pagination.sort
+    ? pagination.sort([...containersToPaginate])
+    : containersToPaginate;
 
   if (limit === 0 && offset === 0) {
-    return containersToPaginate;
+    return orderedContainers;
   }
   if (limit === 0) {
-    return containersToPaginate.slice(offset);
+    return orderedContainers.slice(offset);
   }
-  return containersToPaginate.slice(offset, offset + limit);
+  return orderedContainers.slice(offset, offset + limit);
 }
 
 function getValueByPath(source, path) {

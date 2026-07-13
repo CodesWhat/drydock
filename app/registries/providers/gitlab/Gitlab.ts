@@ -1,5 +1,3 @@
-import axios from 'axios';
-import { withAuthorizationHeader } from '../../../security/auth.js';
 import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
 
 export interface GitlabRegistryConfiguration extends BaseRegistryConfiguration {
@@ -80,23 +78,13 @@ class Gitlab<
     const scope = encodeURIComponent(`repository:${image.name}:pull`);
     const credentials = this.getTokenRequestCredentials();
     const authUrl = `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`;
-    this.validateAuthUrlHost(authUrl, requestOptions);
-    const request = {
-      method: 'GET',
-      url: authUrl,
-      maxRedirects: 0,
-      headers: {
-        Accept: 'application/json',
-        /* v8 ignore next -- GitLab config schema requires token before authenticate is callable. */
-        ...(credentials ? { Authorization: `Basic ${credentials}` } : {}),
-      },
-    };
-    const response = await axios(this.withTlsRequestOptions(request));
-    return withAuthorizationHeader(
-      this.withTlsRequestOptions(requestOptions),
-      'Bearer',
-      response.data.token,
+    return this.authenticateBearerFromAuthUrl(
+      requestOptions,
+      authUrl,
+      credentials,
+      undefined,
       `Unable to authenticate registry ${this.getId()}: GitLab token endpoint response does not contain token`,
+      this.configuration.url,
     );
   }
 

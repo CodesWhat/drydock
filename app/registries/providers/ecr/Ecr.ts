@@ -1,6 +1,5 @@
 import { ECRClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-ecr';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
-import axios from 'axios';
 import { requireAuthString, withAuthorizationHeader } from '../../../security/auth.js';
 import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
 
@@ -199,20 +198,13 @@ class Ecr extends BaseRegistry<EcrRegistryConfiguration> {
 
       // Public ECR gallery
     } else if (getRegistryHost(image?.registry?.url) === ECR_PUBLIC_GALLERY_HOSTNAME) {
-      const response = await axios(
-        this.withTlsRequestOptions({
-          method: 'GET',
-          url: 'https://public.ecr.aws/token/',
-          headers: {
-            Accept: 'application/json',
-          },
-        }),
-      );
-      return withAuthorizationHeader(
-        this.withTlsRequestOptions(requestOptionsWithAuth),
-        'Bearer',
-        response.data.token,
+      return this.authenticateBearerFromAuthUrl(
+        requestOptionsWithAuth,
+        'https://public.ecr.aws/token/',
+        undefined,
+        undefined,
         `Unable to authenticate registry ${this.getId()}: public ECR token endpoint response does not contain token`,
+        'https://public.ecr.aws',
       );
     }
     return this.withTlsRequestOptions(requestOptionsWithAuth);
