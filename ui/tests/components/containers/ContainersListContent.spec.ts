@@ -187,6 +187,16 @@ describe('ContainersListContent', () => {
     expect(wrapper.get('[data-icon="restart"]').attributes('data-size')).toBe('sm');
   });
 
+  it('gives group and recheck toolbar actions stable accessible names', () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+
+    expect(wrapper.get('[data-icon="stack"]').attributes('aria-label')).toBe('Group by stack');
+    expect(wrapper.get('[data-icon="restart"]').attributes('aria-label')).toBe(
+      'Recheck for updates',
+    );
+  });
+
   it('hides the column picker in cards mode and shows it in table mode', async () => {
     const context = makeTemplateContext({
       containerViewMode: writableRef<ViewMode>('cards'),

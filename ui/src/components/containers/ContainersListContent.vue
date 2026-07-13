@@ -240,6 +240,7 @@ const activeFilterChips = computed(() => {
         <AppIconButton icon="stack" size="sm" variant="secondary"
           :class="groupByStack ? 'dd-text dd-bg-elevated' : ''"
           :tooltip="tt(t('containerComponents.listContent.groupByStackTooltip'))"
+          :aria-label="t('containerComponents.listContent.groupByStackTooltip')"
           @click="groupByStack = !groupByStack" />
         <AppButton
           v-if="groupByStack"
@@ -256,6 +257,7 @@ const activeFilterChips = computed(() => {
           :disabled="rechecking"
           :loading="rechecking"
           :tooltip="tt(t('containerComponents.listContent.recheckTooltip'))"
+          :aria-label="t('containerComponents.listContent.recheckTooltip')"
           @click="recheckAll" />
       </template>
       <template #center>
