@@ -173,6 +173,7 @@ describe('AppTabBar', () => {
 
     expect(overviewButton.classes()).toContain('w-11');
     expect(overviewButton.classes()).toContain('h-11');
+    expect(overviewButton.classes()).toContain('shrink-0');
     expect(overviewButton.classes()).toContain('inline-flex');
     expect(overviewButton.classes()).toContain('items-center');
     expect(overviewButton.classes()).toContain('justify-center');

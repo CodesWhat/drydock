@@ -29,7 +29,7 @@ defineEmits<{
 
 const sizeClasses = computed(() =>
   props.iconOnly
-    ? `inline-flex items-center justify-center ${iconButtonSizeClasses.sm} dd-text-tab-sm`
+    ? `inline-flex shrink-0 items-center justify-center ${iconButtonSizeClasses.sm} dd-text-tab-sm`
     : props.size === 'compact'
       ? 'px-2 py-1.5 dd-text-tab-sm'
       : 'px-3 py-2 dd-text-tab',
