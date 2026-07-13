@@ -43,10 +43,10 @@ import {
 } from '../model/container-update-operation.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
+import { createConfiguredSbomStorage } from '../security/configured-sbom-storage.js';
 import { offloadSbomDocuments } from '../security/sbom-migration.js';
-import { createSbomStorage, type SbomStorage } from '../security/sbom-storage.js';
+import type { SbomStorage } from '../security/sbom-storage.js';
 import * as storeContainer from '../store/container.js';
-import { getConfiguration as getValidatedStoreConfiguration } from '../store/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
 import { getErrorMessage } from '../util/error.js';
@@ -59,11 +59,7 @@ let controllerSbomStorage: SbomStorage | undefined;
 
 function getControllerSbomStorage(): SbomStorage {
   if (!controllerSbomStorage) {
-    controllerSbomStorage = createSbomStorage({
-      rootDir: resolveConfiguredPath(getValidatedStoreConfiguration().path, {
-        label: 'DD_STORE_PATH',
-      }),
-    });
+    controllerSbomStorage = createConfiguredSbomStorage();
   }
   return controllerSbomStorage;
 }

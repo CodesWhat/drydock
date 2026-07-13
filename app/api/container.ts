@@ -9,8 +9,7 @@ import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { fullName } from '../model/container.js';
 import * as registry from '../registry/index.js';
-import { resolveConfiguredPath } from '../runtime/paths.js';
-import { createSbomStorage } from '../security/sbom-storage.js';
+import { createConfiguredSbomStorage } from '../security/configured-sbom-storage.js';
 import {
   generateImageSbom,
   SECURITY_SBOM_FORMATS,
@@ -21,7 +20,6 @@ import {
 import { createContainerStatsCollector } from '../stats/collector.js';
 import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
-import { getConfiguration as getValidatedStoreConfiguration } from '../store/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
@@ -51,11 +49,7 @@ import {
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
 const log = logger.child({ component: 'container' });
-const sbomStorage = createSbomStorage({
-  rootDir: resolveConfiguredPath(getValidatedStoreConfiguration().path, {
-    label: 'DD_STORE_PATH',
-  }),
-});
+const sbomStorage = createConfiguredSbomStorage();
 
 const router = express.Router();
 const RECENT_STATUS_AUDIT_LIMIT = 100;
