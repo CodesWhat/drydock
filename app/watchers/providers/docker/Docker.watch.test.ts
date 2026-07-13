@@ -526,6 +526,18 @@ describe('Docker Watcher', () => {
       expect(endDigestCachePollCycle).toHaveBeenCalledTimes(1);
     });
 
+    test('should opt bulk container lookups into the registry poll cache', async () => {
+      const container = { id: 'poll-container', name: 'poll-container' };
+      docker.getContainers = vi.fn().mockResolvedValue([container]);
+      docker.watchContainer = vi.fn().mockResolvedValue({ container, changed: false });
+
+      await docker.watch();
+
+      expect(docker.watchContainer).toHaveBeenCalledWith(container, {
+        useRegistryPollCache: true,
+      });
+    });
+
     test('should end digest cache poll cycle even when watch throws while listing containers', async () => {
       const startDigestCachePollCycle = vi.fn();
       const endDigestCachePollCycle = vi.fn();
@@ -732,7 +744,9 @@ describe('Docker Watcher', () => {
       const result = await docker.watchFromCron();
 
       expect(docker.watchContainer).toHaveBeenCalledTimes(1);
-      expect(docker.watchContainer).toHaveBeenCalledWith(regularContainer);
+      expect(docker.watchContainer).toHaveBeenCalledWith(regularContainer, {
+        useRegistryPollCache: true,
+      });
       expect(result).toHaveLength(1);
       expect(docker.log.debug).toHaveBeenCalledWith(
         expect.stringContaining('Skipping scheduled poll'),

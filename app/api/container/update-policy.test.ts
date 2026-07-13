@@ -375,6 +375,63 @@ describe('api/container/update-policy', () => {
       );
     });
 
+    test('audits a layered snooze override after persistence', () => {
+      const harness = createLayeredHarness();
+
+      callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'snooze',
+        snoozeUntil: '2030-01-01T00:00:00.000Z',
+      });
+
+      expect(harness.deps.recordAuditEvent).toHaveBeenCalledTimes(1);
+      const auditCall = harness.deps.recordAuditEvent.mock.calls[0][0];
+      expect(auditCall.action).toBe('update-policy-override-set');
+      expect(JSON.parse(auditCall.details)).toEqual({
+        operation: 'snooze',
+        fields: {
+          snoozeUntil: {
+            env: null,
+            label: null,
+            override: '2030-01-01T00:00:00.000Z',
+            effective: '2030-01-01T00:00:00.000Z',
+            source: 'override',
+          },
+        },
+      });
+      expect(harness.storeContainer.updateContainer.mock.invocationCallOrder[0]).toBeLessThan(
+        harness.deps.recordAuditEvent.mock.invocationCallOrder[0],
+      );
+    });
+
+    test('audits clearing a layered snooze override', () => {
+      const harness = createLayeredHarness({
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturityMinAgeDays: 7,
+          snoozeUntil: '2030-01-01T00:00:00.000Z',
+        },
+        updatePolicyOverrides: { snoozeUntil: '2030-01-01T00:00:00.000Z' },
+      });
+
+      callPatchContainerUpdatePolicy(harness.handlers, { action: 'unsnooze' });
+
+      expect(harness.deps.recordAuditEvent).toHaveBeenCalledTimes(1);
+      const auditCall = harness.deps.recordAuditEvent.mock.calls[0][0];
+      expect(auditCall.action).toBe('update-policy-override-cleared');
+      expect(JSON.parse(auditCall.details)).toEqual({
+        operation: 'unsnooze',
+        fields: {
+          snoozeUntil: {
+            env: null,
+            label: null,
+            override: null,
+            effective: null,
+            source: null,
+          },
+        },
+      });
+    });
+
     test('does not audit a no-op revert or a failed store update', () => {
       const noOpHarness = createHarness({
         updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
@@ -529,6 +586,59 @@ describe('api/container/update-policy', () => {
       ).toEqual(['keep']);
     });
 
+    test('clears layered policy without exposing inherited label or env policy', () => {
+      const harness = createLayeredHarness({
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturityMinAgeDays: 21,
+          skipTags: ['ui-tag'],
+          skipDigests: ['sha256:ui'],
+          snoozeUntil: '2030-01-01T00:00:00.000Z',
+        },
+        updatePolicyDeclarative: {
+          env: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+            skipTags: ['env-tag'],
+          },
+          label: {
+            maturityMinAgeDays: 14,
+            skipTags: ['label-tag'],
+            skipDigests: ['sha256:label'],
+          },
+        },
+        updatePolicyOverrides: {
+          maturityMode: 'mature',
+          maturityMinAgeDays: 21,
+          skipTags: ['ui-tag'],
+          skipDigests: ['sha256:ui'],
+          snoozeUntil: '2030-01-01T00:00:00.000Z',
+        },
+      });
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, { action: 'clear' });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const updated = harness.storeContainer.updateContainer.mock.calls[0]?.[0];
+      expect(updated.updatePolicyOverrides).toEqual({
+        maturityMode: 'all',
+        skipTags: [],
+        skipDigests: [],
+      });
+      expect(updated.updatePolicy).toEqual({
+        maturityMode: 'all',
+        maturityMinAgeDays: 14,
+        skipTags: [],
+        skipDigests: [],
+      });
+      expect(updated.updatePolicySources).toEqual({
+        maturityMode: 'override',
+        maturityMinAgeDays: 'label',
+        skipTags: 'override',
+        skipDigests: 'override',
+      });
+    });
+
     test('supports layered clear, snooze, unsnooze, maturity-clear, and whole revert actions', () => {
       const clearSkips = createLayeredHarness();
       callPatchContainerUpdatePolicy(clearSkips.handlers, { action: 'clear-skips' });
@@ -582,9 +692,11 @@ describe('api/container/update-policy', () => {
 
       const clear = createLayeredHarness({ updatePolicyOverrides: { maturityMode: 'all' } });
       callPatchContainerUpdatePolicy(clear.handlers, { action: 'clear' });
-      expect(clear.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides).toEqual(
-        {},
-      );
+      expect(clear.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides).toEqual({
+        maturityMode: 'all',
+        skipTags: [],
+        skipDigests: [],
+      });
     });
 
     test('does not audit setting an override to the same normalized value', () => {

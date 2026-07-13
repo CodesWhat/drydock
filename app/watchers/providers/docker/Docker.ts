@@ -995,8 +995,12 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       updateContainer: (container) => storeContainer.updateContainer(container),
       logInfo: (message) => logContainer.info(message),
       applyDerivedLabelFieldsToContainer: (container, labels) =>
-        applyEffectiveDockerConfigFromLabels(container, labels, this.configuration, (image) =>
-          this.getMatchingImgsetConfiguration(image),
+        applyEffectiveDockerConfigFromLabels(
+          container,
+          labels,
+          this.configuration,
+          (image) => this.getMatchingImgsetConfiguration(image),
+          { logger: logContainer, containerName: fullName(containerFound) },
         ),
     });
   }
@@ -1116,7 +1120,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
       const containerReportsSettled = await allSettledWithDockerWatchConcurrency(
         containers,
-        (container) => this.watchContainer(container),
+        (container) => this.watchContainer(container, { useRegistryPollCache: true }),
       );
       const containerReports: ContainerReport[] = [];
       for (const [index, containerReport] of containerReportsSettled.entries()) {
@@ -1174,14 +1178,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    */
   async watchContainer(
     container: Container,
-    { emitBatchEvent = false }: { emitBatchEvent?: boolean } = {},
+    {
+      emitBatchEvent = false,
+      useRegistryPollCache = false,
+    }: { emitBatchEvent?: boolean; useRegistryPollCache?: boolean } = {},
   ) {
     this.ensureLogger();
     return watchContainerState(container, {
       ensureLogger: () => this.ensureLogger(),
       log: this.log,
       findNewVersion: (containerToCheck, logContainer) =>
-        this.findNewVersion(containerToCheck, logContainer),
+        this.findNewVersion(containerToCheck, logContainer, { useRegistryPollCache }),
       mapContainerToContainerReport: (containerWithResult, watchStartedAtMs) =>
         this.mapContainerToContainerReport(containerWithResult, watchStartedAtMs),
       emitBatchEvent,
@@ -1391,7 +1398,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    * Find new version for a Container.
    */
 
-  async findNewVersion(container: Container, logContainer: ContainerWatchLogger) {
+  async findNewVersion(
+    container: Container,
+    logContainer: ContainerWatchLogger,
+    { useRegistryPollCache = false }: { useRegistryPollCache?: boolean } = {},
+  ) {
     const tagPolicy = resolveEffectiveContainerTagPolicy(
       container,
       this.configuration.tag,
@@ -1399,6 +1410,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     );
     return findNewVersionState({ ...container, tagFamily: tagPolicy.tagFamily }, logContainer, {
       pinInfoEnabled: tagPolicy.tagPinInfo,
+      useRegistryPollCache,
     });
   }
 

@@ -341,7 +341,9 @@ describe('Docker Watcher', () => {
 
       await docker.watchContainer(container);
 
-      expect(docker.findNewVersion).toHaveBeenCalledWith(container, expect.any(Object));
+      expect(docker.findNewVersion).toHaveBeenCalledWith(container, expect.any(Object), {
+        useRegistryPollCache: false,
+      });
       expect(event.emitContainerReport).toHaveBeenCalled();
     });
 
@@ -974,7 +976,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image);
+      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image, {
+        usePollCycleCache: false,
+      });
       expect(result).toEqual({ tag: '1.0.0' });
     });
 
@@ -998,7 +1002,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '1.0.0');
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '1.0.0', {
+        usePollCycleCache: false,
+      });
       expect(result).toEqual({
         tag: '1.0.0',
         publishedAt: '2026-03-10T10:00:00.000Z',
@@ -1025,7 +1031,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '');
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '', {
+        usePollCycleCache: false,
+      });
       expect(result.publishedAt).toEqual('2026-03-01T10:00:00.000Z');
       expect(result.tag).toEqual('');
     });

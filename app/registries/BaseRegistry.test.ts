@@ -1025,6 +1025,33 @@ test('getImagePublishedAt should return created date from manifest metadata', as
   expect(publishedAt).toBe('2026-03-06T08:00:00.000Z');
 });
 
+test('getImagePublishedAt should pass lookup cache scope to manifest resolution', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:abc123',
+      created: '2026-03-06T08:00:00.000Z',
+      version: 2,
+    });
+  const lookupOptions = { usePollCycleCache: false };
+
+  await baseRegistry.getImagePublishedAt(
+    {
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+      registry: { url: 'https://registry.example.com/v2' },
+    },
+    undefined,
+    lookupOptions,
+  );
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({ tag: { value: 'latest' } }),
+    undefined,
+    lookupOptions,
+  );
+});
+
 test('getImagePublishedAt should use provided tag override for lookup', async () => {
   const getImageManifestDigestSpy = vi
     .spyOn(baseRegistry, 'getImageManifestDigest')
@@ -1206,6 +1233,58 @@ test('getTags should deduplicate sequential repository lookups within a poll cyc
   expect(second).toEqual(first);
 });
 
+test('getTags should bypass the cache when no poll cycle is active', async () => {
+  const superGetTagsSpy = vi.spyOn(Registry.prototype, 'getTags').mockResolvedValue(['3.0.0']);
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    registry: { url: 'docker.io' },
+  };
+
+  await expect(baseRegistry.getTags(image)).resolves.toEqual(['3.0.0']);
+  await expect(baseRegistry.getTags(image)).resolves.toEqual(['3.0.0']);
+
+  expect(superGetTagsSpy).toHaveBeenCalledTimes(2);
+});
+
+test('getTags should not reuse a completed poll cycle for a standalone lookup', async () => {
+  const superGetTagsSpy = vi.spyOn(Registry.prototype, 'getTags').mockResolvedValue(['3.0.0']);
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    registry: { url: 'docker.io' },
+  };
+
+  baseRegistry.startDigestCachePollCycle();
+  await expect(baseRegistry.getTags(image)).resolves.toEqual(['3.0.0']);
+  baseRegistry.endDigestCachePollCycle();
+  await expect(baseRegistry.getTags(image)).resolves.toEqual(['3.0.0']);
+
+  expect(superGetTagsSpy).toHaveBeenCalledTimes(2);
+});
+
+test('getTags should bypass an active poll cache for a standalone lookup', async () => {
+  const superGetTagsSpy = vi.spyOn(Registry.prototype, 'getTags').mockResolvedValue(['3.0.0']);
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    registry: { url: 'docker.io' },
+  };
+
+  baseRegistry.startDigestCachePollCycle();
+  await expect(baseRegistry.getTags(image, { usePollCycleCache: true })).resolves.toEqual([
+    '3.0.0',
+  ]);
+  await expect(baseRegistry.getTags(image, { usePollCycleCache: false })).resolves.toEqual([
+    '3.0.0',
+  ]);
+  await expect(baseRegistry.getTags(image, { usePollCycleCache: false })).resolves.toEqual([
+    '3.0.0',
+  ]);
+
+  expect(superGetTagsSpy).toHaveBeenCalledTimes(3);
+});
+
 test('getTags should deduplicate concurrent repository lookups within a poll cycle', async () => {
   let resolveTags: (tags: string[]) => void = () => {};
   const pendingTags = new Promise<string[]>((resolve) => {
@@ -1337,6 +1416,84 @@ test('getImageManifestDigest should deduplicate concurrent lookups within a poll
 
   expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
   expect(first).toEqual(second);
+});
+
+test('getImageManifestDigest should bypass the cache when no poll cycle is active', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:new', version: 2 });
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  await expect(baseRegistry.getImageManifestDigest(image)).resolves.toMatchObject({
+    digest: 'sha256:new',
+  });
+  await expect(baseRegistry.getImageManifestDigest(image)).resolves.toMatchObject({
+    digest: 'sha256:new',
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('getImageManifestDigest should not reuse a completed poll cycle for a standalone lookup', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:new', version: 2 });
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  baseRegistry.startDigestCachePollCycle();
+  await expect(baseRegistry.getImageManifestDigest(image)).resolves.toMatchObject({
+    digest: 'sha256:new',
+  });
+  baseRegistry.endDigestCachePollCycle();
+  await expect(baseRegistry.getImageManifestDigest(image)).resolves.toMatchObject({
+    digest: 'sha256:new',
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('getImageManifestDigest should bypass an active poll cache for a standalone lookup', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:new', version: 2 });
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  baseRegistry.startDigestCachePollCycle();
+  await expect(
+    baseRegistry.getImageManifestDigest(image, undefined, {
+      usePollCycleCache: true,
+    }),
+  ).resolves.toMatchObject({ digest: 'sha256:new' });
+  await expect(
+    baseRegistry.getImageManifestDigest(image, undefined, {
+      usePollCycleCache: false,
+    }),
+  ).resolves.toMatchObject({ digest: 'sha256:new' });
+  await expect(
+    baseRegistry.getImageManifestDigest(image, undefined, {
+      usePollCycleCache: false,
+    }),
+  ).resolves.toMatchObject({ digest: 'sha256:new' });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(3);
 });
 
 test('startDigestCachePollCycle should clear previous digest cache entries', async () => {

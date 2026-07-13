@@ -972,9 +972,13 @@ function restoreRetainedUpdatePolicy(container) {
   if (entry.expiresAt <= Date.now()) {
     return;
   }
-  // An explicit incoming controller layer is authoritative. A fresh watcher declaration is not:
-  // merge the retained controller state onto it and derive a new effective policy.
-  if (Object.hasOwn(container, 'updatePolicyOverrides')) {
+  // A non-empty incoming controller layer is authoritative. Watcher normalization also stamps
+  // updatePolicyOverrides={} on fresh declarative data; that empty layer carries no controller
+  // intent and must not discard the retained overrides from the container being replaced.
+  if (
+    container.updatePolicyOverrides !== undefined &&
+    Object.keys(container.updatePolicyOverrides).length > 0
+  ) {
     return;
   }
   if (container.updatePolicyDeclarative !== undefined) {

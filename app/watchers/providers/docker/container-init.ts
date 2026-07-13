@@ -43,7 +43,10 @@ import {
   type ResolvedTriggerLabelValues,
   resolveTriggerLabelValuesPure,
 } from './trigger-label-resolution.js';
-import { applyDockerDeclarativeUpdatePolicy } from './update-policy.js';
+import {
+  applyDockerDeclarativeUpdatePolicy,
+  type DockerUpdatePolicyResolutionOptions,
+} from './update-policy.js';
 
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
 const warnedTriggerCategoryScopeChanges = new Set<string>();
@@ -859,15 +862,14 @@ export function resolveEffectiveContainerTagPolicy(
   getMatchingImgset: (image: TagPolicyImageReference) => ResolvedImgset | undefined,
 ) {
   const watcherDefaults = watcherTagDefaults ?? {};
-  const fallback = {
-    tagFamily: container.tagFamily ?? watcherDefaults.family ?? 'strict',
-    tagPinInfo: container.tagPinInfo ?? watcherDefaults.pin?.info ?? true,
+  const labels = container.labels ?? {};
+  const usePersistedFallbacks = container.labels === undefined;
+  const persistedFallbacks = {
+    family: (usePersistedFallbacks ? container.tagFamily : undefined) ?? watcherDefaults.family,
+    pin: {
+      info: (usePersistedFallbacks ? container.tagPinInfo : undefined) ?? watcherDefaults.pin?.info,
+    },
   };
-  if (!container.labels) {
-    return fallback;
-  }
-
-  const labels = container.labels as Record<string, string>;
   return mergeConfigWithImgset(
     resolveLabelsFromContainer(labels),
     getMatchingImgset({
@@ -875,7 +877,7 @@ export function resolveEffectiveContainerTagPolicy(
       domain: container.image.registry?.url,
     }),
     labels,
-    watcherDefaults,
+    persistedFallbacks,
   );
 }
 
@@ -905,9 +907,10 @@ export function applyEffectiveDockerConfigFromLabels(
     maturityminagedays?: number;
   },
   getMatchingImgset: (image: TagPolicyImageReference) => ResolvedImgset | undefined,
+  policyResolutionOptions: DockerUpdatePolicyResolutionOptions = {},
 ) {
   applyEffectiveTagPolicyFromLabels(container, labels, configuration.tag, getMatchingImgset);
-  applyDockerDeclarativeUpdatePolicy(container, labels, configuration);
+  applyDockerDeclarativeUpdatePolicy(container, labels, configuration, policyResolutionOptions);
 }
 
 function resolveLookupImageFromContainerLabels(

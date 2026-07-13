@@ -774,6 +774,10 @@ class Trigger<
     return getTriggerCategoryForType(this.type);
   }
 
+  private isAutomaticActionDispatchBlocked() {
+    return this.getCategory() === 'action' && getUpdateMode() !== 'auto';
+  }
+
   private getAutoMode() {
     return Trigger.normalizeAutoMode(this.configuration.auto);
   }
@@ -1878,11 +1882,11 @@ class Trigger<
     }
 
     logContainer.debug('Run');
+    if (this.isAutomaticActionDispatchBlocked()) {
+      logContainer.debug('Global update mode does not allow automatic actions => ignore');
+      return;
+    }
     if (this.isUpdateActionTrigger()) {
-      if (getUpdateMode() !== 'auto') {
-        logContainer.debug('Global update mode does not allow automatic updates => ignore');
-        return;
-      }
       if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
         logContainer.debug(
           'Outside maintenance window, deferring auto update until the window opens',
@@ -1956,8 +1960,8 @@ class Trigger<
       this.liftSuppressionIfConfirmed(containerReport.container, 'update confirmed');
     }
 
-    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
-      this.log.debug('Global update mode does not allow automatic updates => ignore');
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug('Global update mode does not allow automatic actions => ignore');
       return;
     }
 
@@ -2020,8 +2024,8 @@ class Trigger<
       }
     }
 
-    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
-      this.log.debug('Global update mode does not allow automatic batch updates => ignore');
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug('Global update mode does not allow automatic batch actions => ignore');
       return;
     }
 
@@ -2127,8 +2131,8 @@ class Trigger<
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
       return;
     }
-    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
-      this.log.debug('Global update mode does not allow automatic digest updates => ignore');
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug('Global update mode does not allow automatic digest actions => ignore');
       return;
     }
     if (!this.shouldHandleDigestContainerReport(containerReport)) {
@@ -2224,9 +2228,9 @@ class Trigger<
       this.log.debug('Digest cron fired — buffer empty, nothing to send');
       return;
     }
-    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
+    if (this.isAutomaticActionDispatchBlocked()) {
       this.log.debug(
-        'Global update mode does not allow automatic digest flushes => preserve buffer',
+        'Global update mode does not allow automatic digest action flushes => preserve buffer',
       );
       return;
     }

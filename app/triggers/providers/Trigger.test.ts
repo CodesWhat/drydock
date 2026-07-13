@@ -619,6 +619,27 @@ test.each([
   expect(notificationSpy).toHaveBeenCalledWith(report.container);
 });
 
+test.each([
+  'manual',
+  'notify',
+] as const)('%s mode suppresses automatic Command triggers in simple mode', async (updateMode) => {
+  mockGetUpdateMode.mockReturnValue(updateMode);
+  trigger.type = 'command';
+  const commandSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      id: 'c1',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  } as any);
+
+  expect(commandSpy).not.toHaveBeenCalled();
+});
+
 test('simple action dispatch rechecks mode before enqueueing when mode changes mid-report', async () => {
   mockGetUpdateMode.mockReturnValueOnce('auto').mockReturnValueOnce('manual');
   trigger.type = 'docker';
@@ -6694,6 +6715,53 @@ describe('digest mode', () => {
     expect((trigger as any).digestBuffer.size).toBe(0);
   });
 
+  test.each([
+    'manual',
+    'notify',
+  ] as const)('Command digest reports are not buffered in %s mode', async (updateMode) => {
+    mockGetUpdateMode.mockReturnValue(updateMode);
+    trigger.type = 'command';
+    trigger.configuration.mode = 'digest';
+
+    await trigger.handleContainerReportDigest({
+      changed: true,
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    } as any);
+
+    expect((trigger as any).digestBuffer.size).toBe(0);
+  });
+
+  test.each([
+    'manual',
+    'notify',
+  ] as const)('Command digest flush preserves buffered updates in %s mode', async (updateMode) => {
+    mockGetUpdateMode.mockReturnValue(updateMode);
+    trigger.type = 'command';
+    trigger.configuration.mode = 'digest';
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    (trigger as any).digestBuffer.set(container.id, container);
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.flushDigestBuffer();
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+    expect((trigger as any).digestBuffer.size).toBe(1);
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
   test('handleContainerReports should use the accepted update batch path for action triggers', async () => {
     trigger.configuration.mode = 'batch';
     vi.spyOn(trigger as any, 'isUpdateActionTrigger').mockReturnValue(true);
@@ -6740,6 +6808,32 @@ describe('digest mode', () => {
     ]);
 
     expect(runAcceptedUpdateBatchSpy).not.toHaveBeenCalled();
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'manual',
+    'notify',
+  ] as const)('Command batches are not dispatched or recorded in %s mode', async (updateMode) => {
+    mockGetUpdateMode.mockReturnValue(updateMode);
+    trigger.type = 'command';
+    trigger.configuration.mode = 'batch';
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReports([
+      {
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        },
+        changed: true,
+      } as any,
+    ]);
+
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
     expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
   });
 

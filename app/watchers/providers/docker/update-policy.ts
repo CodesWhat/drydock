@@ -3,7 +3,7 @@ import type {
   ContainerDeclarativeUpdatePolicy,
   ContainerUpdatePolicyDeclarative,
 } from '../../../model/container.js';
-import { parseMaturityMinAgeDays } from '../../../model/maturity-policy.js';
+import { normalizeMaturityMode, parseMaturityMinAgeDays } from '../../../model/maturity-policy.js';
 import { applyDeclarativeUpdatePolicy } from '../../../model/update-policy.js';
 import {
   ddUpdatePolicyMaturityMinAgeDays,
@@ -15,6 +15,11 @@ import {
 interface DockerMaturityDefaults {
   maturitymode?: unknown;
   maturityminagedays?: unknown;
+}
+
+export interface DockerUpdatePolicyResolutionOptions {
+  logger?: { warn: (message: string) => void };
+  containerName?: string;
 }
 
 function csv(value: unknown) {
@@ -32,20 +37,26 @@ function csv(value: unknown) {
   return entries.length > 0 ? entries : undefined;
 }
 
-function maturityMode(value: unknown) {
-  return value === 'all' || value === 'mature' ? value : undefined;
-}
-
 export function resolveDockerDeclarativeUpdatePolicy(
   labels: Record<string, string>,
   defaults: DockerMaturityDefaults = {},
+  options: DockerUpdatePolicyResolutionOptions = {},
 ): ContainerUpdatePolicyDeclarative {
   const env: ContainerDeclarativeUpdatePolicy = {};
   const label: ContainerDeclarativeUpdatePolicy = {};
-  const envMode = maturityMode(defaults.maturitymode);
+  const envMode = normalizeMaturityMode(defaults.maturitymode);
   const envDays = parseMaturityMinAgeDays(defaults.maturityminagedays);
-  const labelMode = maturityMode(labels[ddUpdatePolicyMaturityMode]);
+  const rawLabelMode = labels[ddUpdatePolicyMaturityMode];
+  const labelMode = normalizeMaturityMode(rawLabelMode);
   const labelDays = parseMaturityMinAgeDays(labels[ddUpdatePolicyMaturityMinAgeDays]);
+  if (typeof rawLabelMode === 'string' && rawLabelMode.trim() !== '' && !labelMode) {
+    const containerContext = options.containerName
+      ? `Container "${options.containerName}" has`
+      : 'Container has';
+    options.logger?.warn(
+      `${containerContext} invalid ${ddUpdatePolicyMaturityMode} value "${rawLabelMode}"; expected "all" or "mature". Ignoring label.`,
+    );
+  }
   if (envMode) env.maturityMode = envMode;
   if (envDays !== undefined) env.maturityMinAgeDays = envDays;
   if (labelMode) label.maturityMode = labelMode;
@@ -61,9 +72,10 @@ export function applyDockerDeclarativeUpdatePolicy(
   container: Container,
   labels: Record<string, string>,
   defaults: DockerMaturityDefaults = {},
+  options: DockerUpdatePolicyResolutionOptions = {},
 ) {
   return applyDeclarativeUpdatePolicy(
     container,
-    resolveDockerDeclarativeUpdatePolicy(labels, defaults),
+    resolveDockerDeclarativeUpdatePolicy(labels, defaults, options),
   );
 }

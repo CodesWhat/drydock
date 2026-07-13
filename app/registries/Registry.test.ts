@@ -1709,6 +1709,28 @@ describe('getImagePublishedAt', () => {
     expect(publishedAt).toBe('2026-03-04T11:22:33.000Z');
   });
 
+  test('should pass lookup cache scope to manifest resolution', async () => {
+    const registryMocked = createMockedRegistry();
+    const manifestSpy = vi.spyOn(registryMocked, 'getImageManifestDigest').mockResolvedValue({
+      digest: 'sha256:manifest',
+      created: '2026-03-04T11:22:33.000Z',
+      version: 2,
+    });
+    const lookupOptions = { usePollCycleCache: false };
+
+    await registryMocked.getImagePublishedAt(
+      imageInput({ tag: { value: 'latest' } }),
+      '1.2.3',
+      lookupOptions,
+    );
+
+    expect(manifestSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ tag: { value: '1.2.3' } }),
+      undefined,
+      lookupOptions,
+    );
+  });
+
   test('should return undefined when manifest created is missing or invalid', async () => {
     const registryMocked = createMockedRegistry();
     const manifestSpy = vi.spyOn(registryMocked, 'getImageManifestDigest');

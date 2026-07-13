@@ -42,6 +42,13 @@ const DECLARATIVE_POLICY_FIELDS: DeclarativePolicyField[] = [
   'skipDigests',
 ];
 
+const DECLARATIVE_POLICY_FIELD_LABEL_KEYS: Record<DeclarativePolicyField, string> = {
+  maturityMode: 'containerComponents.fullPageActions.maturityGroup',
+  maturityMinAgeDays: 'containerComponents.fullPageActions.maturityGroup',
+  skipTags: 'containerComponents.fullPageActions.skippedTags',
+  skipDigests: 'containerComponents.fullPageActions.skippedDigests',
+};
+
 interface UseContainerPolicyInput {
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   containerMetaMap: Readonly<Ref<Record<string, unknown>>>;
@@ -465,7 +472,9 @@ function createRevertPolicySelectedAction(args: SelectedPolicyActionsArgs) {
         'revert-to-declarative',
         field ? { field } : {},
         field
-          ? args.t('containerComponents.policy.toasts.revertField', { field })
+          ? args.t('containerComponents.policy.toasts.revertField', {
+              field: args.t(DECLARATIVE_POLICY_FIELD_LABEL_KEYS[field]).replace(/[:：]\s*$/, ''),
+            })
           : args.t('containerComponents.policy.toasts.revertAll'),
       );
     });

@@ -4520,6 +4520,60 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     });
   });
 
+  test('restores retained overrides when a replacement watcher stamps an empty override layer', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-layered-agent-old',
+      agent: 'remote1',
+      updatePolicy: { maturityMode: 'all', maturityMinAgeDays: 7, skipTags: ['ui-tag'] },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: { skipTags: ['old-label'] },
+      },
+      updatePolicyOverrides: { maturityMode: 'all', skipTags: ['ui-tag'] },
+      updatePolicySources: {
+        maturityMode: 'override',
+        maturityMinAgeDays: 'env',
+        skipTags: 'override',
+      },
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-layered-agent-old', { replacementExpected: true });
+    const inserted = container.insertContainer(
+      makePolicyFixture({
+        id: 'policy-layered-agent-new',
+        agent: 'remote1',
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 14, skipTags: ['new-label'] },
+        updatePolicyDeclarative: {
+          env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          label: { maturityMinAgeDays: 14, skipTags: ['new-label'] },
+        },
+        // applyDeclarativeUpdatePolicy() materializes this empty object on fresh watcher data.
+        updatePolicyOverrides: {},
+        updatePolicySources: {
+          maturityMode: 'env',
+          maturityMinAgeDays: 'label',
+          skipTags: 'label',
+        },
+      }),
+    );
+
+    expect(inserted.id).toBe('policy-layered-agent-new');
+    expect(inserted.updatePolicyOverrides).toEqual({
+      maturityMode: 'all',
+      skipTags: ['ui-tag'],
+    });
+    expect(inserted.updatePolicy).toEqual({
+      maturityMode: 'all',
+      maturityMinAgeDays: 14,
+      skipTags: ['ui-tag'],
+    });
+    expect(inserted.updatePolicyDeclarative?.label).toEqual({
+      maturityMinAgeDays: 14,
+      skipTags: ['new-label'],
+    });
+  });
+
   test('uses an explicit replacement override instead of the retained controller override', () => {
     const oldFixture = makePolicyFixture({
       id: 'policy-layered-explicit-old',

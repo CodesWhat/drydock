@@ -22,6 +22,8 @@ export const BELL_ACTIONS = [
 ];
 
 const ALWAYS_BELL_ACTIONS = ['notification-delivery-failed'];
+const BELL_ENTRY_LIMIT = 20;
+const BELL_BACKFILL_MAX_PAGES = 10;
 
 export function isBellRuleSupported(ruleId: string): boolean {
   return BELL_ACTIONS.includes(ruleId) && !ALWAYS_BELL_ACTIONS.includes(ruleId);
@@ -100,17 +102,39 @@ export const useNotificationStore = defineStore('notifications', () => {
     try {
       const rules = await getAllNotificationRules().catch(() => null);
       const actions = rules ? bellActionsForRules(rules) : BELL_ACTIONS;
-      const data = await getAuditLog({ limit: 20, actions });
-      if (requestSequence !== fetchSequence) {
-        return;
-      }
       const updateAvailableRule = rules?.find((rule) => rule.id === 'update-available');
-      entries.value = (data.entries ?? []).filter(
-        (entry: AuditEntry) =>
-          entry.action !== 'update-available' ||
-          !updateAvailableRule ||
-          updateMeetsBellThreshold(entry.semverDiff, updateAvailableRule.bellThreshold),
-      );
+      const matchingEntries: AuditEntry[] = [];
+      let offset = 0;
+
+      for (
+        let page = 0;
+        page < BELL_BACKFILL_MAX_PAGES && matchingEntries.length < BELL_ENTRY_LIMIT;
+        page += 1
+      ) {
+        const data = await getAuditLog({
+          limit: BELL_ENTRY_LIMIT,
+          ...(offset > 0 ? { offset } : {}),
+          actions,
+        });
+        if (requestSequence !== fetchSequence) {
+          return;
+        }
+        const pageEntries: AuditEntry[] = data.entries ?? [];
+        matchingEntries.push(
+          ...pageEntries.filter(
+            (entry) =>
+              entry.action !== 'update-available' ||
+              !updateAvailableRule ||
+              updateMeetsBellThreshold(entry.semverDiff, updateAvailableRule.bellThreshold),
+          ),
+        );
+        if (data.hasMore !== true || pageEntries.length === 0) {
+          break;
+        }
+        offset += pageEntries.length;
+      }
+
+      entries.value = matchingEntries.slice(0, BELL_ENTRY_LIMIT);
       error.value = null;
     } catch (caught) {
       if (requestSequence === fetchSequence) {
