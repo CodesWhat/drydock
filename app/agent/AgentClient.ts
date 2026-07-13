@@ -4,7 +4,6 @@ import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
-import { getStoreConfiguration } from '../configuration/index.js';
 import type {
   BatchUpdateCompletedEventPayload,
   ContainerUpdateAppliedEventPayload,
@@ -47,6 +46,7 @@ import { resolveConfiguredPath } from '../runtime/paths.js';
 import { offloadSbomDocuments } from '../security/sbom-migration.js';
 import { createSbomStorage, type SbomStorage } from '../security/sbom-storage.js';
 import * as storeContainer from '../store/container.js';
+import { getConfiguration as getValidatedStoreConfiguration } from '../store/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
 import { getErrorMessage } from '../util/error.js';
@@ -60,10 +60,9 @@ let controllerSbomStorage: SbomStorage | undefined;
 function getControllerSbomStorage(): SbomStorage {
   if (!controllerSbomStorage) {
     controllerSbomStorage = createSbomStorage({
-      rootDir: resolveConfiguredPath(
-        (getStoreConfiguration() as { path?: string }).path || '/store',
-        { label: 'DD_STORE_PATH' },
-      ),
+      rootDir: resolveConfiguredPath(getValidatedStoreConfiguration().path, {
+        label: 'DD_STORE_PATH',
+      }),
     });
   }
   return controllerSbomStorage;

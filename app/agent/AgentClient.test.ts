@@ -9,6 +9,9 @@ vi.mock('node:fs', () => ({
   default: { readFileSync: vi.fn().mockReturnValue(Buffer.from('cert-data')) },
 }));
 const mockResolveConfiguredPath = vi.hoisted(() => vi.fn((path) => path));
+const mockGetValidatedStoreConfiguration = vi.hoisted(() =>
+  vi.fn(() => ({ path: '/validated/store', file: 'dd.json' })),
+);
 const mockOffloadSbomDocuments = vi.hoisted(() => vi.fn());
 const mockCreateSbomStorage = vi.hoisted(() => vi.fn(() => ({ storage: 'controller' })));
 vi.mock('../runtime/paths.js', () => ({
@@ -19,6 +22,9 @@ vi.mock('../security/sbom-migration.js', () => ({
 }));
 vi.mock('../security/sbom-storage.js', () => ({
   createSbomStorage: mockCreateSbomStorage,
+}));
+vi.mock('../store/index.js', () => ({
+  getConfiguration: mockGetValidatedStoreConfiguration,
 }));
 const mockLogChild = vi.hoisted(() => ({
   info: vi.fn(),
@@ -295,6 +301,7 @@ describe('AgentClient', () => {
         2,
         expect.objectContaining({ subjectDigest: `sha256:${'2'.repeat(64)}` }),
       );
+      expect(mockCreateSbomStorage).toHaveBeenCalledWith({ rootDir: '/validated/store' });
       const persisted = storeContainer.insertContainer.mock.calls[0][0];
       expect(persisted.security.sbom.documents).toBeUndefined();
       expect(persisted.security.updateSbom.documents).toBeUndefined();
