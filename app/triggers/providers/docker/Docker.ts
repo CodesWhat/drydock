@@ -44,6 +44,7 @@ import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
 import { syncComposeFileTag } from './compose-file-sync.js';
+import { attachCreatedContainerCandidate } from './created-container-candidate.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
@@ -83,6 +84,8 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   autoremovetimeout: number;
   backupcount: number;
 }
+
+export type DockerContainerHandle = Awaited<ReturnType<ContainerUpdateExecutor['createContainer']>>;
 
 type ContainerFullNameReference = {
   name: string;
@@ -938,6 +941,7 @@ class Docker<
    */
   async createContainer(dockerApi, containerToCreate, containerName, logContainer) {
     logContainer.info(`Create container ${containerName}`);
+    let newContainer: DockerContainerHandle | undefined;
     try {
       let containerToCreatePayload = containerToCreate;
       const endpointsConfig = containerToCreate.NetworkingConfig?.EndpointsConfig || {};
@@ -963,7 +967,7 @@ class Docker<
         );
       }
 
-      const newContainer = await dockerApi.createContainer(containerToCreatePayload);
+      newContainer = await dockerApi.createContainer(containerToCreatePayload);
 
       for (const networkName of additionalNetworkNames) {
         logContainer.info(`Connect container ${containerName} to network ${networkName}`);
@@ -980,6 +984,11 @@ class Docker<
       logContainer.info(`Container ${containerName} recreated on new image with success`);
       return newContainer;
     } catch (e: unknown) {
+      // #macvlan incident: if the container was created but a later network
+      // connect failed, stash the handle on the error so callers up the stack
+      // (rollback/reconciliation paths) can stop+force-remove the orphan
+      // instead of losing it — see created-container-candidate.ts.
+      attachCreatedContainerCandidate(e, newContainer);
       logContainer.warn(`Error when creating container ${containerName} (${getErrorMessage(e)})`);
       throw e;
     }
@@ -1038,11 +1047,23 @@ class Docker<
     } = this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
     const currentContainerNetworks = currentContainer.NetworkSettings?.Networks || {};
+    const currentContainerNetworkNames = Object.keys(currentContainerNetworks);
+    // Config.MacAddress is container-wide legacy data that Docker only ever
+    // applies to the container's primary/create-time network (the one named
+    // by HostConfig.NetworkMode, or the sole network for a single-network
+    // container). Forwarding it to every network in a multi-network
+    // container would re-pin the same MAC onto endpoints that never had it.
+    const legacyContainerMacAddress = currentContainer.Config?.MacAddress;
+    const primaryNetworkName = this.runtimeConfigManager.getPrimaryNetworkName(
+      currentContainer,
+      currentContainerNetworkNames,
+    );
     const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
       (acc: Record<string, unknown>, [networkName, endpointConfig]) => {
         acc[networkName] = this.runtimeConfigManager.sanitizeEndpointConfig(
           endpointConfig as Record<string, unknown> | null | undefined,
           currentContainer.Id,
+          networkName === primaryNetworkName ? legacyContainerMacAddress : undefined,
         );
         return acc;
       },
@@ -1081,6 +1102,26 @@ class Docker<
         EndpointsConfig: endpointsConfig,
       },
     };
+    // The deprecated root-level `MacAddress` field (spread in above via
+    // clonedContainerConfig, which carries Config.MacAddress verbatim) is
+    // superseded by the primary network's endpoint-level MacAddress set
+    // above via sanitizeEndpointConfig — that's now the canonical carrier.
+    // But on daemons older than API 1.44, moby's handleMACAddressBC discards
+    // an EndpointsConfig MacAddress entirely when the root field is empty
+    // ("If a MAC address is supplied in EndpointsConfig, discard it because
+    // the old API would have ignored it") — so clearing the root field
+    // unconditionally would silently drop an explicitly-configured MAC on
+    // those daemons. On API >= 1.44 a root field that matches the primary
+    // endpoint's MAC is accepted (the 400 only fires on a mismatch), and it
+    // always does match here since both are set from legacyContainerMacAddress
+    // via sanitizeEndpointConfig above. So: keep the root field as a
+    // back-compat carrier when the MAC was explicitly configured, and delete
+    // it otherwise so a daemon-assigned MAC regenerates and doesn't trip
+    // MAC-denying socket proxies (e.g. sockguard) that reject an explicit
+    // root MacAddress on create.
+    if (!legacyContainerMacAddress) {
+      delete containerClone.MacAddress;
+    }
     // Handle situation when container is using network_mode: service:other_service
     if (containerClone.HostConfig?.NetworkMode?.startsWith('container:')) {
       delete containerClone.Hostname;
@@ -1163,7 +1204,20 @@ class Docker<
     );
 
     if (currentContainerSpec.State.Running) {
-      await this.startContainer(newContainer, container.name, logContainer);
+      try {
+        await this.startContainer(newContainer, container.name, logContainer);
+      } catch (e: unknown) {
+        // #macvlan incident: createContainer already succeeded here, so the
+        // handle isn't lost the way an in-flight create failure is — but
+        // startContainer's own catch only logs+rethrows, so without this the
+        // created-but-unstarted container would still squat the canonical
+        // name with nothing recovering it. Attach it the same way
+        // createContainer does so every consumer that recovers orphans via
+        // getCreatedContainerCandidate(error) (HealthMonitor, backup
+        // rollback, Dockercompose) picks it up too.
+        attachCreatedContainerCandidate(e, newContainer);
+        throw e;
+      }
     }
   }
 

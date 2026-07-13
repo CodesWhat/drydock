@@ -4,6 +4,10 @@ import logger from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as storeBackup from '../store/backup.js';
 import * as storeContainer from '../store/container.js';
+import {
+  cleanupCreatedContainerCandidate,
+  getCreatedContainerCandidate,
+} from '../triggers/providers/docker/created-container-candidate.js';
 import { recordAuditEvent } from './audit-events.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
@@ -125,6 +129,11 @@ async function rollbackContainer(req: Request, res: Response) {
       backup: latestBackup,
     });
   } catch (e: unknown) {
+    // recreateContainer may have created a replacement before a later step
+    // (e.g. an additional-network connect) failed. The prior container was
+    // already stopped/removed above, so reclaim the orphan so it doesn't
+    // squat the container name.
+    await cleanupCreatedContainerCandidate(getCreatedContainerCandidate(e), container.name, log);
     handleContainerActionError({
       error: e,
       action: 'rollback',

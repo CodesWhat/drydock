@@ -63,6 +63,10 @@ type EndpointConfig = {
   Links?: unknown;
   DriverOpts?: unknown;
   MacAddress?: unknown;
+  // Not currently returned by `docker inspect` / GET /containers/{id}/json — see
+  // the sanitizeEndpointConfig comment below. Typed here only so a future Docker
+  // Engine API version that does expose it is picked up automatically.
+  DesiredMacAddress?: unknown;
   Aliases?: string[];
   [key: string]: unknown;
 };
@@ -139,6 +143,7 @@ class ContainerRuntimeConfigManager {
   sanitizeEndpointConfig(
     endpointConfig: EndpointConfig | null | undefined,
     currentContainerId: string,
+    legacyContainerMacAddress?: unknown,
   ) {
     if (!endpointConfig) {
       return {};
@@ -155,8 +160,42 @@ class ContainerRuntimeConfigManager {
     if (endpointConfig.DriverOpts) {
       sanitizedEndpointConfig.DriverOpts = endpointConfig.DriverOpts;
     }
-    if (endpointConfig.MacAddress) {
-      sanitizedEndpointConfig.MacAddress = endpointConfig.MacAddress;
+    // `endpointConfig.MacAddress` from `docker inspect` is operational data —
+    // the daemon auto-assigns a MAC per endpoint when none was requested, and
+    // that generated value is indistinguishable from an explicit one in this
+    // field alone. Forwarding it unconditionally on recreate re-pins the OLD
+    // container's (possibly stale, possibly daemon-generated) MAC onto the
+    // replacement, and trips MAC-denying socket proxies (e.g. sockguard) that
+    // reject explicit endpoint MacAddress by default. Only forward a MAC when
+    // there is a real signal of explicit user intent:
+    //   1. `endpointConfig.DesiredMacAddress` — the per-endpoint field Docker's
+    //      daemon uses internally to distinguish a configured MAC from a
+    //      generated one (added in the DesiredMacAddress/MAC-persistence fix,
+    //      moby#47304 / moby#47233). CONFIRMED as of this writing: this field
+    //      is persisted daemon-side but is NOT included in `docker inspect` /
+    //      GET /containers/{id}/json output — it exists only in the daemon's
+    //      internal wrapped EndpointSettings. Checked here anyway in case a
+    //      future Engine API version starts exposing it; today this branch is
+    //      effectively unreachable from inspect data.
+    //   2. `Config.MacAddress` — the deprecated container-wide field (API
+    //      1.44+ deprecated it in favor of per-network config). Since Docker
+    //      26.0.0 (moby#47233, following the 25.0.0/25.0.1 regression in
+    //      moby#47228 where it briefly leaked the generated address) this
+    //      field is populated in inspect output ONLY when the MAC was
+    //      explicitly configured on the container's primary/default network,
+    //      so it's a reliable (if narrower — it can't represent an explicit
+    //      MAC on a non-default network of a multi-network container) signal
+    //      of intent. Passed in by the caller since it lives on the
+    //      container-level Config, not the per-endpoint config this method
+    //      receives.
+    // Otherwise the MacAddress is dropped entirely rather than forwarded.
+    if (endpointConfig.DesiredMacAddress) {
+      sanitizedEndpointConfig.MacAddress = endpointConfig.DesiredMacAddress;
+    } else if (
+      typeof legacyContainerMacAddress === 'string' &&
+      legacyContainerMacAddress.length > 0
+    ) {
+      sanitizedEndpointConfig.MacAddress = legacyContainerMacAddress;
     }
     if (endpointConfig.Aliases?.length > 0) {
       sanitizedEndpointConfig.Aliases = endpointConfig.Aliases.filter(
@@ -174,6 +213,17 @@ class ContainerRuntimeConfigManager {
     const networkMode = containerToCreate?.HostConfig?.NetworkMode;
     if (networkMode && networkNames.includes(networkMode)) {
       return networkMode;
+    }
+    // A container created on the default bridge network reports
+    // `HostConfig.NetworkMode: "default"` in `docker inspect`, not "bridge" —
+    // moby itself special-cases this at create time
+    // (`if nwm.IsDefault() { name = daemon.netController.Config().DefaultNetwork }`,
+    // daemon/create.go). Without this translation the exact-match branch
+    // above misses and we'd fall through to networkNames[0], which for a
+    // bridge+macvlan container is whichever network name sorts first
+    // alphabetically — sometimes the macvlan network.
+    if (networkMode === 'default' && networkNames.includes('bridge')) {
+      return 'bridge';
     }
     return networkNames[0];
   }

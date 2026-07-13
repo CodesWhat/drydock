@@ -381,6 +381,48 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('updateContainerWithCompose should stop and force-remove the orphan created by a failed rollback-restore attempt', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx' });
+    const orphanedRestoreCandidate = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+
+    // First createContainer call (new image) fails outright, triggering the
+    // rollback-restore safety net. The rollback-restore's own createContainer
+    // call succeeds, but its subsequent startContainer fails — this exercises
+    // the REAL Docker.recreateContainer behavior (via super.recreateContainer),
+    // so the created-but-unstarted container is actually attached to the
+    // thrown error via attachCreatedContainerCandidate, not a stubbed one.
+    vi.spyOn(trigger, 'createContainer')
+      .mockRejectedValueOnce(new Error('No such image: nginx:1.1.0'))
+      .mockResolvedValueOnce(orphanedRestoreCandidate as any);
+    vi.spyOn(trigger, 'startContainer').mockRejectedValueOnce(new Error('rollback start failed'));
+
+    let thrownError: any;
+    try {
+      await trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container);
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe('No such image: nginx:1.1.0');
+    expect(thrownError.composeRollbackOutcome).toEqual({
+      status: 'rollback-failed',
+      phase: 'rollback-failed',
+      rollbackReason: 'compose_runtime_refresh_failed',
+      lastError: 'No such image: nginx:1.1.0',
+    });
+    expect(orphanedRestoreCandidate.stop).toHaveBeenCalledTimes(1);
+    expect(orphanedRestoreCandidate.remove).toHaveBeenCalledWith({ force: true });
+  });
+
   test('updateContainerWithCompose should remove a network-attach replacement candidate before rollback restore', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({ id: 'old-id', name: 'nginx' });

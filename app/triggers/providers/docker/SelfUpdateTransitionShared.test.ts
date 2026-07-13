@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 
+import { attachCreatedContainerCandidate } from './created-container-candidate.js';
 import {
   executeSelfUpdateTransition,
   findDockerSocketBind,
@@ -122,6 +123,61 @@ describe('SelfUpdateTransitionShared', () => {
     );
   });
 
+  test('cascade guard: throws before any rename, pull, or create when the container is already a rollback-orphan name', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/drydock-old-1781107685468',
+      }),
+    });
+    const dependencies = createDependencies();
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow(/drydock-old-1781107685468/);
+
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(dependencies.insertContainerImageBackup).not.toHaveBeenCalled();
+    expect(dependencies.pullImage).not.toHaveBeenCalled();
+    expect(dependencies.cloneContainer).not.toHaveBeenCalled();
+    expect(dependencies.createContainer).not.toHaveBeenCalled();
+  });
+
+  test('cascade guard: resolves the true canonical name through a doubly-nested rollback rename', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/drydock-old-1781107685468-old-1781107699999',
+      }),
+    });
+    const dependencies = createDependencies();
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow(/squatting drydock /);
+  });
+
+  test('cascade guard: throws even in dry-run mode when the container is already a rollback-orphan name', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/drydock-old-1781107685468',
+      }),
+    });
+    const dependencies = createDependencies({ getConfiguration: () => ({ dryrun: true }) });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow(/drydock-old-1781107685468/);
+
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(dependencies.insertContainerImageBackup).not.toHaveBeenCalled();
+    expect(dependencies.pullImage).not.toHaveBeenCalled();
+    expect(log.info).not.toHaveBeenCalledWith(
+      'Do not replace the existing container because dry-run mode is enabled',
+    );
+  });
+
   test('getErrorMessage coerces non-Error thrown values to string', async () => {
     const context = createContext();
     const dependencies = createDependencies({
@@ -137,6 +193,57 @@ describe('SelfUpdateTransitionShared', () => {
     expect(log.warn).toHaveBeenCalledWith(
       'Failed to create new container, rolling back rename: connection refused',
     );
+  });
+
+  test('cleans up an orphaned candidate attached to a createContainer failure before rolling back rename', async () => {
+    const context = createContext();
+    const orphanCandidate = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const connectError = new Error('connect EACCES: denied by socket proxy');
+    attachCreatedContainerCandidate(connectError, orphanCandidate);
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockRejectedValue(connectError),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toBe(connectError);
+
+    expect(orphanCandidate.stop).toHaveBeenCalledTimes(1);
+    expect(orphanCandidate.remove).toHaveBeenCalledWith({ force: true });
+    expect(orphanCandidate.remove.mock.invocationCallOrder[0]).toBeLessThan(
+      context.currentContainer.rename.mock.invocationCallOrder[1],
+    );
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+  });
+
+  test('warns but still rolls back rename when orphaned-candidate cleanup itself fails', async () => {
+    const context = createContext();
+    const orphanCandidate = {
+      stop: vi.fn().mockRejectedValue(new Error('stop exploded')),
+      remove: vi.fn().mockRejectedValue('remove exploded as string'),
+    };
+    const connectError = new Error('connect EACCES: denied by socket proxy');
+    attachCreatedContainerCandidate(connectError, orphanCandidate);
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockRejectedValue(connectError),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toBe(connectError);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to stop orphaned replacement container drydock (stop exploded)',
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to remove orphaned replacement container drydock (remove exploded as string)',
+    );
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
   });
 
   test('uses dependency operation id factory when operation id is omitted', async () => {

@@ -536,6 +536,69 @@ describe('image-comparison', () => {
     expect(result.noUpdateReason).toContain('Pinned tag');
   });
 
+  test('short-circuits without a registry call for a locally-built image (isLocalImage marker)', async () => {
+    const getTags = vi.fn().mockResolvedValue(['1.0.0']);
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags,
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub' },
+        name: 'portwing',
+        tag: { value: '0.3.0-qa', semver: false },
+        digest: { watch: false },
+        isLocalImage: true,
+      },
+    };
+
+    const result = await findNewVersion(container as never, log);
+
+    expect(getTags).not.toHaveBeenCalled();
+    expect(result.noUpdateReason).toBe(
+      'Locally-built image (no repository digest) — registry not queried',
+    );
+    expect(result.tag).toBe('0.3.0-qa');
+  });
+
+  test('does not short-circuit a registry-backed container that merely lacks digest.repo', async () => {
+    // Regression guard: many registry-backed fixtures don't populate digest.repo
+    // (digest watching is off), so the gate must key off the explicit
+    // isLocalImage marker, not digest.repo absence, or this would wrongly skip
+    // the registry call for real registry-backed images too.
+    const getTags = vi.fn().mockResolvedValue(['1.0.0', '2.0.0']);
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags,
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub' },
+        name: 'library/nginx',
+        tag: { value: '1.0.0', semver: true, tagPrecision: 'floating' },
+        digest: { watch: false },
+      },
+    };
+
+    await findNewVersion(container as never, log);
+
+    expect(getTags).toHaveBeenCalledTimes(1);
+  });
+
   test('populates result.updateInsight for a pinned specific tag when a newer same-family tag exists (#498)', async () => {
     mockGetState.mockReturnValue({
       registry: {

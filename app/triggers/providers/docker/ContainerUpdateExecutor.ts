@@ -1,3 +1,4 @@
+import { isRollbackContainerName } from '../../../model/container.js';
 import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
@@ -8,7 +9,9 @@ import {
   verifyContainerStillRunning,
 } from '../../../updates/post-start-liveness.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { getCreatedContainerCandidate } from './created-container-candidate.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
+import { buildRollbackCascadeGuardError } from './rollback-cascade-guard.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 type ContainerUpdateLogger = {
@@ -684,6 +687,23 @@ class ContainerUpdateExecutor {
     // already transitioned it to a terminal state before execution begins.
     const operation = this.resolveOrCreateOperation(requestedOperationId, operationFields);
 
+    // Cascade guard: a container already carries the "-old-<epoch-ms>" rollback
+    // rename suffix, meaning a previous update attempt failed mid-recreate and
+    // was never restored (see created-container-candidate.ts / the macvlan
+    // incident). Recreating from this name would nest a second rollback rename
+    // on top of the first, compounding the mess. Fail terminally instead of
+    // renaming/pulling/creating so the operator gets an explanatory error and
+    // can clean up the orphan manually.
+    if (isRollbackContainerName(oldName)) {
+      const cascadeError = buildRollbackCascadeGuardError(oldName);
+      updateOperationStore.markOperationTerminal(operation.id, {
+        status: 'failed',
+        phase: 'failed',
+        lastError: getErrorMessage(cascadeError),
+      });
+      throw cascadeError;
+    }
+
     try {
       await this.pullImage(dockerApi, auth, newImage, logContainer);
     } catch (pullError: unknown) {
@@ -973,8 +993,12 @@ class ContainerUpdateExecutor {
       lastError: getErrorMessage(error),
     });
 
+    // If createContainer itself rejected (e.g. a post-create network.connect
+    // failure), attemptState.newContainer never got assigned — but the created
+    // handle may still be recoverable off the error (see created-container-candidate.ts),
+    // so it doesn't get orphaned squatting the canonical container name.
     await this.cleanupNewContainerBestEffort(
-      attemptState.newContainer,
+      attemptState.newContainer ?? getCreatedContainerCandidate<DockerContainerHandle>(error),
       preparedExecution.oldName,
       logContainer,
     );

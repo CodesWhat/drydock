@@ -8,7 +8,14 @@ import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
 import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
-import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
+import {
+  cleanupCreatedContainerCandidate,
+  getCreatedContainerCandidate,
+} from '../docker/created-container-candidate.js';
+import Docker, {
+  type DockerContainerHandle,
+  type DockerTriggerConfiguration,
+} from '../docker/Docker.js';
 import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
 import ComposeFileParser, {
@@ -2098,7 +2105,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 
   async createContainer(dockerApi, containerToCreate, containerName, logContainer) {
     logContainer.info(`Create container ${containerName}`);
-    let newContainer: unknown;
+    let newContainer: DockerContainerHandle | undefined;
     try {
       let containerToCreatePayload = containerToCreate;
       /* v8 ignore next -- Docker create payloads normally include NetworkingConfig.EndpointsConfig. */
@@ -2317,6 +2324,18 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         `Failed to restore original container ${containerName} after failed update ` +
           `(${getErrorMessage(rollbackError)}). Manual intervention may be required.`,
       );
+      // #macvlan incident: super.recreateContainer (Docker.recreateContainer)
+      // attaches a created-but-unstarted/unconnected container handle to the
+      // thrown error when create succeeds but start (or a network connect)
+      // fails. Without recovering and cleaning it up here, that orphan is
+      // dropped on the floor and squats the canonical container name.
+      // Cleanup is best-effort (cleanupFailedReplacementCandidate swallows
+      // its own stop/remove errors) so it never changes the rollback-failed
+      // status returned below.
+      const orphanCandidate =
+        getCreatedContainerCandidate(rollbackError) ??
+        Dockercompose.getComposeCreatedContainerCandidate(rollbackError);
+      await this.cleanupFailedReplacementCandidate(orphanCandidate, containerName, logContainer);
       return {
         status: 'rollback-failed',
         phase: 'rollback-failed',
@@ -2331,39 +2350,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     containerName: string,
     logContainer: { warn: (msg: string) => void },
   ): Promise<void> {
-    if (!candidateContainer || typeof candidateContainer !== 'object') {
-      return;
-    }
-    const candidate = candidateContainer as {
-      stop?: () => Promise<unknown>;
-      remove?: (options?: unknown) => Promise<unknown>;
-    };
-    /* v8 ignore next 11 -- replacement cleanup calls are best-effort rollback hygiene. */
-    if (typeof candidate.stop === 'function') {
-      try {
-        await candidate.stop();
-      } catch (stopError: unknown) {
-        /* v8 ignore next 5 -- cleanup warnings preserve rollback failure context when Docker cleanup fails. */
-        logContainer.warn(
-          `Unable to stop failed replacement container ${containerName} during rollback (${getErrorMessage(
-            stopError,
-          )})`,
-        );
-      }
-    }
-    /* v8 ignore next 11 -- replacement cleanup calls are best-effort rollback hygiene. */
-    if (typeof candidate.remove === 'function') {
-      try {
-        await candidate.remove({ force: true });
-      } catch (removeError: unknown) {
-        /* v8 ignore next 5 -- cleanup warnings preserve rollback failure context when Docker cleanup fails. */
-        logContainer.warn(
-          `Unable to remove failed replacement container ${containerName} during rollback (${getErrorMessage(
-            removeError,
-          )})`,
-        );
-      }
-    }
+    return cleanupCreatedContainerCandidate(candidateContainer, containerName, logContainer);
   }
 
   private ensureComposeRuntimeState(currentContainerSpec, composeFile, service): void {

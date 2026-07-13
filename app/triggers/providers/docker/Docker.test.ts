@@ -8,6 +8,7 @@ import log from '../../../log/index.js';
 import * as registryStore from '../../../registry';
 import * as backupStore from '../../../store/backup';
 import { createMockRequest, createMockResponse } from '../../../test/helpers.js';
+import { getCreatedContainerCandidate } from './created-container-candidate.js';
 import Docker from './Docker.js';
 
 const configurationValid = {
@@ -906,6 +907,127 @@ test('clone should remove dynamic network endpoint fields and stale aliases', as
       DriverOpts: { test: 'value' },
     },
   });
+});
+
+test('cloneContainer should drop the auto-assigned endpoint MacAddress when Config.MacAddress is not set', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/macvlan-app',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'macvlan_net' },
+      Config: { configA: 'a' },
+      NetworkSettings: {
+        Networks: {
+          macvlan_net: {
+            IPAMConfig: { IPv4Address: '192.168.1.50' },
+            MacAddress: '02:42:c0:a8:01:32',
+          },
+        },
+      },
+    },
+    'test/test:2.0.0',
+  );
+
+  expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net).not.toHaveProperty('MacAddress');
+});
+
+test('cloneContainer should forward the legacy container-wide Config.MacAddress to the endpoint config and retain the root field for API < 1.44 back-compat', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/macvlan-app',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'macvlan_net' },
+      Config: { configA: 'a', MacAddress: '02:42:c0:a8:01:99' },
+      NetworkSettings: {
+        Networks: {
+          macvlan_net: {
+            IPAMConfig: { IPv4Address: '192.168.1.50' },
+            MacAddress: '02:42:c0:a8:01:32',
+          },
+        },
+      },
+    },
+    'test/test:2.0.0',
+  );
+
+  expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net.MacAddress).toBe('02:42:c0:a8:01:99');
+  // Root MacAddress is intentionally retained (equal to the primary
+  // endpoint's) when the MAC was explicitly configured, since moby's
+  // handleMACAddressBC discards the EndpointsConfig MacAddress on daemons
+  // older than API 1.44 when the root field is empty.
+  expect(clone.MacAddress).toBe('02:42:c0:a8:01:99');
+});
+
+test('cloneContainer should only forward legacy Config.MacAddress to the primary network on a multi-network container, retaining the matching root field', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/macvlan-app',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'macvlan_net' },
+      Config: { configA: 'a', MacAddress: '02:42:c0:a8:01:99' },
+      NetworkSettings: {
+        Networks: {
+          macvlan_net: { IPAMConfig: { IPv4Address: '192.168.1.50' } },
+          bridge: { IPAMConfig: { IPv4Address: '172.17.0.2' } },
+        },
+      },
+    },
+    'test/test:2.0.0',
+  );
+
+  expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net.MacAddress).toBe('02:42:c0:a8:01:99');
+  expect(clone.NetworkingConfig.EndpointsConfig.bridge).not.toHaveProperty('MacAddress');
+  expect(clone.MacAddress).toBe('02:42:c0:a8:01:99');
+});
+
+test('cloneContainer should attribute the legacy Config.MacAddress to "bridge" when NetworkMode is "default"', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/bridge-app',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'default' },
+      Config: { configA: 'a', MacAddress: '02:42:c0:a8:01:99' },
+      NetworkSettings: {
+        Networks: {
+          'app-net': { IPAMConfig: { IPv4Address: '192.168.1.50' } },
+          bridge: { IPAMConfig: { IPv4Address: '172.17.0.2' } },
+        },
+      },
+    },
+    'test/test:2.0.0',
+  );
+
+  expect(clone.NetworkingConfig.EndpointsConfig.bridge.MacAddress).toBe('02:42:c0:a8:01:99');
+  expect(clone.NetworkingConfig.EndpointsConfig['app-net']).not.toHaveProperty('MacAddress');
+  expect(clone.MacAddress).toBe('02:42:c0:a8:01:99');
+});
+
+test('cloneContainer should drop the auto-assigned endpoint MacAddress on every network of a multi-network container when Config.MacAddress is not set', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/macvlan-app',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'macvlan_net' },
+      Config: { configA: 'a' },
+      NetworkSettings: {
+        Networks: {
+          macvlan_net: {
+            IPAMConfig: { IPv4Address: '192.168.1.50' },
+            MacAddress: '02:42:c0:a8:01:32',
+          },
+          bridge: {
+            IPAMConfig: { IPv4Address: '172.17.0.2' },
+            MacAddress: '02:42:ac:11:00:02',
+          },
+        },
+      },
+    },
+    'test/test:2.0.0',
+  );
+
+  expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net).not.toHaveProperty('MacAddress');
+  expect(clone.NetworkingConfig.EndpointsConfig.bridge).not.toHaveProperty('MacAddress');
+  expect(clone.MacAddress).toBeUndefined();
 });
 
 test('cloneContainer should remove Hostname and ExposedPorts when NetworkMode starts with container:', () => {
@@ -5103,6 +5225,46 @@ describe('additional direct wrapper coverage', () => {
     );
 
     expect(startSpy).not.toHaveBeenCalled();
+  });
+
+  test('recreateContainer attaches the created container to the error when start fails after a successful create', async () => {
+    vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+    const createdContainer = { start: vi.fn(), stop: vi.fn(), remove: vi.fn() };
+    vi.spyOn(docker, 'createContainer').mockResolvedValue(createdContainer as any);
+    const startError = new Error('start failed: denied by socket proxy');
+    vi.spyOn(docker, 'startContainer').mockRejectedValue(startError);
+
+    await expect(
+      docker.recreateContainer(
+        {} as any,
+        { State: { Running: true } } as any,
+        'repo/image:new',
+        { name: 'c1' } as any,
+        createMockLog('info', 'warn', 'debug'),
+      ),
+    ).rejects.toBe(startError);
+
+    expect(getCreatedContainerCandidate(startError)).toBe(createdContainer);
+  });
+
+  test('recreateContainer does not double-attach when createContainer itself fails', async () => {
+    vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+    const createError = new Error('create failed');
+    vi.spyOn(docker, 'createContainer').mockRejectedValue(createError);
+    const startSpy = vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await expect(
+      docker.recreateContainer(
+        {} as any,
+        { State: { Running: true } } as any,
+        'repo/image:new',
+        { name: 'c1' } as any,
+        createMockLog('info', 'warn', 'debug'),
+      ),
+    ).rejects.toBe(createError);
+
+    expect(startSpy).not.toHaveBeenCalled();
+    expect(getCreatedContainerCandidate(createError)).toBeUndefined();
   });
 
   test('waitForContainerHealthy should wait when health state is initially unavailable', async () => {

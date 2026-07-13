@@ -549,7 +549,7 @@ export function isDigestToWatch(
     const shouldWatch = watchDigestLabelValue.toLowerCase() === 'true';
     if (shouldWatch && isDockerHubDomain(parsedImage.domain)) {
       log.warn(
-        `Watching digest for image ${parsedImage.path} with domain ${parsedImage.domain} may result in throttled requests`,
+        `Watching digest for image ${parsedImage.path} with domain ${parsedImage.domain ?? 'docker.io'} may result in throttled requests`,
       );
     }
     return shouldWatch;

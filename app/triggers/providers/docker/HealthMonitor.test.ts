@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { attachCreatedContainerCandidate } from './created-container-candidate.js';
+import Docker from './Docker.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 
 var mockInsertAudit = vi.hoisted(() => vi.fn());
@@ -9,6 +11,7 @@ vi.mock('../../../store/audit.js', () => ({
 var mockGetBackupsByName = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/backup.js', () => ({
   getBackupsByName: mockGetBackupsByName,
+  pruneOldBackups: vi.fn(),
 }));
 
 var mockAuditCounterInc = vi.hoisted(() => vi.fn());
@@ -620,6 +623,154 @@ describe('HealthMonitor', () => {
     );
     expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Auto-rollback failed'));
     expect(mockAuditCounterInc).not.toHaveBeenCalled();
+
+    abortController.abort();
+  });
+
+  test('should clean up an orphaned candidate attached to a recreateContainer failure', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var orphanCandidate = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    var connectError = new Error('connect EACCES: denied by socket proxy');
+    attachCreatedContainerCandidate(connectError, orphanCandidate);
+    triggerInstance.recreateContainer.mockRejectedValue(connectError);
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'registry/test-image',
+        imageTag: '1.0.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '2.0.0',
+      window: 300000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(orphanCandidate.stop).toHaveBeenCalledTimes(1);
+    expect(orphanCandidate.remove).toHaveBeenCalledWith({ force: true });
+    expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Auto-rollback failed'));
+
+    abortController.abort();
+  });
+
+  test('should warn but still record rollback error when orphaned-candidate cleanup itself fails', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var orphanCandidate = {
+      stop: vi.fn().mockRejectedValue(new Error('stop exploded')),
+      remove: vi.fn().mockRejectedValue('remove exploded as string'),
+    };
+    var connectError = new Error('connect EACCES: denied by socket proxy');
+    attachCreatedContainerCandidate(connectError, orphanCandidate);
+    triggerInstance.recreateContainer.mockRejectedValue(connectError);
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'registry/test-image',
+        imageTag: '1.0.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '2.0.0',
+      window: 300000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to stop orphaned replacement container test-container (stop exploded)',
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to remove orphaned replacement container test-container (remove exploded as string)',
+    );
+    expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Auto-rollback failed'));
+
+    abortController.abort();
+  });
+
+  test('recovers the orphan through the REAL Docker.recreateContainer create-then-start path when start fails', async () => {
+    var log = createMockLog();
+    var realDocker = new Docker();
+    vi.spyOn(realDocker, 'cloneContainer').mockReturnValue({ Name: '/test-container' });
+
+    var newContainerHandle = {
+      start: vi.fn().mockRejectedValue(new Error('start failed: denied by socket proxy')),
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+    dockerApi.createContainer = vi.fn().mockResolvedValue(newContainerHandle);
+
+    var triggerInstance = createMockTriggerInstance();
+    triggerInstance.recreateContainer = realDocker.recreateContainer.bind(realDocker);
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'registry/test-image',
+        imageTag: '1.0.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '2.0.0',
+      window: 300000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(dockerApi.createContainer).toHaveBeenCalledTimes(1);
+    expect(newContainerHandle.start).toHaveBeenCalledTimes(1);
+    expect(newContainerHandle.stop).toHaveBeenCalledTimes(1);
+    expect(newContainerHandle.remove).toHaveBeenCalledWith({ force: true });
+    expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Auto-rollback failed'));
 
     abortController.abort();
   });
