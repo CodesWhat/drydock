@@ -520,6 +520,47 @@ describe('createDockerScannerBackend', () => {
     expect(container.remove).toHaveBeenCalledWith({ force: true });
   });
 
+  test.each([
+    [
+      'container creation',
+      ({ client }) => {
+        client.createContainer.mockImplementationOnce(() => new Promise(() => undefined));
+      },
+    ],
+    [
+      'stream attachment',
+      ({ container }) => {
+        container.attach.mockImplementationOnce(() => new Promise(() => undefined));
+      },
+    ],
+    [
+      'container start',
+      ({ container }) => {
+        container.start.mockImplementationOnce(() => new Promise(() => undefined));
+      },
+    ],
+  ])('applies the scanner deadline during %s', async (_phase, stallPhase) => {
+    const harness = createHarness();
+    stallPhase(harness);
+
+    const outcome = await Promise.race([
+      harness.backend
+        .run({
+          image: PINNED_IMAGE,
+          args: ['scan'],
+          timeoutMs: 10,
+          maxOutputBytes: 1_024,
+        })
+        .catch((error) => error),
+      new Promise<Error>((resolve) => {
+        setTimeout(() => resolve(new Error('scanner run remained pending')), 100);
+      }),
+    ]);
+
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toBe('Scanner worker timed out after 10ms');
+  });
+
   test('kills a timed-out worker when stopping fails', async () => {
     const { backend, container } = createHarness({ wait: () => new Promise(() => undefined) });
     container.stop.mockRejectedValueOnce(new Error('stop failed'));

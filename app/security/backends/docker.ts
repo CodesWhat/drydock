@@ -465,12 +465,18 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
       );
     }
 
+    const timeout = waitForTimeout(remainingTimeoutMs);
     let container: DockerScannerContainer | undefined;
+    let createContainerPromise: Promise<DockerScannerContainer> | undefined;
     try {
-      container = await options.client.createContainer(
+      createContainerPromise = options.client.createContainer(
         buildContainerConfiguration(runOptions, options.cacheDir, hardening),
       );
-      const stream = await container.attach({ stream: true, stdout: true, stderr: true });
+      container = await Promise.race([createContainerPromise, timeout.promise]);
+      const stream = await Promise.race([
+        container.attach({ stream: true, stdout: true, stderr: true }),
+        timeout.promise,
+      ]);
       const streamCompletion = createStreamCompletion(stream);
       const collectors = createOutputCollectors(runOptions.maxOutputBytes);
       // Attach handlers before demux/start so an early stream or output failure cannot
@@ -479,37 +485,28 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
       void streamCompletion.failed.catch(() => undefined);
       void collectors.overflow.catch(() => undefined);
       options.client.modem.demuxStream(stream, collectors.stdout, collectors.stderr);
-      await container.start();
+      await Promise.race([
+        container.start(),
+        timeout.promise,
+        collectors.overflow,
+        streamCompletion.failed,
+      ]);
 
-      const timeout = waitForTimeout(remainingTimeoutMs);
-      let waitResult: { StatusCode?: number };
-      try {
-        waitResult = await Promise.race([
-          container.wait(),
-          timeout.promise,
-          collectors.overflow,
-          streamCompletion.failed,
-        ]);
-        await Promise.race([
-          streamCompletion.done,
-          collectors.overflow,
-          streamCompletion.failed,
-          timeout.promise,
-        ]);
-        const outputLimitError = collectors.overflowError();
-        if (outputLimitError) {
-          throw outputLimitError;
-        }
-      } catch (error: unknown) {
-        if (
-          error instanceof DockerScannerTimeoutError ||
-          error instanceof DockerScannerOutputLimitError
-        ) {
-          await terminateWorker(container);
-        }
-        throw error;
-      } finally {
-        timeout.clear();
+      const waitResult: { StatusCode?: number } = await Promise.race([
+        container.wait(),
+        timeout.promise,
+        collectors.overflow,
+        streamCompletion.failed,
+      ]);
+      await Promise.race([
+        streamCompletion.done,
+        collectors.overflow,
+        streamCompletion.failed,
+        timeout.promise,
+      ]);
+      const outputLimitError = collectors.overflowError();
+      if (outputLimitError) {
+        throw outputLimitError;
       }
 
       const exitCode = waitResult.StatusCode;
@@ -524,7 +521,22 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
         );
       }
       return { exitCode, stdout, stderr } as DockerScannerRunResult;
+    } catch (error: unknown) {
+      if (error instanceof DockerScannerTimeoutError && createContainerPromise && !container) {
+        void createContainerPromise
+          .then((lateContainer) => lateContainer.remove({ force: true }))
+          .catch(() => undefined);
+      }
+      if (
+        container &&
+        (error instanceof DockerScannerTimeoutError ||
+          error instanceof DockerScannerOutputLimitError)
+      ) {
+        await terminateWorker(container);
+      }
+      throw error;
     } finally {
+      timeout.clear();
       if (container) {
         try {
           await container.remove({ force: true });
