@@ -38,6 +38,7 @@ import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
+  isRequestAuthenticated,
 } from './rate-limit-key.js';
 
 const LokiStore = ConnectLoki(session);
@@ -414,12 +415,11 @@ export function init(app: Application): void {
     max: 100,
     // Authenticated UI navigations re-read the current user. Keep that safe
     // probe from exhausting the public discovery and login budget for clients
-    // behind the same address; every other auth route remains capped.
+    // behind the same address; every other auth route remains capped. Check
+    // authentication before request-controlled route data so the request
+    // cannot decide whether the security check runs.
     skip: (req: Request) =>
-      req.method === 'GET' &&
-      req.path === '/user' &&
-      typeof req.isAuthenticated === 'function' &&
-      req.isAuthenticated(),
+      isRequestAuthenticated(req) && req.method === 'GET' && req.path === '/user',
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },

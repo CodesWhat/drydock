@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
+  isRequestAuthenticated,
 } from './rate-limit-key.js';
 
 function createRequest(
@@ -20,6 +21,22 @@ function createRequest(
 }
 
 const response = {} as Response;
+
+describe('isRequestAuthenticated', () => {
+  test('returns the Passport authentication state', () => {
+    const authenticated = vi.fn(() => true);
+    const anonymous = vi.fn(() => false);
+
+    expect(isRequestAuthenticated({ isAuthenticated: authenticated })).toBe(true);
+    expect(authenticated).toHaveBeenCalledOnce();
+    expect(isRequestAuthenticated({ isAuthenticated: anonymous })).toBe(false);
+    expect(anonymous).toHaveBeenCalledOnce();
+  });
+
+  test('returns false when the Passport helper is missing', () => {
+    expect(isRequestAuthenticated({})).toBe(false);
+  });
+});
 
 describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
   test('should return undefined when identity-aware keying is disabled', () => {
