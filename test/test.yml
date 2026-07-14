@@ -57,7 +57,7 @@ scenarios:
     weight: 10
     flow:
       - get:
-          url: "/api/app"
+          url: "/api/v1/app"
           expect:
             - statusCode: 200
 
@@ -65,12 +65,12 @@ scenarios:
     weight: 10
     flow:
       - get:
-          url: "/api/containers"
+          url: "/api/v1/containers"
           expect:
             - statusCode: 200
       - think: 1
       - get:
-          url: "/api/settings"
+          url: "/api/v1/settings"
           expect:
             - statusCode: 200
 
@@ -78,12 +78,12 @@ scenarios:
     weight: 8
     flow:
       - get:
-          url: "/api/watchers"
+          url: "/api/v1/watchers"
           expect:
             - statusCode: 200
       - think: 1
       - get:
-          url: "/api/triggers"
+          url: "/api/v1/triggers"
           expect:
             - statusCode: 200
 
@@ -91,12 +91,12 @@ scenarios:
     weight: 10
     flow:
       - get:
-          url: "/api/registries"
+          url: "/api/v1/registries"
           expect:
             - statusCode: 200
       - think: 1
       - get:
-          url: "/api/server"
+          url: "/api/v1/server"
           expect:
             - statusCode: 200
 
@@ -104,12 +104,12 @@ scenarios:
     weight: 8
     flow:
       - get:
-          url: "/api/app"
+          url: "/api/v1/app"
           expect:
             - statusCode: 200
       - think: 1
       - get:
-          url: "/api/containers"
+          url: "/api/v1/containers"
           expect:
             - statusCode: 200
 
@@ -117,11 +117,11 @@ scenarios:
     weight: 10
     flow:
       - get:
-          url: "/api/log/entries?tail=200"
+          url: "/api/v1/log/entries?tail=200"
           expect:
             - statusCode: 200
       - think: 1
       - get:
-          url: "/api/log/entries?level=info&tail=100&since=0"
+          url: "/api/v1/log/entries?level=info&tail=100&since=0"
           expect:
             - statusCode: 200

@@ -143,7 +143,7 @@ AUTH_HEADER="Basic $(echo -n 'admin:password' | base64)"
 echo "Waiting for drydock to discover watched containers..."
 for _ in $(seq 1 15); do
 	CONTAINERS_JSON=""
-	if CONTAINERS_JSON=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "${DD_LOAD_TEST_TARGET}/api/containers" 2>/dev/null); then
+	if CONTAINERS_JSON=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "${DD_LOAD_TEST_TARGET}/api/v1/containers" 2>/dev/null); then
 		:
 	fi
 	COUNT=0
