@@ -475,6 +475,50 @@ describe('API Router', () => {
     );
   });
 
+  test('should exempt only valid icon reads from the outer API rate limiter', async () => {
+    const limiterOptions = mockRateLimit.mock.calls[0]?.[0];
+    expect(limiterOptions).toBeDefined();
+    expect(typeof limiterOptions.skip).toBe('function');
+
+    const authenticated = { isAuthenticated: () => true };
+    const unauthenticated = { isAuthenticated: () => false };
+
+    expect(
+      await limiterOptions.skip({ ...authenticated, method: 'GET', path: '/icons/selfhst/docker' }),
+    ).toBe(true);
+    expect(
+      await limiterOptions.skip({
+        ...authenticated,
+        method: 'HEAD',
+        path: '/icons/selfhst/docker/',
+      }),
+    ).toBe(true);
+    expect(
+      await limiterOptions.skip({
+        ...unauthenticated,
+        method: 'GET',
+        path: '/icons/selfhst/docker',
+      }),
+    ).toBe(false);
+    expect(await limiterOptions.skip({ method: 'GET', path: '/icons/selfhst/docker' })).toBe(false);
+    expect(
+      await limiterOptions.skip({ ...authenticated, method: 'DELETE', path: '/icons/cache' }),
+    ).toBe(false);
+    expect(
+      await limiterOptions.skip({ ...authenticated, method: 'GET', path: '/containers' }),
+    ).toBe(false);
+    expect(
+      await limiterOptions.skip({
+        ...authenticated,
+        method: 'GET',
+        path: '/icons/selfhst/docker/extra',
+      }),
+    ).toBe(false);
+    expect(await limiterOptions.skip({ ...authenticated, method: 'GET', path: '/icons' })).toBe(
+      false,
+    );
+  });
+
   test('should mount only /portwing router when DD_EXPERIMENTAL_PORTWING is enabled', async () => {
     mockGetExperimentalPortwingEnabled.mockReturnValue(true);
 
