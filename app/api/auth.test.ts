@@ -6,6 +6,7 @@ const {
   mockFs,
   mockRateLimit,
   mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  mockIsRequestAuthenticated,
   mockIsIdentityAwareRateLimitKeyingEnabled,
   mockDdEnvVars,
 } = vi.hoisted(() => {
@@ -24,6 +25,10 @@ const {
     },
     mockRateLimit: vi.fn(() => rateLimitMiddleware),
     mockCreateAuthenticatedRouteRateLimitKeyGenerator: vi.fn(() => undefined),
+    mockIsRequestAuthenticated: vi.fn(
+      (request: { isAuthenticated?: () => boolean }) =>
+        typeof request.isAuthenticated === 'function' && request.isAuthenticated(),
+    ),
     mockIsIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
     mockDdEnvVars: {} as Record<string, string | undefined>,
   };
@@ -109,6 +114,7 @@ vi.mock('./openapi-contract.js', () => ({
 }));
 vi.mock('./rate-limit-key.js', () => ({
   createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  isRequestAuthenticated: mockIsRequestAuthenticated,
   isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
 }));
 
@@ -3457,25 +3463,64 @@ describe('Auth Router', () => {
       );
     });
 
-    test('authLimiter preserves the public auth budget for authenticated sessions', () => {
+    test('authLimiter authenticates before evaluating the requested method and path', () => {
       const app = createApp();
       auth.init(app);
 
       const limiterOptions = mockRateLimit.mock.calls[0][0];
       expect(limiterOptions.skip).toEqual(expect.any(Function));
-      const authenticated = vi.fn(() => true);
-      expect(
-        limiterOptions.skip({ method: 'GET', path: '/user', isAuthenticated: authenticated }),
-      ).toBe(true);
 
-      for (const request of [
-        { method: 'GET', path: '/api/v1/auth/status', isAuthenticated: authenticated },
-        { method: 'POST', path: '/login', isAuthenticated: authenticated },
-        { method: 'GET', path: '/user', isAuthenticated: vi.fn(() => false) },
-        {},
-      ]) {
-        expect(limiterOptions.skip(request)).toBe(false);
-      }
+      const evaluations: string[] = [];
+      const request = {
+        get method() {
+          evaluations.push('method');
+          return 'GET';
+        },
+        get path() {
+          evaluations.push('path');
+          return '/user';
+        },
+        isAuthenticated: vi.fn(() => {
+          evaluations.push('authenticated');
+          return true;
+        }),
+      };
+
+      expect(limiterOptions.skip(request)).toBe(true);
+      expect(evaluations).toEqual(['authenticated', 'method', 'path']);
+      expect(mockIsRequestAuthenticated).toHaveBeenCalledWith(request);
+    });
+
+    test('authLimiter preserves the public auth budget only for authenticated GET /user', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const limiterOptions = mockRateLimit.mock.calls[0][0];
+      const userSession = vi.fn(() => true);
+      expect(
+        limiterOptions.skip({ method: 'GET', path: '/user', isAuthenticated: userSession }),
+      ).toBe(true);
+      expect(userSession).toHaveBeenCalledOnce();
+
+      const statusSession = vi.fn(() => true);
+      expect(
+        limiterOptions.skip({ method: 'GET', path: '/status', isAuthenticated: statusSession }),
+      ).toBe(false);
+      expect(statusSession).toHaveBeenCalledOnce();
+
+      const mutationSession = vi.fn(() => true);
+      expect(
+        limiterOptions.skip({ method: 'POST', path: '/user', isAuthenticated: mutationSession }),
+      ).toBe(false);
+      expect(mutationSession).toHaveBeenCalledOnce();
+
+      const anonymousSession = vi.fn(() => false);
+      expect(
+        limiterOptions.skip({ method: 'GET', path: '/user', isAuthenticated: anonymousSession }),
+      ).toBe(false);
+      expect(anonymousSession).toHaveBeenCalledOnce();
+
+      expect(limiterOptions.skip({ method: 'GET', path: '/user' })).toBe(false);
     });
 
     test('authLimiter standardHeaders is true', () => {
