@@ -296,8 +296,7 @@ services:
 ```bash
 docker run \
   -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container ${container.name} can be updated' \
-  -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=Container ${container.name} can be updated from ${container.updateKind.localValue.substring(0, 15)} to ${container.updateKind.remoteValue.substring(0, 15)}'
-  ...
+  -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=Container ${container.name} can be updated from ${container.updateKind.localValue.substring(0, 15)} to ${container.updateKind.remoteValue.substring(0, 15)}' \
   codeswhat/drydock
 ```
 </Tab>

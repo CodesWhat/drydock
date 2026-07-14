@@ -1,0 +1,67 @@
+---
+title: "GCR (Google Container Registry)"
+description: "The gcr registry lets you configure GCR integration. GCR was shut down by Google in 2025 — consider using GAR instead."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+![logo](/docs/assets/configuration/registries/gcr/gcr.png)
+
+<Callout type="warn">
+**Effective March 18, 2025, Container Registry is shut down and writes are unavailable.** Only `gcr.io` URLs hosted on migrated or Artifact Registry-backed `gcr.io` repositories remain usable. Drydock's GCR provider still works with those repositories because Google redirects configured `gcr.io` hosts to Artifact Registry; new projects should use the [GAR provider](/docs/configuration/registries/gar) instead.
+</Callout>
+
+The `gcr` registry lets you configure [GCR](https://cloud.google.com/artifact-registry/docs/transition/transition-from-gcr) integration.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_GCR_{REGISTRY_NAME}_CLIENTEMAIL` | ⚪ | Service Account Client Email (required for private images access) | See [Artifact Registry Docker service account key authentication](https://docs.cloud.google.com/artifact-registry/docs/docker/authentication#json-key) | |
+| `DD_REGISTRY_GCR_{REGISTRY_NAME}_PRIVATEKEY` | ⚪ | Service Account Private Key (required for private images access) | See [Artifact Registry Docker service account key authentication](https://docs.cloud.google.com/artifact-registry/docs/docker/authentication#json-key) | |
+
+## Examples
+
+### Configure for authenticated access
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL=johndoe@mysuperproject.iam.gserviceaccount.com
+      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=-----BEGIN PRIVATE KEY-----xxxxxxxxxxx\n-----END PRIVATE KEY-----\n 
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL="johndoe@mysuperproject.iam.gserviceaccount.com" \
+  -e DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY="-----BEGIN PRIVATE KEY-----xxxxxxxxxxx\n-----END PRIVATE KEY-----\n" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+## How to create a Service Account on Google Cloud Platform
+
+### 1. Go to the&nbsp;[Service Account page](https://console.cloud.google.com/iam-admin/serviceaccounts)
+
+### 2. Create a new Service Account
+
+### 3. Grant Artifact Registry Reader (`roles/artifactregistry.reader`) on the private repository
+
+### 4. Save the Service Account
+
+### 5. Create a new key for the newly created Service Account
+
+### 6. Download the keyfile JSON file and store it securely
+
+### 7. Open the JSON file, get the client_email and private_key values and configure drydock with them

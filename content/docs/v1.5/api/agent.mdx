@@ -1,0 +1,278 @@
+---
+title: "Agent API"
+description: "Controller endpoints for remote agent status and logs, plus the Agent's own internal API."
+---
+
+## Controller endpoints
+
+These endpoints are served by the Controller and provide read-only access to connected remote agents.
+
+### List all agents
+
+Returns all configured agents with connection status, system info, and container stats.
+
+```bash
+curl http://drydock:3000/api/v1/agents
+
+{
+  "data": [
+    {
+      "name": "agent1",
+      "host": "192.168.1.50",
+      "port": 3000,
+      "connected": true,
+      "version": "1.5.1",
+      "os": "linux",
+      "arch": "amd64",
+      "cpus": 4,
+      "memoryGb": 8,
+      "uptimeSeconds": 86400,
+      "lastSeen": "2026-03-28T10:00:00.000Z",
+      "logLevel": "info",
+      "pollInterval": "0 */6 * * *",
+      "containers": { "total": 5, "running": 4, "stopped": 1 },
+      "images": 5
+    }
+  ],
+  "total": 1
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data[].name` | string | Agent name |
+| `data[].host` | string | Agent hostname or IP |
+| `data[].port` | integer | Agent port |
+| `data[].connected` | boolean | Whether the agent is currently connected |
+| `data[].version` | string | Agent drydock version |
+| `data[].os` | string | Operating system |
+| `data[].arch` | string | CPU architecture |
+| `data[].cpus` | integer | Number of CPU cores |
+| `data[].memoryGb` | number | Total memory in GB |
+| `data[].uptimeSeconds` | number | Agent process uptime |
+| `data[].lastSeen` | string | ISO 8601 timestamp of last heartbeat |
+| `data[].logLevel` | string | Agent's configured log level |
+| `data[].pollInterval` | string | Agent's watcher cron schedule |
+| `data[].containers` | object | Container count summary (`total`, `running`, `stopped`) |
+| `data[].images` | integer | Number of distinct images across agent containers |
+
+### Get agent log entries
+
+Returns application log entries from a connected agent, proxied through the controller. See [Log API](/docs/api/log#get-agent-log-entries) for query parameters.
+
+```bash
+curl "http://drydock:3000/api/v1/agents/agent1/log/entries?level=warn&tail=50"
+```
+
+Returns 404 if the agent is not found, or 503 if the agent is not connected.
+
+---
+
+## Agent internal API
+
+The Agent exposes specific endpoints for the Controller to synchronize state and receive events. These are generally internal APIs used by the Controller but are documented here for reference or advanced debugging.
+
+All endpoints require the `X-Dd-Agent-Secret` header, except the unauthenticated `GET /health` check.
+
+### Get State
+
+Returns a snapshot of the Agent's current state (containers, watchers, triggers).
+
+```bash
+# Get Containers
+curl -H "X-Dd-Agent-Secret: <SECRET>" http://agent:3000/api/containers
+
+# Get Watchers
+curl -H "X-Dd-Agent-Secret: <SECRET>" http://agent:3000/api/watchers
+
+# Get Triggers
+curl -H "X-Dd-Agent-Secret: <SECRET>" http://agent:3000/api/triggers
+```
+
+### Watch Resources
+
+Trigger a manual watch on a specific watcher or container hosted by the Agent.
+
+```bash
+# Watch a specific watcher (discovery)
+curl -X POST \
+  -H "X-Dd-Agent-Secret: <SECRET>" \
+  http://agent:3000/api/watchers/:type/:name
+
+# Watch a specific container (discovery)
+curl -X POST \
+  -H "X-Dd-Agent-Secret: <SECRET>" \
+  http://agent:3000/api/watchers/:type/:name/container/:id
+```
+
+### Delete a Container
+
+Delete a container from the Agent's state.
+> **Note**: This operation requires `DD_SERVER_FEATURE_DELETE` to be enabled on the Agent.
+
+```bash
+curl -X DELETE \
+  -H "X-Dd-Agent-Secret: <SECRET>" \
+  http://agent:3000/api/containers/:id
+```
+
+### Real-time Events (SSE)
+
+Subscribes to real-time updates from the Agent using Server-Sent Events (SSE).
+
+The Agent pushes events when containers are added, updated, or removed.
+
+#### Endpoint
+
+```bash
+curl -N -H "X-Dd-Agent-Secret: <SECRET>" -H "Accept: text/event-stream" http://agent:3000/api/events
+```
+
+#### Protocol
+
+Events are sent as JSON objects with the following structure:
+
+```json
+data: {
+  "type": "event_type",
+  "data": { ...payload... }
+}
+```
+
+#### Supported Events
+
+##### `dd:ack`
+
+Sent immediately upon connection to confirm the handshake.
+
+```json
+{
+  "type": "dd:ack",
+  "data": {
+    "version": "1.5.1",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 4,
+    "memoryGb": 8,
+    "uptimeSeconds": 86400,
+    "lastSeen": "2026-03-28T10:00:00.000Z",
+    "logLevel": "info",
+    "pollInterval": "0 */6 * * *",
+    "containers": { "total": 5, "running": 4, "stopped": 1 },
+    "images": 5
+  }
+}
+```
+
+The `logLevel` and `pollInterval` fields correspond to the same-named fields in the [GET /agents](#list-all-agents) response.
+
+##### `dd:container-added`
+
+Sent when a new container is discovered.
+
+```json
+{
+  "type": "dd:container-added",
+  "data": { ...container_object... }
+}
+```
+
+##### `dd:container-updated`
+
+Sent when an existing container is updated (e.g. status change, new image tag).
+
+```json
+{
+  "type": "dd:container-updated",
+  "data": { ...container_object... }
+}
+```
+
+##### `dd:container-removed`
+
+Sent when a container is removed (e.g. stopped and pruned).
+
+```json
+{
+  "type": "dd:container-removed",
+  "data": {
+    "id": "container_id"
+  }
+}
+```
+
+### Container Logs
+
+Returns stdout/stderr output from a container running on the Agent.
+
+```bash
+curl -H "X-Dd-Agent-Secret: <SECRET>" \
+  "http://agent:3000/api/containers/:id/logs?tail=100"
+```
+
+Query parameters are the same as the [controller container logs endpoint](/docs/api/container#download-container-logs).
+
+### Application Log Entries
+
+Returns application log entries from the Agent's in-memory ring buffer.
+
+```bash
+curl -H "X-Dd-Agent-Secret: <SECRET>" \
+  "http://agent:3000/api/log/entries?level=warn&tail=50"
+```
+
+#### Query parameters
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `level` | string | Filter by minimum log level |
+| `component` | string | Filter by component name |
+| `tail` | integer | Number of entries to return from the end |
+| `since` | integer | Unix timestamp (milliseconds) -- only entries after this time |
+
+### Execute Remote Trigger
+
+Executes a specific trigger on the Agent (e.g., to update a container).
+
+```bash
+curl -X POST \
+  -H "X-Dd-Agent-Secret: <SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '{ ...container_json... }' \
+  http://agent:3000/api/triggers/:type/:name
+```
+
+#### Batch execution
+
+Execute a trigger for multiple containers in a single request.
+
+```bash
+curl -X POST \
+  -H "X-Dd-Agent-Secret: <SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '[{ ...container_json... }, { ...container_json... }]' \
+  http://agent:3000/api/triggers/:type/:name/batch
+```
+
+### Health Check
+
+Returns the Agent's uptime once at least one watcher is registered. This endpoint is unauthenticated and intended for Docker `HEALTHCHECK` directives.
+
+```bash
+curl http://agent:3000/health
+
+{
+  "uptime": 3600.123
+}
+```
+
+If the agent starts but no watchers register, it returns `503`:
+
+```json
+{
+  "status": "unhealthy",
+  "reason": "no watchers registered"
+}
+```

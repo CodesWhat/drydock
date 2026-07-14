@@ -54,16 +54,16 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_HUB_PUBLIC_LOGIN=mylogin
-      - DD_REGISTRY_HUB_PUBLIC_TOKEN=fb4d5db9-e64d-3648-8846-74d0846e55de
+      - DD_REGISTRY_HUB_PUBLIC_LOGIN=johndoe
+      - DD_REGISTRY_HUB_PUBLIC_TOKEN=example-token
 ```
 
 </Tab>
 <Tab value="Docker (Login/Token)">
 ```bash
 docker run \
-  -e DD_REGISTRY_HUB_PUBLIC_LOGIN="mylogin" \
-  -e DD_REGISTRY_HUB_PUBLIC_TOKEN="fb4d5db9-e64d-3648-8846-74d0846e55de" \
+  -e DD_REGISTRY_HUB_PUBLIC_LOGIN="johndoe" \
+  -e DD_REGISTRY_HUB_PUBLIC_TOKEN="example-token" \
   ...
   codeswhat/drydock
 ```
@@ -78,13 +78,17 @@ docker run \
 
 #### 2. Encode with Base64
 
-Concatenate `$username:$password` and [encode with Base64](https://www.base64encode.org/).
+Concatenate `login:password` and encode it locally. Base64 is encoding, not encryption; never send registry credentials to an online encoder.
+
+```bash
+printf '%s' 'johndoe:example-token' | base64
+```
 
 For example,
 
-- if your username is `johndoe`
-- and your password is `2c1bd872-efb6-4f3a-81aa-724518a0a592`
-- the resulting encoded string would be `am9obmRvZToyYzFiZDg3Mi1lZmI2LTRmM2EtODFhYS03MjQ1MThhMGE1OTI=`
+- if your login is `johndoe`
+- and your password is `example-token`
+- the resulting encoded string would be `am9obmRvZTpleGFtcGxlLXRva2Vu`
 
 <Tabs items={["Docker Compose (Base64 Auth)", "Docker (Base64 Auth)"]}>
 <Tab value="Docker Compose (Base64 Auth)">
@@ -95,14 +99,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_HUB_PUBLIC_AUTH=am9obmRvZToyYzFiZDg3Mi1lZmI2LTRmM2EtODFhYS03MjQ1MThhMGE1OTI=
+      - DD_REGISTRY_HUB_PUBLIC_AUTH=am9obmRvZTpleGFtcGxlLXRva2Vu
 ```
 
 </Tab>
 <Tab value="Docker (Base64 Auth)">
 ```bash
 docker run \
-  -e DD_REGISTRY_HUB_PUBLIC_AUTH="am9obmRvZToyYzFiZDg3Mi1lZmI2LTRmM2EtODFhYS03MjQ1MThhMGE1OTI=" \
+  -e DD_REGISTRY_HUB_PUBLIC_AUTH="am9obmRvZTpleGFtcGxlLXRva2Vu" \
   ...
   codeswhat/drydock
 ```

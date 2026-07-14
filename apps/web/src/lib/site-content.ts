@@ -255,7 +255,7 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.5.1-rc",
+    version: "v1.5.1",
     title: "Security & Maintenance",
     emoji: "\u{1F527}",
     status: "released",
@@ -271,9 +271,9 @@ export const roadmap: Milestone[] = [
     version: "v1.5.2",
     title: "Maturity & Pinned-Tag Reliability",
     emoji: "\u{1F6E1}️",
-    status: "next",
+    status: "released",
     dotColor:
-      "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
       "Recreation-safe maturity policy retention",
       "Pinned-tag digest detection and informational insights",
@@ -281,10 +281,10 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.6.0",
+    version: "v1.6.0-rc.1",
     title: "Notifications, Policy & Release Intel",
     emoji: "\u{1F4E8}",
-    status: "planned",
+    status: "next",
     dotColor:
       "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
     items: [

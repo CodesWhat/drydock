@@ -124,8 +124,8 @@ curl http://drydock:3000/api/v1/containers/summary
 | `containers.stopped` | integer | Number of stopped containers |
 | `containers.updatesAvailable` | integer | Number of containers with an available update |
 | `security.issues` | integer | Number of containers with critical or high vulnerabilities |
-| `hotUpdates` | integer | Number of containers whose `updateMaturityLevel` is `hot` |
-| `matureUpdates` | integer | Number of containers whose `updateMaturityLevel` is `mature` or `established` |
+| `hotUpdates` | integer | Number of containers with an available update whose `updateMaturityLevel` is `hot` |
+| `matureUpdates` | integer | Number of containers with an available update whose `updateMaturityLevel` is `mature` or `established` |
 
 ## Get recent container status
 

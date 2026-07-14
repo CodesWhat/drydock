@@ -1,0 +1,34 @@
+---
+title: "Translating Drydock"
+description: "Help translate the Drydock UI into your language through Crowdin. No GitHub account or build setup required."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Drydock's interface is fully translatable, and the translation project is open to everyone. English is the source language; every other locale is community-maintained through [Crowdin](https://crowdin.com/project/drydock).
+
+## Languages
+
+Drydock ships with 16 languages beyond English: Arabic, German, Spanish, French, Italian, Japanese, Korean, Dutch, Polish, Brazilian Portuguese, Russian, Turkish, Ukrainian, Vietnamese, Simplified Chinese, and Traditional Chinese.
+
+You switch language in the app under **Config > Appearance**. See [UI configuration](/docs/configuration/ui#language--locale) for the full locale list.
+
+## How to contribute
+
+You don't need a GitHub account, a checkout, or any build tooling. Everything happens in Crowdin.
+
+1. Create a free account and open the [Drydock project](https://crowdin.com/project/drydock).
+2. Pick your language and start translating strings. Each string shows the surrounding context (and often a screenshot) so you can see where it lands in the UI.
+3. Save your suggestions. That's the whole loop.
+
+<Callout type="info">
+Translations sync back into the repository automatically. A bot opens a pull request with approved strings, so your work ships in the next release without anyone editing code by hand.
+</Callout>
+
+## Requesting a new language
+
+Want a language that isn't listed yet? Drop a comment on the [translations announcement](https://github.com/CodesWhat/drydock/discussions/455), and we'll add it to Crowdin so you can start translating.
+
+## How it works under the hood
+
+The English source strings live in the repo at `ui/src/locales/en/`. Crowdin watches those files: the [Crowdin GitHub Action](https://github.com/crowdin/github-action) pushes new source strings up and pulls completed translations back down as a pull request. You never edit the per-language JSON files directly. Translate in Crowdin and let the sync handle the rest.

@@ -42,8 +42,8 @@ services:
     ...
     environment:
         - DD_NOTIFICATION_ROCKETCHAT_LOCAL_URL=https://example.com
-        - DD_NOTIFICATION_ROCKETCHAT_LOCAL_USER_ID=jDdn8oh9BfJKnWdDY
-        - DD_NOTIFICATION_ROCKETCHAT_LOCAL_AUTH_TOKEN=Rbqz90hnkRyVwRfcmE5PzkP5Pqwml_fo7ZUXzxv2_zx
+        - DD_NOTIFICATION_ROCKETCHAT_LOCAL_USER_ID=your-rocketchat-user-id
+        - DD_NOTIFICATION_ROCKETCHAT_LOCAL_AUTH_TOKEN=your-rocketchat-auth-token
         - DD_NOTIFICATION_ROCKETCHAT_LOCAL_CHANNEL=#drydock
 ```
 
@@ -52,8 +52,8 @@ services:
 ```bash
 docker run \
     -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_URL="https://example.com" \
-    -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_USER_ID="jDdn8oh9BfJKnWdDY" \
-    -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_AUTH_TOKEN="Rbqz90hnkRyVwRfcmE5PzkP5Pqwml_fo7ZUXzxv2_zx" \
+    -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_USER_ID="your-rocketchat-user-id" \
+    -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_AUTH_TOKEN="your-rocketchat-auth-token" \
     -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_CHANNEL="#drydock" \
   ...
   codeswhat/drydock

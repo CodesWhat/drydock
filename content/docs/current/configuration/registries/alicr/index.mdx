@@ -7,15 +7,15 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 The `alicr` registry lets you configure [Alibaba Cloud Container Registry](https://www.alibabacloud.com/product/container-registry) integration.
 
-Drydock automatically detects Alibaba Cloud registries by matching `registry[-intl].*.aliyuncs.com` and `*.cr.aliyuncs.com` hostnames.
+Drydock automatically detects `registry.REGION.aliyuncs.com`, `registry-intl.REGION.aliyuncs.com`, and registry hosts ending in `cr.aliyuncs.com` or `cr.aliyuncs.com.cn` (including namespace subdomains).
 
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_ALICR_{REGISTRY_NAME}_LOGIN` | ⚪ | Alibaba Cloud username | DD_REGISTRY_ALICR_\{REGISTRY_NAME\}_PASSWORD must be defined | |
-| `DD_REGISTRY_ALICR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Registry password | DD_REGISTRY_ALICR_\{REGISTRY_NAME\}_LOGIN must be defined | |
-| `DD_REGISTRY_ALICR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_ALICR_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_ALICR_{REGISTRY_NAME}_LOGIN` | ⚪ | Alibaba Cloud username | `DD_REGISTRY_ALICR_{REGISTRY_NAME}_PASSWORD` must be defined | |
+| `DD_REGISTRY_ALICR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Registry password | `DD_REGISTRY_ALICR_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_ALICR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | `DD_REGISTRY_ALICR_{REGISTRY_NAME}_LOGIN/PASSWORD` must not be defined | |
 
 ## Examples
 

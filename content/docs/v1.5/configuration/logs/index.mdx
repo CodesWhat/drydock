@@ -1,0 +1,147 @@
+---
+title: "Logs"
+description: "Configure drydock log output and use the built-in log viewers to monitor application and container activity."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+## Server Log Configuration
+
+Control drydock's own log output with environment variables.
+
+### Variables
+
+| Env var | Required | Description | Supported values | Default in official Docker image |
+| ---------------- | :--------------: | ----------- | --------------------------- | --------------------------- |
+| `DD_LOG_LEVEL` | ⚪ | Log level | `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` |
+| `DD_LOG_FORMAT` | ⚪ | Log format | text json | `text` |
+| `DD_LOG_BUFFER_ENABLED` | ⚪ | Enable in-memory log ring buffer used by UI/API log viewer | `true`, `false` | `true` |
+| `DD_SSE_DEBUG_LOG_IP` | ⚪ | Log raw client IPs in SSE connection lifecycle and rate-limit log lines. When unset or `false`, IPs are replaced with a per-process hashed identifier (`h:xxxxxxxx`) that allows correlating connect/disconnect for the same host without persisting the raw address. Enable only for short-lived troubleshooting. | `true`, `false` | `false` |
+
+The official image sets `DD_LOG_FORMAT=text` by default for pretty, human-readable logs. Set `DD_LOG_FORMAT=json` when you want structured output for log aggregators.
+Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory ring buffer (reduces per-log processing overhead).
+
+By default, SSE connect/disconnect and per-IP rate-limit log lines include the internal client ID (for lifecycle correlation) and a short hashed identifier for the client's IP address. The hash is derived from a random salt generated at process start, so hashes cannot be correlated across restarts and the raw IP is never written to logs. Set `DD_SSE_DEBUG_LOG_IP=true` only during short-lived troubleshooting to temporarily log raw IPs.
+
+### Examples
+
+#### Set debug level
+
+<Tabs items={["Docker Compose (Debug Level)", "Docker (Debug Level)"]}>
+<Tab value="Docker Compose (Debug Level)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_LOG_LEVEL=debug
+```
+
+</Tab>
+<Tab value="Docker (Debug Level)">
+```bash
+docker run -e DD_LOG_LEVEL=debug ... codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+#### Set json format (for ElasticSearch ingestion for example)
+
+<Tabs items={["Docker (JSON Format)", "Docker Compose (JSON Format)"]}>
+<Tab value="Docker (JSON Format)">
+
+```bash
+docker run -e DD_LOG_FORMAT=json ... codeswhat/drydock:v1.5.2
+```
+
+</Tab>
+<Tab value="Docker Compose (JSON Format)">
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_LOG_FORMAT=json
+```
+</Tab>
+</Tabs>
+
+## Application Log Viewer
+
+The **Configuration > Logs** page provides a terminal-style viewer for drydock's own runtime logs — startup events, polling cycles, registry checks, trigger executions, and errors.
+
+By default, this view opens a live WebSocket stream to `WS /api/v1/log/stream` and backfills the selected `tail` size on connect.
+
+When enabled, logs are stored in an in-memory ring buffer (last 1,000 entries) and are not persisted to disk.  
+If `DD_LOG_BUFFER_ENABLED=false`, buffered-entry API responses are empty.
+
+### Toolbar controls
+
+| Control | Description |
+| --- | --- |
+| **Live** | Toggle real-time WebSocket streaming on/off. Shows `Live`, `Offline`, or `Paused` status. |
+| **Level** | Filter by log level: `all`, `debug`, `info`, `warn`, `error`. |
+| **Tail** | Backfill size on connect/filter apply: 50, 100, 500, or 1,000 entries. |
+| **Component filter** | Substring filter for component name (for example `api`, `watcher`). |
+| **Apply** | Reapply filters. In live mode this reconnects the stream with the new query. |
+| **Reset** | Reset filters to defaults (`all`, `tail=100`, empty component). |
+
+When **Live** is disabled, the view falls back to one-shot API fetches from `GET /api/v1/log/entries` using the same filters.
+
+### Scroll behavior
+
+The log viewport is pinned to the newest entries by default. If you scroll up, it automatically unpins so your reading position is preserved. Use **Pin / Unpin** to control this behavior explicitly.
+
+## Container Log Viewer
+
+The container log viewer provides real-time log streaming via WebSocket — logs appear instantly as the container produces them, with no polling delay. The viewer is available in two modes:
+
+- **Full-page viewer** at `/containers/:id/logs`, with a header showing the container name, image, and status.
+- **Compact mode** inside the slide-in container detail panel.
+
+A maximum of 5,000 lines are retained in the viewport buffer. Older lines are discarded as new ones arrive.
+
+### Toolbar controls
+
+| Control | Description |
+| --- | --- |
+| **Pause / Resume** | Pause the live WebSocket stream; resume reconnects and continues streaming. |
+| **Unpin / Pin** | Toggle auto-scroll to newest entries. |
+| **Copy** | Copy all visible log lines to clipboard. |
+| **Download** | Download container logs as a `.log` text file (gzip-compressed if the browser supports it). |
+| **Search** | Free-text search across visible log entries. |
+| **.* Regex** | Toggle regex mode for the search field. |
+| **stdout** | Show or hide the stdout stream. |
+| **stderr** | Show or hide the stderr stream. |
+| **Tail** | Number of initial historical lines to load when the viewer opens: 100, 500, 1,000, or All. |
+| **Level** | Filter by log level. Only shown when the container emits JSON-structured logs (see below). |
+| **Prev / Next** | Navigate between search matches. Only shown when a search is active, with a match counter. |
+
+### ANSI color rendering
+
+Terminal ANSI color codes are rendered correctly in the viewer — colored build output, test runners, and CLI tools display as they would in a real terminal.
+
+### JSON log detection
+
+When the viewer detects JSON-structured log lines, it automatically pretty-prints them with syntax highlighting. Keys, strings, numbers, booleans, and `null` are each distinctly colored for readability.
+
+JSON-structured logs also enable the **Level** filter in the toolbar. The viewer auto-detects the level field from common conventions: `level`, `severity`, `logLevel`, `log_level`, and `lvl`.
+
+### Stream filtering
+
+Each log line is tagged with a color-coded **stdout** or **stderr** badge. Use the stream toggle buttons in the toolbar to show or hide either stream independently.
+
+### Scroll behavior
+
+Auto-scroll follows new entries by default. Scrolling up automatically pauses auto-scroll so your reading position is preserved. Click **Pin** to jump back to the bottom and re-enable auto-scroll.
+
+### Agent containers
+
+Container log streaming is available for local containers. For agent-managed containers, HTTP-based log download is available.
+
+## Agent Log Viewer
+
+Agent runtime logs are available from the **Agents** page. Open an agent's detail slide-in panel and switch to the **Logs** tab.

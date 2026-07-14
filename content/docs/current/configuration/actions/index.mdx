@@ -17,7 +17,7 @@ Drydock provides direct container management actions through both the UI and API
 | **Stop** | `POST /api/v1/containers/:id/stop` | Stop a running container |
 | **Restart** | `POST /api/v1/containers/:id/restart` | Restart a container |
 | **Update** | `POST /api/v1/containers/:id/update` | Pull new image and recreate container |
-| **Delete** | `DELETE /api/v1/containers/:id` | Remove container from drydock tracking |
+| **Delete** | `DELETE /api/v1/containers/:id` | Remove the container from Drydock tracking; this does not delete the runtime container, and it may reappear after rediscovery |
 
 ## Feature flags
 

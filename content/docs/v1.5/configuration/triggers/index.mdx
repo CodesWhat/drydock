@@ -1,0 +1,310 @@
+---
+title: "Triggers"
+description: "Triggers are responsible for performing actions when a new container version is found."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Triggers are enabled using environment variables.
+
+```bash
+DD_ACTION_{{ trigger_type }}_{{ trigger_name }}_{{ trigger_configuration_item }}=XXX
+DD_NOTIFICATION_{{ trigger_type }}_{{ trigger_name }}_{{ trigger_configuration_item }}=XXX
+```
+
+<Callout type="warn">Multiple triggers of the same type can be configured (for example multiple Smtp addresses).
+You just need to give them different names.</Callout>
+
+## Environment variable prefixes
+
+Three prefixes are supported for trigger configuration:
+
+| Prefix | Status | Example |
+| --- | --- | --- |
+| `DD_ACTION_*` | **Current** | `DD_ACTION_DOCKER_MYSERVER_SOCKETPATH=/var/run/docker.sock` |
+| `DD_NOTIFICATION_*` | **Current** | `DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com` |
+| `DD_TRIGGER_*` | **Deprecated** (removal in v1.7.0) | `DD_TRIGGER_SLACK_MYSLACK_URL=https://...` |
+
+All three prefixes are interchangeable -- they configure the same triggers. Use whichever reads best for your use case: `DD_ACTION_*` for update-action triggers (Docker, Docker Compose) and `DD_NOTIFICATION_*` for messaging triggers (Slack, SMTP, Discord, etc.), or use either for any trigger type.
+
+When the same trigger property is set under multiple prefixes, the merge priority is `DD_NOTIFICATION_*` > `DD_ACTION_*` > `DD_TRIGGER_*` (highest wins).
+
+<Callout type="info">A built-in migration CLI can rewrite your config files from `DD_TRIGGER_*` to `DD_ACTION_*` automatically: `drydock config migrate --source trigger`. Use `--dry-run` to preview changes before applying. Note that the CLI always emits `DD_ACTION_*` for every trigger type — if you use messaging providers (Slack, SMTP, Discord, ntfy, and others), you may prefer to rename those to `DD_NOTIFICATION_*` manually to match the canonical prefix for your provider category.</Callout>
+
+### Migrating trigger prefixes
+
+The following example shows a typical before/after migration for a Docker + Slack setup.
+
+**Before** (deprecated `DD_TRIGGER_*` form):
+
+```bash
+# .env — legacy form (deprecated in v1.5.0, removed in v1.7.0)
+DD_TRIGGER_DOCKER_LOCAL_SOCKETPATH=/var/run/docker.sock
+DD_TRIGGER_SLACK_MYSLACK_URL=https://hooks.slack.com/services/T000/B000/xxxx
+DD_TRIGGER_SMTP_GMAIL_HOST=smtp.gmail.com
+DD_TRIGGER_SMTP_GMAIL_PORT=465
+```
+
+Run the migration (add `--dry-run` to preview without writing):
+
+```bash
+drydock config migrate --source trigger
+```
+
+**After** (canonical prefixes):
+
+```bash
+# .env — canonical form
+# Update-action triggers use DD_ACTION_*
+DD_ACTION_DOCKER_LOCAL_SOCKETPATH=/var/run/docker.sock
+# Messaging/notification triggers use DD_NOTIFICATION_*
+DD_NOTIFICATION_SLACK_MYSLACK_URL=https://hooks.slack.com/services/T000/B000/xxxx
+DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com
+DD_NOTIFICATION_SMTP_GMAIL_PORT=465
+```
+
+<Callout type="info">The CLI writes `DD_ACTION_*` for all trigger types. For messaging providers (Slack, SMTP, Discord, ntfy, etc.) you may want to rename those to `DD_NOTIFICATION_*` to match the canonical prefix for your provider category — both are accepted, but `DD_NOTIFICATION_*` communicates intent more clearly.</Callout>
+
+## Available triggers
+
+**Update actions:**
+
+- [**Docker**](/docs/configuration/triggers/docker) -- Update containers via the Docker Engine API
+- [**Docker Compose**](/docs/configuration/triggers/docker-compose) -- Update containers managed by Docker Compose
+- [**Command**](/docs/configuration/triggers/command) -- Execute a shell command
+
+**Messaging & notifications:**
+
+- [**Apprise**](/docs/configuration/triggers/apprise) -- Multi-provider notification relay
+- [**Discord**](/docs/configuration/triggers/discord) -- Discord webhook
+- [**Google Chat**](/docs/configuration/triggers/google-chat) -- Google Chat webhook
+- [**Gotify**](/docs/configuration/triggers/gotify) -- Gotify push notification
+- [**HTTP**](/docs/configuration/triggers/http) -- Generic HTTP request
+- [**IFTTT**](/docs/configuration/triggers/ifttt) -- IFTTT webhook
+- [**Kafka**](/docs/configuration/triggers/kafka) -- Apache Kafka topic
+- [**Matrix**](/docs/configuration/triggers/matrix) -- Matrix room message
+- [**Mattermost**](/docs/configuration/triggers/mattermost) -- Mattermost webhook
+- [**MQTT**](/docs/configuration/triggers/mqtt) -- MQTT topic
+- [**ntfy**](/docs/configuration/triggers/ntfy) -- ntfy push notification
+- [**Pushover**](/docs/configuration/triggers/pushover) -- Pushover notification
+- [**Rocket.Chat**](/docs/configuration/triggers/rocketchat) -- Rocket.Chat webhook
+- [**Slack**](/docs/configuration/triggers/slack) -- Slack webhook
+- [**SMTP**](/docs/configuration/triggers/smtp) -- Email notification
+- [**Teams**](/docs/configuration/triggers/teams) -- Microsoft Teams webhook
+- [**Telegram**](/docs/configuration/triggers/telegram) -- Telegram bot message
+
+## Common trigger configuration
+
+All implemented triggers, in addition to their specific configuration, also support the following common configuration variables. The table uses `DD_NOTIFICATION_{trigger_type}_{trigger_name}_*` for notification triggers and `DD_ACTION_{trigger_type}_{trigger_name}_*` for action triggers (see [Environment variable prefixes](#environment-variable-prefixes) above). For brevity the rows below show the `DD_NOTIFICATION_*` form; replace with `DD_ACTION_*` for Docker, Docker Compose, and Command triggers.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --------------------------------------------------------- | :--------------: | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_AUTO` | ⚪ | Controls automatic execution for `update-available` events. `true` — auto-execute for all watched containers. `oninclude` — auto-execute only for containers with an explicit `dd.action.include` or `dd.notification.include` label. `false` — disable automatic `update-available` notifications (manual-only from UI/API). Note: `AUTO=false` does **not** suppress lifecycle notifications (`update-applied`, `update-failed`, `security-alert`, `agent-disconnect`, `agent-reconnect`). | `true`, `false`, `oninclude` | `oninclude` for action triggers (docker, dockercompose, command); `true` for notification triggers |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_BATCHTITLE` | ⚪ | The template to use to render the title of the notification (batch mode) | String template with placeholders `${count}` | `${containers.length} updates available` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update, trigger once with all available updates as a list, or accumulate updates and send on a schedule | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_DIGESTCRON` | ⚪ | Cron schedule for digest mode flush (only used when `MODE=digest` or `MODE=batch+digest`) | Cron expression | `0 8 * * *` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYMODE` | ⚪ | How `security-alert` events are delivered: one notification per container (`simple`), all alerts in a cycle batched on completion (`batch`), or one digest per scan cycle (`digest`) | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTTITLE` | ⚪ | The template to use to render the title of the security digest (only used when `SECURITYMODE=digest` or `SECURITYMODE=batch+digest`) | String template with `scan.*` vars | `Security scan complete: ${scan.alertCount} ${scan.containerNoun} with findings` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTBODY` | ⚪ | The template to use to render the body of the security digest | String template with `scan.*` vars | Severity-grouped list (critical → high → medium → low) |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ONCE` | ⚪ | Run trigger once (do not repeat previous results) | `true`, `false` | `true` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ORDER` | ⚪ | Trigger execution order (lower runs first) | Number | `100` |
+| `DD_EVENT_HANDLER_TIMEOUT_MS` | ⚪ | Per-handler execution cap in milliseconds. If a single notification handler (e.g. an SMTP transport stalling on retry) runs longer than this value, it is abandoned and the emit chain continues. Prevents one slow provider from stalling the entire update lifecycle. Applies globally — not per-trigger-name. If the value is absent, zero, or non-numeric it falls back to the default silently. | Positive integer (milliseconds) | `30000` (30 s) |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | `Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${container}` | `New ${container.updateKind.kind} found for container ${container.name}` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_RESOLVENOTIFICATIONS` | ⚪ | Auto-dismiss the notification after the container is successfully updated | `true`, `false` | `false` |
+
+### Threshold reference
+
+| Threshold | Fires on |
+| --- | --- |
+| `all` | Any change (default) |
+| `major` | Major, minor, or patch semver change |
+| `major-only` | Major only |
+| `minor` | Any semver change that is not major (minor, patch, prerelease) |
+| `minor-only` | Minor only |
+| `patch` | Any semver change that is not major or minor (patch, prerelease) |
+| `digest` | Digest changes only |
+
+Any threshold can be suffixed with `-no-digest` to exclude digest-only updates (e.g. `major-no-digest`, `minor-only-no-digest`). Updates with an `unknown` update kind (e.g. created-date-only changes) are passed through when `threshold=all`, but filtered out for all other threshold values.
+
+### Notes
+
+- `RESOLVENOTIFICATIONS` is currently implemented for Gotify (auto-deletes the notification message after a successful update). Other providers can be extended to support it.
+- Some messaging triggers (Slack, Telegram, Teams, Matrix, Mattermost, Rocket.Chat, Google Chat) also support `DISABLETITLE` (default `false`) to send only the body without a title line.
+- You can set `DD_NOTIFICATION_{trigger_type}_THRESHOLD` to define a default threshold for all triggers of the same type, e.g. `DD_NOTIFICATION_NTFY_THRESHOLD=minor` (or `DD_ACTION_{trigger_type}_THRESHOLD` for action triggers).
+- Triggers are executed by ascending `ORDER`; when two triggers have the same `ORDER`, they are sorted by trigger id.
+- Triggers sharing the same trigger name (e.g. `docker.update` and `discord.update`) can share `THRESHOLD`; if exactly one threshold value is defined among them, that value is used for the others unless they override it explicitly.
+- Setting `ONCE=false` with `MODE=batch` gives a report with all pending updates on every run.
+- `DIGESTCRON` is validated with `cron.validate()` at registration time. An invalid cron expression causes a startup error with a descriptive message — the trigger will not be registered.
+- `MODE=digest` accumulates update events in an in-memory buffer and flushes them as a single batch notification on the `DIGESTCRON` schedule. If the same container has multiple updates within the window, only the latest is included. Containers that are updated before the digest fires are automatically evicted from the buffer. Useful for daily email digests: `DD_NOTIFICATION_SMTP_GMAIL_MODE=digest` + `DD_NOTIFICATION_SMTP_GMAIL_DIGESTCRON=0 8 * * *`.
+- `MODE=batch+digest` enables both modes simultaneously — immediate batch emails on each scan cycle plus a scheduled digest summary. Requires `DIGESTCRON` to be set.
+- **Note:** Digest and batch modes still depend on the `update-available` notification rule being enabled (see below). If the trigger is excluded from `update-available` routing, no events reach the buffer.
+- `SECURITYMODE` governs `security-alert` delivery independently of `MODE`. A trigger may legitimately want `MODE=batch` for update notifications and `SECURITYMODE=digest` for security findings. Digest and batch+digest modes buffer alerts per-scan-cycle (keyed by `cycleId`) and flush one summary per cycle on completion. Cycles with zero findings never emit. See the [Security Hardening Guide](/docs/guides/security#quiet-scan-notifications-with-digest-mode) for an end-to-end example.
+- Scheduled scans do not emit `security-alert` events by default. Set `DD_SECURITY_SCAN_NOTIFICATIONS=true` to opt in. On-demand scans (UI button, `POST /api/v1/containers/:id/scan`, `POST /api/v1/containers/scan-all`) always emit.
+- Notification deduplication (`ONCE=true`) is now persisted in the `notifications_history` store collection, so `once=true` dedup survives restarts. Previously the dedup state was lost on container restart, causing previously-suppressed notifications to re-fire.
+- Digest and batch-retry buffers enforce a **5,000-entry cap** and a **7-day retention** limit. Entries exceeding the cap or age are evicted before the next digest flush.
+- When release notes bodies are truncated to fit within the notification body limit, the truncated body is marked with a trailing `…` ellipsis so recipients know the notes continue at the source URL.
+
+## Notification Rules
+
+Notification rules control which events fire which triggers. Each rule corresponds to an event type and has an `enabled` flag and an optional list of trigger IDs.
+
+| Rule ID | Default enabled | Description |
+| --- | :---: | --- |
+| `update-available` | Yes | A container has a newer version available |
+| `update-applied` | Yes | A container was successfully updated |
+| `update-failed` | Yes | An update failed or was rolled back |
+| `security-alert` | Yes | Critical/high vulnerability detected during pre-update scan |
+| `agent-disconnect` | No | A remote agent lost its connection |
+| `agent-reconnect` | No | A remote agent reconnected after losing connection |
+
+**Dispatch behavior:**
+
+- **`update-available`** -- when its trigger list is empty, all notification triggers fire (legacy default). Once you assign specific triggers, only those fire.
+- **`update-applied`**, **`update-failed`**, **`security-alert`** -- when their trigger list is empty, all notification triggers fire (same permissive default as `update-available`). Once you assign specific triggers, only those fire.
+- **`agent-disconnect`**, **`agent-reconnect`** -- disabled by default. Enable them and assign triggers to receive disconnect/reconnect alerts. When their trigger list is empty, all notification triggers fire. These events always fire regardless of the threshold setting.
+
+Rules are managed via `GET /api/v1/notifications` and `PATCH /api/v1/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
+
+<Callout type="warn">Docker and Docker Compose triggers cannot be assigned to notification rules. These are update-action triggers (they perform container updates), not notification triggers. Only messaging/alerting triggers (Slack, SMTP, Discord, ntfy, etc.) can be assigned to rules.</Callout>
+
+## Event Types
+
+Beyond the classic `update-available` event, triggers can fire on additional events:
+
+- **`update-applied`** -- fires after a container is successfully updated by a Docker or Docker Compose trigger. Useful for audit or confirmation notifications.
+- **`update-failed`** -- fires when an update fails or is rolled back. Carries the container name and error message.
+- **`security-alert`** -- fires when the [Update Bouncer](/docs/configuration/security) detects critical or high vulnerabilities during a pre-update scan. Includes a vulnerability summary.
+- **`agent-disconnect`** -- fires when a remote agent loses its connection. This event **skips threshold checks** (always fires).
+- **`agent-reconnect`** -- fires when a remote agent reconnects after losing connection. Only fires on true reconnects, not the initial startup connection. This event **skips threshold checks** (always fires).
+
+<Callout type="info">To receive notifications for these events, add the desired trigger IDs to the corresponding notification rule via the API or UI.</Callout>
+
+## Notification Outbox
+
+Drydock uses a durable **notification outbox** to persist and retry failed notification deliveries. When a trigger call fails (network error, provider down, etc.), the delivery intent is saved and retried with exponential backoff and jitter rather than being silently dropped.
+
+**Default behavior:**
+
+- **Max attempts:** 5. After 5 failed attempts the entry moves to **dead-letter** status.
+- **Backoff:** 30 s base, doubles per attempt, capped at 5 minutes. Up to 5 s jitter per retry.
+- **TTL:** 30 days. Delivered and dead-letter entries older than 30 days are purged automatically.
+
+**API:**
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/notifications/outbox` | List outbox entries (filter by `status=pending\|delivered\|dead-letter`) |
+| `POST /api/notifications/outbox/:id/retry` | Manually requeue a dead-letter entry |
+| `DELETE /api/notifications/outbox/:id` | Discard an outbox entry |
+
+**UI:** The **Notification Outbox** page (Settings → Notification Outbox, route `/notifications/outbox`) shows tabs for Dead-letter, Pending, and Delivered entries with Retry and Discard actions.
+
+<Callout type="info">The outbox covers all notification trigger types (Slack, SMTP, Discord, etc.). Update-action triggers (Docker, Docker Compose, Command) do not use the outbox — their retries are handled by the update lifecycle itself.</Callout>
+
+## Template Variable Reference
+
+Template strings use `${expression}` placeholders. Drydock provides two sets of variables depending on the trigger mode.
+
+### Simple mode variables
+
+| Variable | Description | Example value |
+| --- | --- | --- |
+| `container` | The full container object | _(object)_ |
+| `container.id` | Container ID | `sha256:abc123...` |
+| `container.name` | Container name | `my-app` |
+| `container.displayName` | Display name (from `dd.display.name` label, defaults to name) | `My App` |
+| `container.displayIcon` | Display icon (from `dd.display.icon` label) | `mdi:docker` |
+| `container.status` | Container runtime status | `running` |
+| `container.watcher` | Watcher name | `local` |
+| `container.agent` | Agent name (when using distributed agents) | `remote-1` |
+| `container.notificationAgentPrefix` | Server identification prefix: `[agentName]` + space for agent containers, `[controllerName]` + space for controller containers when agents exist, empty for single-server setups | `[prod-server]` |
+| `container.notificationServerName` | Server identity — agent name for agent containers, controller name (from `DD_SERVER_NAME`, otherwise the detected daemon host name when available, then the process hostname) for controller containers. Always resolved regardless of setup | `prod-server` |
+| `container.image.name` | Image name | `library/nginx` |
+| `container.image.registry.name` | Registry provider name | `hub` |
+| `container.image.registry.url` | Registry URL | `https://registry-1.docker.io` |
+| `container.image.tag.value` | Current image tag | `1.24.0` |
+| `container.image.tag.semver` | Whether the tag is valid semver | `true` |
+| `container.image.digest.value` | Current image digest | `sha256:abc123...` |
+| `container.image.digest.watch` | Whether digest watching is enabled | `true` |
+| `container.image.architecture` | Image architecture | `amd64` |
+| `container.image.os` | Image OS | `linux` |
+| `container.image.created` | Image creation date | `2024-01-15T10:30:00Z` |
+| `container.updateKind.kind` | Update type: `tag`, `digest`, or `unknown` | `tag` |
+| `container.updateKind.localValue` | Current version (tag or digest) | `1.24.0` |
+| `container.updateKind.remoteValue` | New version (tag or digest) | `1.25.0` |
+| `container.updateKind.semverDiff` | Semver diff level: `major`, `minor`, `patch`, `prerelease`, or `unknown` | `minor` |
+| `container.result.tag` | New tag value from the registry | `1.25.0` |
+| `container.result.digest` | New digest value from the registry | `sha256:def456...` |
+| `container.result.created` | Creation date of the new image | `2024-02-01T08:00:00Z` |
+| `container.result.link` | Link to the release (when a link template is configured) | `https://github.com/org/repo/releases/tag/v1.25.0` |
+| `container.error.message` | Error message (when an error occurred) | `401 Unauthorized` |
+
+#### Legacy aliases (deprecated)
+
+These aliases resolve to a single container property and will be removed in v1.6.0. Use the `container.*` equivalents instead.
+
+| Legacy variable | Equivalent | Description |
+| --- | --- | --- |
+| `id` | `container.id` | Container ID |
+| `name` | `container.name` | Container name |
+| `watcher` | `container.watcher` | Watcher name |
+| `kind` | `container.updateKind.kind` | Update type |
+| `semver` | `container.updateKind.semverDiff` | Semver diff level |
+| `local` | `container.updateKind.localValue` | Current version |
+| `remote` | `container.updateKind.remoteValue` | New version |
+| `link` | `container.result.link` | Release link |
+
+### Batch mode variables
+
+| Variable | Description | Example value |
+| --- | --- | --- |
+| `containers` | Array of container objects (each with the same properties as above) | _(array)_ |
+| `containers.length` | Number of containers in the batch | `3` |
+
+#### Legacy alias (deprecated)
+
+| Legacy variable | Equivalent | Description |
+| --- | --- | --- |
+| `count` | `containers.length` | Number of containers in the batch |
+
+### Expression syntax
+
+Inside `${...}` you can use:
+
+- **Property paths** -- `container.updateKind.kind`
+- **Method calls** -- `local.substring(0, 15)` (see allowed methods below)
+- **Ternary** -- `container.result.link ? container.result.link : "no link"`
+- **Logical AND** -- `container.result && container.result.link`
+- **String concatenation** -- `"Version: " + container.updateKind.remoteValue`
+- **String and number literals** -- `"hello"`, `42`
+
+**Allowed string methods:** `substring`, `slice`, `toLowerCase`, `toUpperCase`, `trim`, `trimStart`, `trimEnd`, `replace`, `split`, `indexOf`, `lastIndexOf`, `startsWith`, `endsWith`, `includes`, `charAt`, `padStart`, `padEnd`, `repeat`, `toString`.
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container $${container.name} can be updated
+      - DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=Container $${name} can be updated from $${local.substring(0, 15)} to $${remote.substring(0, 15)}
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container ${container.name} can be updated' \
+  -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=Container ${name} can be updated from ${local.substring(0, 15)} to ${remote.substring(0, 15)}' \
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>

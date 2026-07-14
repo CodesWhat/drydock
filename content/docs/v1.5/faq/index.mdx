@@ -1,0 +1,441 @@
+---
+title: "FAQ"
+description: "Frequently asked questions and common troubleshooting tips for drydock."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Socket permission errors (EACCES)
+
+Drydock runs as a non-root user by default. The entrypoint automatically detects the Docker socket GID and adds the `node` user to the matching group. If the socket is owned by GID 0 (root), the entrypoint refuses to start implicitly as root.
+
+**Recommended fix:** Use a [Docker socket proxy](/docs/configuration/watchers#option-1-socket-proxy-recommended) so drydock never needs direct socket access.
+
+**Break-glass override:** If you cannot use a socket proxy, set **both** environment variables:
+
+```yaml
+environment:
+  - DD_RUN_AS_ROOT=true
+  - DD_ALLOW_INSECURE_ROOT=true
+```
+
+Setting only `DD_RUN_AS_ROOT=true` without `DD_ALLOW_INSECURE_ROOT=true` will fail closed at startup. See [Docker Socket Security](/docs/configuration/watchers#docker-socket-security) for details.
+
+## Socket proxy connection refused (ECONNREFUSED)
+
+If you see repeated `Docker event stream connection failure (connect ECONNREFUSED ...)` messages when using a socket proxy like `tecnativa/docker-socket-proxy`, the proxy is not accepting connections. Common causes:
+
+1. **Read-only socket mount (`:ro`)** — Remove the `:ro` flag from the proxy's Docker socket volume mount. The `:ro` flag can prevent the proxy from connecting to the Docker daemon on some Linux kernels. The proxy's environment variables (`CONTAINERS=1`, `EVENTS=1`, etc.) are the actual security boundary, not the mount flag.
+
+2. **Startup ordering** — The proxy may not be ready when drydock tries to connect. Add a health check and `depends_on` condition:
+
+```yaml
+services:
+  drydock:
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+
+  socket-proxy:
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+```
+
+Drydock automatically retries with exponential backoff (1s → 30s max) and will recover once the proxy becomes available, but the health check prevents unnecessary retries during startup.
+
+## Can Drydock safely update its own socket proxy?
+
+Yes. Add the `dd.update.mode=infrastructure` label to your socket proxy container:
+
+```yaml
+  socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    labels:
+      - dd.watch=true
+      - dd.update.mode=infrastructure
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+```
+
+Without this label, updating the socket proxy severs Drydock's Docker API connection mid-update, leaving the old container running and the new one stuck in `created` state. The `infrastructure` mode routes the update through a helper container that connects directly to `/var/run/docker.sock`, bypassing the proxy. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for the full explanation.
+
+This also works for [agent](/docs/configuration/agents) socket proxies — add the label to each agent's socket proxy.
+
+## Docker event stream "aborted" reconnects every few minutes
+
+If you see periodic messages like:
+
+`Docker event stream error (aborted); reconnect attempt #1 in 1000ms`
+
+followed by:
+
+`Listening to docker events`
+
+this is commonly caused by proxy idle timeout, not a hard failure. Docker events use a long-lived stream, and third-party socket proxies often close idle streams after `TIMEOUT`.
+
+Common fixes:
+
+1. Increase proxy timeout (for example `TIMEOUT=86400s` on linuxserver socket-proxy).
+2. Prefer direct socket mount over proxy where possible.
+3. Use a proxy that supports exempting `/events` from idle timeout.
+4. Optional workaround: run a lightweight heartbeat container/job to reduce idle disconnects.
+
+<Callout type="info">A single reconnect that immediately recovers is expected in many proxy setups. Repeated reconnect failures (not recovering) indicate a real connectivity issue.</Callout>
+
+## SELinux blocks Podman socket access (Permission denied)
+
+On RHEL, Rocky Linux, Fedora, and CentOS with SELinux enforcing, you may see `permission denied` or `EACCES` when Drydock tries to connect to the Podman socket. This is caused by SELinux denying the container access to the host socket file.
+
+**Fix:** Add the `:Z` flag to your socket volume mount so SELinux relabels the socket for the container:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    volumes:
+      - /run/podman/podman.sock:/var/run/docker.sock:Z
+```
+
+<Callout type="info">The `:Z` flag applies a private SELinux label, granting exclusive access to this container. If multiple containers need the same socket, use `:z` (lowercase) for a shared label instead. Check `ausearch -m avc -ts recent` to confirm SELinux denials are the cause.</Callout>
+
+## `podman-compose` vs `podman compose` networking
+
+If service-name DNS (e.g. `socket-proxy`) fails between containers, check which compose tool you are using:
+
+- **`podman-compose`** (third-party Python tool) groups containers into a single **pod** where all containers share `localhost`. Service names are not resolvable — containers communicate via `localhost:<port>` instead.
+- **`podman compose`** (Podman 4.0+ built-in) uses proper container networking with service-name DNS, matching Docker Compose behavior.
+
+**Recommendation:** Use `podman compose` (built-in, Podman 4.0+) or Docker Compose with the Podman socket for proper service-name DNS resolution. If you must use `podman-compose`, replace hostname references like `socket-proxy` with `localhost` and ensure port mappings are correct.
+
+## Podman socket proxy DNS resolution fails (ENOTFOUND)
+
+If you see `getaddrinfo ENOTFOUND socket-proxy` with Podman, this is usually service-name DNS, not an API compatibility problem.
+
+Checklist:
+
+1. Run `drydock` and `socket-proxy` on the same Compose network (same compose file is simplest).
+2. Keep `DD_WATCHER_LOCAL_HOST=socket-proxy` only when that hostname is resolvable from the drydock container.
+3. If running containers separately, use a resolvable hostname or IP instead of `socket-proxy`.
+
+See [Podman Quick Start](/docs/configuration/watchers#podman-quick-start) and [GitHub issue #152](https://github.com/CodesWhat/drydock/issues/152).
+
+## Podman rootless networking limitations
+
+Rootless Podman networking can behave differently from Docker bridge networking:
+
+- Service-name DNS works only inside the same rootless Podman network/project.
+- Port publishing uses user-mode networking, which may differ in latency and behavior from rootful bridge networking.
+- Host networking and cross-project name resolution are more limited than rootful setups.
+
+If socket-proxy hostname resolution is unstable in rootless mode, prefer:
+
+1. Running both services in one compose project/network.
+2. Or mounting the Podman socket directly and using `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock`.
+
+Reference examples: [Podman Quick Start](/docs/configuration/watchers#podman-quick-start).
+
+## Podman `podman.sock` vs `docker.sock` path
+
+Use Podman's host socket path, then map it to `/var/run/docker.sock` inside Drydock.
+
+- Rootful Podman host path: `/run/podman/podman.sock`
+- Rootless Podman host path: `/run/user/<uid>/podman/podman.sock`
+- Inside Drydock: `/var/run/docker.sock` (mapped target)
+
+Then set:
+
+```yaml
+environment:
+  - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+```
+
+See the full mapping table in [Podman Quick Start](/docs/configuration/watchers#podman-quick-start).
+
+## Podman trigger configuration differences
+
+There are no Podman-specific trigger variables in v1.5. Trigger setup is the same as Docker:
+
+- Add a Docker trigger (`DD_ACTION_DOCKER_{name}_AUTO=false` or `true`).
+- If using socket proxy, include `POST=1` and `NETWORKS=1` on the proxy.
+
+Without a Docker trigger, UI actions show `No docker trigger found for this container`.
+See [Socket proxy permissions](/docs/configuration/watchers#proxy-permissions-by-feature) for the required proxy env vars.
+
+## CSRF validation failed (403) behind a reverse proxy
+
+If you see `403 {"error":"CSRF validation failed"}` when clicking buttons like **Recheck for updates**, **Scan**, or any action that sends a POST/PUT/DELETE request, your reverse proxy setup is missing the `DD_SERVER_TRUSTPROXY` configuration.
+
+**Why this happens:** Drydock validates that the `Origin` header sent by your browser matches the server's own origin. Behind a TLS-terminating reverse proxy (Traefik, Nginx, Caddy, HAProxy, etc.), the internal connection to drydock uses plain HTTP. Without trust-proxy enabled, drydock thinks it is running on `http://` while your browser sends `Origin: https://...` — the mismatch triggers CSRF protection.
+
+**Fix:** Add `DD_SERVER_TRUSTPROXY` to your drydock environment:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    environment:
+      - DD_SERVER_TRUSTPROXY=1  # Trust one proxy hop (Traefik, Nginx, etc.)
+```
+
+This tells drydock to read the `X-Forwarded-Proto` header from your proxy, so it correctly sees `https` as the protocol.
+
+<Callout type="info">
+Most reverse proxies (Traefik, Nginx, NGINX Proxy Manager, Caddy) set `X-Forwarded-Proto` automatically. If yours does not, add the header explicitly in your proxy configuration — for example, in Nginx: `proxy_set_header X-Forwarded-Proto $scheme;`
+</Callout>
+
+**Traefik example (complete):**
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    environment:
+      - DD_SERVER_TRUSTPROXY=1
+      # ... other DD_ variables ...
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.drydock.rule=Host(`drydock.example.com`)
+      - traefik.http.routers.drydock.entrypoints=websecure
+      - traefik.http.services.drydock.loadbalancer.server.port=3000
+```
+
+**Nginx example (proxy block):**
+
+```nginx
+location / {
+    proxy_pass http://drydock:3000;
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $http_host;
+}
+```
+
+**NGINX Proxy Manager:**
+
+NGINX Proxy Manager forwards `X-Forwarded-Proto` and rewrites the `Host` header to your external hostname by default, so no custom proxy headers are required — set the env var and recreate the container:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    environment:
+      - DD_SERVER_TRUSTPROXY=1
+      # ... other DD_ variables ...
+```
+
+See [Server configuration](/docs/configuration/server#reverse-proxy-trust-proxy) for additional trust-proxy options.
+
+## OIDC callback fails or session lost after login
+
+If your OIDC callback redirects back to the login page or loses the session, the session cookie is likely being blocked by the browser's `SameSite` policy during the cross-origin IdP redirect.
+
+**Fix:** Set `DD_SERVER_COOKIE_SAMESITE=lax` (this is the default since v1.4.0). If you previously set it to `strict`, change it to `lax`:
+
+```yaml
+environment:
+  - DD_SERVER_COOKIE_SAMESITE=lax
+```
+
+Use `strict` only when your IdP is on the same domain as drydock. Use `lax` (default) for all cross-site IdP callback flows. See [Authentication](/docs/configuration/authentications) and [Server configuration](/docs/configuration/server) for details.
+
+## Dex logout only clears local session
+
+If you use Dex as OIDC provider, clicking logout may only end the drydock session and not the upstream IdP session. This is expected when no OIDC end-session URL is available.
+
+**Why:** Dex discovery metadata does not advertise `end_session_endpoint`, so drydock cannot auto-build an IdP logout redirect.
+
+**Options:**
+
+1. Accept local-session-only logout (default behavior).
+2. If your auth stack exposes a real logout URL in front of Dex, set `DD_AUTH_OIDC_DEX_LOGOUTURL=https://<your_logout_endpoint>`.
+
+See the [OIDC configuration guide](/docs/configuration/authentications/oidc#how-to-integrate-with-dex) for examples.
+
+## Registry auth failures (401/403)
+
+Token exchange is required for most registries, even for public images. Common causes:
+
+- **GHCR/LSCR:** If configured credentials are rejected with 401 or 403, drydock automatically retries the token request without credentials for public image checks. If you only pull public images, you may not need credentials at all.
+- **Docker Hub:** Anonymous access requires a token exchange with `https://auth.docker.io`. Ensure outbound HTTPS is not blocked.
+- **Quay:** Similar token exchange flow. Check that your token has `repo:read` scope.
+
+<Callout type="warn">Since v1.4.0, auth is **fail-closed**: if credentials are configured and the token exchange fails, drydock does **not** fall back to anonymous. This prevents silent degradation but means bad credentials will cause errors instead of silently downgrading. See [Fail-closed auth enforcement](/docs/configuration/authentications#fail-closed-auth-enforcement).</Callout>
+
+Check the drydock logs at `debug` level for the exact token exchange URL and response status.
+
+## DNS resolution failures (getaddrinfo EAI_AGAIN)
+
+If drydock logs show errors like `getaddrinfo EAI_AGAIN auth.docker.io` or `token request failed (getaddrinfo EAI_AGAIN ghcr.io)`, DNS resolution is failing inside the container even though the hosts are reachable via `ping`.
+
+**Why this happens:** Drydock runs on Alpine Linux, which uses musl libc instead of glibc. Musl's DNS resolver handles dual-stack (IPv4/IPv6) networks less robustly than glibc. On some hosts — particularly NixOS, certain Kubernetes setups, or systems with IPv6 enabled but not fully routable — DNS lookups return IPv6 records first and time out before falling back to IPv4.
+
+**Fix (default since v1.4.3):** Drydock now defaults to IPv4-first DNS ordering, which resolves this for most users. No action is needed unless you run in an IPv6-only environment.
+
+If you need to change the DNS behavior, set `DD_DNS_MODE`:
+
+| Value | Behavior |
+| --- | --- |
+| `ipv4first` | IPv4 addresses tried first (default) |
+| `ipv6first` | IPv6 addresses tried first |
+| `verbatim` | Use OS resolver order (Node.js default, may trigger the bug on Alpine) |
+
+```yaml
+environment:
+  - DD_DNS_MODE=verbatim  # Only set this if you need IPv6-first or OS-native ordering
+```
+
+<Callout type="info">This setting calls Node.js `dns.setDefaultResultOrder()` at startup and affects all outbound connections (registry checks, trigger webhooks, agent communication).</Callout>
+
+## Container shows "update available" but it is wrong (tag family mismatch)
+
+This usually happens when the registry has tags from different naming families (e.g. `5.1.4` and `20.04.1` for Ubuntu, or `18-alpine` vs `18.20.1`). Drydock may pick a higher semver tag from a different family.
+
+Since v1.4.0, **tag family detection** (`dd.tag.family`) defaults to `strict`, which infers the current tag's prefix, suffix, and segment structure and only considers candidates within the same family.
+
+This applies to floating tags (`latest`, `v3`, `16-alpine`) as well as fully-pinned specific tags (e.g. `1.4.5`, `v1.13.3`) — a pinned container compares by digest by default so a rebuilt image republished under the same tag is still detected, but it will not climb to a different tag on its own. Since v1.5.2, this doesn't leave you blind to what's out there: drydock still computes an informational `updateInsight` for pinned containers — the best newer same-family tag available in the registry, shown as an informational "Newer available" badge in the UI. It's purely informational; it never triggers an update, a notification, or changes the actionable update state. Disable it per watcher with `DD_WATCHER_{watcher_name}_TAG_PIN_INFO=false`.
+
+If you still see cross-family false positives, verify that your `dd.tag.include` regex is specific enough. If you intentionally want cross-family updates (e.g. you want to jump from one naming scheme to another, or let a pinned tag climb to a newer version), set:
+
+```yaml
+labels:
+  - dd.tag.family=loose
+```
+
+Managing many containers through an `IMGSET` preset instead of per-container labels? Set it via the equivalent env var on the preset: `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_FAMILY=loose`.
+
+See [Docker Watchers](/docs/configuration/watchers#labels) for the full label reference.
+
+## Log output format (JSON vs pretty)
+
+Drydock log behavior is controlled by environment variables:
+
+| Variable | Values | Default |
+| --- | --- | --- |
+| `DD_LOG_LEVEL` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` | `info` |
+| `DD_LOG_FORMAT` | `text`, `json` | `text` |
+| `DD_LOG_BUFFER_ENABLED` | `true`, `false` | `true` |
+
+The official image defaults to `DD_LOG_FORMAT=text` for pretty, human-readable logs. Set `DD_LOG_FORMAT=json` if you want structured output for log aggregators like Elasticsearch or Loki.
+Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory application log ring buffer used by `/api/v1/log/entries` and the UI log viewer.
+See [Logs](/docs/configuration/logs) for examples.
+
+## Trivy or Cosign not found errors
+
+Since v1.4.0, drydock ships a **single image** that bundles both Trivy and Cosign. If you see "not found" errors, you are likely running a custom or older image that does not include them.
+
+Verify tool availability at runtime via the API:
+
+```bash
+curl http://drydock:3000/api/v1/server/security/runtime
+```
+
+If you build a custom image, ensure Trivy and Cosign are installed in your Dockerfile. See [Security](/docs/configuration/security) for scanning configuration.
+
+## Vulnerability report download button does nothing
+
+If the **Download Report** button in the Security detail panel doesn't trigger a download, check that a vulnerability scan has completed for that container. The button is disabled when there are no scan results to export.
+
+**Steps:** Run an on-demand scan first (click the shield icon on the container row), then open the detail panel and try the export again.
+
+See the [vulnerability report export](/docs/configuration/security#vulnerability-report-export) documentation and the [Security Guide](/docs/guides/security) for a full walkthrough.
+
+## How do I share scan results with my team?
+
+Export vulnerability reports as CSV or JSON from the Security detail panel:
+
+1. Open the Security view and click a container row
+2. Select **CSV** or **JSON** from the export dropdown
+3. Click **Download Report**
+
+The CSV is formatted for spreadsheets and tracking tools (Jira, Linear, GitHub Issues). The JSON is suitable for programmatic consumption.
+
+For API-based workflows, use `GET /api/v1/containers/:id/vulnerabilities`. See the [Security Guide](/docs/guides/security#export-and-share-vulnerability-reports) for a full sharing workflow.
+
+## Keeping secrets out of compose files
+
+Never put credentials directly in `docker-compose.yml` files committed to version control. Drydock supports two patterns:
+
+**Docker secrets (recommended):**
+
+```yaml
+environment:
+  - DD_REGISTRY_HUB_PRIVATE_TOKEN__FILE=/run/secrets/hub_token
+secrets:
+  hub_token:
+    file: ./secrets/hub_token.txt
+```
+
+**Environment file:**
+
+```yaml
+services:
+  drydock:
+    env_file: .env
+```
+
+The `__FILE` suffix works on any `DD_*` variable. Add `.env` and `secrets/` to your `.gitignore`. See the [Security Guide](/docs/guides/security#manage-secrets-safely) for details.
+
+## Scans are slow or timing out
+
+If scans take a long time or fail with timeout errors:
+
+1. **Increase the timeout:** Set `DD_SECURITY_TRIVY_TIMEOUT=300000` (5 minutes). The default is 2 minutes, which may not be enough for large images on the first scan.
+2. **Use a Trivy server:** A dedicated Trivy server caches the vulnerability database, avoiding repeated downloads. See [Trivy server mode](/docs/configuration/security#server-mode-trivy-server).
+3. **Tune concurrency:** For scheduled scans, lower `DD_SECURITY_SCAN_CONCURRENCY` if the host is resource-constrained.
+
+## Temporary container names during recreation (hex prefix aliases)
+
+When Docker recreates a container — for example via Portainer, Docker Compose `up --force-recreate`, or a Drydock Docker trigger — Docker temporarily renames the old container to a name like `fcdb966987a0_myapp` (a 12-character hex prefix matching the container ID, followed by an underscore and the original name). This alias is transient and disappears once the recreation completes.
+
+Drydock automatically detects and filters these temporary alias names. They will never appear in notifications, MQTT topics, the UI, or any trigger output. No configuration is needed — this is handled unconditionally.
+
+<Callout type="info">If you previously saw garbled container names in notifications during container updates, this was caused by the temporary alias leaking through. This is resolved as of v1.5.0.</Callout>
+
+## Self-update leaves container stopped
+
+Drydock updates itself using a **helper container pattern**: it renames the old container, creates a new one with the updated image, then spawns a short-lived helper container that stops the old container, starts the new one, and removes the old one on success. If the new container fails to start, the helper restarts the old container as a fallback.
+
+For this to work:
+
+- The Docker socket must be bind-mounted at `/var/run/docker.sock`
+- The Docker trigger must be enabled
+- Drydock must be able to create temporary helper containers
+
+If the container ends up stopped, check `docker logs drydock-old-*` for the helper container output. See [Self-Update](/docs/configuration/self-update) for the full sequence.
+
+## Container left renamed `-old-<number>` after a failed update
+
+Before recreating a container, Drydock renames the running container to `<name>-old-<timestamp>` so the original name is free for the replacement. If container creation fails partway through — for example a network connect call rejected by a socket proxy — Drydock rolls back by renaming the container back to its original name.
+
+In versions prior to 1.5.2, a failure that happened *after* the replacement container was created (but before it was confirmed healthy) could leave that orphaned "Created" container squatting the original name, with the old container still parked under the `-old-<timestamp>` suffix. A subsequent update attempt against the renamed container could compound the problem by appending another rollback suffix.
+
+As of 1.5.2, Drydock detects and removes the orphaned replacement container as part of rollback, so the rename back to the original name succeeds automatically. Its rollback-cascade guard also rejects an update for a container that already has a rollback suffix, so that attempt fails cleanly instead of nesting another suffix. If you're on an older version and hit this:
+
+1. List every matching container and note the IDs of the `Created` replacement and the stopped rollback container: `docker ps -a --filter name=<name> --format '{{.ID}}\t{{.Names}}\t{{.Status}}'`
+2. If the `Created` replacement is squatting the original name, remove it: `docker rm <replacement-container-id>`
+3. Rename the identified rollback container back by ID: `docker rename <rollback-container-id> <name>`
+4. If the container was started from Compose, `docker compose up -d` will also recreate it cleanly once the name is free.
+
+Upgrading to 1.5.2 or later prevents this from happening again. Note that if you intentionally gave a container a name matching this pattern (`<name>-old-<10+ digit number>`), Drydock can't tell it apart from its own rollback rename and will refuse to update it — rename the container to something outside that pattern to make it updatable again.
+
+## Legacy WUD environment variables or labels
+
+Drydock accepts legacy `WUD_*` environment variables and `wud.*` container labels as fallback, but emits deprecation warnings when they are used. Each legacy fallback increments the `dd_legacy_input_total{source,key}` Prometheus counter.
+
+To convert your configuration in place, use the built-in migration CLI:
+
+```bash
+# Preview changes without writing
+docker exec drydock node dist/index.js config migrate --dry-run
+
+# Apply migration to a specific file
+docker exec drydock node dist/index.js config migrate --file /path/to/compose.yml
+```
+
+See the [Quick start](/docs/quickstart) for the recommended `DD_*` / `dd.*` configuration format.

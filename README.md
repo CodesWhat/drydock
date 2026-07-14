@@ -13,7 +13,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.5.1--rc.4-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0--rc.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -171,7 +171,7 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
-<summary><strong>v1.6 development highlights</strong></summary>
+<summary><strong>v1.6.0-rc.1 highlights</strong></summary>
 
 - **Notifications** — Per-rule/per-provider title and body templates with live preview, plus audit-backed in-app bell categories and update severity thresholds.
 - **Dashboard** — Zero-dependency CSS Grid replacement with mouse/touch reorder, bounded resize, responsive layouts, widget visibility, reset, and optional cross-device preference sync.
@@ -184,14 +184,13 @@ Full migration guidance in [DEPRECATIONS.md](./DEPRECATIONS.md).
 </details>
 
 <details>
-<summary><strong>v1.5.1-rc.4 highlights</strong></summary>
+<summary><strong>v1.5.2 highlights</strong></summary>
 
-- **Version and Uptime visibility** — Containers now surface `image.softwareVersion` in detail views and the new **Version** column, plus live runtime uptime from Docker `State.StartedAt`.
-- **Release notes coverage** — Trigger templates can use `${currentReleaseNotes}`, container rows show current and available release notes, and intermediate semver release notes are lazy-loaded with `DD_RELEASE_NOTES_MAX_INTERMEDIATE`.
-- **Docker Compose mount-prefix fallback** — `DD_ACTION_DOCKERCOMPOSE_<name>_MOUNTPREFIXFALLBACK=true` handles Portainer/bind-mount path-prefix mismatches while staying opt-in to avoid ambiguous stack matches.
-- **Maintenance and maturity fixes** — Maintenance windows now gate auto-apply on every detection path, maturity gates use trusted Docker Hub/GHCR publish dates, and changed candidates restart the soak clock.
-- **Security hardening** — Registry TLS applies end to end, GCR/GAR action pulls use the correct `_json_key` auth, hook env values are sanitized, secret-file handling warns on unsafe permissions, and debug dumps redact more credential shapes.
-- **Docs refresh & API hygiene (live on website now)** — Podman Docker-compatible API guidance, Docker socket security docs, remote TLS/OIDC watcher auth docs, config/env-var parity, and API/OpenAPI parity. These docs publish to the website on merge to main; the accompanying API/spec fixes (OpenAPI document validity, `/api/v1` parity) ship in v1.6.
+- **Recreation-safe update policy** — Maturity gates, skipped tags/digests, and snoozes now survive container recreation for local and remote-agent workloads.
+- **Pinned-tag reliability** — Fully pinned tags detect same-tag digest rebuilds again, while the UI can show a non-actionable newer same-family tag without changing update or trigger behavior.
+- **Rollback recovery** — Failed replacement creation, network attachment, or startup now cleans up the candidate before restoring the original container, and repeated failures cannot cascade through nested rollback renames.
+- **Safer container recreation** — Daemon-assigned MAC addresses are no longer pinned onto replacements, while explicitly configured primary-network MAC addresses remain preserved.
+- **Quieter local-image polling** — Locally built or loaded images with no registry digest skip remote lookups instead of generating recurring authorization errors.
 
 Full history in [CHANGELOG.md](./CHANGELOG.md).
 
@@ -358,7 +357,8 @@ High-level themes only — see [CHANGELOG.md](CHANGELOG.md) for per-release deta
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, re2js regex engine |
 | **v1.4.x** ✅ | UI Modernization & Hardening | Tailwind 4 + custom components, 6 themes, Cmd/K palette, OpenAPI 3.1, compose-native YAML updates, dual-slot scanning, OIDC hardening |
 | **v1.5.0** ✅ | Observability & i18n | trigger taxonomy split (`DD_ACTION_*`/`DD_NOTIFICATION_*`), WebSocket log viewer, dashboard customization, resource monitoring, notification outbox + DLQ, security scan digest, 17 locales, SSE Last-Event-ID replay, edge agent dial-out with Ed25519 auth (experimental, `DD_EXPERIMENTAL_PORTWING=true`) |
-| **v1.5.1** | Security & Maintenance | GCR/GAR pull-auth fix, registry TLS completion (M-2), hook env-var injection hardening, `DD_SESSION_SECRET__FILE` support, debug-dump credential redaction, secret-file permission check, maturity gate deadlock fix, full UI translatability + community translations, maintenance-window auto-apply gate, container uptime display, Tag/Version column split surfacing software version (OCI label, with `dd.inspect.tag.path` dual-write + opt-in `dd.inspect.tag.version-only` routing), opt-in compose mount-prefix matching, `${currentReleaseNotes}` template var |
+| **v1.5.1** ✅ | Security & Maintenance | GCR/GAR pull-auth fix, registry TLS completion (M-2), hook env-var injection hardening, `DD_SESSION_SECRET__FILE` support, debug-dump credential redaction, secret-file permission check, maturity gate deadlock fix, full UI translatability + community translations, maintenance-window auto-apply gate, container uptime display, Tag/Version column split surfacing software version (OCI label, with `dd.inspect.tag.path` dual-write + opt-in `dd.inspect.tag.version-only` routing), opt-in compose mount-prefix matching, `${currentReleaseNotes}` template var |
+| **v1.5.2** ✅ | Policy & Pinned-Tag Reliability | Recreation-safe maturity/skip/snooze policy retention, pinned-tag digest rebuild detection and informational same-family insights, rollback-candidate cleanup, rollback-cascade prevention, explicit-MAC preservation, and local-image registry-skip behavior |
 | **v1.6.0** | Notifications, Policy & Release Intel | Per-rule/per-trigger notification templates with live preview, notification-bell preferences, cross-device preference sync, zero-dependency custom dashboard grid ([#281](https://github.com/CodesWhat/drydock/issues/281)), declarative update policy ([#320](https://github.com/CodesWhat/drydock/issues/320)), maturity stabilization countdown + immediate candidate visibility + manual override ([#406](https://github.com/CodesWhat/drydock/discussions/406)), actionable Update Status panel and global `notify` / `manual` / `auto` update mode ([#325](https://github.com/CodesWhat/drydock/discussions/325)), watcher/imgset/container tag-policy inheritance plus stacked current → newer pinned-tag visibility ([#498](https://github.com/CodesWhat/drydock/issues/498)), standardized 44px Source / release notes / registry resource actions across table, cards, and details ([#295](https://github.com/CodesWhat/drydock/discussions/295)), health-status event notifications ([#198](https://github.com/CodesWhat/drydock/discussions/198)), bidirectional Home Assistant MQTT, responsive table/card list views, Trivy/Grype/both scanning across command or pinned Docker-worker backends, scanner asset pull/warm controls, off-heap deduplicated SBOM storage, Trivy long-scan correctness ([#490](https://github.com/CodesWhat/drydock/issues/490)), trigger-taxonomy migration warnings, v1.6 compatibility removals, docs/API hygiene, and `/api` → `/api/v1` migration completion with an opt-in wud-card/Homepage compatibility shim (`DD_COMPAT_WUDCARD`). |
 | **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, image prune, static image monitoring, keyboard shortcuts, PWA, API token-auth provider (demand-elevated by [#469](https://github.com/CodesWhat/drydock/discussions/469) — HA/dashboard integrations need a static bearer token) |
 | **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config, volume browser, parallel updates, SQLite store migration |
