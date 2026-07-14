@@ -27,6 +27,7 @@ interface WorkflowJobStep {
 interface WorkflowDefinition {
   env?: Record<string, string>;
   jobs?: Record<string, WorkflowJob>;
+  on?: Record<string, unknown>;
 }
 
 interface LefthookCommand {
@@ -75,6 +76,34 @@ test('ci-verify job names are emoji-prefixed for GitHub checks readability', () 
     .filter(({ name }) => !emojiPrefix.test(name));
 
   expect(jobsWithoutEmoji).toStrictEqual([]);
+});
+
+test('manual dispatch runs the complete release-candidate matrix regardless of path filters', () => {
+  const workflow = loadWorkflow();
+  const manualDispatch = "github.event_name == 'workflow_dispatch'";
+
+  expect(Object.hasOwn(workflow.on ?? {}, 'workflow_dispatch')).toBe(true);
+  expect(getWorkflowStep('changes', 'Filter paths')?.with?.base).toContain(
+    "github.event_name == 'workflow_dispatch'",
+  );
+
+  for (const jobId of [
+    'codeql',
+    'fuzz',
+    'web',
+    'dast-zap-baseline',
+    'e2e',
+    'load-test-ci',
+    'load-test-behavior',
+  ]) {
+    expect(workflow.jobs?.[jobId]?.if, `${jobId} must run on manual dispatch`).toContain(
+      manualDispatch,
+    );
+  }
+
+  expect(workflow.jobs?.['dependency-review']?.if).toBe(
+    "github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')",
+  );
 });
 
 test('script node tests are wired into local and CI gates', () => {
@@ -137,18 +166,18 @@ test('DAST auth steps mask derived basic auth credentials', () => {
 
 test('load-test workflow runs load profiles in parallel jobs', () => {
   const workflow = loadWorkflow();
-  const pushOnlyCondition =
-    "github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))";
+  const releaseCandidateCondition =
+    "github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))";
 
   expect(workflow.jobs?.['load-test-ci']).toMatchObject({
     name: '⚡ Load Test: CI',
-    if: pushOnlyCondition,
+    if: releaseCandidateCondition,
     needs: ['build'],
     'timeout-minutes': expect.any(Number),
   });
   expect(workflow.jobs?.['load-test-behavior']).toMatchObject({
     name: '⚡ Load Test: Behavior + Stress (Advisory)',
-    if: pushOnlyCondition,
+    if: releaseCandidateCondition,
     needs: ['build'],
     'timeout-minutes': expect.any(Number),
   });

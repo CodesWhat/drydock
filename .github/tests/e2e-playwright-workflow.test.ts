@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 
 interface WorkflowStep {
+  if?: string;
   name?: string;
   uses?: string;
   with?: Record<string, string>;
@@ -11,12 +12,14 @@ interface WorkflowStep {
 
 interface WorkflowJob {
   env?: Record<string, string>;
+  if?: string;
   steps?: WorkflowStep[];
 }
 
 interface WorkflowDefinition {
   env?: Record<string, string>;
   jobs?: Record<string, WorkflowJob>;
+  on?: Record<string, unknown>;
 }
 
 const workflowPath = fileURLToPath(new URL('../workflows/e2e-playwright.yml', import.meta.url));
@@ -41,4 +44,16 @@ test('Playwright workflow disables browser downloads for host-side npm installs'
       command: 'cd ui && npm ci',
     },
   });
+});
+
+test('manual dispatch runs Playwright against the selected ref regardless of path filters', () => {
+  const workflow = loadWorkflow();
+
+  expect(Object.hasOwn(workflow.on ?? {}, 'workflow_dispatch')).toBe(true);
+  expect(getWorkflowStep('changes', 'Filter paths')?.with?.base).toContain(
+    "github.event_name == 'workflow_dispatch'",
+  );
+  expect(workflow.jobs?.playwright?.if).toBe(
+    "github.event_name == 'workflow_dispatch' || needs.changes.outputs.runtime == 'true'",
+  );
 });
