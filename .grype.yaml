@@ -10,19 +10,19 @@
 # Why: those CVEs (golang.org/x/crypto, x/net, Go stdlib, …) live inside upstream
 # tool binaries, not drydock's own code, and reach the binary only as cosign's /
 # trivy's vendored modules. We cannot patch them independently — they clear only
-# when Alpine rebuilds the cosign/trivy packages with a patched toolchain, which
-# we pick up by bumping the base image / package pins (the cosign 2.6.3-r1 ->
-# 3.0.6-r1 bump in this change already cleared the bulk of them). Gating the build
+# when upstream releases a rebuilt Trivy image or Alpine rebuilds Cosign, which we
+# pick up by bumping the pinned Trivy image index or Alpine package (the cosign
+# 2.6.3-r1 -> 3.0.6-r1 bump already cleared the bulk of them). Gating the build
 # on a module graph we don't control is the same manifest-vs-shipped mismatch we
 # dropped Snyk over. The Node runtime, musl, curl, git, every other OS package,
 # and the entire app dependency graph stay fully gated — confirmed by the scan,
 # which after the base bump leaves residual HIGH/CRITICAL findings only at these
 # two binary locations.
 #
-# Revisit on each base-image bump: if Alpine ships rebuilt cosign/trivy packages,
-# the residuals clear on their own and these scopes simply stop matching anything.
+# Revisit on each pinned-tool or base-image bump: fixed upstream binaries make
+# these scopes stop matching anything.
 ignore:
   - package:
       location: "/usr/bin/cosign"
   - package:
-      location: "/usr/bin/trivy"
+      location: "/usr/local/bin/trivy"
