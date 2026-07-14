@@ -17,4 +17,11 @@ describe('Dockerfile release defaults', () => {
     expect(dockerfile).not.toContain('alpine/edge/testing');
     expect(dockerfile).not.toMatch(/apk add[^\n]*trivy/u);
   });
+
+  test('release image pins the available Alpine tzdata revision', () => {
+    const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
+
+    expect(dockerfile).toContain('tzdata=2026c-r0');
+    expect(dockerfile).not.toContain('tzdata=2026b-r0');
+  });
 });
