@@ -1,0 +1,128 @@
+---
+title: "Updates"
+description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
+---
+
+## Release Highlights — v1.5.0 (May 2026)
+
+- **Default watcher cron changed to every 6 hours** — The default `DD_WATCHER_{name}_CRON` value changed from `0 * * * *` (hourly) to `0 */6 * * *` (every 6 hours) to stay within anonymous Docker Hub and GHCR rate limits on larger inventories. Deployments that set `DD_WATCHER_{name}_CRON` explicitly are unaffected. To keep near-real-time detection, set `DD_WATCHER_LOCAL_CRON=0 * * * *`.
+  Docs: [Watchers configuration](/docs/configuration/watchers).
+- **17 UI locales** — The UI now ships with English plus 16 non-English locales: Simplified Chinese, Traditional Chinese, Italian, Spanish, German, French, Brazilian Portuguese, Dutch, Polish, Turkish, Japanese, Korean, Russian, Vietnamese, Ukrainian, and Arabic. Switch language in **Config > Appearance**.
+  Docs: [UI Customization — Language](/docs/configuration/ui#language--locale).
+- **`DD_LOG_FORMAT` default is now `text`** — The official Docker image defaults to human-readable log output. Set `DD_LOG_FORMAT=json` for structured output consumed by log aggregators.
+  Docs: [Logs](/docs/configuration/logs), [FAQ](/docs/faq#log-output-format-json-vs-pretty).
+- **Notification outbox** — Failed notification deliveries are persisted and retried with exponential backoff. A new **Notification outbox** page (under Settings) shows pending, delivered, and dead-letter entries with retry and discard actions.
+  Docs: [Triggers](/docs/configuration/triggers#notification-outbox).
+- **Diagnostic debug dump** — One-click export from **Config > Diagnostics** collects a redacted snapshot of recent events. `GET /api/v1/debug/dump?minutes=30`.
+  Docs: [Configuration > Diagnostics](/docs/configuration#diagnostics), [API](/docs/api/app#download-diagnostic-debug-dump).
+
+## Release Highlights (March 2026)
+
+- **Shared data table sizing** — Tables now share one sizing model with stable columns, sticky actions, pointer/keyboard resize, double-click autosize, and persisted per-view widths. Containers also folds lower-priority metadata at narrow widths instead of compressing primary identifiers.
+  Docs: [UI customization — Data Tables](/docs/configuration/ui#data-tables).
+- **System log live streaming** — The Configuration Logs view now supports live WebSocket system logs with level/component filtering and tail backfill.  
+  Docs: [Logs configuration](/docs/configuration/logs), [Log API stream endpoint](/docs/api/log#stream-application-logs-websocket).
+- **Watcher run-time visibility** — Watchers expose `metadata.lastRunAt` and `metadata.nextRunAt`, and the UI surfaces these in the Watchers and Agents views as **Last run** and **Next run**.  
+  Docs: [Watcher API](/docs/api/watcher).
+- **Container list query enhancements** — Container list now supports `order`, runtime `status` filters (`running`, `paused`, etc.), and watched-state `kind` filters (`watched`, `unwatched`, `all`).  
+  Docs: [Container API query parameters](/docs/api/container#get-all-containers).
+- **Digest notification mode** — Triggers can accumulate updates and flush on schedule with `MODE=digest` + `DIGESTCRON`.  
+  Docs: [Trigger modes](/docs/configuration/triggers#notes).
+- **Signed registry webhooks** — Added HMAC-verified registry push webhook endpoint for targeted checks.  
+  Docs: [Webhooks](/docs/configuration/webhooks).
+- **Podman API compatibility improvements** — Watchers now handle Podman API-version differences more reliably (including redirect-prone unversioned API paths).  
+  Docs: [Watchers Podman setup](/docs/configuration/watchers#podman-quick-start), [Podman FAQ](/docs/faq).
+- **Container-action failure toasts** — UI now surfaces update/delete failures as visible toast notifications instead of silent failures.  
+  Docs: [Container actions](/docs/configuration/actions).
+- **Unified update-completion toasts (v1.5.0-rc.19)** — Update, rollback, and cancel result toasts now appear the moment the operation completes, and are replayed correctly after a reconnect.
+
+## Per-container Update Policy (February 9, 2026)
+
+This update adds skip/snooze controls per container to reduce noisy repeated notifications for known-bad versions.
+
+### What changed
+
+- Added container-level update policy in store:
+  - `skipTags`
+  - `skipDigests`
+  - `snoozeUntil`
+- Added API endpoint:
+  - `PATCH /api/v1/containers/:id/update-policy`
+  - Actions: `skip-current`, `clear-skips`, `snooze`, `unsnooze`, `clear`
+- Added UI controls on container cards:
+  - Skip current update
+  - Snooze for 1/7/30 days
+  - Clear snooze or all policy
+
+### Behavior
+
+- `updateKind` still reflects the detected remote update.
+- `updateAvailable` is suppressed while policy applies (skip/snooze), and becomes true again when a new unmatched version/digest is detected or snooze expires.
+
+## Trigger Coordination Improvements (February 9, 2026)
+
+This update improves how triggers can be coordinated when they share the same trigger name (for example `docker.update` and `discord.update`).
+
+### What changed
+
+#### 1. Trigger execution ordering
+
+You can now control trigger execution order with:
+
+`DD_ACTION_{trigger_type}_{trigger_name}_ORDER` / `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ORDER`
+
+- Lower values run first
+- Default is `100`
+- If two triggers have the same `ORDER`, they are sorted by trigger id
+
+Example:
+
+```bash
+DD_ACTION_DOCKER_UPDATE_ORDER=10
+DD_NOTIFICATION_DISCORD_UPDATE_ORDER=20
+```
+
+This ensures the Docker update trigger runs before the Discord notification trigger for the same update event.
+
+#### 2. Trigger name aliases in container labels
+
+Container labels `dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) now accept either:
+
+- full trigger id (`docker.update`)
+- trigger name alias (`update`)
+
+Example:
+
+```bash
+dd.action.exclude=update
+```
+
+This applies to all triggers named `update` (for example `docker.update`, `discord.update`). The legacy labels `dd.trigger.include` / `dd.trigger.exclude` still work as aliases until v1.7.0.
+
+#### 3. Shared threshold by trigger name
+
+Triggers sharing the same trigger name can share `THRESHOLD` automatically:
+
+- if exactly one threshold value is explicitly set among same-name triggers, that value is inherited by the others
+- if multiple different threshold values are set, no inheritance is applied
+
+Example:
+
+```bash
+DD_ACTION_DOCKER_UPDATE_THRESHOLD=minor
+```
+
+With no explicit Discord threshold, `discord.update` inherits `minor`.
+
+### Recommended setup for "update then notify"
+
+```bash
+DD_ACTION_DOCKER_UPDATE_THRESHOLD=minor
+DD_ACTION_DOCKER_UPDATE_ORDER=10
+DD_ACTION_DOCKER_UPDATE_PRUNE=true
+
+DD_NOTIFICATION_DISCORD_UPDATE_ORDER=20
+DD_NOTIFICATION_DISCORD_UPDATE_URL=<discord_webhook_url>
+DD_NOTIFICATION_DISCORD_UPDATE_SIMPLETITLE=Updated ${container.name}
+DD_NOTIFICATION_DISCORD_UPDATE_SIMPLEBODY=Container ${container.name} has been updated from ${container.updateKind.localValue} to ${container.updateKind.remoteValue}
+```

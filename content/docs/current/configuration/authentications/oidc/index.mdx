@@ -112,6 +112,7 @@ docker run \
   ...
   codeswhat/drydock
 ```
+
 </Tab>
 </Tabs>
 
@@ -155,6 +156,7 @@ docker run \
   ...
   codeswhat/drydock
 ```
+
 </Tab>
 </Tabs>
 
@@ -197,7 +199,7 @@ services:
       - DD_AUTH_OIDC_AUTHENTIK_CLIENTID=<paste the Client ID from authentik drydock_oidc provider>
       - DD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET=<paste the Client Secret from authentik drydock_oidc provider>
       - DD_AUTH_OIDC_AUTHENTIK_DISCOVERY=<authentik_url>/application/o/<authentik_application_name>/.well-known/openid-configuration
-      - DD_AUTH_OIDC_AUTHENTIK_REDIRECT=true # optional (to skip internal login page)
+      # - DD_AUTH_OIDC_AUTHENTIK_REDIRECT=true # optional (to skip internal login page)
 ```
 
 </Tab>
@@ -208,10 +210,16 @@ docker run \
   -e DD_AUTH_OIDC_AUTHENTIK_CLIENTID="<paste the Client ID from authentik drydock_oidc provider>" \
   -e DD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET="<paste the Client Secret from authentik drydock_oidc provider>" \
   -e DD_AUTH_OIDC_AUTHENTIK_DISCOVERY="<authentik_url>/application/o/<authentik_application_name>/.well-known/openid-configuration" \
-  -e DD_AUTH_OIDC_AUTHENTIK_REDIRECT=true # optional (to skip internal login page) \
   ...
   codeswhat/drydock
 ```
+
+Opt in to direct Authentik redirect only when you intentionally want to skip the internal login page. Add this option before the `...` line in the Docker command above:
+
+```text
+-e DD_AUTH_OIDC_AUTHENTIK_REDIRECT=true \
+```
+
 </Tab>
 </Tabs>
 
@@ -252,10 +260,10 @@ docker run \
   codeswhat/drydock
 ```
 
-Optional (only when a real IdP logout endpoint exists):
+Opt in to a real Dex logout endpoint only when your IdP or auth proxy provides one. Add this option before the `...` line in the Docker command above:
 
-```bash
--e DD_AUTH_OIDC_DEX_LOGOUTURL="https://<your_logout_endpoint>"
+```text
+-e DD_AUTH_OIDC_DEX_LOGOUTURL="https://<your_logout_endpoint>" \
 ```
 
 </Tab>

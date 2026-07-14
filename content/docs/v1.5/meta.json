@@ -1,0 +1,16 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "quickstart",
+    "getting-started",
+    "configuration",
+    "guides",
+    "updates",
+    "api",
+    "monitoring",
+    "deprecations",
+    "faq",
+    "changelog"
+  ]
+}

@@ -1,0 +1,163 @@
+---
+title: "UI Customization"
+description: "Customize the drydock dashboard appearance with themes, icon libraries, fonts, and layout preferences."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+All UI preferences are configured in **Config > Appearance** and persisted in the browser's localStorage. No server-side environment variables are needed.
+
+## Themes
+
+Drydock ships with 6 color themes, each available in dark and light variants:
+
+| Theme | Style |
+| --- | --- |
+| **One Dark** (default) | Clean and balanced |
+| **GitHub** | Clean, familiar |
+| **Dracula** | Bold purple |
+| **Catppuccin** | Warm pastels |
+| **Gruvbox** | Retro earthy warmth |
+| **Ayu** | Soft golden tones |
+
+Switch themes in **Config > Appearance**. A circle-reveal transition animation plays when changing themes.
+
+## Icon Libraries
+
+7 icon libraries are available:
+
+| Library | Notes |
+| --- | --- |
+| **Phosphor Duotone** (default) | Two-tone style |
+| **Phosphor** | Solid style |
+| **Lucide** | |
+| **Tabler** | |
+| **Heroicons** | |
+| **Iconoir** | |
+| **Font Awesome** | |
+
+An icon size slider in **Config > Appearance** adjusts icon scale across the UI.
+
+## Font Families
+
+6 monospace fonts are supported:
+
+| Font | Notes |
+| --- | --- |
+| **IBM Plex Mono** (default) | Bundled offline |
+| **JetBrains Mono** | Lazy-loaded from local `/fonts/` |
+| **Source Code Pro** | Lazy-loaded from local `/fonts/` |
+| **Inconsolata** | Lazy-loaded from local `/fonts/` |
+| **Commit Mono** | Lazy-loaded from local `/fonts/` |
+| **Comic Mono** | Lazy-loaded from local `/fonts/` |
+
+All non-default fonts are served locally from the container's `/fonts/` directory — no external network requests are made. In internetless mode, all fonts fall back to IBM Plex Mono which is bundled in the image.
+
+## Font Size
+
+An adjustable font size slider in **Config > Appearance** scales semantic text tokens across the entire UI. Headings, table headers, card titles, labels, body copy, and metadata use separate tokens so relative hierarchy stays intact as the global scale changes. The setting is persisted in localStorage.
+
+## Command Palette
+
+Open the command palette with **Cmd+K** (macOS) or **Ctrl+K** (Windows/Linux).
+
+### Scope prefixes
+
+Type a prefix character to filter results:
+
+| Prefix | Scope | Includes |
+| --- | --- | --- |
+| `/` | Pages | Pages and settings navigation |
+| `@` | Runtime | Containers, agents, triggers, watchers |
+| `#` | Config | Registries, auth providers, notification rules |
+
+Use arrow keys to navigate results, **Enter** to select, and **Escape** to close. Recent search history is persisted across sessions.
+
+## Border Radius
+
+5 border radius presets control the roundness of UI elements:
+
+| Preset | Description |
+| --- | --- |
+| **None** | No rounding (0px) |
+| **Sharp** | Subtle rounding |
+| **Modern** | Balanced rounding |
+| **Soft** | Gentle rounding |
+| **Round** | Maximum rounding |
+
+Select a preset in **Config > Appearance**. The choice is persisted in localStorage.
+
+## Dashboard
+
+The dashboard is a customizable grid of 9 widgets — 4 stat cards and 5 detail widgets — with drag-to-reorder, resize, and per-widget visibility controls. See the dedicated [Dashboard guide](/docs/configuration/dashboard) for full details on widgets, edit mode, responsive breakpoints, and real-time updates.
+
+## Data Tables
+
+All first-party table surfaces use the shared Drydock data table component. That includes Containers, Security, Audit, Agents, Watchers, Registries, Servers, Triggers, Auth, Notifications, Notification Outbox, dashboard table widgets, and compact configuration tables.
+
+Data tables support:
+
+- Stable column widths driven by each column's content role.
+- Drag resizing with mouse or touch.
+- Keyboard resizing from the column separator: **ArrowLeft** / **ArrowRight** adjust the width, and **Shift** makes larger steps.
+- Double-click autosize on a column separator.
+- Sticky action columns where row actions need to remain reachable while horizontally scrolling.
+- Per-view width persistence in browser localStorage.
+- Responsive column hiding on dense views such as Containers, where lower-priority metadata folds away before primary identifiers become unreadable.
+
+## View Modes
+
+Data views that expose view-mode controls support table, card, or list presentation depending on the page:
+
+| Mode | Description |
+| --- | --- |
+| **Table** (default) | Rows with shared sizing, interactive column resizing, persisted widths, and sticky actions where relevant |
+| **Cards** | Grid layout |
+| **List** | Accordion-style |
+
+Toggle between modes using the view mode buttons in the toolbar where they are available. Utility pages with naturally tabular data may use table-only presentation.
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| **Cmd/Ctrl+K** | Open command palette |
+| **Escape** | Close detail panel or dialog |
+| **Enter** | Confirm dialog action |
+| **Arrow keys** | Navigate command palette results |
+
+## Announcement Banner
+
+A dismissible banner appears at the top of the dashboard to surface release notes and important notices after upgrades. Once dismissed, the banner does not reappear until the next release. No configuration is needed — the banner is managed automatically by the UI.
+
+## Detail Panels
+
+Clicking any row in a data view opens a slide-in detail panel with contextual information and actions. Detail panels are available on all views: Containers, Watchers, Registries, Triggers, Auth, Agents, and Security.
+
+## Language / Locale
+
+Drydock ships with 17 locales in v1.5.0. Switch language in **Config > Appearance**.
+
+| Locale | Language |
+| --- | --- |
+| `en` | English (default) |
+| `zh-CN` | Simplified Chinese |
+| `zh-TW` | Traditional Chinese |
+| `it` | Italian |
+| `es` | Spanish |
+| `de` | German |
+| `fr` | French |
+| `pt-BR` | Brazilian Portuguese |
+| `nl` | Dutch |
+| `pl` | Polish |
+| `tr` | Turkish |
+| `ja` | Japanese |
+| `ko` | Korean |
+| `ru` | Russian |
+| `vi` | Vietnamese |
+| `uk` | Ukrainian |
+| `ar` | Arabic |
+
+Translation strings are managed via [Crowdin](https://crowdin.com/project/drydock). Want to help translate Drydock into your language? See the [Translations guide](/docs/guides/translations).
+
+<Callout type="info">All UI preferences are stored in the browser's localStorage. They are not synced across devices or browsers.</Callout>

@@ -14,9 +14,9 @@ Drydock automatically detects Codeberg registries by matching `codeberg.org` hos
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_LOGIN` | ⚪ | Codeberg username | DD_REGISTRY_CODEBERG_\{REGISTRY_NAME\}_PASSWORD must be defined | |
-| `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_PASSWORD` | ⚪ | Codeberg password or personal access token | DD_REGISTRY_CODEBERG_\{REGISTRY_NAME\}_LOGIN must be defined | |
-| `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_CODEBERG_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_LOGIN` | ⚪ | Codeberg username | `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_PASSWORD` must be defined | |
+| `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_PASSWORD` | ⚪ | Codeberg password or personal access token | `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | `DD_REGISTRY_CODEBERG_{REGISTRY_NAME}_LOGIN/PASSWORD` must not be defined | |
 
 ## Examples
 

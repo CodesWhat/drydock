@@ -44,7 +44,7 @@ curl "http://drydock:3000/api/v1/log/entries?level=error&tail=50"
   {
     "timestamp": 1771243200000,
     "level": "error",
-    "component": "registry:hub",
+    "component": "registry.hub.public",
     "msg": "Rate limit exceeded"
   }
 ]
@@ -97,8 +97,8 @@ Example frame payload:
 {
   "timestamp": 1771262400000,
   "level": "warn",
-  "component": "api:websocket",
-  "msg": "Client disconnected"
+  "component": "api",
+  "msg": "CORS is enabled; review the configured origin"
 }
 ```
 

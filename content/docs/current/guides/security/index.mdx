@@ -58,6 +58,8 @@ services:
 
 The proxy's environment variables (`CONTAINERS=1`, `EVENTS=1`, etc.) are the security boundary — they control which Docker API endpoints are forwarded. Everything else is blocked.
 
+The socket proxy can use infrastructure self-update because its own container mounts the Docker socket directly. The helper uses that target-container bind for the replacement; Drydock itself does not need a direct socket mount for this proxy-based setup.
+
 </Tab>
 <Tab value="sockguard">
 
@@ -103,7 +105,7 @@ For remote Docker APIs that require basic, bearer, or OIDC auth, use HTTPS or mT
 
 ## Require authentication
 
-Since v1.4.0, authentication is required by default. If you haven't configured it yet, you'll see a setup prompt on first access.
+Since v1.4.0, authentication is required by default. Fresh installs require authentication configuration before access unless anonymous access is explicitly confirmed with `DD_ANONYMOUS_AUTH_CONFIRM=true`. Existing upgrades that were already anonymous remain accessible with a warning until authentication is configured.
 
 <Tabs items={["Basic Auth", "OIDC (SSO)"]}>
 <Tab value="Basic Auth">
@@ -111,7 +113,7 @@ Since v1.4.0, authentication is required by default. If you haven't configured i
 Generate an Argon2id hash for your password:
 
 ```bash
-npx argon2-cli "your-password" --type argon2id
+printf '%s' 'your-password' | argon2 "$(openssl rand -base64 32)" -id -m 16 -t 3 -p 4 -l 64 -e
 ```
 
 Then configure:
@@ -119,7 +121,7 @@ Then configure:
 ```yaml
 environment:
   - DD_AUTH_BASIC_ADMIN_USER=admin
-  - DD_AUTH_BASIC_ADMIN_HASH=$argon2id$v=19$m=65536,t=3,p=4$...
+  - DD_AUTH_BASIC_ADMIN_HASH=$$argon2id$$v=19$$m=65536,t=3,p=4$$...
 ```
 
 </Tab>

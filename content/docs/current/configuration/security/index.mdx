@@ -225,7 +225,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 ```
 
-<Callout type="info">SBOM documents are retrievable per-container via `GET /api/v1/containers/:id/sbom?format=\{format\}` where `format` is one of `spdx-json` or `cyclonedx-json`.</Callout>
+<Callout type="info">SBOM documents are retrievable per-container via `GET /api/v1/containers/:id/sbom?format={format}` where `format` is one of `spdx-json` or `cyclonedx-json`.</Callout>
 
 SBOM bodies are stored off-heap at `/store/sbom/<digest-key>/<document-sha>/<format>.json`; LokiJS container rows retain only validated checksum/size references. Identical canonical documents for the same image digest share a blob, while divergent regenerations remain independently readable. On startup, Drydock atomically migrates legacy inline current/update SBOM records and preserves the original row for retry if any write fails.
 
