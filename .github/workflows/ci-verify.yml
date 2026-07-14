@@ -994,6 +994,11 @@ jobs:
     needs: [build, changes]
     permissions:
       contents: read
+    env:
+      # Use the same immutable browser runtime as the dedicated Playwright
+      # workflow. This avoids stale cache restores and runtime CDN downloads.
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
     steps:
       - name: Harden Runner
@@ -1012,29 +1017,30 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
-      # Cache Playwright's browser binary directory across runs.
-      # `npm ci` in e2e/ triggers a 167 MiB @playwright/browser-chromium
-      # postinstall fetch from cdn.playwright.dev; the CDN has repeatedly
-      # throttled the download to ~30 min, which used to time the job out.
-      # Per-ref key mirrors the cache scoping in quality-mutation-monthly.yml
-      # so an untrusted PR can't poison main's chromium binary.
-      - name: Cache Playwright browsers
-        # zizmor: ignore[cache-poisoning]
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ github.ref_name }}-${{ hashFiles('e2e/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-${{ github.ref_name }}-
-            ${{ runner.os }}-playwright-
+      - name: Verify Playwright image matches package
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Install e2e dependencies
+          package_version="$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")"
+          if [[ ! "$PLAYWRIGHT_IMAGE" =~ :v([0-9]+\.[0-9]+\.[0-9]+)-noble(@sha256:[0-9a-f]{64})?$ ]]; then
+            echo "::error title=Invalid Playwright image tag::Expected $PLAYWRIGHT_IMAGE to use :v<major>.<minor>.<patch>-noble optionally pinned with @sha256:<digest>."
+            exit 1
+          fi
+
+          image_version="${BASH_REMATCH[1]}"
+          if [[ "$package_version" != "$image_version" ]]; then
+            echo "::error title=Playwright version mismatch::PLAYWRIGHT_IMAGE uses $image_version, but e2e/package.json pins @playwright/test to $package_version."
+            exit 1
+          fi
+
+      - name: Pull Playwright container
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 15
+          timeout_minutes: 5
           max_attempts: 3
           retry_wait_seconds: 30
-          command: cd e2e && npm ci
+          command: docker pull "$PLAYWRIGHT_IMAGE"
 
       - name: Setup test containers
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -1054,10 +1060,26 @@ jobs:
         # @requires_gitlab scenarios here to match, otherwise they fail looking
         # for a missing container. The token-gated local path that runs them
         # lives in scripts/run-e2e-tests.sh.
-        run: npm run cucumber -- --tags "not @requires_gitlab" --retry 1
-        working-directory: e2e
+        # The pinned image supplies the browser revision expected by
+        # @playwright/test. Host networking keeps localhost API/browser access
+        # identical to the former host-side invocation.
         env:
           DD_PORT: ${{ steps.drydock.outputs.dd_port }}
+        run: |
+          docker run --rm \
+            --init \
+            --network host \
+            --ipc=host \
+            --user 1001:1001 \
+            -e CI=true \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD \
+            -e DD_PORT \
+            -v "${{ github.workspace }}:/work" \
+            -w /work/e2e \
+            "$PLAYWRIGHT_IMAGE" \
+            sh -c 'npm ci --no-audit --no-fund && npm run cucumber -- --tags "not @requires_gitlab" --retry 1'
 
       - name: Show drydock logs on failure
         if: failure()
