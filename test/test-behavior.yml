@@ -65,12 +65,12 @@ scenarios:
     weight: 15
     flow:
       - get:
-          url: "/api/containers"
+          url: "/api/v1/containers"
           expect:
             - statusCode: 200
       - think: 1
       - get:
-          url: "/api/containers/__missing__/logs?tail=100"
+          url: "/api/v1/containers/__missing__/logs?tail=100"
           expect:
             - statusCode: 404
 
@@ -78,14 +78,14 @@ scenarios:
     weight: 20
     flow:
       - post:
-          url: "/api/containers/watch"
+          url: "/api/v1/containers/watch"
           expect:
             - statusCode: 200
           capture:
-            - json: "$[0].id"
+            - json: "$.data[0].id"
               as: "containerId"
       - get:
-          url: "/api/containers/{{ containerId }}/logs?tail=100&since=0&timestamps=false"
+          url: "/api/v1/containers/{{ containerId }}/logs?tail=100&since=0&timestamps=false"
           expect:
             - statusCode: 200
 
@@ -93,12 +93,12 @@ scenarios:
     weight: 15
     flow:
       - get:
-          url: "/api/agents"
+          url: "/api/v1/agents"
           expect:
             - statusCode: 200
       - think: 1
       - get:
-          url: "/api/agents/__missing__/log/entries?tail=100"
+          url: "/api/v1/agents/__missing__/log/entries?tail=100"
           expect:
             - statusCode: 404
 
@@ -111,27 +111,27 @@ scenarios:
     weight: 10
     flow:
       - post:
-          url: "/api/containers/watch"
+          url: "/api/v1/containers/watch"
           expect:
             - statusCode: 200
           capture:
-            - json: "$[0].id"
+            - json: "$.data[0].id"
               as: "containerId"
       - patch:
-          url: "/api/containers/{{ containerId }}/update-policy"
+          url: "/api/v1/containers/{{ containerId }}/update-policy"
           json:
             action: "clear"
           expect:
             - statusCode: 200
       - get:
-          url: "/api/notifications"
+          url: "/api/v1/notifications"
           expect:
             - statusCode: 200
           capture:
-            - json: "$[0].id"
+            - json: "$.data[0].id"
               as: "notificationRuleId"
-      - put:
-          url: "/api/notifications/{{ notificationRuleId }}"
+      - patch:
+          url: "/api/v1/notifications/{{ notificationRuleId }}"
           json:
             enabled: true
           expect:
