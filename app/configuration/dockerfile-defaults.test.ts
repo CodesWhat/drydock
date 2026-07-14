@@ -13,7 +13,7 @@ describe('Dockerfile release defaults', () => {
       /^FROM node:[^\n]+ AS base\n(?<content>[\s\S]*?)(?=^FROM )/mu,
     )?.groups?.content;
 
-    expect(baseStage).toMatch(/^\s+tzdata=2026c-r0\s+\\$/mu);
+    expect(baseStage).toMatch(/^[ \t]+tzdata=2026c-r0[ \t]+\\$/mu);
     expect(baseStage).not.toContain('tzdata=2026b-r0');
   });
 });
