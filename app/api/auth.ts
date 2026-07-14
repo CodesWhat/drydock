@@ -412,6 +412,14 @@ export function init(app: Application): void {
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
+    // Authenticated UI navigations re-read the current user. Keep that safe
+    // probe from exhausting the public discovery and login budget for clients
+    // behind the same address; every other auth route remains capped.
+    skip: (req: Request) =>
+      req.method === 'GET' &&
+      req.path === '/user' &&
+      typeof req.isAuthenticated === 'function' &&
+      req.isAuthenticated(),
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },

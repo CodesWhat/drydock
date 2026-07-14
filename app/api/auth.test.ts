@@ -3457,6 +3457,27 @@ describe('Auth Router', () => {
       );
     });
 
+    test('authLimiter preserves the public auth budget for authenticated sessions', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const limiterOptions = mockRateLimit.mock.calls[0][0];
+      expect(limiterOptions.skip).toEqual(expect.any(Function));
+      const authenticated = vi.fn(() => true);
+      expect(
+        limiterOptions.skip({ method: 'GET', path: '/user', isAuthenticated: authenticated }),
+      ).toBe(true);
+
+      for (const request of [
+        { method: 'GET', path: '/api/v1/auth/status', isAuthenticated: authenticated },
+        { method: 'POST', path: '/login', isAuthenticated: authenticated },
+        { method: 'GET', path: '/user', isAuthenticated: vi.fn(() => false) },
+        {},
+      ]) {
+        expect(limiterOptions.skip(request)).toBe(false);
+      }
+    });
+
     test('authLimiter standardHeaders is true', () => {
       // Line 379: BooleanLiteral false mutant
       const app = createApp();
