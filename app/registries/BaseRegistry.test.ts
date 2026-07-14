@@ -1485,6 +1485,58 @@ test('getImageManifestDigest should deduplicate concurrent lookups within a poll
   expect(first).toEqual(second);
 });
 
+test('stale manifest completion preserves the newer in-flight poll lookup', async () => {
+  type Manifest = { digest: string; created: string; version: number };
+  let resolveStale: (manifest: Manifest) => void = () => {};
+  let resolveFresh: (manifest: Manifest) => void = () => {};
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStale = resolve;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFresh = resolve;
+        }),
+    );
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'https://registry-1.docker.io/v2' },
+  };
+
+  baseRegistry.startDigestCachePollCycle();
+  const staleLookup = baseRegistry.getImageManifestDigest(image);
+  baseRegistry.startDigestCachePollCycle();
+  const freshLookup = baseRegistry.getImageManifestDigest(image);
+
+  resolveStale({
+    digest: 'sha256:stale',
+    created: '2026-03-10T12:00:00.000Z',
+    version: 2,
+  });
+  await expect(staleLookup).resolves.toMatchObject({ digest: 'sha256:stale' });
+
+  const joinedFreshLookup = baseRegistry.getImageManifestDigest(image);
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+
+  resolveFresh({
+    digest: 'sha256:fresh',
+    created: '2026-03-10T12:01:00.000Z',
+    version: 2,
+  });
+  await expect(Promise.all([freshLookup, joinedFreshLookup])).resolves.toEqual([
+    expect.objectContaining({ digest: 'sha256:fresh' }),
+    expect.objectContaining({ digest: 'sha256:fresh' }),
+  ]);
+});
+
 test('getImageManifestDigest should bypass the cache when no poll cycle is active', async () => {
   const superGetImageManifestDigestSpy = vi
     .spyOn(Registry.prototype, 'getImageManifestDigest')

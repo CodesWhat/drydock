@@ -399,29 +399,14 @@ export function createSbomStorage(options: CreateSbomStorageOptions): SbomStorag
     const subjectPath = path.join(sbomRoot, keyMatch[1]);
     await assertExistingDirectory(subjectPath);
     await assertExistingDirectory(path.dirname(targetPath));
-    let targetStats: fs.Stats;
-    try {
-      targetStats = await fs.promises.lstat(targetPath);
-    } catch (error: unknown) {
-      /* v8 ignore next 3 -- Only ENOENT is practically produced by this lstat. */
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new Error('SBOM document not found');
-      }
-      /* v8 ignore next -- Defensive propagation for unexpected filesystem failures. */
-      throw error;
-    }
-    if (targetStats.isSymbolicLink()) {
-      throw new Error('SBOM storage path must not be a symbolic link');
-    }
-    if (!targetStats.isFile()) {
-      throw new Error('SBOM document must be a regular file');
-    }
 
     let handle: fs.promises.FileHandle | undefined;
     try {
-      handle = await fs.promises.open(targetPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+      handle = await fs.promises.open(
+        targetPath,
+        fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+      );
       const openedStats = await handle.stat();
-      /* v8 ignore next 3 -- A hostile post-open file-type swap is checked defensively. */
       if (!openedStats.isFile()) {
         throw new Error('SBOM document must be a regular file');
       }
@@ -443,7 +428,11 @@ export function createSbomStorage(options: CreateSbomStorageOptions): SbomStorag
         throw new Error('Invalid SBOM JSON document');
       }
     } catch (error: unknown) {
-      /* v8 ignore next 3 -- lstat rejects symlinks first; O_NOFOLLOW closes the race. */
+      /* v8 ignore next 3 -- Missing files are covered by the public read contract. */
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error('SBOM document not found');
+      }
+      /* v8 ignore next 3 -- O_NOFOLLOW rejects final-component symlinks. */
       if ((error as NodeJS.ErrnoException).code === 'ELOOP') {
         throw new Error('SBOM storage path must not be a symbolic link');
       }

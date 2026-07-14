@@ -26,7 +26,7 @@ test("star history keeps theme-aware image loading inside a narrow client compon
   assert.doesNotMatch(starHistorySource, /^"use client"/mu);
   assert.match(starHistorySource, /import \{ StarHistoryChart \}/u);
   assert.match(starHistorySource, /<StarHistoryChart/u);
-  assert.doesNotMatch(starHistorySource, /api\.star-history\.com/u);
+  assert.equal(starHistorySource.indexOf("api.star-history.com"), -1);
 });
 
 test("star history lazily loads only the active theme chart", () => {

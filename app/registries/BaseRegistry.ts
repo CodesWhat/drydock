@@ -229,7 +229,7 @@ class BaseRegistry<
     try {
       return [...(await tagLookup)];
     } finally {
-      if (this.tagListCacheInFlight.get(cacheKey) === tagLookup) {
+      if (Object.is(this.tagListCacheInFlight.get(cacheKey), tagLookup)) {
         this.tagListCacheInFlight.delete(cacheKey);
       }
     }
@@ -510,7 +510,7 @@ class BaseRegistry<
     try {
       return await manifestLookup;
     } finally {
-      if (this.digestManifestCacheInFlight.get(cacheKey) === manifestLookup) {
+      if (Object.is(this.digestManifestCacheInFlight.get(cacheKey), manifestLookup)) {
         this.digestManifestCacheInFlight.delete(cacheKey);
       }
     }
