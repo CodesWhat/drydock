@@ -1870,9 +1870,11 @@ test('persisted templates override one notification rule and trigger without cha
   notificationStore.getNotificationTemplate.mockImplementation((ruleId, triggerId, field) => {
     if (ruleId === 'update-applied' && triggerId === 'slack.ops') {
       return {
-        simpleTitle: 'Deployed ${container.name}',
-        simpleBody: '${container.updateKind.localValue} -> ${container.updateKind.remoteValue}',
-        batchTitle: '${containers.length} deployments',
+        simpleTitle: `Deployed ${buildLiteralTemplateExpression('container.name')}`,
+        simpleBody: `${buildLiteralTemplateExpression(
+          'container.updateKind.localValue',
+        )} -> ${buildLiteralTemplateExpression('container.updateKind.remoteValue')}`,
+        batchTitle: `${buildLiteralTemplateExpression('containers.length')} deployments`,
       }[field];
     }
     return undefined;

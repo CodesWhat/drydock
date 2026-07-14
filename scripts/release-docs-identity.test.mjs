@@ -256,11 +256,11 @@ test('current and archived provider setup remains copy-paste safe', () => {
     assert.match(hub, /if your login is `johndoe`/u);
     assert.match(hub, /am9obmRvZTpleGFtcGxlLXRva2Vu/u);
     assert.doesNotMatch(hub, /[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}/iu);
-    assert.doesNotMatch(hub, /base64encode\.org/u);
+    assert.equal(hub.indexOf('base64encode.org'), -1);
     assert.match(hub, /Base64 is encoding, not encryption/u);
     assert.match(hub, /printf '%s' 'johndoe:example-token' \| base64/u);
     assert.doesNotMatch(custom, /localhost:500/u);
-    assert.match(custom, /https:\/\/registry\.example\.com/u);
+    assert.notEqual(custom.indexOf('https://registry.example.com'), -1);
     assert.match(ocir, /bare `ocir\.io` hostname and subdomains such as `iad\.ocir\.io`/u);
     assert.match(ocir, /tenancy-namespace\/user@example\.com/u);
     assert.match(ocir, /tenancy-namespace\/identity-domain\/user@example\.com/u);
