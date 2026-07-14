@@ -29,6 +29,7 @@ interface WorkflowJobStep {
 interface WorkflowDefinition {
   env?: Record<string, string>;
   jobs?: Record<string, WorkflowJob>;
+  on?: Record<string, unknown>;
 }
 
 interface LefthookCommand {
@@ -106,6 +107,39 @@ test('workflow tests are wired outside the app coverage suite', () => {
   });
 });
 
+test('ci-verify can dispatch the complete release-candidate matrix manually', () => {
+  const workflow = loadWorkflow();
+
+  expect(workflow.on).toHaveProperty('workflow_dispatch');
+  expect(getWorkflowStep('changes', 'Filter paths')?.with?.base).toContain(
+    "github.event_name == 'workflow_dispatch'",
+  );
+
+  for (const jobId of [
+    'codeql',
+    'fuzz',
+    'web',
+    'dast-zap-baseline',
+    'e2e',
+    'load-test-ci',
+    'load-test-behavior',
+  ]) {
+    expect(workflow.jobs?.[jobId]?.if).toContain("github.event_name == 'workflow_dispatch'");
+  }
+
+  for (const jobId of ['zizmor', 'changes', 'lint', 'test', 'build']) {
+    expect(workflow.jobs?.[jobId]?.if).toBeUndefined();
+  }
+
+  expect(workflow.jobs?.codeql?.needs).toStrictEqual(['zizmor']);
+  expect(workflow.jobs?.fuzz?.needs).toStrictEqual(['zizmor']);
+  expect(workflow.jobs?.web?.needs).toStrictEqual(['changes']);
+  expect(workflow.jobs?.['dast-zap-baseline']?.needs).toStrictEqual(['build']);
+  expect(workflow.jobs?.e2e?.needs).toStrictEqual(['build', 'changes']);
+  expect(workflow.jobs?.['load-test-ci']?.needs).toStrictEqual(['build']);
+  expect(workflow.jobs?.['load-test-behavior']?.needs).toStrictEqual(['build']);
+});
+
 test('ci-verify runs Cucumber in the pinned Playwright browser image', () => {
   const workflow = loadWorkflow();
   const playwrightImage =
@@ -171,18 +205,18 @@ test('DAST auth steps mask derived basic auth credentials', () => {
 
 test('load-test workflow runs load profiles in parallel jobs', () => {
   const workflow = loadWorkflow();
-  const pushOnlyCondition =
-    "github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))";
+  const releaseMatrixCondition =
+    "github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))";
 
   expect(workflow.jobs?.['load-test-ci']).toMatchObject({
     name: '⚡ Load Test: CI',
-    if: pushOnlyCondition,
+    if: releaseMatrixCondition,
     needs: ['build'],
     'timeout-minutes': expect.any(Number),
   });
   expect(workflow.jobs?.['load-test-behavior']).toMatchObject({
     name: '⚡ Load Test: Behavior + Stress (Advisory)',
-    if: pushOnlyCondition,
+    if: releaseMatrixCondition,
     needs: ['build'],
     'timeout-minutes': expect.any(Number),
   });
