@@ -38,7 +38,7 @@ RUN apk add --no-cache \
     && mkdir /store && chown node:node /store
 
 # Build stage for healthcheck binary (~65KB static binary)
-FROM alpine:3.21@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709 AS healthcheck-build
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS healthcheck-build
 RUN apk add --no-cache gcc=14.2.0-r4 musl-dev=1.2.5-r11
 COPY healthcheck.c /src/healthcheck.c
 RUN gcc -Os -static -s -o /bin/healthcheck /src/healthcheck.c
