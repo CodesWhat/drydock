@@ -14,6 +14,7 @@ import { requireSameOriginForMutations } from './csrf.js';
 import * as debugRouter from './debug.js';
 import { sendErrorResponse } from './error-response.js';
 import * as groupRouter from './group.js';
+import { isIconProxyApiPath } from './icons/route.js';
 import * as iconsRouter from './icons.js';
 import * as internalSelfUpdateRouter from './internal-self-update.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
@@ -41,6 +42,13 @@ import * as watcherRouter from './watcher.js';
 import * as webhookRouter from './webhook.js';
 import * as webhooksRouter from './webhooks.js';
 
+function shouldSkipOuterApiRateLimit(req: Request): boolean {
+  const isSafeRead = req.method === 'GET' || req.method === 'HEAD';
+  const isAuthenticated =
+    typeof req.isAuthenticated === 'function' && req.isAuthenticated() === true;
+  return isAuthenticated && isSafeRead && isIconProxyApiPath(req.path);
+}
+
 /**
  * Init the API router.
  * @returns {*|Router}
@@ -55,6 +63,11 @@ export function init(): express.Router {
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1000,
+    // Icon reads have their own stricter limiter in icons.ts. Do not charge
+    // those immutable assets against this outer API budget as well; Playwright
+    // routing and cache-disabled clients otherwise exhaust it while the
+    // dedicated icon limiter is still providing endpoint-specific protection.
+    skip: shouldSkipOuterApiRateLimit,
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },

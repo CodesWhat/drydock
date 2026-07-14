@@ -14,6 +14,7 @@ import {
   sendMissingIconResponse,
   shouldServeImageFallback,
 } from './icons/response.js';
+import { ICON_PROXY_ROUTE_PATH } from './icons/route.js';
 import {
   ICON_PROXY_RATE_LIMIT_MAX,
   ICON_PROXY_RATE_LIMIT_WINDOW_MS,
@@ -138,7 +139,7 @@ export function init() {
       ? { keyGenerator: identityAwareRateLimitKeyGenerator }
       : {}),
   });
-  router.get('/:provider/:slug', iconProxyRateLimiter, getIcon);
+  router.get(ICON_PROXY_ROUTE_PATH, iconProxyRateLimiter, getIcon);
   router.delete('/cache', clearCache);
   return router;
 }
