@@ -11,12 +11,15 @@ interface WorkflowStep {
 
 interface WorkflowJob {
   env?: Record<string, string>;
+  if?: string;
+  needs?: string[];
   steps?: WorkflowStep[];
 }
 
 interface WorkflowDefinition {
   env?: Record<string, string>;
   jobs?: Record<string, WorkflowJob>;
+  on?: Record<string, unknown>;
 }
 
 const workflowPath = fileURLToPath(new URL('../workflows/e2e-playwright.yml', import.meta.url));
@@ -41,4 +44,16 @@ test('Playwright workflow disables browser downloads for host-side npm installs'
       command: 'cd ui && npm ci',
     },
   });
+});
+
+test('Playwright can be dispatched against a frozen release candidate', () => {
+  const workflow = loadWorkflow();
+
+  expect(workflow.on).toHaveProperty('workflow_dispatch');
+  expect(getWorkflowStep('changes', 'Filter paths')?.with?.base).toContain(
+    "github.event_name == 'workflow_dispatch'",
+  );
+  expect(workflow.jobs?.playwright?.if).toContain("github.event_name == 'workflow_dispatch'");
+  expect(workflow.jobs?.changes?.if).toBeUndefined();
+  expect(workflow.jobs?.playwright?.needs).toStrictEqual(['changes']);
 });

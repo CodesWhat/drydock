@@ -17,6 +17,9 @@ run-name: >-
 # Playwright job remains a required status check via branch ruleset.
 
 on:
+  # Release candidates use this trigger to run Playwright against the frozen
+  # branch before the final NAS acceptance starts.
+  workflow_dispatch:
   push:
     # Only `main` — release/** branches reach main via a PR (covered by
     # `pull_request` below). Triggering on `push: release/**` produced a
@@ -67,14 +70,14 @@ jobs:
         id: filter
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
         with:
-          base: ${{ github.event_name == 'push' && github.event.before || '' }}
+          base: ${{ github.event_name == 'push' && github.event.before || github.event_name == 'workflow_dispatch' && 'main' || '' }}
           # Shared with ci-verify.yml so Cucumber and Playwright short-circuit
           # symmetrically on pure docs/changelog edits.
           filters: .github/filters/runtime.yml
 
   playwright:
     name: "🎭 E2E: Playwright"
-    if: needs.changes.outputs.runtime == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35  # UI build + Docker build + QA stack startup + Playwright pull + UI flow tests
     needs: [changes]
