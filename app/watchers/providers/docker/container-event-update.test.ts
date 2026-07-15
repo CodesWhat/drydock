@@ -439,6 +439,82 @@ describe('container event update helpers', () => {
     expect(logInfo).not.toHaveBeenCalledWith(expect.stringContaining('Name changed'));
   });
 
+  test('updateContainerFromInspect ignores drydock transient rollback renames', () => {
+    const container = createMockContainer({
+      name: 'app1',
+      displayName: 'app1',
+      status: 'running',
+    });
+    const updateContainer = vi.fn();
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/app1-old-1752019200000',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+      },
+    );
+
+    expect(container.name).toBe('app1');
+    expect(updateContainer).not.toHaveBeenCalled();
+  });
+
+  test('updateContainerFromInspect propagates a genuine user rename', () => {
+    const container = createMockContainer({
+      name: 'foo',
+      displayName: 'foo',
+      status: 'running',
+    });
+    const updateContainer = vi.fn();
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/bar',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+      },
+    );
+
+    expect(container.name).toBe('bar');
+    expect(updateContainer).toHaveBeenCalledWith(container);
+  });
+
+  test('updateContainerFromInspect preserves a legitimate rollback-shaped stored name', () => {
+    const literalName = 'audit-old-1752019200000';
+    const container = createMockContainer({
+      name: literalName,
+      displayName: literalName,
+      status: 'running',
+    });
+    const updateContainer = vi.fn();
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: `/${literalName}`,
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+      },
+    );
+
+    expect(container.name).toBe(literalName);
+    expect(updateContainer).not.toHaveBeenCalled();
+  });
+
   test('updateContainerFromInspect applies custom display name label', () => {
     const container = createMockContainer({
       displayName: 'old-name',

@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as event from '../event/index.js';
 import { createContainerFixture } from '../test/helpers.js';
+import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
+import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
 import * as container from './container.js';
 
 vi.mock('./migrate');
@@ -4886,5 +4888,55 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     // preceding replacement-delete must not inherit anything
     const later = container.insertContainer(makePolicyFixture({ id: 'policy-once-later' }));
     expect(later.updatePolicy).toBeUndefined();
+  });
+});
+
+describe('rollback rename policy retention regression (#535)', () => {
+  test('preserves updatePolicy through rename poisoning, prune, and replacement insertion', async () => {
+    const updatePolicy = { maturityMode: 'mature' as const, maturityMinAgeDays: 5 };
+    const oldContainer = createContainerFixture({
+      id: 'rename-policy-old',
+      watcher: 'docker',
+      name: 'app1',
+      displayName: 'app1',
+      status: 'running',
+      labels: {},
+      details: { ports: [], volumes: [], env: [] },
+      updatePolicy,
+    });
+    const collection = createFilterableCollection([{ data: oldContainer }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    const liveContainer = container.getContainer('rename-policy-old');
+
+    updateContainerFromInspect(
+      liveContainer as any,
+      {
+        Name: '/app1-old-1752019200000',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer: container.updateContainer,
+      },
+    );
+
+    const staleContainer = container.getContainer('rename-policy-old');
+    const dockerApi = {
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+      }),
+    };
+
+    await pruneOldContainers([], [staleContainer] as any, dockerApi as any);
+    const inserted = container.insertContainer(
+      createContainerFixture({
+        id: 'rename-policy-replacement',
+        watcher: 'docker',
+        name: 'app1',
+      }),
+    );
+
+    expect(inserted.updatePolicy).toEqual(updatePolicy);
   });
 });
