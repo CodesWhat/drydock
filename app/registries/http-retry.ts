@@ -2,6 +2,8 @@
  * Retry helper for HTTP requests that return 429 / 503 responses.
  * Honors Retry-After response headers (seconds or HTTP-date form).
  * Falls back to exponential backoff when no header is present.
+ * Also retries a bounded number of times on response-less transient
+ * network errors (timeouts, connection resets) using exponential backoff.
  */
 
 export interface HttpEnvelope<T> {
@@ -37,6 +39,17 @@ export interface WithRetryOptions {
   logger?: { debug: (msg: string) => void };
   /** Human-readable label for log messages (e.g. "ghcr.io GET /v2/img/tags/list"). */
   requestLabel?: string;
+  /**
+   * Error `code` values on response-less failures that are eligible for
+   * retry (default: ['ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'EAI_AGAIN']).
+   */
+  retryableNetworkErrorCodes?: string[];
+  /**
+   * Maximum retries for response-less network errors (default: 2). Bounded
+   * tighter than HTTP-status retries because each timed-out attempt already
+   * costs the full request timeout.
+   */
+  maxNetworkRetries?: number;
 }
 
 function isAxiosError(err: unknown): err is {
@@ -77,6 +90,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getNetworkErrorCode(err: unknown): string | undefined {
+  if (typeof err === 'object' && err !== null && 'code' in err) {
+    const code = (err as Record<string, unknown>).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
 export async function withRetry<T>(
   request: RetryableHttpRequest<T>,
   options: WithRetryOptions = {},
@@ -90,6 +111,8 @@ export async function withRetry<T>(
     backoffMaxMs = 60_000,
     logger,
     requestLabel = '',
+    retryableNetworkErrorCodes = ['ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET', 'EAI_AGAIN'],
+    maxNetworkRetries = 2,
   } = options;
 
   let lastError: unknown;
@@ -102,8 +125,30 @@ export async function withRetry<T>(
       lastError = err;
 
       if (!isAxiosError(err)) {
-        // Not an HTTP error — don't retry
-        throw err;
+        // No response — a transient network error (timeout, connection
+        // reset) may still be worth a bounded retry.
+        const code = getNetworkErrorCode(err);
+        const isRetryableNetworkError =
+          code !== undefined && retryableNetworkErrorCodes.includes(code);
+
+        if (!isRetryableNetworkError || attempt >= maxNetworkRetries || attempt >= maxRetries) {
+          throw err;
+        }
+
+        // No Retry-After header exists on these — custom override falls
+        // back straight to exponential backoff.
+        const delay = Math.min(
+          retryDelayMs?.(err) ?? Math.min(backoffBaseMs * 2 ** attempt, backoffMaxMs),
+          backoffMaxMs,
+        );
+
+        const label = requestLabel ? `Retrying ${requestLabel}` : 'Retrying request';
+        logger?.debug(
+          `${label} after ${delay}ms (attempt ${attempt + 1}/${Math.min(maxNetworkRetries, maxRetries)}, reason: ${code})`,
+        );
+
+        await sleep(delay);
+        continue;
       }
 
       const status = err.response.status;

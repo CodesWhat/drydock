@@ -1,5 +1,3 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
-
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import {
@@ -93,11 +91,150 @@ function createHelpers(overrides: Record<string, any> = {}) {
   };
 }
 
+function createErroredStoredContainer(
+  digest: { repo?: string; value?: string } = {
+    repo: 'sha256:raw',
+    value: 'sha256:reconciled',
+  },
+) {
+  return {
+    id: 'container-1',
+    name: 'service',
+    displayName: 'service',
+    status: 'running',
+    error: { message: 'timeout of 30000ms exceeded' },
+    details: { ports: [], volumes: [], env: [] },
+    image: {
+      id: 'image-old',
+      name: 'acme/service',
+      registry: { name: 'ghcr', url: 'ghcr.io' },
+      tag: { value: 'latest', semver: false },
+      digest: { ...digest, watch: false },
+      created: '2025-01-01T00:00:00.000Z',
+    },
+    updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' },
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe('docker image details orchestration module', () => {
+  describe('errored-container slow-path rebuild integrity', () => {
+    test('preserves a reconciled digest and user policy overrides when the repo digest is unchanged', async () => {
+      const stored = createErroredStoredContainer();
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['ghcr.io/acme/service@sha256:raw'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.image.digest).toMatchObject({
+        repo: 'sha256:raw',
+        value: 'sha256:reconciled',
+      });
+      expect(result?.updatePolicyOverrides).toEqual({
+        snoozeUntil: '2027-01-01T00:00:00.000Z',
+      });
+      expect(result?.updatePolicyOverrides).not.toBe(stored.updatePolicyOverrides);
+    });
+
+    test('resets the digest value when Docker reports a genuine repo digest change', async () => {
+      const stored = createErroredStoredContainer({
+        repo: 'sha256:old-raw',
+        value: 'sha256:reconciled',
+      });
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.image.digest).toMatchObject({
+        repo: 'sha256:new',
+        value: 'sha256:new',
+      });
+    });
+
+    test('falls back to the repo digest when the stored digest value is undefined', async () => {
+      const stored = createErroredStoredContainer({ repo: 'sha256:new', value: undefined });
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.image.digest).toMatchObject({
+        repo: 'sha256:new',
+        value: 'sha256:new',
+      });
+    });
+
+    test('keeps the digest undefined and marks a rebuilt local image', async () => {
+      const stored = createErroredStoredContainer({
+        repo: undefined,
+        value: 'sha256:stale-reconciled',
+      });
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-local',
+        RepoDigests: [],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.image.digest.value).toBeUndefined();
+      expect(result?.image.isLocalImage).toBe(true);
+    });
+
+    test('uses the repo digest and a fresh override object for a brand-new container', async () => {
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.image.digest).toMatchObject({
+        repo: 'sha256:new',
+        value: 'sha256:new',
+      });
+      expect(result?.updatePolicyOverrides).toEqual({});
+    });
+  });
+
   test.each([
     { inspection: { State: { Health: { Status: 'unhealthy' } } }, expected: 'unhealthy' },
     { inspection: {}, expected: undefined },

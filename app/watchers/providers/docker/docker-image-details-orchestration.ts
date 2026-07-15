@@ -819,7 +819,13 @@ export async function addImageDetailsToContainerOrchestration(
       digest: {
         watch: watchDigest,
         repo: repoDigest,
-        value: repoDigest,
+        // A rebuild of an errored container must not reset the
+        // registry-reconciled digest value; only a genuine repo-digest
+        // change (image re-pulled) may.
+        value:
+          repoDigest !== undefined && repoDigest === containerInStore?.image?.digest?.repo
+            ? (containerInStore.image.digest.value ?? repoDigest)
+            : repoDigest,
       },
       // True when the live image inspect had no RepoDigests (built locally or
       // `docker load`ed) — lets findNewVersion skip a registry lookup that
@@ -855,6 +861,15 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
+  // A rebuild of an errored container must not discard user-set policy
+  // overrides (snoozes, skipped tags) stored on the existing doc —
+  // applyDockerDeclarativeUpdatePolicy would otherwise stamp `{}` and the
+  // store merge keeps whatever key the incoming doc carries.
+  if (containerInStore?.updatePolicyOverrides !== undefined) {
+    containerToReturn.updatePolicyOverrides = structuredClone(
+      containerInStore.updatePolicyOverrides,
+    );
+  }
   applyDockerDeclarativeUpdatePolicy(containerToReturn, containerLabels, watcher.configuration, {
     logger: watcher.log,
     containerName: dockerContainerName,
