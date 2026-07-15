@@ -28,7 +28,7 @@ The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oi
 **OIDC configuration requirements:**
 
 - **`DD_PUBLIC_URL` is required** — Without it, the OIDC provider will fail to register at startup and the login page will show "No authentication methods configured". Check startup logs for the exact error.
-- **HTTP discovery is deprecated** — `http://` OIDC discovery URLs will be removed in v1.6.0. When the discovery URL uses `http:`, drydock passes `allowInsecureRequests` to the OIDC client. Migrate your IdP to HTTPS before upgrading.
+- **HTTPS discovery is required** — `http://` OIDC discovery URLs are rejected as of v1.6. Migrate your IdP to HTTPS; `INSECURE` only relaxes certificate verification for HTTPS and does not re-enable HTTP.
 - **`INSECURE` is for dev only** — `DD_AUTH_OIDC_{auth_name}_INSECURE=true` disables TLS certificate verification for OIDC HTTPS calls (discovery, token, userinfo, JWKS). Use only for local/dev troubleshooting.
 </Callout>
 
@@ -112,6 +112,7 @@ docker run \
   ...
   codeswhat/drydock
 ```
+
 </Tab>
 </Tabs>
 
@@ -155,6 +156,7 @@ docker run \
   ...
   codeswhat/drydock
 ```
+
 </Tab>
 </Tabs>
 
@@ -197,7 +199,7 @@ services:
       - DD_AUTH_OIDC_AUTHENTIK_CLIENTID=<paste the Client ID from authentik drydock_oidc provider>
       - DD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET=<paste the Client Secret from authentik drydock_oidc provider>
       - DD_AUTH_OIDC_AUTHENTIK_DISCOVERY=<authentik_url>/application/o/<authentik_application_name>/.well-known/openid-configuration
-      - DD_AUTH_OIDC_AUTHENTIK_REDIRECT=true # optional (to skip internal login page)
+      # - DD_AUTH_OIDC_AUTHENTIK_REDIRECT=true # optional (to skip internal login page)
 ```
 
 </Tab>
@@ -208,10 +210,16 @@ docker run \
   -e DD_AUTH_OIDC_AUTHENTIK_CLIENTID="<paste the Client ID from authentik drydock_oidc provider>" \
   -e DD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET="<paste the Client Secret from authentik drydock_oidc provider>" \
   -e DD_AUTH_OIDC_AUTHENTIK_DISCOVERY="<authentik_url>/application/o/<authentik_application_name>/.well-known/openid-configuration" \
-  -e DD_AUTH_OIDC_AUTHENTIK_REDIRECT=true # optional (to skip internal login page) \
   ...
   codeswhat/drydock
 ```
+
+Opt in to direct Authentik redirect only when you intentionally want to skip the internal login page. Add this option before the `...` line in the Docker command above:
+
+```text
+-e DD_AUTH_OIDC_AUTHENTIK_REDIRECT=true \
+```
+
 </Tab>
 </Tabs>
 
@@ -252,10 +260,10 @@ docker run \
   codeswhat/drydock
 ```
 
-Optional (only when a real IdP logout endpoint exists):
+Opt in to a real Dex logout endpoint only when your IdP or auth proxy provides one. Add this option before the `...` line in the Docker command above:
 
-```bash
--e DD_AUTH_OIDC_DEX_LOGOUTURL="https://<your_logout_endpoint>"
+```text
+-e DD_AUTH_OIDC_DEX_LOGOUTURL="https://<your_logout_endpoint>" \
 ```
 
 </Tab>

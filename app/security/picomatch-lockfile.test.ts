@@ -24,7 +24,7 @@ describe('app package lockfile security', () => {
       overrides?: Record<string, string>;
     };
 
-    expect(packageJson.overrides?.picomatch).toBe('4.0.4');
+    expect(packageJson.overrides?.picomatch).toBe('4.0.5');
   });
 
   test('package lockfile does not resolve vulnerable picomatch versions', () => {

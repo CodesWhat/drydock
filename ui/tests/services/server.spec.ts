@@ -1,4 +1,4 @@
-import { getSecurityRuntime, getServer } from '@/services/server';
+import { getSecurityRuntime, getServer, manageSecurityAsset } from '@/services/server';
 
 global.fetch = vi.fn();
 
@@ -78,6 +78,29 @@ describe('Server Service', () => {
 
     await expect(getSecurityRuntime()).rejects.toThrow(
       'Failed to get security runtime status: Internal Server Error',
+    );
+  });
+
+  it('runs a scanner asset lifecycle operation', async () => {
+    const payload = { provider: 'grype', state: 'ready' };
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => payload } as any);
+
+    await expect(manageSecurityAsset('grype', 'warm')).resolves.toEqual(payload);
+    expect(fetch).toHaveBeenCalledWith('/api/v1/server/security/assets/grype/warm', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  });
+
+  it('reports scanner asset lifecycle failures', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      statusText: 'Service Unavailable',
+      json: vi.fn().mockResolvedValue({ error: 'pull denied' }),
+    } as any);
+
+    await expect(manageSecurityAsset('trivy', 'pull')).rejects.toThrow(
+      'Scanner asset operation failed: Service Unavailable (pull denied)',
     );
   });
 });

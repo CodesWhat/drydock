@@ -3,8 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIconButton from '@/components/AppIconButton.vue';
 import AppStatusIndicator from '@/components/AppStatusIndicator.vue';
-import ProjectLink from '@/components/containers/ProjectLink.vue';
-import ReleaseNotesLink from '@/components/containers/ReleaseNotesLink.vue';
+import ContainerLinkActions from '@/components/containers/ContainerLinkActions.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import type { DashboardUpdateSequenceEntry, RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
@@ -32,19 +31,39 @@ const tableColumns = computed(() =>
           minSize: 120,
           maxSize: 220,
         },
-        { key: 'type', label: '', sortable: false, size: 64, minSize: 56, maxSize: 82 },
+        {
+          key: 'type',
+          label: t('dashboardView.recentUpdates.columns.type'),
+          sortable: false,
+          size: 64,
+          minSize: 56,
+          maxSize: 82,
+        },
         {
           key: 'actions',
-          label: '',
+          label: t('dashboardView.recentUpdates.columns.actions'),
           sortable: false,
           align: 'text-center',
-          size: 72,
-          minSize: 64,
-          maxSize: 90,
+          size: 220,
+          minSize: 180,
+          maxSize: 260,
         },
       ]
     : [
-        { key: 'icon', label: '', icon: true, size: 42, minSize: 42, maxSize: 42 },
+        {
+          key: 'icon',
+          label: '',
+          icon: true,
+          // 52 = 28px ContainerIcon (rendered in the `cell-icon` slot below via
+          // <ContainerIcon :icon="row.icon" :size="28" />) + 20px pl-5 padding DataTable
+          // hardcodes for icon columns + 4px breathing room. Was 42 until the icon cell gained
+          // `overflow-hidden` (commit 9b017a99): a 42-20=22px content box clipped the 28px icon
+          // ~6px. Same formula as the Containers icon column fix in useColumnVisibility.ts
+          // (56 = 32px icon + 20px + 4px) — this icon is 28px, not 32px, so the total is smaller.
+          size: 52,
+          minSize: 52,
+          maxSize: 52,
+        },
         {
           key: 'container',
           label: t('dashboardView.recentUpdates.columns.container'),
@@ -76,9 +95,9 @@ const tableColumns = computed(() =>
           label: t('dashboardView.recentUpdates.columns.actions'),
           sortable: false,
           align: 'text-center',
-          size: 90,
-          minSize: 76,
-          maxSize: 120,
+          size: 220,
+          minSize: 180,
+          maxSize: 260,
         },
       ],
 );
@@ -95,6 +114,7 @@ interface Props {
   getUpdateKindMutedColor: (kind: UpdateKind | null) => string;
   pendingUpdatesCount: number;
   recentUpdates: RecentUpdateRow[];
+  updatesAllowed: boolean;
 }
 
 const props = defineProps<Props>();
@@ -264,7 +284,7 @@ function updateKindInitial(kind?: string): string {
       </div>
       <div class="flex items-center gap-3">
         <AppButton
-          v-if="pendingUpdatesCount > 0"
+          v-if="updatesAllowed && pendingUpdatesCount > 0"
           data-test="dashboard-update-all-btn"
           size="compact"
           :variant="isDashboardBulkUpdateLocked ? 'muted-subtle' : 'success'"
@@ -349,21 +369,6 @@ function updateKindInitial(kind?: string): string {
                 <div v-if="row.registryError" class="text-2xs mt-0.5 truncate" style="color: var(--dd-danger);">
                   {{ row.registryError }}
                 </div>
-                <ReleaseNotesLink
-                  v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
-                  :release-notes="row.releaseNotes"
-                  :current-release-notes="row.currentReleaseNotes"
-                  :release-link="row.releaseLink"
-                  :container-id="row.id"
-                  :from-tag="row.oldVer"
-                  :to-tag="row.newVer"
-                  icon-only
-                />
-                <ProjectLink
-                  v-if="row.sourceRepo"
-                  :source-repo="row.sourceRepo"
-                  icon-only
-                />
               </div>
             </div>
           </template>
@@ -416,40 +421,63 @@ function updateKindInitial(kind?: string): string {
           </template>
 
           <template #cell-actions="{ row }">
-            <div class="flex justify-center">
-            <span
-              v-if="isRowUpdating(row)"
-              class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted"
-              v-tooltip.top="getRowUpdateLabel(row)">
-              <AppIcon name="spinner" :size="14" class="dd-spin" />
-            </span>
-            <span
-              v-else-if="isRowQueued(row)"
-              class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted"
-              v-tooltip.top="getRowUpdateLabel(row)">
-              <AppIcon name="clock" :size="14" />
-            </span>
-            <span
-              v-else-if="row.blocked"
-              class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted opacity-60 cursor-not-allowed"
-              v-tooltip.top="t('dashboardView.recentUpdates.securityBlocked')">
-              <AppIcon name="lock" :size="14" />
-            </span>
-            <AppIconButton
-              v-else-if="row.status === 'pending'"
-              icon="cloud-download"
-              size="toolbar"
-              variant="plain"
-              data-test="dashboard-update-btn"
-              class="dd-rounded-sm transition-colors"
-              :class="dashboardUpdateInProgress === row.id
-                ? 'dd-text-muted opacity-50 cursor-not-allowed'
-                : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
-              :disabled="dashboardUpdateInProgress === row.id"
-              :loading="dashboardUpdateInProgress === row.id"
-              :tooltip="t('dashboardView.recentUpdates.updateContainer')"
-              :aria-label="t('dashboardView.recentUpdates.updateContainer')"
-              @click.stop="handleConfirmUpdate(row)" />
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <div
+                v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink || row.sourceRepo || row.registry || row.registryName || row.registryUrl"
+                class="shrink-0"
+                data-test="dashboard-resource-actions">
+                <ContainerLinkActions
+                  :source-repo="row.sourceRepo"
+                  :release-notes="row.releaseNotes"
+                  :current-release-notes="row.currentReleaseNotes"
+                  :release-link="row.releaseLink"
+                  :container-id="row.id"
+                  :from-tag="row.oldVer"
+                  :to-tag="row.newVer"
+                  :registry="row.registry"
+                  :registry-name="row.registryName"
+                  :registry-url="row.registryUrl"
+                  icon-size="sm" />
+              </div>
+              <div class="flex items-center justify-center shrink-0" data-test="dashboard-lifecycle-actions">
+                <span
+                  v-if="isRowUpdating(row)"
+                  class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted"
+                  v-tooltip.top="getRowUpdateLabel(row)">
+                  <AppIcon name="spinner" :size="14" class="dd-spin" />
+                </span>
+                <span
+                  v-else-if="isRowQueued(row)"
+                  class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted"
+                  v-tooltip.top="getRowUpdateLabel(row)">
+                  <AppIcon name="clock" :size="14" />
+                </span>
+                <span
+                  v-else-if="row.blocked"
+                  class="w-7 h-7 dd-rounded-sm flex items-center justify-center dd-text-muted opacity-60 cursor-not-allowed"
+                  v-tooltip.top="t('dashboardView.recentUpdates.securityBlocked')">
+                  <AppIcon name="lock" :size="14" />
+                </span>
+                <AppIconButton
+                  v-else-if="updatesAllowed && (row.status === 'pending' || row.status === 'maturity-blocked')"
+                  icon="cloud-download"
+                  size="toolbar"
+                  :variant="row.status === 'maturity-blocked' ? 'warning' : 'plain'"
+                  data-test="dashboard-update-btn"
+                  class="dd-rounded-sm transition-colors"
+                  :class="
+                    dashboardUpdateInProgress === row.id
+                      ? 'dd-text-muted opacity-50 cursor-not-allowed'
+                      : row.status === 'maturity-blocked'
+                        ? 'dd-text-warning hover:dd-bg-elevated'
+                        : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'
+                  "
+                  :disabled="dashboardUpdateInProgress === row.id"
+                  :loading="dashboardUpdateInProgress === row.id"
+                  :tooltip="t('dashboardView.recentUpdates.updateContainer')"
+                  :aria-label="t('dashboardView.recentUpdates.updateContainer')"
+                  @click.stop="handleConfirmUpdate(row)" />
+              </div>
             </div>
           </template>
 

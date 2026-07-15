@@ -13,6 +13,7 @@ import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailP
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
 import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
 import { useToast } from '../composables/useToast';
+import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
@@ -62,6 +63,7 @@ const {
   reconcileHoldsAgainstContainers,
 } = useOperationDisplayHold();
 const toast = useToast();
+const { updateMode } = useUpdateMode();
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   const idMap: Record<string, string> = {};
@@ -111,6 +113,22 @@ function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
 
   return { idMap, metaMap };
 }
+
+function updatePolicyMetadataFingerprint(apiContainers: Record<string, unknown>[]): string {
+  return JSON.stringify(
+    apiContainers.map((container) => ({
+      id: container.id,
+      name: container.name,
+      displayName: container.displayName,
+      updatePolicy: container.updatePolicy,
+      updatePolicyDeclarative: container.updatePolicyDeclarative,
+      updatePolicyOverrides: container.updatePolicyOverrides,
+      updatePolicySources: container.updatePolicySources,
+    })),
+  );
+}
+
+let committedUpdatePolicyMetadataFingerprint = '';
 
 /**
  * Produce a stable fingerprint string for a container list so that
@@ -233,22 +251,30 @@ async function loadContainers() {
     const apiContainers = await getAllContainers();
     const mappedRaw = mapApiContainers(apiContainers, t);
     const mapped = preserveTransientUiFields(containers.value, mappedRaw);
+    const nextPolicyMetadataFingerprint = updatePolicyMetadataFingerprint(
+      apiContainers as Record<string, unknown>[],
+    );
+    const policyMetadataChanged =
+      nextPolicyMetadataFingerprint !== committedUpdatePolicyMetadataFingerprint;
+    const listChanged =
+      containers.value.length !== mapped.length ||
+      containerListFingerprint(mapped) !== containerListFingerprint(containers.value);
     // Skip reactive assignment (and downstream chain re-eval) when incoming
     // data is bit-for-bit identical to the current list. Gate the lookup map
     // reassignment on the same guard so unchanged reloads don't churn
     // containerIdMap/containerMetaMap reactivity either.
-    if (
-      containers.value.length !== mapped.length ||
-      containerListFingerprint(mapped) !== containerListFingerprint(containers.value)
-    ) {
+    if (listChanged) {
       containers.value = mapped;
       refreshServerNames(mapped);
+    }
+    if (listChanged || policyMetadataChanged) {
       const { idMap, metaMap } = buildContainerLookupMaps(
         apiContainers as Record<string, unknown>[],
       );
       containerIdMap.value = idMap;
       containerMetaMap.value = metaMap;
     }
+    committedUpdatePolicyMetadataFingerprint = nextPolicyMetadataFingerprint;
     reconcileHoldsAgainstContainers(containers.value);
     if (groupByStack.value) {
       await loadGroups();
@@ -445,6 +471,7 @@ const {
   previewLoading,
   removeSkipDigestSelected,
   removeSkipTagSelected,
+  revertPolicySelected,
   rollbackError,
   rollbackInProgress,
   rollbackMessage,
@@ -457,6 +484,8 @@ const {
   selectedHasMaturityPolicy,
   selectedMaturityMinAgeDays,
   selectedMaturityMode,
+  selectedPolicyOverriddenFields,
+  selectedPolicyOverrideFields,
   selectedSkipDigests,
   selectedSkipTags,
   selectedSnoozeUntil,
@@ -491,9 +520,14 @@ const {
   loadContainers,
   selectedContainer,
   selectedContainerId,
+  updateMode,
 });
 
 const containerViewMode = useViewMode('containers');
+// Set by the DataTable's measured-width reflow (< 640px); hides the table/cards toggle and
+// keeps the sort control in the toolbar when the width forces cards.
+const containerCardReflowForced = ref(false);
+
 const tableActionStyle = usePreference(
   () => preferences.containers.tableActions,
   (value) => {
@@ -1197,33 +1231,49 @@ const renderGroups = computed<RenderGroup[]>(() => {
   return groupedContainers.value;
 });
 
-const availableContentWidth = computed(() => {
+// Real measurement from DataViewLayout's ResizeObserver (see @content-width below) — the source
+// of truth for how much horizontal room the table actually has. `measuredContentWidth` starts at
+// 0 (nothing measured yet, pre-mount) and is only ever written to a positive value.
+const measuredContentWidth = ref(0);
+
+function handleContentWidth(width: number): void {
+  measuredContentWidth.value = width;
+}
+
+// Pre-mount fallback ONLY: used for the single frame before DataViewLayout's ResizeObserver
+// delivers its first real measurement, so auto-hide has something reasonable to work with
+// instead of flashing a too-wide layout. Once a real measurement arrives, `availableContentWidth`
+// never consults this again. Do not use this as a substitute for the real measurement — it was
+// the hand-rolled estimate that caused the original ~23px drift (this formula can't see the
+// flexbox gap between the content column and the detail panel, or the panel's own margins).
+const fallbackContentWidth = computed(() => {
   const sidebarPx = isMobile.value ? 0 : preferences.layout.sidebarCollapsed ? 56 : 240;
   const contentPx = 48;
   const panelPx = detailPanelOpen.value ? PANEL_WIDTH_PX[panelSize.value] : 0;
   return Math.max(0, windowWidth.value - sidebarPx - contentPx - panelPx);
 });
 
-const {
-  allColumns,
-  visibleColumns,
-  activeColumns,
-  autoHiddenColumns,
-  showColumnPicker,
-  toggleColumn,
-} = useColumnVisibility(availableContentWidth);
+const availableContentWidth = computed(() =>
+  measuredContentWidth.value > 0 ? measuredContentWidth.value : fallbackContentWidth.value,
+);
+
+const { allColumns, visibleColumns, hiddenColumnKeys, toggleColumn, resetColumns } =
+  useColumnVisibility(availableContentWidth);
 
 const tableColumns = computed(() =>
-  activeColumns.value.map((column) => ({
+  allColumns.map((column) => ({
     key: column.key,
     label: column.labelKey ? t(column.labelKey) : column.label,
     align: column.align,
-    sortable: column.key !== 'icon',
+    sortable: column.key !== 'icon' && column.key !== 'links',
     size: column.size,
     minSize: column.minSize,
     maxSize: column.maxSize,
     flex: column.flex,
     priority: column.priority,
+    // No cardPriority here — containers ships a hand-authored #card template (see
+    // ContainersGroupedViews.vue), so DataTable's cardPriority-driven generic card
+    // composition is never reached for this view.
     overflow: column.overflow,
     autoSize: column.autoSize,
     px: column.px,
@@ -1259,7 +1309,6 @@ const actionsMenuStyle = ref<Record<string, string>>({});
 // available room below the viewport is shorter than the menu would render at.
 // Slightly generous to bias toward correct behavior on the boundary.
 const ACTIONS_MENU_ESTIMATED_HEIGHT_PX = 320;
-const COLUMN_PICKER_ESTIMATED_HEIGHT_PX = 360;
 const POPOVER_GAP_PX = 4;
 
 type PopoverHorizontalAnchor = { right: number } | { left: number };
@@ -1301,32 +1350,18 @@ function closeActionsMenu() {
   openActionsMenu.value = null;
 }
 
-const columnPickerStyle = ref<Record<string, string>>({});
-function toggleColumnPicker(event: MouseEvent) {
-  showColumnPicker.value = !showColumnPicker.value;
-  if (showColumnPicker.value) {
-    const button = event.currentTarget as HTMLElement;
-    const rect = button.getBoundingClientRect();
-    columnPickerStyle.value = buildPopoverStyle(
-      rect,
-      { left: rect.left },
-      COLUMN_PICKER_ESTIMATED_HEIGHT_PX,
-    );
-  }
-}
-
 function handleGlobalClick() {
   openActionsMenu.value = null;
-  showColumnPicker.value = false;
 }
 
 // Popovers are position:fixed and anchored at click-time via getBoundingClientRect;
 // scrolling moves the trigger button while the popover stays put. Close on scroll
-// to keep the popover from drifting away from its visual anchor.
+// to keep the popover from drifting away from its visual anchor. (The column picker
+// manages its own open/close + scroll/click-outside handling internally — see
+// DataTableColumnPicker.vue — so only the actions menu needs to be tracked here.)
 function handleGlobalScroll() {
-  if (openActionsMenu.value !== null || showColumnPicker.value) {
+  if (openActionsMenu.value !== null) {
     openActionsMenu.value = null;
-    showColumnPicker.value = false;
   }
 }
 
@@ -1386,6 +1421,7 @@ function registryErrorTooltip(container: Container): string {
 }
 
 provide(containersViewTemplateContextKey, {
+  containerCardReflowForced,
   error,
   loading,
   containers,
@@ -1402,13 +1438,11 @@ provide(containersViewTemplateContextKey, {
   filterKind,
   filterHidePinned,
   clearFilters,
-  showColumnPicker,
-  toggleColumnPicker,
-  columnPickerStyle,
   allColumns,
   toggleColumn,
   visibleColumns,
-  autoHiddenColumns,
+  hiddenColumnKeys,
+  resetColumns,
   tt,
   groupByStack,
   rechecking,
@@ -1524,6 +1558,9 @@ provide(containersViewTemplateContextKey, {
   clearMaturityPolicySelected,
   confirmClearPolicy,
   clearPolicySelected,
+  revertPolicySelected,
+  selectedPolicyOverriddenFields,
+  selectedPolicyOverrideFields,
   policyMessage,
   policyError,
   removeSkipTagSelected,
@@ -1555,11 +1592,12 @@ provide(containersViewTemplateContextKey, {
   closeFullPage,
   filterContainerIds,
   clearContainerIdsFilter,
+  updateMode,
 });
 </script>
 
 <template>
-  <DataViewLayout v-if="!containerFullPage">
+  <DataViewLayout v-if="!containerFullPage" @content-width="handleContentWidth">
     <ContainersListContent />
     <template #panel>
       <ContainerSideDetail />

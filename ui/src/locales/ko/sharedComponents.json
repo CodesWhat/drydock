@@ -9,9 +9,6 @@
       "clickToCopy": "클릭하여 복사",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "{name} 선택"
-    },
     "dataFilterBar": {
       "filters": "필터",
       "toggleFilters": "필터 표시/숨기기",
@@ -19,13 +16,8 @@
       "viewModeLabel": "{label} 보기",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "{name} 상세 정보 표시/숨기기",
-      "selectItem": "{name} 선택"
     },
     "dataTable": {
       "actions": "작업",

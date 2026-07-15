@@ -53,6 +53,7 @@ async function getUser() {
       const response = await fetch('/auth/user', {
         redirect: 'manual',
         credentials: 'include',
+        signal: AbortSignal.timeout(8_000),
       });
       if (response.ok) {
         return await response.json();

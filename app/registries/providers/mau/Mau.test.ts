@@ -4,16 +4,17 @@ import Mau from './Mau.js';
 
 const TEST_TOKEN = 'abcdef';
 
-const mau = new Mau();
-mau.configuration = {
-  url: 'https://dock.mau.dev',
-  authurl: 'https://dock.mau.dev',
-  token: TEST_TOKEN,
-};
+let mau: Mau;
 
 vi.mock('axios');
 
 beforeEach(() => {
+  mau = new Mau();
+  mau.configuration = {
+    url: 'https://dock.mau.dev',
+    authurl: 'https://dock.mau.dev',
+    token: TEST_TOKEN,
+  };
   vi.clearAllMocks();
 });
 
@@ -109,6 +110,15 @@ test('authenticate should perform request with token auth when token is configur
   );
 });
 
+test('authenticate should reuse the dock.mau.dev token until it expires', async () => {
+  axios.mockResolvedValue({ data: { token: 'token' } });
+
+  await mau.authenticate({ name: 'team/image' }, { headers: {} });
+  await mau.authenticate({ name: 'team/image' }, { headers: {} });
+
+  expect(axios).toHaveBeenCalledTimes(1);
+});
+
 test('authenticate should omit basic auth when token is not configured', async () => {
   const mauPublic = new Mau();
   mauPublic.configuration = {
@@ -173,7 +183,7 @@ test('authenticate should propagate timeout errors', async () => {
 
 test('authenticate should propagate 429 rate limit errors', async () => {
   const error = new Error('Request failed with status code 429');
-  (error as any).response = { status: 429 };
+  (error as any).response = { status: 429, headers: { 'retry-after': '0' } };
   axios.mockRejectedValue(error);
 
   await expect(mau.authenticate({ name: 'team/image' }, { headers: {} })).rejects.toThrow(

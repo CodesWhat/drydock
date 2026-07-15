@@ -1,4 +1,8 @@
 # checkov:skip=CKV_DOCKER_3: entrypoint uses su-exec for runtime privilege drop
+# Trivy publishes a multi-arch image and installs its binary at this path.
+# Pin the image index so every target architecture resolves reproducibly.
+FROM aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f AS trivy-bin
+
 # Common Stage
 FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS base
 WORKDIR /home/node/app
@@ -15,13 +19,10 @@ ENV DD_LOG_FORMAT=text
 
 HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; /bin/healthcheck ${DD_SERVER_PORT:-3000}"]
 
-# Install system packages, trivy, and cosign.
-# hadolint ignore=DL3018: curl and trivy are intentionally unpinned. Alpine's
-# per-arch mirrors rotate -rN releases at different times; pinning to one
-# version breaks multi-arch builds during the sync window (see rc.21). trivy
-# additionally ships only from the fast-moving edge/testing repo, which drops
-# old -rN builds outright (trivy=0.70.0-r1 vanished and broke rc.30), so it is
-# pinned to the package name only.
+# Install system packages and cosign.
+# hadolint ignore=DL3018: curl remains intentionally unpinned. Alpine's per-arch
+# mirrors rotate -rN releases at different times; pinning to one version breaks
+# multi-arch builds during the sync window (see rc.21).
 # hadolint ignore=DL3018
 RUN apk add --no-cache \
     bash=5.3.9-r1 \
@@ -33,13 +34,12 @@ RUN apk add --no-cache \
     tini=0.19.0-r3 \
     tzdata=2026c-r0 \
     && apk add --no-cache cosign=3.0.6-r1 \
-    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy \
     && apk upgrade --no-cache zlib libcrypto3 libssl3 libexpat \
     && mkdir /store && chown node:node /store
 
 # Build stage for healthcheck binary (~65KB static binary)
-FROM alpine:3.21@sha256:c3f8e73fdb79deaebaa2037150150191b9dcbfba68b4a46d70103204c53f4709 AS healthcheck-build
-RUN apk add --no-cache gcc=14.2.0-r4 musl-dev=1.2.5-r11
+FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS healthcheck-build
+RUN apk add --no-cache gcc=15.2.0-r5 musl-dev=1.2.6-r2
 COPY healthcheck.c /src/healthcheck.c
 RUN gcc -Os -static -s -o /bin/healthcheck /src/healthcheck.c
 
@@ -85,6 +85,9 @@ RUN rm -f /usr/bin/wget /usr/bin/nc \
 
 # Copy healthcheck binary (65KB static, default HEALTHCHECK probe)
 COPY --from=healthcheck-build /bin/healthcheck /bin/healthcheck
+
+# Copy the release-pinned Trivy binary without depending on Alpine edge/testing.
+COPY --from=trivy-bin /usr/local/bin/trivy /usr/local/bin/trivy
 
 # Default entrypoint
 COPY --chmod=755 Docker.entrypoint.sh /usr/bin/entrypoint.sh

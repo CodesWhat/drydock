@@ -1,10 +1,11 @@
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
+import AppIconButton from '@/components/AppIconButton.vue';
 import ContainerSideDetail from '@/components/containers/ContainerSideDetail.vue';
 import DetailPanel from '@/components/DetailPanel.vue';
 
-const selectedContainer = ref({
+const selectedContainer = ref<any>({
   id: 'container-1',
   name: 'nginx',
   image: 'nginx',
@@ -17,6 +18,7 @@ const detailPanelOpen = ref(true);
 const isMobile = ref(false);
 const panelSize = ref<'sm' | 'md' | 'lg'>('sm');
 const activeDetailTab = ref('overview');
+const updateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 
 const closePanel = vi.fn();
 const openFullPage = vi.fn();
@@ -43,6 +45,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     openFullPage,
     detailTabs: [{ id: 'overview', label: 'Overview', icon: 'info' }],
     activeDetailTab,
+    updateMode,
     confirmStop,
     startContainer,
     confirmRestart,
@@ -62,8 +65,10 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 describe('ContainerSideDetail', () => {
   afterEach(() => {
     detailPanelOpen.value = true;
+    isMobile.value = false;
     panelSize.value = 'sm';
     activeDetailTab.value = 'overview';
+    updateMode.value = 'manual';
     selectedContainer.value = {
       id: 'container-1',
       name: 'nginx',
@@ -89,6 +94,33 @@ describe('ContainerSideDetail', () => {
     isContainerUpdateQueued.mockReturnValue(false);
     getContainerUpdateSequenceLabel.mockReset();
     getContainerUpdateSequenceLabel.mockReturnValue(null);
+  });
+
+  it('uses wrapping 44px controls for mobile container actions', () => {
+    isMobile.value = true;
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.get('[data-test="container-side-detail-actions"]').classes()).toContain(
+      'flex-wrap',
+    );
+    const actionLabels = new Set(['Stop', 'Restart', 'Scan', 'Recheck for updates', 'Delete']);
+    const actionButtons = wrapper
+      .findAllComponents(AppIconButton)
+      .filter((button) => actionLabels.has(button.attributes('aria-label') ?? ''));
+
+    expect(actionButtons).toHaveLength(actionLabels.size);
+    expect(actionButtons.map((button) => button.props('size'))).toEqual(
+      Array(actionLabels.size).fill('sm'),
+    );
   });
 
   it('updates panel width when size controls are clicked', async () => {
@@ -145,6 +177,55 @@ describe('ContainerSideDetail', () => {
     expect(title).toBeDefined();
     expect(title?.classes()).toContain('text-sm');
     expect(title?.classes()).toContain('font-bold');
+  });
+
+  it('hides header update and force-update controls in notify mode', () => {
+    updateMode.value = 'notify';
+    (selectedContainer as any).value = {
+      ...selectedContainer.value,
+      newTag: '1.2.3',
+      bouncer: 'blocked',
+    };
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.find('button[aria-label="Update"]').exists()).toBe(false);
+    expect(wrapper.find('button[aria-label="Blocked — Force Update"]').exists()).toBe(false);
+  });
+
+  it('shows the header update control for a suppressed raw candidate', () => {
+    selectedContainer.value = {
+      ...selectedContainer.value,
+      newTag: null,
+      newDigest: null,
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-07-12T00:00:00.000Z',
+        blockers: [{ reason: 'snoozed', severity: 'soft', message: 'Snoozed.', actionable: true }],
+      },
+    };
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.find('button[aria-label="Update"]').exists()).toBe(true);
   });
 
   it('caps the subtitle and server badge so long values do not widen the panel', () => {

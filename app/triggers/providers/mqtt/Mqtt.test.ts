@@ -6,7 +6,7 @@ import {
   emitContainerUpdated,
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
-import { flatten } from '../../../model/container.js';
+import { flatten, validate } from '../../../model/container.js';
 
 vi.mock('mqtt');
 vi.mock('node:fs/promises', () => ({
@@ -17,6 +17,8 @@ vi.mock('node:fs/promises', () => ({
 }));
 
 import fs from 'node:fs/promises';
+import Trigger from '../Trigger.js';
+import Hass from './Hass.js';
 import Mqtt from './Mqtt.js';
 
 const mqtt = new Mqtt();
@@ -30,6 +32,7 @@ const configurationValid = {
   hass: {
     discovery: false,
     agenttopicsegment: false,
+    commands: false,
     enabled: false,
     prefix: 'homeassistant',
     attributes: 'short',
@@ -120,6 +123,7 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     prefix: 'homeassistant',
     discovery: true,
     agenttopicsegment: false,
+    commands: false,
     attributes: 'short',
     filter: {
       include: '',
@@ -233,6 +237,92 @@ test.each(containerData)('trigger should format json message payload as expected
   expect(mqtt.client.publish).toHaveBeenCalledWith(data.topic, JSON.stringify(flatten(container)), {
     retain: true,
   });
+});
+
+// Regression guard for #491: the HA latest_version_template reads result_tag /
+// result_digest / image_tag_value from the flattened MQTT state payload. Lock the
+// shape the template depends on — an up-to-date container carries image_tag_value
+// but NO result_* keys (the case that used to render an empty "Newest version"),
+// while tag/digest updates carry the matching result_* field.
+test('trigger should publish latest-version source fields for current, tag, and digest states', async () => {
+  mqtt.configuration = {
+    topic: 'dd/container',
+    exclude: '',
+    hass: {
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
+  };
+
+  const installedDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const remoteDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+  const buildContainer = ({ id, name, digestWatch = false, result }) =>
+    validate({
+      id,
+      name,
+      watcher: 'local',
+      image: {
+        id: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+        registry: {
+          name: 'docker.io',
+          url: 'docker.io',
+        },
+        name: 'library/test',
+        tag: {
+          value: '1.25.0',
+          semver: true,
+        },
+        digest: {
+          watch: digestWatch,
+          value: installedDigest,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      ...(result ? { result } : {}),
+    });
+
+  const publishContainer = async (container) => {
+    mqtt.client.publish.mockClear();
+    await mqtt.trigger(container);
+    expect(mqtt.client.publish).toHaveBeenCalledTimes(1);
+    return JSON.parse(mqtt.client.publish.mock.calls[0][1]);
+  };
+
+  const upToDatePayload = await publishContainer(
+    buildContainer({ id: 'container-current', name: 'current' }),
+  );
+  expect(upToDatePayload).toHaveProperty('update_available', false);
+  expect(upToDatePayload).toHaveProperty('image_tag_value', '1.25.0');
+  expect(upToDatePayload).not.toHaveProperty('result_tag');
+  expect(upToDatePayload).not.toHaveProperty('result_digest');
+
+  const tagUpdatePayload = await publishContainer(
+    buildContainer({
+      id: 'container-tag-update',
+      name: 'tag-update',
+      result: { tag: '1.26.0' },
+    }),
+  );
+  expect(tagUpdatePayload).toHaveProperty('update_available', true);
+  expect(tagUpdatePayload).toHaveProperty('update_kind_kind', 'tag');
+  expect(tagUpdatePayload).toHaveProperty('result_tag', '1.26.0');
+
+  const digestUpdatePayload = await publishContainer(
+    buildContainer({
+      id: 'container-digest-update',
+      name: 'digest-update',
+      digestWatch: true,
+      result: { digest: remoteDigest },
+    }),
+  );
+  expect(digestUpdatePayload).toHaveProperty('update_available', true);
+  expect(digestUpdatePayload).toHaveProperty('update_kind_kind', 'digest');
+  expect(digestUpdatePayload).toHaveProperty('result_digest', remoteDigest);
 });
 
 test('trigger should normalize recreated alias-prefixed container names to their base topic', async () => {
@@ -675,5 +765,291 @@ describe('trigger filtering', () => {
     expect(publishedPayload).not.toHaveProperty('security_scan_vulnerabilities_0_id');
     expect(publishedPayload).not.toHaveProperty('details_ports_0');
     expect(publishedPayload).toHaveProperty('name', 'filtered-test');
+  });
+});
+
+// ── #210: hass.commands (bidirectional MQTT / HA Install button) ───────────
+
+describe('hass.commands validation', () => {
+  test('should default hass.commands to false when omitted', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+    });
+    expect(validated.hass.commands).toBe(false);
+  });
+
+  test('should accept hass.commands=true', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+      hass: { commands: true },
+    });
+    expect(validated.hass.commands).toBe(true);
+  });
+
+  test('should coerce an env-style string value for hass.commands', () => {
+    const validated = mqtt.validateConfiguration({
+      url: configurationValid.url,
+      clientid: 'dd',
+      hass: { commands: 'true' },
+    });
+    expect(validated.hass.commands).toBe(true);
+  });
+
+  test('maskConfiguration should not mask hass.commands', () => {
+    mqtt.configuration = {
+      password: 'password',
+      url: 'mqtt://host:1883',
+      topic: 'dd/container',
+      hass: {
+        discovery: false,
+        enabled: false,
+        commands: true,
+        prefix: 'homeassistant',
+      },
+    };
+    expect(mqtt.maskConfiguration()).toEqual({
+      hass: {
+        discovery: false,
+        enabled: false,
+        commands: true,
+        prefix: 'homeassistant',
+      },
+      password: '[REDACTED]',
+      topic: 'dd/container',
+      url: 'mqtt://host:1883',
+    });
+  });
+
+  test('initTrigger should not throw when hass.commands is false or absent', async () => {
+    mqtt.configuration = {
+      ...configurationValid,
+      clientid: 'dd',
+      hass: {
+        enabled: true,
+        discovery: true,
+        prefix: 'homeassistant',
+        attributes: 'short',
+        filter: { include: '', exclude: '' },
+        // commands intentionally omitted
+      },
+    };
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({ publish: vi.fn() });
+
+    await expect(mqtt.initTrigger()).resolves.toBeUndefined();
+  });
+
+  test('initTrigger should never construct/init Hass command subscription when hass.enabled is false, even if hass.commands is true', async () => {
+    mqtt.configuration = {
+      ...configurationValid,
+      clientid: 'dd',
+      hass: {
+        enabled: false,
+        discovery: false,
+        commands: true,
+        prefix: 'homeassistant',
+        attributes: 'short',
+        filter: { include: '', exclude: '' },
+      },
+    };
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({ publish: vi.fn() });
+    const initCommandSubscriptionSpy = vi.spyOn(Hass.prototype, 'initCommandSubscription');
+
+    await mqtt.initTrigger();
+
+    expect(initCommandSubscriptionSpy).not.toHaveBeenCalled();
+    initCommandSubscriptionSpy.mockRestore();
+  });
+});
+
+describe('hass command lifecycle ordering (#210)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('initTrigger should construct Hass and await initCommandSubscription before resolving', async () => {
+    mqtt.configuration = {
+      ...configurationValid,
+      clientid: 'dd',
+      hass: {
+        enabled: true,
+        discovery: true,
+        commands: true,
+        prefix: 'homeassistant',
+        attributes: 'short',
+        filter: { include: '', exclude: '' },
+      },
+    };
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({ publish: vi.fn() });
+
+    const order: string[] = [];
+    let resolveInitCommandSubscription: () => void;
+    const initCommandSubscriptionSpy = vi
+      .spyOn(Hass.prototype, 'initCommandSubscription')
+      .mockImplementation(function mockedInitCommandSubscription() {
+        order.push('initCommandSubscription-called');
+        return new Promise<void>((resolve) => {
+          resolveInitCommandSubscription = () => {
+            order.push('initCommandSubscription-resolved');
+            resolve();
+          };
+        });
+      });
+
+    const initTriggerPromise = mqtt.initTrigger().then(() => {
+      order.push('initTrigger-resolved');
+    });
+
+    // Let pending microtasks flush; initTrigger must still be pending, blocked
+    // on the (not-yet-resolved) initCommandSubscription call.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toEqual(['initCommandSubscription-called']);
+
+    resolveInitCommandSubscription!();
+    await initTriggerPromise;
+
+    expect(order).toEqual([
+      'initCommandSubscription-called',
+      'initCommandSubscription-resolved',
+      'initTrigger-resolved',
+    ]);
+    expect(initCommandSubscriptionSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('re-init should await the previous Hass.deregister() before constructing a new Hass', async () => {
+    mqtt.configuration = {
+      ...configurationValid,
+      clientid: 'dd',
+      hass: {
+        enabled: true,
+        discovery: true,
+        prefix: 'homeassistant',
+        attributes: 'short',
+        filter: { include: '', exclude: '' },
+      },
+    };
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({ publish: vi.fn() });
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+
+    // First init constructs Hass instance #1 with the real deregister.
+    await mqtt.initTrigger();
+
+    const order: string[] = [];
+    let resolveDeregister: () => void;
+    vi.spyOn(Hass.prototype, 'deregister').mockImplementation(function mockedDeregister() {
+      order.push('deregister-called');
+      return new Promise<void>((resolve) => {
+        resolveDeregister = () => {
+          order.push('deregister-resolved');
+          resolve();
+        };
+      });
+    });
+
+    const secondInitPromise = mqtt.initTrigger().then(() => {
+      order.push('initTrigger-resolved');
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toEqual(['deregister-called']);
+
+    resolveDeregister!();
+    await secondInitPromise;
+
+    expect(order).toEqual(['deregister-called', 'deregister-resolved', 'initTrigger-resolved']);
+  });
+
+  test('deregisterComponent should await Hass.deregister() before calling super.deregisterComponent()', async () => {
+    mqtt.configuration = {
+      ...configurationValid,
+      clientid: 'dd',
+      hass: {
+        enabled: true,
+        discovery: true,
+        prefix: 'homeassistant',
+        attributes: 'short',
+        filter: { include: '', exclude: '' },
+      },
+    };
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({ publish: vi.fn() });
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+    await mqtt.initTrigger();
+
+    const order: string[] = [];
+    let resolveDeregister: () => void;
+    vi.spyOn(Hass.prototype, 'deregister').mockImplementation(function mockedDeregister() {
+      order.push('hass-deregister-called');
+      return new Promise<void>((resolve) => {
+        resolveDeregister = () => {
+          order.push('hass-deregister-resolved');
+          resolve();
+        };
+      });
+    });
+    vi.spyOn(Trigger.prototype, 'deregisterComponent').mockImplementation(
+      async function mockedSuperDeregisterComponent() {
+        order.push('super-deregisterComponent-called');
+      },
+    );
+
+    const deregisterPromise = mqtt.deregisterComponent().then(() => {
+      order.push('deregisterComponent-resolved');
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toEqual(['hass-deregister-called']);
+
+    resolveDeregister!();
+    await deregisterPromise;
+
+    expect(order).toEqual([
+      'hass-deregister-called',
+      'hass-deregister-resolved',
+      'super-deregisterComponent-called',
+      'deregisterComponent-resolved',
+    ]);
+  });
+});
+
+describe('hass isContainerAllowed wiring (#491)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('initTrigger wires Hass isContainerAllowed to this.mustTrigger', async () => {
+    mqtt.configuration = {
+      ...configurationValid,
+      clientid: 'dd',
+      hass: {
+        enabled: true,
+        discovery: true,
+        prefix: 'homeassistant',
+        attributes: 'short',
+        filter: { include: '', exclude: '' },
+      },
+    };
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({ publish: vi.fn() });
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+    const mustTriggerSpy = vi.spyOn(mqtt, 'mustTrigger');
+
+    await mqtt.initTrigger();
+
+    const hassInstance = (
+      mqtt as unknown as { hass: { isContainerAllowed: (container: unknown) => boolean } }
+    ).hass;
+    expect(hassInstance).toBeDefined();
+
+    const container = { name: 'container-name' };
+
+    mustTriggerSpy.mockReturnValueOnce(true);
+    expect(hassInstance.isContainerAllowed(container)).toBe(true);
+    expect(mustTriggerSpy).toHaveBeenCalledWith(container);
+
+    mustTriggerSpy.mockReturnValueOnce(false);
+    expect(hassInstance.isContainerAllowed(container)).toBe(false);
   });
 });

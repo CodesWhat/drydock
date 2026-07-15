@@ -274,14 +274,10 @@
       "hidePinned": "Ẩn đã ghim",
       "hidePinnedTooltip": "Ẩn container được ghim ở phiên bản cụ thể",
       "clearAll": "Xóa tất cả",
-      "toggleColumnsTooltip": "Bật/tắt cột",
       "groupByStackTooltip": "Nhóm theo stack",
       "expandAll": "Mở rộng tất cả",
       "collapseAll": "Thu gọn tất cả",
       "recheckTooltip": "Kiểm tra lại cập nhật",
-      "columnsHeader": "Cột",
-      "narrowViewportSuffix": "(màn hình hẹp)",
-      "autoHiddenBadgeTooltip": "{count} cột bị ẩn tự động do cửa sổ hẹp. Mở rộng cửa sổ hoặc ẩn cột khác để có thêm chỗ.",
       "filterSearch": "Tìm kiếm: {value}",
       "filterStatus": "Trạng thái: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -324,6 +320,7 @@
     "projectLink": {
       "viewProject": "Xem dự án"
     },
+    "registryLink": { "viewRegistry": "Xem registry" },
     "releaseNotesLink": {
       "releaseNotes": "Ghi chú phát hành",
       "viewFullNotes": "Xem toàn bộ ghi chú",
@@ -553,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Đã ghim — có phiên bản mới hơn để tham khảo."
+      }
     }
   }
 }

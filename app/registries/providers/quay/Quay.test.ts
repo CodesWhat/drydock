@@ -305,7 +305,8 @@ test('getTagsPage should percent-encode next_page tokens containing URL metachar
   );
   const calledUrl = quayInstance.callRegistry.mock.calls[0][0].url;
   expect(calledUrl).not.toContain('&scope=');
-  expect(calledUrl).toContain('next_page=');
+  expect(calledUrl).toContain('next_page=foo%26bar%3Dbaz');
+  expect(calledUrl).not.toContain('next_page=foo%2526bar%253Dbaz');
 });
 
 test('getTagsPage should drop &-prefixed last value to prevent query-param injection', async () => {
@@ -323,6 +324,40 @@ test('getTagsPage should drop &-prefixed last value to prevent query-param injec
   // and the injected scope query param never reaches the registry URL.
   expect(calledUrl).not.toMatch(/&scope=/);
   expect(calledUrl).toBe('https://quay.io/v2/test/image/tags/list?n=1000');
+});
+
+test('getTagsPage should safely encode a malformed cursor escape', async () => {
+  const quayInstance = new Quay();
+  quayInstance.configuration = {};
+  quayInstance.callRegistry = vi.fn().mockResolvedValue({ data: { tags: [] } });
+  await quayInstance.getTagsPage(
+    { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    'sometag',
+    '/v2/test/image/tags/list?next_page=bad%cursor',
+  );
+
+  expect(quayInstance.callRegistry).toHaveBeenCalledWith({
+    image: { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    url: 'https://quay.io/v2/test/image/tags/list?n=1000&next_page=bad%25cursor',
+    resolveWithFullResponse: true,
+  });
+});
+
+test('getTagsPage should preserve valid escapes alongside a malformed cursor escape', async () => {
+  const quayInstance = new Quay();
+  quayInstance.configuration = {};
+  quayInstance.callRegistry = vi.fn().mockResolvedValue({ data: { tags: [] } });
+  await quayInstance.getTagsPage(
+    { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    'sometag',
+    '/v2/test/image/tags/list?next_page=good%26value%cursor',
+  );
+
+  expect(quayInstance.callRegistry).toHaveBeenCalledWith({
+    image: { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    url: 'https://quay.io/v2/test/image/tags/list?n=1000&next_page=good%26value%25cursor',
+    resolveWithFullResponse: true,
+  });
 });
 
 test('getTagsPage should capture next_page token from second query param (&next_page=cursor99)', async () => {

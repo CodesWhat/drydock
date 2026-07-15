@@ -20,40 +20,28 @@ describe('preferences lifecycle integration', () => {
     }
   });
 
-  it('covers legacy keys -> migrate() -> reactive store -> composable reactivity', async () => {
+  it('covers legacy keys -> migrate() -> reactive store persistence', async () => {
     localStorage.setItem('dd-triggers-view-v1', 'cards');
     localStorage.setItem('drydock-theme-family-v1', 'github');
 
     const migrateModule = await import('@/preferences/migrate');
     const migrated = migrateModule.migrateFromLegacyKeys();
 
-    expect(migrated.views.triggers.mode).toBe('cards');
+    expect(migrated.theme.family).toBe('github');
     expect(localStorage.getItem('dd-triggers-view-v1')).toBeNull();
     expect(localStorage.getItem('drydock-theme-family-v1')).toBeNull();
 
     const migrateSpy = vi.spyOn(migrateModule, 'migrate');
 
     const { preferences, flushPreferences } = await import('@/preferences/store');
-    const { useViewMode } = await import('@/preferences/useViewMode');
 
     expect(migrateSpy).toHaveBeenCalledTimes(1);
-
-    const triggerMode = useViewMode('triggers');
-    const triggerModeMirror = useViewMode('triggers');
-
-    expect(triggerMode.value).toBe('cards');
-    expect(preferences.views.triggers.mode).toBe('cards');
-
-    triggerMode.value = 'list';
-
-    expect(preferences.views.triggers.mode).toBe('list');
-    expect(triggerModeMirror.value).toBe('list');
+    expect(preferences.theme.family).toBe('github');
 
     flushPreferences();
 
     const persisted = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
     expect(persisted.theme.family).toBe('github');
-    expect(persisted.views.triggers.mode).toBe('list');
 
     migrateSpy.mockRestore();
   });

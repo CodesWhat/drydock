@@ -3,6 +3,7 @@ var {
   mockRegisterSelfUpdateStarting,
   mockRegisterContainerAdded,
   mockRegisterContainerUpdated,
+  mockRegisterContainerHealthTransition,
   mockRegisterContainerRemoved,
   mockRegisterUpdateOperationChanged,
   mockRegisterAgentConnected,
@@ -51,6 +52,7 @@ var {
     mockRegisterSelfUpdateStarting: vi.fn(),
     mockRegisterContainerAdded: vi.fn(),
     mockRegisterContainerUpdated: vi.fn(),
+    mockRegisterContainerHealthTransition: vi.fn(),
     mockRegisterContainerRemoved: vi.fn(),
     mockRegisterUpdateOperationChanged: vi.fn(),
     mockRegisterAgentConnected: vi.fn(),
@@ -123,6 +125,7 @@ vi.mock('../event/index', () => ({
   registerSelfUpdateStarting: mockRegisterSelfUpdateStarting,
   registerContainerAdded: mockRegisterContainerAdded,
   registerContainerUpdated: mockRegisterContainerUpdated,
+  registerContainerHealthTransition: mockRegisterContainerHealthTransition,
   registerContainerRemoved: mockRegisterContainerRemoved,
   registerUpdateOperationChanged: mockRegisterUpdateOperationChanged,
   registerAgentConnected: mockRegisterAgentConnected,
@@ -249,6 +252,14 @@ describe('SSE lifecycle event handlers', () => {
   });
 
   describe('init registers lifecycle event handlers', () => {
+    test('registers unhealthy invalidation after audit processing', () => {
+      sseRouter.init();
+      expect(mockRegisterContainerHealthTransition).toHaveBeenCalledWith(expect.any(Function), {
+        id: 'sse',
+        order: 1000,
+      });
+    });
+
     test('registers registerContainerUpdateApplied on init', () => {
       sseRouter.init();
       expect(mockRegisterContainerUpdateApplied).toHaveBeenCalledTimes(1);
@@ -300,6 +311,17 @@ describe('SSE lifecycle event handlers', () => {
       expect(mockRegisterContainerUpdateApplied).toHaveBeenCalledTimes(1);
       expect(mockRegisterContainerUpdateFailed).toHaveBeenCalledTimes(1);
       expect(mockRegisterBatchUpdateCompleted).toHaveBeenCalledTimes(1);
+      expect(mockRegisterContainerHealthTransition).toHaveBeenCalledTimes(1);
+    });
+
+    test('deregisters unhealthy invalidation when reset is called', () => {
+      const deregisterUnhealthy = vi.fn();
+      mockRegisterContainerHealthTransition.mockReturnValueOnce(deregisterUnhealthy);
+
+      sseRouter.init();
+      sseRouter._resetInitializationStateForTests();
+
+      expect(deregisterUnhealthy).toHaveBeenCalledTimes(1);
     });
 
     test('deregisters update-applied handler when reset is called', () => {

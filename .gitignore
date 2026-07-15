@@ -184,5 +184,8 @@ artifacts/
 # Local scratch/output directory used during issue triage
 /tmp/
 
+# Private local incident investigation retained outside the release diff
+/drydock-npm-macvlan-incident-20260709/
+
 # Local debug-repro scratch tests (never shipped, never CI'd)
 **/__tmp__/

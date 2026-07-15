@@ -1,0 +1,129 @@
+---
+title: "Lifecycle Hooks"
+description: "Run custom commands before or after container updates."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Overview
+
+Lifecycle hooks let you run shell commands before or after a container is updated. Common use cases:
+
+- Stop dependent services before updating
+- Run database migrations after updating
+- Send custom notifications
+- Create network resources or volumes
+
+## Container labels
+
+| Label | Type | Default | Description |
+| --- | --- | --- | --- |
+| `dd.hook.pre` | string | — | Shell command to execute before the update |
+| `dd.hook.post` | string | — | Shell command to execute after the update |
+| `dd.hook.pre.abort` | boolean | `true` | Abort the update if the pre-hook exits with a non-zero code |
+| `dd.hook.timeout` | number (ms) | `60000` | Maximum execution time for each hook |
+
+<Callout type="info">Legacy `wud.hook.*` labels are still supported for backward compatibility. When used, drydock logs a one-time deprecation warning and records the fallback in `dd_legacy_input_total`. You can rewrite labels with `node dist/index.js config migrate`.</Callout>
+
+## Hook enablement and allowlist
+
+| Env var | Required | Description | Supported values | Default |
+| --- | --- | --- | --- | --- |
+| `DD_HOOKS_ENABLED` | ⚪ | Enable execution of lifecycle hook labels (`dd.hook.*` / `wud.hook.*`) | `true`, `false` | `false` |
+| `DD_HOOKS_ALLOWED_COMMANDS` | ⚪ | Comma-separated list of allowed first-token binary names or paths | e.g. `curl,sh,/usr/local/bin/notify.sh` | (unset — see below) |
+
+<Callout type="warn">Hooks sourced from labels are skipped by default. Set `DD_HOOKS_ENABLED=true` to opt in.</Callout>
+
+<Callout type="warn">**Command allowlist (recommended):** When `DD_HOOKS_ENABLED=true` and `DD_HOOKS_ALLOWED_COMMANDS` is **not set**, drydock logs a one-time warning recommending you configure the allowlist. Any hook that passes the syntax validator runs. When `DD_HOOKS_ALLOWED_COMMANDS` **is set**, drydock checks the first token of each hook command against the list before executing. Hooks whose binary is not on the list are rejected with a clear error and never executed.</Callout>
+
+### Allowlist matching rules
+
+- **No slash in entry** (`curl`, `sh`): the basename of the hook command's first token is compared. `curl` matches both `curl` and `/usr/bin/curl`.
+- **Slash in entry** (`/usr/local/bin/notify.sh`): an exact full-path match is required. The basename alone is not sufficient.
+
+Example:
+
+```bash
+DD_HOOKS_ALLOWED_COMMANDS=curl,/usr/local/bin/notify.sh
+```
+
+This permits `curl https://…` and `/usr/local/bin/notify.sh`, but not `notify.sh` or `/other/path/curl`.
+
+## Hook environment variables
+
+When a hook runs, drydock injects environment variables describing the update:
+
+| Variable | Description | Example |
+| --- | --- | --- |
+| `DD_CONTAINER_NAME` | Container name | `myapp` |
+| `DD_CONTAINER_ID` | Container ID | `abc123def456` |
+| `DD_IMAGE_NAME` | Image name (without registry prefix) | `myorg/myapp` |
+| `DD_IMAGE_TAG` | Current image tag | `1.2.3` |
+| `DD_UPDATE_KIND` | Update type | `tag` or `digest` |
+| `DD_UPDATE_FROM` | Current tag or digest | `1.2.3` |
+| `DD_UPDATE_TO` | New tag or digest | `1.3.0` |
+
+## Command validation
+
+Hook commands are validated against a restricted shell-safe grammar. Commands containing any of the following are rejected when the hook runs, with a clear error:
+
+- Command substitution: `$(...)` or backticks (`` ` ``)
+- Output or input redirections: `>`, `>>`, `<`
+- Command chaining metacharacters: `;`, `&&`, `||`, `|`
+
+Simple positional arguments and environment variable references that do not use substitution are allowed. Use a wrapper script (mounted into the container) for complex logic.
+
+## Execution details
+
+- Hooks run inside the drydock container using `/bin/sh -c` only when `DD_HOOKS_ENABLED=true`
+- Combined stdout and stderr output is capped at **10 KB**
+- An exit code of `0` is treated as success; any non-zero code is a failure
+- If a hook exceeds its timeout, it is killed and treated as a failure (exit code 1)
+- Hooks are NOT executed during [self-update](/docs/configuration/self-update)
+
+## Threat model (label-sourced commands)
+
+Hooks are sourced from container labels and then executed by drydock. Treat hook labels as a code-execution boundary.
+
+- Trust boundary: Container labels (`dd.hook.*` / `wud.hook.*`) cross into the drydock runtime command executor.
+- Trust boundary: Hook execution can cross from drydock into Docker host control when the socket is mounted.
+- High-value assets: Docker socket access, mounted credentials/secrets, and network-reachable internal services.
+- Attacker capability: Anyone who can modify deployed container labels (Compose manifests, swarm specs, API-driven container creation) can inject hook commands.
+- Abuse path: A malicious label can execute arbitrary shell via `/bin/sh -c`, including secret exfiltration or unauthorized Docker API actions.
+- Abuse path: Expensive hooks can degrade availability (for example long-running or fork-heavy commands), bounded by `dd.hook.timeout`.
+- Mitigation: Restrict who can modify container specs/labels and protect deployment pipelines.
+- Mitigation: Run drydock with least privilege; mount `/var/run/docker.sock` only when required.
+- Mitigation: Keep `dd.hook.pre.abort=true` when you want fail-closed behavior on pre-hook errors.
+- Mitigation: Monitor audit events (`hook-configured`, `hook-pre-*`, `hook-post-*`) for unauthorized hook changes and executions.
+
+## Pre-hook abort behavior
+
+When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook cancels the update entirely. Set it to `false` if you want the update to proceed regardless of hook outcome.
+
+## Audit events
+
+| Event | Description |
+| --- | --- |
+| `hook-configured` | Hook labels were detected for the update lifecycle |
+| `hook-pre-success` | Pre-hook completed successfully |
+| `hook-pre-failed` | Pre-hook exited non-zero or timed out |
+| `hook-post-success` | Post-hook completed successfully |
+| `hook-post-failed` | Post-hook exited non-zero or timed out |
+
+## Example
+
+```yaml
+services:
+  myapp:
+    image: myapp:latest
+    labels:
+      - dd.watch=true
+      - dd.hook.pre=docker exec mydb pg_dump -U postgres -F c -f /backup/pre-update.dump mydb
+      - dd.hook.post=curl -X POST https://hooks.slack.com/services/xxx -d '{"text":"myapp updated"}'
+      - dd.hook.pre.abort=true
+      - dd.hook.timeout=120000
+```
+
+Commands that require shell redirects (`>`, `|`, etc.) must be wrapped in a script file and invoked via the hook (e.g. `dd.hook.pre=/usr/local/bin/backup.sh`).
+
+<Callout type="warn">Hooks run with the permissions of the drydock process. Ensure the Docker socket is mounted if your hooks need to interact with Docker.</Callout>

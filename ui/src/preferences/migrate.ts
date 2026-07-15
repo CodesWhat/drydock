@@ -8,6 +8,9 @@ import {
   type DashboardLayoutBreakpoint,
   DEFAULTS,
   type PreferencesSchema,
+  VIEW_TABLE_COLUMN_KEYS,
+  VIEW_TABLE_REQUIRED_COLUMN_KEYS,
+  type ViewTableColumnKey,
 } from './schema';
 import {
   FONT_FAMILIES,
@@ -15,7 +18,6 @@ import {
   isValidFontSize,
   isValidLocale,
   isValidScale,
-  isViewMode,
   RADIUS_PRESETS,
   TABLE_ACTIONS,
   THEME_FAMILIES,
@@ -36,7 +38,12 @@ export function mergeDefaults(source: Record<string, unknown>): PreferencesSchem
 // ─── Sanitize persisted data ─────────────────────────────────
 
 function deleteIfInvalid(obj: Record<string, unknown>, key: string, allow: Set<string>): void {
-  if (typeof obj[key] === 'string' && !allow.has(obj[key] as string)) {
+  // Delete unless the value is a string AND in the allow-list — a non-string
+  // value (object, array, number, null) is just as invalid as an unknown
+  // string and must not survive to reach deepMerge/applyRadius etc. verbatim.
+  // An absent key stays absent either way (delete on a missing key is a
+  // no-op) — mergeDefaults fills in the default for absent keys.
+  if (!(typeof obj[key] === 'string' && allow.has(obj[key] as string))) {
     delete obj[key];
   }
 }
@@ -133,6 +140,7 @@ function sanitize(data: Record<string, unknown>): void {
   sanitizeContainers(data);
   sanitizeTables(data);
   sanitizeViews(data);
+  sanitizeSync(data);
 }
 
 function sanitizeLocale(data: Record<string, unknown>): void {
@@ -191,7 +199,6 @@ function sanitizeContainers(data: Record<string, unknown>): void {
   const containers = data.containers;
   if (containers && typeof containers === 'object') {
     const c = containers as Record<string, unknown>;
-    if ('viewMode' in c && !isViewMode(c.viewMode)) delete c.viewMode;
     deleteIfInvalid(c, 'tableActions', TABLE_ACTIONS);
 
     if ('columns' in c) {
@@ -248,6 +255,31 @@ function sanitizeTables(data: Record<string, unknown>): void {
   }
 }
 
+const VIEW_KEYS_WITH_HIDDEN_COLUMNS = Object.keys(VIEW_TABLE_COLUMN_KEYS) as ViewTableColumnKey[];
+
+/**
+ * Clamp a single view's persisted `hiddenColumns` to a known-safe array: non-array/
+ * non-string-array garbage resets to `[]`, unknown keys are dropped, and required
+ * columns (which must never persist as hidden) are dropped.
+ */
+function sanitizeViewHiddenColumns(
+  view: Record<string, unknown>,
+  viewKey: ViewTableColumnKey,
+): void {
+  if (!('hiddenColumns' in view)) {
+    return;
+  }
+  if (!isStringArray(view.hiddenColumns)) {
+    view.hiddenColumns = [];
+    return;
+  }
+  const allowedKeys = VIEW_TABLE_COLUMN_KEYS[viewKey] as readonly string[];
+  const requiredKeys = VIEW_TABLE_REQUIRED_COLUMN_KEYS[viewKey] as readonly string[];
+  view.hiddenColumns = view.hiddenColumns.filter(
+    (key) => allowedKeys.includes(key) && !requiredKeys.includes(key),
+  );
+}
+
 function sanitizeViews(data: Record<string, unknown>): void {
   const views = data.views;
   if (views && typeof views === 'object') {
@@ -262,6 +294,30 @@ function sanitizeViews(data: Record<string, unknown>): void {
         }
       }
     }
+    for (const viewKey of VIEW_KEYS_WITH_HIDDEN_COLUMNS) {
+      if (!(viewKey in v)) {
+        continue;
+      }
+      if (!isRecord(v[viewKey])) {
+        delete v[viewKey];
+      } else {
+        sanitizeViewHiddenColumns(v[viewKey] as Record<string, unknown>, viewKey);
+      }
+    }
+  }
+}
+
+function sanitizeSync(data: Record<string, unknown>): void {
+  const sync = data.sync;
+  if (sync === undefined) {
+    return;
+  }
+  if (!isRecord(sync)) {
+    delete data.sync;
+    return;
+  }
+  if ('enabled' in sync && typeof sync.enabled !== 'boolean') {
+    delete sync.enabled;
   }
 }
 
@@ -368,14 +424,6 @@ function scheduleLegacyKeyCleanup(): void {
 }
 
 const LEGACY_FILTER_KEYS = ['status', 'registry', 'bouncer', 'server', 'kind'] as const;
-const SIMPLE_VIEW_MODE_KEYS = [
-  ['triggers', 'dd-triggers-view-v1'],
-  ['watchers', 'dd-watchers-view-v1'],
-  ['servers', 'dd-servers-view-v1'],
-  ['registries', 'dd-registries-view-v1'],
-  ['notifications', 'dd-notifications-view-v1'],
-  ['auth', 'dd-auth-view-v1'],
-] as const;
 
 function migrateThemePreference(): Record<string, string> | undefined {
   const family = readString('drydock-theme-family-v1');
@@ -465,11 +513,6 @@ function migrateContainerFilters(): Record<string, string> | undefined {
 function migrateContainersPreference(): Record<string, unknown> | undefined {
   const containers: Record<string, unknown> = {};
 
-  const containerView = readString('dd-containers-view-v1');
-  if (containerView && isViewMode(containerView)) {
-    containers.viewMode = containerView;
-  }
-
   const tableActions = readString('dd-table-actions-v1');
   if (tableActions && TABLE_ACTIONS.has(tableActions)) {
     containers.tableActions = tableActions;
@@ -507,22 +550,17 @@ function migrateDashboardPreference(): { widgetOrder: string[] } | undefined {
 }
 
 function migrateSortableViewPreference(args: {
-  viewKey: string;
   sortFieldKey: string;
   sortFieldOutputKey: string;
   sortAscKey: string;
 }): Record<string, unknown> | undefined {
-  const view = readString(args.viewKey);
   const sortField = readString(args.sortFieldKey);
   const sortAsc = readJSON(args.sortAscKey, isBoolean);
-  if (!view && sortField === undefined && sortAsc === undefined) {
+  if (sortField === undefined && sortAsc === undefined) {
     return undefined;
   }
 
   const preference: Record<string, unknown> = {};
-  if (view && isViewMode(view)) {
-    preference.mode = view;
-  }
   if (sortField !== undefined) {
     preference[args.sortFieldOutputKey] = sortField;
   }
@@ -530,44 +568,23 @@ function migrateSortableViewPreference(args: {
     preference.sortAsc = sortAsc;
   }
 
-  return Object.keys(preference).length > 0 ? preference : undefined;
+  return preference;
 }
 
 function migrateSecurityViewPreference(): Record<string, unknown> | undefined {
   return migrateSortableViewPreference({
-    viewKey: 'dd-security-view-v1',
     sortFieldKey: 'dd-security-sort-field-v1',
     sortFieldOutputKey: 'sortField',
     sortAscKey: 'dd-security-sort-asc-v1',
   });
 }
 
-function migrateAuditViewPreference(): { mode: string } | undefined {
-  const auditView = readString('dd-audit-view-v1');
-  if (auditView && isViewMode(auditView)) {
-    return { mode: auditView };
-  }
-  return undefined;
-}
-
 function migrateAgentsViewPreference(): Record<string, unknown> | undefined {
   return migrateSortableViewPreference({
-    viewKey: 'dd-agents-view-v1',
     sortFieldKey: 'dd-agents-sort-key-v1',
     sortFieldOutputKey: 'sortKey',
     sortAscKey: 'dd-agents-sort-asc-v1',
   });
-}
-
-function migrateSimpleViewModePreferences(): Record<string, { mode: string }> {
-  const views: Record<string, { mode: string }> = {};
-  for (const [key, viewKey] of SIMPLE_VIEW_MODE_KEYS) {
-    const mode = readString(viewKey);
-    if (mode && isViewMode(mode)) {
-      views[key] = { mode };
-    }
-  }
-  return views;
 }
 
 function migrateViewsPreference(): Record<string, unknown> | undefined {
@@ -578,17 +595,10 @@ function migrateViewsPreference(): Record<string, unknown> | undefined {
     views.security = security;
   }
 
-  const audit = migrateAuditViewPreference();
-  if (audit) {
-    views.audit = audit;
-  }
-
   const agents = migrateAgentsViewPreference();
   if (agents) {
     views.agents = agents;
   }
-
-  Object.assign(views, migrateSimpleViewModePreferences());
 
   return Object.keys(views).length > 0 ? views : undefined;
 }
@@ -676,7 +686,15 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
   }
 
   if (data.schemaVersion === 3) {
-    data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
+    data = { ...data, schemaVersion: 4 };
+  }
+
+  if (data.schemaVersion === 4) {
+    data = { ...data, schemaVersion: 5 };
+  }
+
+  if (data.schemaVersion === 5) {
+    data = { ...data, schemaVersion: 6 };
   }
 
   if (data.schemaVersion === 6) {
@@ -691,6 +709,29 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
       }
     }
     data = { ...data, schemaVersion: 7 };
+  }
+
+  if (data.schemaVersion === 7) {
+    data = { ...data, schemaVersion: 8 };
+  }
+
+  if (data.schemaVersion === 8) {
+    data = { ...data, schemaVersion: 9 };
+  }
+
+  if (data.schemaVersion === 9) {
+    data = { ...data, schemaVersion: 10 };
+  }
+
+  if (data.schemaVersion === 10) {
+    data = {
+      ...data,
+      schemaVersion: 11,
+      sync: {
+        enabled: DEFAULTS.sync.enabled,
+        ...(isRecord(data.sync) ? data.sync : {}),
+      },
+    };
   }
 
   if (typeof data.schemaVersion === 'number' && data.schemaVersion < CURRENT_SCHEMA_VERSION) {

@@ -15,11 +15,6 @@ interface KafkaConfiguration extends TriggerConfiguration {
   };
 }
 
-type KafkaConfigurationWithLegacyAlias = KafkaConfiguration & {
-  clientid?: string;
-  clientId?: string;
-};
-
 const AUTH_TYPE_TO_SASL_MECHANISM = {
   PLAIN: 'plain',
   'SCRAM-SHA-256': 'scram-sha-256',
@@ -28,40 +23,10 @@ const AUTH_TYPE_TO_SASL_MECHANISM = {
 const SUPPORTED_AUTH_TYPES = Object.keys(
   AUTH_TYPE_TO_SASL_MECHANISM,
 ) as (keyof typeof AUTH_TYPE_TO_SASL_MECHANISM)[];
-const DEPRECATED_CLIENT_ID_KEY = 'clientId';
-const warnedLegacyConfigurationKeys = new Set<string>();
-
 function toSaslMechanism(authType: string): UserPasswordSaslMechanism {
   return (
     AUTH_TYPE_TO_SASL_MECHANISM[authType as keyof typeof AUTH_TYPE_TO_SASL_MECHANISM] ?? 'plain'
   );
-}
-
-function normalizeLegacyConfiguration(
-  configuration: KafkaConfiguration,
-  warn: (message: string) => void,
-): KafkaConfiguration {
-  const configurationWithLegacyAlias = configuration as KafkaConfigurationWithLegacyAlias;
-  if (configurationWithLegacyAlias.clientId === undefined) {
-    return configuration;
-  }
-
-  const normalizedConfiguration: KafkaConfigurationWithLegacyAlias = {
-    ...configurationWithLegacyAlias,
-  };
-  if (normalizedConfiguration.clientid === undefined) {
-    normalizedConfiguration.clientid = configurationWithLegacyAlias.clientId;
-  }
-  delete normalizedConfiguration.clientId;
-
-  if (!warnedLegacyConfigurationKeys.has(DEPRECATED_CLIENT_ID_KEY)) {
-    warnedLegacyConfigurationKeys.add(DEPRECATED_CLIENT_ID_KEY);
-    warn(
-      `Kafka trigger configuration key "${DEPRECATED_CLIENT_ID_KEY}" is deprecated and will be removed in v1.6.0. Use "clientid" instead.`,
-    );
-  }
-
-  return normalizedConfiguration;
 }
 
 /**
@@ -70,12 +35,6 @@ function normalizeLegacyConfiguration(
 class Kafka extends Trigger<KafkaConfiguration> {
   private kafka!: KafkaClient;
   private producer?: Producer;
-
-  validateConfiguration(configuration: KafkaConfiguration): KafkaConfiguration {
-    return super.validateConfiguration(
-      normalizeLegacyConfiguration(configuration, (message) => this.log.warn(message)),
-    );
-  }
 
   /**
    * Get the Trigger configuration schema.

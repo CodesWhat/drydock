@@ -1,0 +1,242 @@
+---
+title: "Server"
+description: "You can adjust the server configuration with the following environment variables."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_PUBLIC_URL` | ⚪ | Public-facing URL for OIDC callbacks and links (auto-detected from request if not set) | URL (e.g., `https://drydock.example.com`) | auto-detected |
+| `DD_SERVER_NAME` | ⚪ | Server name used in notifications to identify this instance (useful in multi-server setups with agents) | Any string | `os.hostname()` |
+| `DD_SERVER_ENABLED` | ⚪ | If REST API must be exposed | `true`, `false` | `true` |
+| `DD_SERVER_UI_ENABLED` | ⚪ | Serve the web UI (set to `false` for headless/API-only mode) | `true`, `false` | `true` |
+| `DD_SERVER_PORT` | ⚪ | Http listener port | from `0` to `65535` | `3000` |
+| `DD_SERVER_TRUSTPROXY` | ⚪ | Trust X-Forwarded-For headers when behind a reverse proxy | `true`, `false`, or hop count (`1`, `2`, etc.) | `false` |
+| `DD_SERVER_TLS_ENABLED` | ⚪ | Enable HTTPS+TLS | `true`, `false` | `false` |
+| `DD_SERVER_TLS_KEY` | ⚪ | TLS server key (required when `DD_SERVER_TLS_ENABLED` is enabled) | File path to the key file | |
+| `DD_SERVER_TLS_CERT` | ⚪ | TLS server certificate (required when `DD_SERVER_TLS_ENABLED` is enabled) | File path to the cert file | |
+| `DD_SERVER_CORS_ENABLED` | ⚪ | Enable [CORS](https://developer.mozilla.org/fr/docs/Web/HTTP/CORS) Requests | `true`, `false` | `false` |
+| `DD_SERVER_CORS_ORIGIN` | 🔴 (when CORS enabled) | Allowed CORS origin — **required** when `DD_SERVER_CORS_ENABLED=true`; startup will abort if CORS is enabled but this is unset | `*` or a single origin URL (for example `https://drydock.example.com`) | — |
+| `DD_SERVER_CORS_METHODS` | ⚪ | Supported CORS methods | Comma separated list of valid HTTP verbs | `GET,HEAD,PUT,PATCH,POST,DELETE` |
+| `DD_SERVER_COMPRESSION_ENABLED` | ⚪ | Enable gzip response compression (SSE responses are excluded automatically) | `true`, `false` | `true` |
+| `DD_SERVER_COMPRESSION_THRESHOLD` | ⚪ | Minimum response size in bytes before compression is applied | integer (`>=0`) | `1024` |
+| `DD_SERVER_FEATURE_CONTAINERACTIONS` | ⚪ | Enable start, stop, restart, and update actions via API and UI | `true`, `false` | `true` |
+| `DD_SERVER_FEATURE_DELETE` | ⚪ | If deleting operations are enabled through API & UI | `true`, `false` | `true` |
+| `DD_SERVER_METRICS_AUTH` | ⚪ | Require authentication on `/metrics` endpoint | `true`, `false` | `true` |
+| `DD_SERVER_METRICS_TOKEN` | ⚪ | Bearer token for `/metrics` Prometheus scraping (takes priority over session auth when set) | String (minimum 16 characters) | |
+| `DD_SESSION_SECRET` | ⚪ | Override the auto-generated, persisted session secret used for cookie signing | Any non-empty string (whitespace-only values are ignored) | auto-generated and persisted to `/store` on first boot |
+| `DD_SERVER_COOKIE_SAMESITE` | ⚪ | Session cookie SameSite policy for auth flows (`none` requires HTTPS) | `strict`, `lax`, `none` | `lax` |
+| `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS` | ⚪ | Maximum concurrent authenticated sessions per user (oldest sessions are revoked first at login when limit is reached) | integer (`>=1`) | `5` |
+| `DD_SERVER_RATELIMIT_IDENTITYKEYING` | ⚪ | Key authenticated-route rate limits by session/username instead of IP (prevents collisions for multiple users behind shared proxies) | `true`, `false` | `false` |
+| `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique client identities held in the auth lockout state. Older entries are pruned when the cap is reached. | integer (`>0`) | `5000` |
+| `DD_SSE_MAX_CLIENTS` | ⚪ | Maximum total concurrent SSE connections across all sessions (global cap; individual sessions are also capped at 10). Connections beyond this limit receive a `429 Too Many Requests` response. | integer (`>0`) | `500` |
+| `DD_RUN_AS_ROOT` | ⚪ | Request break-glass root mode (requires `DD_ALLOW_INSECURE_ROOT=true`) | `true`, `false` | `false` |
+| `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
+
+For log output configuration (`DD_LOG_LEVEL`, `DD_LOG_FORMAT`), see [Logs configuration](/docs/configuration/logs).
+
+## CORS Security Guidance
+
+`DD_SERVER_CORS_ORIGIN` is **required** when `DD_SERVER_CORS_ENABLED=true`. Drydock will abort at startup if CORS is enabled without an explicit origin. To intentionally allow all origins (local testing only), set `DD_SERVER_CORS_ORIGIN=*` explicitly.
+
+For production deployments, set a specific trusted origin:
+
+- `DD_SERVER_CORS_ORIGIN=https://drydock.example.com`
+- `DD_SERVER_CORS_ORIGIN=https://ops.example.com`
+
+## Container Healthcheck
+
+The official Docker image includes a built-in `HEALTHCHECK` that polls the `/health` endpoint using a lightweight static binary. When `DD_SERVER_TLS_ENABLED=true`, the healthcheck automatically switches to HTTPS (with `--insecure` semantics for self-signed certificates). No additional configuration is needed — remove any custom `healthcheck:` blocks from your compose file.
+
+<Callout type="warn">**Deprecated:** Custom `curl`-based healthcheck overrides (e.g. `test: curl --fail http://localhost:3000/health`) remain supported for backward compatibility in v1.5.x. When Drydock can inspect its own container through the local Docker socket, the UI shows a deprecation banner if it detects a curl-based override. v1.6.0 is the final warning release, and `curl` will be removed from the image in v1.7.0. Use the built-in probe or switch to `/bin/healthcheck ${DD_SERVER_PORT:-3000}` for custom intervals.</Callout>
+
+## Plain HTTP Deployments
+
+When `DD_SERVER_TLS_ENABLED` is not set or is `false`, drydock automatically adjusts its security headers for plain HTTP:
+
+- **HSTS** is omitted (since the browser is not on HTTPS)
+- **`upgrade-insecure-requests`** CSP directive is omitted (prevents browsers from blocking sub-resource loads)
+
+No additional configuration is required — drydock detects the TLS state and adapts automatically. If you run drydock behind a TLS-terminating reverse proxy, set `DD_SERVER_TRUSTPROXY=1` (use a hop count, not `true`, to avoid IP spoofing — see the Reverse proxy section below) so drydock sees the correct protocol from `X-Forwarded-Proto`.
+
+## Session Cookie SameSite Guidance
+
+- Use `lax` (default) for typical web + OIDC setups.
+- Use `strict` only when drydock and IdP are same-site and you want the strictest cookie policy.
+- Use `none` only when you explicitly need cross-site cookies (for example embedded UI), and only over HTTPS. Setting `DD_SERVER_COOKIE_SAMESITE=none` causes a startup validation check -- drydock will refuse to start unless `DD_SERVER_TLS_ENABLED=true` or `DD_SERVER_TRUSTPROXY` is set, ensuring cookies are only sent over a secure transport.
+
+## Concurrent Session Guidance
+
+`DD_SERVER_SESSION_MAXCONCURRENTSESSIONS` controls how many authenticated sessions each user may keep active at once. When a login would exceed the cap, drydock revokes that user's oldest existing sessions first.
+
+## Examples
+
+### Disable http listener
+
+<Tabs items={["Docker Compose (Disable Listener)", "Docker (Disable Listener)"]}>
+<Tab value="Docker Compose (Disable Listener)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_SERVER_ENABLED=false
+```
+
+</Tab>
+<Tab value="Docker (Disable Listener)">
+```bash
+docker run \
+  -e DD_SERVER_ENABLED=false \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+### Set http listener port to 8080
+
+<Tabs items={["Docker Compose (Custom Port)", "Docker (Custom Port)"]}>
+<Tab value="Docker Compose (Custom Port)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_SERVER_PORT=8080
+```
+
+</Tab>
+<Tab value="Docker (Custom Port)">
+```bash
+docker run \
+  -e DD_SERVER_PORT=8080 \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+### Enable HTTPS
+
+<Tabs items={["Docker Compose (HTTPS)", "Docker (HTTPS)"]}>
+<Tab value="Docker Compose (HTTPS)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_SERVER_TLS_ENABLED=true
+      - DD_SERVER_TLS_KEY=/drydock_certs/server.key
+      - DD_SERVER_TLS_CERT=/drydock_certs/server.crt
+```
+
+</Tab>
+<Tab value="Docker (HTTPS)">
+```bash
+docker run \
+  -e "DD_SERVER_TLS_ENABLED=true" \
+  -e "DD_SERVER_TLS_KEY=/drydock_certs/server.key" \
+  -e "DD_SERVER_TLS_CERT=/drydock_certs/server.crt" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+### Reverse proxy (trust proxy)
+
+**Required when drydock runs behind a TLS-terminating reverse proxy** (Traefik, Nginx, Caddy, HAProxy, etc.). Without this setting, drydock cannot determine the real protocol or client IP from forwarded headers, which causes:
+
+- **CSRF validation failures** (403 errors on POST/PUT/DELETE requests) — drydock sees `http://` internally while the browser sends `Origin: https://...`
+- **Incorrect security headers** — HSTS and secure cookie flags may not be applied
+- **Wrong client IPs in logs and rate limiting** — drydock sees the proxy's IP instead of the real client
+
+Set `DD_SERVER_TRUSTPROXY=1` to trust one proxy hop. Use a higher number if you have chained proxies (e.g. CDN → load balancer → app proxy = `3`).
+
+<Tabs items={["Docker Compose (Trust Proxy)", "Docker (Trust Proxy)"]}>
+<Tab value="Docker Compose (Trust Proxy)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_SERVER_TRUSTPROXY=1
+```
+
+</Tab>
+<Tab value="Docker (Trust Proxy)">
+```bash
+docker run \
+  -e DD_SERVER_TRUSTPROXY=1 \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+Your proxy must forward the `X-Forwarded-Proto` header so drydock knows whether the original request used HTTPS. Most proxies (Traefik, Caddy, NGINX Proxy Manager) do this by default. For Nginx, add `proxy_set_header X-Forwarded-Proto $scheme;` to your location block. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for complete Traefik and Nginx examples.
+
+## Advanced Tuning
+
+These variables control the icon proxy cache used to serve container icons. Defaults are suitable for most deployments.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_ICON_CACHE_TTL_MS` | ⚪ | TTL for cached icon files on disk | integer (ms) | `2592000000` (30 days) |
+| `DD_ICON_CACHE_MAX_FILES` | ⚪ | Maximum number of icon files in cache | integer (`>0`) | `5000` |
+| `DD_ICON_CACHE_MAX_BYTES` | ⚪ | Maximum total size of icon cache in bytes | integer (`>0`) | `104857600` (100 MB) |
+| `DD_STATS_INTERVAL` | ⚪ | Stats aggregator poll cycle in seconds — how often the fleet-stats snapshot is refreshed | integer (`>0`) | `10` |
+| `DD_STATS_HISTORY_SIZE` | ⚪ | Number of historical fleet-stat snapshots retained per container (older snapshots are evicted when the cap is exceeded) | integer (`>0`) | `60` |
+
+### Secrets from files
+
+Any `DD_*` environment variable can be loaded from a file by appending `__FILE` to the variable name and setting the value to the file path. This is useful for Docker secrets and other secret management tools.
+
+<Tabs items={["Docker Compose (Secrets from Files)", "Docker (Secrets from Files)"]}>
+<Tab value="Docker Compose (Secrets from Files)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token
+      - DD_SERVER_WEBHOOK_TOKENS_UPDATE__FILE=/run/secrets/webhook_update_token
+    secrets:
+      - webhook_token
+      - webhook_update_token
+
+secrets:
+  webhook_token:
+    file: ./webhook_token.txt
+  webhook_update_token:
+    file: ./webhook_update_token.txt
+```
+
+</Tab>
+<Tab value="Docker (Secrets from Files)">
+```bash
+docker run \
+  -e DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token \
+  -e DD_SERVER_WEBHOOK_TOKENS_UPDATE__FILE=/run/secrets/webhook_update_token \
+  -v ./webhook_token.txt:/run/secrets/webhook_token:ro \
+  -v ./webhook_update_token.txt:/run/secrets/webhook_update_token:ro \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>

@@ -1316,7 +1316,7 @@ describe('Dockercompose Trigger', () => {
 
     expect(pullImageSpy).not.toHaveBeenCalled();
     expect(mockLog.child).toHaveBeenCalledWith({ container: 'nginx' });
-    expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('dry-run mode is enabled'));
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('dry-run mode is enabled'));
   });
 
   test('updateContainerWithCompose should pull and recreate the target service via Docker API', async () => {
@@ -1904,7 +1904,7 @@ describe('Dockercompose Trigger', () => {
     expect(hooksSpy).not.toHaveBeenCalled();
     expect(getCurrentContainerSpy).not.toHaveBeenCalled();
     expect(orchestratorExecuteSpy).not.toHaveBeenCalled();
-    expect(mockLog.info).toHaveBeenCalledWith(
+    expect(mockLog.warn).toHaveBeenCalledWith(
       'Do not replace the existing container because dry-run mode is enabled',
     );
   });
@@ -3440,14 +3440,14 @@ describe('Dockercompose Trigger', () => {
     expect(result).toBe('/opt/compose.yml');
   });
 
-  test('getComposeFileForContainer should use wud fallback label', () => {
+  test('getComposeFileForContainer should ignore removed wud label', () => {
     const container = {
       labels: { 'wud.compose.file': '/opt/wud-compose.yml' },
     };
 
     const result = trigger.getComposeFileForContainer(container);
 
-    expect(result).toBe('/opt/wud-compose.yml');
+    expect(result).toBeNull();
   });
 
   test('getComposeFileForContainer should use the first compose config file from compose labels', () => {

@@ -10,12 +10,16 @@ import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js'
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { toPositiveInteger } from '../util/parse.js';
+import { buildGrypeInvocation, parseGrypeOutput } from './providers/grype.js';
 import { hasValidCommandPath } from './runtime.js';
+import { getDefaultScannerRuntime } from './scanner-runtime.js';
+import { createTrivyDatabaseWarmup } from './trivy-warmup.js';
 
 export { SECURITY_SBOM_FORMATS, type SecuritySbomFormat, type SecuritySeverity, toPositiveInteger };
 export type SecurityScanStatus = 'passed' | 'blocked' | 'error';
 export type SecuritySignatureStatus = 'verified' | 'unverified' | 'error';
 export type SecuritySbomStatus = 'generated' | 'error';
+export type SecurityScanner = 'trivy' | 'grype' | 'both';
 
 export interface ContainerVulnerabilitySummary {
   unknown: number;
@@ -34,17 +38,24 @@ export interface ContainerVulnerability {
   severity: SecuritySeverity;
   title?: string;
   primaryUrl?: string;
+  scanners?: Array<'trivy' | 'grype'>;
 }
 
 export interface ContainerSecurityScan {
-  scanner: 'trivy';
+  scanner: SecurityScanner;
   image: string;
+  imageDigest?: string;
   scannedAt: string;
   status: SecurityScanStatus;
   blockSeverities: SecuritySeverity[];
   blockingCount: number;
   summary: ContainerVulnerabilitySummary;
   vulnerabilities: ContainerVulnerability[];
+  relativeGate?: {
+    decision: 'passed' | 'blocked';
+    reason: 'no-worse-than-current' | 'candidate-worse' | 'current-scan-unavailable';
+    currentSummary?: ContainerVulnerabilitySummary;
+  };
   error?: string;
 }
 
@@ -59,17 +70,23 @@ export interface ContainerSignatureVerification {
 }
 
 export interface ContainerSecuritySbom {
-  generator: 'trivy';
+  generator: 'trivy' | 'syft';
   image: string;
+  subjectDigest?: string;
   generatedAt: string;
   status: SecuritySbomStatus;
   formats: SecuritySbomFormat[];
-  documents: Partial<Record<SecuritySbomFormat, unknown>>;
+  /** Legacy inline documents retained only until startup migration succeeds. */
+  documents?: Partial<Record<SecuritySbomFormat, unknown>>;
+  documentRefs?: Partial<
+    Record<SecuritySbomFormat, { key: string; sha256: string; bytes: number }>
+  >;
   error?: string;
 }
 
 interface ScanImageOptions {
   image: string;
+  retryTransient?: boolean;
   auth?: {
     username?: string;
     password?: string;
@@ -102,7 +119,11 @@ interface TrivyRawOutput {
 const MAX_TRIVY_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_TRIVY_PARSE_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_COSIGN_OUTPUT_BYTES = 2 * 1024 * 1024; // 2 MB
+const MAX_SYFT_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_STORED_VULNERABILITIES = 500;
+const TRIVY_PROCESS_TIMEOUT_GRACE_MS = 30_000;
+const TRIVY_DB_WARMUP_TIMEOUT_MS = 10 * 60 * 1000;
+const TRIVY_DB_WARMUP_MAX_BUFFER_BYTES = 512 * 1024;
 const DEFAULT_DIGEST_SCAN_CACHE_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const COSIGN_UNVERIFIED_PATTERNS = [
   'no matching signatures',
@@ -224,6 +245,7 @@ function runCommand(options: {
   command: string;
   args: string[];
   timeout: number;
+  reportedTimeout?: number;
   maxBuffer: number;
   env: NodeJS.ProcessEnv;
   commandName: string;
@@ -239,14 +261,49 @@ function runCommand(options: {
       },
       (error, stdout, stderr) => {
         if (error) {
-          const exitCode = (error as NodeJS.ErrnoException)?.code ?? child.exitCode ?? 'unknown';
+          const commandError = error as NodeJS.ErrnoException & {
+            killed?: boolean;
+            signal?: string;
+          };
+          const exitCode = commandError.code ?? child.exitCode ?? 'unknown';
           const stderrValue = `${stderr || ''}`.trim();
           const errorMessage = stderrValue || error.message;
+          const maxBufferExceeded = commandError.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+          const processTimedOut =
+            !maxBufferExceeded &&
+            (commandError.code === 'ETIMEDOUT' ||
+              (commandError.killed === true && commandError.signal === 'SIGTERM'));
+          const commandTimedOut =
+            !maxBufferExceeded &&
+            /(?:context deadline exceeded|i\/o timeout|tls handshake timeout|client\.timeout exceeded|(?:request|operation) timed out)/i.test(
+              errorMessage,
+            );
+          if (processTimedOut || commandTimedOut) {
+            const configuredTimeout = options.reportedTimeout ?? options.timeout;
+            const timeoutMessage = processTimedOut
+              ? `${options.commandName} process timed out after ${options.timeout}ms (configured timeout ${configuredTimeout}ms)`
+              : `${options.commandName} command timed out after ${configuredTimeout}ms`;
+            reject(
+              new CommandExecutionError(
+                `${timeoutMessage}${errorMessage ? `: ${errorMessage}` : ''}`,
+                true,
+              ),
+            );
+            return;
+          }
+          const transient =
+            commandError.code === 'ECONNRESET' ||
+            commandError.code === 'EAI_AGAIN' ||
+            commandError.code === 'ECONNREFUSED' ||
+            /(?:temporary|temporarily unavailable|connection (?:reset|refused)|no such host|temporary failure in name resolution|database.*(?:download|update|lock)|failed to download.*db)/i.test(
+              errorMessage,
+            );
           reject(
-            new Error(
+            new CommandExecutionError(
               `${options.commandName} command failed (exit=${exitCode}): ${
                 errorMessage || 'unknown error'
               }`,
+              transient,
             ),
           );
           return;
@@ -256,6 +313,60 @@ function runCommand(options: {
     );
   });
 }
+
+class CommandExecutionError extends Error {
+  readonly transient: boolean;
+
+  constructor(message: string, transient: boolean) {
+    super(message);
+    this.name = 'CommandExecutionError';
+    this.transient = transient;
+  }
+}
+
+function isTransientCommandError(error: unknown): boolean {
+  if (error instanceof CommandExecutionError) {
+    return error.transient;
+  }
+  return (
+    error instanceof Error &&
+    /(?:timed out|timeout|connection (?:reset|refused)|temporary|no such host|pull.*(?:failed|unavailable)|database.*(?:download|update|lock))/i.test(
+      error.message,
+    )
+  );
+}
+
+const logTrivyWarmup = log.child({ component: 'security.trivy-warmup' });
+
+export const warmTrivyDatabase = createTrivyDatabaseWarmup({
+  getConfiguration: () => getSecurityConfiguration(),
+  timeoutMs: TRIVY_DB_WARMUP_TIMEOUT_MS,
+  failureCooldownMs: 15 * 60 * 1000,
+  execute: (operation) => enqueueTrivy(operation),
+  run: async ({ command, args, timeoutMs }) => {
+    if (!hasValidCommandPath(command)) {
+      throw new Error(
+        `Trivy command "${sanitizeLogParam(command)}" is invalid; use a command name or absolute path`,
+      );
+    }
+    await runCommand({
+      command,
+      args,
+      timeout: timeoutMs + TRIVY_PROCESS_TIMEOUT_GRACE_MS,
+      reportedTimeout: timeoutMs,
+      maxBuffer: TRIVY_DB_WARMUP_MAX_BUFFER_BYTES,
+      env: process.env,
+      commandName: 'Trivy database warm-up',
+    });
+  },
+  onFailure: (error) => {
+    logTrivyWarmup.warn(
+      `Trivy database warm-up failed (${sanitizeLogParam(
+        getErrorMessage(error, 'Unknown Trivy database warm-up error'),
+      )}); the scan will continue with Trivy's normal database handling`,
+    );
+  },
+});
 
 function buildTrivyEnvironment(options: ScanImageOptions) {
   const env = { ...process.env };
@@ -273,6 +384,19 @@ const TRIVY_FORMAT_MAP: Partial<Record<string, string>> = {
 
 function toTrivyFormat(format: string): string {
   return TRIVY_FORMAT_MAP[format] ?? format;
+}
+
+function validateProviderExtraArgs(
+  provider: string,
+  extraArgs: string[],
+  protectedFlags: string[],
+): string[] {
+  for (const argument of extraArgs) {
+    if (protectedFlags.some((flag) => argument === flag || argument.startsWith(`${flag}=`))) {
+      throw new Error(`${provider} extra arguments cannot override ${argument.split('=')[0]}`);
+    }
+  }
+  return extraArgs;
 }
 
 function buildTrivyArgs(
@@ -300,6 +424,20 @@ function buildTrivyArgs(
     args.push('--image-src', configuration.trivy.imageSrc);
   }
 
+  args.push(
+    ...validateProviderExtraArgs('Trivy', configuration.trivy.extraArgs || [], [
+      '-f',
+      '-o',
+      '-s',
+      '--format',
+      '--output',
+      '--timeout',
+      '--server',
+      '--scanners',
+      '--severity',
+    ]),
+  );
+
   return args;
 }
 
@@ -316,13 +454,24 @@ function runTrivyVulnerabilityCommand(
     }
     const args = [...buildTrivyArgs(configuration, 'json'), options.image];
 
-    return runCommand({
+    const invocation = {
       command: trivyCommand,
       args,
-      timeout: configuration.trivy.timeout,
+      timeout: configuration.trivy.timeout + TRIVY_PROCESS_TIMEOUT_GRACE_MS,
+      reportedTimeout: configuration.trivy.timeout,
       maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
+    };
+    if (configuration.backend === 'command') {
+      return runCommand(invocation);
+    }
+    return getDefaultScannerRuntime().run({
+      provider: 'trivy',
+      args,
+      env: invocation.env,
+      timeoutMs: invocation.timeout,
+      maxOutputBytes: invocation.maxBuffer,
     });
   });
 }
@@ -341,14 +490,127 @@ function runTrivySbomCommand(
     }
     const args = [...buildTrivyArgs(configuration, format), options.image];
 
-    return runCommand({
+    const invocation = {
       command: trivyCommand,
       args,
-      timeout: configuration.trivy.timeout,
+      timeout: configuration.trivy.timeout + TRIVY_PROCESS_TIMEOUT_GRACE_MS,
+      reportedTimeout: configuration.trivy.timeout,
       maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
+    };
+    if (configuration.backend === 'command') {
+      return runCommand(invocation);
+    }
+    return getDefaultScannerRuntime().run({
+      provider: 'trivy',
+      args,
+      env: invocation.env,
+      timeoutMs: invocation.timeout,
+      maxOutputBytes: invocation.maxBuffer,
     });
+  });
+}
+
+async function runTrivyVulnerabilityCommandWithRetry(
+  options: ScanImageOptions,
+  configuration: ReturnType<typeof getSecurityConfiguration>,
+): Promise<string> {
+  try {
+    return await runTrivyVulnerabilityCommand(options, configuration);
+  } catch (error: unknown) {
+    if (!options.retryTransient || !isTransientCommandError(error)) {
+      throw error;
+    }
+    return runTrivyVulnerabilityCommand(options, configuration);
+  }
+}
+
+function runGrypeVulnerabilityCommand(
+  options: ScanImageOptions,
+  configuration: ReturnType<typeof getSecurityConfiguration>,
+): Promise<string> {
+  const invocation = buildGrypeInvocation(options, configuration.grype);
+  if (configuration.backend === 'command') {
+    return runCommand(invocation);
+  }
+  return getDefaultScannerRuntime().run({
+    provider: 'grype',
+    args: invocation.args,
+    env: invocation.env,
+    timeoutMs: invocation.timeout,
+    maxOutputBytes: invocation.maxBuffer,
+  });
+}
+
+async function runGrypeVulnerabilityCommandWithRetry(
+  options: ScanImageOptions,
+  configuration: ReturnType<typeof getSecurityConfiguration>,
+): Promise<string> {
+  try {
+    return await runGrypeVulnerabilityCommand(options, configuration);
+  } catch (error: unknown) {
+    if (!options.retryTransient || !isTransientCommandError(error)) {
+      throw error;
+    }
+    return runGrypeVulnerabilityCommand(options, configuration);
+  }
+}
+
+function resolveSbomGenerator(configuration: ReturnType<typeof getSecurityConfiguration>) {
+  if (configuration.sbom.generator === 'trivy' || configuration.sbom.generator === 'syft') {
+    return configuration.sbom.generator;
+  }
+  return configuration.scanner === 'grype' ? 'syft' : 'trivy';
+}
+
+function buildSyftEnvironment(options: ScanImageOptions): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  if (options.auth?.password !== undefined) {
+    env.SYFT_REGISTRY_AUTH_USERNAME = options.auth.username ?? '';
+    env.SYFT_REGISTRY_AUTH_PASSWORD = options.auth.password;
+  }
+  return env;
+}
+
+function runSyftSbomCommand(
+  options: ScanImageOptions,
+  configuration: ReturnType<typeof getSecurityConfiguration>,
+  format: SecuritySbomFormat,
+): Promise<string> {
+  const command = `${configuration.syft.command || 'syft'}`.trim() || 'syft';
+  if (!hasValidCommandPath(command)) {
+    throw new Error(
+      `Syft command "${sanitizeLogParam(command)}" is invalid; use a command name or absolute path`,
+    );
+  }
+  const args = [
+    `registry:${options.image}`,
+    '--output',
+    format,
+    ...validateProviderExtraArgs('Syft', configuration.syft.extraArgs || [], [
+      '--output',
+      '-o',
+      '--file',
+    ]),
+  ];
+  const env = buildSyftEnvironment(options);
+  if (configuration.backend === 'command') {
+    return runCommand({
+      command,
+      args,
+      timeout: configuration.syft.timeout,
+      maxBuffer: MAX_SYFT_OUTPUT_BYTES,
+      env,
+      commandName: 'Syft',
+    });
+  }
+  return getDefaultScannerRuntime().run({
+    provider: 'syft',
+    args,
+    env,
+    timeoutMs: configuration.syft.timeout,
+    maxOutputBytes: MAX_SYFT_OUTPUT_BYTES,
   });
 }
 
@@ -408,9 +670,10 @@ function mapToErrorResult(
   image: string,
   blockSeverities: SecuritySeverity[],
   errorMessage: string,
+  scanner: SecurityScanner = 'trivy',
 ): ContainerSecurityScan {
   return {
-    scanner: 'trivy',
+    scanner,
     image,
     scannedAt: new Date().toISOString(),
     status: 'error',
@@ -420,6 +683,85 @@ function mapToErrorResult(
     vulnerabilities: [],
     error: errorMessage,
   };
+}
+
+type ProviderScanResult = {
+  provider: 'trivy' | 'grype';
+  vulnerabilities: ContainerVulnerability[];
+  error?: string;
+};
+
+async function scanWithProvider(
+  provider: 'trivy' | 'grype',
+  options: ScanImageOptions,
+  configuration: ReturnType<typeof getSecurityConfiguration>,
+): Promise<ProviderScanResult> {
+  try {
+    if (provider === 'trivy') {
+      if (configuration.backend === 'command') {
+        await warmTrivyDatabase();
+      } else {
+        const runtime = getDefaultScannerRuntime();
+        if (runtime.assets.get('trivy').state !== 'ready') {
+          await runtime.assets.warm('trivy');
+        }
+      }
+      const output = await runTrivyVulnerabilityCommandWithRetry(options, configuration);
+      return { provider, vulnerabilities: parseTrivyOutput(output) };
+    }
+    if (configuration.backend !== 'command') {
+      const runtime = getDefaultScannerRuntime();
+      if (runtime.assets.get('grype').state !== 'ready') {
+        await runtime.assets.warm('grype');
+      }
+    }
+    const output = await runGrypeVulnerabilityCommandWithRetry(options, configuration);
+    return { provider, vulnerabilities: parseGrypeOutput(output) };
+  } catch (error: unknown) {
+    return {
+      provider,
+      vulnerabilities: [],
+      error: getErrorMessage(error, 'Unknown security scan error'),
+    };
+  }
+}
+
+function vulnerabilityIdentity(vulnerability: ContainerVulnerability): string {
+  return [
+    vulnerability.id,
+    vulnerability.target || '',
+    vulnerability.packageName || '',
+    vulnerability.installedVersion || '',
+  ].join('\0');
+}
+
+function mergeProviderVulnerabilities(results: ProviderScanResult[]): ContainerVulnerability[] {
+  const severityRank: Record<SecuritySeverity, number> = {
+    UNKNOWN: 0,
+    LOW: 1,
+    MEDIUM: 2,
+    HIGH: 3,
+    CRITICAL: 4,
+  };
+  const merged = new Map<string, ContainerVulnerability>();
+  results.forEach((result) => {
+    result.vulnerabilities.forEach((vulnerability) => {
+      const identity = vulnerabilityIdentity(vulnerability);
+      const existing = merged.get(identity);
+      if (!existing) {
+        merged.set(identity, { ...vulnerability, scanners: [result.provider] });
+        return;
+      }
+      existing.scanners = Array.from(new Set([...existing.scanners!, result.provider])).sort();
+      if (severityRank[vulnerability.severity] > severityRank[existing.severity]) {
+        existing.severity = vulnerability.severity;
+      }
+      existing.fixedVersion ||= vulnerability.fixedVersion;
+      existing.title ||= vulnerability.title;
+      existing.primaryUrl ||= vulnerability.primaryUrl;
+    });
+  });
+  return Array.from(merged.values());
 }
 
 function mapToSignatureResult(
@@ -444,14 +786,15 @@ function mapToSbomErrorResult(
   image: string,
   formats: SecuritySbomFormat[],
   errorMessage: string,
+  generator: 'trivy' | 'syft' = 'trivy',
 ): ContainerSecuritySbom {
   return {
-    generator: 'trivy',
+    generator,
     image,
     generatedAt: new Date().toISOString(),
     status: 'error',
     formats,
-    documents: {},
+    documentRefs: {},
     error: errorMessage,
   };
 }
@@ -533,17 +876,17 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-/**
- * Run vulnerability scan for an image using the configured scanner.
- * Currently supports Trivy only.
- */
+/** Run a vulnerability scan with the configured provider set. */
 export async function scanImageForVulnerabilities(
   options: ScanImageOptions,
 ): Promise<ContainerSecurityScan> {
   const configuration = getSecurityConfiguration();
   const blockSeverities = configuration.blockSeverities;
 
-  if (!configuration.enabled || configuration.scanner !== 'trivy') {
+  if (
+    !configuration.enabled ||
+    !(['trivy', 'grype', 'both'] as const).includes(configuration.scanner as SecurityScanner)
+  ) {
     return mapToErrorResult(
       options.image,
       blockSeverities,
@@ -557,32 +900,46 @@ export async function scanImageForVulnerabilities(
     image: options.image,
   });
 
-  try {
-    const trivyOutput = await runTrivyVulnerabilityCommand(options, configuration);
-    const vulnerabilities = parseTrivyOutput(trivyOutput);
-    const blockingCount = getBlockingCount(vulnerabilities, blockSeverities);
-    const summary = buildSummary(vulnerabilities);
-    const vulnerabilitiesToStore = vulnerabilities.slice(0, MAX_STORED_VULNERABILITIES);
+  const scanner = configuration.scanner as SecurityScanner;
+  const providers: Array<'trivy' | 'grype'> = scanner === 'both' ? ['trivy', 'grype'] : [scanner];
+  const providerResults = await Promise.all(
+    providers.map((provider) => scanWithProvider(provider, options, configuration)),
+  );
+  const errors = providerResults
+    .filter((result) => result.error)
+    .map((result) =>
+      scanner === 'both'
+        ? `${result.provider === 'trivy' ? 'Trivy' : 'Grype'}: ${result.error}`
+        : (result.error as string),
+    );
+  const vulnerabilities =
+    scanner === 'both'
+      ? mergeProviderVulnerabilities(providerResults)
+      : providerResults[0].vulnerabilities;
+  const blockingCount = getBlockingCount(vulnerabilities, blockSeverities);
+  const status: SecurityScanStatus =
+    blockingCount > 0 ? 'blocked' : errors.length > 0 ? 'error' : 'passed';
+  const error = errors.length > 0 ? errors.join('; ') : undefined;
 
+  if (status === 'error') {
+    logSecurity.warn(`Security scan failed (${sanitizeLogParam(error as string)})`);
+  } else {
     logSecurity.info(
       `Scan finished (${vulnerabilities.length} vulnerabilities, ${blockingCount} blocking)`,
     );
-
-    return {
-      scanner: 'trivy',
-      image: options.image,
-      scannedAt: new Date().toISOString(),
-      status: blockingCount > 0 ? 'blocked' : 'passed',
-      blockSeverities,
-      blockingCount,
-      summary,
-      vulnerabilities: vulnerabilitiesToStore,
-    };
-  } catch (error: unknown) {
-    const errorMessage = getErrorMessage(error, 'Unknown security scan error');
-    logSecurity.warn(`Security scan failed (${errorMessage})`);
-    return mapToErrorResult(options.image, blockSeverities, errorMessage);
   }
+
+  return {
+    scanner,
+    image: options.image,
+    scannedAt: new Date().toISOString(),
+    status,
+    blockSeverities,
+    blockingCount,
+    summary: buildSummary(vulnerabilities),
+    vulnerabilities: vulnerabilities.slice(0, MAX_STORED_VULNERABILITIES),
+    ...(error ? { error } : {}),
+  };
 }
 
 /**
@@ -624,27 +981,26 @@ export async function verifyImageSignature(
   }
 }
 
-/**
- * Generate SBOM documents using Trivy.
- * Supported formats: spdx-json, cyclonedx-json.
- */
+/** Generate SBOM documents using the configured provider-neutral generator. */
 export async function generateImageSbom(
   options: GenerateSbomOptions,
 ): Promise<ContainerSecuritySbom> {
   const configuration = getSecurityConfiguration();
   const formats = resolveSbomFormats(options.formats, configuration.sbom.formats);
+  const generator = resolveSbomGenerator(configuration);
 
-  if (!configuration.enabled || configuration.scanner !== 'trivy') {
+  if (!configuration.enabled) {
     return mapToSbomErrorResult(
       options.image,
       formats,
       'Security scanner is disabled or misconfigured',
+      generator,
     );
   }
 
   const logSecurity = log.child({
     component: 'security.sbom',
-    generator: 'trivy',
+    generator,
     image: options.image,
     formats: formats.join(','),
   });
@@ -655,7 +1011,10 @@ export async function generateImageSbom(
 
   for (const format of formats) {
     try {
-      const sbomOutput = await runTrivySbomCommand(options, configuration, format);
+      const sbomOutput =
+        generator === 'trivy'
+          ? await runTrivySbomCommand(options, configuration, format)
+          : await runSyftSbomCommand(options, configuration, format);
       documentMap.set(format, JSON.parse(sbomOutput));
       generatedFormats.push(format);
     } catch (error: unknown) {
@@ -669,11 +1028,11 @@ export async function generateImageSbom(
   if (generatedFormats.length === 0) {
     const errorMessage = errors.join('; ');
     logSecurity.warn(sanitizeLogParam(errorMessage));
-    return mapToSbomErrorResult(options.image, formats, errorMessage);
+    return mapToSbomErrorResult(options.image, formats, errorMessage, generator);
   }
 
   const sbomResult: ContainerSecuritySbom = {
-    generator: 'trivy',
+    generator,
     image: options.image,
     generatedAt: new Date().toISOString(),
     status: 'generated',
@@ -698,6 +1057,7 @@ const ERROR_RETRY_FLOOR_MS = 15 * 60 * 1000; // 15 minutes
 interface ErrorRetryFloorEntry {
   errorAt: number;
   scanResult: ContainerSecurityScan;
+  scannerFingerprint: string;
 }
 
 const errorRetryFloor = new Map<string, ErrorRetryFloorEntry>();
@@ -710,7 +1070,7 @@ export function _resetErrorRetryFloorForTesting(): void {
 interface DigestScanCacheEntry {
   digest: string;
   scanResult: ContainerSecurityScan;
-  trivyDbUpdatedAt: string;
+  scannerFingerprint: string;
   cachedAt: number;
 }
 
@@ -719,7 +1079,7 @@ const digestScanCache = new Map<string, DigestScanCacheEntry>();
 function setDigestScanCacheEntry(
   digest: string,
   scanResult: ContainerSecurityScan,
-  trivyDbUpdatedAt: string,
+  assetUpdatedAt: string,
 ): void {
   if (digestScanCache.has(digest)) {
     digestScanCache.delete(digest);
@@ -727,7 +1087,7 @@ function setDigestScanCacheEntry(
   digestScanCache.set(digest, {
     digest,
     scanResult,
-    trivyDbUpdatedAt,
+    scannerFingerprint: getScannerFingerprint(assetUpdatedAt),
     cachedAt: Date.now(),
   });
 
@@ -753,9 +1113,14 @@ export function getDigestScanCacheSize(): number {
 export function updateDigestScanCache(
   digest: string,
   scanResult: ContainerSecurityScan,
-  trivyDbUpdatedAt: string,
+  assetUpdatedAt: string,
 ): void {
-  setDigestScanCacheEntry(digest, scanResult, trivyDbUpdatedAt);
+  setDigestScanCacheEntry(digest, { ...scanResult, imageDigest: digest }, assetUpdatedAt);
+}
+
+function getScannerFingerprint(assetUpdatedAt: string): string {
+  const configuration = getSecurityConfiguration();
+  return `${configuration.scanner}:${configuration.backend}:${assetUpdatedAt}`;
 }
 
 export async function scanImageWithDedup(
@@ -764,15 +1129,18 @@ export async function scanImageWithDedup(
 ): Promise<{ scanResult: ContainerSecurityScan; fromCache: boolean }> {
   const cached = digestScanCache.get(options.digest);
   const dbUpdatedAt = options.trivyDbUpdatedAt;
+  const scannerFingerprint = getScannerFingerprint(dbUpdatedAt || '');
 
   if (
     cached &&
-    dbUpdatedAt &&
-    cached.trivyDbUpdatedAt === dbUpdatedAt &&
+    cached.scannerFingerprint === scannerFingerprint &&
     Date.now() - cached.cachedAt < scanIntervalMs
   ) {
     markDigestScanCacheEntryAsRecentlyUsed(options.digest, cached);
-    return { scanResult: cached.scanResult, fromCache: true };
+    return {
+      scanResult: { ...cached.scanResult, imageDigest: options.digest },
+      fromCache: true,
+    };
   }
 
   // If the last scan for this digest errored and we're still within the retry
@@ -780,18 +1148,30 @@ export async function scanImageWithDedup(
   // This bounds retry frequency under aggressive cron schedules or registry
   // outages without letting the error propagate forever. Issue #357.
   const floorEntry = errorRetryFloor.get(options.digest);
-  if (floorEntry !== undefined && Date.now() - floorEntry.errorAt < ERROR_RETRY_FLOOR_MS) {
-    return { scanResult: floorEntry.scanResult, fromCache: true };
+  if (
+    floorEntry !== undefined &&
+    floorEntry.scannerFingerprint === scannerFingerprint &&
+    Date.now() - floorEntry.errorAt < ERROR_RETRY_FLOOR_MS
+  ) {
+    return {
+      scanResult: { ...floorEntry.scanResult, imageDigest: options.digest },
+      fromCache: true,
+    };
   }
 
-  const scanResult = await scanImageForVulnerabilities(options);
+  const rawScanResult = await scanImageForVulnerabilities(options);
+  const scanResult = { ...rawScanResult, imageDigest: options.digest };
 
   if (scanResult.status === 'error') {
     // Record the error so we can enforce the retry floor on subsequent calls.
     // Do not cache the error in the main cache — a later successful scan
     // should always overwrite without a TTL barrier.
-    errorRetryFloor.set(options.digest, { errorAt: Date.now(), scanResult });
-  } else {
+    errorRetryFloor.set(options.digest, {
+      errorAt: Date.now(),
+      scanResult,
+      scannerFingerprint,
+    });
+  } else if (!scanResult.error) {
     // Clear any previous error floor entry and store the successful result.
     errorRetryFloor.delete(options.digest);
     setDigestScanCacheEntry(options.digest, scanResult, dbUpdatedAt || '');

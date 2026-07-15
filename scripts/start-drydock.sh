@@ -164,7 +164,7 @@ echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with im
 for i in $(seq 1 75); do
 	# Count containers that have a populated image.name (not just discovered)
 	CONTAINERS_JSON=""
-	if CONTAINERS_JSON=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "http://localhost:${E2E_PORT}/api/containers" 2>/dev/null); then
+	if CONTAINERS_JSON=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "http://localhost:${E2E_PORT}/api/v1/containers" 2>/dev/null); then
 		:
 	fi
 	READY=0

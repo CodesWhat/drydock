@@ -1,0 +1,1252 @@
+---
+title: "Docker Watchers"
+description: "Watchers are responsible for scanning Docker containers."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/watchers/docker.png)
+
+The `docker` watcher lets you configure the Docker hosts you want to watch.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_WATCHER_{watcher_name}_CAFILE` | ⚪ | CA pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_AUTH_BEARER` | ⚪ | Bearer token for remote Docker API auth (HTTPS only) | | |
+| `DD_WATCHER_{watcher_name}_AUTH_INSECURE` | ⚪ | Allow fail-open remote auth fallback when auth is invalid or non-HTTPS | `true`, `false` | `false` |
+| `DD_WATCHER_{watcher_name}_AUTH_PASSWORD` | ⚪ | Password for remote Docker API basic auth (HTTPS only) | | |
+| `DD_WATCHER_{watcher_name}_AUTH_TYPE` | ⚪ | Auth mode for remote Docker API auth | `BASIC`, `BEARER`, `OIDC` | auto-detected from provided credentials |
+| `DD_WATCHER_{watcher_name}_AUTH_USER` | ⚪ | Username for remote Docker API basic auth (HTTPS only) | | |
+| `DD_WATCHER_{watcher_name}_CERTFILE` | ⚪ | Certificate pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_CRON` | ⚪ | Scheduling options | [Valid CRON expression](https://crontab.guru/) | `0 */6 * * *` (every 6 hours) |
+| `DD_WATCHER_{watcher_name}_HOST` | ⚪ | Docker hostname or ip of the host to watch | | |
+| `DD_WATCHER_{watcher_name}_JITTER` | ⚪ | Jitter in ms applied to the CRON to better distribute the load on the registries (on the Hub at the first place) | > 0 | `60000` (1 minute) |
+| `DD_WATCHER_{watcher_name}_KEYFILE` | ⚪ | Key pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` | ⚪ | Allowed update schedule (checks outside this window are skipped) | [Valid CRON expression](https://crontab.guru/) | |
+| `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ` | ⚪ | Timezone used to evaluate `MAINTENANCE_WINDOW` | IANA timezone (e.g. `UTC`, `Europe/Paris`) | `UTC` |
+| `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch | | `2375` |
+| `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
+| `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
+| `DD_WATCHER_{watcher_name}_TAG_PIN_INFO` | ⚪ | Compute the informational `updateInsight` (best newer same-family tag) for pinned containers — see the pinned-tags note below | `true`, `false` | `true` |
+| `DD_WATCHER_{watcher_name}_WATCHALL` | ⚪ | Include containers in **every** state (created, paused, exited, restarting, etc.) — not just running ones | `true`, `false` | `false` |
+| `DD_WATCHER_{watcher_name}_WATCHATSTART` (deprecated) | ⚪ | If drydock must check for image updates during startup | `true`, `false` | `true` |
+| `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` | ⚪ | Watch containers that don't have an explicit `dd.watch` label | `true`, `false` | `true` |
+| `DD_WATCHER_{watcher_name}_WATCHEVENTS` | ⚪ | If drydock must monitor docker events | `true`, `false` | `true` |
+| `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_*` | ⚪ | Shared per-image defaults (image match + include/exclude/transform/link/display/trigger/lookup) | See **Image Set Presets** section below | |
+
+`WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages. `WATCHALL` controls **which container states** Docker returns (running-only vs all states). `WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set. See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.
+
+<Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in v1.6.0. Use the `dd.watch.digest` container label instead.</Callout>
+
+<Callout type="warn" title="Watcher frequency and registry rate limits">
+The default cron is `0 */6 * * *` (every 6 hours). With many watched containers and tag lists that paginate to thousands of entries (a single GHCR image can take 20+ paginated calls), polling more often can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger `429` responses. Drydock honors `Retry-After` on 429s and rate-limits its own outbound calls with a per-host token bucket. Set `DD_WATCHER_{watcher_name}_CRON` to change the interval — use `0 * * * *` for near-real-time detection or `0 1 * * *` for once-daily polling. An explicit `CRON` you set is always preserved.
+</Callout>
+
+**Notes:**
+
+- If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket). To suppress this default watcher (e.g. when running as a controller-only node for remote agents), set `DD_LOCAL_WATCHER=false`.
+- Multiple watchers can be configured (if you have multiple Docker hosts to watch). Give them different names.
+- Socket configuration and host/port configuration are mutually exclusive.
+- When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.
+- Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
+- If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.
+- The watcher fan-out is capped at **10 concurrent `watchContainer` invocations** per cron cycle. On inventories with 40–200 containers this prevents a burst of simultaneous registry calls that would trigger rate limits despite the token bucket.
+- Hybrid `image:tag@sha256:digest` references (e.g. `docker.io/valkey/valkey:9@sha256:bcf6…`) are handled correctly: drydock preserves both the tag and the digest rather than falling back to digest-only mode, so the human-readable tag is displayed in the UI and the registry router resolves the provider cleanly.
+- Label-derived watcher fields (`tagFamily`, `includeTags`, `excludeTags`, `transformTags`, `triggerInclude`, `triggerExclude`) are **re-derived on Docker update events** (e.g. after `docker compose up -d`). Labels set on the recreated container take effect immediately without waiting for the next cron cycle.
+- Floating semver aliases (e.g. `3.3` and `3.3.0`, which both coerce to the same semver) are excluded from the greater-than check in candidate ranking, so aliases that resolve identically are never reported as upgrades.
+- Fully-pinned specific tags (3+ numeric segments, e.g. `1.4.5`, `v1.13.3`) also compare by digest by default, the same as floating tags, so a rebuilt image republished under the same tag is detected. Version climbing across tags for a pinned image is opt-in via `dd.tag.include` or `dd.tag.family=loose`. This doesn't leave you blind to what's out there, though: drydock still computes an informational `updateInsight` — the best newer same-family tag available in the registry, shown as an informational "Newer available" badge in the UI — purely as information. It never triggers an update, a notification, or changes `updateAvailable`/`updateKind`; it only tells you a version exists so you can decide whether to opt into climbing to it. The insight reuses the same strict-style family matching used for actionable version climbing (prefix + suffix/variant compatibility + matching numeric-segment count) — that matching never restricted crossing a MAJOR version in the first place, pinned or not. What's new here is exposing the comparison at all for a pinned tag, since the pin gate itself already blocks acting on it. Disable it per watcher with `DD_WATCHER_{watcher_name}_TAG_PIN_INFO=false`.
+
+<Callout type="warn">
+**Before you start — important watcher caveats:**
+
+- **Socket vs remote API** — When using socket configuration, mount the Docker socket on your drydock container. When using host/port configuration, enable the [Docker remote API](https://docs.docker.com/reference/cli/dockerd/). If the remote API is secured with TLS, mount and configure the [TLS certificates](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket).
+- **Remote auth is fail-closed** — Remote watcher auth (`AUTH_*`) requires HTTPS (`PROTOCOL=https`) or TLS certificate-based connections by default. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.
+- **Digest watching and Hub quotas** — Watching image digests causes usage of the _Docker Registry Pull API_, which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/usage/). By default, drydock enables digest watching for both mutable floating tags (`latest`, `stable`, `v3`, `16-alpine`, `10.6`) and fully-pinned specific tags (`1.4.5`), so those tags update in place and same-tag rebuilds are detected without the container being moved to a different tag. Version climbing across tags for a pinned image is opt-in via `dd.tag.include` or `dd.tag.family=loose`. You can force or disable digest watching per container using the `dd.watch.digest` label or per image with `IMGSET_*_WATCH_DIGEST`. If you face [quota related errors](https://docs.docker.com/docker-hub/usage/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.
+</Callout>
+
+## Variable examples
+
+### Watch the local docker host every day at 1am
+
+<Tabs items={["Docker Compose (Daily CRON)", "Docker (Daily CRON)"]}>
+<Tab value="Docker Compose (Daily CRON)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+        - DD_WATCHER_LOCAL_CRON=0 1 * * *
+```
+
+</Tab>
+<Tab value="Docker (Daily CRON)">
+```bash
+docker run \
+    -e DD_WATCHER_LOCAL_CRON="0 1 * * *" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+### Watch all containers regardless of their status (created, paused, exited, restarting, running...)
+
+<Tabs items={["Docker Compose (Watch All)", "Docker (Watch All)"]}>
+<Tab value="Docker Compose (Watch All)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+        - DD_WATCHER_LOCAL_WATCHALL=true
+```
+
+</Tab>
+<Tab value="Docker (Watch All)">
+```bash
+docker run \
+    -e DD_WATCHER_LOCAL_WATCHALL="true" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+### WATCHALL / WATCHBYDEFAULT behavior matrix
+
+These two variables are **orthogonal** — they filter at different stages of the container selection pipeline:
+
+1. **WATCHALL** (Docker API level) — decides which container **states** are fetched from Docker.
+2. **WATCHBYDEFAULT** (per-container level) — decides whether containers **without** a `dd.watch` label are watched. An explicit `dd.watch` label always takes precedence.
+
+| `WATCHALL` | `WATCHBYDEFAULT` | Containers fetched | Unlabeled containers | `dd.watch=true` | `dd.watch=false` |
+| :---: | :---: | --- | --- | --- | --- |
+| `false` (default) | `true` (default) | Running only | Watched | Watched | **Not** watched |
+| `false` | `false` | Running only | **Not** watched | Watched | **Not** watched |
+| `true` | `true` | All states | Watched | Watched | **Not** watched |
+| `true` | `false` | All states | **Not** watched | Watched | **Not** watched |
+
+<Callout type="warn">A stopped container with `dd.watch=true` will **not** be watched when `WATCHALL` is `false` because it is never returned by the Docker API in the first place. Set `WATCHALL=true` if you need to monitor non-running containers.</Callout>
+
+### Watch a remote docker host via TCP on 2375
+
+<Callout type="info">**Monitoring containers on other hosts?** The remote-host examples below have a single Drydock instance reach a remote Docker daemon directly, which means exposing the Docker API (TCP/TLS/SSH) on each host. To monitor multiple hosts without exposing the Docker API at all, run a lightweight [Agent](/docs/configuration/agents) on each remote host instead — it connects back to a central controller over HTTP/HTTPS and aggregates into one UI.</Callout>
+
+<Tabs items={["Docker Compose (Remote TCP)", "Docker (Remote TCP)"]}>
+<Tab value="Docker Compose (Remote TCP)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+        - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
+```
+
+</Tab>
+<Tab value="Docker (Remote TCP)">
+```bash
+docker run \
+    -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+### Watch a remote docker host behind HTTPS with bearer auth
+
+<Tabs items={["Docker Compose (HTTPS Bearer)", "Docker (HTTPS Bearer)"]}>
+<Tab value="Docker Compose (HTTPS Bearer)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+        - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
+        - DD_WATCHER_MYREMOTEHOST_PORT=443
+        - DD_WATCHER_MYREMOTEHOST_PROTOCOL=https
+        - DD_WATCHER_MYREMOTEHOST_AUTH_TYPE=BEARER
+        - DD_WATCHER_MYREMOTEHOST_AUTH_BEARER=my-secret-token
+```
+
+</Tab>
+<Tab value="Docker (HTTPS Bearer)">
+```bash
+docker run \
+    -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
+    -e DD_WATCHER_MYREMOTEHOST_PORT="443" \
+    -e DD_WATCHER_MYREMOTEHOST_PROTOCOL="https" \
+    -e DD_WATCHER_MYREMOTEHOST_AUTH_TYPE="BEARER" \
+    -e DD_WATCHER_MYREMOTEHOST_AUTH_BEARER="my-secret-token" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+### Watch a remote docker host via TCP with TLS enabled on 2376
+
+<Tabs items={["Docker Compose (TLS)", "Docker (TLS)"]}>
+<Tab value="Docker Compose (TLS)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+        - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
+        - DD_WATCHER_MYREMOTEHOST_PORT=2376
+        - DD_WATCHER_MYREMOTEHOST_CAFILE=/certs/ca.pem
+        - DD_WATCHER_MYREMOTEHOST_CERTFILE=/certs/cert.pem
+        - DD_WATCHER_MYREMOTEHOST_KEYFILE=/certs/key.pem
+    volumes:
+        - /my-host/my-certs/ca.pem:/certs/ca.pem:ro
+        - /my-host/my-certs/cert.pem:/certs/cert.pem:ro
+        - /my-host/my-certs/key.pem:/certs/key.pem:ro
+```
+
+</Tab>
+<Tab value="Docker (TLS)">
+```bash
+docker run \
+    -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
+    -e DD_WATCHER_MYREMOTEHOST_PORT="2376" \
+    -e DD_WATCHER_MYREMOTEHOST_CAFILE="/certs/ca.pem" \
+    -e DD_WATCHER_MYREMOTEHOST_CERTFILE="/certs/cert.pem" \
+    -e DD_WATCHER_MYREMOTEHOST_KEYFILE="/certs/key.pem" \
+    -v /my-host/my-certs/ca.pem:/certs/ca.pem:ro \
+    -v /my-host/my-certs/cert.pem:/certs/cert.pem:ro \
+    -v /my-host/my-certs/key.pem:/certs/key.pem:ro \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+<Callout type="warn">Don't forget to mount the certificates into the container!</Callout>
+
+### Connecting via SSH
+
+Drydock does not currently support the `ssh://` protocol for remote Docker connections. The `PROTOCOL` variable only accepts `http` or `https`.
+
+If your remote Docker host is only reachable over SSH, you can use an **SSH tunnel** to forward the remote Docker socket to a local TCP port or Unix socket, then point Drydock at that forwarded endpoint:
+
+```bash
+# Forward the remote Docker socket to a local TCP port
+ssh -nNT -L 2375:/var/run/docker.sock user@remote-host
+```
+
+Then configure Drydock to connect to the forwarded port:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_WATCHER_MYREMOTEHOST_HOST=host.docker.internal
+      - DD_WATCHER_MYREMOTEHOST_PORT=2375
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+```
+
+<Callout type="info">For production SSH tunneling, consider using [autossh](https://www.harding.motd.ca/autossh/) to automatically restart the tunnel if the connection drops.</Callout>
+
+## Docker Socket Security
+
+Drydock needs to communicate with the Docker Engine API to monitor containers and (optionally) perform updates. By default this means mounting the Docker socket — which grants broad access to the host. This section covers all available approaches to secure that access, from the recommended socket proxy to remote TLS connections.
+
+### Security comparison
+
+| Approach | Attack surface | Privilege level | Setup complexity | Auto-updates? |
+| --- | --- | --- | --- | --- |
+| **Socket proxy** (recommended) | Filtered API only | Non-root | Low | Yes (with `POST=1`) |
+| **Remote Docker over TLS** | Network + TLS | Non-root | Medium | Yes |
+| **Rootless Docker** | Full API, unprivileged daemon | Non-root | Medium | Yes |
+| **Direct socket mount** | Full Docker API | Root | Trivial | Yes |
+| **Break-glass root mode** | Full Docker API + host root | Root | Trivial | Yes |
+
+### Option 1: Socket proxy (recommended)
+
+A socket proxy runs as a separate container with access to the Docker socket and exposes only the API endpoints Drydock needs. Drydock connects to the proxy over HTTP, so no socket mount is required at all.
+
+This is the **recommended approach** for all deployments. It provides a strict security boundary with minimal setup.
+
+<Callout type="info">Running Drydock with Podman? See [Podman Quick Start](#podman-quick-start) for rootless/rootful socket paths and proxy setup details.</Callout>
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+      - INFO=1       # required for daemon hostname detection (notification identity)
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+```
+
+The `:ro` (read-only) flag on the Docker socket mount is omitted intentionally. The proxy's environment variables (`CONTAINERS`, `EVENTS`, etc.) control which API endpoints are exposed — that is the actual security boundary. The `:ro` flag on Unix sockets does not prevent API communication and can cause connection failures on some Linux kernels.
+
+#### Proxy permissions by feature
+
+| Feature | Required proxy env vars |
+| --- | --- |
+| Watch containers (default) | `CONTAINERS=1`, `IMAGES=1`, `EVENTS=1`, `SERVICES=1` |
+| Notification identity (daemon hostname) | All of the above **plus** `INFO=1` — required so drydock can read the Docker daemon's hostname for notification prefixes (e.g. `[datavault]`). Without this, notifications fall back to `os.hostname()` which inside a container resolves to the container's short ID. Alternative: set `DD_SERVER_NAME` on the drydock container to override detection entirely. |
+| Container actions (start/stop/restart) | All of the above **plus** `POST=1` and a [Docker trigger](/docs/configuration/triggers/docker) |
+| Docker trigger (auto-updates) | All of the above **plus** `POST=1`, `NETWORKS=1` |
+
+<Callout type="warn">Container actions (start, stop, restart, update) require a Docker trigger to be configured. If you only want container actions without automatic updates, set `DD_ACTION_DOCKER_{name}_AUTO=false`. Without a Docker trigger, the UI will show "No docker trigger found for this container" when attempting actions.</Callout>
+
+<Callout type="info">
+**Static IPs and MAC addresses (macvlan, custom networks):** recreating a container attached to more than one network requires Drydock to call `POST /networks/{id}/connect` for each additional network after the replacement container is created. With Tecnativa/docker-socket-proxy, both `POST=1` and `NETWORKS=1` must be set for these multi-network recreates — `NETWORKS=1` alone only covers reads. If you're using [sockguard](https://github.com/CodesWhat/sockguard) instead, it denies endpoint configs that specify a static IP or MAC address unless `request_body.network.allow_endpoint_config: true` is set in its policy — and in sockguard v1.5.0 and later (forthcoming at the time of this release), that gate applies to `POST /containers/create` as well as `POST /networks/{id}/connect`, so **single-network** macvlan/static-IP containers need the policy set too, not just multi-network ones (older sockguard versions enforce the policy only at network-connect time).
+</Callout>
+
+#### Alternative socket proxies
+
+[Tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) is the most widely used option, but any HAProxy or nginx-based Docker socket proxy that filters by HTTP method and path will work. The key requirement is that the proxy exposes the Docker Engine API endpoints listed in the permissions table above and blocks everything else (especially `exec`, `build`, and `swarm` endpoints).
+
+Other compatible proxies include [linuxserver/docker-socket-proxy](https://github.com/linuxserver/docker-socket-proxy) (a fork with additional features).
+
+### Option 2: Remote Docker over TLS
+
+Instead of mounting the socket at all, Drydock can connect to a remote Docker host over the network using mutual TLS (mTLS). This is ideal when you need a single Drydock instance to reach a remote Docker daemon directly, or want to avoid socket mounts entirely. For monitoring containers across multiple independent hosts from one UI, consider [Agents](/docs/configuration/agents), which don't require exposing the Docker API over the network.
+
+#### Step 1: Generate TLS certificates on the Docker host
+
+Follow the official [Docker TLS guide](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket) to generate a CA, server certificate, and client certificate.
+
+#### Step 2: Configure the Docker daemon
+
+Configure the daemon to listen on a TLS port by adding this to `/etc/docker/daemon.json`:
+
+```json
+{
+  "hosts": ["unix:///var/run/docker.sock", "tcp://0.0.0.0:2376"],
+  "tls": true,
+  "tlscacert": "/etc/docker/ca.pem",
+  "tlscert": "/etc/docker/server-cert.pem",
+  "tlskey": "/etc/docker/server-key.pem",
+  "tlsverify": true
+}
+```
+
+#### Step 3: Configure Drydock
+
+Configure Drydock with the client certificates:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    environment:
+      - DD_WATCHER_REMOTE_HOST=docker-host.example.com
+      - DD_WATCHER_REMOTE_PORT=2376
+      - DD_WATCHER_REMOTE_CAFILE=/certs/ca.pem
+      - DD_WATCHER_REMOTE_CERTFILE=/certs/client-cert.pem
+      - DD_WATCHER_REMOTE_KEYFILE=/certs/client-key.pem
+    volumes:
+      - ./certs/ca.pem:/certs/ca.pem:ro
+      - ./certs/client-cert.pem:/certs/client-cert.pem:ro
+      - ./certs/client-key.pem:/certs/client-key.pem:ro
+    ports:
+      - 3000:3000
+```
+
+When TLS certificates are provided (`CAFILE`, `CERTFILE`, `KEYFILE`), Drydock automatically uses HTTPS regardless of the `PROTOCOL` setting.
+
+<Callout type="warn">Keep your client certificates secure. Mount them read-only (`:ro`) and restrict file permissions to the Drydock user.</Callout>
+
+### Option 3: Rootless Docker
+
+[Rootless Docker](https://docs.docker.com/engine/security/rootless/) runs the Docker daemon entirely in user space without root privileges. Even full socket access does not grant host root because the daemon itself is unprivileged.
+
+**Step 1: Install rootless Docker** following the [official guide](https://docs.docker.com/engine/security/rootless/#install).
+
+**Step 2: Find your rootless socket path:**
+
+```bash
+echo $XDG_RUNTIME_DIR/docker.sock
+# Typically: /run/user/1000/docker.sock
+```
+
+**Step 3: Mount the rootless socket:**
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    volumes:
+      - /run/user/1000/docker.sock:/var/run/docker.sock
+    ports:
+      - 3000:3000
+```
+
+The rootless socket path varies by user. Replace `1000` with your user's UID (`id -u`).
+
+<Callout type="warn">Rootless Docker has some limitations: no `--privileged` containers, limited network configuration, and some storage drivers may not be available. Check the [official limitations list](https://docs.docker.com/engine/security/rootless/#known-limitations) for your use case.</Callout>
+
+You can combine rootless Docker with a socket proxy for defense in depth — even if the proxy is compromised, the attacker only gains unprivileged access.
+
+### Option 4: Direct socket mount (default)
+
+The simplest approach — mount the Docker socket directly. Drydock runs as a non-root user inside the container, but the socket grants access to the full Docker API.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 3000:3000
+```
+
+<Callout type="warn">Direct socket access grants the container full control over the Docker daemon, including the ability to create privileged containers, mount host filesystems, and effectively gain root access to the host. Use a socket proxy or remote TLS connection for production deployments.</Callout>
+
+### Option 5: Break-glass root mode (least secure)
+
+If the non-root user cannot connect to the socket (common with `:ro` mounts), you can explicitly opt into root mode. This is a break-glass path and should not be your default. Both flags are required; setting only `DD_RUN_AS_ROOT=true` fails closed at startup.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DD_RUN_AS_ROOT=true
+      - DD_ALLOW_INSECURE_ROOT=true
+    ports:
+      - 3000:3000
+```
+
+<Callout type="warn">Running as root trades away the privilege-drop security boundary. Use this only as a temporary break-glass fallback; prefer socket proxy mode for long-term deployments.</Callout>
+
+### Which Docker API endpoints does Drydock use?
+
+Understanding exactly what Drydock accesses helps you configure socket proxies and evaluate your security posture.
+
+**Read-only operations (watchers):**
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /containers/json` | List running containers |
+| `GET /containers/{id}/json` | Inspect container details and labels |
+| `GET /images/json` | List images on the host |
+| `GET /images/{id}/json` | Inspect image metadata (tags, digests, architecture) |
+| `GET /events` | Stream real-time container lifecycle events |
+| `GET /services/{id}` | Inspect Docker Swarm service labels |
+
+**Write operations (triggers — only when performing updates):**
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /images/create` | Pull new image versions |
+| `POST /containers/create` | Create replacement container |
+| `POST /containers/{id}/start` | Start the new container |
+| `POST /containers/{id}/stop` | Stop the old container |
+| `POST /containers/{id}/wait` | Wait for container removal |
+| `DELETE /containers/{id}` | Remove the old container |
+| `DELETE /images/{id}` | Prune old images (when enabled) |
+| `POST /networks/{id}/connect` | Connect container to additional networks |
+
+If you only need monitoring (no auto-updates), a read-only socket proxy configuration is sufficient.
+
+### Podman Quick Start
+
+Podman works with Drydock through Podman's Docker-compatible API socket.
+
+<Callout type="info">Podman compatibility is supported in current releases. Drydock negotiates against the daemon API version and is most reliable with direct socket mounts.</Callout>
+
+<Callout type="info">Background and user reports: [GitHub issue #152](https://github.com/CodesWhat/drydock/issues/152).</Callout>
+
+#### Socket path mapping (`podman.sock` vs `docker.sock`)
+
+Use Podman's host socket path, but mount it inside the Drydock container at `/var/run/docker.sock` so existing Drydock defaults still work.
+
+| Runtime mode | Host socket path | Path inside Drydock container | Drydock watcher variable |
+| --- | --- | --- | --- |
+| Docker | `/var/run/docker.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+| Podman rootful | `/run/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+| Podman rootless | `/run/user/<uid>/podman/podman.sock` | `/var/run/docker.sock` | `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock` |
+
+#### Rootful vs rootless setup
+
+- **Rootful Podman socket:** `sudo systemctl enable --now podman.socket`
+- **Rootless Podman socket:** `systemctl --user enable --now podman.socket`
+
+<Callout type="warn">
+**Choosing rootful vs rootless:**
+
+- **Rootless is recommended** for production because it runs the entire container stack without root privileges. Use rootful only when you need privileged ports (&lt;1024) or specific kernel features.
+- **Rootless requires lingering sessions** — You **must** run `loginctl enable-linger <user>` so the user systemd instance (and all rootless containers) survives logout. Without it, Podman containers stop when the user session ends.
+</Callout>
+
+<Tabs items={["Podman Rootful (Direct Socket)", "Podman Rootless (Direct Socket)", "Podman + Socket Proxy"]}>
+<Tab value="Podman Rootful (Direct Socket)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    volumes:
+      - /run/podman/podman.sock:/var/run/docker.sock
+    environment:
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_ACTION_DOCKER_LOCAL_AUTO=false
+    ports:
+      - 3000:3000
+```
+
+</Tab>
+<Tab value="Podman Rootless (Direct Socket)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    volumes:
+      - ${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock
+    environment:
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_ACTION_DOCKER_LOCAL_AUTO=false
+    ports:
+      - 3000:3000
+```
+
+</Tab>
+<Tab value="Podman + Socket Proxy">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    depends_on:
+      socket-proxy:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_ACTION_DOCKER_LOCAL_AUTO=false
+    ports:
+      - 3000:3000
+
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy
+    environment:
+      - SOCKET_PATH=/run/podman/podman.sock
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - SERVICES=1
+      - INFO=1       # required for daemon hostname detection (notification identity)
+      - POST=1
+      - NETWORKS=1
+    volumes:
+      - /run/podman/podman.sock:/run/podman/podman.sock
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+**Podman socket proxy notes:**
+
+- **Rootless proxy path** — For rootless Podman with socket proxy, set `SOCKET_PATH=${XDG_RUNTIME_DIR}/podman/podman.sock` and mount the same host path into the proxy container.
+- **503 errors** — Some users have reported intermittent `503` errors when using `tecnativa/docker-socket-proxy` with Podman ([tecnativa/docker-socket-proxy#66](https://github.com/Tecnativa/docker-socket-proxy/issues/66)). If you experience this, prefer direct socket mount over the proxy — the direct mount examples above are the most reliable option with Podman.
+- **Docker Compose trigger compatibility** — The Docker Compose trigger (`DD_ACTION_DOCKERCOMPOSE_*`) works with Podman — it inherits the socket connection from your watcher configuration. No additional Podman-specific trigger settings are needed.
+</Callout>
+
+#### Known limitations and tested versions
+
+| Topic | Status |
+| --- | --- |
+| Tested Podman version | `5.6.0` on Rocky Linux `9.7` (issue [#152](https://github.com/CodesWhat/drydock/issues/152)) |
+| API version negotiation | Drydock probes `/version` at startup and pins Dockerode to the reported API version, preventing `EAI_AGAIN` crashes caused by Podman returning HTTP 301 for unversioned API paths. |
+| Pod infra containers | Podman pod infrastructure containers (empty `Image` field) are automatically skipped — they are never added to the container store or compared against registry tags. |
+| CI coverage | No dedicated Podman CI matrix yet |
+| Rootless networking | Can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations) |
+| SELinux (RHEL/Rocky/Fedora) | Socket mounts need `:Z` flag; see [SELinux FAQ](/docs/faq#selinux-blocks-podman-socket-access-permission-denied) |
+| `podman-compose` networking | Pod-based networking breaks service-name DNS; use `podman compose` instead; see [FAQ](/docs/faq#podman-compose-vs-podman-compose-networking) |
+
+For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#selinux-blocks-podman-socket-access-permission-denied).
+
+### Watch 1 local Docker host and 2 remote docker hosts at the same time
+
+<Tabs items={["Docker Compose (Multiple Hosts)", "Docker (Multiple Hosts)"]}>
+<Tab value="Docker Compose (Multiple Hosts)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+        -  DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+        -  DD_WATCHER_MYREMOTEHOST1_HOST=myremotehost1
+        -  DD_WATCHER_MYREMOTEHOST2_HOST=myremotehost2
+```
+
+</Tab>
+<Tab value="Docker (Multiple Hosts)">
+```bash
+docker run \
+    -e  DD_WATCHER_LOCAL_SOCKET="/var/run/docker.sock" \
+    -e  DD_WATCHER_MYREMOTEHOST1_HOST="myremotehost1" \
+    -e  DD_WATCHER_MYREMOTEHOST2_HOST="myremotehost2" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+### Maintenance window
+
+Only allow update checks between 2 AM and 4 AM in Europe/Berlin:
+
+<Tabs items={["Docker Compose (Maintenance Window)", "Docker (Maintenance Window)"]}>
+<Tab value="Docker Compose (Maintenance Window)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_WATCHER_LOCAL_CRON=0 * * * *
+      - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-3 * * *
+      - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ=Europe/Berlin
+```
+
+</Tab>
+<Tab value="Docker (Maintenance Window)">
+```bash
+docker run \
+    -e DD_WATCHER_LOCAL_CRON="0 * * * *" \
+    -e DD_WATCHER_LOCAL_MAINTENANCE_WINDOW="0 2-3 * * *" \
+    -e DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ="Europe/Berlin" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+## Image Set Presets
+
+Use `IMGSET` to define reusable defaults by image reference. This is useful when many containers need the same tag filters, link template, icon, or trigger routing.
+
+Looking for ready-to-copy presets for common containers? See [Popular IMGSET Presets](/docs/configuration/watchers/popular-imgsets).
+
+### Supported imgset keys
+
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_IMAGE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_INCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_EXCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_TRANSFORM`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_LINK_TEMPLATE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_DISPLAY_NAME`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_DISPLAY_ICON`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRIGGER_INCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_FAMILY`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_WATCH_DIGEST`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_INSPECT_TAG_PATH`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRIGGER_EXCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_REGISTRY_LOOKUP_IMAGE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_REGISTRY_LOOKUP_URL`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_INCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_EXCLUDE`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRANSFORM`
+
+`INCLUDE`/`EXCLUDE`/`TRANSFORM` are shorthand aliases for `TAG_INCLUDE`/`TAG_EXCLUDE`/`TAG_TRANSFORM` — prefer the `TAG_` form since it matches the `dd.tag.*` label naming used everywhere else. `REGISTRY_LOOKUP_URL` is an alias for `REGISTRY_LOOKUP_IMAGE`.
+
+### Imgset precedence
+
+- `dd.*` labels on the container (or swarm service/container merged labels) are highest priority.
+- `IMGSET` values are defaults applied only when the corresponding label is not set.
+
+### Imgset example
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    environment:
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_IMAGE=ghcr.io/home-assistant/home-assistant
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_TAG_INCLUDE=^\\d+\\.\\d+\\.\\d+$$
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_DISPLAY_NAME=Home Assistant
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_DISPLAY_ICON=hl-home-assistant
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_LINK_TEMPLATE=https://www.home-assistant.io/changelogs/core-$${major}$${minor}$${patch}
+      - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_TRIGGER_INCLUDE=ntfy.default:major
+```
+
+## Labels
+
+To fine-tune the behaviour of drydock _per container_, you can add labels on them.
+
+| Label | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `dd.display.icon` | ⚪ | Custom display icon for the container | Valid [Fontawesome Icon](https://fontawesome.com/), [Homarr Labs Icon](https://dashboardicons.com/), [Selfh.st Icon](https://selfh.st/icons/), or [Simple Icon](https://simpleicons.org/) (see details below). `mdi:` icons are auto-resolved but not recommended. | `fab fa-docker` |
+| `dd.display.picture` | ⚪ | Custom entity picture URL for Home Assistant MQTT integration. When set to an HTTP/HTTPS URL, overrides the icon-derived `entity_picture` in HASS discovery payloads. | Valid HTTP or HTTPS URL | |
+| `dd.display.name` | ⚪ | Custom display name for the container | Valid String | Container name |
+| `dd.group` | ⚪ | Group name for stack/group views in the UI (falls back to `com.docker.compose.project`, then the Swarm stack label `com.docker.stack.namespace`, if not set) | Valid String | |
+| `dd.inspect.tag.path` | ⚪ | Docker inspect path used to derive a local semver tag. The extracted value overwrites the image tag (for update detection) **and** is written to `image.softwareVersion` (for the Version column). Use `dd.inspect.tag.version-only=true` to route it to `image.softwareVersion` only. | Slash-separated path in `docker inspect` output | |
+| `dd.inspect.tag.version-only` | ⚪ | When `dd.inspect.tag.path` is set, route the extracted value to `image.softwareVersion` only instead of overwriting the image tag. Default behavior (tag overwrite) is unchanged when this label is absent or `false`. | `true`, `false` | `false` |
+| `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
+| `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
+| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | Valid JavaScript Regex | |
+| `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
+| `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
+| `dd.tag.family` | ⚪ | Tag family policy for semver updates. In `strict` mode, floating aliases such as `16-alpine` stay on the current tag and update by digest; use `loose` to allow cross-tag semver moves such as `16-alpine` → `17-alpine`. | `strict` (default) or `loose` | `strict` |
+| `dd.action.exclude` | ⚪ | Exclude specific action triggers from automatic execution for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.action.include` | ⚪ | Only allow specific action triggers to automatically execute for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.notification.exclude` | ⚪ | Exclude specific notification triggers from this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.notification.include` | ⚪ | Only allow specific notification triggers for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.exclude` | ⚪ | **Deprecated** — use `dd.action.exclude` or `dd.notification.exclude` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.include` | ⚪ | **Deprecated** — use `dd.action.include` or `dd.notification.include` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.watch.digest` | ⚪ | Watch this container digest. Missing values are auto-enabled for floating tags and disabled for specific semver tags. | Valid Boolean | Automatic |
+| `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
+| `dd.compose.file` | ⚪ | Path to the docker-compose.yml file for compose-native updates (also configurable via trigger `COMPOSEFILELABEL`) | file path | |
+| `dd.source.repo` | ⚪ | Source repository override for release-notes lookup (e.g. `owner/repo`) | Valid `owner/repo` string | |
+| `dd.webhook.enabled` | ⚪ | Allow or block [webhook API](/docs/configuration/webhooks) calls targeting this container | `true`, `false` | `true` |
+| `dd.hook.pre` | ⚪ | Shell command to run before a container update | Valid shell command | |
+| `dd.hook.post` | ⚪ | Shell command to run after a container update | Valid shell command | |
+| `dd.hook.pre.abort` | ⚪ | Abort the update if the pre-hook exits non-zero | Valid Boolean | `true` |
+| `dd.hook.timeout` | ⚪ | Timeout in milliseconds for hook execution | integer | `60000` |
+| `dd.rollback.auto` | ⚪ | Automatically rollback the container if the health check fails after an update | Valid Boolean | `false` |
+| `dd.rollback.window` | ⚪ | Health monitoring window in milliseconds after an update (how long to watch for failures) | integer | `300000` |
+| `dd.rollback.interval` | ⚪ | Health polling interval in milliseconds during the rollback window | integer | `10000` |
+| `dd.update.mode` | ⚪ | Update routing mode for infrastructure containers (socket proxies, etc.) | `infrastructure` | standard update path |
+| `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
+| `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
+
+`dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
+
+<Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. By default the extracted value overwrites the image tag (enabling update detection against the embedded semver) and is also written to `image.softwareVersion` (shown in the Version column). Add `dd.inspect.tag.version-only=true` when you want the Version column populated without changing how drydock matches updates. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
+
+<Callout type="warn" title="dd.tag.transform is validated at startup">`dd.tag.transform` regex patterns are validated at config time. A malformed or oversized regex pattern causes drydock to throw at startup with a descriptive error rather than silently producing broken tag transformations that could generate false positive update detections.</Callout>
+
+<Callout type="info">**Source project link** — When an `org.opencontainers.image.source` OCI label, `dd.source.repo` label, or GHCR-derived source URL is available for a container, drydock shows a clickable "View project" link in the detail panel and container card. Set `dd.source.repo=owner/repo` on a container to override or supply the source URL when the image does not carry `org.opencontainers.image.source`.</Callout>
+
+<Callout type="info">
+
+**Release notes inline popover** — The release-notes icon on each container row opens an inline popover showing both the current and available-version release notes side by side, with expand/collapse per panel. When only an external release URL is available (no structured notes), the popover contains a single row linking out to that URL.
+
+**Intermediate releases.** When a container is several versions behind, drydock also fetches the releases between the running tag (exclusive) and the update target (inclusive), so you see the full range in one place. This is best-effort and semver-only: both tags must be strict semver (a leading `v` is fine). Date tags and rolling tags (`latest`, `stable`) fall back to the standard two-panel current/target view. The intermediate list is lazy-loaded when the popover opens — it is not embedded in the container model or the agent snapshot, so it adds no ongoing payload weight. Control the cap with `DD_RELEASE_NOTES_MAX_INTERMEDIATE` (default `20`; set to `0` to disable intermediate fetching entirely). When the range exceeds the cap, the popover shows a "N older releases not shown" notice. The `__FILE` secret-file convention is supported (`DD_RELEASE_NOTES_MAX_INTERMEDIATE__FILE`). The backing endpoint is `GET /api/containers/{id}/intermediate-release-notes?from=<tag>&to=<tag>` (`from` required; `to` defaults to the container's pending update tag).
+
+**Token behavior.** Release notes are fetched from GitHub. The dedicated `DD_RELEASE_NOTES_GITHUB_TOKEN`, when configured, is forwarded for all source resolutions: trusted OCI image labels, GHCR image paths, Docker Hub metadata lookups, and container-label sources (`dd.source.repo`, persisted `container.sourceRepo`). The GHCR token fallback (see [GHCR](/docs/configuration/registries/ghcr)) stays restricted to trusted sources only and is never sent to a container-label source. Because `DD_RELEASE_NOTES_GITHUB_TOKEN` can be sent to a repo named by a (potentially attacker-controllable) container label, scope it narrowly. Two safe options: (a) a classic PAT with the `public_repo` scope only — no other scopes; or (b) a fine-grained PAT with read-only **Contents** permission limited to public repositories and no write or account permissions.
+
+**Rate limiting.** A range fetch makes more GitHub API calls than two point lookups. Unauthenticated GitHub is capped at 60 requests per hour, so operators watching third-party images via `dd.source.repo` should configure `DD_RELEASE_NOTES_GITHUB_TOKEN` to make intermediate fetching viable.
+
+</Callout>
+
+<Callout type="warn" title="dd.source.repo container label can shadow a trusted OCI source label">Adding a `dd.source.repo` label directly to a running container (rather than baking it into the image) silently downgrades source resolution from trusted to untrusted when the image already carries a trusted `org.opencontainers.image.source` (or `org.opencontainers.image.url`) OCI label. The downgrade means the GHCR token fallback is not used for release-notes lookups on that container. Drydock logs a `warn`-level line each watch cycle whenever a `dd.source.repo` container label shadows a trusted OCI source label, naming both repos. If you rely on the GHCR token fallback, remove the `dd.source.repo` container label and let the OCI label resolve the source repo instead.</Callout>
+
+<Callout type="info">**`dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) control automatic trigger dispatch.** These labels filter which triggers fire automatically when an update is detected (e.g., route notifications to specific Slack channels or restrict which docker trigger auto-updates this container). They match against the trigger **name** (e.g., `alerts`) or **full ID** (e.g., `smtp.alerts`). Manual updates from the UI use [agent-based matching](/docs/configuration/agents) instead — the update is routed to the agent that discovered the container. The legacy `dd.trigger.include` / `dd.trigger.exclude` labels still work but are deprecated — see [Deprecation Schedule](/docs/deprecations#legacy-trigger-labels).</Callout>
+
+<Callout type="info">**Update hooks** (`dd.hook.pre` / `dd.hook.post`) let you run arbitrary shell commands before and after a container update. If `dd.hook.pre.abort` is `true` (the default) and the pre-hook exits non-zero, the update is cancelled. Use `dd.hook.timeout` to control how long the hook is allowed to run before being killed.</Callout>
+
+<Callout type="info">**Automatic rollback** (`dd.rollback.auto`) monitors the container's health check after an update. If the health check fails within the `dd.rollback.window` (default 5 minutes, polled every `dd.rollback.interval` = 10 seconds), drydock automatically rolls the container back to its previous image.</Callout>
+
+<Callout type="info">**Infrastructure update mode** (`dd.update.mode=infrastructure`) is for containers that Drydock depends on for its Docker API connection, such as a socket proxy. When set, the container is updated through a helper-container path that connects directly to `/var/run/docker.sock`, bypassing the proxy so the connection isn't severed mid-update. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for details.</Callout>
+
+<Callout type="info">**Per-container update policy** (maturity gate, snooze, skip-tag, skip-digest) is set from the UI rather than via labels. Open a container row → **Update policy** menu, or call `PATCH /api/v1/containers/:id/update-policy`. Policies are stored with the container record and persist across Drydock restarts. There is no `dd.updatePolicy.*` label — earlier drafts of the v1.4 docs listed label equivalents that were never implemented. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
+
+## Label examples
+
+### Include specific containers to watch
+
+Set `WATCHBYDEFAULT=false` so that only containers with an explicit `dd.watch=true` label are monitored.
+<Tabs items={["Docker Compose (Disable Watch by Default)", "Docker (Disable Watch by Default)"]}>
+<Tab value="Docker Compose (Disable Watch by Default)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+```
+
+</Tab>
+<Tab value="Docker (Disable Watch by Default)">
+```bash
+docker run \
+    -e DD_WATCHER_LOCAL_WATCHBYDEFAULT="false" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+Then add the `dd.watch=true` label on the containers you want to watch.
+<Tabs items={["Docker Compose (Include Label)", "Docker (Include Label)"]}>
+<Tab value="Docker Compose (Include Label)">
+
+```yaml
+services:
+  mariadb:
+    image: mariadb:10.4.5
+    ...
+    labels:
+      - dd.watch=true
+```
+
+</Tab>
+<Tab value="Docker (Include Label)">
+```bash
+docker run -d --name mariadb --label dd.watch=true mariadb:10.4.5
+```
+</Tab>
+</Tabs>
+
+### Exclude specific containers to watch
+
+Ensure `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` is true (default value).
+
+Then add the `dd.watch=false` label on the containers you want to exclude from being watched.
+<Tabs items={["Docker Compose (Exclude Label)", "Docker (Exclude Label)"]}>
+<Tab value="Docker Compose (Exclude Label)">
+
+```yaml
+services:
+  mariadb:
+    image: mariadb:10.4.5
+    ...
+    labels:
+      - dd.watch=false
+```
+
+</Tab>
+<Tab value="Docker (Exclude Label)">
+```bash
+docker run -d --name mariadb --label dd.watch=false mariadb:10.4.5
+```
+</Tab>
+</Tabs>
+
+### Derive a semver from Docker inspect when image tag is `latest`
+
+Use this when the running container exposes a version label in `docker inspect`.
+
+<Tabs items={["Docker Compose (Inspect Tag Path)", "Docker (Inspect Tag Path)"]}>
+<Tab value="Docker Compose (Inspect Tag Path)">
+
+```yaml
+services:
+  myapp:
+    image: ghcr.io/example/myapp:latest
+    labels:
+      - dd.inspect.tag.path=Config/Labels/org.opencontainers.image.version
+```
+
+</Tab>
+<Tab value="Docker (Inspect Tag Path)">
+```bash
+docker run -d \
+  --name myapp \
+  --label dd.inspect.tag.path=Config/Labels/org.opencontainers.image.version \
+  ghcr.io/example/myapp:latest
+```
+</Tab>
+</Tabs>
+
+### Show the app version from inspect without changing update detection
+
+Use `dd.inspect.tag.version-only=true` when the inspect path value is a display-only version string that would break update detection if used as the image tag (for example when the registry tag and the embedded app version differ in format).
+
+<Tabs items={["Docker Compose (Version Only)", "Docker (Version Only)"]}>
+<Tab value="Docker Compose (Version Only)">
+
+```yaml
+services:
+  myapp:
+    image: ghcr.io/example/myapp:latest
+    labels:
+      - dd.inspect.tag.path=Config/Labels/org.opencontainers.image.version
+      - dd.inspect.tag.version-only=true
+```
+
+The extracted version (e.g. `2.14.3`) appears in the **Version** column. The **Tag** column continues to show `latest` and digest-based update detection is unaffected.
+
+</Tab>
+<Tab value="Docker (Version Only)">
+```bash
+docker run -d \
+  --name myapp \
+  --label dd.inspect.tag.path=Config/Labels/org.opencontainers.image.version \
+  --label dd.inspect.tag.version-only=true \
+  ghcr.io/example/myapp:latest
+```
+</Tab>
+</Tabs>
+
+### Use an alternative image for update lookups
+
+Use this when your runtime image is pulled from a cache/proxy registry, but you want updates checked against an upstream image.
+
+<Tabs items={["Docker Compose (Lookup Image)", "Docker (Lookup Image)"]}>
+<Tab value="Docker Compose (Lookup Image)">
+
+```yaml
+services:
+  traefik:
+    image: harbor.example.com/dockerhub-proxy/traefik:v3.5.3
+    labels:
+      - dd.watch=true
+      - dd.registry.lookup.image=library/traefik
+```
+
+</Tab>
+<Tab value="Docker (Lookup Image)">
+```bash
+docker run -d \
+  --name traefik \
+  --label 'dd.watch=true' \
+  --label 'dd.registry.lookup.image=library/traefik' \
+  harbor.example.com/dockerhub-proxy/traefik:v3.5.3
+```
+</Tab>
+</Tabs>
+
+### Include only 3 digits semver tags
+
+You can filter (by inclusion or exclusion) which versions can be candidates for update.
+
+For example, you can indicate that you want to watch x.y.z versions only
+<Tabs items={["Docker Compose (Tag Include)", "Docker (Tag Include)"]}>
+<Tab value="Docker Compose (Tag Include)">
+
+```yaml
+services:
+
+  mariadb:
+    image: mariadb:10.4.5
+    labels:
+      - dd.tag.include=^\d+\.\d+\.\d+$$
+```
+
+</Tab>
+<Tab value="Docker (Tag Include)">
+```bash
+docker run -d --name mariadb --label 'dd.tag.include=^\d+\.\d+\.\d+$' mariadb:10.4.5
+```
+</Tab>
+</Tabs>
+
+### Transform the tags before performing the analysis
+
+In certain cases, tag values are so badly formatted that the resolution algorithm cannot find any valid update candidates or, worst, find bad positive matches.
+
+For example, you can encounter such an issue if you need to deal with tags looking like `1.0.0-99-7b368146`, `1.0.0-273-21d7efa6`...  
+By default, drydock will report bad positive matches because of the `sha-1` part at the end of the tag value (`-7b368146`...).  
+That's a shame because `1.0.0-99` and `1.0.0-273` would have been valid semver values (`$major.$minor.$patch-$prerelease`).
+
+You can get around this issue by providing a function that keeps only the part you are interested in.  
+
+How does it work?  
+The transform function must follow the following syntax:
+
+```text
+$valid_regex_with_capturing_groups => $valid_string_with_placeholders
+```
+
+For example:
+
+```bash
+^(\d+\.\d+\.\d+-\d+)-.*$ => $1
+```
+
+The capturing groups are accessible with the syntax `$1`, `$2`, `$3`....
+
+<Callout type="warn">The first capturing group is accessible as `$1`!</Callout>
+
+For example, to watch only `x.y.z-n-hash`-style tags and strip the hash suffix before comparison:
+<Tabs items={["Docker Compose (Tag Transform)", "Docker (Tag Transform)"]}>
+<Tab value="Docker Compose (Tag Transform)">
+
+```yaml
+services:
+
+  searx:
+    image: searx/searx:1.0.0-269-7b368146
+    labels:
+      - dd.tag.include=^\d+\.\d+\.\d+-\d+-.*$$
+      - dd.tag.transform=^(\d+\.\d+\.\d+-\d+)-.*$$ => $$1
+```
+
+</Tab>
+<Tab value="Docker (Tag Transform)">
+```bash
+docker run -d --name searx \
+--label 'dd.tag.include=^\d+\.\d+\.\d+-\d+-.*$' \
+--label 'dd.tag.transform=^(\d+\.\d+\.\d+-\d+)-.*$ => $1' \
+searx/searx:1.0.0-269-7b368146
+```
+</Tab>
+</Tabs>
+
+### Enable digest watching
+
+In addition to semver tag tracking, drydock can track whether the digest associated with the local tag has been updated. This is enabled automatically for floating tags known to move in place (`latest`, `stable`, `10`, `10.6`, `16-alpine`). Add `dd.watch.digest=true` when you want to force digest tracking for a specific container, or `dd.watch.digest=false` when you want to opt a high-churn Docker Hub image out.
+
+<Tabs items={["Docker Compose (Digest Watch)", "Docker (Digest Watch)"]}>
+<Tab value="Docker Compose (Digest Watch)">
+
+```yaml
+services:
+
+  mariadb:
+    image: mariadb:10
+    labels:
+      - dd.tag.include=^\d+$$
+      - dd.watch.digest=true
+```
+
+</Tab>
+<Tab value="Docker (Digest Watch)">
+```bash
+docker run -d --name mariadb --label 'dd.tag.include=^\d+$' --label dd.watch.digest=true mariadb:10
+```
+</Tab>
+</Tabs>
+
+### Associate a link to the container version
+
+You can associate a browsable link to the container version using a templated string.
+For example, if you want to associate a mariadb version to a changelog (e.g. `https://mariadb.com/kb/en/mariadb-1064-changelog`),
+
+you would specify a template like `https://mariadb.com/kb/en/mariadb-${major}${minor}${patch}-changelog`
+
+The available variables are:
+
+- `${original}` the original unparsed tag
+- `${transformed}` the original unparsed tag transformed with the optional `dd.tag.transform` label option
+- `${major}` the major version (if tag value is semver)
+- `${minor}` the minor version (if tag value is semver)
+- `${patch}` the patch version (if tag value is semver)
+- `${prerelease}` the prerelease version (if tag value is semver)
+
+<Tabs items={["Docker Compose (Link Template)", "Docker (Link Template)"]}>
+<Tab value="Docker Compose (Link Template)">
+
+```yaml
+services:
+
+  mariadb:
+    image: mariadb:10.6.4
+    labels:
+      - dd.link.template=https://mariadb.com/kb/en/mariadb-$${major}$${minor}$${patch}-changelog
+```
+
+</Tab>
+<Tab value="Docker (Link Template)">
+```bash
+docker run -d --name mariadb --label 'dd.link.template=https://mariadb.com/kb/en/mariadb-${major}${minor}${patch}-changelog' mariadb:10
+```
+</Tab>
+</Tabs>
+
+### Customize the name and the icon to display
+
+You can customize the name & the icon of a container (displayed in the UI, in Home-Assistant...)
+
+Icons must be prefixed with:
+
+- `fab:` or `fab-` for [Fontawesome brand icons](https://fontawesome.com/) (`fab:github`, `fab-mailchimp`...)
+- `far:` or `far-` for [Fontawesome regular icons](https://fontawesome.com/) (`far:heart`, `far-house`...)
+- `fas:` or `fas-` for [Fontawesome solid icons](https://fontawesome.com/) (`fas:heart`, `fas-house`...)
+- `hl:` or `hl-` for [Homarr Labs icons](https://dashboardicons.com/) (`hl:plex`, `hl-authelia`...)
+- `mdi:` or `mdi-` icons are auto-resolved to Dashboard Icons but are **not recommended**; prefer `hl:` or `fa` prefixes instead
+- `sh:` or `sh-` for [Selfh.st](https://selfh.st/icons/) (`sh:authentik`, `sh-authelia-light`...) (only works for logo available as `png`)
+- `si:` or `si-` for [Simple icons](https://simpleicons.org/) (`si:mysql`, `si-plex`...)
+
+<Callout type="warn">The [HASS-fontawesome](https://github.com/thomasloven/hass-fontawesome) and [HASS-simpleicons](https://github.com/vigonotion/hass-simpleicons) Home Assistant integrations are deprecated and no longer maintained. Both projects recommend migrating to [hass-custom_icons](https://github.com/thomasloven/hass-custom_icons) instead.</Callout>
+
+<Tabs items={["Docker Compose (Display Name & Icon)", "Docker (Display Name & Icon)"]}>
+<Tab value="Docker Compose (Display Name & Icon)">
+
+```yaml
+services:
+
+  mariadb:
+    image: mariadb:10.6.4
+    labels:
+      - dd.display.name=Maria DB
+      - dd.display.icon=si:mariadb
+```
+
+</Tab>
+<Tab value="Docker (Display Name & Icon)">
+```bash
+docker run -d --name mariadb --label 'dd.display.name=Maria DB' --label 'dd.display.icon=si:mariadb' mariadb:10.6.4
+```
+</Tab>
+</Tabs>
+
+### Assign different triggers to containers
+
+You can assign different triggers and thresholds on a per container basis.
+
+#### Example send a mail notification for all updates but auto-update only if minor or patch
+
+<Tabs items={["Docker Compose (Trigger Include)", "Docker (Trigger Include)"]}>
+<Tab value="Docker Compose (Trigger Include)">
+
+```yaml
+services:
+
+  my_important_service:
+    image: my_important_service:1.0.0
+    labels:
+      - dd.notification.include=smtp.gmail
+      - dd.action.include=dockercompose.local:minor
+```
+
+</Tab>
+<Tab value="Docker (Trigger Include)">
+```bash
+docker run -d --name my_important_service --label 'dd.notification.include=smtp.gmail' --label 'dd.action.include=dockercompose.local:minor' my_important_service:1.0.0
+```
+</Tab>
+</Tabs>
+
+- `dd.notification.include=smtp.gmail` is a shorthand for `dd.notification.include=smtp.gmail:all`
+- `dd.action.include=update` (or `dd.action.exclude=update`) targets all triggers named `update`, for example `docker.update` and `dockercompose.update`
+
+**Threshold values:**
+
+| Threshold | Behavior |
+| --- | --- |
+| `all` | Trigger runs regardless of the nature of the change |
+| `major` | Trigger runs only for `major`, `minor`, or `patch` semver changes |
+| `minor` | Trigger runs only for `minor` or `patch` semver changes |
+| `patch` | Trigger runs only for `patch` semver changes |
+| `digest` | Trigger runs only on digest updates |
+| `*-no-digest` | Any threshold ending with `-no-digest` excludes digest updates for that threshold |
+
+## Container Runtime Details
+
+Each monitored container exposes runtime details sourced from Docker inspect and the container summary. These are visible in the API response and the UI:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `details.ports` | `string[]` | Published port mappings (e.g. `8080->80/tcp`, `443/tcp`) |
+| `details.volumes` | `string[]` | Volume and bind mounts (e.g. `myvolume:/data`, `/host/path:/container/path:ro`) |
+| `details.env` | `{ key, value }[]` | Environment variables set on the container |
+
+## Container Status Fields
+
+The container model includes additional fields useful for understanding update state:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `result.noUpdateReason` | `string` | When no update is available, explains why (e.g. tag filtering, no newer version found) |
+| `updateDetectedAt` | `string (ISO 8601)` | Drydock's own wall-clock timestamp recorded when it **first** stored a pending update for this container. This is not the image build date or the registry push date. The value is preserved across polls and across container recreation — if a container is redeployed (e.g. via a Portainer stack redeploy or `docker compose down && up`) with the same stable identity and the same update still pending, the original timestamp is carried forward. When no trusted registry publish date is available, the maturity gate uses `updateDetectedAt` as its fallback clock to measure how long an update has been known. |
+| `image.tag.tagPrecision` | `'specific' \| 'floating'` | Whether the container's tag is a mutable version alias (`floating`, e.g. `latest`, `v3`, `1.4`) or a pinned release (`specific`, e.g. `1.4.5`). Computed automatically; used by digest-watch auto-enable logic and the Hide Pinned UI filter. |
+
+## Next-run visibility
+
+The Watchers and Agents views show when each watcher will next poll. The **Next Run** column displays a live relative countdown (e.g. "in 14m"). Hover over the countdown to see the absolute local timestamp (e.g. `Apr 18, 14:32:07`), making it easy to correlate the next poll with other scheduled work. The watcher API also exposes `nextRunAt` for programmatic consumers.
+
+## UI: floating-tag detection and Hide Pinned
+
+### Floating tag detection (`tagPrecision`)
+
+drydock classifies each container's tag as `specific` (pinned release, e.g. `1.4.5`) or `floating` (mutable alias, e.g. `latest`, `v3`, `16-alpine`) using the `tagPrecision` classifier. This has two practical effects:
+
+1. **Auto-digest watching** — Floating tags on non-Docker Hub registries have digest watching enabled automatically so in-place rebuilds are detected even when the tag name does not change.
+2. **Caution badge** — When a container has a floating tag without digest watching active, the container detail view shows a caution indicator.
+
+The `tagPrecision` field is computed from the tag name and any active `dd.tag.transform`. You do not need to configure it manually.
+
+### Tag and Version columns
+
+The containers table has two distinct columns for version information:
+
+- **Tag** (column key `version`) — the image tag used for update detection (e.g. `latest`, `1.4.5`). This column was called "Version" in releases before v1.5.1; the column key is unchanged so saved column preferences keep working.
+- **Version** (column key `softwareVersion`) — the application version surfaced from `image.softwareVersion` (the `org.opencontainers.image.version` OCI label, a `dd.inspect.tag.path` extract, or other runtime metadata). Falls back to the image tag when `softwareVersion` is not available. Visible by default for new installs; added automatically to saved column lists on upgrade.
+
+### Version column display
+
+The **Tag** column adapts based on `tagPrecision`:
+
+- **Floating-tag + digest-watch containers** (e.g. `prom/prometheus:latest`): shows the human-readable tag (not raw SHA). The digest transition is available in the cell tooltip and detail panels.
+- **Digest-pinned containers** (`image.tag.value` starts with `sha256:`): shows the `sha256:abc… → sha256:def…` pair directly in the cell.
+
+### Hide Pinned toggle
+
+The **Hide Pinned** filter in the Containers toolbar hides containers whose `tagPrecision` is `specific`. This is useful for decluttering the list when you have infrastructure containers (databases, proxies) pinned to specific versions and want to focus on containers with available updates. The preference is persisted across sessions.
+
+## Docker Event Stream
+
+The watcher monitors Docker events (container create, destroy, start, stop, etc.) in real time. If the event stream disconnects, Drydock automatically reconnects with exponential backoff starting at 1 second and capping at 30 seconds.
+
+When using third-party socket proxies, periodic reconnects are expected: many proxies close idle long-lived HTTP connections after their configured timeout. In logs this appears as:
+
+`Docker event stream error (aborted); reconnect attempt #1 in 1000ms`
+
+followed by:
+
+`Listening to docker events`
+
+The first reconnect attempt is logged at **info** level since it is expected behavior (proxy timeout or network blip). If the first attempt fails and subsequent reconnects are needed, those are logged at **warn** level to flag a potential real problem.
+
+### Event gap during reconnect
+
+Container lifecycle events (create, start, stop, destroy) that occur during the brief reconnect window are not captured until the next scheduled poll cycle. The reconnect window is typically ~1 second under normal conditions. In practice this is rarely noticeable because the next cron poll will pick up the current container state, but it means Drydock does not guarantee zero missed events across a reconnect.
+
+A future release will wire the reconnect path to request events from the last-seen timestamp, closing this gap entirely.
+
+### Native socket proxy
+
+The root cause of proxy-timeout reconnects is that Drydock cannot control idle timeout behavior on third-party proxies. A purpose-built Drydock socket proxy is on the [roadmap](https://github.com/CodesWhat/drydock#roadmap).
+
+### Reduce proxy-timeout reconnect churn
+
+Until the native proxy ships, you can reduce reconnect noise:
+
+1. Increase your proxy idle timeout (for example, linuxserver socket-proxy `TIMEOUT=86400s`).
+2. Prefer direct socket mount when your environment allows it.
+3. If your proxy supports endpoint-specific behavior, exempt Docker `/events` streams from idle timeout.
+4. As a workaround, run a lightweight heartbeat container (e.g. `alpine:latest` with `command: sh -c "sleep 300"` and `restart: always`) to keep the proxy connection path active.

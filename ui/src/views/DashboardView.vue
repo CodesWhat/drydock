@@ -11,11 +11,11 @@ import {
 import type { Container } from '../types/container';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import type { OperationChangedPayload } from '../services/sse';
-import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useToast } from '../composables/useToast';
+import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
 import { ROUTES } from '../router/routes';
 import { updateContainer, updateContainers } from '../services/container-actions';
@@ -28,13 +28,14 @@ import {
   runContainerUpdateRequest,
 } from '../utils/container-update';
 import { errorMessage } from '../utils/error';
-import { getPrimaryHardBlocker } from '../utils/update-eligibility';
+import { getPrimaryHardBlocker, getSoftBlockers } from '../utils/update-eligibility';
 import type { ContainerStatsSummarySnapshot } from '../services/stats';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
 import DashboardResourceUsageWidget from './dashboard/components/DashboardResourceUsageWidget.vue';
 import DashboardSecurityOverviewWidget from './dashboard/components/DashboardSecurityOverviewWidget.vue';
 import DashboardUpdateBreakdownWidget from './dashboard/components/DashboardUpdateBreakdownWidget.vue';
+import DashboardGrid from './dashboard/components/DashboardGrid.vue';
 import {
   DASHBOARD_WIDGET_META,
   type DashboardUpdateSequenceEntry,
@@ -55,6 +56,8 @@ const { t } = useI18n();
 const router = useRouter();
 const confirm = useConfirmDialog();
 const toast = useToast();
+const { updateMode } = useUpdateMode();
+const managedUpdatesAllowed = computed(() => updateMode.value !== 'notify');
 const {
   clearAllOperationDisplayHolds,
   heldOperations,
@@ -103,6 +106,7 @@ onUnmounted(() => {
 const {
   currentBreakpoint,
   gridInstanceKey,
+  hiddenWidgets,
   onBreakpointChanged,
   editMode,
   isWidgetVisible,
@@ -111,7 +115,6 @@ const {
   resetAll,
   toggleEditMode,
   toggleWidgetVisibility,
-  widgetOrderIndex,
 } = useDashboardWidgetOrder();
 
 const layoutWithBreakpointBounds = computed(() =>
@@ -584,18 +587,35 @@ function isStatWidget(id: string): boolean {
 }
 
 function confirmDashboardUpdate(row: RecentUpdateRow) {
+  if (!managedUpdatesAllowed.value) {
+    toast.warning(t('containerComponents.updateStatus.summary.notify'));
+    return;
+  }
   const hardBlocker = getPrimaryHardBlocker(row.updateEligibility);
   if (row.blocked || hardBlocker) {
     toast.warning(hardBlocker?.message ?? t('dashboardView.recentUpdates.securityBlocked'));
     return;
   }
+  const softBlockers = getSoftBlockers(row.updateEligibility);
+  let message = t('dashboardView.confirm.updateContainer.message', { name: row.name });
+  if (softBlockers.length > 0) {
+    const list = softBlockers.map((blocker) => `• ${blocker.message}`).join('\n');
+    message += t('containerComponents.confirmDialogs.update.softBlockerSuffix', { list });
+  }
   confirm.require({
     header: t('dashboardView.confirm.updateContainer.header'),
-    message: t('dashboardView.confirm.updateContainer.message', { name: row.name }),
+    message,
     severity: 'warn',
-    acceptLabel: t('dashboardView.confirm.updateContainer.accept'),
+    acceptLabel:
+      softBlockers.length > 0
+        ? t('containerComponents.confirmDialogs.update.acceptLabelOverride')
+        : t('dashboardView.confirm.updateContainer.accept'),
     rejectLabel: t('common.cancel'),
     accept: async () => {
+      if (!managedUpdatesAllowed.value) {
+        toast.warning(t('containerComponents.updateStatus.summary.notify'));
+        return;
+      }
       dashboardUpdateInProgress.value = row.id;
       dashboardUpdateError.value = null;
       // Optimistic state: mark this row as updating immediately, before the API
@@ -644,6 +664,10 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
 }
 
 function confirmDashboardUpdateAll() {
+  if (!managedUpdatesAllowed.value) {
+    toast.warning(t('containerComponents.updateStatus.summary.notify'));
+    return;
+  }
   confirm.require({
     header: t('dashboardView.confirm.updateAll.header'),
     message: t('dashboardView.confirm.updateAll.message', { count: pendingUpdates.value.length }),
@@ -651,6 +675,10 @@ function confirmDashboardUpdateAll() {
     acceptLabel: t('dashboardView.confirm.updateAll.accept'),
     rejectLabel: t('common.cancel'),
     accept: async () => {
+      if (!managedUpdatesAllowed.value) {
+        toast.warning(t('containerComponents.updateStatus.summary.notify'));
+        return;
+      }
       const pendingRowsSnapshot = pendingUpdates.value.filter((row) => !row.blocked);
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
@@ -763,43 +791,23 @@ function confirmDashboardUpdateAll() {
         </Teleport>
 
         <!-- Grid Layout -->
-        <GridLayout
+        <DashboardGrid
           :key="gridInstanceKey"
-          v-model:layout="layout"
+          @update:layout="layout = $event"
           @pointerdown.capture="handleDashboardGridPointerDown"
           @breakpoint-changed="onBreakpointChanged"
-          :col-num="12"
+          :columns="GRID_COLS[currentBreakpoint]"
           :row-height="30"
           :margin="gridMargin"
-          :responsive="true"
           :responsive-layouts="responsiveLayouts"
           :breakpoints="GRID_BREAKPOINTS"
-          :cols="GRID_COLS"
-          :class="{ 'dd-grid-ready': gridReady }"
-          :is-draggable="editMode"
-          :is-resizable="editMode"
-          :vertical-compact="true"
-          :use-css-transforms="true">
-          <GridItem
-            v-for="item in layoutWithBreakpointBounds"
-            v-show="isWidgetVisible(item.i as DashboardWidgetId)"
-            :key="item.i"
-            :data-widget-id="item.i"
-            :data-widget-order="widgetOrderIndex(item.i as DashboardWidgetId)"
-            :x="item.x"
-            :y="item.y"
-            :w="item.w"
-            :h="item.h"
-            :i="item.i"
-            :min-w="item.breakpointBounds.minW"
-            :min-h="item.breakpointBounds.minH"
-            :max-w="item.breakpointBounds.maxW"
-            :max-h="item.breakpointBounds.maxH"
-            drag-ignore-from="input, textarea, button, a, select, .no-drag"
-            drag-allow-from=".drag-handle"
-            class="dd-grid-item"
-            :style="editMode ? { touchAction: 'pan-y' } : undefined"
-            :class="editMode ? 'dd-grid-edit' : ''">
+          :layout="layoutWithBreakpointBounds"
+          :hidden-items="hiddenWidgets"
+          :current-breakpoint="currentBreakpoint"
+          :resize-label="t('dashboardView.resizeWidget')"
+          :editable="editMode"
+          :class="{ 'dd-grid-ready': gridReady }">
+          <template #item="{ item }">
 
             <!-- Stat Cards -->
             <component
@@ -849,6 +857,7 @@ function confirmDashboardUpdateAll() {
               :get-update-kind-icon="getUpdateKindIcon"
               :get-update-kind-muted-color="getUpdateKindMutedColor"
               :edit-mode="editMode"
+              :updates-allowed="managedUpdatesAllowed"
               @confirm-update="confirmDashboardUpdate"
               @confirm-update-all="confirmDashboardUpdateAll"
               @open-container="navigateTo({ path: ROUTES.CONTAINERS, query: { containerIds: $event.id } })"
@@ -892,8 +901,8 @@ function confirmDashboardUpdateAll() {
               :update-breakdown-buckets="updateBreakdownBuckets"
               :edit-mode="editMode"
               @view-all="navigateTo({ path: ROUTES.CONTAINERS, query: { filterKind: 'any' } })" />
-          </GridItem>
-        </GridLayout>
+          </template>
+        </DashboardGrid>
       </template>
     </div>
 
@@ -966,54 +975,14 @@ function confirmDashboardUpdateAll() {
 </template>
 
 <style>
-/*
- * grid-layout-plus overrides
- *
- * The library exposes CSS custom properties on .vgl-layout for theming.
- * We set those instead of using !important where possible.
- * The 3 remaining !important declarations override inline transition
- * styles that the library sets via JS during mount and drag — there
- * is no custom property for these.
- */
-
-/* Theme the library's built-in placeholder and resizer via its CSS vars */
-.vgl-layout {
-  --vgl-placeholder-bg: var(--dd-success);
-  --vgl-placeholder-opacity: 15%;
-  --vgl-resizer-border-color: var(--dd-text-secondary);
-  --vgl-resizer-border-width: 1.5px;
-  --vgl-resizer-size: 20px;
-  /* Grid library adds outer-edge margins equal to the item gap.
-     Pull top and left flush to align with page content.
-     Vertical stays at -16px (works at all breakpoints).
-     Horizontal must match the responsive gridMargin[0]. */
-  margin-top: -16px;
-  margin-left: -10px;  /* mobile: gridMargin [10, 20] */
+.dd-dashboard-grid {
+  align-items: stretch;
+  padding-bottom: 16px;
 }
 
-@media (min-width: 768px) {
-  .vgl-layout {
-    margin-left: -14px;  /* tablet: gridMargin [14, 18] */
-  }
-}
-
-@media (min-width: 1024px) {
-  .vgl-layout {
-    margin-left: -16px;  /* desktop: gridMargin [16, 16] */
-  }
-}
-
-/* Disable the initial fly-in — library sets inline transition styles */
-.vgl-layout:not(.dd-grid-ready) {
-  transition: none !important;
-}
-
-.vgl-layout:not(.dd-grid-ready) .vgl-item {
-  transition: none !important;
-}
-
-.vgl-item--dragging {
-  transition: none !important;
+.dd-dashboard-grid:not(.dd-grid-ready) .dd-grid-item,
+.dd-grid-dragging {
+  transition: none;
 }
 
 /* Grid item content fills its cell */
@@ -1061,7 +1030,7 @@ function confirmDashboardUpdateAll() {
 }
 
 /* Re-enable pointer events on resize handle */
-.dd-grid-edit .vgl-item__resizer {
+.dd-grid-edit .dd-grid-resizer {
   pointer-events: auto;
 }
 
@@ -1089,7 +1058,11 @@ function confirmDashboardUpdateAll() {
 }
 
 /* Resize handle pill — matches drag handle style */
-.vgl-item .vgl-item__resizer {
+.dd-grid-resizer {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 0;
   opacity: 0;
   cursor: se-resize;
   background-color: var(--dd-neutral-muted);
@@ -1100,7 +1073,9 @@ function confirmDashboardUpdateAll() {
   transition: opacity 150ms ease, background-color 150ms ease;
 }
 
-.vgl-item .vgl-item__resizer::before {
+.dd-grid-resizer::before {
+  content: '';
+  position: absolute;
   border-color: var(--dd-neutral);
   width: 7px;
   height: 7px;
@@ -1110,23 +1085,24 @@ function confirmDashboardUpdateAll() {
   inset: auto 4px 4px auto;
 }
 
-.dd-grid-edit.vgl-item .vgl-item__resizer {
+.dd-grid-edit .dd-grid-resizer {
   opacity: var(--dd-opacity-handle-idle);
 }
 
 /* Card hover darkens both handles */
-.dd-grid-edit.vgl-item:hover .vgl-item__resizer {
+.dd-grid-edit:hover .dd-grid-resizer {
   opacity: 1;
   background-color: var(--dd-border-strong);
 }
 
-.dd-grid-edit.vgl-item:hover .vgl-item__resizer::before {
+.dd-grid-edit:hover .dd-grid-resizer::before {
   border-color: var(--dd-text);
 }
 
 /* Placeholder border during drag/resize */
-.vgl-item--placeholder {
+.dd-grid-drop-target {
   border-radius: var(--dd-radius);
   border: 2px dashed var(--dd-success);
+  background: color-mix(in srgb, var(--dd-success) 10%, transparent);
 }
 </style>

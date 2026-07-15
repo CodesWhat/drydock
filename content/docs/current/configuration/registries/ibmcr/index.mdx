@@ -14,9 +14,9 @@ Drydock automatically detects IBMCR registries by matching `*.icr.io` hostnames.
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_APIKEY` | ⚪ | IBM Cloud API key | Automatically sets login to `iamapikey` | |
-| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_LOGIN` | ⚪ | Registry username | DD_REGISTRY_IBMCR_\{REGISTRY_NAME\}_PASSWORD must be defined | |
-| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Registry password | DD_REGISTRY_IBMCR_\{REGISTRY_NAME\}_LOGIN must be defined | |
-| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_IBMCR_\{REGISTRY_NAME\}_LOGIN/PASSWORD/APIKEY must not be defined | |
+| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_LOGIN` | ⚪ | Registry username | `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_PASSWORD` must be defined | |
+| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Registry password | `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | `DD_REGISTRY_IBMCR_{REGISTRY_NAME}_LOGIN/PASSWORD/APIKEY` must not be defined | |
 
 ## Examples
 

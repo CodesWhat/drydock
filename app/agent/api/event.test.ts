@@ -530,6 +530,17 @@ describe('agent API event', () => {
       expect(payload).toContain('"container"');
     });
 
+    test('update-applied handler should preserve the dry-run phase', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateAppliedHandler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      updateAppliedHandler({ containerName: 'local_nginx', phase: 'dryrun' });
+
+      expect(res.write.mock.calls[0][0]).toContain('"phase":"dryrun"');
+    });
+
     test('update-applied handler should omit operationId when empty string', () => {
       eventApi.subscribeEvents(req, res);
       res.write.mockClear();

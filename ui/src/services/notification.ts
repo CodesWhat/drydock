@@ -6,11 +6,31 @@ export interface NotificationRule {
   description: string;
   enabled: boolean;
   triggers: string[];
+  bellEnabled: boolean;
+  bellThreshold: NotificationBellThreshold;
+  templates: NotificationTemplateOverrides;
 }
+
+export type NotificationBellThreshold = 'all' | 'major' | 'minor' | 'patch';
+
+export interface NotificationTemplateOverride {
+  simpleTitle?: string;
+  simpleBody?: string;
+  batchTitle?: string;
+}
+
+export type NotificationTemplateField = keyof NotificationTemplateOverride;
+
+export type NotificationTemplateOverrides = Record<string, NotificationTemplateOverride>;
+
+export type NotificationTemplatePreview = Required<NotificationTemplateOverride>;
 
 export interface NotificationRuleUpdate {
   enabled?: boolean;
   triggers?: string[];
+  bellEnabled?: boolean;
+  bellThreshold?: NotificationBellThreshold;
+  templates?: NotificationTemplateOverrides;
 }
 
 async function getAllNotificationRules(): Promise<NotificationRule[]> {
@@ -41,4 +61,22 @@ async function updateNotificationRule(
   return readJsonResponse<NotificationRule>(response);
 }
 
-export { getAllNotificationRules, updateNotificationRule };
+async function previewNotificationTemplates(
+  ruleId: string,
+  triggerId: string,
+  templates: NotificationTemplateOverride,
+): Promise<NotificationTemplatePreview> {
+  const response = await fetch(`/api/v1/notifications/${ruleId}/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ triggerId, templates }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || `HTTP ${response.status}`);
+  }
+  return readJsonResponse<NotificationTemplatePreview>(response);
+}
+
+export { getAllNotificationRules, previewNotificationTemplates, updateNotificationRule };

@@ -1,14 +1,19 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent, nextTick } from 'vue';
+import { computed, defineComponent, nextTick, ref } from 'vue';
 
 const mockGetSecurityVulnerabilityOverview = vi.fn();
 const mockScanContainer = vi.fn();
 const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
+const mockManageSecurityAsset = vi.fn();
 const mockGetAllContainers = vi.fn();
 const mockRouterPush = vi.fn().mockResolvedValue(undefined);
-const mockIsMobile = { value: false };
-const mockWindowNarrow = { value: false };
+// Real refs (not plain `{ value }` objects) — the component's template uses bare
+// `isCompact`/`isMobile` (no `.value`) in several `v-if`/prop bindings, which only
+// auto-unwraps for genuine Vue refs. A plain object would be constant-truthy there.
+const mockIsMobile = ref(false);
+const mockWindowNarrow = ref(false);
+const mockUpdateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 const { mockComputeSecurityDelta, mockToSafeExternalUrl } = vi.hoisted(() => ({
   mockComputeSecurityDelta: vi.fn(),
   mockToSafeExternalUrl: vi.fn(),
@@ -28,10 +33,15 @@ vi.mock('@/services/container', () => ({
 
 vi.mock('@/services/server', () => ({
   getSecurityRuntime: (...args: any[]) => mockGetSecurityRuntime(...args),
+  manageSecurityAsset: (...args: any[]) => mockManageSecurityAsset(...args),
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
   useBreakpoints: () => ({ isMobile: mockIsMobile, windowNarrow: mockWindowNarrow }),
+}));
+
+vi.mock('@/composables/useUpdateMode', () => ({
+  useUpdateMode: () => ({ updateMode: mockUpdateMode }),
 }));
 
 vi.mock('@/utils/container-mapper', async () => {
@@ -60,6 +70,8 @@ vi.mock('@/views/security/securityViewUtils', async () => {
 });
 
 import { mount } from '@vue/test-utils';
+import ContainerLinkActions from '@/components/containers/ContainerLinkActions.vue';
+import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
 import SecurityView from '@/views/SecurityView.vue';
@@ -104,7 +116,26 @@ const stubs: Record<string, any> = {
     ],
     emits: ['update:modelValue', 'update:showFilters'],
     template:
-      '<div class="dfb"><slot name="filters" /><slot name="left" /><slot name="center" /></div>',
+      '<div class="dfb"><slot name="extra-buttons" /><slot name="filters" /><slot name="left" /><slot name="center" /></div>',
+  }),
+  DataTableColumnPicker: defineComponent({
+    props: ['columns', 'hiddenKeys'],
+    emits: ['toggle', 'reset'],
+    template: `
+      <div data-test="data-table-column-picker">
+        <button
+          v-for="column in columns"
+          :key="column.key"
+          type="button"
+          :data-test="'column-picker-toggle-' + column.key"
+          @click="$emit('toggle', column.key)">
+          {{ column.label }}
+        </button>
+        <button type="button" data-test="data-table-column-picker-reset" @click="$emit('reset')">
+          Reset
+        </button>
+      </div>
+    `,
   }),
   AppIconButton: defineComponent({
     inheritAttrs: false,
@@ -113,20 +144,20 @@ const stubs: Record<string, any> = {
       '<button class="app-icon-button-stub" v-bind="$attrs" :data-icon="icon" :data-size="size" :data-variant="variant" :data-loading="String(loading)" :aria-label="ariaLabel" :disabled="disabled"><slot /></button>',
   }),
   DataTable: defineComponent({
-    props: ['columns', 'rows', 'rowKey', 'sortKey', 'sortAsc', 'selectedKey'],
+    props: ['columns', 'rows', 'rowKey', 'sortKey', 'sortAsc', 'selectedKey', 'hiddenColumnKeys'],
     emits: ['update:sortKey', 'update:sortAsc', 'row-click'],
-    template: '<div class="dt" :data-rows="rows.length"><slot name="empty" /></div>',
-  }),
-  DataCardGrid: defineComponent({
-    props: ['items', 'itemKey', 'minWidth', 'selectedKey'],
-    emits: ['item-click'],
-    template:
-      '<div class="dcg" :data-items="items.length"><div v-for="item in items" :key="item[itemKey]" class="dcg-card"><slot name="card" :item="item" /></div></div>',
-  }),
-  DataListAccordion: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
-    template: '<div class="dla" :data-items="items.length" />',
+    template: `
+      <div class="dt" :data-rows="rows.length" :data-hidden-keys="JSON.stringify(hiddenColumnKeys || [])">
+        <div
+          v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+          :key="col.key"
+          class="dt-header"
+          :data-col-key="col.key">
+          {{ col.label }}
+        </div>
+        <slot name="empty" />
+      </div>
+    `,
   }),
   DetailPanel: defineComponent({
     props: ['open', 'isMobile', 'showSizeControls', 'showFullPage'],
@@ -176,8 +207,185 @@ const stubs: Record<string, any> = {
   }),
 };
 
-function factory() {
-  return mount(SecurityView, { global: { stubs }, shallow: false });
+const securityCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'countLabel',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="dfb security-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button class="mode-table" @click="$emit('update:modelValue', 'table')">table</button>
+      <button class="mode-cards" @click="$emit('update:modelValue', 'cards')">cards</button>
+      <slot name="sort" />
+      <slot name="extra-buttons" />
+      <slot name="filters" />
+      <slot name="left" />
+      <slot name="center" />
+    </div>
+  `,
+});
+
+const securityDataSortControlStub = defineComponent({
+  props: ['columns', 'sortKey', 'sortAsc'],
+  emits: ['update:sortKey', 'update:sortAsc'],
+  template: `
+    <div
+      class="security-sort-control"
+      :data-columns="columns.map((column) => column.key).join(',')"
+      :data-sort-key="sortKey"
+      :data-sort-asc="String(sortAsc)">
+      <button class="sort-by-high" @click="$emit('update:sortKey', 'high')">Sort high</button>
+      <button class="sort-asc" @click="$emit('update:sortAsc', true)">Asc</button>
+    </div>
+  `,
+});
+
+function makeSecurityCardDataTableStub(extraRows: any[] = []) {
+  return defineComponent({
+    props: [
+      'columns',
+      'rows',
+      'rowKey',
+      'sortKey',
+      'sortAsc',
+      'selectedKey',
+      'hiddenColumnKeys',
+      'preferCards',
+      'hoistCardSort',
+    ],
+    emits: ['update:sortKey', 'update:sortAsc', 'row-click', 'update:cardReflowForced'],
+    setup(props) {
+      const renderedRows = computed(() => [...((props.rows as any[]) || []), ...extraRows]);
+      return { renderedRows };
+    },
+    template: `
+      <div
+        class="dt security-card-table"
+        :data-rows="rows?.length ?? 0"
+        :data-sort-key="sortKey"
+        :data-sort-asc="String(sortAsc)"
+        :data-prefer-cards="String(preferCards)"
+        :data-hoist-card-sort="String(hoistCardSort)"
+        :data-hidden-keys="JSON.stringify(hiddenColumnKeys || [])">
+        <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+          Force cards
+        </button>
+        <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+          Clear cards
+        </button>
+        <article
+          v-for="row in renderedRows"
+          :key="row[rowKey || 'image']"
+          class="security-card"
+          :data-card-id="row[rowKey || 'image']"
+          @click="$emit('row-click', row)">
+          <slot name="card" :row="row" />
+        </article>
+        <slot name="empty" v-if="!rows || rows.length === 0" />
+      </div>
+    `,
+  });
+}
+
+const releaseNotesLinkStub = defineComponent({
+  inheritAttrs: false,
+  props: ['releaseNotes', 'currentReleaseNotes', 'releaseLink', 'iconOnly', 'iconSize'],
+  template: '<a class="release-notes-link-stub" v-bind="$attrs">Release notes</a>',
+});
+
+const projectLinkStub = defineComponent({
+  inheritAttrs: false,
+  props: ['sourceRepo', 'iconOnly', 'iconSize'],
+  template: '<a class="project-link-stub" v-bind="$attrs">{{ sourceRepo }}</a>',
+});
+
+const containerLinkActionsStub = defineComponent({
+  inheritAttrs: false,
+  props: [
+    'sourceRepo',
+    'releaseNotes',
+    'currentReleaseNotes',
+    'releaseLink',
+    'containerId',
+    'fromTag',
+    'toTag',
+    'registry',
+    'registryName',
+    'registryUrl',
+    'iconSize',
+  ],
+  template: `
+    <div
+      data-test="container-link-actions-stub"
+      :data-source-repo="sourceRepo"
+      :data-container-id="containerId"
+      :data-from-tag="fromTag"
+      :data-to-tag="toTag"
+      :data-registry="registry"
+      :data-registry-name="registryName"
+      :data-registry-url="registryUrl"
+      :data-icon-size="iconSize"
+      v-bind="$attrs">
+      <button type="button" data-link-action="source" @click.stop>Source</button>
+      <button type="button" data-link-action="release" @click.stop>Release notes</button>
+      <button type="button" data-link-action="registry" @click.stop>Registry</button>
+    </div>
+  `,
+});
+
+const securityLinkTableStub = defineComponent({
+  props: ['rows', 'rowKey'],
+  emits: ['row-click'],
+  template: `
+    <div data-test="security-link-table-stub">
+      <div
+        v-for="row in rows"
+        :key="row[rowKey || 'image']"
+        class="security-link-table-row"
+        @click="$emit('row-click', row)">
+        <slot name="cell-image" :row="row" />
+      </div>
+    </div>
+  `,
+});
+
+const securityCardAppButtonStub = defineComponent({
+  inheritAttrs: false,
+  props: ['size', 'variant', 'disabled'],
+  emits: ['click'],
+  template:
+    '<button class="app-button-stub" v-bind="$attrs" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
+});
+
+const containerUpdateDialogStub = defineComponent({
+  props: ['containerId'],
+  template: '<div v-if="containerId" data-test="container-update-dialog-stub" />',
+});
+
+function securityCardStubs(extraRows: any[] = []) {
+  return {
+    DataFilterBar: securityCardFilterBarStub,
+    DataSortControl: securityDataSortControlStub,
+    DataTable: makeSecurityCardDataTableStub(extraRows),
+    ReleaseNotesLink: releaseNotesLinkStub,
+    ProjectLink: projectLinkStub,
+    ContainerLinkActions: containerLinkActionsStub,
+    AppButton: securityCardAppButtonStub,
+    ContainerUpdateDialog: containerUpdateDialogStub,
+  };
+}
+
+function factory(extraStubs: Record<string, any> = {}) {
+  return mount(SecurityView, { global: { stubs: { ...stubs, ...extraStubs } }, shallow: false });
 }
 
 function readyRuntimeStatus() {
@@ -290,12 +498,107 @@ function mockContainers(containers: any[]) {
 describe('SecurityView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     containerIdCounter = 0;
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
+    mockUpdateMode.value = 'manual';
     mockGetSecurityRuntime.mockResolvedValue(readyRuntimeStatus());
+    mockManageSecurityAsset.mockResolvedValue(undefined);
     mockGetAllContainers.mockResolvedValue([]);
     mockRouterPush.mockResolvedValue(undefined);
+  });
+
+  describe('tableColumns (card-mode annotations)', () => {
+    it('flags critical with cardPriority in the wide (non-compact) column set', async () => {
+      mockWindowNarrow.value = false;
+      const w = factory();
+      await flushPromises();
+      const vm = w.vm as any;
+      const criticalCol = vm.tableColumns.find((c: any) => c.key === 'critical');
+      expect(criticalCol?.cardPriority).toBe(5);
+    });
+
+    it('always returns the full 7-column set, even when compact (severity columns are hidden via hiddenColumnKeys, not dropped from tableColumns)', async () => {
+      mockWindowNarrow.value = true;
+      const w = factory();
+      await flushPromises();
+      const vm = w.vm as any;
+      const criticalCol = vm.tableColumns.find((c: any) => c.key === 'critical');
+      expect(criticalCol).toBeDefined();
+      expect(criticalCol?.cardPriority).toBe(5);
+      expect(vm.tableColumns).toHaveLength(7);
+    });
+  });
+
+  describe('column picker', () => {
+    it('tableColumns keys match VIEW_TABLE_COLUMN_KEYS.security (schema/view sync guard)', async () => {
+      const w = factory();
+      await flushPromises();
+      const vm = w.vm as any;
+      const keys = new Set(vm.tableColumns.map((c: any) => c.key));
+      expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.security));
+    });
+
+    it('marks the image column as required', async () => {
+      const w = factory();
+      await flushPromises();
+      const vm = w.vm as any;
+      const imageCol = vm.tableColumns.find((c: any) => c.key === 'image');
+      expect(imageCol.required).toBe(true);
+    });
+
+    it('renders the picker and passes only the picker-hidden set to DataTable when not compact', async () => {
+      mockWindowNarrow.value = false;
+      mockContainers([makeContainer()]);
+      const w = factory();
+      await flushPromises();
+
+      expect(w.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+      await w.find('[data-test="column-picker-toggle-fixable"]').trigger('click');
+      await nextTick();
+
+      const hiddenKeys = JSON.parse(w.find('.dt').attributes('data-hidden-keys') ?? '[]');
+      expect(hiddenKeys).toEqual(['fixable']);
+    });
+
+    it('hides the picker and unions the picker-hidden set with the compact-forced-hidden columns when compact', async () => {
+      mockWindowNarrow.value = true;
+      mockContainers([makeContainer()]);
+      const w = factory();
+      await flushPromises();
+
+      expect(w.find('[data-test="data-table-column-picker"]').exists()).toBe(false);
+      const hiddenKeys = JSON.parse(w.find('.dt').attributes('data-hidden-keys') ?? '[]');
+      expect([...hiddenKeys].sort()).toEqual(
+        ['critical', 'fixable', 'high', 'low', 'medium'].sort(),
+      );
+    });
+
+    it('toggling a column via the picker removes its header from the table', async () => {
+      mockWindowNarrow.value = false;
+      mockContainers([makeContainer()]);
+      const w = factory();
+      await flushPromises();
+
+      expect(w.find('[data-col-key="critical"]').exists()).toBe(true);
+      await w.find('[data-test="column-picker-toggle-critical"]').trigger('click');
+      await nextTick();
+
+      expect(w.find('[data-col-key="critical"]').exists()).toBe(false);
+    });
+
+    it('toggling a column via the picker persists the key to preferences.views.security.hiddenColumns', async () => {
+      mockWindowNarrow.value = false;
+      mockContainers([makeContainer()]);
+      const w = factory();
+      await flushPromises();
+
+      await w.find('[data-test="column-picker-toggle-critical"]').trigger('click');
+      await nextTick();
+
+      expect(preferences.views.security.hiddenColumns).toContain('critical');
+    });
   });
 
   describe('data loading', () => {
@@ -763,6 +1066,40 @@ describe('SecurityView', () => {
     });
   });
 
+  describe('compact scanner asset controls', () => {
+    it('renders touch-friendly pull and warm controls and runs the selected operation', async () => {
+      mockWindowNarrow.value = true;
+      mockGetSecurityRuntime.mockResolvedValue({
+        ...readyRuntimeStatus(),
+        backend: 'docker',
+        providers: [],
+        assets: [
+          { provider: 'trivy', state: 'ready' },
+          { provider: 'grype', state: 'missing' },
+        ],
+      });
+
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const warmButton = wrapper.find('.app-icon-button-stub[aria-label="Warm trivy"]');
+      const pullButton = wrapper.find('.app-icon-button-stub[aria-label="Pull grype"]');
+      expect(warmButton.exists()).toBe(true);
+      expect(warmButton.attributes('data-icon')).toBe('restart');
+      expect(warmButton.attributes('data-size')).toBe('sm');
+      expect(pullButton.exists()).toBe(true);
+      expect(pullButton.attributes('data-icon')).toBe('cloud-download');
+      expect(pullButton.attributes('data-size')).toBe('sm');
+
+      await pullButton.trigger('click');
+      await vi.waitFor(() => expect(mockManageSecurityAsset).toHaveBeenCalledWith('grype', 'pull'));
+      await flushPromises();
+
+      expect(mockGetSecurityRuntime).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('scan coverage display', () => {
     it('shows 0/N scanned when no containers have been scanned', async () => {
       mockContainers([makeContainer({ security: null }), makeContainer({ security: null })]);
@@ -1128,6 +1465,7 @@ describe('SecurityView', () => {
           name: 'nginx',
           displayName: 'nginx',
           image: { name: 'nginx', tag: { value: '1.25' } },
+          currentTag: '1.25',
           newTag: '1.26',
           status: 'running',
           registry: 'dockerhub',
@@ -1167,6 +1505,7 @@ describe('SecurityView', () => {
           name: 'nginx',
           displayName: 'nginx',
           image: { name: 'nginx', tag: { value: '1.25' } },
+          currentTag: '1.25',
           newTag: null,
           status: 'running',
           registry: 'dockerhub',
@@ -1296,6 +1635,53 @@ describe('SecurityView', () => {
       expect(vm.isSummaryUpdateBlocked(summary)).toBe(true);
 
       vm.openUpdateAction(summary);
+      await nextTick();
+
+      expect(vm.updateDialogContainerId).toBeNull();
+    });
+
+    it('hides and guards managed security updates in notify mode', async () => {
+      mockUpdateMode.value = 'notify';
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          currentTag: '1.25',
+          newTag: '1.26',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'patch',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+        },
+      ]);
+
+      const w = factory(securityCardStubs());
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      expect(w.find('[data-test="security-card-update-btn"]').exists()).toBe(false);
+
+      vm.openUpdateAction(summary);
+      const choice = vm.resolveContainerChoices(summary)[0];
+      vm.openUpdateFromChooser(choice);
       await nextTick();
 
       expect(vm.updateDialogContainerId).toBeNull();
@@ -1526,9 +1912,11 @@ describe('SecurityView', () => {
       await flushPromises();
 
       expect(w.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
-      // Fallthrough attr from SecurityDetailPanel overrides the component's own data-test
-      expect(w.find('[data-test="security-detail-release-notes"]').exists()).toBe(true);
-      expect(w.find('[data-test="security-detail-project-link"]').exists()).toBe(true);
+      const resources = w.get('[data-test="container-quick-links"]');
+      expect(resources.find('[data-test="project-link"]').exists()).toBe(true);
+      expect(resources.find('[data-test="current-release-notes-link"]').exists()).toBe(true);
+      expect(resources.find('[data-test="registry-link"]').exists()).toBe(true);
+      expect(resources.findAll('[data-size="sm"]')).toHaveLength(3);
     });
 
     it('navigateToContainerUpdate joins multiple container IDs with comma', async () => {
@@ -1599,12 +1987,113 @@ describe('SecurityView', () => {
     });
   });
 
-  describe('cards view', () => {
-    afterEach(() => {
-      resetPreferences();
-    });
+  describe('resource link actions', () => {
+    it('forwards table-row resources to one 44px cluster without triggering the row action', async () => {
+      preferences.views.security.mode = 'table';
+      mockContainers([makeContainer({ id: 'c1', name: 'nginx', displayName: 'nginx' })]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: '1.26',
+          currentTag: '1.25',
+          status: 'running',
+          registry: 'ghcr',
+          registryName: 'GitHub Container Registry',
+          registryUrl: 'https://ghcr.io/v2',
+          sourceRepo: 'github.com/nginx/nginx',
+          releaseLink: 'https://github.com/nginx/nginx/releases',
+        },
+      ]);
 
-    it('card footer shows ReleaseNotesLink and ProjectLink for a no-update image with currentReleaseNotes and sourceRepo', async () => {
+      const w = factory({
+        DataTable: securityLinkTableStub,
+        ContainerLinkActions,
+        ContainerUpdateDialog: containerUpdateDialogStub,
+      });
+      await flushPromises();
+
+      const cluster = w.get('[data-test="container-quick-links"]');
+      const actions = w.getComponent(ContainerLinkActions);
+      expect(w.findAll('[data-test="container-quick-links"]')).toHaveLength(1);
+      expect(actions.props()).toMatchObject({
+        sourceRepo: 'github.com/nginx/nginx',
+        containerId: 'c1',
+        fromTag: '1.25',
+        toTag: '1.26',
+        registry: 'ghcr',
+        registryName: 'GitHub Container Registry',
+        registryUrl: 'https://ghcr.io/v2',
+        iconSize: 'sm',
+      });
+
+      const resourceLayout = w.get('[data-test="security-resource-actions"]');
+      const tableImageLayout = resourceLayout.element.parentElement;
+      const canWrapAtNarrowWidths =
+        tableImageLayout?.classList.contains('flex-wrap') ||
+        resourceLayout
+          .classes()
+          .some((className) =>
+            ['w-full', 'basis-full', 'max-sm:w-full', 'max-sm:basis-full'].includes(className),
+          );
+      expect(canWrapAtNarrowWidths).toBe(true);
+
+      await cluster.get('[data-test="registry-link"]').trigger('click');
+      expect((w.vm as any).selectedImage).toBeNull();
+    });
+  });
+
+  describe('card mode', () => {
+    const cardBranchRows = [
+      {
+        image: 'redis',
+        critical: 0,
+        high: 2,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+        total: 2,
+        fixable: 1,
+        delta: { fixed: 1, new: 0, unchanged: 1 },
+      },
+      {
+        image: 'api',
+        critical: 0,
+        high: 0,
+        medium: 3,
+        low: 0,
+        unknown: 0,
+        total: 3,
+        fixable: 0,
+        delta: { fixed: 0, new: 2, unchanged: 1 },
+      },
+      {
+        image: 'worker',
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 4,
+        unknown: 0,
+        total: 4,
+        fixable: 2,
+        delta: { fixed: 1, new: 1, unchanged: 2 },
+      },
+      {
+        image: 'clean-image',
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+        total: 0,
+        fixable: 0,
+      },
+    ];
+
+    it('renders security cards with severity, delta, update, and link affordances', async () => {
+      preferences.views.security.mode = 'cards';
       mockContainers([
         makeContainer({
           id: 'c1',
@@ -1612,7 +2101,32 @@ describe('SecurityView', () => {
           displayName: 'nginx',
           security: {
             scan: {
-              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+              vulnerabilities: [
+                {
+                  id: 'CVE-critical',
+                  severity: 'CRITICAL',
+                  packageName: 'openssl',
+                  fixedVersion: '3.0.1',
+                },
+                {
+                  id: 'CVE-high',
+                  severity: 'HIGH',
+                  packageName: 'curl',
+                  fixedVersion: '8.0.1',
+                },
+                {
+                  id: 'CVE-medium',
+                  severity: 'MEDIUM',
+                  packageName: 'zlib',
+                  fixedVersion: null,
+                },
+                {
+                  id: 'CVE-low',
+                  severity: 'LOW',
+                  packageName: 'busybox',
+                  fixedVersion: null,
+                },
+              ],
             },
           },
         }),
@@ -1623,33 +2137,168 @@ describe('SecurityView', () => {
           name: 'nginx',
           displayName: 'nginx',
           image: { name: 'nginx', tag: { value: '1.25' } },
-          newTag: null,
+          newTag: '1.26',
           status: 'running',
           registry: 'dockerhub',
-          updateKind: null,
+          updateKind: 'patch',
           updateMaturity: null,
           bouncer: 'safe',
           server: 'Local',
           sourceRepo: 'github.com/nginx/nginx',
-          currentReleaseNotes: {
-            title: 'v1.25.0',
-            body: 'Current notes',
-            url: 'https://github.com/nginx/nginx/releases/tag/v1.25.0',
-            publishedAt: '2025-12-01T00:00:00Z',
+          releaseLink: 'https://github.com/nginx/nginx/releases',
+          releaseNotes: {
+            title: 'v1.26.0',
+            body: 'Security and bug fixes',
+            url: 'https://github.com/nginx/nginx/releases/tag/v1.26.0',
+            publishedAt: '2026-04-01T00:00:00Z',
             provider: 'github',
           },
         },
       ]);
 
-      preferences.views.security.mode = 'cards';
+      const w = factory(securityCardStubs(cardBranchRows));
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
+      await flushPromises();
 
-      const w = factory();
+      const table = w.get('.security-card-table');
+      expect(table.attributes('data-prefer-cards')).toBe('true');
+      expect(table.attributes('data-hoist-card-sort')).toBe('true');
+      expect(table.attributes('data-sort-key')).toBe('critical');
+      expect(table.attributes('data-sort-asc')).toBe('false');
+      expect(w.get('.security-card-filter').attributes('data-mode')).toBe('cards');
+      expect(w.get('.security-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+      const sort = w.get('.security-sort-control');
+      expect(sort.attributes('data-columns')).toBe('critical,high,medium,low,fixable,total');
+      await sort.get('.sort-by-high').trigger('click');
+      await nextTick();
+      expect(preferences.views.security.sortField).toBe('high');
+      expect(w.get('.security-card-table').attributes('data-sort-key')).toBe('high');
+
+      await w.get('.security-sort-control .sort-asc').trigger('click');
+      await nextTick();
+      expect(preferences.views.security.sortAsc).toBe(true);
+      expect(w.get('.security-card-table').attributes('data-sort-asc')).toBe('true');
+
+      const nginxCard = w.get('[data-card-id="nginx"]');
+      expect(nginxCard.text()).toContain('nginx');
+      expect(nginxCard.text()).toContain('github.com');
+      expect(nginxCard.text()).toContain('Critical');
+      expect(nginxCard.text()).toContain('1 Critical');
+      expect(nginxCard.text()).toContain('1 High');
+      expect(nginxCard.text()).toContain('1 Medium');
+      expect(nginxCard.text()).toContain('1 Low');
+      expect(nginxCard.text()).toContain('4 total');
+      expect(nginxCard.text()).toContain('50%');
+      expect(nginxCard.find('[data-test="security-card-update-btn"]').exists()).toBe(true);
+      expect(nginxCard.find('[data-test="security-card-containers-link"]').exists()).toBe(true);
+      expect(nginxCard.find('[data-test="security-card-resource-actions"]').exists()).toBe(true);
+      expect(nginxCard.find('[data-test="container-link-actions-stub"]').exists()).toBe(true);
+
+      await nginxCard.get('[data-test="security-card-update-btn"]').trigger('click');
+      await nextTick();
+      expect((w.vm as any).updateDialogContainerId).toBe('c1');
+
+      await nginxCard.get('[data-test="security-card-containers-link"]').trigger('click');
+      await nextTick();
+      expect(mockRouterPush).toHaveBeenCalledWith({
+        path: '/containers',
+        query: { containerIds: 'c1' },
+      });
+
+      expect(w.get('[data-card-id="redis"]').text()).toContain('High');
+      expect(w.get('[data-card-id="redis"]').text()).toContain('1 fixed');
+      expect(w.get('[data-card-id="api"]').text()).toContain('Medium');
+      expect(w.get('[data-card-id="api"]').text()).toContain('2 new');
+      expect(w.get('[data-card-id="worker"]').text()).toContain('Low');
+      expect(w.get('[data-card-id="worker"]').text()).toContain('1 fixed, 1 new');
+
+      const cleanCard = w.get('[data-card-id="clean-image"]');
+      expect(cleanCard.text()).toContain('Clean');
+      expect(cleanCard.text()).toContain('0 total');
+      expect(cleanCard.text()).toContain('0%');
+      expect(cleanCard.find('[data-test="security-card-update-btn"]').exists()).toBe(false);
+      expect(cleanCard.find('[data-test="container-link-actions-stub"]').exists()).toBe(false);
+    });
+
+    it('forwards card resources to one 44px cluster without triggering the card row action', async () => {
+      preferences.views.security.mode = 'cards';
+      mockContainers([makeContainer({ id: 'c1', name: 'nginx', displayName: 'nginx' })]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: '1.26',
+          currentTag: '1.25',
+          status: 'running',
+          registry: 'ghcr',
+          registryName: 'GitHub Container Registry',
+          registryUrl: 'https://ghcr.io/v2',
+          sourceRepo: 'github.com/nginx/nginx',
+          releaseLink: 'https://github.com/nginx/nginx/releases',
+        },
+      ]);
+
+      const w = factory({ ...securityCardStubs(), ContainerLinkActions });
+      await flushPromises();
+
+      const cluster = w.get('[data-test="container-quick-links"]');
+      const actions = w.getComponent(ContainerLinkActions);
+      expect(w.findAll('[data-test="container-quick-links"]')).toHaveLength(1);
+      expect(actions.props()).toMatchObject({
+        sourceRepo: 'github.com/nginx/nginx',
+        containerId: 'c1',
+        fromTag: '1.25',
+        toTag: '1.26',
+        registry: 'ghcr',
+        registryName: 'GitHub Container Registry',
+        registryUrl: 'https://ghcr.io/v2',
+        iconSize: 'sm',
+      });
+
+      const resourceLayout = w.get('[data-test="security-card-resource-actions"]');
+      const actionLayout = resourceLayout.element.parentElement;
+      const footerLayout = actionLayout?.parentElement;
+      const canWrapAtNarrowWidths =
+        actionLayout?.classList.contains('flex-wrap') ||
+        actionLayout?.classList.contains('flex-col') ||
+        footerLayout?.classList.contains('flex-wrap') ||
+        footerLayout?.classList.contains('flex-col');
+      expect(canWrapAtNarrowWidths).toBe(true);
+
+      await cluster.get('[data-test="registry-link"]').trigger('click');
+      expect((w.vm as any).selectedImage).toBeNull();
+    });
+
+    it('hoists security sorting when card reflow is forced in table mode', async () => {
+      mockContainers([makeContainer()]);
+
+      const w = factory(securityCardStubs());
       await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
       await flushPromises();
 
-      expect(w.find('[data-test="security-release-notes"]').exists()).toBe(true);
-      expect(w.find('[data-test="security-project-link"]').exists()).toBe(true);
-      expect(w.find('[data-test="security-update-btn"]').exists()).toBe(false);
+      expect(w.find('.security-sort-control').exists()).toBe(false);
+      expect(w.get('.security-card-table').attributes('data-prefer-cards')).toBe('false');
+      expect(w.get('.security-card-table').attributes('data-hoist-card-sort')).toBe('false');
+      expect(w.get('.security-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+      await w.get('.force-card-reflow').trigger('click');
+      await nextTick();
+
+      expect(w.find('.security-sort-control').exists()).toBe(true);
+      expect(w.get('.security-card-table').attributes('data-prefer-cards')).toBe('false');
+      expect(w.get('.security-card-table').attributes('data-hoist-card-sort')).toBe('true');
+      expect(w.get('.security-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+      await w.get('.clear-card-reflow').trigger('click');
+      await nextTick();
+
+      expect(w.find('.security-sort-control').exists()).toBe(false);
+      expect(w.get('.security-card-table').attributes('data-hoist-card-sort')).toBe('false');
+      expect(w.get('.security-card-filter').attributes('data-hide-view-toggle')).toBe('false');
     });
   });
 

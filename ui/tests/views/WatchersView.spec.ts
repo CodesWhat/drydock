@@ -1,6 +1,7 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
-import { resetPreferences } from '@/preferences/store';
+import { defineComponent, nextTick } from 'vue';
+import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAllWatchers, getWatcher } from '@/services/watcher';
 import WatchersView from '@/views/WatchersView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
@@ -39,10 +40,17 @@ function withStats(total: number) {
 }
 
 const richDataTableStub = defineComponent({
-  props: ['columns', 'rows', 'rowKey', 'activeRow'],
+  props: ['columns', 'rows', 'rowKey', 'activeRow', 'hiddenColumnKeys'],
   emits: ['row-click'],
   template: `
     <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+      <div
+        v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+        :key="col.key"
+        class="dt-header"
+        :data-col-key="col.key">
+        {{ col.label }}
+      </div>
       <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
         <button v-if="row" class="row-click-first" @click="$emit('row-click', row)">Open</button>
         <slot name="cell-name" :row="row" />
@@ -69,6 +77,87 @@ async function mountWatchersView() {
   return wrapper;
 }
 
+const watcherCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar watcher-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+      <slot name="extra-buttons" />
+    </div>
+  `,
+});
+
+const watcherCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+    'hiddenColumnKeys',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table watcher-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="watcher-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+async function mountWatchersCardView() {
+  const wrapper = mountWithPlugins(WatchersView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: watcherCardFilterBarStub,
+        DataTable: watcherCardDataTableStub,
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
 describe('WatchersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -79,6 +168,83 @@ describe('WatchersView', () => {
       name: 'Alpha Watcher',
       type: 'docker',
       configuration: { cron: '*/1 * * * *', grace: '30s' },
+    });
+  });
+
+  describe('tableColumns (card-mode annotations)', () => {
+    it('demotes cron out of the card body with a negative cardPriority', async () => {
+      mockGetAllWatchers.mockResolvedValue([
+        {
+          id: 'watcher-alpha',
+          name: 'Alpha Watcher',
+          type: 'docker',
+          configuration: { cron: '*/5 * * * *' },
+          ...withStats(1),
+        },
+      ]);
+      const wrapper = await mountWatchersView();
+      const table = wrapper.findComponent(richDataTableStub);
+      const columns = table.props('columns') as Array<{ key: string; cardPriority?: number }>;
+      const cronCol = columns.find((c) => c.key === 'cron');
+      expect(cronCol?.cardPriority).toBe(-1);
+    });
+  });
+
+  describe('column picker', () => {
+    it('tableColumns keys match VIEW_TABLE_COLUMN_KEYS.watchers (schema/view sync guard)', async () => {
+      mockGetAllWatchers.mockResolvedValue([
+        { id: 'watcher-alpha', name: 'Alpha Watcher', type: 'docker', configuration: {} },
+      ]);
+      const wrapper = await mountWatchersView();
+      const table = wrapper.findComponent(richDataTableStub);
+      const keys = new Set((table.props('columns') as Array<{ key: string }>).map((c) => c.key));
+      expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.watchers));
+    });
+
+    it('marks the name column as required', async () => {
+      mockGetAllWatchers.mockResolvedValue([
+        { id: 'watcher-alpha', name: 'Alpha Watcher', type: 'docker', configuration: {} },
+      ]);
+      const wrapper = await mountWatchersView();
+      const table = wrapper.findComponent(richDataTableStub);
+      const nameCol = (table.props('columns') as Array<{ key: string; required?: boolean }>).find(
+        (c) => c.key === 'name',
+      );
+      expect(nameCol?.required).toBe(true);
+    });
+
+    it('renders the column picker in the filter bar', async () => {
+      mockGetAllWatchers.mockResolvedValue([]);
+      const wrapper = await mountWatchersView();
+      expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+    });
+
+    it('toggling a column via the picker removes its header from the table', async () => {
+      mockGetAllWatchers.mockResolvedValue([
+        {
+          id: 'watcher-alpha',
+          name: 'Alpha Watcher',
+          type: 'docker',
+          configuration: { cron: '*/5 * * * *' },
+        },
+      ]);
+      const wrapper = await mountWatchersView();
+      expect(wrapper.find('[data-col-key="cron"]').exists()).toBe(true);
+
+      await wrapper.find('[data-test="column-picker-toggle-cron"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[data-col-key="cron"]').exists()).toBe(false);
+    });
+
+    it('toggling a column via the picker persists the key to preferences.views.watchers.hiddenColumns', async () => {
+      mockGetAllWatchers.mockResolvedValue([]);
+      const wrapper = await mountWatchersView();
+
+      await wrapper.find('[data-test="column-picker-toggle-cron"]').trigger('click');
+      await nextTick();
+
+      expect(preferences.views.watchers.hiddenColumns).toContain('cron');
     });
   });
 
@@ -350,39 +516,6 @@ describe('WatchersView', () => {
     expect(wrapper.text()).toContain('30s');
   });
 
-  it('opens watcher details from cards mode selections', async () => {
-    mockGetAllWatchers.mockResolvedValue([
-      {
-        id: 'watcher-alpha',
-        name: 'Alpha Watcher',
-        type: 'docker',
-        configuration: { cron: '*/5 * * * *' },
-      },
-    ]);
-    mockGetWatcher.mockResolvedValue({
-      id: 'watcher-alpha',
-      name: 'Alpha Watcher',
-      type: 'docker',
-      configuration: { cron: '*/1 * * * *', grace: '30s' },
-    });
-
-    const wrapper = await mountWatchersView();
-
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-    await wrapper.find('.card-click-first').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-    expect(mockGetWatcher).toHaveBeenCalledWith({
-      type: 'docker',
-      name: 'Alpha Watcher',
-      agent: undefined,
-    });
-    expect(wrapper.text()).toContain('*/1 * * * *');
-    expect(wrapper.text()).toContain('30s');
-  });
-
   it('reads containers total from metadata (issue #301)', async () => {
     mockGetAllWatchers.mockResolvedValue([
       {
@@ -436,88 +569,6 @@ describe('WatchersView', () => {
         stubs: { ...dataViewStubs, DataTable: dualStatusTableStub },
       },
     });
-    await flushPromises();
-
-    const badges = wrapper.findAll('span.badge');
-    expect(badges.some((b) => b.text().trim() === 'Watching')).toBe(true);
-    expect(badges.some((b) => b.text().trim() === 'Paused')).toBe(true);
-  });
-
-  it('card badge shows translated watching/paused labels', async () => {
-    mockGetAllWatchers.mockResolvedValue([
-      {
-        id: 'watcher-alpha',
-        name: 'Alpha Watcher',
-        type: 'docker',
-        configuration: { cron: '*/5 * * * *' },
-      },
-    ]);
-
-    // Stub renders card slot with both a watching (real) and paused (injected) item
-    const dualStatusCardStub = defineComponent({
-      props: ['items', 'itemKey', 'selectedKey'],
-      emits: ['item-click'],
-      template: `
-        <div class="data-card-grid" :data-item-count="items?.length ?? 0">
-          <slot v-if="items?.[0]" name="card" :item="items[0]" />
-          <slot name="card" :item="{ status: 'paused', name: 'Paused', cron: '', containers: 0, lastRun: '—', nextRun: '—', config: {} }" />
-        </div>
-      `,
-    });
-
-    const wrapper = mountWithPlugins(WatchersView, {
-      global: {
-        stubs: {
-          ...dataViewStubs,
-          DataTable: richDataTableStub,
-          DataCardGrid: dualStatusCardStub,
-        },
-      },
-    });
-    await flushPromises();
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-
-    const badges = wrapper.findAll('span.badge');
-    expect(badges.some((b) => b.text().trim() === 'Watching')).toBe(true);
-    expect(badges.some((b) => b.text().trim() === 'Paused')).toBe(true);
-  });
-
-  it('list accordion header badge shows translated watching/paused labels', async () => {
-    mockGetAllWatchers.mockResolvedValue([
-      {
-        id: 'watcher-alpha',
-        name: 'Alpha Watcher',
-        type: 'docker',
-        configuration: { cron: '*/5 * * * *' },
-      },
-    ]);
-
-    // Stub renders header slot with both a watching (real) and paused (injected) item
-    const dualStatusListStub = defineComponent({
-      props: ['items', 'itemKey', 'selectedKey'],
-      emits: ['item-click'],
-      template: `
-        <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
-          <template v-for="item in items" :key="item[itemKey || 'id']">
-            <slot name="header" :item="item" />
-          </template>
-          <slot name="header" :item="{ status: 'paused', name: 'Paused', cron: '', containers: 0, config: {} }" />
-        </div>
-      `,
-    });
-
-    const wrapper = mountWithPlugins(WatchersView, {
-      global: {
-        stubs: {
-          ...dataViewStubs,
-          DataTable: richDataTableStub,
-          DataListAccordion: dualStatusListStub,
-        },
-      },
-    });
-    await flushPromises();
-    await wrapper.find('.mode-list').trigger('click');
     await flushPromises();
 
     const badges = wrapper.findAll('span.badge');
@@ -590,5 +641,42 @@ describe('WatchersView', () => {
     const detailHeader = wrapper.find('.detail-header');
     const badge = detailHeader.findAll('span.badge').find((b) => b.text().trim() === 'Paused');
     expect(badge).toBeDefined();
+  });
+
+  it('renders watcher cards and wires the card-mode reflow controls', async () => {
+    preferences.views.watchers.mode = 'cards';
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+        ...withStats(3),
+      },
+    ]);
+
+    const wrapper = await mountWatchersCardView();
+
+    expect(wrapper.get('.watcher-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.watcher-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.watcher-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const card = wrapper.get('[data-card-id="watcher-alpha"]');
+    expect(card.text()).toContain('Alpha Watcher');
+    expect(card.text()).toContain('*/5 * * * *');
+    expect(card.text()).toContain('Watching');
+    expect(card.text()).toContain('Containers');
+    expect(card.text()).toContain('3');
+    expect(card.text()).toContain('Next run');
+    expect(card.text()).toContain('Last run');
+    expect(card.text()).toContain('containers watched');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.watcher-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.watcher-card-filter').attributes('data-hide-view-toggle')).toBe('false');
   });
 });

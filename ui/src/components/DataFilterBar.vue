@@ -5,7 +5,12 @@ import AppIconButton from './AppIconButton.vue';
 const { t } = useI18n();
 
 defineProps<{
-  modelValue: string;
+  /**
+   * Current view mode ('table' | 'cards'). Optional — the switcher only renders when a
+   * caller binds this (`v-model`). A view that doesn't bind it stays table-only and won't
+   * grow a dead toggle. As of v1.6 every list view binds it.
+   */
+  modelValue?: string;
   filteredCount: number;
   totalCount: number;
   countLabel?: string;
@@ -14,6 +19,11 @@ defineProps<{
   viewModes?: Array<{ id: string; icon: string }>;
   showColumnPicker?: boolean;
   hideFilter?: boolean;
+  /**
+   * Hide the table/cards switcher even when `modelValue` is bound. Used when the width forces
+   * cards (mobile reflow): the switcher would be a dead control there, so it's just cards.
+   */
+  hideViewToggle?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -24,7 +34,6 @@ const emit = defineEmits<{
 const defaultViewModes = [
   { id: 'table', icon: 'table' },
   { id: 'cards', icon: 'grid' },
-  { id: 'list', icon: 'list' },
 ] as const;
 
 const filterPanelId = `filter-panel-${Math.random().toString(36).slice(2, 10)}`;
@@ -46,10 +55,10 @@ function viewModeLabel(id: string): string {
          :style="{
            backgroundColor: 'var(--dd-bg-card)',
          }">
-      <div class="flex items-center gap-2.5 relative">
+      <div data-test="data-filter-bar-controls" class="flex flex-wrap items-center gap-2.5 relative">
         <!-- Filter toggle button -->
-        <div v-if="!hideFilter" class="relative" v-tooltip.top="t('sharedComponents.dataFilterBar.filters')">
-          <AppIconButton icon="filter" size="toolbar" variant="plain" class="text-2xs-plus"
+        <div v-if="!hideFilter" class="relative shrink-0" v-tooltip.top="t('sharedComponents.dataFilterBar.filters')">
+          <AppIconButton icon="filter" size="sm" variant="plain" class="text-2xs-plus shrink-0"
                   :class="showFilters || (activeFilterCount ?? 0) > 0 ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                   :aria-label="t('sharedComponents.dataFilterBar.toggleFilters')"
                   :aria-expanded="String(showFilters)"
@@ -72,15 +81,19 @@ function viewModeLabel(id: string): string {
         <slot name="center" />
 
         <!-- Right side: count + view mode switcher -->
-        <div class="flex items-center gap-2 ml-auto">
+        <div data-test="data-filter-bar-trailing" class="flex flex-wrap items-center gap-2 ml-auto min-w-0">
           <span class="text-2xs font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
             {{ filteredCount }}/{{ totalCount }}<template v-if="countLabel"> {{ countLabel }}</template>
           </span>
-          <div class="flex items-center dd-rounded overflow-hidden"
+          <!-- Sort control (card mode only — table mode sorts via column headers) -->
+          <slot name="sort" />
+          <div v-if="modelValue !== undefined && !hideViewToggle"
+               data-test="data-filter-bar-view-modes"
+               class="flex items-center dd-rounded overflow-hidden shrink-0"
                role="group"
                :aria-label="t('sharedComponents.dataFilterBar.viewMode')">
             <AppIconButton v-for="vm in (viewModes ?? defaultViewModes)" :key="vm.id"
-                    :icon="vm.icon" size="toolbar" variant="plain"
+                    :icon="vm.icon" size="sm" variant="plain"
                     :class="modelValue === vm.id ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                     :tooltip="viewModeLabel(vm.id)"
                     :aria-label="viewModeLabel(vm.id)"

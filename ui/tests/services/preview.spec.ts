@@ -1,4 +1,4 @@
-import { normalizePreviewPayload, previewContainer } from '@/services/preview';
+import { normalizePreviewPayload, PreviewRequestError, previewContainer } from '@/services/preview';
 
 describe('preview service', () => {
   beforeEach(() => {
@@ -21,13 +21,75 @@ describe('preview service', () => {
     expect(result).toEqual(mockResponse);
   });
 
-  it('throws when response is not ok', async () => {
+  it('preserves typed actionable preview failures from the API', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: false,
-      statusText: 'Not Found',
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () =>
+        Promise.resolve({
+          code: 'registry-auth-failed',
+          message: 'Authentication failed for ghcr.io: 401 Unauthorized',
+          details: { registry: 'ghcr.io' },
+          action: { label: 'Open registry settings', href: '/registries' },
+        }),
     });
 
-    await expect(previewContainer('bad-id')).rejects.toThrow('Preview failed: Not Found');
+    const failure = await previewContainer('bad-id').catch((error) => error);
+
+    expect(failure).toBeInstanceOf(PreviewRequestError);
+    expect(failure).toMatchObject({
+      code: 'registry-auth-failed',
+      message: 'Authentication failed for ghcr.io: 401 Unauthorized',
+      status: 401,
+      details: { registry: 'ghcr.io' },
+      action: { label: 'Open registry settings', href: '/registries' },
+    });
+  });
+
+  it('returns a typed fallback when an older server sends no preview error body', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+      json: () => Promise.reject(new Error('not json')),
+    });
+
+    const failure = await previewContainer('bad-id').catch((error) => error);
+
+    expect(failure).toMatchObject({
+      code: 'preview-http-error',
+      message: 'Unable to prepare this update preview (502 Bad Gateway)',
+      status: 502,
+    });
+  });
+
+  it.each([
+    [{ label: 42, href: '/registries' }, 'Bad Gateway'],
+    [{ label: 'Unsafe link', href: 'https://attacker.example' }, ''],
+  ])('drops malformed preview actions and handles optional status text', async (action, statusText) => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      statusText,
+      json: () =>
+        Promise.resolve({
+          code: ' ',
+          message: ' ',
+          details: [],
+          action,
+        }),
+    });
+
+    const failure = await previewContainer('bad-id').catch((error) => error);
+
+    expect(failure).toMatchObject({
+      code: 'preview-http-error',
+      message: `Unable to prepare this update preview (502${statusText ? ` ${statusText}` : ''})`,
+      status: 502,
+      details: undefined,
+      action: undefined,
+    });
   });
 
   it('normalizes compose preview fields while preserving generic preview fields', async () => {

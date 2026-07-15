@@ -35,6 +35,12 @@ export interface ImageSummary {
   releaseNotes?: ContainerReleaseNotes | null;
   currentReleaseNotes?: ContainerReleaseNotes | null;
   releaseLink?: string;
+  containerId?: string;
+  fromTag?: string;
+  toTag?: string;
+  registry?: Container['registry'];
+  registryName?: string;
+  registryUrl?: string;
 }
 
 export interface ImageSummaryWithVulns extends ImageSummary {
@@ -269,12 +275,27 @@ function annotateImageSummariesFromContainers(
       if (!summary.releaseLink && container.releaseLink) {
         summary.releaseLink = container.releaseLink;
       }
+      if (!summary.registry) {
+        summary.registry = container.registry;
+      }
+      if (!summary.registryName && container.registryName) {
+        summary.registryName = container.registryName;
+      }
+      if (!summary.registryUrl && container.registryUrl) {
+        summary.registryUrl = container.registryUrl;
+      }
     }
 
     // Update-specific behavior layered on top. The running-tag fields
     // (currentReleaseNotes, releaseLink, sourceRepo) are already owned by the
     // loop above, so the update path only contributes the new-tag releaseNotes.
     const withUpdate = ids.filter((id) => Boolean(containerById.get(id)?.newTag));
+    const linkContext = containerById.get(withUpdate[0] ?? ids[0]);
+    if (linkContext) {
+      summary.containerId = linkContext.id;
+      summary.fromTag = linkContext.currentTag;
+      summary.toTag = linkContext.newTag ?? undefined;
+    }
     if (withUpdate.length > 0) {
       summary.hasUpdate = true;
       summary.containersWithUpdate = withUpdate;

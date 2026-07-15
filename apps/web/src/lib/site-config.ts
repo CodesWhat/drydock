@@ -15,7 +15,7 @@ export const SITE_CONFIG = {
   /** Brand name shown in the header, footer, and metadata. */
   name: "Drydock",
   /** Current release version shown in the hero badge. */
-  version: "1.5.0",
+  version: "1.6.0-rc.1",
   /** Short product tagline used in page titles and OG metadata. */
   tagline: "Container Update Monitoring",
   /** Default meta / OpenGraph / Twitter description. */
@@ -31,6 +31,8 @@ export const SITE_CONFIG = {
   twitterCreator: "@codeswhat",
   /** Twitter/X profile URL (used in JSON-LD sameAs). */
   twitterUrl: "https://x.com/codeswhat",
+  /** Discord community invite. */
+  discordUrl: "https://discord.gg/mWHCPJRzSx",
   /** Logo asset in /public. */
   logo: "/whale-logo.png",
   /** Whether the logo inverts in dark mode (adds `dark:invert`). */

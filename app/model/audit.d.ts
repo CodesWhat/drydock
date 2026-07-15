@@ -4,12 +4,20 @@ export interface AuditEntry {
   action:
     | 'update-available'
     | 'update-applied'
+    | 'update-applied-dryrun'
     | 'update-failed'
     | 'notification-delivery-failed'
     | 'container-update'
     | 'security-alert'
     | 'security-scan-skipped'
+    | 'scanner-asset-pull-started'
+    | 'scanner-asset-pull-succeeded'
+    | 'scanner-asset-pull-failed'
+    | 'scanner-asset-warm-started'
+    | 'scanner-asset-warm-succeeded'
+    | 'scanner-asset-warm-failed'
     | 'agent-disconnect'
+    | 'container-unhealthy'
     | 'container-added'
     | 'container-removed'
     | 'rollback'
@@ -28,12 +36,17 @@ export interface AuditEntry {
     | 'auto-rollback'
     | 'auth-login'
     | 'env-reveal'
-    | 'auto-update-blocked';
+    | 'auto-update-blocked'
+    | 'update-policy-override-set'
+    | 'update-policy-override-cleared'
+    | 'mqtt-command-update';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;
   fromVersion?: string;
   toVersion?: string;
+  updateKind?: 'tag' | 'digest' | 'unknown';
+  semverDiff?: 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
   triggerName?: string;
   status: 'success' | 'error' | 'info';
   details?: string;

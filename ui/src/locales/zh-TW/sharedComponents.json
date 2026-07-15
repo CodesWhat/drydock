@@ -9,9 +9,6 @@
       "clickToCopy": "點選複製",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "選擇 {name}"
-    },
     "dataFilterBar": {
       "filters": "篩選",
       "toggleFilters": "切換篩選",
@@ -19,13 +16,8 @@
       "viewModeLabel": "{label} 檢視",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "切換 {name} 詳情",
-      "selectItem": "選擇 {name}"
     },
     "dataTable": {
       "actions": "操作",

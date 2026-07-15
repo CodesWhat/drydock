@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 ![logo](/docs/assets/configuration/registries/gcr/gcr.png)
 
 <Callout type="warn">
-**Google Container Registry was shut down in 2025.** All `gcr.io` traffic is now transparently served by [Google Artifact Registry (GAR)](/docs/configuration/registries/gar). The drydock GCR provider still functions because `gcr.io` endpoints redirect to Artifact Registry, but new projects should use the [GAR provider](/docs/configuration/registries/gar) instead.
+**Effective March 18, 2025, Container Registry is shut down and writes are unavailable.** Only `gcr.io` URLs hosted on migrated or Artifact Registry-backed `gcr.io` repositories remain usable. Drydock's GCR provider still works with those repositories because Google redirects configured `gcr.io` hosts to Artifact Registry; new projects should use the [GAR provider](/docs/configuration/registries/gar) instead.
 </Callout>
 
 The `gcr` registry lets you configure [GCR](https://cloud.google.com/artifact-registry/docs/transition/transition-from-gcr) integration.
@@ -18,8 +18,10 @@ The `gcr` registry lets you configure [GCR](https://cloud.google.com/artifact-re
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_GCR_{REGISTRY_NAME}_CLIENTEMAIL` | ⚪ | Service Account Client Email (required for private images access) | See [Service Account credentials](https://cloud.google.com/container-registry/docs/advanced-authentication#json-key) | |
-| `DD_REGISTRY_GCR_{REGISTRY_NAME}_PRIVATEKEY` | ⚪ | Service Account Private Key (required for private images access) | See [Service Account credentials](https://cloud.google.com/container-registry/docs/advanced-authentication#json-key) | |
+| `DD_REGISTRY_GCR_{REGISTRY_NAME}_CLIENTEMAIL` | ⚪ | Service Account Client Email (required for private images access) | See [Artifact Registry Docker service account key authentication](https://docs.cloud.google.com/artifact-registry/docs/docker/authentication#json-key) | |
+| `DD_REGISTRY_GCR_{REGISTRY_NAME}_PRIVATEKEY` | ⚪ | Service Account Private Key (required for private images access) | See [Artifact Registry Docker service account key authentication](https://docs.cloud.google.com/artifact-registry/docs/docker/authentication#json-key) | |
+
+Docker and Docker Compose action triggers use this same service-account configuration when they pull private GCR images during an update. No separate action-trigger auth setting is required.
 
 ## Examples
 
@@ -56,7 +58,7 @@ docker run \
 
 ### 2. Create a new Service Account
 
-### 3. Add the Container Registry Service Role
+### 3. Grant Artifact Registry Reader (`roles/artifactregistry.reader`) on the private repository
 
 ### 4. Save the Service Account
 

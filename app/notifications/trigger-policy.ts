@@ -1,11 +1,11 @@
-const NON_NOTIFICATION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+import { getTriggerCategoryForType } from '../triggers/trigger-category.js';
 
 export function isNotificationTriggerType(type: string | undefined): boolean {
   const typeNormalized = `${type || ''}`.trim().toLowerCase();
   if (!typeNormalized) {
     return false;
   }
-  return !NON_NOTIFICATION_TRIGGER_TYPES.has(typeNormalized);
+  return getTriggerCategoryForType(typeNormalized) === 'notification';
 }
 
 export function getNotificationTriggerIdsFromState(

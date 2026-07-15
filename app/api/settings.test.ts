@@ -1,13 +1,17 @@
 import { createMockResponse } from '../test/helpers.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
-const deprecatedPutDeprecation = '@1798761600';
-const deprecatedPutSunset = 'Wed, 01 Jan 2027 00:00:00 GMT';
+const deprecatedPutDeprecation = '@1772236800';
+const deprecatedPutSunset = 'Fri, 01 Jan 2027 00:00:00 GMT';
 
 const { mockRouter, mockGetSettings, mockUpdateSettings, mockLogWarn } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), put: vi.fn(), patch: vi.fn() },
-  mockGetSettings: vi.fn(() => ({ internetlessMode: false })),
-  mockUpdateSettings: vi.fn((settings) => ({ internetlessMode: settings.internetlessMode })),
+  mockGetSettings: vi.fn(() => ({ internetlessMode: false, updateMode: 'manual' })),
+  mockUpdateSettings: vi.fn((settings) => ({
+    internetlessMode: false,
+    updateMode: 'manual',
+    ...settings,
+  })),
   mockLogWarn: vi.fn(),
 }));
 
@@ -18,6 +22,7 @@ vi.mock('express', () => ({
 vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store/settings', () => ({
+  UPDATE_MODES: ['notify', 'manual', 'auto'],
   getSettings: mockGetSettings,
   updateSettings: mockUpdateSettings,
 }));
@@ -55,9 +60,10 @@ describe('Settings Router', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
       internetlessMode: false,
+      updateMode: 'manual',
     });
     const contractValidation = validateOpenApiJsonResponse({
-      path: '/api/settings',
+      path: '/api/v1/settings',
       method: 'get',
       statusCode: '200',
       payload: res.json.mock.calls[0][0],
@@ -86,15 +92,39 @@ describe('Settings Router', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
       internetlessMode: true,
+      updateMode: 'manual',
     });
     const contractValidation = validateOpenApiJsonResponse({
-      path: '/api/settings',
+      path: '/api/v1/settings',
       method: 'patch',
       statusCode: '200',
       payload: res.json.mock.calls[0][0],
     });
     expect(contractValidation.valid).toBe(true);
     expect(contractValidation.errors).toStrictEqual([]);
+  });
+
+  test('should update the global update mode when payload is valid', () => {
+    settingsRouter.init();
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/')[1];
+    const res = createMockResponse();
+
+    handler({ body: { updateMode: 'auto' } }, res);
+
+    expect(mockUpdateSettings).toHaveBeenCalledWith({ updateMode: 'auto' });
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ internetlessMode: false, updateMode: 'auto' });
+  });
+
+  test('should reject an unsupported update mode', () => {
+    settingsRouter.init();
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/')[1];
+    const res = createMockResponse();
+
+    handler({ body: { updateMode: 'sometimes' } }, res);
+
+    expect(mockUpdateSettings).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 
   test('should reject invalid settings payload', () => {
@@ -155,12 +185,20 @@ describe('Settings Router', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
       internetlessMode: true,
+      updateMode: 'manual',
     });
     expect(res.setHeader).toHaveBeenCalledWith('Deprecation', deprecatedPutDeprecation);
     expect(res.setHeader).toHaveBeenCalledWith('Sunset', deprecatedPutSunset);
     expect(mockLogWarn).toHaveBeenCalledWith(
-      'PUT /api/settings is deprecated and will be removed in v1.6.0. Use PATCH /api/settings instead.',
+      'PUT /api/settings is deprecated and will be removed in API v2. Use PATCH /api/settings instead.',
     );
+
+    // RFC 9745: Deprecation is the instant the resource BECAME deprecated
+    // (past/current), never the same instant as the future Sunset removal
+    // date.
+    const deprecationEpochMs = Number(deprecatedPutDeprecation.replace('@', '')) * 1000;
+    const sunsetEpochMs = Date.parse(deprecatedPutSunset);
+    expect(deprecationEpochMs).toBeLessThan(sunsetEpochMs);
   });
 
   test('should not return deprecation headers on PATCH', () => {

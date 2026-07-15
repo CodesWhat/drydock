@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
+  isRequestAuthenticated,
 } from './rate-limit-key.js';
 
 function createRequest(
@@ -20,6 +21,22 @@ function createRequest(
 }
 
 const response = {} as Response;
+
+describe('isRequestAuthenticated', () => {
+  test('returns the Passport authentication state', () => {
+    const authenticated = vi.fn(() => true);
+    const anonymous = vi.fn(() => false);
+
+    expect(isRequestAuthenticated({ isAuthenticated: authenticated })).toBe(true);
+    expect(authenticated).toHaveBeenCalledOnce();
+    expect(isRequestAuthenticated({ isAuthenticated: anonymous })).toBe(false);
+    expect(anonymous).toHaveBeenCalledOnce();
+  });
+
+  test('returns false when the Passport helper is missing', () => {
+    expect(isRequestAuthenticated({})).toBe(false);
+  });
+});
 
 describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
   test('should return undefined when identity-aware keying is disabled', () => {
@@ -77,7 +94,7 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     expect(secondKey).toBe(firstKey);
   });
 
-  test('should prefer socket remote address over request ip for unauthenticated requests', async () => {
+  test('should prefer normalized request ip over proxy socket address for unauthenticated requests', async () => {
     const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
     expect(keyGenerator).toBeDefined();
 
@@ -103,7 +120,26 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     );
 
     expect(firstKey).toMatch(/^ip:/);
-    expect(secondKey).toBe(firstKey);
+    expect(secondKey).not.toBe(firstKey);
+  });
+
+  test('should fall back to socket remote address when normalized request ip is unavailable', async () => {
+    const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
+    expect(keyGenerator).toBeDefined();
+
+    const key = await keyGenerator!(
+      createRequest({
+        ip: undefined,
+        socket: {
+          remoteAddress: '198.51.100.7',
+        } as Request['socket'],
+        isAuthenticated: () => false,
+      }),
+      response,
+    );
+
+    expect(key).toMatch(/^ip:/);
+    expect(key).not.toBe('ip:unknown');
   });
 
   test('should return unknown ip key when unauthenticated request ip is undefined', async () => {

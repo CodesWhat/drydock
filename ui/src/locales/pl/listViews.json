@@ -22,10 +22,6 @@
       "status": "Stan",
       "details": "Szczegóły"
     },
-    "card": {
-      "time": "Czas",
-      "version": "Wersja"
-    },
     "detail": {
       "timestamp": "Znacznik czasu",
       "event": "Wydarzenie",
@@ -156,10 +152,6 @@
       "total": "Razem"
     },
     "card": {
-      "vulnerabilities": "luki w zabezpieczeniach",
-      "vsUpdate": "vs aktualizacja",
-      "fixable": "naprawialne",
-      "noFixesAvailable": "Brak dostępnych poprawek",
       "total": "łącznie"
     },
     "badge": {
@@ -254,10 +246,6 @@
       "private": "Prywatny",
       "public": "Publiczne"
     },
-    "card": {
-      "auth": "Uwierzytelnianie",
-      "status": "Stan"
-    },
     "status": {
       "connected": "Połączono",
       "error": "Błąd",
@@ -289,15 +277,6 @@
       "status": "Stan",
       "containers": "Kontenery",
       "lastSeen": "Ostatnio widziany"
-    },
-    "card": {
-      "containers": "Kontenery",
-      "running": "Działa",
-      "images": "Obrazy",
-      "lastSeen": "Ostatnio widziany"
-    },
-    "list": {
-      "containers": "pojemniki"
     },
     "detail": {
       "containers": "Kontenery",
@@ -340,9 +319,6 @@
       "status": "Stan",
       "refreshing": "Odświeżanie szczegółów wyzwalacza...",
       "noConfig": "Brak właściwości konfiguracyjnych"
-    },
-    "list": {
-      "status": "Stan"
     }
   },
   "watchersView": {
@@ -363,12 +339,6 @@
     "status": {
       "watching": "Oglądanie",
       "paused": "Wstrzymano"
-    },
-    "card": {
-      "containers": "Kontenery",
-      "nextRun": "Następny bieg",
-      "lastRun": "Ostatni bieg",
-      "containersWatched": "Obejrzane kontenery {count}"
     },
     "badge": {
       "maint": "Konserwacja"

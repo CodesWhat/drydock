@@ -10,14 +10,19 @@ vi.mock('axios', () => ({
   }),
 }));
 
-const gar = new Gar();
-gar.configuration = {
-  clientemail: TEST_CLIENT_EMAIL,
-  privatekey: TEST_PRIVATE_KEY,
-};
+let gar: Gar;
 
-beforeEach(() => {
-  vi.clearAllMocks();
+beforeEach(async () => {
+  gar = new Gar();
+  gar.configuration = {
+    clientemail: TEST_CLIENT_EMAIL,
+    privatekey: TEST_PRIVATE_KEY,
+  };
+  const { default: axios } = await import('axios');
+  axios.mockReset();
+  axios.mockResolvedValue({
+    data: { token: 'xxxxx' },
+  });
 });
 
 test('validatedConfiguration should initialize when configuration is valid', async () => {
@@ -118,6 +123,19 @@ test('authenticate should call gar auth endpoint', async () => {
       url: expect.stringContaining('https://us-central1-docker.pkg.dev/v2/token?'),
     }),
   );
+});
+
+test('authenticate should reuse the provider token until it expires', async () => {
+  const { default: axios } = await import('axios');
+
+  const image = {
+    name: 'project/repository/cached-image',
+    registry: { url: 'us-central1-docker.pkg.dev' },
+  };
+  await gar.authenticate(image, { headers: {} });
+  await gar.authenticate(image, { headers: {} });
+
+  expect(axios).toHaveBeenCalledTimes(1);
 });
 
 test('authenticate should return unchanged options when no clientemail configured', async () => {
@@ -263,8 +281,8 @@ test('authenticate should propagate timeout errors', async () => {
 test('authenticate should propagate 429 rate limit errors', async () => {
   const { default: axios } = await import('axios');
   const error = new Error('Request failed with status code 429');
-  (error as any).response = { status: 429 };
-  axios.mockRejectedValueOnce(error);
+  (error as any).response = { status: 429, headers: { 'retry-after': '0' } };
+  axios.mockRejectedValue(error);
 
   await expect(
     gar.authenticate(
@@ -280,8 +298,8 @@ test('authenticate should propagate 429 rate limit errors', async () => {
 test('authenticate should propagate 503 errors', async () => {
   const { default: axios } = await import('axios');
   const error = new Error('Request failed with status code 503');
-  (error as any).response = { status: 503 };
-  axios.mockRejectedValueOnce(error);
+  (error as any).response = { status: 503, headers: { 'retry-after': '0' } };
+  axios.mockRejectedValue(error);
 
   await expect(
     gar.authenticate(

@@ -112,12 +112,24 @@ export interface ContainerUpdateKind {
   semverDiff?: 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
 }
 
-export interface ContainerUpdatePolicy {
+export interface ContainerDeclarativeUpdatePolicy {
   skipTags?: string[];
   skipDigests?: string[];
-  snoozeUntil?: string;
   maturityMode?: 'all' | 'mature';
   maturityMinAgeDays?: number;
+}
+
+export interface ContainerUpdatePolicy extends ContainerDeclarativeUpdatePolicy {
+  snoozeUntil?: string;
+}
+
+export type ContainerUpdatePolicySource = 'env' | 'label' | 'override';
+export type ContainerUpdatePolicySources = Partial<
+  Record<keyof ContainerDeclarativeUpdatePolicy, ContainerUpdatePolicySource>
+>;
+export interface ContainerUpdatePolicyDeclarative {
+  env: ContainerDeclarativeUpdatePolicy;
+  label: ContainerDeclarativeUpdatePolicy;
 }
 
 export interface ContainerSecurityState {
@@ -166,12 +178,15 @@ export interface ContainerUpdateOperationState {
   targetImage?: string;
 }
 
+export type TriggerCategory = 'action' | 'notification';
+
 export interface Container {
   id: string;
   name: string;
   displayName: string;
   displayIcon: string;
   status: string;
+  health?: 'starting' | 'healthy' | 'unhealthy';
   watcher: string;
   agent?: string;
   identityKey?: string;
@@ -179,12 +194,22 @@ export interface Container {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: boolean;
   linkTemplate?: string;
   link?: string;
+  actionTriggerInclude?: string;
+  actionTriggerExclude?: string;
+  notificationTriggerInclude?: string;
+  notificationTriggerExclude?: string;
+  /** @deprecated compat mirror for /api/v1, persisted store, and mixed-version agents. */
   triggerInclude?: string;
+  /** @deprecated compat mirror. */
   triggerExclude?: string;
   tagPinned?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
+  updatePolicyDeclarative?: ContainerUpdatePolicyDeclarative;
+  updatePolicyOverrides?: ContainerUpdatePolicy;
+  updatePolicySources?: ContainerUpdatePolicySources;
   security?: ContainerSecurityState;
   updateRollback?: ContainerUpdateRollbackState;
   image: ContainerImage;
@@ -223,6 +248,7 @@ const containerSecurityVulnerabilitySchema = joi.object({
   severity: joi.string().valid('UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'),
   title: joi.string(),
   primaryUrl: joi.string(),
+  scanners: joi.array().items(joi.string().valid('trivy', 'grype')).unique(),
 });
 
 const containerSecuritySummarySchema = joi.object({
@@ -234,8 +260,9 @@ const containerSecuritySummarySchema = joi.object({
 });
 
 const containerSecurityScanSchema = joi.object({
-  scanner: joi.string().valid('trivy').required(),
+  scanner: joi.string().valid('trivy', 'grype', 'both').required(),
   image: joi.string().required(),
+  imageDigest: joi.string(),
   scannedAt: joi.string().isoDate().required(),
   status: joi.string().valid('passed', 'blocked', 'error').required(),
   blockSeverities: joi
@@ -245,6 +272,14 @@ const containerSecurityScanSchema = joi.object({
   blockingCount: joi.number().integer().min(0).required(),
   summary: containerSecuritySummarySchema.required(),
   vulnerabilities: joi.array().items(containerSecurityVulnerabilitySchema).required(),
+  relativeGate: joi.object({
+    decision: joi.string().valid('passed', 'blocked').required(),
+    reason: joi
+      .string()
+      .valid('no-worse-than-current', 'candidate-worse', 'current-scan-unavailable')
+      .required(),
+    currentSummary: containerSecuritySummarySchema,
+  }),
   error: joi.string(),
 });
 
@@ -258,15 +293,32 @@ const containerSecuritySignatureSchema = joi.object({
   error: joi.string(),
 });
 
-const containerSecuritySbomSchema = joi.object({
-  generator: joi.string().valid('trivy').required(),
-  image: joi.string().required(),
-  generatedAt: joi.string().isoDate().required(),
-  status: joi.string().valid('generated', 'error').required(),
-  formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
-  documents: joi.object().required(),
-  error: joi.string(),
-});
+const containerSecuritySbomSchema = joi
+  .object({
+    generator: joi.string().valid('trivy', 'syft').required(),
+    image: joi.string().required(),
+    subjectDigest: joi.string(),
+    generatedAt: joi.string().isoDate().required(),
+    status: joi.string().valid('generated', 'error').required(),
+    formats: joi.array().items(joi.string().valid('spdx-json', 'cyclonedx-json')).required(),
+    documents: joi.object(),
+    documentRefs: joi.object().pattern(
+      joi.string().valid('spdx-json', 'cyclonedx-json'),
+      joi.object({
+        key: joi
+          .string()
+          .pattern(/^sbom\/[a-f0-9]{64}(?:\/[a-f0-9]{64})?\/(?:spdx-json|cyclonedx-json)\.json$/)
+          .required(),
+        sha256: joi
+          .string()
+          .pattern(/^[a-f0-9]{64}$/)
+          .required(),
+        bytes: joi.number().integer().min(0).required(),
+      }),
+    ),
+    error: joi.string(),
+  })
+  .or('documents', 'documentRefs');
 
 // Container data schema
 const schema = joi.object({
@@ -275,6 +327,7 @@ const schema = joi.object({
   displayName: joi.string().default(joi.ref('name')),
   displayIcon: joi.string().default('mdi:docker'),
   status: joi.string().default('unknown'),
+  health: joi.string().valid('starting', 'healthy', 'unhealthy').optional(),
   watcher: joi.string().min(1).required(),
   agent: joi.string().optional(),
   identityKey: joi.string().optional(),
@@ -282,8 +335,13 @@ const schema = joi.object({
   excludeTags: joi.string(),
   transformTags: joi.string(),
   tagFamily: joi.string(),
+  tagPinInfo: joi.boolean(),
   linkTemplate: joi.string(),
   link: joi.string(),
+  actionTriggerInclude: joi.string(),
+  actionTriggerExclude: joi.string(),
+  notificationTriggerInclude: joi.string(),
+  notificationTriggerExclude: joi.string(),
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
   tagPinned: joi.boolean(),
@@ -297,6 +355,45 @@ const schema = joi.object({
       .integer()
       .min(MATURITY_MIN_AGE_DAYS_MIN)
       .max(MATURITY_MIN_AGE_DAYS_MAX),
+  }),
+  updatePolicyDeclarative: joi.object({
+    env: joi.object({
+      skipTags: joi.array().items(joi.string()),
+      skipDigests: joi.array().items(joi.string()),
+      maturityMode: joi.string().valid('all', 'mature'),
+      maturityMinAgeDays: joi
+        .number()
+        .integer()
+        .min(MATURITY_MIN_AGE_DAYS_MIN)
+        .max(MATURITY_MIN_AGE_DAYS_MAX),
+    }),
+    label: joi.object({
+      skipTags: joi.array().items(joi.string()),
+      skipDigests: joi.array().items(joi.string()),
+      maturityMode: joi.string().valid('all', 'mature'),
+      maturityMinAgeDays: joi
+        .number()
+        .integer()
+        .min(MATURITY_MIN_AGE_DAYS_MIN)
+        .max(MATURITY_MIN_AGE_DAYS_MAX),
+    }),
+  }),
+  updatePolicyOverrides: joi.object({
+    skipTags: joi.array().items(joi.string()),
+    skipDigests: joi.array().items(joi.string()),
+    snoozeUntil: joi.string().isoDate(),
+    maturityMode: joi.string().valid('all', 'mature'),
+    maturityMinAgeDays: joi
+      .number()
+      .integer()
+      .min(MATURITY_MIN_AGE_DAYS_MIN)
+      .max(MATURITY_MIN_AGE_DAYS_MAX),
+  }),
+  updatePolicySources: joi.object({
+    skipTags: joi.string().valid('env', 'label', 'override'),
+    skipDigests: joi.string().valid('env', 'label', 'override'),
+    maturityMode: joi.string().valid('env', 'label', 'override'),
+    maturityMinAgeDays: joi.string().valid('env', 'label', 'override'),
   }),
   security: joi.object({
     scan: containerSecurityScanSchema,
@@ -827,12 +924,32 @@ function addResultChangedFunction(container: Container) {
 }
 
 /**
+ * Normalize a raw health value to the known `Container['health']` enum.
+ * The three known Docker health strings pass through unchanged; anything
+ * else — undefined, null, numbers, or a future Docker value like `'none'` —
+ * degrades to `undefined` instead of being treated as a failure state.
+ * @param value
+ * @returns {Container['health']}
+ */
+export function normalizeContainerHealth(value: unknown): Container['health'] {
+  return value === 'starting' || value === 'healthy' || value === 'unhealthy' ? value : undefined;
+}
+
+/**
  * Apply validation to the container object.
  * @param container
  * @returns {*}
  */
 export function validate(container: unknown): Container {
-  const validation = schema.validate(container, { allowUnknown: true });
+  const rawHealth =
+    container && typeof container === 'object'
+      ? (container as { health?: unknown }).health
+      : undefined;
+  const containerToValidate =
+    rawHealth !== undefined && normalizeContainerHealth(rawHealth) === undefined
+      ? { ...(container as Record<string, unknown>), health: undefined }
+      : container;
+  const validation = schema.validate(containerToValidate, { allowUnknown: true });
   if (validation.error) {
     throw new Error(`Error when validating container properties ${validation.error}`);
   }

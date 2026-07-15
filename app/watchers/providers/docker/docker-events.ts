@@ -13,6 +13,7 @@ const DOCKER_CONTAINER_EVENT_TYPES = [
   'die',
   'update',
   'rename',
+  'health_status',
 ] as const;
 
 interface DockerEventsStream {

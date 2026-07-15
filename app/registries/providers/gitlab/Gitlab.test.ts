@@ -4,16 +4,17 @@ import Gitlab from './Gitlab.js';
 // Test fixture credentials - not real secrets
 const TEST_TOKEN = 'abcdef';
 
-const gitlab = new Gitlab();
-gitlab.configuration = {
-  url: 'https://registry.gitlab.com',
-  authurl: 'https://gitlab.com',
-  token: TEST_TOKEN,
-};
+let gitlab: Gitlab;
 
 vi.mock('axios');
 
 beforeEach(() => {
+  gitlab = new Gitlab();
+  gitlab.configuration = {
+    url: 'https://registry.gitlab.com',
+    authurl: 'https://gitlab.com',
+    token: TEST_TOKEN,
+  };
   vi.clearAllMocks();
 });
 
@@ -96,6 +97,15 @@ test('authenticate should perform authenticate request', async () => {
   ).resolves.toEqual({ headers: { Authorization: 'Bearer token' } });
 });
 
+test('authenticate should reuse the GitLab token until it expires', async () => {
+  axios.mockResolvedValue({ data: { token: 'token' } });
+
+  await gitlab.authenticate({ name: 'group/project' }, { headers: {} });
+  await gitlab.authenticate({ name: 'group/project' }, { headers: {} });
+
+  expect(axios).toHaveBeenCalledTimes(1);
+});
+
 test('authenticate should encode scope query parameter', async () => {
   axios.mockImplementation(() => ({
     data: {
@@ -119,6 +129,27 @@ test('authenticate should encode scope query parameter', async () => {
       Authorization: `Basic ${Buffer.from(`:${TEST_TOKEN}`).toString('base64')}`,
     },
   });
+});
+
+test('authenticate should reject a plaintext token endpoint before sending the configured PAT', async () => {
+  axios.mockResolvedValue({ data: { token: 'must-not-be-used' } });
+  const plaintextGitlab = new Gitlab();
+  plaintextGitlab.configuration = {
+    url: 'https://registry.gitlab.example.com',
+    authurl: 'http://gitlab.example.com',
+    token: TEST_TOKEN,
+  };
+
+  await expect(
+    plaintextGitlab.authenticate(
+      { name: 'group/project' },
+      {
+        headers: {},
+        url: 'https://registry.gitlab.example.com/v2/group/project/manifests/latest',
+      },
+    ),
+  ).rejects.toThrow('uses plaintext HTTP');
+  expect(axios).not.toHaveBeenCalled();
 });
 
 test('resolveBearerChallengeOptions should use configured token credentials', async () => {
@@ -192,7 +223,7 @@ test('authenticate should propagate 401 errors', async () => {
 
 test('authenticate should propagate 429 rate limit errors', async () => {
   const error = new Error('Request failed with status code 429');
-  (error as any).response = { status: 429 };
+  (error as any).response = { status: 429, headers: { 'retry-after': '0' } };
   axios.mockRejectedValue(error);
 
   await expect(gitlab.authenticate({}, { headers: {} })).rejects.toThrow(

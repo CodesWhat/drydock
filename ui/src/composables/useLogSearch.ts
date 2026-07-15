@@ -10,6 +10,7 @@ interface UseLogSearchOptions<TEntry extends SearchableLogEntry> {
   visibleEntries: Ref<TEntry[]> | ComputedRef<TEntry[]>;
   lineElements: Map<number, HTMLElement>;
   searchTextForEntry?: (entry: TEntry) => string;
+  scrollToEntry?: (entryId: number) => void;
   t?: (key: string) => string;
 }
 
@@ -99,6 +100,8 @@ export function useLogSearch<TEntry extends SearchableLogEntry>(
     const targetElement = options.lineElements.get(targetId);
     if (targetElement && typeof targetElement.scrollIntoView === 'function') {
       targetElement.scrollIntoView({ block: 'center' });
+    } else {
+      options.scrollToEntry?.(targetId);
     }
   }
 

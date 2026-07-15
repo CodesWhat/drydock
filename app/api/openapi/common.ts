@@ -154,6 +154,68 @@ export const containerListQueryParams = [
     description: 'When true, include full vulnerability arrays in container payloads',
     schema: { type: 'boolean' },
   },
+  {
+    name: 'sort',
+    in: 'query',
+    required: false,
+    description:
+      'Sort order. Prefix a field with "-" for descending order, for example "-created".',
+    schema: {
+      type: 'string',
+      enum: ['name', '-name', 'status', '-status', 'age', '-age', 'created', '-created'],
+    },
+  },
+  {
+    name: 'order',
+    in: 'query',
+    required: false,
+    description: 'Optional sort direction override',
+    schema: { type: 'string', enum: ['asc', 'desc'] },
+  },
+  {
+    name: 'status',
+    in: 'query',
+    required: false,
+    description: 'Filter by update/runtime status',
+    schema: {
+      type: 'string',
+      enum: [
+        'update-available',
+        'up-to-date',
+        'running',
+        'stopped',
+        'exited',
+        'paused',
+        'restarting',
+        'dead',
+        'created',
+      ],
+    },
+  },
+  {
+    name: 'kind',
+    in: 'query',
+    required: false,
+    description: 'Filter by update kind or watched state',
+    schema: {
+      type: 'string',
+      enum: ['major', 'minor', 'patch', 'digest', 'watched', 'unwatched', 'all'],
+    },
+  },
+  {
+    name: 'watcher',
+    in: 'query',
+    required: false,
+    description: 'Filter by watcher name',
+    schema: { type: 'string' },
+  },
+  {
+    name: 'maturity',
+    in: 'query',
+    required: false,
+    description: 'Filter by update maturity',
+    schema: { type: 'string', enum: ['hot', 'mature', 'established'] },
+  },
 ];
 
 export function destructiveConfirmationHeaderParam(actionToken: string) {

@@ -71,11 +71,11 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - Docker helper functions', () => {
-    test('getLabel should fallback to wud key when dd key is absent', () => {
+    test('getLabel should ignore removed wud keys', () => {
       const labels = {
         'wud.display.name': 'Legacy Name',
       };
-      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Legacy Name');
+      expect(testable_getLabel(labels, 'dd.display.name')).toBeUndefined();
     });
 
     test('getLabel should prefer dd key when both dd and wud keys are present', () => {
@@ -83,63 +83,11 @@ describe('Docker Watcher', () => {
         'dd.display.name': 'Preferred',
         'wud.display.name': 'Legacy Name',
       };
-      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Preferred');
+      expect(testable_getLabel(labels, 'dd.display.name')).toBe('Preferred');
     });
 
     test('getLabel should return undefined when fallback key is not provided', () => {
       expect(testable_getLabel({}, 'dd.display.name')).toBeUndefined();
-    });
-
-    test.each([
-      {
-        aliasKey: 'dd.action.include',
-        legacyKey: 'dd.trigger.include',
-        fallbackKey: 'wud.trigger.include',
-        preferredValue: 'action-include',
-      },
-      {
-        aliasKey: 'dd.notification.exclude',
-        legacyKey: 'dd.trigger.exclude',
-        fallbackKey: 'wud.trigger.exclude',
-        preferredValue: 'notification-exclude',
-      },
-    ])('getLabel should prefer $aliasKey over $legacyKey and warn once for the legacy key', ({
-      aliasKey,
-      legacyKey,
-      fallbackKey,
-      preferredValue,
-    }) => {
-      const warnedLegacyTriggerLabels = new Set<string>();
-      const warn = vi.fn();
-      const labels = {
-        [aliasKey]: preferredValue,
-        [legacyKey]: 'legacy-value',
-        [fallbackKey]: 'legacy-fallback',
-      } as Record<string, string>;
-
-      expect(
-        testable_getLabel(labels, legacyKey, fallbackKey, {
-          warn,
-          warnedLegacyTriggerLabels,
-        }),
-      ).toBe(preferredValue);
-      expect(
-        testable_getLabel(
-          {
-            [legacyKey]: 'legacy-value',
-            [fallbackKey]: 'legacy-fallback',
-          } as Record<string, string>,
-          legacyKey,
-          fallbackKey,
-          {
-            warn,
-            warnedLegacyTriggerLabels,
-          },
-        ),
-      ).toBe('legacy-value');
-
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0][0]).toContain(legacyKey);
     });
 
     test('getCurrentPrefix should return the non-numeric prefix before the first digit', () => {

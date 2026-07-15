@@ -1,5 +1,5 @@
 import { mergeDefaults, migrate, migrateFromLegacyKeys } from '@/preferences/migrate';
-import { DEFAULTS } from '@/preferences/schema';
+import { CURRENT_SCHEMA_VERSION, DEFAULTS } from '@/preferences/schema';
 
 const LEGACY_KEYS = [
   'drydock-theme-family-v1',
@@ -65,21 +65,49 @@ describe('preferences migration', () => {
     });
 
     it('should fill missing nested keys with defaults', () => {
-      const result = mergeDefaults({ containers: { viewMode: 'cards' } });
-      expect(result.containers.viewMode).toBe('cards');
-      expect(result.containers.tableActions).toBe('icons');
+      const result = mergeDefaults({ containers: { tableActions: 'buttons' } });
+      expect(result.containers.tableActions).toBe('buttons');
       expect(result.containers.groupByStack).toBe(false);
       expect(result.containers.sort).toEqual({ key: 'name', asc: true });
     });
   });
 
   describe('migrate', () => {
+    it('adds disabled sync preferences when migrating schema version 10', () => {
+      const result = migrate({ schemaVersion: 10, sync: undefined });
+      expect(result.schemaVersion).toBe(11);
+      expect(result.sync).toEqual({ enabled: false });
+    });
+
+    it('preserves an existing sync object while migrating schema version 10', () => {
+      expect(migrate({ schemaVersion: 10, sync: { enabled: true } }).sync).toEqual({
+        enabled: true,
+      });
+    });
+
+    it('preserves an already-current sync preference', () => {
+      const result = migrate({ schemaVersion: 11, sync: { enabled: true } });
+      expect(result.sync).toEqual({ enabled: true });
+    });
+
+    it('sanitizes malformed sync values on every load, including current schema data', () => {
+      expect(migrate({ schemaVersion: 11, sync: { enabled: 'false' } }).sync).toEqual({
+        enabled: false,
+      });
+      expect(migrate({ schemaVersion: 11, sync: 42 }).sync).toEqual({ enabled: false });
+      expect(migrate({ schemaVersion: 11, sync: { enabled: true } }).sync).toEqual({
+        enabled: true,
+      });
+    });
+
+    it('backfills disabled sync preferences from older schemas', () => {
+      expect(migrate({ schemaVersion: 9 }).sync).toEqual({ enabled: false });
+    });
     it('should return merged defaults for schemaVersion 1 data and upgrade the schema version', () => {
       const result = migrate({ schemaVersion: 1, theme: { family: 'dracula' } });
       expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
       expect(result.theme.family).toBe('dracula');
       expect(result.theme.variant).toBe('dark');
-      expect(result.containers.viewMode).toBe('table');
     });
 
     it('should fill missing fields from defaults', () => {
@@ -122,6 +150,21 @@ describe('preferences migration', () => {
     it('should replace invalid radius with default', () => {
       const result = migrate({ schemaVersion: 1, appearance: { radius: 'huge' } });
       expect(result.appearance.radius).toBe(DEFAULTS.appearance.radius);
+    });
+
+    it.each([
+      {},
+      [],
+      42,
+      null,
+    ])('should delete non-string allow-listed fields and restore defaults for %j', (invalid) => {
+      const result = migrate({
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        appearance: { radius: invalid },
+        theme: { family: invalid },
+      });
+      expect(result.appearance.radius).toBe(DEFAULTS.appearance.radius);
+      expect(result.theme.family).toBe(DEFAULTS.theme.family);
     });
 
     it('should replace invalid fontSize with default', () => {
@@ -263,9 +306,10 @@ describe('preferences migration', () => {
       expect(result.locale.language).toBe(DEFAULTS.locale.language);
     });
 
-    it('should replace invalid container viewMode with default', () => {
-      const result = migrate({ schemaVersion: 1, containers: { viewMode: 'timeline' } });
-      expect(result.containers.viewMode).toBe(DEFAULTS.containers.viewMode);
+    it('should add the container view mode preference with a table default', () => {
+      const result = migrate({ schemaVersion: 1, containers: { tableActions: 'buttons' } });
+      expect(result.containers.viewMode).toBe('table');
+      expect(result.containers.tableActions).toBe('buttons');
     });
 
     it('should replace invalid tableActions with default', () => {
@@ -412,7 +456,7 @@ describe('preferences migration', () => {
         font: { family: 'jetbrains-mono' },
         icons: { library: 'tabler', scale: 1.2 },
         appearance: { radius: 'round', fontSize: 1.15 },
-        containers: { viewMode: 'cards', tableActions: 'buttons' },
+        containers: { tableActions: 'buttons' },
       };
       const result = migrate(input);
       expect(result.theme).toEqual({ family: 'catppuccin', variant: 'light' });
@@ -420,15 +464,14 @@ describe('preferences migration', () => {
       expect(result.icons).toEqual({ library: 'tabler', scale: 1.2 });
       expect(result.appearance.radius).toBe('round');
       expect(result.appearance.fontSize).toBe(1.15);
-      expect(result.containers.viewMode).toBe('cards');
       expect(result.containers.tableActions).toBe('buttons');
     });
 
-    it('should add the shared log sort preference when migrating older schema data', () => {
-      const result = migrate({ schemaVersion: 1, views: { triggers: { mode: 'cards' } } });
+    it('should add the shared log sort preference and default trigger mode when migrating older schema data', () => {
+      const result = migrate({ schemaVersion: 1, views: { triggers: {} } });
 
       expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
-      expect(result.views.triggers.mode).toBe('cards');
+      expect(result.views.triggers.mode).toBe('table');
     });
 
     it('should preserve the shared log sort preference in current schema data', () => {
@@ -477,6 +520,40 @@ describe('preferences migration', () => {
   });
 
   describe('schema v6 → v7 migration (softwareVersion column)', () => {
+    it('normalizes an unsupported pre-v1 numeric schema after known migrations', () => {
+      expect(migrate({ schemaVersion: 0 }).schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    });
+
+    it('cascades schema v3 data through the v6 column migration', () => {
+      const result = migrate({
+        schemaVersion: 3,
+        containers: {
+          columns: ['icon', 'name', 'version', 'kind', 'status', 'server', 'registry'],
+        },
+      });
+
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.containers.columns.indexOf('softwareVersion')).toBe(
+        result.containers.columns.indexOf('version') + 1,
+      );
+    });
+
+    it.each([
+      1, 2,
+    ] as const)('cascades released schema v%s preferences through the softwareVersion migration', (schemaVersion) => {
+      const result = migrate({
+        schemaVersion,
+        containers: {
+          columns: ['icon', 'name', 'version', 'kind', 'status', 'server', 'registry'],
+        },
+      });
+
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.containers.columns.indexOf('softwareVersion')).toBe(
+        result.containers.columns.indexOf('version') + 1,
+      );
+    });
+
     it('should add softwareVersion column when migrating from schemaVersion 6', () => {
       const result = migrate({
         schemaVersion: 6,
@@ -676,18 +753,6 @@ describe('preferences migration', () => {
     });
 
     describe('container migration', () => {
-      it('should migrate container view mode', () => {
-        localStorage.setItem('dd-containers-view-v1', 'cards');
-        const result = migrateFromLegacyKeys();
-        expect(result.containers.viewMode).toBe('cards');
-      });
-
-      it('should ignore invalid container view mode', () => {
-        localStorage.setItem('dd-containers-view-v1', 'invalid');
-        const result = migrateFromLegacyKeys();
-        expect(result.containers.viewMode).toBe(DEFAULTS.containers.viewMode);
-      });
-
       it('should migrate table actions', () => {
         localStorage.setItem('dd-table-actions-v1', 'buttons');
         const result = migrateFromLegacyKeys();
@@ -773,7 +838,7 @@ describe('preferences migration', () => {
         const columns = ['name', 'status', 'registry'];
         localStorage.setItem('dd-table-cols-v1', JSON.stringify(columns));
         const result = migrateFromLegacyKeys();
-        expect(result.containers.columns).toEqual(['icon', ...columns]);
+        expect(result.containers.columns).toEqual(['icon', ...columns, 'links']);
       });
 
       it('should drop stale columns that no longer exist in the table', () => {
@@ -782,7 +847,7 @@ describe('preferences migration', () => {
           JSON.stringify(['icon', 'name', 'bouncer', 'status', 'registry']),
         );
         const result = migrateFromLegacyKeys();
-        expect(result.containers.columns).toEqual(['icon', 'name', 'status', 'registry']);
+        expect(result.containers.columns).toEqual(['icon', 'name', 'status', 'registry', 'links']);
       });
     });
 
@@ -792,30 +857,6 @@ describe('preferences migration', () => {
         localStorage.setItem('dd-dashboard-widget-order-v3', JSON.stringify(order));
         const result = migrateFromLegacyKeys();
         expect(result.dashboard.widgetOrder).toEqual(order);
-      });
-    });
-
-    describe('view mode migration', () => {
-      it.each([
-        ['security', 'dd-security-view-v1'],
-        ['audit', 'dd-audit-view-v1'],
-        ['agents', 'dd-agents-view-v1'],
-        ['triggers', 'dd-triggers-view-v1'],
-        ['watchers', 'dd-watchers-view-v1'],
-        ['servers', 'dd-servers-view-v1'],
-        ['registries', 'dd-registries-view-v1'],
-        ['notifications', 'dd-notifications-view-v1'],
-        ['auth', 'dd-auth-view-v1'],
-      ] as const)('should migrate %s view mode', (viewName, legacyKey) => {
-        localStorage.setItem(legacyKey, 'cards');
-        const result = migrateFromLegacyKeys();
-        expect(result.views[viewName].mode).toBe('cards');
-      });
-
-      it('should ignore invalid view modes for views', () => {
-        localStorage.setItem('dd-triggers-view-v1', 'invalid');
-        const result = migrateFromLegacyKeys();
-        expect(result.views.triggers.mode).toBe(DEFAULTS.views.triggers.mode);
       });
     });
 
@@ -837,12 +878,6 @@ describe('preferences migration', () => {
         const result = migrateFromLegacyKeys();
         expect(result.views.security.sortAsc).toBe(false);
       });
-
-      it('should ignore security migration when only an invalid security view mode is present', () => {
-        localStorage.setItem('dd-security-view-v1', 'invalid');
-        const result = migrateFromLegacyKeys();
-        expect(result.views.security).toEqual(DEFAULTS.views.security);
-      });
     });
 
     describe('agents sort migration', () => {
@@ -863,22 +898,16 @@ describe('preferences migration', () => {
         const result = migrateFromLegacyKeys();
         expect(result.views.agents.sortAsc).toBe(false);
       });
-
-      it('should ignore agents migration when only an invalid agents view mode is present', () => {
-        localStorage.setItem('dd-agents-view-v1', 'invalid');
-        const result = migrateFromLegacyKeys();
-        expect(result.views.agents).toEqual(DEFAULTS.views.agents);
-      });
     });
 
     describe('partial migration', () => {
       it('should handle only some legacy keys present', () => {
         localStorage.setItem('drydock-theme-family-v1', 'dracula');
-        localStorage.setItem('dd-containers-view-v1', 'list');
+        localStorage.setItem('dd-table-actions-v1', 'buttons');
         // All other keys absent
         const result = migrateFromLegacyKeys();
         expect(result.theme.family).toBe('dracula');
-        expect(result.containers.viewMode).toBe('list');
+        expect(result.containers.tableActions).toBe('buttons');
         // Defaults for everything else
         expect(result.theme.variant).toBe('dark');
         expect(result.font.family).toBe('ibm-plex-mono');
@@ -991,8 +1020,8 @@ describe('preferences migration', () => {
     describe('idempotency', () => {
       it('should produce the same result when run twice', () => {
         localStorage.setItem('drydock-theme-family-v1', 'github');
-        localStorage.setItem('dd-containers-view-v1', 'list');
-        localStorage.setItem('dd-audit-view-v1', 'cards');
+        localStorage.setItem('dd-table-actions-v1', 'buttons');
+        localStorage.setItem('dd-security-sort-field-v1', 'high');
         const first = migrateFromLegacyKeys();
 
         // Legacy keys were deleted. Running again with no legacy keys should give defaults.
@@ -1000,8 +1029,8 @@ describe('preferences migration', () => {
         // Reset to simulate a fresh run with the same legacy data:
         localStorage.clear();
         localStorage.setItem('drydock-theme-family-v1', 'github');
-        localStorage.setItem('dd-containers-view-v1', 'list');
-        localStorage.setItem('dd-audit-view-v1', 'cards');
+        localStorage.setItem('dd-table-actions-v1', 'buttons');
+        localStorage.setItem('dd-security-sort-field-v1', 'high');
         const second = migrateFromLegacyKeys();
 
         expect(first).toEqual(second);
@@ -1011,6 +1040,225 @@ describe('preferences migration', () => {
         const result = migrateFromLegacyKeys();
         expect(result).toEqual(DEFAULTS);
       });
+    });
+  });
+
+  describe('v8 -> current migration', () => {
+    it('should bump schema v8 preferences to the current version and backfill table modes', () => {
+      const result = migrate({
+        schemaVersion: 8,
+        containers: { tableActions: 'buttons' },
+        views: {
+          agents: { sortKey: 'status', sortAsc: false, hiddenColumns: ['status'] },
+          notifications: {},
+          security: { sortField: 'name', sortAsc: true, hiddenColumns: ['critical'] },
+          triggers: {},
+        },
+      });
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.containers.viewMode).toBe('table');
+      expect(result.views.agents.mode).toBe('table');
+      expect(result.views.notifications.mode).toBe('table');
+      expect(result.views.security.mode).toBe('table');
+      expect(result.views.triggers.mode).toBe('table');
+      expect(result.containers.tableActions).toBe('buttons');
+      expect(result.views.agents.sortKey).toBe('status');
+      expect(result.views.agents.sortAsc).toBe(false);
+      expect(result.views.agents.hiddenColumns).toEqual(['status']);
+      expect(result.views.security.sortField).toBe('name');
+      expect(result.views.security.sortAsc).toBe(true);
+      expect(result.views.security.hiddenColumns).toEqual(['critical']);
+    });
+
+    it('should upgrade a stored v8 payload with no mode keys without an explicit transform block', () => {
+      const first = migrate({
+        schemaVersion: 8,
+        containers: { groupByStack: true },
+        views: {
+          agents: { sortKey: 'lastSeen', sortAsc: false },
+          security: { sortField: 'high', sortAsc: false },
+        },
+      });
+      const second = migrate(first as unknown as Record<string, unknown>);
+
+      expect(first.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(first.containers.viewMode).toBe('table');
+      expect(first.views.agents.mode).toBe('table');
+      expect(first.views.notifications.mode).toBe('table');
+      expect(first.views.security.mode).toBe('table');
+      expect(first.views.triggers.mode).toBe('table');
+      expect(first.containers.groupByStack).toBe(true);
+      expect(first.views.agents.sortKey).toBe('lastSeen');
+      expect(first.views.security.sortField).toBe('high');
+      expect(second).toEqual(first);
+    });
+  });
+
+  describe('v9 -> v10 migration', () => {
+    it('bumps schema v9 preferences to v10 and backfills the newly card-enabled view modes', () => {
+      const result = migrate({
+        schemaVersion: 9,
+        views: {
+          agents: { mode: 'cards', sortKey: 'status', sortAsc: false, hiddenColumns: ['status'] },
+          notifications: { mode: 'cards' },
+          security: { mode: 'cards', sortField: 'high', sortAsc: false, hiddenColumns: [] },
+          triggers: { mode: 'cards' },
+          audit: { hiddenColumns: ['details'] },
+          watchers: { hiddenColumns: ['cron'] },
+          servers: { hiddenColumns: ['host'] },
+          registries: {},
+          auth: {},
+        },
+      });
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      // Views that gained a card view in v1.6 backfill to table mode for existing users.
+      expect(result.views.audit.mode).toBe('table');
+      expect(result.views.watchers.mode).toBe('table');
+      expect(result.views.servers.mode).toBe('table');
+      expect(result.views.registries.mode).toBe('table');
+      expect(result.views.auth.mode).toBe('table');
+      // Pre-existing view modes and other fields are preserved untouched.
+      expect(result.views.agents.mode).toBe('cards');
+      expect(result.views.notifications.mode).toBe('cards');
+      expect(result.views.security.mode).toBe('cards');
+      expect(result.views.triggers.mode).toBe('cards');
+      expect(result.views.audit.hiddenColumns).toEqual(['details']);
+      expect(result.views.watchers.hiddenColumns).toEqual(['cron']);
+      expect(result.views.servers.hiddenColumns).toEqual(['host']);
+    });
+
+    it('should upgrade a v9 payload without the new mode keys and stay idempotent', () => {
+      const first = migrate({
+        schemaVersion: 9,
+        views: {
+          watchers: { mode: 'cards', hiddenColumns: [] },
+          registries: { mode: 'cards' },
+        },
+      });
+      const second = migrate(first as unknown as Record<string, unknown>);
+
+      expect(first.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(first.views.watchers.mode).toBe('cards');
+      expect(first.views.registries.mode).toBe('cards');
+      expect(first.views.audit.mode).toBe('table');
+      expect(first.views.servers.mode).toBe('table');
+      expect(first.views.auth.mode).toBe('table');
+      expect(second).toEqual(first);
+    });
+  });
+
+  describe('view hiddenColumns (security/watchers/servers/audit/agents)', () => {
+    it('DEFAULTS should default hiddenColumns to an empty array for each view', () => {
+      expect(DEFAULTS.views.security.hiddenColumns).toEqual([]);
+      expect(DEFAULTS.views.watchers.hiddenColumns).toEqual([]);
+      expect(DEFAULTS.views.servers.hiddenColumns).toEqual([]);
+      expect(DEFAULTS.views.audit.hiddenColumns).toEqual([]);
+      expect(DEFAULTS.views.agents.hiddenColumns).toEqual([]);
+    });
+
+    it('backfills hiddenColumns as [] for views missing the field in a legacy persisted blob', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          security: { sortField: 'critical', sortAsc: false },
+          watchers: {},
+          servers: {},
+          audit: {},
+          agents: { sortKey: 'name', sortAsc: true },
+        },
+      });
+      expect(result.views.security.hiddenColumns).toEqual([]);
+      expect(result.views.watchers.hiddenColumns).toEqual([]);
+      expect(result.views.servers.hiddenColumns).toEqual([]);
+      expect(result.views.audit.hiddenColumns).toEqual([]);
+      expect(result.views.agents.hiddenColumns).toEqual([]);
+    });
+
+    it('backfills hiddenColumns as [] when the views object is entirely absent', () => {
+      const result = migrate({ schemaVersion: DEFAULTS.schemaVersion });
+      expect(result.views.security.hiddenColumns).toEqual([]);
+      expect(result.views.watchers.hiddenColumns).toEqual([]);
+      expect(result.views.servers.hiddenColumns).toEqual([]);
+      expect(result.views.audit.hiddenColumns).toEqual([]);
+      expect(result.views.agents.hiddenColumns).toEqual([]);
+    });
+
+    it('clamps non-array/non-string hiddenColumns garbage to an empty array for each view', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          security: { hiddenColumns: 'not-an-array' as any },
+          watchers: { hiddenColumns: 42 as any },
+          servers: { hiddenColumns: null as any },
+          audit: { hiddenColumns: {} as any },
+          agents: { hiddenColumns: false as any },
+        },
+      });
+      expect(result.views.security.hiddenColumns).toEqual([]);
+      expect(result.views.watchers.hiddenColumns).toEqual([]);
+      expect(result.views.servers.hiddenColumns).toEqual([]);
+      expect(result.views.audit.hiddenColumns).toEqual([]);
+      expect(result.views.agents.hiddenColumns).toEqual([]);
+    });
+
+    it('drops unknown column keys from persisted hiddenColumns', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          security: { hiddenColumns: ['critical', 'bogus-key'] },
+        },
+      });
+      expect(result.views.security.hiddenColumns).toEqual(['critical']);
+    });
+
+    it('drops required column keys from persisted hiddenColumns so a required column can never persist hidden', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          security: { hiddenColumns: ['image', 'critical'] },
+          watchers: { hiddenColumns: ['name', 'status'] },
+          servers: { hiddenColumns: ['name', 'host'] },
+          audit: { hiddenColumns: ['containerName', 'action'] },
+          agents: { hiddenColumns: ['name', 'status'] },
+        },
+      });
+      expect(result.views.security.hiddenColumns).toEqual(['critical']);
+      expect(result.views.watchers.hiddenColumns).toEqual(['status']);
+      expect(result.views.servers.hiddenColumns).toEqual(['host']);
+      expect(result.views.audit.hiddenColumns).toEqual(['action']);
+      expect(result.views.agents.hiddenColumns).toEqual(['status']);
+    });
+
+    it('preserves valid hiddenColumns as-is', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          watchers: { hiddenColumns: ['cron', 'lastRun'] },
+        },
+      });
+      expect(result.views.watchers.hiddenColumns).toEqual(['cron', 'lastRun']);
+    });
+
+    it('resets a non-record view to defaults during sanitization', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          watchers: 'invalid' as any,
+        },
+      });
+      expect(result.views.watchers).toEqual(DEFAULTS.views.watchers);
+    });
+
+    it('deletes a non-record view during sanitization of legacy schema data', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        views: {
+          servers: 42 as any,
+        },
+      });
+      expect(result.views.servers).toEqual(DEFAULTS.views.servers);
     });
   });
 });

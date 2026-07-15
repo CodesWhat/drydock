@@ -157,20 +157,16 @@
     "banners": {
       "legacyConfigTitleSingular": "Обнаружен {total} устаревший псевдоним конфигурации",
       "legacyConfigTitlePlural": "Обнаружено {total} устаревших псевдонимов конфигурации",
-      "legacyApiPathTitle": "Обнаружено {total} устаревших путей API",
+      "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "Больше не показывать",
-      "oidcHttpTitle": "Обнаружено HTTP OIDC discovery",
-      "legacyHashTitle": "Обнаружен устаревший хеш пароля",
       "curlHealthcheckTitle": "Обнаружено переопределение healthcheck через curl",
       "envKeysLabel": "Переменные окружения ({count}): {keys}",
       "labelKeysLabel": "Метки ({count}): {keys}",
       "apiPathsLabel": "Пути API ({count}): {keys}",
       "healthcheckCommandLabel": "Команда healthcheck: {command}",
-      "oidcHttpBody": "One or more OIDC providers use an insecure {httpCode} discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0. Upgrade your OIDC discovery URL to use HTTPS, or set {envVar} only for trusted internal issuers.",
-      "legacyHashBody": "Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Re-hash your admin password with {argon} (see the migration guide for the one-liner).",
-      "legacyConfigBody": "Deprecated configuration aliases are in use. Rename {wudEnv} env vars to {ddEnv} and {wudLabel} Docker labels to {ddLabel}. {triggerEnv} variables should also migrate to {actionEnv} or {notificationEnv} (see the migration guide for the full rename map).",
-      "legacyApiBody": "Unversioned API paths are deprecated. Update API clients to the {v1Prefix} prefix. Unversioned {oldPrefix} aliases are removed in v1.6.0.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains supported for backward compatibility in v1.5.x. v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Remove the {envVar} override; the image now uses wget and curl is no longer bundled. Prefer the built-in image healthcheck or {bin} for custom intervals.",
+      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
+      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
+      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
       "hiddenMore": "(+{count} more)"
     }
   }

@@ -1,7 +1,10 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick } from 'vue';
+import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAuditLog } from '@/services/audit';
 import AuditView from '@/views/AuditView.vue';
+import { dataViewStubs } from '../helpers/data-view-stubs';
 import { mountWithPlugins } from '../helpers/mount';
 
 const { mockRoute } = vi.hoisted(() => ({
@@ -27,22 +30,27 @@ const stubs: Record<string, any> = {
     template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
   }),
   DataFilterBar: defineComponent({
-    props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
-    emits: ['update:modelValue', 'update:showFilters'],
+    props: ['showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
+    emits: ['update:showFilters'],
     template: `
       <div class="data-filter-bar">
-        <button class="mode-table" @click="$emit('update:modelValue', 'table')">Table</button>
-        <button class="mode-cards" @click="$emit('update:modelValue', 'cards')">Cards</button>
-        <button class="mode-list" @click="$emit('update:modelValue', 'list')">List</button>
         <slot name="filters" />
+        <slot name="extra-buttons" />
       </div>
     `,
   }),
   DataTable: defineComponent({
-    props: ['columns', 'rows', 'rowKey', 'activeRow'],
+    props: ['columns', 'rows', 'rowKey', 'activeRow', 'hiddenColumnKeys'],
     emits: ['row-click'],
     template: `
       <div class="data-table" :data-row-count="rows.length" :data-active-row="activeRow || ''">
+        <div
+          v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+          :key="col.key"
+          class="dt-header"
+          :data-col-key="col.key">
+          {{ col.label }}
+        </div>
         <div v-for="(row, index) in rows" :key="row.id" class="data-table-row">
           <button
             v-if="row"
@@ -60,24 +68,7 @@ const stubs: Record<string, any> = {
       </div>
     `,
   }),
-  DataCardGrid: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
-    template: `
-      <div class="data-card-grid" :data-item-count="items.length">
-        <button v-if="items[0]" class="card-click-first" @click="$emit('item-click', items[0])">Card 1</button>
-      </div>
-    `,
-  }),
-  DataListAccordion: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
-    template: `
-      <div class="data-list-accordion" :data-item-count="items.length">
-        <button v-if="items[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
-      </div>
-    `,
-  }),
+  DataTableColumnPicker: dataViewStubs.DataTableColumnPicker,
   DetailPanel: defineComponent({
     props: ['open', 'isMobile', 'showSizeControls', 'showFullPage'],
     emits: ['update:open'],
@@ -101,6 +92,87 @@ const stubs: Record<string, any> = {
     `,
   }),
 };
+
+const auditCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar audit-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+      <slot name="extra-buttons" />
+    </div>
+  `,
+});
+
+const auditCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+    'hiddenColumnKeys',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table audit-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="audit-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+async function mountAuditCardView() {
+  const wrapper = mountWithPlugins(AuditView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: auditCardFilterBarStub,
+        DataTable: auditCardDataTableStub,
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
 
 const mockGetAuditLog = getAuditLog as ReturnType<typeof vi.fn>;
 
@@ -137,14 +209,66 @@ function findButtonByIcon(wrapper: any, icon: string) {
 describe('AuditView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     mockRoute.query = {};
     mockGetAuditLog.mockResolvedValue({ entries: [], total: 0, page: 1, limit: 50 });
+  });
+
+  describe('tableColumns (card-mode annotations)', () => {
+    it('flags containerName as the card title and action as the card subtitle priority', async () => {
+      const wrapper = await mountAuditView();
+      const vm = wrapper.vm as any;
+      const containerNameCol = vm.tableColumns.find((c: any) => c.key === 'containerName');
+      const actionCol = vm.tableColumns.find((c: any) => c.key === 'action');
+      expect(containerNameCol.cardTitle).toBe(true);
+      expect(actionCol.cardPriority).toBe(1);
+    });
+  });
+
+  describe('column picker', () => {
+    it('tableColumns keys match VIEW_TABLE_COLUMN_KEYS.audit (schema/view sync guard)', async () => {
+      const wrapper = await mountAuditView();
+      const vm = wrapper.vm as any;
+      const keys = new Set(vm.tableColumns.map((c: any) => c.key));
+      expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.audit));
+    });
+
+    it('marks the containerName column as required', async () => {
+      const wrapper = await mountAuditView();
+      const vm = wrapper.vm as any;
+      const containerNameCol = vm.tableColumns.find((c: any) => c.key === 'containerName');
+      expect(containerNameCol.required).toBe(true);
+    });
+
+    it('renders the column picker in the filter bar', async () => {
+      const wrapper = await mountAuditView();
+      expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+    });
+
+    it('toggling a column via the picker removes its header from the table', async () => {
+      mockGetAuditLog.mockResolvedValue({ entries: [makeEntry()], total: 1 });
+      const wrapper = await mountAuditView();
+      expect(wrapper.find('[data-col-key="details"]').exists()).toBe(true);
+
+      await wrapper.find('[data-test="column-picker-toggle-details"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[data-col-key="details"]').exists()).toBe(false);
+    });
+
+    it('toggling a column via the picker persists the key to preferences.views.audit.hiddenColumns', async () => {
+      const wrapper = await mountAuditView();
+
+      await wrapper.find('[data-test="column-picker-toggle-details"]').trigger('click');
+      await nextTick();
+
+      expect(preferences.views.audit.hiddenColumns).toContain('details');
+    });
   });
 
   describe('routing', () => {
     it('loads using route query values for view, page, action, and search', async () => {
       mockRoute.query = {
-        view: 'cards',
         page: '2',
         action: 'update-failed',
         q: 'redis',
@@ -164,8 +288,6 @@ describe('AuditView', () => {
         limit: 50,
         action: 'update-failed',
       });
-      expect(wrapper.find('.data-card-grid').exists()).toBe(true);
-      expect(wrapper.find('.data-card-grid').attributes('data-item-count')).toBe('1');
       expect((wrapper.find('input').element as HTMLInputElement).value).toBe('redis');
       expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('Update Failed');
     });
@@ -695,33 +817,58 @@ describe('AuditView', () => {
       expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
       expect(wrapper.find('.data-table').attributes('data-active-row')).toBe('');
     });
+  });
 
-    it('opens detail panel from cards and list interactions', async () => {
-      mockGetAuditLog.mockResolvedValue({
-        entries: [makeEntry({ id: 'e1', containerName: 'nginx' })],
-        total: 1,
-      });
-      const wrapper = await mountAuditView();
-
-      await wrapper.find('.mode-cards').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.data-card-grid').exists()).toBe(true);
-
-      await wrapper.find('.card-click-first').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-
-      await wrapper.find('.close-detail').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
-
-      await wrapper.find('.mode-list').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.data-list-accordion').exists()).toBe(true);
-
-      await wrapper.find('.list-click-first').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
+  it('renders audit cards and wires the card-mode reflow controls', async () => {
+    preferences.views.audit.mode = 'cards';
+    mockGetAuditLog.mockResolvedValue({
+      entries: [
+        makeEntry({
+          id: 'e1',
+          action: 'update-applied',
+          containerName: 'nginx',
+          status: 'success',
+          fromVersion: '1.0.0',
+          toVersion: '1.1.0',
+        }),
+        makeEntry({
+          id: 'e2',
+          action: 'container-added',
+          containerName: 'redis',
+          status: 'info',
+          fromVersion: undefined,
+          toVersion: undefined,
+        }),
+      ],
+      total: 2,
     });
+
+    const wrapper = await mountAuditCardView();
+
+    expect(wrapper.get('.audit-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.audit-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.audit-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const firstCard = wrapper.get('[data-card-id="e1"]');
+    expect(firstCard.text()).toContain('Update Applied');
+    expect(firstCard.text()).toContain('nginx');
+    expect(firstCard.text()).toContain('Time');
+    expect(firstCard.text()).toContain('Version');
+    expect(firstCard.text()).toContain('1.0.0');
+    expect(firstCard.text()).toContain('1.1.0');
+    expect(firstCard.text()).toContain('success');
+
+    const secondCard = wrapper.get('[data-card-id="e2"]');
+    expect(secondCard.text()).toContain('Container Added');
+    expect(secondCard.text()).toContain('redis');
+    expect(secondCard.text()).not.toContain('Version');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.audit-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.audit-card-filter').attributes('data-hide-view-toggle')).toBe('false');
   });
 });

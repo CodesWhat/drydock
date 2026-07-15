@@ -2,7 +2,8 @@ import { DEFAULT_LOCALE, type SupportedLocale } from '../i18n/locales';
 import type { ThemeFamily } from '../theme/palettes';
 import type { RadiusPresetId } from './radius';
 
-export type ViewMode = 'table' | 'cards' | 'list';
+/** Table/cards view-mode switch. `'list'` (the old 3-way `DataListAccordion` mode) is gone for good. */
+export type ViewMode = 'table' | 'cards';
 
 export const DASHBOARD_LAYOUT_BREAKPOINTS = ['xxs', 'xs', 'sm', 'md', 'lg'] as const;
 export type DashboardLayoutBreakpoint = (typeof DASHBOARD_LAYOUT_BREAKPOINTS)[number];
@@ -53,19 +54,44 @@ export interface PreferencesSchema {
   };
   views: {
     logs: { newestFirst: boolean };
-    security: { mode: ViewMode; sortField: string; sortAsc: boolean };
-    audit: { mode: ViewMode };
-    agents: { mode: ViewMode; sortKey: string; sortAsc: boolean };
+    security: { mode: ViewMode; sortField: string; sortAsc: boolean; hiddenColumns: string[] };
+    audit: { mode: ViewMode; hiddenColumns: string[] };
+    agents: { mode: ViewMode; sortKey: string; sortAsc: boolean; hiddenColumns: string[] };
     triggers: { mode: ViewMode };
-    watchers: { mode: ViewMode };
-    servers: { mode: ViewMode };
+    watchers: { mode: ViewMode; hiddenColumns: string[] };
+    servers: { mode: ViewMode; hiddenColumns: string[] };
     registries: { mode: ViewMode };
     notifications: { mode: ViewMode };
     auth: { mode: ViewMode };
   };
+  sync: { enabled: boolean };
 }
 
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 11;
+
+/**
+ * Table-mode column keys for the five views that share the `DataTableColumnPicker`
+ * infrastructure. Persisted preferences store the HIDDEN set (not the visible set) —
+ * see `VIEW_TABLE_REQUIRED_COLUMN_KEYS` and `sanitizeViews` in `migrate.ts` — so a
+ * column added in a future release is automatically visible for existing users.
+ */
+export const VIEW_TABLE_COLUMN_KEYS = {
+  security: ['image', 'critical', 'high', 'medium', 'low', 'fixable', 'total'],
+  watchers: ['name', 'status', 'containers', 'cron', 'nextRun', 'lastRun'],
+  servers: ['name', 'host', 'status', 'containers', 'lastSeen'],
+  audit: ['timestamp', 'action', 'containerName', 'status', 'details'],
+  agents: ['name', 'status', 'containers', 'docker', 'os', 'version', 'lastSeen'],
+} as const;
+
+export type ViewTableColumnKey = keyof typeof VIEW_TABLE_COLUMN_KEYS;
+
+export const VIEW_TABLE_REQUIRED_COLUMN_KEYS = {
+  security: ['image'],
+  watchers: ['name'],
+  servers: ['name'],
+  audit: ['containerName'],
+  agents: ['name'],
+} as const;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',
@@ -76,11 +102,12 @@ export const CONTAINER_TABLE_COLUMN_KEYS = [
   'status',
   'server',
   'registry',
+  'links',
 ] as const;
 
 export const CONTAINER_TABLE_OPT_IN_COLUMN_KEYS = ['uptime'] as const;
 
-export const CONTAINER_TABLE_REQUIRED_COLUMN_KEYS = ['icon', 'name'] as const;
+export const CONTAINER_TABLE_REQUIRED_COLUMN_KEYS = ['icon', 'name', 'links'] as const;
 
 export const DEFAULTS: PreferencesSchema = {
   schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -132,14 +159,15 @@ export const DEFAULTS: PreferencesSchema = {
   },
   views: {
     logs: { newestFirst: false },
-    security: { mode: 'table', sortField: 'critical', sortAsc: false },
-    audit: { mode: 'table' },
-    agents: { mode: 'table', sortKey: 'name', sortAsc: true },
+    security: { mode: 'table', sortField: 'critical', sortAsc: false, hiddenColumns: [] },
+    audit: { mode: 'table', hiddenColumns: [] },
+    agents: { mode: 'table', sortKey: 'name', sortAsc: true, hiddenColumns: [] },
     triggers: { mode: 'table' },
-    watchers: { mode: 'table' },
-    servers: { mode: 'table' },
+    watchers: { mode: 'table', hiddenColumns: [] },
+    servers: { mode: 'table', hiddenColumns: [] },
     registries: { mode: 'table' },
     notifications: { mode: 'table' },
     auth: { mode: 'table' },
   },
+  sync: { enabled: false },
 };

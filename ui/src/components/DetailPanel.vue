@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useFocusTrap } from '../composables/useFocusTrap';
 import AppIconButton from './AppIconButton.vue';
 
 const { t } = useI18n();
@@ -48,6 +49,13 @@ function handleKeydown(event: KeyboardEvent) {
 
 onMounted(() => globalThis.addEventListener('keydown', handleKeydown));
 onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
+
+// Mobile panels are genuinely modal (full-screen overlay + backdrop), so they
+// trap focus. Desktop is a non-modal sticky sidebar the user keeps open while
+// clicking through rows — never trap or move focus there.
+const panelRef = ref<HTMLElement | null>(null);
+const trapActive = computed(() => props.open && props.isMobile);
+useFocusTrap(panelRef, trapActive);
 </script>
 
 <template>
@@ -64,11 +72,13 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
     removing either makes the panel misalign on Containers and Audit pages.
   -->
   <aside v-if="open"
+         ref="panelRef"
          role="dialog"
+         tabindex="-1"
          :aria-modal="isMobile ? 'true' : undefined"
          :aria-label="t('sharedComponents.detailPanel.ariaLabel')"
          class="detail-panel-inline flex flex-col min-w-0 overflow-clip transition-[flex-basis,width,max-width,color,background-color,border-color,opacity,transform,box-shadow] duration-300 ease-in-out"
-         :class="isMobile ? 'fixed top-0 right-0 h-full z-50 dd-rounded' : 'sticky top-0 mt-4 sm:mt-6 mr-[15px]'"
+         :class="isMobile ? 'fixed top-0 end-0 h-full z-50 dd-rounded' : 'sticky top-0 mt-4 sm:mt-6 mr-[15px]'"
          :style="{
            flex: isMobile ? undefined : `0 0 ${panelDesktopWidth}`,
            width: isMobile ? '100%' : panelDesktopWidth,
@@ -83,12 +93,14 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
          }">
 
     <!-- Panel toolbar: size + full page + close -->
-    <div class="shrink-0 px-4 py-2.5 flex items-center justify-between"
+    <div
+         data-test="detail-panel-toolbar"
+         class="shrink-0 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2"
          :style="{ borderBottom: '1px solid var(--dd-border)' }">
-      <div class="flex items-center gap-2">
+      <div data-test="detail-panel-toolbar-leading" class="flex flex-1 flex-wrap items-center gap-2 min-w-0">
         <div v-if="(showSizeControls && !isMobile) || showFullPage" class="flex items-center dd-rounded overflow-hidden">
           <AppIconButton v-if="showFullPage"
-                  icon="frame-corners" size="toolbar" variant="muted"
+                  icon="frame-corners" size="sm" variant="muted"
                   :tooltip="t('sharedComponents.detailPanel.openFullPage')"
                   @click="$emit('full-page')" />
           <AppButton size="none" variant="plain" weight="none" v-if="showSizeControls && !isMobile"
@@ -103,7 +115,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
         </div>
         <slot name="toolbar" />
       </div>
-      <AppIconButton icon="xmark" size="toolbar" variant="muted"
+      <AppIconButton icon="xmark" size="sm" variant="muted"
               :aria-label="t('sharedComponents.detailPanel.closePanel')"
               @click="closePanel" />
     </div>

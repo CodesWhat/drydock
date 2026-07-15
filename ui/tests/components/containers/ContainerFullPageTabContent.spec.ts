@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import ContainerFullPageTabContent from '@/components/containers/ContainerFullPageTabContent.vue';
 import type { ApiContainerUpdateOperation } from '@/types/api';
+import { expectContainerQuickLinks } from '../../helpers/containerQuickLinks';
 
 type Trigger = {
   type: string;
   name: string;
   agent?: string;
+  configuration?: Record<string, unknown>;
 };
 
 type Backup = {
@@ -117,6 +119,7 @@ const detailComposePreview = ref<{
   patch?: string;
 } | null>(null);
 const previewError = ref<string | null>(null);
+const previewErrorAction = ref<{ label: string; href: '/registries' | '/triggers' } | null>(null);
 const triggersLoading = ref(false);
 const detailTriggers = ref<Trigger[]>([]);
 const triggerRunInProgress = ref<string | null>(null);
@@ -146,6 +149,11 @@ const mockClearSkipsSelected = vi.fn();
 const mockSetMaturityPolicySelected = vi.fn();
 const mockClearMaturityPolicySelected = vi.fn();
 const mockClearPolicySelected = vi.fn();
+const mockRevertPolicySelected = vi.fn();
+const selectedPolicyOverrideFields = ref(
+  new Set(['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests']),
+);
+const selectedPolicyOverriddenFields = ref(new Set(['maturityMode', 'skipTags']));
 const mockRemoveSkipTagSelected = vi.fn();
 const mockRemoveSkipDigestSelected = vi.fn();
 const mockGetTriggerKey = vi.fn((trigger: Trigger) => `${trigger.type}.${trigger.name}`);
@@ -163,6 +171,7 @@ const mockRecheckContainer = vi.fn();
 const mockRecheckingContainerId = ref<string | null>(null);
 const mockConfirmUpdate = vi.fn();
 const mockConfirmForceUpdate = vi.fn();
+const updateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 
 const LOG_AUTO_FETCH_INTERVALS = [
   { value: 0, label: 'Paused' },
@@ -232,6 +241,9 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     setMaturityPolicySelected: mockSetMaturityPolicySelected,
     clearMaturityPolicySelected: mockClearMaturityPolicySelected,
     confirmClearPolicy: mockClearPolicySelected,
+    revertPolicySelected: mockRevertPolicySelected,
+    selectedPolicyOverrideFields,
+    selectedPolicyOverriddenFields,
     policyMessage,
     policyError,
     removeSkipTagSelected: mockRemoveSkipTagSelected,
@@ -239,6 +251,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     detailPreview,
     detailComposePreview,
     previewError,
+    previewErrorAction,
     triggersLoading,
     detailTriggers,
     getTriggerKey: mockGetTriggerKey,
@@ -264,6 +277,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     scanContainer: mockScanContainer,
     confirmUpdate: mockConfirmUpdate,
     confirmForceUpdate: mockConfirmForceUpdate,
+    updateMode,
     registryColorBg: () => 'var(--dd-bg-inset)',
     registryColorText: () => 'var(--dd-text)',
     registryLabel: () => 'Docker Hub',
@@ -333,6 +347,7 @@ function resetState() {
   detailPreview.value = null;
   detailComposePreview.value = null;
   previewError.value = null;
+  previewErrorAction.value = null;
   triggersLoading.value = false;
   detailTriggers.value = [];
   triggerRunInProgress.value = null;
@@ -362,6 +377,14 @@ function resetState() {
   mockSetMaturityPolicySelected.mockReset();
   mockClearMaturityPolicySelected.mockReset();
   mockClearPolicySelected.mockReset();
+  mockRevertPolicySelected.mockReset();
+  selectedPolicyOverrideFields.value = new Set([
+    'maturityMode',
+    'maturityMinAgeDays',
+    'skipTags',
+    'skipDigests',
+  ]);
+  selectedPolicyOverriddenFields.value = new Set(['maturityMode', 'skipTags']);
   mockRemoveSkipTagSelected.mockReset();
   mockRemoveSkipDigestSelected.mockReset();
   mockGetTriggerKey.mockClear();
@@ -391,6 +414,11 @@ function mountComponent() {
           template: '<span class="app-icon-stub" />',
           props: ['name', 'size'],
         },
+        UpdateStatusPanel: {
+          props: ['container', 'mode'],
+          emits: ['update', 'open-tab'],
+          template: '<div data-test="update-status-panel-stub" :data-mode="mode" />',
+        },
       },
     },
   });
@@ -403,6 +431,54 @@ function findButtonByText(wrapper: ReturnType<typeof mountComponent>, text: stri
 describe('ContainerFullPageTabContent', () => {
   afterEach(() => {
     resetState();
+    updateMode.value = 'manual';
+  });
+
+  it('replaces the legacy eligibility stack with the update status panel', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      updateEligibility: {
+        eligible: true,
+        blockers: [],
+        evaluatedAt: '2026-07-12T00:00:00.000Z',
+      },
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="update-status-panel-stub"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="eligibility-badge-full"]').exists()).toBe(false);
+  });
+
+  it('does not render managed update actions in notify mode', () => {
+    activeDetailTab.value = 'actions';
+    updateMode.value = 'notify';
+    selectedContainer.value = makeContainer({ newTag: '1.2.3', bouncer: 'blocked' });
+
+    const wrapper = mountComponent();
+    const actionLabels = wrapper.findAll('button').map((button) => button.text().trim());
+
+    expect(actionLabels).not.toContain('Update Now');
+    expect(actionLabels).not.toContain('Force Update');
+    expect(actionLabels).not.toContain('Blocked');
+  });
+
+  it('disables docker trigger runs but keeps notification trigger runs enabled in notify mode', () => {
+    activeDetailTab.value = 'actions';
+    updateMode.value = 'notify';
+    detailTriggers.value = [
+      { type: 'docker', name: 'local' },
+      { type: 'slack', name: 'ops' },
+    ];
+
+    const wrapper = mountComponent();
+
+    expect(
+      wrapper.get('[data-trigger-key="docker.local"] button').attributes('disabled'),
+    ).toBeDefined();
+    expect(
+      wrapper.get('[data-trigger-key="slack.ops"] button').attributes('disabled'),
+    ).toBeUndefined();
   });
 
   it('wires standard action buttons in the non-blocked update branch', async () => {
@@ -533,6 +609,23 @@ describe('ContainerFullPageTabContent', () => {
     expect(mockRemoveSkipDigestSelected).toHaveBeenCalledWith('sha256:abc');
   });
 
+  it('shows material override badges and wires field and whole-policy reverts', async () => {
+    selectedSkipTags.value = ['ui-tag'];
+    selectedSkipDigests.value = [];
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="policy-overridden-maturityMode"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="policy-overridden-maturityMinAgeDays"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="policy-overridden-skipTags"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="policy-overridden-skipDigests"]').exists()).toBe(false);
+
+    await wrapper.find('[data-test="policy-revert-maturityMode"]').trigger('click');
+    await wrapper.find('[data-test="policy-revert-all"]').trigger('click');
+
+    expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(1, 'maturityMode');
+    expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(2);
+  });
+
   it('renders detailed preview, trigger, backups, and operation history branches', async () => {
     detailPreview.value = {
       currentImage: 'nginx:1.0',
@@ -598,11 +691,26 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('reason:manual');
   });
 
+  it('marks a dry-run action as preview-only and explains the trigger condition', () => {
+    detailTriggers.value = [{ type: 'docker', name: 'local', configuration: { dryrun: true } }];
+
+    const wrapper = mountComponent();
+    const action = wrapper.get('[data-test="dry-run-update-action"]');
+    expect(action.text()).toContain('Preview only');
+    expect(action.attributes('title')).toContain(
+      'pull the new image but not replace the container',
+    );
+    expect(wrapper.get('[data-test="dry-run-trigger-condition"]').text()).toContain(
+      'Action trigger docker.local is in dry-run mode',
+    );
+  });
+
   it('renders action-tab status/error messages and running-state branches', () => {
     policyMessage.value = 'Policy saved';
     policyError.value = 'Policy failed';
     detailPreview.value = { error: 'Preview generation failed' };
     previewError.value = 'Preview API error';
+    previewErrorAction.value = { label: 'Open registry settings', href: '/registries' };
     detailTriggers.value = [{ type: 'docker', name: 'deploy', agent: 'watchtower' }];
     triggerRunInProgress.value = 'docker.deploy';
     triggerMessage.value = 'Trigger started';
@@ -639,6 +747,10 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('Policy failed');
     expect(wrapper.text()).toContain('Preview generation failed');
     expect(wrapper.text()).toContain('Preview API error');
+    const previewAction = wrapper.get('[data-test="preview-error-action"]');
+    expect(previewAction.text()).toBe('Open registry settings');
+    expect(previewAction.attributes('href')).toBe('/registries');
+    expect(previewAction.classes()).toContain('min-h-11');
     expect(wrapper.text()).toContain('Running...');
     expect(wrapper.text()).toContain('Trigger started');
     expect(wrapper.text()).toContain('Trigger failed');
@@ -803,7 +915,7 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('#1');
     expect(wrapper.text()).toContain('/stack/compose.yml');
     expect(wrapper.text()).toContain('Latest:');
-    expect(wrapper.text()).toContain('Release notes');
+    expect(wrapper.find('[data-test="release-link"]').exists()).toBe(true);
     expect(wrapper.text()).toContain('Registry warning');
     expect(wrapper.text()).toContain('Entrypoint differs from desired config');
     expect(wrapper.text()).toContain('Abort on pre-update failure');
@@ -831,6 +943,21 @@ describe('ContainerFullPageTabContent', () => {
     await refreshSbomButton?.trigger('click');
     expect(mockLoadDetailSecurityData).toHaveBeenCalledTimes(1);
     expect(mockLoadDetailSbom).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the standardized source, release, and registry quick-link group in full-page detail (#295)', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      sourceRepo: 'github.com/example/nginx',
+      releaseLink: 'https://example.test/releases/nginx-1.1',
+      registry: 'custom',
+      registryName: 'registry.example.com',
+      registryUrl: 'https://registry.example.com/v2',
+    });
+
+    const wrapper = mountComponent();
+    const group = wrapper.get('[data-test="container-quick-links"]');
+    expectContainerQuickLinks(group, 'registry.example.com');
   });
 
   it('renders overview fallback, loading, and error branches', () => {
@@ -875,6 +1002,23 @@ describe('ContainerFullPageTabContent', () => {
     const errorWrapper = mountComponent();
     expect(errorWrapper.text()).toContain('Vulnerability scan failed');
     expect(errorWrapper.text()).toContain('SBOM refresh failed');
+  });
+
+  it('shows pinned-tag insight as an informational latest row without replacing #325 status (#498)', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      updateKind: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'minor' },
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.get('[data-test="container-fullpage-insight-tag"]').text()).toBe('v2.0.0');
+    expect(wrapper.get('[data-test="container-fullpage-insight-kind-badge"]').text()).toBe('Minor');
+    expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="update-status-panel-stub"]').exists()).toBe(true);
+    expect(wrapper.getComponent({ name: 'ContainerLinkActions' }).props('toTag')).toBe('v2.0.0');
   });
 
   it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {

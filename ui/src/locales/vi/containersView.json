@@ -40,6 +40,7 @@
       "status": "Trạng thái",
       "host": "Máy chủ",
       "registry": "Registry",
+      "resources": "Tài nguyên",
       "uptime": "Uptime"
     },
     "status": {

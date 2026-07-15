@@ -54,3 +54,30 @@ describe('DataTable first-party column sizing standard', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('DataTable print styles', () => {
+  const source = readFileSync(resolve('src/components/DataTable.vue'), 'utf8');
+  const printBlockMatch = source.match(/@media print\s*\{([\s\S]*?)\n\}/);
+
+  it('defines an @media print block in the scoped style', () => {
+    expect(printBlockMatch).not.toBeNull();
+  });
+
+  const printBlock = printBlockMatch?.[1] ?? '';
+
+  it('keeps cards intact across a page break', () => {
+    expect(printBlock).toMatch(/\.dd-data-table-card\s*\{[^}]*break-inside:\s*avoid;?[^}]*\}/);
+  });
+
+  it('does not fall back to the legacy page-break-inside property', () => {
+    expect(printBlock).not.toMatch(/page-break-inside/);
+  });
+
+  it('hides the card-mode sort bar', () => {
+    expect(printBlock).toMatch(/\.dd-data-table-card-sort-bar\s*\{[^}]*display:\s*none;?[^}]*\}/);
+  });
+
+  it('un-clips the table scroll container so every column prints', () => {
+    expect(printBlock).toMatch(/\.dd-data-table-scroll\s*\{[^}]*overflow:\s*visible;?[^}]*\}/);
+  });
+});

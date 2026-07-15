@@ -9,9 +9,6 @@
       "clickToCopy": "Kopyalamak için tıklayın",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "{name}'yi seçin"
-    },
     "dataFilterBar": {
       "filters": "Filtreler",
       "toggleFilters": "Filtreleri değiştir",
@@ -19,13 +16,8 @@
       "viewModeLabel": "{label} görünümü",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "{name} ayrıntılarını değiştir",
-      "selectItem": "{name}'yi seçin"
     },
     "dataTable": {
       "actions": "Eylemler",

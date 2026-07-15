@@ -9,9 +9,6 @@
       "clickToCopy": "Kliknij, aby skopiować",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "Wybierz {name}"
-    },
     "dataFilterBar": {
       "filters": "Filtry",
       "toggleFilters": "Przełącz filtry",
@@ -19,13 +16,8 @@
       "viewModeLabel": "Widok {label}",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Przełącz szczegóły {name}",
-      "selectItem": "Wybierz {name}"
     },
     "dataTable": {
       "actions": "Działania",

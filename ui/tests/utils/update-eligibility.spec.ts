@@ -1,4 +1,5 @@
 import type { UpdateBlocker, UpdateEligibility } from '@/types/container';
+import { mapApiContainer } from '@/utils/container-mapper';
 import {
   BLOCKER_SEVERITY,
   getHardBlockers,
@@ -6,6 +7,7 @@ import {
   getPrimarySoftBlocker,
   getSoftBlockers,
   hasHardBlocker,
+  hasRawUpdateCandidate,
   hasSoftBlocker,
   primaryBlockerForButton,
   severityOf,
@@ -269,6 +271,97 @@ describe('updateButtonState', () => {
       blockers: [makeBlocker({ reason: 'agent-mismatch' })],
     });
     expect(updateButtonState(eligibility, true, true)).toBe('hard');
+  });
+
+  it('suppresses every update action in notify mode', () => {
+    const soft = makeEligibility({
+      blockers: [makeBlocker({ reason: 'trigger-not-included' })],
+    });
+    const hard = makeEligibility({ blockers: [makeBlocker({ reason: 'agent-mismatch' })] });
+
+    expect(updateButtonState(undefined, true, false, 'notify')).toBe('none');
+    expect(updateButtonState(soft, true, false, 'notify')).toBe('none');
+    expect(updateButtonState(hard, true, false, 'notify')).toBe('none');
+  });
+});
+
+describe('hasRawUpdateCandidate', () => {
+  it('detects ordinary tag and digest candidates', () => {
+    expect(hasRawUpdateCandidate({ newTag: '2.0.0' })).toBe(true);
+    expect(hasRawUpdateCandidate({ newDigest: 'sha256:new' })).toBe(true);
+    expect(hasRawUpdateCandidate({ newTag: null, newDigest: null })).toBe(false);
+  });
+
+  it('#498: does not promote updateInsight into the manual-update path', () => {
+    const pinnedWithInsight = {
+      newTag: null,
+      newDigest: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'minor' as const },
+      updateEligibility: undefined,
+    };
+
+    const hasCandidate = hasRawUpdateCandidate(pinnedWithInsight);
+    expect(hasCandidate).toBe(false);
+    expect(updateButtonState(pinnedWithInsight.updateEligibility, hasCandidate)).toBe('none');
+  });
+
+  it.each([
+    {
+      reason: 'snoozed' as const,
+      result: { tag: '1.26' },
+      updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+      updatePolicy: { snoozeUntil: '2099-01-01T00:00:00.000Z' },
+    },
+    {
+      reason: 'skip-tag' as const,
+      result: { tag: '1.26' },
+      updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+      updatePolicy: { skipTags: ['1.26'] },
+    },
+    {
+      reason: 'skip-digest' as const,
+      result: { digest: 'sha256:new' },
+      updateKind: { kind: 'digest', semverDiff: 'unknown', remoteValue: 'sha256:new' },
+      updatePolicy: { skipDigests: ['sha256:new'] },
+    },
+  ])('detects a mapper-backed suppressed $reason candidate', (scenario) => {
+    const mapped = mapApiContainer({
+      id: 'c1',
+      name: 'nginx',
+      status: 'running',
+      watcher: 'local',
+      image: { name: 'nginx', tag: { value: '1.25' } },
+      result: scenario.result,
+      updateAvailable: false,
+      updateKind: scenario.updateKind,
+      updatePolicy: scenario.updatePolicy,
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-07-12T00:00:00.000Z',
+        blockers: [
+          {
+            reason: scenario.reason,
+            severity: 'soft',
+            message: 'Policy suppressed candidate.',
+            actionable: true,
+          },
+        ],
+      },
+    });
+
+    expect(mapped.newTag).toBeNull();
+    expect(mapped.newDigest).toBeNull();
+    expect(hasRawUpdateCandidate(mapped)).toBe(true);
+  });
+
+  it('does not treat the internal no-update blocker as a candidate', () => {
+    expect(
+      hasRawUpdateCandidate({
+        updateEligibility: makeEligibility({
+          blockers: [makeBlocker({ reason: 'no-update-available' })],
+        }),
+      }),
+    ).toBe(false);
   });
 });
 

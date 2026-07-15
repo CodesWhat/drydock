@@ -9,13 +9,27 @@ export const dataViewStubs: Record<string, any> = {
     template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
   }),
   DataFilterBar: defineComponent({
-    props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
+    props: [
+      'modelValue',
+      'viewModes',
+      'showFilters',
+      'filteredCount',
+      'totalCount',
+      'activeFilterCount',
+    ],
     emits: ['update:modelValue', 'update:showFilters'],
     template: `
       <div class="data-filter-bar">
-        <button class="mode-table" @click="$emit('update:modelValue', 'table')">Table</button>
-        <button class="mode-cards" @click="$emit('update:modelValue', 'cards')">Cards</button>
-        <button class="mode-list" @click="$emit('update:modelValue', 'list')">List</button>
+        <template v-if="modelValue !== undefined">
+          <button
+            v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+            :key="mode.id"
+            :class="'mode-' + mode.id"
+            :data-active="String(modelValue === mode.id)"
+            @click="$emit('update:modelValue', mode.id)">
+            {{ mode.id }}
+          </button>
+        </template>
         <slot name="left" />
         <slot name="filters" />
         <slot name="extra-buttons" />
@@ -23,7 +37,16 @@ export const dataViewStubs: Record<string, any> = {
     `,
   }),
   DataTable: defineComponent({
-    props: ['columns', 'rows', 'rowKey', 'activeRow', 'selectedKey', 'sortKey', 'sortAsc'],
+    props: [
+      'columns',
+      'rows',
+      'rowKey',
+      'activeRow',
+      'selectedKey',
+      'sortKey',
+      'sortAsc',
+      'hiddenColumnKeys',
+    ],
     emits: ['row-click', 'update:sort-key', 'update:sort-asc'],
     template: `
       <div class="data-table"
@@ -36,23 +59,22 @@ export const dataViewStubs: Record<string, any> = {
       </div>
     `,
   }),
-  DataCardGrid: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
+  DataTableColumnPicker: defineComponent({
+    props: ['columns', 'hiddenKeys'],
+    emits: ['toggle', 'reset'],
     template: `
-      <div class="data-card-grid" :data-item-count="items?.length ?? 0">
-        <button v-if="items?.[0]" class="card-click-first" @click="$emit('item-click', items[0])">Card 1</button>
-        <slot name="card" v-if="items?.[0]" :item="items[0]" />
-      </div>
-    `,
-  }),
-  DataListAccordion: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
-    template: `
-      <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
-        <button v-if="items?.[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
-        <div v-if="items?.[0]" class="list-details"><slot name="details" :item="items[0]" /></div>
+      <div data-test="data-table-column-picker">
+        <button
+          v-for="column in columns"
+          :key="column.key"
+          type="button"
+          :data-test="'column-picker-toggle-' + column.key"
+          @click="$emit('toggle', column.key)">
+          {{ column.label }}
+        </button>
+        <button type="button" data-test="data-table-column-picker-reset" @click="$emit('reset')">
+          Reset
+        </button>
       </div>
     `,
   }),

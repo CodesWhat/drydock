@@ -1,5 +1,5 @@
 export const serverInfo = {
-  version: '1.5.0',
+  version: '1.6.0-rc.1',
   uptime: 864000,
   hostname: 'drydock-demo',
   platform: 'linux',
@@ -18,6 +18,8 @@ export const serverInfo = {
 export const securityRuntime = {
   checkedAt: new Date(Date.now() - 3600000).toISOString(),
   ready: true,
+  backend: 'command',
+  availabilityPolicy: 'block',
   scanner: {
     enabled: true,
     command: 'trivy',
@@ -37,6 +39,19 @@ export const securityRuntime = {
   sbom: {
     enabled: true,
     formats: ['spdx-json', 'cyclonedx-json'],
+    generator: 'trivy',
   },
+  providers: [
+    {
+      provider: 'trivy',
+      role: 'scanner',
+      enabled: true,
+      command: 'trivy',
+      commandAvailable: true,
+      status: 'ready',
+      message: 'Trivy client is ready',
+    },
+  ],
+  assets: [],
   requirements: [],
 };

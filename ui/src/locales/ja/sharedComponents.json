@@ -9,9 +9,6 @@
       "clickToCopy": "クリックしてコピー",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "{name} を選択"
-    },
     "dataFilterBar": {
       "filters": "フィルター",
       "toggleFilters": "フィルターの切替",
@@ -19,13 +16,8 @@
       "viewModeLabel": "{label} 表示",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "{name} の詳細を切替",
-      "selectItem": "{name} を選択"
     },
     "dataTable": {
       "actions": "アクション",

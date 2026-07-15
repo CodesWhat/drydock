@@ -18,7 +18,6 @@ type DebounceFn = <T extends (...args: any[]) => void>(
 const debounceModule = debounceImport as unknown as { default?: DebounceFn };
 const debounce: DebounceFn = debounceModule.default || (debounceImport as unknown as DebounceFn);
 
-import { ddEnvVars } from '../../../configuration/index.js';
 import * as event from '../../../event/index.js';
 import log from '../../../log/index.js';
 import { type Container, type ContainerReport, fullName } from '../../../model/container.js';
@@ -37,7 +36,7 @@ import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
 import {
   type AliasFilterDecision,
-  applyDerivedLabelFieldsToContainer,
+  applyEffectiveDockerConfigFromLabels,
   filterRecreatedContainerAliases,
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
@@ -46,7 +45,9 @@ import {
   isDockerWatcher,
   mergeConfigWithImgset,
   pruneOldContainers,
+  resolveEffectiveContainerTagPolicy,
   resolveLabelsFromContainer,
+  resolveTriggerLabelOverrides,
 } from './container-init.js';
 import {
   mapContainerToContainerReport as mapContainerToContainerReportState,
@@ -111,21 +112,9 @@ import {
   ddTagExclude,
   ddTagFamily,
   ddTagInclude,
+  ddTagPinInfo,
   ddTagTransform,
-  ddTriggerExclude,
-  ddTriggerInclude,
   ddWatch,
-  wudDisplayIcon,
-  wudDisplayName,
-  wudLinkTemplate,
-  wudRegistryLookupImage,
-  wudRegistryLookupUrl,
-  wudTagExclude,
-  wudTagInclude,
-  wudTagTransform,
-  wudTriggerExclude,
-  wudTriggerInclude,
-  wudWatch,
 } from './label.js';
 import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
 import {
@@ -154,23 +143,22 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
   jitter: number;
   watchbydefault: boolean;
   watchall: boolean;
-  watchdigest?: unknown;
   watchevents: boolean;
-  watchatstart: boolean;
   maintenancewindow?: string;
   maintenancewindowtz: string;
+  maturitymode?: 'all' | 'mature';
+  maturityminagedays?: number;
   imgset?: Record<string, Record<string, unknown>>;
   tag?: {
+    family?: 'strict' | 'loose';
     pin?: {
       info?: boolean;
     };
   };
 }
 
-// The delay before starting the watcher when the app is started
 const START_WATCHER_DELAY_MS = 1000;
 
-// Debounce delay used when performing a watch after a docker event has been received
 const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
@@ -178,9 +166,6 @@ const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
 const RECENT_DOCKER_EVENT_LIMIT = 1000;
 const RECENT_ALIAS_FILTER_DECISION_LIMIT = 1000;
 const DOCKER_WATCH_CONCURRENCY = 10;
-const joiWildcardSchema = (joi as unknown as Record<string, () => Joi.Schema>)[`a${'ny'}`].bind(
-  joi,
-);
 
 function mapWithDockerWatchConcurrency<T, R>(
   items: T[],
@@ -407,15 +392,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       jitter: this.joi.number().integer().min(0).default(60000),
       watchbydefault: this.joi.boolean().default(true),
       watchall: this.joi.boolean().default(false),
-      watchdigest: joiWildcardSchema(),
       watchevents: this.joi.boolean().default(true),
-      watchatstart: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
       maintenancewindowtz: this.joi.string().default('UTC'),
-      // #498: DD_WATCHER_{name}_TAG_PIN_INFO=false opts a watcher out of the
-      // informational pin-gate insight (dd.tag.pin.info label has no
-      // per-container equivalent — this is a watcher-level default).
+      maturitymode: this.joi.string().valid('all', 'mature'),
+      maturityminagedays: this.joi.number().integer().min(1).max(365),
       tag: this.joi.object({
+        family: this.joi.string().valid('strict', 'loose').default('strict'),
         pin: this.joi.object({
           info: this.joi.boolean().default(true),
         }),
@@ -434,6 +417,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
               exclude: this.joi.string(),
               transform: this.joi.string(),
               family: this.joi.string().valid('strict', 'loose'),
+              pin: this.joi.object({
+                info: this.joi.boolean(),
+              }),
             }),
             link: this.joi.object({
               template: this.joi.string(),
@@ -631,17 +617,6 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.ensureLogger();
     this.isWatcherDeregistered = false;
     await this.initWatcher();
-    if (this.configuration.watchdigest !== undefined) {
-      this.log.warn(
-        'DD_WATCHER_{watcher_name}_WATCHDIGEST environment variable is deprecated and will be removed in v1.6.0. Use the dd.watch.digest=true container label instead.',
-      );
-    }
-    const watchAtStartEnvKey = `DD_WATCHER_${this.name.toUpperCase()}_WATCHATSTART`;
-    if (Object.hasOwn(ddEnvVars, watchAtStartEnvKey)) {
-      this.log.warn(
-        `${watchAtStartEnvKey} environment variable is deprecated and will be removed in v1.6.0. Drydock watches at startup by default.`,
-      );
-    }
     this.log.info(`Cron scheduled (${this.configuration.cron})`);
     this.watchCron = cron.schedule(this.configuration.cron, () => this.watchFromCron(), {
       maxRandomDelay: this.configuration.jitter,
@@ -654,10 +629,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       { id: this.getId(), order: 0 },
     );
 
-    // watch at startup if enabled (after all components have been registered)
-    if (this.configuration.watchatstart) {
-      this.watchCronTimeout = setTimeout(this.watchFromCron.bind(this), START_WATCHER_DELAY_MS);
-    }
+    // Watch at startup after all components have been registered.
+    this.watchCronTimeout = setTimeout(this.watchFromCron.bind(this), START_WATCHER_DELAY_MS);
 
     // listen to docker events
     if (this.configuration.watchevents) {
@@ -1018,10 +991,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     });
 
     updateContainerFromInspectState(containerFound, containerInspect, {
-      getCustomDisplayNameFromLabels: (labels) => getLabel(labels, ddDisplayName, wudDisplayName),
+      getCustomDisplayNameFromLabels: (labels) => getLabel(labels, ddDisplayName),
       updateContainer: (container) => storeContainer.updateContainer(container),
       logInfo: (message) => logContainer.info(message),
-      applyDerivedLabelFieldsToContainer,
+      applyDerivedLabelFieldsToContainer: (container, labels) =>
+        applyEffectiveDockerConfigFromLabels(
+          container,
+          labels,
+          this.configuration,
+          (image) => this.getMatchingImgsetConfiguration(image),
+          { logger: logContainer, containerName: fullName(containerFound) },
+        ),
     });
   }
 
@@ -1140,7 +1120,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
       const containerReportsSettled = await allSettledWithDockerWatchConcurrency(
         containers,
-        (container) => this.watchContainer(container),
+        (container) => this.watchContainer(container, { useRegistryPollCache: true }),
       );
       const containerReports: ContainerReport[] = [];
       for (const [index, containerReport] of containerReportsSettled.entries()) {
@@ -1198,14 +1178,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    */
   async watchContainer(
     container: Container,
-    { emitBatchEvent = false }: { emitBatchEvent?: boolean } = {},
+    {
+      emitBatchEvent = false,
+      useRegistryPollCache = false,
+    }: { emitBatchEvent?: boolean; useRegistryPollCache?: boolean } = {},
   ) {
     this.ensureLogger();
     return watchContainerState(container, {
       ensureLogger: () => this.ensureLogger(),
       log: this.log,
       findNewVersion: (containerToCheck, logContainer) =>
-        this.findNewVersion(containerToCheck, logContainer),
+        this.findNewVersion(containerToCheck, logContainer, { useRegistryPollCache }),
       mapContainerToContainerReport: (containerWithResult, watchStartedAtMs) =>
         this.mapContainerToContainerReport(containerWithResult, watchStartedAtMs),
       emitBatchEvent,
@@ -1267,10 +1250,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
     // Filter on containers to watch
     const filteredContainers = containersWithResolvedLabels.filter((container) =>
-      isContainerToWatch(
-        getLabel(container.Labels, ddWatch, wudWatch),
-        this.configuration.watchbydefault,
-      ),
+      isContainerToWatch(getLabel(container.Labels, ddWatch), this.configuration.watchbydefault),
     );
     const { containersToWatch, skippedContainerIds, decisions } = filterRecreatedContainerAliases(
       filteredContainers,
@@ -1280,21 +1260,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
     const enrichmentResults = await mapWithDockerWatchConcurrency(containersToWatch, (container) =>
       this.addImageDetailsToContainer(container, {
-        includeTags: getLabel(container.Labels, ddTagInclude, wudTagInclude),
-        excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
-        transformTags: getLabel(container.Labels, ddTagTransform, wudTagTransform),
+        includeTags: getLabel(container.Labels, ddTagInclude),
+        excludeTags: getLabel(container.Labels, ddTagExclude),
+        transformTags: getLabel(container.Labels, ddTagTransform),
         tagFamily: getLabel(container.Labels, ddTagFamily),
-        linkTemplate: getLabel(container.Labels, ddLinkTemplate, wudLinkTemplate),
-        displayName: getLabel(container.Labels, ddDisplayName, wudDisplayName),
-        displayIcon: getLabel(container.Labels, ddDisplayIcon, wudDisplayIcon),
-        triggerInclude: getLabel(container.Labels, ddTriggerInclude, wudTriggerInclude),
-        triggerExclude: getLabel(container.Labels, ddTriggerExclude, wudTriggerExclude),
-        registryLookupImage: getLabel(
-          container.Labels,
-          ddRegistryLookupImage,
-          wudRegistryLookupImage,
-        ),
-        registryLookupUrl: getLabel(container.Labels, ddRegistryLookupUrl, wudRegistryLookupUrl),
+        tagPinInfo: getLabel(container.Labels, ddTagPinInfo),
+        linkTemplate: getLabel(container.Labels, ddLinkTemplate),
+        displayName: getLabel(container.Labels, ddDisplayName),
+        displayIcon: getLabel(container.Labels, ddDisplayIcon),
+        ...resolveTriggerLabelOverrides(container.Labels),
+        registryLookupImage: getLabel(container.Labels, ddRegistryLookupImage),
+        registryLookupUrl: getLabel(container.Labels, ddRegistryLookupUrl),
       }).catch((error: unknown) => {
         const errorMessage = getErrorMessage(error);
         this.log.warn(
@@ -1365,11 +1341,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         this.log.debug(
           `Swarm service ${serviceId} (container ${containerId}): deploy labels=${
             Object.keys(serviceLabels)
-              .filter((k) => k.startsWith('dd.') || k.startsWith('wud.'))
+              .filter((k) => k.startsWith('dd.'))
               .join(',') || 'none'
           }, task labels=${
             Object.keys(taskContainerLabels)
-              .filter((k) => k.startsWith('dd.') || k.startsWith('wud.'))
+              .filter((k) => k.startsWith('dd.'))
               .join(',') || 'none'
           }`,
         );
@@ -1422,9 +1398,19 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    * Find new version for a Container.
    */
 
-  async findNewVersion(container: Container, logContainer: ContainerWatchLogger) {
-    return findNewVersionState(container, logContainer, {
-      pinInfoEnabled: this.configuration.tag?.pin?.info ?? true,
+  async findNewVersion(
+    container: Container,
+    logContainer: ContainerWatchLogger,
+    { useRegistryPollCache = false }: { useRegistryPollCache?: boolean } = {},
+  ) {
+    const tagPolicy = resolveEffectiveContainerTagPolicy(
+      container,
+      this.configuration.tag,
+      (image) => this.getMatchingImgsetConfiguration(image),
+    );
+    return findNewVersionState({ ...container, tagFamily: tagPolicy.tagFamily }, logContainer, {
+      pinInfoEnabled: tagPolicy.tagPinInfo,
+      useRegistryPollCache,
     });
   }
 

@@ -1,5 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
+import { setI18nLocale } from '@/boot/i18n';
 import {
   OPERATION_DISPLAY_HOLD_MS,
   useOperationDisplayHold,
@@ -155,6 +156,7 @@ async function mountActionsHarness(
     containers?: Container[];
     selectedContainer?: Container | null;
     selectedContainerId?: string;
+    updateMode?: 'notify' | 'manual' | 'auto';
   } = {},
 ) {
   let state: ActionsHarnessState | undefined;
@@ -173,6 +175,7 @@ async function mountActionsHarness(
       const selectedContainerId = ref(
         options.selectedContainerId ?? options.selectedContainer?.id ?? undefined,
       );
+      const updateMode = ref(options.updateMode ?? 'manual');
       const composable = useContainerActions({
         activeDetailTab,
         closeFullPage,
@@ -184,6 +187,7 @@ async function mountActionsHarness(
         loadContainers,
         selectedContainer,
         selectedContainerId,
+        updateMode,
       });
       state = {
         activeDetailTab,
@@ -215,6 +219,7 @@ async function mountActionsHarness(
 
 describe('useContainerActions', () => {
   beforeEach(() => {
+    setI18nLocale('en');
     vi.useRealTimers();
     vi.resetAllMocks();
     _resetScanLifecycleStateForTests();
@@ -588,6 +593,95 @@ describe('useContainerActions', () => {
     await composable.setMaturityPolicySelected('mature');
     expect(composable.policyError.value).toBe('Enter a maturity age between 1 and 365 days');
     expect(mocks.updateContainerPolicy).toHaveBeenCalledTimes(4);
+  });
+
+  it('distinguishes override presence from a material declarative difference', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: {
+            maturityMode: 'all',
+            maturityMinAgeDays: 7,
+            skipTags: ['ui-tag'],
+            skipDigests: [],
+          },
+          updatePolicyDeclarative: {
+            env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+            label: { skipTags: ['label-tag'] },
+          },
+          updatePolicyOverrides: {
+            maturityMode: 'all',
+            maturityMinAgeDays: 7,
+            skipTags: ['ui-tag'],
+            skipDigests: [],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedPolicyOverrideFields.value).toEqual(
+      new Set(['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests']),
+    );
+    expect(composable.selectedPolicyOverriddenFields.value).toEqual(
+      new Set(['maturityMode', 'skipTags']),
+    );
+  });
+
+  it('normalizes an invalid maturity override to the allow-all comparison fallback', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      containerMetaMap: {
+        'container-1': {
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: { maturityMode: 'invalid' },
+        },
+      },
+    });
+
+    expect(composable.selectedPolicyOverrideFields.value).toEqual(new Set(['maturityMode']));
+    expect(composable.selectedPolicyOverriddenFields.value).toEqual(new Set());
+  });
+
+  it('reverts one field or all declarative overrides', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+    });
+
+    await composable.revertPolicySelected('skipTags');
+    await composable.revertPolicySelected();
+
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      1,
+      'container-1',
+      'revert-to-declarative',
+      { field: 'skipTags' },
+    );
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      2,
+      'container-1',
+      'revert-to-declarative',
+      {},
+    );
+  });
+
+  it('uses a translated policy-field label in single-field revert feedback', async () => {
+    setI18nLocale('fr');
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+    });
+
+    await composable.revertPolicySelected('skipTags');
+
+    expect(composable.policyMessage.value).toContain('Tags ignorés');
+    expect(composable.policyMessage.value).not.toContain('skipTags');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith(expect.stringContaining('Tags ignorés'));
   });
 
   it('deletes selected container and closes detail views', async () => {
@@ -1743,6 +1837,41 @@ describe('useContainerActions', () => {
     expect(mocks.toastWarning).toHaveBeenCalledWith('Last update attempt rolled back.');
   });
 
+  it('does not initiate a manual update in notify mode', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+      updateMode: 'notify',
+    });
+
+    composable.confirmUpdate('web');
+
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).toHaveBeenCalledWith(
+      "Notifications only — Drydock won't apply updates.",
+    );
+  });
+
+  it('does not open force-update confirmation in notify mode', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+      updateMode: 'notify',
+    });
+
+    composable.confirmForceUpdate('web');
+
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
+    expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).toHaveBeenCalledWith(
+      "Notifications only — Drydock won't apply updates.",
+    );
+  });
+
   it('shows tag change details in update confirmation for tag updates', async () => {
     const container = makeContainer({
       id: 'container-1',
@@ -2118,11 +2247,41 @@ describe('useContainerActions', () => {
       writableFile: undefined,
     });
 
-    mocks.previewContainer.mockRejectedValueOnce(new Error('preview failed'));
+    mocks.previewContainer.mockRejectedValueOnce(
+      Object.assign(new Error('Authentication failed for ghcr.io: 401 Unauthorized'), {
+        code: 'registry-auth-failed',
+        action: { label: 'Open registry settings', href: '/registries' },
+      }),
+    );
     await composable.runContainerPreview();
     expect(composable.detailPreview.value).toBeNull();
     expect(composable.detailComposePreview.value).toBeNull();
-    expect(composable.previewError.value).toBe('preview failed');
+    expect(composable.previewError.value).toBe(
+      'Authentication failed for ghcr.io: 401 Unauthorized',
+    );
+    expect(composable.previewErrorAction.value).toEqual({
+      label: 'Open registry settings',
+      href: '/registries',
+    });
+
+    mocks.previewContainer.mockRejectedValueOnce(new Error('runtime unavailable'));
+    await composable.runContainerPreview();
+    expect(composable.previewErrorAction.value).toBeNull();
+
+    for (const action of [
+      null,
+      'invalid',
+      { href: '/registries' },
+      { label: 42, href: '/registries' },
+      { label: 'Open settings' },
+      { label: 'Unsafe', href: 'https://attacker.example' },
+    ]) {
+      mocks.previewContainer.mockRejectedValueOnce(
+        Object.assign(new Error('typed error'), { action }),
+      );
+      await composable.runContainerPreview();
+      expect(composable.previewErrorAction.value).toBeNull();
+    }
   });
 
   it('covers rollback guard and failure/latest-backup branches', async () => {

@@ -120,6 +120,7 @@ interface ApiContainerSecurityScan {
 
 interface ApiContainerUpdateBlocker {
   reason?: unknown;
+  severity?: unknown;
   message?: unknown;
   actionable?: unknown;
   actionHint?: unknown;
@@ -386,8 +387,9 @@ export function computeSecurityDelta(
 /** Derive the simplified updateKind string from the API updateKind object. */
 function deriveUpdateKind(
   apiContainer: ApiContainerInput,
+  updatePolicyState?: Container['updatePolicyState'],
 ): 'major' | 'minor' | 'patch' | 'digest' | null {
-  if (!apiContainer.updateAvailable) return null;
+  if (!apiContainer.updateAvailable && updatePolicyState !== 'maturity-blocked') return null;
   const uk = apiContainer.updateKind;
   if (!uk) return null;
   if (uk.kind === 'digest') return 'digest';
@@ -401,8 +403,11 @@ function deriveUpdateKind(
 }
 
 /** Derive the new tag (remote version) when an update is available. */
-function deriveNewTag(apiContainer: ApiContainerInput): string | null {
-  if (!apiContainer.updateAvailable) return null;
+function deriveNewTag(
+  apiContainer: ApiContainerInput,
+  updatePolicyState?: Container['updatePolicyState'],
+): string | null {
+  if (!apiContainer.updateAvailable && updatePolicyState !== 'maturity-blocked') return null;
   return asNonEmptyString(apiContainer.result?.tag) ?? null;
 }
 
@@ -410,8 +415,11 @@ function deriveNewTag(apiContainer: ApiContainerInput): string | null {
  * For digest updates, derive the remote digest from updateKind.remoteValue.
  * Returns null when no update is available or the kind is not 'digest'.
  */
-function deriveNewDigest(apiContainer: ApiContainerInput): string | null {
-  if (!apiContainer.updateAvailable) return null;
+function deriveNewDigest(
+  apiContainer: ApiContainerInput,
+  updatePolicyState?: Container['updatePolicyState'],
+): string | null {
+  if (!apiContainer.updateAvailable && updatePolicyState !== 'maturity-blocked') return null;
   const uk = apiContainer.updateKind;
   if (!uk || uk.kind !== 'digest') return null;
   return asNonEmptyString(uk.remoteValue) ?? null;
@@ -754,6 +762,7 @@ function deriveUpdateBlocker(blocker: unknown): UpdateBlocker | null {
   if (!message) return null;
   const actionable = typeof b.actionable === 'boolean' ? b.actionable : false;
   const result: UpdateBlocker = { reason: b.reason, message, actionable };
+  if (b.severity === 'hard' || b.severity === 'soft') result.severity = b.severity;
   const actionHint = asNonEmptyString(b.actionHint);
   if (actionHint) result.actionHint = actionHint;
   const liftableAt = asNonEmptyString(b.liftableAt);
@@ -845,7 +854,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     image: imageName,
     icon: getEffectiveDisplayIcon(displayIcon, imageName),
     currentTag,
-    newTag: deriveNewTag(apiContainer),
+    newTag: deriveNewTag(apiContainer, updatePolicyState),
     tagFamily: asNonEmptyString(apiContainer.tagFamily),
     imageVariant: asNonEmptyString(apiContainer.image?.variant),
     imageDigestWatch: asOptionalBoolean(apiContainer.image?.digest?.watch),
@@ -873,7 +882,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     registry: deriveRegistry(apiContainer),
     registryName: deriveRegistryName(apiContainer),
     registryUrl: deriveRegistryUrl(apiContainer),
-    updateKind: deriveUpdateKind(apiContainer),
+    updateKind: deriveUpdateKind(apiContainer, updatePolicyState),
     registryError: deriveRegistryError(apiContainer),
     registryErrorKind: deriveRegistryErrorKind(apiContainer),
     noUpdateReason: deriveNoUpdateReason(apiContainer),
@@ -894,7 +903,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     triggerInclude: asNonEmptyString(apiContainer.triggerInclude),
     triggerExclude: asNonEmptyString(apiContainer.triggerExclude),
     currentDigest: deriveCurrentDigest(apiContainer),
-    newDigest: deriveNewDigest(apiContainer),
+    newDigest: deriveNewDigest(apiContainer, updatePolicyState),
     isDigestPinned: deriveIsDigestPinned(apiContainer),
     details: {
       ports: runtimeDetails.ports,

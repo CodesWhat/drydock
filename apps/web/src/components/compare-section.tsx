@@ -93,14 +93,11 @@ export function CompareSection() {
                       className={[
                         "px-4 py-3 text-center font-semibold",
                         tool === SITE_CONFIG.name
-                          ? "bg-neutral-900/5 text-neutral-900 dark:bg-neutral-100/5 dark:text-neutral-100"
+                          ? "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"
                           : "text-neutral-500 dark:text-neutral-400",
                       ].join(" ")}
                     >
                       {tool}
-                      {tool === SITE_CONFIG.name && (
-                        <span className="ml-1.5 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      )}
                       {tool === "Watchtower" && (
                         <span className="mt-0.5 block text-[10px] font-normal uppercase tracking-wide text-neutral-400 dark:text-neutral-600">
                           Archived
@@ -127,7 +124,7 @@ export function CompareSection() {
                         key={tool}
                         className={[
                           "px-4 py-3 text-center",
-                          tool === SITE_CONFIG.name ? "bg-neutral-900/5 dark:bg-neutral-100/5" : "",
+                          tool === SITE_CONFIG.name ? "bg-emerald-500/5" : "",
                         ].join(" ")}
                       >
                         <ComparisonCellIcon value={cellValue(row, tool)} />

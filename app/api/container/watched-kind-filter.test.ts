@@ -18,6 +18,14 @@ describe('api/container/watched-kind-filter', () => {
     ] as unknown as Container[];
 
     const filtered = applyContainerWatchedKindFilter(containers, 'watched');
-    expect(filtered.map((container) => container.id)).toEqual(['c1', 'c3']);
+    expect(filtered.map((container) => container.id)).toEqual(['c1']);
+  });
+
+  test('removed wud.watch labels do not make a container watched', () => {
+    const containers = [
+      { id: 'legacy', labels: { 'wud.watch': 'true' } },
+    ] as unknown as Container[];
+
+    expect(applyContainerWatchedKindFilter(containers, 'watched')).toEqual([]);
   });
 });

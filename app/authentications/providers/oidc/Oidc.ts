@@ -399,7 +399,10 @@ class Oidc extends Authentication<OidcConfiguration> {
    */
   getConfigurationSchema() {
     return this.joi.object().keys({
-      discovery: this.joi.string().uri().required(),
+      discovery: this.joi
+        .string()
+        .uri({ scheme: ['https'] })
+        .required(),
       clientid: this.joi.string().required(),
       clientsecret: this.joi.string().required(),
       cafile: this.joi.string(),
@@ -444,16 +447,8 @@ class Oidc extends Authentication<OidcConfiguration> {
     const openidClient = await this.getOpenIdClient();
     const timeoutSeconds = Math.ceil(this.configuration.timeout / 1000);
     const discoveryUrl = new URL(this.configuration.discovery);
-    let execute: Array<typeof openidClient.allowInsecureRequests> = [];
-    if (discoveryUrl.protocol === 'http:') {
-      this.log.warn(
-        'HTTP OIDC discovery URL is deprecated and will be removed in v1.6.0. Update your Identity Provider to serve discovery over HTTPS.',
-      );
-      execute = [openidClient.allowInsecureRequests];
-    }
     const discoveryOptions: openidClientLibrary.DiscoveryRequestOptions = {
       timeout: timeoutSeconds,
-      execute,
     };
     if (this.configuration.cafile || this.configuration.insecure) {
       const connectOptions: ConnectionOptions = {};

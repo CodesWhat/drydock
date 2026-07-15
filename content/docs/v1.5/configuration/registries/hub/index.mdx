@@ -1,0 +1,114 @@
+---
+title: "HUB (Docker Hub incl private repositories)"
+description: "The hub registry lets you configure Docker Hub integration."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/registries/hub/docker.png)
+
+The `hub` registry lets you configure [Docker Hub](https://hub.docker.com/) integration.
+
+Currently, the supported credentials are:
+
+- Docker Hub auth + Docker Hub Access Token
+- Docker Base64 credentials (like in [.docker/config.json](https://docs.docker.com/reference/cli/docker/login/))
+- Docker Hub auth + Docker Hub password (not recommended)
+
+<Callout type="warn">By default, if you don't configure any registries, drydock will configure a default one with anonymous access.
+Don't forget to configure authentication if you're using [Docker Hub Private Repositories](https://docs.docker.com/docker-hub/repos/#private-repositories).</Callout>
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` | ⚪ | A valid Docker Hub login (required with `PASSWORD` or deprecated `TOKEN`) | Docker Hub username | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_PASSWORD` | ⚪ | A valid Docker Hub password or access token (`LOGIN` must be defined) | Docker Hub password or [access token](https://docs.docker.com/security/access-tokens/) | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_TOKEN` | ⚪ | **Deprecated** — accepted as an alias for `PASSWORD` (`LOGIN` must be defined; cannot be combined with `PASSWORD`) | Docker Hub [access token](https://docs.docker.com/security/access-tokens/) | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_AUTH` | ⚪ | A valid Docker Hub Base64 Auth String (cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`) | Base64 encoded `username:password` string | |
+
+<Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD` or deprecated `TOKEN`, and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`. The `TOKEN` key is a deprecated alias for `PASSWORD`; use `PASSWORD` for new configs.</Callout>
+
+## Examples
+
+### Configure Authentication using Login/Token
+
+#### 1. Login to your&nbsp;[Docker Hub Account](https://hub.docker.com/)
+
+![image](/docs/assets/configuration/registries/hub/hub_login.png)
+
+#### 2. Go to your&nbsp;[Security Settings](https://hub.docker.com/settings/security)
+
+- Create a new Access Token
+- Copy it and use it as the `DD_REGISTRY_HUB_PUBLIC_PASSWORD` value
+
+![image](/docs/assets/configuration/registries/hub/hub_token.png)
+
+<Tabs items={["Docker Compose (Login/Token)", "Docker (Login/Token)"]}>
+<Tab value="Docker Compose (Login/Token)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_REGISTRY_HUB_PUBLIC_LOGIN=johndoe
+      - DD_REGISTRY_HUB_PUBLIC_PASSWORD=example-token
+```
+
+</Tab>
+<Tab value="Docker (Login/Token)">
+```bash
+docker run \
+  -e DD_REGISTRY_HUB_PUBLIC_LOGIN="johndoe" \
+  -e DD_REGISTRY_HUB_PUBLIC_PASSWORD="example-token" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>
+
+### Configure Authentication using Base64 encoded credentials
+
+#### 1. Create an Access Token
+
+[See above](/docs/configuration/registries/hub/#configure-authentication-using-logintoken)
+
+#### 2. Encode with Base64
+
+Concatenate `login:password` and encode it locally. Base64 is encoding, not encryption; never send registry credentials to an online encoder.
+
+```bash
+printf '%s' 'johndoe:example-token' | base64
+```
+
+For example,
+
+- if your login is `johndoe`
+- and your password is `example-token`
+- the resulting encoded string would be `am9obmRvZTpleGFtcGxlLXRva2Vu`
+
+<Tabs items={["Docker Compose (Base64 Auth)", "Docker (Base64 Auth)"]}>
+<Tab value="Docker Compose (Base64 Auth)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_REGISTRY_HUB_PUBLIC_AUTH=am9obmRvZTpleGFtcGxlLXRva2Vu
+```
+
+</Tab>
+<Tab value="Docker (Base64 Auth)">
+```bash
+docker run \
+  -e DD_REGISTRY_HUB_PUBLIC_AUTH="am9obmRvZTpleGFtcGxlLXRva2Vu" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>

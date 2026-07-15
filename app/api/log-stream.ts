@@ -23,7 +23,14 @@ import {
   writeUpgradeError,
 } from './ws-upgrade-utils.js';
 
-const STREAM_ROUTE_PATTERN = /^\/api(?:\/v1)?\/log\/stream$/;
+const STREAM_ROUTE_PATTERN = /^\/api\/v1\/log\/stream$/;
+// Removed in v1.6.0 alongside the rest of the unversioned /api/* alias (see
+// DEPRECATIONS.md) — the REST tombstone (sendUnversionedApiTombstone in
+// index.ts) returns 410 for /api/*, so this WS upgrade path mirrors that
+// same phrasing/status instead of silently accepting the legacy path.
+const REMOVED_UNVERSIONED_STREAM_ROUTE_PATTERN = /^\/api\/log\/stream$/;
+const REMOVED_UNVERSIONED_STREAM_ROUTE_MESSAGE =
+  'The unversioned /api/log/stream path was removed in v1.6.0. Use /api/v1/log/stream instead.';
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX = 1000;
 const WS_BUFFER_CAP_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -85,9 +92,12 @@ export function parseSystemLogStreamQuery(query: URLSearchParams): ParsedSystemL
   };
 }
 
-function parseSystemLogStreamUpgradeUrl(
-  rawUrl: string | undefined,
-): { query: ParsedSystemLogStreamQuery } | undefined {
+type ParsedSystemLogStreamRoute =
+  | { kind: 'match'; query: ParsedSystemLogStreamQuery }
+  | { kind: 'removed-alias' }
+  | undefined;
+
+function parseSystemLogStreamUpgradeUrl(rawUrl: string | undefined): ParsedSystemLogStreamRoute {
   if (!rawUrl) {
     return undefined;
   }
@@ -99,11 +109,16 @@ function parseSystemLogStreamUpgradeUrl(
     return undefined;
   }
 
+  if (REMOVED_UNVERSIONED_STREAM_ROUTE_PATTERN.test(parsedUrl.pathname)) {
+    return { kind: 'removed-alias' };
+  }
+
   if (!STREAM_ROUTE_PATTERN.test(parsedUrl.pathname)) {
     return undefined;
   }
 
   return {
+    kind: 'match',
     query: parseSystemLogStreamQuery(parsedUrl.searchParams),
   };
 }
@@ -214,6 +229,11 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
     async handleUpgrade(request: IncomingMessage, socket: Socket, head: Buffer): Promise<void> {
       const parsedRequest = parseSystemLogStreamUpgradeUrl(request.url);
       if (!parsedRequest) {
+        return;
+      }
+
+      if (parsedRequest.kind === 'removed-alias') {
+        writeUpgradeError(socket, 410, REMOVED_UNVERSIONED_STREAM_ROUTE_MESSAGE);
         return;
       }
 

@@ -1,5 +1,11 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Toggle columns",
+      "heading": "Columns",
+      "reset": "Reset",
+      "hiddenBadgeTooltip": "{count} columns hidden"
+    },
     "confirmDialog": {
       "cancel": "Cancel",
       "confirm": "Confirm"
@@ -9,9 +15,6 @@
       "clickToCopy": "Click to copy",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "Select {name}"
-    },
     "dataFilterBar": {
       "filters": "Filters",
       "toggleFilters": "Toggle filters",
@@ -19,17 +22,15 @@
       "viewModeLabel": "{label} view",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Toggle {name} details",
-      "selectItem": "Select {name}"
     },
     "dataTable": {
       "actions": "Actions",
-      "resizeColumn": "Resize column"
+      "resizeColumn": "Resize column",
+      "sortBy": "Sort by",
+      "sortDirectionAscending": "Sort direction: ascending",
+      "sortDirectionDescending": "Sort direction: descending"
     },
     "detailPanel": {
       "openFullPage": "Open full page view",

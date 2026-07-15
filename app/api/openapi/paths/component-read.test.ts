@@ -12,19 +12,19 @@ describe('componentReadPaths', () => {
   test('should describe component collection endpoints with tags, pagination, and auth errors', () => {
     const componentCollections = [
       {
-        path: '/api/watchers',
+        path: '/api/v1/watchers',
         tag: 'Watchers',
         nounPlural: 'watchers',
         operationId: 'watcherList',
       },
       {
-        path: '/api/registries',
+        path: '/api/v1/registries',
         tag: 'Registries',
         nounPlural: 'registries',
         operationId: 'registryList',
       },
       {
-        path: '/api/authentications',
+        path: '/api/v1/authentications',
         tag: 'Authentications',
         nounPlural: 'authentications',
         operationId: 'authenticationList',
@@ -50,19 +50,19 @@ describe('componentReadPaths', () => {
   test('should describe component detail endpoints for local and agent-scoped lookups', () => {
     const componentDetails = [
       {
-        basePath: '/api/watchers',
+        basePath: '/api/v1/watchers',
         tag: 'Watchers',
         nounSingular: 'watcher',
         operationPrefix: 'watcher',
       },
       {
-        basePath: '/api/registries',
+        basePath: '/api/v1/registries',
         tag: 'Registries',
         nounSingular: 'registry',
         operationPrefix: 'registry',
       },
       {
-        basePath: '/api/authentications',
+        basePath: '/api/v1/authentications',
         tag: 'Authentications',
         nounSingular: 'authentication',
         operationPrefix: 'authentication',

@@ -32,7 +32,6 @@ type RollbackMonitorDependencies = {
   getPreferredLabelValue: (
     labels: Record<string, string> | undefined,
     ddKey: string,
-    wudKey: string,
     logger?: unknown,
   ) => string | undefined;
   getLogger: () => RollbackMonitorRootLogger | undefined;
@@ -120,24 +119,14 @@ class RollbackMonitor {
   getConfig(container: RollbackContainer): RollbackConfig {
     const logger = this.getLogger()?.child?.({});
     const rollbackWindow = parsePositiveDurationLabel(
-      this.getPreferredLabelValue(
-        container.labels,
-        'dd.rollback.window',
-        'wud.rollback.window',
-        logger,
-      ),
+      this.getPreferredLabelValue(container.labels, 'dd.rollback.window', logger),
       'dd.rollback.window',
       DEFAULT_ROLLBACK_WINDOW,
       `Invalid rollback window label value — using default ${DEFAULT_ROLLBACK_WINDOW}ms`,
       logger,
     );
     const rollbackInterval = parsePositiveDurationLabel(
-      this.getPreferredLabelValue(
-        container.labels,
-        'dd.rollback.interval',
-        'wud.rollback.interval',
-        logger,
-      ),
+      this.getPreferredLabelValue(container.labels, 'dd.rollback.interval', logger),
       'dd.rollback.interval',
       DEFAULT_ROLLBACK_INTERVAL,
       `Invalid rollback interval label value — using default ${DEFAULT_ROLLBACK_INTERVAL}ms`,
@@ -147,12 +136,7 @@ class RollbackMonitor {
     return {
       autoRollback:
         (
-          this.getPreferredLabelValue(
-            container.labels,
-            'dd.rollback.auto',
-            'wud.rollback.auto',
-            logger,
-          ) ?? 'false'
+          this.getPreferredLabelValue(container.labels, 'dd.rollback.auto', logger) ?? 'false'
         ).toLowerCase() === 'true',
       rollbackWindow,
       rollbackInterval,

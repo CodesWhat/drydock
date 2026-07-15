@@ -10,7 +10,6 @@ import { getAllRegistries, getRegistry } from '../services/registry';
 import type { ApiComponent } from '../types/api';
 
 const { t } = useI18n();
-const registriesViewMode = useViewMode('registries');
 
 const registriesData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);
@@ -125,6 +124,10 @@ async function openDetail(reg: Record<string, unknown>) {
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const registryViewMode = useViewMode('registries');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -208,11 +211,12 @@ onMounted(async () => {
 
       <!-- Filter bar -->
       <DataFilterBar
-        v-model="registriesViewMode"
+        v-model="registryViewMode"
         v-model:showFilters="showFilters"
         :filtered-count="filteredRegistries.length"
         :total-count="registriesData.length"
-        :active-filter-count="activeFilterCount">
+        :active-filter-count="activeFilterCount"
+        :hide-view-toggle="cardReflowForced">
         <template #filters>
           <input v-model="searchQuery"
                  type="text"
@@ -227,12 +231,14 @@ onMounted(async () => {
       </DataFilterBar>
 
       <!-- Table view -->
-      <DataTable v-if="registriesViewMode === 'table' && !loading"
+      <DataTable v-if="!loading"
                  :columns="tableColumns"
                  storage-key="registries"
                  :rows="filteredRegistries"
                  row-key="id"
                  :active-row="selectedRegistry?.id"
+                 :prefer-cards="registryViewMode === 'cards'"
+                 @update:card-reflow-forced="cardReflowForced = $event"
                  @row-click="openDetail($event)">
         <template #cell-name="{ row }">
           <span class="font-medium dd-text">{{ registryTypeBadge(row.type).label }}</span>
@@ -258,6 +264,50 @@ onMounted(async () => {
             {{ resolveUrl(row) }}
           </span>
         </template>
+        <template #card="{ row }">
+          <div class="relative flex flex-col flex-1">
+            <!-- Header: name + resolved URL + type badge -->
+            <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+                <div class="text-2xs truncate mt-0.5 dd-text-muted font-mono"
+                     :title="resolveUrl(row)"
+                     v-tooltip.top="resolveUrl(row)">
+                  {{ resolveUrl(row) }}
+                </div>
+              </div>
+              <AppBadge :custom="{ bg: registryTypeBadge(row.type).bg, text: registryTypeBadge(row.type).text }" size="xs" class="shrink-0">
+                {{ registryTypeBadge(row.type).label }}
+              </AppBadge>
+            </div>
+            <!-- Body: auth / status -->
+            <div class="px-4 py-3">
+              <div class="grid grid-cols-2 gap-2 text-2xs-plus">
+                <div>
+                  <span class="dd-text-muted">{{ t('registriesView.card.auth') }}</span>
+                  <span class="ml-1 font-semibold" :style="{ color: isPrivate(row) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
+                    {{ isPrivate(row) ? t('registriesView.badge.private') : t('registriesView.badge.public') }}
+                  </span>
+                </div>
+                <div>
+                  <span class="dd-text-muted">{{ t('registriesView.card.status') }}</span>
+                  <span class="ml-1 font-semibold" :style="{ color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
+                    {{ registryStatusLabel(row.status) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <!-- Footer: URL repeated -->
+            <div class="px-4 py-2.5 mt-auto"
+                 :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+              <span class="block truncate text-2xs dd-text-muted font-mono"
+                    :title="resolveUrl(row)"
+                    v-tooltip.top="resolveUrl(row)">
+                {{ resolveUrl(row) }}
+              </span>
+            </div>
+          </div>
+        </template>
         <template #empty>
           <EmptyState icon="registries"
                       :message="t('registriesView.emptyFiltered')"
@@ -265,94 +315,6 @@ onMounted(async () => {
                       @clear="searchQuery = ''" />
         </template>
       </DataTable>
-
-      <!-- Card view -->
-      <DataCardGrid v-if="registriesViewMode === 'cards' && !loading"
-                    :items="filteredRegistries"
-                    item-key="id"
-                    :selected-key="selectedRegistry?.id"
-                    @item-click="openDetail($event)">
-        <template #card="{ item: reg }">
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-            <div class="min-w-0">
-              <div class="text-sm font-semibold truncate dd-text">{{ reg.name }}</div>
-              <div class="text-2xs truncate mt-0.5 dd-text-muted font-mono"
-                   :title="resolveUrl(reg)"
-                   v-tooltip.top="resolveUrl(reg)">
-                {{ resolveUrl(reg) }}
-              </div>
-            </div>
-            <AppBadge :custom="{ bg: registryTypeBadge(reg.type).bg, text: registryTypeBadge(reg.type).text }" size="xs" class="shrink-0 ml-2">
-              {{ registryTypeBadge(reg.type).label }}
-            </AppBadge>
-          </div>
-          <div class="px-4 py-3">
-            <div class="grid grid-cols-2 gap-2 text-2xs-plus">
-              <div>
-                <span class="dd-text-muted">{{ t('registriesView.card.auth') }}</span>
-                <span class="ml-1 font-semibold" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
-                  {{ isPrivate(reg) ? t('registriesView.badge.private') : t('registriesView.badge.public') }}
-                </span>
-              </div>
-              <div>
-                <span class="dd-text-muted">{{ t('registriesView.card.status') }}</span>
-                <span class="ml-1 font-semibold" :style="{ color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
-                  {{ registryStatusLabel(reg.status) }}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div class="px-4 py-2.5 mt-auto"
-               :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-            <span class="block truncate text-2xs dd-text-muted font-mono"
-                  :title="resolveUrl(reg)"
-                  v-tooltip.top="resolveUrl(reg)">
-              {{ resolveUrl(reg) }}
-            </span>
-          </div>
-        </template>
-      </DataCardGrid>
-
-      <!-- List view -->
-      <DataListAccordion v-if="registriesViewMode === 'list' && !loading"
-                         :items="filteredRegistries"
-                         item-key="id"
-                         :selected-key="selectedRegistry?.id"
-                         @item-click="openDetail($event)">
-        <template #header="{ item: reg }">
-          <AppBadge :custom="{ bg: registryTypeBadge(reg.type).bg, text: registryTypeBadge(reg.type).text }" size="xs" class="shrink-0">
-            {{ registryTypeBadge(reg.type).label }}
-          </AppBadge>
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold truncate dd-text">{{ reg.name }}</div>
-            <div class="text-2xs font-mono dd-text-muted truncate mt-0.5"
-                 :title="resolveUrl(reg)"
-                 v-tooltip.top="resolveUrl(reg)">
-              {{ resolveUrl(reg) }}
-            </div>
-          </div>
-          <div class="flex items-center gap-3 shrink-0">
-            <span class="text-2xs-plus hidden md:inline font-medium" :style="{ color: isPrivate(reg) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
-              {{ isPrivate(reg) ? t('registriesView.badge.private') : t('registriesView.badge.public') }}
-            </span>
-            <AppBadge v-if="isPrivate(reg)" v-tooltip.top="t('registriesView.badge.private')" tone="warning" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="lock" :size="12" /></AppBadge>
-            <AppBadge v-else v-tooltip.top="t('registriesView.badge.public')" tone="neutral" size="xs" class="px-1.5 py-0 md:!hidden"><AppIcon name="eye" :size="12" /></AppBadge>
-            <AppIcon :name="reg.status === 'connected' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
-                     v-tooltip.top="registryStatusLabel(reg.status)"
-                     :style="{ color: reg.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
-            <AppBadge :tone="reg.status === 'connected' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
-              {{ registryStatusLabel(reg.status) }}
-            </AppBadge>
-          </div>
-        </template>
-      </DataListAccordion>
-
-      <EmptyState
-        v-if="(registriesViewMode === 'cards' || registriesViewMode === 'list') && filteredRegistries.length === 0 && !loading"
-        icon="registries"
-        :message="t('registriesView.emptyFiltered')"
-        :show-clear="activeFilterCount > 0"
-        @clear="searchQuery = ''" />
 
     <template #panel>
       <DetailPanel

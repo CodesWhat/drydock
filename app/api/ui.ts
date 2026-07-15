@@ -40,6 +40,15 @@ export function init() {
   const indexFile = path.resolve(path.join(uiDirectory, 'index.html'));
   router.get('/{*path}', uiLimiter, (req, res) => {
     res.set('Cache-Control', HTML_DOCUMENT_CACHE_CONTROL);
+    // A request reaching the catch-all under /assets/ is a content-hashed bundle
+    // that no longer exists (e.g. a chunk deleted by a prior upgrade). Return a
+    // clean 404 rather than the SPA shell: serving index.html (text/html) for a
+    // .js/.css URL trips the browser's strict MIME check and white-screens a stale
+    // page, and lets caching reverse proxies poison the asset URL with HTML.
+    if (req.path.startsWith('/assets/')) {
+      res.status(404).end();
+      return;
+    }
     res.sendFile(indexFile);
   });
   return router;

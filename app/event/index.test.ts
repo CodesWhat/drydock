@@ -376,6 +376,62 @@ test('deregistration of agent disconnected handler should work', async () => {
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('container health transition handlers run by order, id, then registration sequence', async () => {
+  const calls: string[] = [];
+  const payload = { containerName: 'web', health: 'unhealthy' as const };
+  event.registerContainerHealthTransition(
+    async () => {
+      calls.push('late');
+    },
+    { id: 'z', order: 20 },
+  );
+  event.registerContainerHealthTransition(
+    async () => {
+      calls.push('id-a-first');
+    },
+    { id: 'a', order: 10 },
+  );
+  event.registerContainerHealthTransition(
+    async () => {
+      calls.push('id-a-second');
+    },
+    { id: 'a', order: 10 },
+  );
+  event.registerContainerHealthTransition(
+    async () => {
+      calls.push('id-b');
+    },
+    { id: 'b', order: 10 },
+  );
+
+  await event.emitContainerHealthTransition(payload);
+
+  expect(calls).toEqual(['id-a-first', 'id-a-second', 'id-b', 'late']);
+});
+
+test('container health transition handler unsubscribe prevents later dispatch', async () => {
+  const handler = vi.fn();
+  const unsubscribe = event.registerContainerHealthTransition(handler);
+  unsubscribe();
+  await event.emitContainerHealthTransition({ containerName: 'web', health: 'unhealthy' });
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('a timed-out container health transition handler does not block the next handler', async () => {
+  event.setHandlerTimeoutMsForTests(20);
+  const next = vi.fn();
+  event.registerContainerHealthTransition(() => new Promise<void>(() => {}), {
+    id: 'hung',
+    order: 10,
+  });
+  event.registerContainerHealthTransition(next, { id: 'next', order: 20 });
+
+  await event.emitContainerHealthTransition({ containerName: 'web', health: 'unhealthy' });
+
+  expect(next).toHaveBeenCalledTimes(1);
+  expect(warnMock).toHaveBeenCalledTimes(1);
+});
+
 test('emitAgentStatsChanged should call registered handlers with payload', async () => {
   const handler = vi.fn();
   const payload = { agentName: 'edge-a' };

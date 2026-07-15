@@ -33,7 +33,9 @@ describe('Docker Watcher', () => {
 
       await docker.watchContainer(container);
 
-      expect(docker.findNewVersion).toHaveBeenCalledWith(container, expect.any(Object));
+      expect(docker.findNewVersion).toHaveBeenCalledWith(container, expect.any(Object), {
+        useRegistryPollCache: false,
+      });
       expect(hEvent.emitContainerReport).toHaveBeenCalled();
     });
 

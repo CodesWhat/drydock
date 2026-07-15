@@ -60,6 +60,20 @@ labels:
     expect(migrated.labelReplacements).toBe(4);
   });
 
+  test('migrates wud.webhook.enabled and wud.display.picture labels to drydock prefixes', () => {
+    const content = `
+labels:
+  wud.webhook.enabled: "false"
+  wud.display.picture: https://example.com/pic.png
+`;
+
+    const migrated = migrateLegacyConfigContent(content);
+
+    expect(migrated.content).toContain('dd.webhook.enabled: "false"');
+    expect(migrated.content).toContain('dd.display.picture: https://example.com/pic.png');
+    expect(migrated.labelReplacements).toBe(2);
+  });
+
   test('migrates watchtower labels when source is watchtower', () => {
     const content = `
 services:
@@ -607,7 +621,7 @@ describe('runConfigMigrateCommandIfRequested', () => {
     });
 
     expect(result).toBe(0);
-    expect(collector.out.join('\n')).toContain('Usage: drydock config migrate');
+    expect(collector.out.join('\n')).toContain('Usage: node dist/index.js config migrate');
     expect(collector.err).toEqual([]);
   });
 
@@ -619,7 +633,7 @@ describe('runConfigMigrateCommandIfRequested', () => {
       expect(runConfigMigrateCommandIfRequested(['config', 'migrate', '--help'])).toBe(0);
       expect(runConfigMigrateCommandIfRequested(['config', 'migrate', '--unknown'])).toBe(1);
       expect(stdoutSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Usage: drydock config migrate'),
+        expect.stringContaining('Usage: node dist/index.js config migrate'),
       );
       expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('Error: Unknown argument'));
     } finally {
@@ -635,7 +649,7 @@ describe('runConfigMigrateCommandIfRequested', () => {
     });
 
     expect(result).toBe(0);
-    expect(collector.out.join('\n')).toContain('Usage: drydock config migrate');
+    expect(collector.out.join('\n')).toContain('Usage: node dist/index.js config migrate');
     expect(collector.err).toEqual([]);
   });
 

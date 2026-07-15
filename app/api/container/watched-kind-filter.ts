@@ -11,7 +11,7 @@ function isContainerExplicitlyWatched(container: Container): boolean {
   if (!labels || typeof labels !== 'object') {
     return false;
   }
-  const watchLabel = labels['dd.watch'] ?? labels['wud.watch'];
+  const watchLabel = labels['dd.watch'];
   return typeof watchLabel === 'string' && watchLabel.toLowerCase() === 'true';
 }
 

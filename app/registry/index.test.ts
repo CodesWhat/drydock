@@ -168,6 +168,19 @@ test('applySharedTriggerConfigurationByName should return undefined when configu
   expect(registry.testable_applySharedTriggerConfigurationByName(undefined as any)).toBeUndefined();
 });
 
+test('mergeProviderConfigurations appends defaults without replacing named user configuration', () => {
+  expect(
+    registry.testable_mergeProviderConfigurations(
+      { public: { anonymous: true }, shared: { source: 'default' } },
+      { private: { token: 'secret' }, shared: { source: 'configured' } },
+    ),
+  ).toEqual({
+    private: { token: 'secret' },
+    shared: { source: 'configured' },
+    public: { anonymous: true },
+  });
+});
+
 test('registerRegistries should register all registries', async () => {
   registries = {
     hub: {
@@ -249,147 +262,19 @@ test('registerRegistries should warn when registration errors occur', async () =
   expect(Object.keys(registry.getState().registry)).not.toContain('hub.private');
 });
 
-test.each([
-  {
-    provider: 'hub',
-    publicConfiguration: { login: 'onlyuser' },
-    configuredKeys: 'login',
-  },
-  {
-    provider: 'hub',
-    publicConfiguration: { token: 'onlytoken' },
-    configuredKeys: 'token',
-  },
-  {
-    provider: 'hub',
-    publicConfiguration: { password: 'onlypassword' },
-    configuredKeys: 'password',
-  },
-  {
-    provider: 'hub',
-    publicConfiguration: { login: 'user', password: 'pass', token: 'token' },
-    configuredKeys: 'login, password, token',
-  },
-  {
-    provider: 'dhi',
-    publicConfiguration: { login: 'onlyuser' },
-    configuredKeys: 'login',
-  },
-  {
-    provider: 'dhi',
-    publicConfiguration: { token: 'onlytoken' },
-    configuredKeys: 'token',
-  },
-  {
-    provider: 'dhi',
-    publicConfiguration: { password: 'onlypassword' },
-    configuredKeys: 'password',
-  },
-  {
-    provider: 'dhi',
-    publicConfiguration: { login: 'user', password: 'pass', token: 'token' },
-    configuredKeys: 'login, password, token',
-  },
-])('registerRegistries should fallback $provider.public legacy token-auth config to anonymous', async ({
-  provider,
-  publicConfiguration,
-  configuredKeys,
-}) => {
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
-  registries = {
-    [provider]: {
-      public: publicConfiguration,
-    },
-  };
-
-  await registry.testable_registerRegistries();
-
-  expect(Object.keys(registry.getState().registry)).toContain(`${provider}.public`);
-  expect(spyLog).toHaveBeenCalledWith(
-    expect.stringContaining(
-      `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials for ${provider}.public.`,
-    ),
-  );
-  expect(spyLog).toHaveBeenCalledWith(
-    expect.stringContaining(`Configured keys: ${configuredKeys}.`),
-  );
-  expect(spyLog).toHaveBeenCalledWith(
-    expect.stringContaining(
-      `Falling back to anonymous ${provider}.public registry for backward compatibility.`,
-    ),
-  );
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes('Some registries failed to register'),
-    ),
-  ).toBe(false);
-});
-
-test('registerRegistries should not apply legacy fallback when public config has no credential keys', async () => {
+test('registerRegistries should reject removed public token-only compatibility config', async () => {
   const spyLog = vi.spyOn(registry.testable_log, 'warn');
   registries = {
     hub: {
-      public: {
-        username: 'legacy-user',
-      } as unknown as Record<string, unknown>,
+      public: { token: 'legacy-token' },
     },
   };
 
   await registry.testable_registerRegistries();
 
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes(
-        'Detected incompatible DD_REGISTRY_HUB_PUBLIC_* token-auth credentials',
-      ),
-    ),
-  ).toBe(false);
-});
-
-test('registerRegistries should fallback when login/password credentials are present but blank', async () => {
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
-  registries = {
-    hub: {
-      public: {
-        login: '',
-        password: 'present',
-      },
-    },
-  };
-
-  await registry.testable_registerRegistries();
-
-  expect(Object.keys(registry.getState().registry)).toContain('hub.public');
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes(
-        'Detected incompatible DD_REGISTRY_HUB_PUBLIC_* token-auth credentials',
-      ),
-    ),
-  ).toBe(true);
-});
-
-test('registerRegistries should fallback when auth is combined with other credential keys', async () => {
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
-  registries = {
-    hub: {
-      public: {
-        auth: 'token-value',
-        login: 'extra',
-      },
-    },
-  };
-
-  await registry.testable_registerRegistries();
-
-  expect(Object.keys(registry.getState().registry)).toContain('hub.public');
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes(
-        'Detected incompatible DD_REGISTRY_HUB_PUBLIC_* token-auth credentials',
-      ),
-    ),
-  ).toBe(true);
+  expect(Object.keys(registry.getState().registry)).not.toContain('hub.public');
+  expect(spyLog).toHaveBeenCalledWith(expect.stringContaining('failed to register'));
+  expect(spyLog).not.toHaveBeenCalledWith(expect.stringContaining('Falling back to anonymous'));
 });
 
 test.each([

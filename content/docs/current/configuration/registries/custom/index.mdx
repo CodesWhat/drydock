@@ -3,6 +3,7 @@ title: "CUSTOM (Self-hosted Docker Registry)"
 description: "The custom registry lets you configure a self-hosted Docker Registry integration."
 ---
 
+import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 ![logo](/docs/assets/configuration/registries/custom/custom.png)
@@ -13,16 +14,18 @@ The `custom` registry lets you configure a self-hosted [Docker Registry](https:/
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_URL` | 🔴 | Registry URL (e.g. `http://localhost:5000`) | | |
-| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_LOGIN` | ⚪ | Login (when htpasswd auth is enabled on the registry) | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_PASSWORD must be defined | |
-| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_PASSWORD` | ⚪ | Password (when htpasswd auth is enabled on the registry) | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_LOGIN must be defined | |
-| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_URL` | 🔴 | Registry URL (e.g. `https://registry.example.com`) | | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_LOGIN` | ⚪ | Login (when htpasswd auth is enabled on the registry) | `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_PASSWORD` must be defined | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_PASSWORD` | ⚪ | Password (when htpasswd auth is enabled on the registry) | `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_LOGIN/PASSWORD` must not be defined | |
 | `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_CAFILE` | ⚪ | Path to custom CA certificate file | | |
-| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_INSECURE` | ⚪ | Allow insecure (non-TLS) connections | `true`, `false` | `false` |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_INSECURE` | ⚪ | Disable HTTPS certificate validation (plain HTTP is selected by the registry `URL` scheme) | `true`, `false` | `false` |
 | `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_CLIENTCERT` | ⚪ | Path to client certificate file for mTLS | | |
-| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_CLIENTKEY` | ⚪ | Path to client key file for mTLS | DD_REGISTRY_CUSTOM_\{REGISTRY_NAME\}_CLIENTCERT must be defined | |
+| `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_CLIENTKEY` | ⚪ | Path to client key file for mTLS | `DD_REGISTRY_CUSTOM_{REGISTRY_NAME}_CLIENTCERT` must be defined | |
 
 ## Examples
+
+<Callout type="warn">Use a registry hostname that resolves from inside the Drydock container; `localhost` would refer to Drydock itself. The URL scheme selects HTTP or HTTPS. `INSECURE=true` only disables certificate validation for HTTPS—it does not enable HTTP or make a hostname reachable. Always use HTTPS when registry credentials are configured.</Callout>
 
 ### Configure for anonymous access
 
@@ -35,14 +38,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000
+      - DD_REGISTRY_CUSTOM_PRIVATE_URL=https://registry.example.com
 ```
 
 </Tab>
 <Tab value="Docker (Anonymous)">
 ```bash
 docker run \
-  -e "DD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE_URL=https://registry.example.com" \
   ...
   codeswhat/drydock
 ```
@@ -60,7 +63,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000
+      - DD_REGISTRY_CUSTOM_PRIVATE_URL=https://registry.example.com
       - DD_REGISTRY_CUSTOM_PRIVATE_LOGIN=john
       - DD_REGISTRY_CUSTOM_PRIVATE_PASSWORD=doe
 ```
@@ -69,7 +72,7 @@ services:
 <Tab value="Docker (Basic Auth)">
 ```bash
 docker run \
-  -e "DD_REGISTRY_CUSTOM_PRIVATE_URL=http://localhost:5000" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE_URL=https://registry.example.com" \
   -e "DD_REGISTRY_CUSTOM_PRIVATE_LOGIN=john" \
   -e "DD_REGISTRY_CUSTOM_PRIVATE_PASSWORD=doe" \
   ...
@@ -89,10 +92,10 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_CUSTOM_PRIVATE1_URL=http://localhost:5000
+      - DD_REGISTRY_CUSTOM_PRIVATE1_URL=https://registry-one.example.com
       - DD_REGISTRY_CUSTOM_PRIVATE1_LOGIN=john
       - DD_REGISTRY_CUSTOM_PRIVATE1_PASSWORD=doe
-      - DD_REGISTRY_CUSTOM_PRIVATE2_URL=http://localhost:5001
+      - DD_REGISTRY_CUSTOM_PRIVATE2_URL=https://registry-two.example.com
       - DD_REGISTRY_CUSTOM_PRIVATE2_LOGIN=jane
       - DD_REGISTRY_CUSTOM_PRIVATE2_PASSWORD=doe
 ```
@@ -101,10 +104,10 @@ services:
 <Tab value="Docker (Multiple Registries)">
 ```bash
 docker run \
-  -e "DD_REGISTRY_CUSTOM_PRIVATE1_URL=http://localhost:5000" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE1_URL=https://registry-one.example.com" \
   -e "DD_REGISTRY_CUSTOM_PRIVATE1_LOGIN=john" \
   -e "DD_REGISTRY_CUSTOM_PRIVATE1_PASSWORD=doe" \
-  -e "DD_REGISTRY_CUSTOM_PRIVATE2_URL=http://localhost:5001" \
+  -e "DD_REGISTRY_CUSTOM_PRIVATE2_URL=https://registry-two.example.com" \
   -e "DD_REGISTRY_CUSTOM_PRIVATE2_LOGIN=jane" \
   -e "DD_REGISTRY_CUSTOM_PRIVATE2_PASSWORD=doe" \
   ...

@@ -28,7 +28,7 @@ services:
     ...
     environment:
       - DD_REGISTRY_ACR_PRIVATE_CLIENTID=7c0195aa-112d-4ac3-be24-6664a13f3d2b
-      - DD_REGISTRY_ACR_PRIVATE_CLIENTSECRET=SBgHNi3zA5K.f9.f9ft~_hpqbS~.pk.t_i
+      - DD_REGISTRY_ACR_PRIVATE_CLIENTSECRET=replace-with-your-client-secret
 ```
 
 </Tab>
@@ -36,7 +36,7 @@ services:
 ```bash
 docker run \
   -e DD_REGISTRY_ACR_PRIVATE_CLIENTID=7c0195aa-112d-4ac3-be24-6664a13f3d2b \
-  -e DD_REGISTRY_ACR_PRIVATE_CLIENTSECRET=SBgHNi3zA5K.f9.f9ft~_hpqbS~.pk.t_i \
+  -e DD_REGISTRY_ACR_PRIVATE_CLIENTSECRET=replace-with-your-client-secret \
   ...
   codeswhat/drydock
 ```

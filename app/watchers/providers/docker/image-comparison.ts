@@ -8,6 +8,7 @@ import {
   validate as validateContainer,
 } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
+import type { RegistryLookupOptions } from '../../../registries/Registry.js';
 import * as registry from '../../../registry/index.js';
 import { isCredentialedInstance } from '../../../registry/index.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
@@ -17,16 +18,21 @@ import { getTagCandidates } from './tag-candidates.js';
 
 export interface ContainerTagLookupProvider {
   normalizeImage: (image: ContainerImage) => ContainerImage;
-  getTags: (image: Container['image']) => Promise<string[]>;
+  getTags: (image: Container['image'], options?: RegistryLookupOptions) => Promise<string[]>;
   getImageManifestDigest: (
     image: Container['image'],
     digest?: string,
+    options?: RegistryLookupOptions,
   ) => Promise<{
     digest?: string;
     created?: string;
     version?: number;
   }>;
-  getImagePublishedAt?: (image: Container['image'], tag?: string) => Promise<string | undefined>;
+  getImagePublishedAt?: (
+    image: Container['image'],
+    tag?: string,
+    options?: RegistryLookupOptions,
+  ) => Promise<string | undefined>;
   publishedAtIsPushDate?: boolean;
 }
 
@@ -238,6 +244,7 @@ async function handleDigestWatch(
   registryProvider: ContainerTagLookupProvider,
   tagsCandidates: string[],
   result: ContainerResult,
+  lookupOptions: RegistryLookupOptions,
 ) {
   const imageToGetDigestFrom =
     tagsCandidates.length > 0
@@ -248,7 +255,11 @@ async function handleDigestWatch(
       : container.image;
 
   const queryImage = getImageForRegistryQuery(imageToGetDigestFrom, registryProvider);
-  const remoteDigest = await registryProvider.getImageManifestDigest(queryImage);
+  const remoteDigest = await registryProvider.getImageManifestDigest(
+    queryImage,
+    undefined,
+    lookupOptions,
+  );
 
   result.digest = remoteDigest.digest;
   result.created = remoteDigest.created;
@@ -257,6 +268,7 @@ async function handleDigestWatch(
     const digestV2 = await registryProvider.getImageManifestDigest(
       queryImage,
       container.image.digest.repo,
+      lookupOptions,
     );
     container.image.digest.value = digestV2.digest;
   } else {
@@ -266,6 +278,7 @@ async function handleDigestWatch(
 
 export interface FindNewVersionOptions {
   pinInfoEnabled?: boolean;
+  useRegistryPollCache?: boolean;
 }
 
 export async function findNewVersion(
@@ -273,7 +286,10 @@ export async function findNewVersion(
   logContainer: ContainerWatchLogger,
   options: FindNewVersionOptions = {},
 ): Promise<ContainerResult> {
-  const { pinInfoEnabled = true } = options;
+  const { pinInfoEnabled = true, useRegistryPollCache = false } = options;
+  const lookupOptions: RegistryLookupOptions = {
+    usePollCycleCache: useRegistryPollCache,
+  };
   let registryProvider: ContainerTagLookupProvider;
   try {
     registryProvider = getRegistry(container.image.registry.name);
@@ -296,16 +312,24 @@ export async function findNewVersion(
     if (container.image.digest.watch && container.image.digest.repo) {
       const tags = await registryProvider.getTags(
         getImageForRegistryQuery(container.image, registryProvider),
+        lookupOptions,
       );
       const comparisonTag = resolveDigestComparisonTag(container, tags, logContainer);
 
       if (comparisonTag) {
-        await handleDigestWatch(container, registryProvider, [comparisonTag], result);
+        await handleDigestWatch(
+          container,
+          registryProvider,
+          [comparisonTag],
+          result,
+          lookupOptions,
+        );
         try {
           if (typeof registryProvider.getImagePublishedAt === 'function') {
             const publishedAt = await registryProvider.getImagePublishedAt(
               getImageForRegistryQuery(container.image, registryProvider),
               comparisonTag,
+              lookupOptions,
             );
             if (typeof publishedAt === 'string') {
               result.publishedAt = publishedAt;
@@ -350,6 +374,7 @@ export async function findNewVersion(
   // Get all available tags
   const tags = await registryProvider.getTags(
     getImageForRegistryQuery(container.image, registryProvider),
+    lookupOptions,
   );
 
   // Get candidate tags (based on tag name)
@@ -374,7 +399,7 @@ export async function findNewVersion(
 
   // Must watch digest? => Find local/remote digests on registry
   if (container.image.digest.watch && container.image.digest.repo) {
-    await handleDigestWatch(container, registryProvider, tagsCandidates, result);
+    await handleDigestWatch(container, registryProvider, tagsCandidates, result, lookupOptions);
   }
 
   // The first one in the array is the highest
@@ -388,6 +413,7 @@ export async function findNewVersion(
       const publishedAt = await registryProvider.getImagePublishedAt(
         getImageForRegistryQuery(container.image, registryProvider),
         publishedTag,
+        lookupOptions,
       );
       if (typeof publishedAt === 'string') {
         result.publishedAt = publishedAt;

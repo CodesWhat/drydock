@@ -3,6 +3,17 @@ import { defineComponent, nextTick, ref } from 'vue';
 import AppLogViewer from '@/components/AppLogViewer.vue';
 import type { AppLogEntry } from '@/types/log-entry';
 
+const mockTokenizeJson = vi.hoisted(() => vi.fn());
+
+vi.mock('@/utils/json-tokenizer', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/json-tokenizer')>();
+  mockTokenizeJson.mockImplementation(actual.tokenizeJson);
+  return {
+    ...actual,
+    tokenizeJson: mockTokenizeJson,
+  };
+});
+
 function makeEntry(id: number, overrides: Partial<AppLogEntry> = {}): AppLogEntry {
   const plainLine = overrides.plainLine ?? `line-${id}`;
 
@@ -62,6 +73,7 @@ describe('AppLogViewer', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+    mockTokenizeJson.mockClear();
   });
 
   it('renders empty state and custom footer status details', () => {
@@ -136,6 +148,136 @@ describe('AppLogViewer', () => {
     expect(wrapper.find('.json-boolean').text()).toContain('true');
     expect(wrapper.find('.json-null').text()).toContain('null');
     expect(wrapper.findAll('.json-punctuation').length).toBeGreaterThan(0);
+    expect(mockTokenizeJson).toHaveBeenCalledWith(
+      '{\n  "msg": "ok",\n  "count": 3,\n  "enabled": true,\n  "data": null\n}',
+    );
+  });
+
+  it('virtualizes large log streams and keeps absolute line numbers while scrolling', async () => {
+    const wrapper = mountViewer({
+      autoScrollPinned: false,
+      entries: Array.from({ length: 1000 }, (_, index) =>
+        makeEntry(index + 1, { plainLine: `stream-line-${index + 1}` }),
+      ),
+    });
+    const viewport = wrapper.get('[data-test="app-log-viewport"]');
+    setViewportMetrics(viewport.element as HTMLElement, {
+      scrollHeight: 28_000,
+      clientHeight: 140,
+      scrollTop: 0,
+    });
+    await viewport.trigger('scroll');
+    await nextTick();
+
+    const initialRows = wrapper.findAll('[data-test="container-log-row"]');
+    expect(initialRows.length).toBeGreaterThan(0);
+    expect(initialRows.length).toBeLessThan(100);
+    expect(wrapper.find('[data-test="app-log-bottom-spacer"]').exists()).toBe(true);
+    const virtualStatus = wrapper.get('[data-test="app-log-virtual-status"]');
+    expect(virtualStatus.attributes('role')).toBe('status');
+    expect(virtualStatus.attributes('aria-live')).toBeUndefined();
+    expect(virtualStatus.text()).toBe('1000 lines');
+
+    (viewport.element as HTMLElement).scrollTop = 14_000;
+    await viewport.trigger('scroll');
+    await nextTick();
+
+    const scrolledRows = wrapper.findAll('[data-test="container-log-row"]');
+    expect(scrolledRows.length).toBeLessThan(100);
+    expect(scrolledRows[0].text()).toContain('stream-line-');
+    expect(
+      Number(scrolledRows[0].find('[data-test="container-log-line-number"]').text()),
+    ).toBeGreaterThan(400);
+    expect(wrapper.find('[data-test="app-log-top-spacer"]').exists()).toBe(true);
+  });
+
+  it('recalculates the virtual window from ResizeObserver row-height corrections', async () => {
+    const originalResizeObserver = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+    const resizeCallbacks: ResizeObserverCallback[] = [];
+    class CapturingResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallbacks.push(callback);
+      }
+
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      value: CapturingResizeObserver,
+    });
+
+    let wrapper: ReturnType<typeof mountViewer> | undefined;
+    try {
+      wrapper = mountViewer({
+        autoScrollPinned: false,
+        entries: Array.from({ length: 500 }, (_, index) =>
+          makeEntry(index + 1, { plainLine: `stream-line-${index + 1}` }),
+        ),
+      });
+      const viewport = wrapper.get('[data-test="app-log-viewport"]');
+      setViewportMetrics(viewport.element as HTMLElement, {
+        scrollHeight: 14_000,
+        clientHeight: 140,
+        scrollTop: 1_000,
+      });
+      await viewport.trigger('scroll');
+      await nextTick();
+
+      const initialRows = wrapper.findAll('[data-test="container-log-row"]');
+      const correctedRow = initialRows[0].element as HTMLElement;
+      const correctedId = Number.parseInt(correctedRow.dataset.logEntryId ?? '', 10);
+      Object.defineProperty(correctedRow, 'offsetHeight', {
+        configurable: true,
+        value: 380,
+      });
+
+      resizeCallbacks[0](
+        [{ target: correctedRow } as unknown as ResizeObserverEntry],
+        {} as ResizeObserver,
+      );
+      await nextTick();
+
+      expect(Number.isFinite(correctedId)).toBe(true);
+      expect(wrapper.findAll('[data-test="container-log-row"]').length).toBeLessThan(
+        initialRows.length,
+      );
+    } finally {
+      wrapper?.unmount();
+      if (originalResizeObserver) {
+        Object.defineProperty(globalThis, 'ResizeObserver', originalResizeObserver);
+      } else {
+        delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+      }
+    }
+  });
+
+  it('scrolls a virtualized off-screen search match into the rendered window', async () => {
+    const wrapper = mountViewer({
+      autoScrollPinned: false,
+      entries: Array.from({ length: 1000 }, (_, index) =>
+        makeEntry(index + 1, {
+          plainLine: index === 899 ? 'unique-offscreen-match' : `line-${index + 1}`,
+        }),
+      ),
+    });
+    const viewport = wrapper.get('[data-test="app-log-viewport"]');
+    setViewportMetrics(viewport.element as HTMLElement, {
+      scrollHeight: 28_000,
+      clientHeight: 140,
+      scrollTop: 0,
+    });
+    await viewport.trigger('scroll');
+    await wrapper
+      .get('[data-test="container-log-search-input"]')
+      .setValue('unique-offscreen-match');
+    await wrapper.get('[data-test="container-log-next-match"]').trigger('click');
+    await nextTick();
+    await nextTick();
+
+    expect(viewport.element.scrollTop).toBeGreaterThan(20_000);
+    expect(wrapper.text()).toContain('unique-offscreen-match');
   });
 
   it('keeps JSON strings with trailing escaped backslashes intact', () => {
@@ -616,6 +758,84 @@ describe('AppLogViewer', () => {
       expect(rows[0].text()).toContain('third');
       expect(rows[1].text()).toContain('second');
       expect(rows[2].text()).toContain('first');
+    });
+
+    it('keeps an unpinned virtual reader anchored across a newest-first batch prepend', async () => {
+      const entries = ref(
+        Array.from({ length: 500 }, (_, index) =>
+          makeEntry(index + 1, { plainLine: `stream-line-${index + 1}` }),
+        ),
+      );
+      const Harness = defineComponent({
+        components: { AppLogViewer },
+        setup() {
+          return { entries };
+        },
+        template:
+          '<AppLogViewer :entries="entries" :newest-first="true" :auto-scroll-pinned="false" />',
+      });
+      const wrapper = mount(Harness, {
+        global: {
+          stubs: {
+            AppIcon: { template: '<span class="app-icon-stub" />' },
+          },
+        },
+      });
+      const viewer = wrapper.getComponent(AppLogViewer);
+      const viewport = viewer.get('[data-test="app-log-viewport"]');
+      setViewportMetrics(viewport.element as HTMLElement, {
+        scrollHeight: 14_000,
+        clientHeight: 140,
+        scrollTop: 1_000,
+      });
+      await viewport.trigger('scroll');
+      await nextTick();
+      const firstRenderedId = viewer
+        .findAll('[data-test="container-log-row"]')[0]
+        .attributes('data-log-entry-id');
+
+      entries.value.push(
+        ...Array.from({ length: 25 }, (_, index) =>
+          makeEntry(501 + index, { plainLine: `stream-line-${501 + index}` }),
+        ),
+      );
+      await nextTick();
+      await nextTick();
+
+      expect(viewport.element.scrollTop).toBe(1_700);
+      expect(
+        viewer.findAll('[data-test="container-log-row"]')[0].attributes('data-log-entry-id'),
+      ).toBe(firstRenderedId);
+    });
+
+    it('refreshes newest-first rows when a full ring buffer rolls over at constant length', async () => {
+      const entries = ref([
+        makeEntry(1, { plainLine: 'first' }),
+        makeEntry(2, { plainLine: 'second' }),
+      ]);
+      const Harness = defineComponent({
+        components: { AppLogViewer },
+        setup() {
+          return { entries };
+        },
+        template: '<AppLogViewer :entries="entries" :newest-first="true" />',
+      });
+      const wrapper = mount(Harness, {
+        global: {
+          stubs: {
+            AppIcon: { template: '<span class="app-icon-stub" />' },
+          },
+        },
+      });
+
+      entries.value = [entries.value[1], makeEntry(3, { plainLine: 'third' })];
+      await nextTick();
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows).toHaveLength(2);
+      expect(rows[0].text()).toContain('third');
+      expect(rows[1].text()).toContain('second');
+      expect(wrapper.text()).not.toContain('first');
     });
 
     it('emits newestFirst updates when sort toggle is clicked', async () => {

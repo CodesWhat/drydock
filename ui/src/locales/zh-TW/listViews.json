@@ -22,10 +22,6 @@
       "status": "狀態",
       "details": "詳情"
     },
-    "card": {
-      "time": "時間",
-      "version": "版本"
-    },
     "detail": {
       "timestamp": "時間戳",
       "event": "事件",
@@ -156,10 +152,6 @@
       "total": "總計"
     },
     "card": {
-      "vulnerabilities": "個漏洞",
-      "vsUpdate": "對比更新",
-      "fixable": "可修復",
-      "noFixesAvailable": "沒有可用修復",
       "total": "總計"
     },
     "badge": {
@@ -254,10 +246,6 @@
       "private": "私有",
       "public": "公開"
     },
-    "card": {
-      "auth": "認證",
-      "status": "狀態"
-    },
     "status": {
       "connected": "已連線",
       "error": "錯誤",
@@ -289,15 +277,6 @@
       "status": "狀態",
       "containers": "容器",
       "lastSeen": "最後活躍"
-    },
-    "card": {
-      "containers": "容器",
-      "running": "執行中",
-      "images": "映像檔",
-      "lastSeen": "最後活躍"
-    },
-    "list": {
-      "containers": "個容器"
     },
     "detail": {
       "containers": "容器",
@@ -340,9 +319,6 @@
       "status": "狀態",
       "refreshing": "正在重新整理觸發器詳情……",
       "noConfig": "無配置屬性"
-    },
-    "list": {
-      "status": "狀態"
     }
   },
   "watchersView": {
@@ -363,12 +339,6 @@
     "status": {
       "watching": "監視中",
       "paused": "已暫停"
-    },
-    "card": {
-      "containers": "容器",
-      "nextRun": "下次執行",
-      "lastRun": "上次執行",
-      "containersWatched": "監視 {count} 個容器"
     },
     "badge": {
       "maint": "維護"

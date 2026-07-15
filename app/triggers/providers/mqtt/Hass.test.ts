@@ -7,7 +7,10 @@ import {
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
 import * as containerStore from '../../../store/container.js';
+import * as requestUpdateModule from '../../../updates/request-update.js';
+import { UpdateRequestError } from '../../../updates/request-update.js';
 import Hass, { HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT } from './Hass.js';
+import { getHassCommandTopicFromStateTopic } from './hass-commands.js';
 
 const MOCK_VERSION = '1.4.0-test';
 
@@ -26,6 +29,54 @@ vi.mock('../../../configuration/index.js', async (importOriginal) => {
     getVersion: () => MOCK_VERSION,
   };
 });
+
+// #210 — recordAuditEvent is fully mocked (not spied) since the real
+// implementation writes to the LokiJS audit store, which is not wired up in
+// this unit-test environment.
+const { mockRecordAuditEvent } = vi.hoisted(() => ({
+  mockRecordAuditEvent: vi.fn(),
+}));
+
+vi.mock('../../../api/audit-events.js', () => ({
+  recordAuditEvent: mockRecordAuditEvent,
+}));
+
+// #210 — flush the microtask queue past a macrotask boundary, so every
+// pending `.then()`/`await` chain triggered by an unawaited command-message
+// listener invocation (see fireCommandMessage below) has settled, regardless
+// of how many microtask hops it took.
+function flushMicrotasks(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+// #210 — builds a fully hass-command-capable mqtt client double.
+function makeCapableClientMock() {
+  return {
+    publish: vi.fn(() => {}),
+    subscribeAsync: vi.fn().mockResolvedValue(undefined),
+    unsubscribeAsync: vi.fn().mockResolvedValue(undefined),
+    on: vi.fn(),
+    removeListener: vi.fn(),
+  };
+}
+
+function getRegisteredMessageListener(clientMock: { on: ReturnType<typeof vi.fn> }) {
+  const call = clientMock.on.mock.calls.find(([event]: [string]) => event === 'message');
+  return call?.[1] as
+    | ((topic: string, payload: Buffer, packet: { retain: boolean }) => void)
+    | undefined;
+}
+
+async function fireCommandMessage(
+  clientMock: { on: ReturnType<typeof vi.fn> },
+  topic: string,
+  payload: string | Buffer,
+  packet: { retain: boolean } = { retain: false },
+): Promise<void> {
+  const listener = getRegisteredMessageListener(clientMock);
+  listener?.(topic, Buffer.isBuffer(payload) ? payload : Buffer.from(payload), packet);
+  await flushMicrotasks();
+}
 
 const containerData = [
   {
@@ -68,6 +119,7 @@ beforeEach(async () => {
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
 });
 
@@ -228,7 +280,7 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
       value_template: '{{ value_json.image_tag_value }}',
       latest_version_topic: 'topic/watcher-name/container-name',
       latest_version_template:
-        '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] }}{% else %}{{ value_json.result_tag }}{% endif %}',
+        '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] if value_json.result_digest else value_json.image_tag_value }}{% else %}{{ value_json.result_tag if value_json.result_tag else value_json.image_tag_value }}{% endif %}',
       json_attributes_topic: 'topic/watcher-name/container-name',
     }),
     { retain: true },
@@ -341,6 +393,83 @@ test('addContainerSensor should prefer dd.display.picture over icon-derived enti
   const discoveryCall = mqttClientMock.publish.mock.calls[0];
   const discoveryPayload = JSON.parse(discoveryCall[1]);
   expect(discoveryPayload.entity_picture).toBe('https://images.example.com/nextcloud.png');
+});
+
+test('addContainerSensor should ignore removed wud.display.picture', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'wud.display.picture': 'https://images.example.com/legacy-nextcloud.png',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  );
+});
+
+test('addContainerSensor should not fall through to wud.display.picture for an empty dd value', async () => {
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'dd.display.picture': '',
+      'wud.display.picture': 'https://images.example.com/legacy-nextcloud.png',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  );
+});
+
+test('addContainerSensor should warn once when multiple agents share a watcher name and the agent segment flag is disabled', async () => {
+  const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+  vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+    { id: 'c1', watcher: 'collision-watcher', agent: 'ml' },
+    { id: 'c2', watcher: 'collision-watcher' },
+  ] as any);
+
+  await hass.addContainerSensor({
+    name: 'nginx',
+    watcher: 'collision-watcher',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(logWarnSpy).toHaveBeenCalledWith(
+    'Multiple agents share watcher name "collision-watcher" but the Home Assistant MQTT topic layout has no agent segment, so their topics/sensors will collide. Set DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true to opt into the corrected layout before it becomes the default in v1.7.0.',
+  );
+
+  logWarnSpy.mockClear();
+  await hass.addContainerSensor({
+    name: 'nginx',
+    watcher: 'collision-watcher',
+    displayIcon: 'mdi:docker',
+  });
+  expect(logWarnSpy).not.toHaveBeenCalled();
+});
+
+test('addContainerSensor should not warn when a watcher name has only one distinct agent', async () => {
+  const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+  vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+    { id: 'c1', watcher: 'single-agent-watcher', agent: 'ml' },
+    { id: 'c2', watcher: 'single-agent-watcher', agent: 'ml' },
+  ] as any);
+
+  await hass.addContainerSensor({
+    name: 'nginx',
+    watcher: 'single-agent-watcher',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(logWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Multiple agents share'));
 });
 
 test.each(
@@ -631,6 +760,7 @@ test('addContainerSensor should skip discovery when discovery is false', async (
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
   vi.spyOn(hassNoDiscovery, 'publishDiscoveryMessage');
   vi.spyOn(hassNoDiscovery, 'updateContainerSensors').mockResolvedValue();
@@ -654,6 +784,7 @@ test('removeContainerSensor should skip discovery when discovery is false', asyn
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
   vi.spyOn(hassNoDiscovery, 'removeSensor');
   vi.spyOn(hassNoDiscovery, 'updateContainerSensors').mockResolvedValue();
@@ -677,6 +808,7 @@ test('updateContainerSensors should skip discovery messages when discovery is fa
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
   await hassNoDiscovery.updateContainerSensors({
     name: 'container-name',
@@ -697,6 +829,7 @@ test('updateWatcherSensors should skip discovery when discovery is false', async
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
   await hassNoDiscovery.updateWatcherSensors({
     watcher: { name: 'watcher-name' },
@@ -1098,6 +1231,7 @@ test('addContainerSensor should enforce a defensive cap on tracked state topics'
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
 
   const hassWithInternalMap = hassNoDiscovery as unknown as {
@@ -1143,6 +1277,7 @@ test('deregister should invoke event unregister callbacks', async () => {
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
 
   hassWithUnregisterCallbacks.deregister();
@@ -1152,6 +1287,212 @@ test('deregister should invoke event unregister callbacks', async () => {
   expect(unregisterContainerRemoved).toHaveBeenCalledTimes(1);
   expect(unregisterWatcherStart).toHaveBeenCalledTimes(1);
   expect(unregisterWatcherStop).toHaveBeenCalledTimes(1);
+});
+
+// ── #491: hass sensor sync respects isContainerAllowed gating ───────────────
+
+describe('hass sensor sync gating by isContainerAllowed (#491)', () => {
+  let mqttClientGatedMock: { publish: ReturnType<typeof vi.fn> };
+  let isContainerAllowedMock: ReturnType<typeof vi.fn>;
+  let gatedHass: Hass;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mqttClientGatedMock = { publish: vi.fn(() => {}) };
+    isContainerAllowedMock = vi.fn().mockReturnValue(true);
+    gatedHass = new Hass({
+      client: mqttClientGatedMock,
+      configuration: {
+        topic: 'topic',
+        hass: {
+          discovery: true,
+          prefix: 'homeassistant',
+        },
+      },
+      log,
+      isContainerAllowed: (container) => isContainerAllowedMock(container),
+    });
+  });
+
+  test('containerAdded for an excluded container publishes the removal payload, not a discovery add', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+
+    await containerAddedCb({ id: 'ctr-excluded', name: 'nginx', watcher: 'local' });
+
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_nginx/config',
+      '',
+      { retain: true },
+    );
+    const discoveryAddPublishes = mqttClientGatedMock.publish.mock.calls.filter(
+      ([topic, payload]) =>
+        topic === 'homeassistant/update/topic_local_nginx/config' && payload !== '',
+    );
+    expect(discoveryAddPublishes).toHaveLength(0);
+  });
+
+  test('a second event for the same still-excluded container does not repeat the removal; debug skip is logged', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-excluded-2', name: 'redis', watcher: 'local' };
+
+    await containerAddedCb(container);
+    mqttClientGatedMock.publish.mockClear();
+    const debugSpy = vi.spyOn(log, 'debug').mockImplementation(() => {});
+
+    await containerAddedCb(container);
+
+    expect(mqttClientGatedMock.publish).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Skip hass sensor sync for excluded container [topic/local/redis]',
+    );
+  });
+
+  test('a rejected removal publish drops the dedupe key so the next event retries; success re-establishes the dedupe', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-removal-retry', name: 'nginx', watcher: 'local' };
+    const internalSet = (gatedHass as unknown as { cleanedExcludedContainerKeys: Set<string> })
+      .cleanedExcludedContainerKeys;
+
+    // First excluded event: the removal publish rejects.
+    mqttClientGatedMock.publish.mockRejectedValueOnce(new Error('mqtt publish failed'));
+    await expect(containerAddedCb(container)).rejects.toThrow('mqtt publish failed');
+    // A failed removal must not be marked cleaned — the key must not stick.
+    expect(internalSet.size).toBe(0);
+
+    mqttClientGatedMock.publish.mockClear();
+
+    // Second excluded event: removal is attempted again (not skipped) and
+    // this time succeeds, so the key is (re-)added.
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_nginx/config',
+      '',
+      { retain: true },
+    );
+    expect(internalSet.size).toBe(1);
+
+    mqttClientGatedMock.publish.mockClear();
+
+    // Third excluded event: dedupe works again after the successful removal.
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).not.toHaveBeenCalled();
+  });
+
+  test('flipping a container from excluded to included publishes a discovery add; flipping back publishes removal again', async () => {
+    const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-flip', name: 'nginx', watcher: 'local' };
+
+    isContainerAllowedMock.mockReturnValue(false);
+    await containerUpdatedCb(container);
+    mqttClientGatedMock.publish.mockClear();
+
+    isContainerAllowedMock.mockReturnValue(true);
+    await containerUpdatedCb(container);
+    const addCall = mqttClientGatedMock.publish.mock.calls.find(
+      ([topic]) => topic === 'homeassistant/update/topic_local_nginx/config',
+    );
+    expect(addCall?.[1]).not.toBe('');
+    mqttClientGatedMock.publish.mockClear();
+
+    isContainerAllowedMock.mockReturnValue(false);
+    await containerUpdatedCb(container);
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_nginx/config',
+      '',
+      { retain: true },
+    );
+  });
+
+  test('excluded container with no id derives its sync key from the state topic; the dedupe still works', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const container = { id: undefined, name: 'no-id-app', watcher: 'local' };
+
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_no-id-app/config',
+      '',
+      { retain: true },
+    );
+
+    mqttClientGatedMock.publish.mockClear();
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).not.toHaveBeenCalled();
+  });
+
+  test('containerRemoved drops a previously-excluded container key so a later add while still excluded cleans again', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const containerRemovedCb = registerContainerRemoved.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-removed-flow', name: 'nginx', watcher: 'local' };
+
+    await containerAddedCb(container);
+    mqttClientGatedMock.publish.mockClear();
+
+    // Still excluded — deduped, no publish (sanity check before removal).
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).not.toHaveBeenCalled();
+
+    await containerRemovedCb(container);
+    mqttClientGatedMock.publish.mockClear();
+
+    // Key was dropped on removal, so the next excluded add cleans again.
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_nginx/config',
+      '',
+      { retain: true },
+    );
+  });
+
+  test('deregister clears cleanedExcludedContainerKeys', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-deregister', name: 'nginx', watcher: 'local' };
+    await containerAddedCb(container);
+
+    const internalSet = (gatedHass as unknown as { cleanedExcludedContainerKeys: Set<string> })
+      .cleanedExcludedContainerKeys;
+    expect(internalSet.size).toBe(1);
+
+    await gatedHass.deregister();
+
+    expect(internalSet.size).toBe(0);
+  });
+
+  test('a command message for a container the predicate rejects is ignored: no update requested, warn logged, no audit event', async () => {
+    const capableClient = makeCapableClientMock();
+    const isContainerAllowedForCommands = vi.fn().mockReturnValue(false);
+    const commandsHass = new Hass({
+      client: capableClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant', commands: true },
+      },
+      log,
+      isContainerAllowed: isContainerAllowedForCommands,
+    });
+    await commandsHass.initCommandSubscription();
+
+    const container = { id: 'ctr-excluded-cmd', name: 'nginx', watcher: 'local' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    const requestSpy = vi.spyOn(requestUpdateModule, 'requestContainerUpdate');
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+    const commandTopic = getHassCommandTopicFromStateTopic(
+      commandsHass.getContainerStateTopic({ container }),
+    );
+    await fireCommandMessage(capableClient, commandTopic, 'install', { retain: false });
+
+    expect(requestSpy).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Ignoring hass install command for [nginx]: container is excluded from this trigger',
+    );
+  });
 });
 
 // ── #386: agenttopicsegment flag ─────────────────────────────────────────────
@@ -1172,6 +1513,7 @@ describe('agenttopicsegment flag', () => {
         },
       },
       log,
+      isContainerAllowed: () => true,
     });
   }
 
@@ -1625,6 +1967,1025 @@ describe('agenttopicsegment flag', () => {
         '',
         { retain: true },
       );
+    });
+  });
+});
+
+// ── #210: hass install commands (bidirectional MQTT / HA Install button) ────
+
+describe('hass install commands (#210)', () => {
+  describe('discovery payload', () => {
+    test('hass.commands false/absent: discovery payload has no command_topic/payload_install/extra qos/retain', async () => {
+      // `hass` (top-level fixture) is configured without a `commands` key.
+      await hass.addContainerSensor({
+        name: 'container-name',
+        watcher: 'watcher-name',
+        displayIcon: 'mdi:docker',
+      });
+      const discoveryCall = mqttClientMock.publish.mock.calls[0];
+      const discoveryPayload = JSON.parse(discoveryCall[1]);
+      expect(discoveryPayload).not.toHaveProperty('command_topic');
+      expect(discoveryPayload).not.toHaveProperty('payload_install');
+      expect(discoveryPayload).not.toHaveProperty('qos');
+      expect(discoveryPayload).not.toHaveProperty('retain');
+    });
+
+    test('hass.commands true + discovery true: payload includes command_topic/payload_install/qos/retain', async () => {
+      // #210 bug fix — the command_topic gate now requires a *live* command
+      // subscription, not just the config flag, so establish one first via
+      // a capable client before asserting the discovery payload.
+      const capableClient = makeCapableClientMock();
+      const commandsHass = new Hass({
+        client: capableClient,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await commandsHass.initCommandSubscription();
+      await commandsHass.addContainerSensor({
+        name: 'container-name',
+        watcher: 'watcher-name',
+        displayIcon: 'mdi:docker',
+      });
+      const discoveryCall = capableClient.publish.mock.calls.find(([topic]) =>
+        topic.startsWith('homeassistant/update/'),
+      );
+      const discoveryPayload = JSON.parse(discoveryCall[1]);
+      expect(discoveryPayload.command_topic).toBe('topic/watcher-name/container-name/cmd');
+      expect(discoveryPayload.payload_install).toBe('install');
+      expect(discoveryPayload.qos).toBe(1);
+      expect(discoveryPayload.retain).toBe(false);
+    });
+
+    test('hass.commands true + subscribeAsync rejects: discovery payload omits command_topic/payload_install/qos/retain', async () => {
+      // #210 regression — a broker ACL that denies subscribe (but allows
+      // publish) must not advertise a dead Install button: commandSubscriptionActive
+      // stays false when initCommandSubscription's subscribeAsync rejects.
+      const capableClient = makeCapableClientMock();
+      capableClient.subscribeAsync.mockRejectedValue(new Error('ACL denied'));
+      const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      const commandsHass = new Hass({
+        client: capableClient,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await commandsHass.initCommandSubscription();
+      expect(logWarnSpy).toHaveBeenCalledWith(
+        'Failed to subscribe to Home Assistant command topics (ACL denied)',
+      );
+      await commandsHass.addContainerSensor({
+        name: 'container-name',
+        watcher: 'watcher-name',
+        displayIcon: 'mdi:docker',
+      });
+      const discoveryCall = capableClient.publish.mock.calls.find(([topic]) =>
+        topic.startsWith('homeassistant/update/'),
+      );
+      const discoveryPayload = JSON.parse(discoveryCall[1]);
+      expect(discoveryPayload).not.toHaveProperty('command_topic');
+      expect(discoveryPayload).not.toHaveProperty('payload_install');
+      expect(discoveryPayload).not.toHaveProperty('qos');
+      expect(discoveryPayload).not.toHaveProperty('retain');
+    });
+
+    test('hass.commands true but initCommandSubscription was never called: discovery payload omits command_topic', async () => {
+      // Proves the gate is on real subscription state (commandSubscriptionActive),
+      // not merely the config flag: a fresh Hass never had initCommandSubscription
+      // invoked, so commandSubscriptionActive is still its initial false.
+      const capableClient = makeCapableClientMock();
+      const commandsHass = new Hass({
+        client: capableClient,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await commandsHass.addContainerSensor({
+        name: 'container-name',
+        watcher: 'watcher-name',
+        displayIcon: 'mdi:docker',
+      });
+      const discoveryCall = capableClient.publish.mock.calls.find(([topic]) =>
+        topic.startsWith('homeassistant/update/'),
+      );
+      const discoveryPayload = JSON.parse(discoveryCall[1]);
+      expect(discoveryPayload).not.toHaveProperty('command_topic');
+      expect(discoveryPayload).not.toHaveProperty('payload_install');
+      expect(discoveryPayload).not.toHaveProperty('qos');
+      expect(discoveryPayload).not.toHaveProperty('retain');
+      expect(capableClient.subscribeAsync).not.toHaveBeenCalled();
+    });
+
+    test('after deregister following a successful subscription: discovery payload omits command_topic', async () => {
+      // Covers the commandSubscriptionActive = false assignment in deregister():
+      // a subscription that was live goes dead again once deregistered.
+      const capableClient = makeCapableClientMock();
+      const commandsHass = new Hass({
+        client: capableClient,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await commandsHass.initCommandSubscription();
+      await commandsHass.deregister();
+      await commandsHass.addContainerSensor({
+        name: 'container-name',
+        watcher: 'watcher-name',
+        displayIcon: 'mdi:docker',
+      });
+      const discoveryCall = capableClient.publish.mock.calls.find(([topic]) =>
+        topic.startsWith('homeassistant/update/'),
+      );
+      const discoveryPayload = JSON.parse(discoveryCall[1]);
+      expect(discoveryPayload).not.toHaveProperty('command_topic');
+      expect(discoveryPayload).not.toHaveProperty('payload_install');
+      expect(discoveryPayload).not.toHaveProperty('qos');
+      expect(discoveryPayload).not.toHaveProperty('retain');
+    });
+
+    test('hass.commands true + discovery false: no discovery publish at all', async () => {
+      const commandsNoDiscoveryHass = new Hass({
+        client: mqttClientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: false, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      vi.spyOn(commandsNoDiscoveryHass, 'updateContainerSensors').mockResolvedValue(undefined);
+      await commandsNoDiscoveryHass.addContainerSensor({
+        name: 'container-name',
+        watcher: 'watcher-name',
+        displayIcon: 'mdi:docker',
+      });
+      const discoveryCalls = mqttClientMock.publish.mock.calls.filter(([topic]) =>
+        topic.startsWith('homeassistant/'),
+      );
+      expect(discoveryCalls).toHaveLength(0);
+    });
+
+    test('agent-segmented layout: command_topic reflects the 5-segment state topic', async () => {
+      const capableClient = makeCapableClientMock();
+      const agentCommandsHass = new Hass({
+        client: capableClient,
+        configuration: {
+          topic: 'topic',
+          hass: {
+            discovery: true,
+            prefix: 'homeassistant',
+            commands: true,
+            agenttopicsegment: true,
+          },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await agentCommandsHass.initCommandSubscription();
+      await agentCommandsHass.addContainerSensor({
+        id: 'ctr-1',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+      const discoveryCall = capableClient.publish.mock.calls.find(([topic]) =>
+        topic.startsWith('homeassistant/update/'),
+      );
+      const discoveryPayload = JSON.parse(discoveryCall[1]);
+      expect(discoveryPayload.command_topic).toBe('topic/agent/ml/local/nginx/cmd');
+    });
+  });
+
+  describe('initCommandSubscription', () => {
+    let capableClientMock: ReturnType<typeof makeCapableClientMock>;
+
+    beforeEach(() => {
+      capableClientMock = makeCapableClientMock();
+    });
+
+    function makeCommandsHass(
+      configOverrides: Record<string, unknown> = {},
+      client: unknown = capableClientMock,
+    ) {
+      return new Hass({
+        client,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: true, ...configOverrides },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+    }
+
+    test('no-op when hass.commands is false/absent', async () => {
+      const h = makeCommandsHass({ commands: false });
+      await h.initCommandSubscription();
+      expect(capableClientMock.on).not.toHaveBeenCalled();
+      expect(capableClientMock.subscribeAsync).not.toHaveBeenCalled();
+    });
+
+    test('capable client: subscribes with the two exact filters at qos 1, registers one message listener', async () => {
+      const h = makeCommandsHass();
+      await h.initCommandSubscription();
+      expect(capableClientMock.on).toHaveBeenCalledTimes(1);
+      expect(capableClientMock.on).toHaveBeenCalledWith('message', expect.any(Function));
+      expect(capableClientMock.subscribeAsync).toHaveBeenCalledTimes(1);
+      expect(capableClientMock.subscribeAsync).toHaveBeenCalledWith(
+        ['topic/+/+/cmd', 'topic/agent/+/+/+/cmd'],
+        { qos: 1 },
+      );
+    });
+
+    test('publish-only client: warns and skips, no subscription surface exists on it', async () => {
+      const publishOnlyClient = { publish: vi.fn() };
+      const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      const h = makeCommandsHass({}, publishOnlyClient);
+      await h.initCommandSubscription();
+      expect(logWarnSpy).toHaveBeenCalledWith(
+        'Home Assistant install commands are enabled but the MQTT client does not support subscriptions; skipping.',
+      );
+      // publishOnlyClient (the client actually passed to Hass) lacks
+      // on/subscribeAsync entirely, so no subscription could have been
+      // established on it.
+      expect(publishOnlyClient.on).toBeUndefined();
+      expect(publishOnlyClient.subscribeAsync).toBeUndefined();
+    });
+
+    test('subscribeAsync rejection: caught, warned, listener cleaned up, method resolves', async () => {
+      capableClientMock.subscribeAsync.mockRejectedValue(new Error('ACL denied'));
+      const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      const h = makeCommandsHass();
+
+      await expect(h.initCommandSubscription()).resolves.toBeUndefined();
+
+      const registeredListener = capableClientMock.on.mock.calls[0][1];
+      expect(logWarnSpy).toHaveBeenCalledWith(
+        'Failed to subscribe to Home Assistant command topics (ACL denied)',
+      );
+      expect(capableClientMock.removeListener).toHaveBeenCalledWith('message', registeredListener);
+    });
+
+    test('subscribeAsync rejection with a non-Error value still warns using String(error)', async () => {
+      capableClientMock.subscribeAsync.mockRejectedValue('acl-denied-string');
+      const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      const h = makeCommandsHass();
+
+      await h.initCommandSubscription();
+
+      expect(logWarnSpy).toHaveBeenCalledWith(
+        'Failed to subscribe to Home Assistant command topics (acl-denied-string)',
+      );
+    });
+
+    test('called twice (re-init) registers a fresh, independent listener each time', async () => {
+      const h = makeCommandsHass();
+      await h.initCommandSubscription();
+      await h.initCommandSubscription();
+      expect(capableClientMock.on).toHaveBeenCalledTimes(2);
+      expect(capableClientMock.subscribeAsync).toHaveBeenCalledTimes(2);
+      const [firstListener] = capableClientMock.on.mock.calls[0];
+      const [secondListener] = capableClientMock.on.mock.calls[1];
+      expect(firstListener).toBe('message');
+      expect(secondListener).toBe('message');
+      expect(capableClientMock.on.mock.calls[0][1]).not.toBe(capableClientMock.on.mock.calls[1][1]);
+    });
+
+    test('subscribeAsync rejection where client capability degrades between checks skips the removeListener cleanup call', async () => {
+      // hasHassCommandCapableClient() is a runtime duck-type check re-evaluated
+      // on every call rather than cached, so the catch block's cleanup guard
+      // (`this.commandMessageHandler && hasHassCommandCapableClient(this.client)`)
+      // re-checks capability independently of the entry guard on line 341. A
+      // client whose capability degenerates *between* those two checks (e.g. a
+      // transport that tears down its subscribe/unsubscribe surface mid-call)
+      // must skip the removeListener cleanup rather than throw.
+      let unsubscribeAsyncAccessCount = 0;
+      const degradingClient = {
+        publish: vi.fn(),
+        on: vi.fn(),
+        removeListener: vi.fn(),
+        subscribeAsync: vi.fn().mockRejectedValue(new Error('boom')),
+      } as unknown as {
+        publish: ReturnType<typeof vi.fn>;
+        on: ReturnType<typeof vi.fn>;
+        removeListener: ReturnType<typeof vi.fn>;
+        subscribeAsync: ReturnType<typeof vi.fn>;
+        unsubscribeAsync?: () => Promise<unknown>;
+      };
+      Object.defineProperty(degradingClient, 'unsubscribeAsync', {
+        configurable: true,
+        get() {
+          unsubscribeAsyncAccessCount += 1;
+          // Capable on the entry guard's check, incapable by the time the
+          // catch block re-checks.
+          return unsubscribeAsyncAccessCount === 1 ? vi.fn() : undefined;
+        },
+      });
+
+      const h = makeCommandsHass({}, degradingClient);
+      await h.initCommandSubscription();
+
+      expect(degradingClient.removeListener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('inbound command message handling', () => {
+    const baseTopic = 'topic';
+    let commandClientMock: ReturnType<typeof makeCapableClientMock>;
+    let commandsHass: Hass;
+
+    beforeEach(async () => {
+      commandClientMock = makeCapableClientMock();
+      commandsHass = new Hass({
+        client: commandClientMock,
+        configuration: {
+          topic: baseTopic,
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await commandsHass.initCommandSubscription();
+      // Default spy with no implementation — negative-assertion tests never
+      // reach the call at all (guard clauses return earlier), while
+      // positive-path tests override with their own mockResolvedValue/
+      // mockRejectedValue below.
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate');
+    });
+
+    function seedContainer(overrides: Record<string, unknown> = {}) {
+      const container = { id: 'ctr-1', name: 'nginx', watcher: 'local', ...overrides };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+      return container;
+    }
+
+    function commandTopicFor(container: { name: string; watcher: string; agent?: string }) {
+      return getHassCommandTopicFromStateTopic(commandsHass.getContainerStateTopic({ container }));
+    }
+
+    // ── Retained-message guard ────────────────────────────────────────────
+
+    test('retained message is ignored: no update call, no audit, debug log only', async () => {
+      const container = seedContainer();
+      const debugSpy = vi.spyOn(log, 'debug').mockImplementation(() => {});
+      await fireCommandMessage(commandClientMock, commandTopicFor(container), 'install', {
+        retain: true,
+      });
+      expect(requestUpdateModule.requestContainerUpdate).not.toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Ignoring retained hass command message'),
+      );
+    });
+
+    test('non-retained message proceeds to resolution (baseline happy path)', async () => {
+      const container = seedContainer();
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockResolvedValue({
+        operationId: 'op-baseline',
+      } as any);
+      await fireCommandMessage(commandClientMock, commandTopicFor(container), 'install', {
+        retain: false,
+      });
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledWith(container);
+    });
+
+    // ── Topic/payload guards ──────────────────────────────────────────────
+
+    test('topic not ending in /cmd is dropped', async () => {
+      seedContainer();
+      await fireCommandMessage(commandClientMock, 'topic/local/nginx', 'install', {
+        retain: false,
+      });
+      expect(requestUpdateModule.requestContainerUpdate).not.toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+    });
+
+    test('topic not under the base topic is dropped', async () => {
+      seedContainer();
+      await fireCommandMessage(commandClientMock, 'other/local/nginx/cmd', 'install', {
+        retain: false,
+      });
+      expect(requestUpdateModule.requestContainerUpdate).not.toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      '',
+      'ON',
+      '{"install":true}',
+      'Install',
+    ])('unexpected payload %j is dropped independently, debug-logged, no call', async (payload) => {
+      const container = seedContainer();
+      const debugSpy = vi.spyOn(log, 'debug').mockImplementation(() => {});
+      await fireCommandMessage(commandClientMock, commandTopicFor(container), payload, {
+        retain: false,
+      });
+      expect(requestUpdateModule.requestContainerUpdate).not.toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('unexpected payload'));
+    });
+
+    // ── Reverse lookup (Gotcha B) ─────────────────────────────────────────
+
+    test('default-layout command topic resolves to the exact seeded container object', async () => {
+      const container = seedContainer();
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockResolvedValue({
+        operationId: 'op-1',
+      } as any);
+      await fireCommandMessage(commandClientMock, commandTopicFor(container), 'install', {
+        retain: false,
+      });
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledWith(container);
+    });
+
+    test('agent-segmented command topic resolves to the correct agent-scoped container', async () => {
+      const agentClientMock = makeCapableClientMock();
+      const agentHass = new Hass({
+        client: agentClientMock,
+        configuration: {
+          topic: baseTopic,
+          hass: {
+            discovery: true,
+            prefix: 'homeassistant',
+            commands: true,
+            agenttopicsegment: true,
+          },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await agentHass.initCommandSubscription();
+      const container = { id: 'ctr-agent-1', name: 'nginx', watcher: 'local', agent: 'ml' };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockResolvedValue({
+        operationId: 'op-agent',
+      } as any);
+      const commandTopic = getHassCommandTopicFromStateTopic(
+        agentHass.getContainerStateTopic({ container }),
+      );
+      await fireCommandMessage(agentClientMock, commandTopic, 'install', { retain: false });
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledWith(container);
+    });
+
+    test('no matching container: not-found, dropped, debug log, no audit event', async () => {
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([]);
+      const debugSpy = vi.spyOn(log, 'debug').mockImplementation(() => {});
+      await fireCommandMessage(commandClientMock, `${baseTopic}/local/ghost/cmd`, 'install', {
+        retain: false,
+      });
+      expect(requestUpdateModule.requestContainerUpdate).not.toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('No tracked container'));
+    });
+
+    test('two containers colliding on the same state topic: ambiguous, dropped, warn log, no call, no audit', async () => {
+      const containerA = { id: 'ctr-a', name: 'nginx', watcher: 'local' };
+      const containerB = { id: 'ctr-b', name: 'nginx', watcher: 'local' };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([containerA, containerB] as any);
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      await fireCommandMessage(commandClientMock, `${baseTopic}/local/nginx/cmd`, 'install', {
+        retain: false,
+      });
+      expect(requestUpdateModule.requestContainerUpdate).not.toHaveBeenCalled();
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Ambiguous hass command topic'));
+    });
+
+    test('resolves via a live store scan with zero container-added/updated events ever fired (no cache dependency)', async () => {
+      const freshClientMock = makeCapableClientMock();
+      const freshHass = new Hass({
+        client: freshClientMock,
+        configuration: {
+          topic: baseTopic,
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await freshHass.initCommandSubscription();
+
+      // No addContainerSensor/removeContainerSensor call was ever made on
+      // freshHass, so the event-driven containerStateTopicById cache is
+      // guaranteed empty — proves resolution does not depend on it.
+      const internalMap = (freshHass as unknown as { containerStateTopicById: Map<string, string> })
+        .containerStateTopicById;
+      expect(internalMap.size).toBe(0);
+
+      const container = { id: 'ctr-cold', name: 'nginx', watcher: 'local' };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockResolvedValue({
+        operationId: 'op-cold',
+      } as any);
+
+      const commandTopic = getHassCommandTopicFromStateTopic(
+        freshHass.getContainerStateTopic({ container }),
+      );
+      await fireCommandMessage(freshClientMock, commandTopic, 'install', { retain: false });
+
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledWith(container);
+      expect(internalMap.size).toBe(0);
+    });
+
+    test('container removed from the store before the command arrives resolves as not-found', async () => {
+      const container = { id: 'ctr-gone', name: 'nginx', watcher: 'local' };
+      const commandTopic = commandTopicFor(container);
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([]); // removed by the time the command arrives
+      const debugSpy = vi.spyOn(log, 'debug').mockImplementation(() => {});
+      await fireCommandMessage(commandClientMock, commandTopic, 'install', { retain: false });
+      expect(requestUpdateModule.requestContainerUpdate).not.toHaveBeenCalled();
+      expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('No tracked container'));
+    });
+
+    test('container without an id: rate-limit key falls back to the state topic', async () => {
+      const container = seedContainer({ id: undefined });
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockResolvedValue({
+        operationId: 'op-noid',
+      } as any);
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      const commandTopic = commandTopicFor(container);
+
+      await fireCommandMessage(commandClientMock, commandTopic, 'install', { retain: false });
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledTimes(1);
+
+      // Firing again immediately proves the fallback key (derived from
+      // stateTopic, since getContainerId() returns undefined) is stable
+      // across calls and is what the rate limiter is keying on.
+      await fireCommandMessage(commandClientMock, commandTopic, 'install', { retain: false });
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('rate limited'));
+    });
+
+    test('an exception thrown outside the inner try/catch (e.g. containerStore.getContainers throwing) is caught by the outer safety net and warn-logged', async () => {
+      vi.spyOn(containerStore, 'getContainers').mockImplementation(() => {
+        throw new Error('store unavailable');
+      });
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+      await fireCommandMessage(commandClientMock, `${baseTopic}/local/nginx/cmd`, 'install', {
+        retain: false,
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error handling hass command message on'),
+      );
+    });
+
+    // ── requestContainerUpdate outcomes / audit ─────────────────────────────
+
+    test('success: records a success audit event with the operation id, info-logs', async () => {
+      const container = seedContainer();
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockResolvedValue({
+        operationId: 'op-happy',
+      } as any);
+      const infoSpy = vi.spyOn(log, 'info').mockImplementation(() => {});
+      await fireCommandMessage(commandClientMock, commandTopicFor(container), 'install', {
+        retain: false,
+      });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'mqtt-command-update',
+        container,
+        status: 'success',
+        details: 'operation op-happy',
+      });
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Accepted hass install command'),
+      );
+    });
+
+    test('UpdateRequestError 400 (no update available): swallowed, info-logged, audited as error', async () => {
+      const container = seedContainer();
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockRejectedValue(
+        new UpdateRequestError(400, 'No update available for this container'),
+      );
+      const infoSpy = vi.spyOn(log, 'info').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      await expect(
+        fireCommandMessage(commandClientMock, commandTopicFor(container), 'install', {
+          retain: false,
+        }),
+      ).resolves.toBeUndefined();
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'mqtt-command-update',
+        container,
+        status: 'error',
+        details: 'No update available for this container',
+      });
+      expect(infoSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Hass install command rejected'),
+      );
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Unexpected error'));
+    });
+
+    test('UpdateRequestError 409 (active operation): swallowed, audited as error', async () => {
+      const container = seedContainer();
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockRejectedValue(
+        new UpdateRequestError(409, 'Container update already in progress'),
+      );
+      await fireCommandMessage(commandClientMock, commandTopicFor(container), 'install', {
+        retain: false,
+      });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'mqtt-command-update',
+        container,
+        status: 'error',
+        details: 'Container update already in progress',
+      });
+    });
+
+    test('UpdateRequestError 404 (no docker trigger found): swallowed, audited as error', async () => {
+      const container = seedContainer();
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockRejectedValue(
+        new UpdateRequestError(404, 'No docker trigger found for this container'),
+      );
+      await fireCommandMessage(commandClientMock, commandTopicFor(container), 'install', {
+        retain: false,
+      });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'mqtt-command-update',
+        container,
+        status: 'error',
+        details: 'No docker trigger found for this container',
+      });
+    });
+
+    test('unexpected non-UpdateRequestError: warn-logged, audited generically, does not throw', async () => {
+      const container = seedContainer();
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockRejectedValue(new Error('boom'));
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      await expect(
+        fireCommandMessage(commandClientMock, commandTopicFor(container), 'install', {
+          retain: false,
+        }),
+      ).resolves.toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Unexpected error handling hass install command for container [nginx] (boom)',
+        ),
+      );
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'mqtt-command-update',
+        container,
+        status: 'error',
+        details: 'Unexpected error',
+      });
+    });
+
+    test('unexpected non-Error thrown value still warn-logs (String(error) fallback) and audits generically', async () => {
+      const container = seedContainer();
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockRejectedValue(
+        'raw-string-rejection',
+      );
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      await fireCommandMessage(commandClientMock, commandTopicFor(container), 'install', {
+        retain: false,
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Unexpected error handling hass install command for container [nginx] (raw-string-rejection)',
+        ),
+      );
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'mqtt-command-update',
+        container,
+        status: 'error',
+        details: 'Unexpected error',
+      });
+    });
+
+    // ── Cross-agent routing ─────────────────────────────────────────────────
+
+    test('resolved container carries agent field intact into requestContainerUpdate', async () => {
+      const agentClientMock = makeCapableClientMock();
+      const agentHass = new Hass({
+        client: agentClientMock,
+        configuration: {
+          topic: baseTopic,
+          hass: {
+            discovery: true,
+            prefix: 'homeassistant',
+            commands: true,
+            agenttopicsegment: true,
+          },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await agentHass.initCommandSubscription();
+      const container = {
+        id: 'ctr-agent-routing',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'agent-1',
+      };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockResolvedValue({
+        operationId: 'op-agent-routing',
+      } as any);
+      const commandTopic = getHassCommandTopicFromStateTopic(
+        agentHass.getContainerStateTopic({ container }),
+      );
+      await fireCommandMessage(agentClientMock, commandTopic, 'install', { retain: false });
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ agent: 'agent-1' }),
+      );
+    });
+
+    test('agenttopicsegment=true globally with a no-agent container still resolves via the agentless filter', async () => {
+      const agentClientMock = makeCapableClientMock();
+      const agentHass = new Hass({
+        client: agentClientMock,
+        configuration: {
+          topic: baseTopic,
+          hass: {
+            discovery: true,
+            prefix: 'homeassistant',
+            commands: true,
+            agenttopicsegment: true,
+          },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await agentHass.initCommandSubscription();
+      const container = { id: 'ctr-noagent', name: 'nginx', watcher: 'local', agent: undefined };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockResolvedValue({
+        operationId: 'op-noagent',
+      } as any);
+      const commandTopic = getHassCommandTopicFromStateTopic(
+        agentHass.getContainerStateTopic({ container }),
+      );
+      await fireCommandMessage(agentClientMock, commandTopic, 'install', { retain: false });
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledWith(container);
+    });
+  });
+
+  describe('rate limiting', () => {
+    let clientMock: ReturnType<typeof makeCapableClientMock>;
+    let rlHass: Hass;
+    let dateNowSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(async () => {
+      clientMock = makeCapableClientMock();
+      rlHass = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await rlHass.initCommandSubscription();
+      dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockResolvedValue({
+        operationId: 'op-rl',
+      } as any);
+    });
+
+    afterEach(() => {
+      dateNowSpy.mockRestore();
+    });
+
+    test('immediate second command for the same container is rate-limited; update requested exactly once', async () => {
+      const container = { id: 'ctr-rl-1', name: 'nginx', watcher: 'local' };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+      const commandTopic = getHassCommandTopicFromStateTopic(
+        rlHass.getContainerStateTopic({ container }),
+      );
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+      await fireCommandMessage(clientMock, commandTopic, 'install', { retain: false });
+      await fireCommandMessage(clientMock, commandTopic, 'install', { retain: false });
+
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('rate limited'));
+      // Only the first (accepted) command is audited; the rate-limited drop is not.
+      expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1);
+    });
+
+    test('command after the cooldown elapses is accepted again', async () => {
+      const container = { id: 'ctr-rl-2', name: 'nginx', watcher: 'local' };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+      const commandTopic = getHassCommandTopicFromStateTopic(
+        rlHass.getContainerStateTopic({ container }),
+      );
+
+      await fireCommandMessage(clientMock, commandTopic, 'install', { retain: false });
+      dateNowSpy.mockReturnValue(1_000_000 + 30_000);
+      await fireCommandMessage(clientMock, commandTopic, 'install', { retain: false });
+
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    test('two different containers near-simultaneously are both accepted independently', async () => {
+      const containerA = { id: 'ctr-rl-a', name: 'nginx', watcher: 'local' };
+      const containerB = { id: 'ctr-rl-b', name: 'redis', watcher: 'local' };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([containerA, containerB] as any);
+      const topicA = getHassCommandTopicFromStateTopic(
+        rlHass.getContainerStateTopic({ container: containerA }),
+      );
+      const topicB = getHassCommandTopicFromStateTopic(
+        rlHass.getContainerStateTopic({ container: containerB }),
+      );
+
+      await fireCommandMessage(clientMock, topicA, 'install', { retain: false });
+      await fireCommandMessage(clientMock, topicB, 'install', { retain: false });
+
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledTimes(2);
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledWith(containerA);
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledWith(containerB);
+    });
+
+    test('synchronous double-fire before the first requestContainerUpdate settles is rejected by the rate limiter itself', async () => {
+      const container = { id: 'ctr-rl-sync', name: 'nginx', watcher: 'local' };
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+      const commandTopic = getHassCommandTopicFromStateTopic(
+        rlHass.getContainerStateTopic({ container }),
+      );
+
+      let resolveUpdate: (value: { operationId: string }) => void;
+      const pendingUpdate = new Promise<{ operationId: string }>((resolve) => {
+        resolveUpdate = resolve;
+      });
+      vi.spyOn(requestUpdateModule, 'requestContainerUpdate').mockReturnValue(pendingUpdate as any);
+
+      const listener = getRegisteredMessageListener(clientMock)!;
+      // Fire twice synchronously, back-to-back, before the first await settles.
+      listener(commandTopic, Buffer.from('install'), { retain: false });
+      listener(commandTopic, Buffer.from('install'), { retain: false });
+
+      resolveUpdate!({ operationId: 'op-sync' });
+      await flushMicrotasks();
+
+      expect(requestUpdateModule.requestContainerUpdate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('deregister / lifecycle', () => {
+    test('deregister unsubscribes exact filters, removes the exact listener, and clears the rate limiter', async () => {
+      const clientMock = makeCapableClientMock();
+      const h = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await h.initCommandSubscription();
+      const registeredListener = clientMock.on.mock.calls[0][1];
+
+      const rateLimiter = (
+        h as unknown as { commandRateLimiter: { tryConsume: (key: string) => boolean } }
+      ).commandRateLimiter;
+      expect(rateLimiter.tryConsume('probe-key')).toBe(true);
+      expect(rateLimiter.tryConsume('probe-key')).toBe(false); // consumed, still within cooldown
+
+      await h.deregister();
+
+      expect(clientMock.unsubscribeAsync).toHaveBeenCalledWith([
+        'topic/+/+/cmd',
+        'topic/agent/+/+/+/cmd',
+      ]);
+      expect(clientMock.removeListener).toHaveBeenCalledWith('message', registeredListener);
+      expect(rateLimiter.tryConsume('probe-key')).toBe(true); // cleared by deregister
+    });
+
+    test('deregister is a no-op for command cleanup when commands were never enabled', async () => {
+      const clientMock = makeCapableClientMock();
+      const h = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: false },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await h.initCommandSubscription(); // no-op since commands:false
+
+      await expect(h.deregister()).resolves.toBeUndefined();
+
+      expect(clientMock.unsubscribeAsync).not.toHaveBeenCalled();
+      expect(clientMock.removeListener).not.toHaveBeenCalled();
+    });
+
+    test('deregister catches unsubscribeAsync rejection, warns, and still resolves', async () => {
+      const clientMock = makeCapableClientMock();
+      clientMock.unsubscribeAsync.mockRejectedValue(new Error('broker gone'));
+      const h = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await h.initCommandSubscription();
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+      await expect(h.deregister()).resolves.toBeUndefined();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to unsubscribe hass command topics (broker gone)',
+      );
+    });
+
+    test('deregister handles a non-Error unsubscribeAsync rejection (String(error) fallback)', async () => {
+      const clientMock = makeCapableClientMock();
+      clientMock.unsubscribeAsync.mockRejectedValue('raw-reason');
+      const h = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: true },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await h.initCommandSubscription();
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+      await h.deregister();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to unsubscribe hass command topics (raw-reason)',
+      );
+    });
+
+    test('full re-init cycle leaves exactly one active listener with no stacking', async () => {
+      const clientMock = makeCapableClientMock();
+      const config = {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant', commands: true },
+      };
+
+      const first = new Hass({
+        client: clientMock,
+        configuration: config,
+        log,
+        isContainerAllowed: () => true,
+      });
+      await first.initCommandSubscription();
+      await first.deregister();
+
+      const second = new Hass({
+        client: clientMock,
+        configuration: config,
+        log,
+        isContainerAllowed: () => true,
+      });
+      await second.initCommandSubscription();
+
+      // 2 registrations total across both instances' lifetimes, 1 removal (from first's deregister).
+      expect(clientMock.on).toHaveBeenCalledTimes(2);
+      expect(clientMock.removeListener).toHaveBeenCalledTimes(1);
+      const firstListener = clientMock.on.mock.calls[0][1];
+      const secondListener = clientMock.on.mock.calls[1][1];
+      expect(firstListener).not.toBe(secondListener);
+      expect(clientMock.removeListener).toHaveBeenCalledWith('message', firstListener);
+    });
+
+    test('existing containerStateTopicById.clear() assertion in deregister() still passes unmodified (regression)', async () => {
+      const clientMock = makeCapableClientMock();
+      const h = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant' },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      await h.addContainerSensor({
+        id: 'container-regression',
+        name: 'container-name',
+        watcher: 'watcher-name',
+        displayIcon: 'mdi:docker',
+      });
+      const internalMap = (h as unknown as { containerStateTopicById: Map<string, string> })
+        .containerStateTopicById;
+      expect(internalMap.size).toBe(1);
+
+      await h.deregister();
+
+      expect(internalMap.size).toBe(0);
     });
   });
 });

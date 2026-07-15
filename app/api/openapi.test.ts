@@ -3,6 +3,43 @@ import { errorResponse, jsonResponse, paginationQueryParams } from './openapi/co
 import { openApiDocument as openApiDocumentFromIndex } from './openapi/index.js';
 import { openApiDocument } from './openapi.js';
 
+/**
+ * Walks the document recursively and returns every $ref value that points at
+ * #/components/schemas/<Name> where <Name> is not present in the provided
+ * schemas set. Used to catch dangling schema references before they reach
+ * validators, Swagger UI, or code generators.
+ */
+function collectSchemaDanglingRefs(document: unknown): string[] {
+  const schemas = new Set(
+    Object.keys(
+      (document as { components?: { schemas?: Record<string, unknown> } }).components?.schemas ??
+        {},
+    ),
+  );
+  const unresolved: string[] = [];
+
+  function walk(value: unknown): void {
+    if (value === null || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item);
+      return;
+    }
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (key === '$ref' && typeof val === 'string' && val.startsWith('#/components/schemas/')) {
+        const name = val.slice('#/components/schemas/'.length);
+        if (!schemas.has(name)) {
+          unresolved.push(val);
+        }
+      } else {
+        walk(val);
+      }
+    }
+  }
+
+  walk(document);
+  return unresolved;
+}
+
 describe('OpenAPI document', () => {
   test('should expose the same OpenAPI document through the decomposed module entrypoint', () => {
     expect(openApiDocumentFromIndex).toBe(openApiDocument);
@@ -11,33 +48,78 @@ describe('OpenAPI document', () => {
   test('should declare OpenAPI 3.1 and include representative API paths', () => {
     expect(openApiDocument.openapi).toBe('3.1.0');
     expect(openApiDocument.info.version).toBe(appPackageJson.version);
-    expect(openApiDocument.paths['/api/openapi.json']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/debug/dump']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/containers/{id}/scan']?.post).toBeDefined();
-    expect(openApiDocument.paths['/api/containers/{id}/stats']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/webhook/watch']?.post).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/openapi.json']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/debug/dump']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/containers/{id}/scan']?.post).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/containers/{id}/stats']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/webhook/watch']?.post).toBeDefined();
     expect(openApiDocument.paths['/auth/login']?.post).toBeDefined();
   });
 
-  test('should define session, webhook, and metrics bearer security schemes', () => {
+  test('should define session, webhook, registry webhook, and metrics security schemes', () => {
     expect(openApiDocument.components.securitySchemes.sessionAuth).toBeDefined();
     expect(openApiDocument.components.securitySchemes.webhookBearerAuth).toBeDefined();
+    expect(openApiDocument.components.securitySchemes.registryWebhookSignature).toMatchObject({
+      type: 'apiKey',
+      in: 'header',
+      name: 'x-drydock-signature',
+    });
     expect(openApiDocument.components.securitySchemes.metricsBearerAuth).toBeDefined();
     expect(openApiDocument.components.securitySchemes.metricsBearerAuth.type).toBe('http');
     expect(openApiDocument.components.securitySchemes.metricsBearerAuth.scheme).toBe('bearer');
   });
 
   test('should keep webhook endpoints protected by bearer auth in the spec', () => {
-    expect(openApiDocument.paths['/api/webhook/watch']?.post?.security).toStrictEqual([
+    expect(openApiDocument.paths['/api/v1/webhook/watch']?.post?.security).toStrictEqual([
       { webhookBearerAuth: [] },
     ]);
   });
 
-  test('should declare /metrics with bearer token and session security alternatives', () => {
+  test('should declare /metrics with bearer token, session, and disabled-auth alternatives', () => {
     expect(openApiDocument.paths['/metrics']?.get?.security).toStrictEqual([
       { metricsBearerAuth: [] },
       { sessionAuth: [] },
+      {},
     ]);
+  });
+
+  test('should model auth status, strategy, and logout response shapes', () => {
+    expect(openApiDocument.paths['/api/auth/methods']?.get?.responses?.[200]).toEqual(
+      jsonResponse('Authentication strategies', {
+        $ref: '#/components/schemas/AuthStrategiesResponse',
+      }),
+    );
+    expect(openApiDocument.paths['/auth/strategies']?.get?.responses?.[200]).toEqual(
+      jsonResponse('Authentication strategies', {
+        $ref: '#/components/schemas/AuthStrategiesResponse',
+      }),
+    );
+    expect(openApiDocument.paths['/api/v1/auth/status']?.get?.responses?.[200]).toEqual(
+      jsonResponse('Authentication provider status', {
+        $ref: '#/components/schemas/AuthStatusResponse',
+      }),
+    );
+    expect(openApiDocument.components.schemas.LogoutResponse).toMatchObject({
+      properties: {
+        logoutUrl: { type: 'string' },
+      },
+    });
+  });
+
+  test('should model container summary update counters', () => {
+    expect(openApiDocument.components.schemas.ContainerSummaryResponse).toMatchObject({
+      properties: {
+        containers: {
+          properties: {
+            updatesAvailable: { type: 'integer', minimum: 0 },
+          },
+          required: ['total', 'running', 'stopped', 'updatesAvailable'],
+        },
+        hotUpdates: { type: 'integer', minimum: 0 },
+        matureUpdates: { type: 'integer', minimum: 0 },
+      },
+      required: ['containers', 'security', 'hotUpdates', 'matureUpdates'],
+    });
   });
 
   test('should model action and webhook success payloads with a result envelope', () => {
@@ -83,6 +165,33 @@ describe('OpenAPI document', () => {
       },
       required: ['message', 'result'],
     });
+
+    expect(openApiDocument.components.schemas.RegistryWebhookResponse).toMatchObject({
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        result: {
+          type: 'object',
+          properties: {
+            provider: { type: 'string' },
+            referencesMatched: { type: 'integer', minimum: 0 },
+            containersMatched: { type: 'integer', minimum: 0 },
+            checksTriggered: { type: 'integer', minimum: 0 },
+            checksFailed: { type: 'integer', minimum: 0 },
+            watchersMissing: { type: 'integer', minimum: 0 },
+          },
+          required: [
+            'provider',
+            'referencesMatched',
+            'containersMatched',
+            'checksTriggered',
+            'checksFailed',
+            'watchersMissing',
+          ],
+        },
+      },
+      required: ['message', 'result'],
+    });
   });
 
   test('should document accepted container updates with an operation id response', () => {
@@ -95,7 +204,7 @@ describe('OpenAPI document', () => {
       required: ['message', 'operationId'],
     });
 
-    expect(openApiDocument.paths['/api/containers/{id}/update']?.post?.responses?.[202]).toEqual(
+    expect(openApiDocument.paths['/api/v1/containers/{id}/update']?.post?.responses?.[202]).toEqual(
       jsonResponse('Container update accepted', {
         $ref: '#/components/schemas/ContainerUpdateAcceptedResponse',
       }),
@@ -103,9 +212,24 @@ describe('OpenAPI document', () => {
   });
 
   test('should expose PATCH /api/settings and keep PUT as deprecated compatibility alias', () => {
-    expect(openApiDocument.paths['/api/settings']?.patch).toBeDefined();
-    expect(openApiDocument.paths['/api/settings']?.put).toBeDefined();
-    expect(openApiDocument.paths['/api/settings']?.put?.deprecated).toBe(true);
+    expect(openApiDocument.paths['/api/v1/settings']?.patch).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/settings']?.put).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/settings']?.put?.deprecated).toBe(true);
+    expect(openApiDocument.components.schemas.Settings).toMatchObject({
+      properties: {
+        internetlessMode: { type: 'boolean' },
+        updateMode: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+      },
+      required: ['internetlessMode', 'updateMode'],
+    });
+    expect(
+      openApiDocument.paths['/api/v1/settings']?.patch?.requestBody?.content?.['application/json']
+        ?.schema,
+    ).toMatchObject({
+      properties: {
+        updateMode: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+      },
+    });
   });
 
   test('should document the bulk container update endpoint', () => {
@@ -119,7 +243,7 @@ describe('OpenAPI document', () => {
       required: ['message', 'accepted', 'rejected'],
     });
 
-    expect(openApiDocument.paths['/api/containers/update']?.post?.responses?.[200]).toEqual(
+    expect(openApiDocument.paths['/api/v1/containers/update']?.post?.responses?.[200]).toEqual(
       jsonResponse('Container update requests processed', {
         $ref: '#/components/schemas/ContainerBulkUpdateResponse',
       }),
@@ -161,43 +285,82 @@ describe('OpenAPI document', () => {
     });
   });
 
+  test('should document typed actionable update preview errors', () => {
+    const previewPath = openApiDocument.paths['/api/v1/containers/{id}/preview'].post;
+
+    expect(openApiDocument.components.schemas.PreviewErrorResponse).toMatchObject({
+      type: 'object',
+      required: ['code', 'message'],
+      properties: {
+        code: {
+          enum: expect.arrayContaining([
+            'no-trigger-configured',
+            'registry-auth-failed',
+            'registry-not-found',
+            'manifest-fetch-failed',
+            'registry-network-error',
+          ]),
+        },
+        action: {
+          properties: {
+            href: { enum: ['/registries', '/triggers'] },
+          },
+        },
+      },
+    });
+    expect(previewPath.responses[401].content['application/json'].schema).toEqual({
+      oneOf: [
+        { $ref: '#/components/schemas/ErrorResponse' },
+        { $ref: '#/components/schemas/PreviewErrorResponse' },
+      ],
+    });
+    expect(previewPath.responses[422].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/PreviewErrorResponse',
+    });
+    expect(previewPath.responses[503].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/PreviewErrorResponse',
+    });
+  });
+
   test('should keep agent-scoped component routes with agent as the final path segment', () => {
-    expect(openApiDocument.paths['/api/triggers/{type}/{name}/{agent}']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/triggers/{agent}/{type}/{name}']).toBeUndefined();
+    expect(openApiDocument.paths['/api/v1/triggers/{type}/{name}/{agent}']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/triggers/{agent}/{type}/{name}']).toBeUndefined();
     expect(
       openApiDocument.paths[
-        '/api/containers/{id}/triggers/{triggerType}/{triggerName}/{triggerAgent}'
+        '/api/v1/containers/{id}/triggers/{triggerType}/{triggerName}/{triggerAgent}'
       ]?.post,
     ).toBeDefined();
     expect(
       openApiDocument.paths[
-        '/api/containers/{id}/triggers/{triggerAgent}/{triggerType}/{triggerName}'
+        '/api/v1/containers/{id}/triggers/{triggerAgent}/{triggerType}/{triggerName}'
       ],
     ).toBeUndefined();
-    expect(openApiDocument.paths['/api/watchers/{type}/{name}/{agent}']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/watchers/{agent}/{type}/{name}']).toBeUndefined();
-    expect(openApiDocument.paths['/api/registries/{type}/{name}/{agent}']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/registries/{agent}/{type}/{name}']).toBeUndefined();
-    expect(openApiDocument.paths['/api/authentications/{type}/{name}/{agent}']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/authentications/{agent}/{type}/{name}']).toBeUndefined();
+    expect(openApiDocument.paths['/api/v1/watchers/{type}/{name}/{agent}']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/watchers/{agent}/{type}/{name}']).toBeUndefined();
+    expect(openApiDocument.paths['/api/v1/registries/{type}/{name}/{agent}']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/registries/{agent}/{type}/{name}']).toBeUndefined();
+    expect(
+      openApiDocument.paths['/api/v1/authentications/{type}/{name}/{agent}']?.get,
+    ).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/authentications/{agent}/{type}/{name}']).toBeUndefined();
   });
 
   test('should describe component collection endpoints with pagination and auth errors', () => {
     const componentCollections = [
       {
-        path: '/api/watchers',
+        path: '/api/v1/watchers',
         tag: 'Watchers',
         nounPlural: 'watchers',
         operationId: 'watcherList',
       },
       {
-        path: '/api/registries',
+        path: '/api/v1/registries',
         tag: 'Registries',
         nounPlural: 'registries',
         operationId: 'registryList',
       },
       {
-        path: '/api/authentications',
+        path: '/api/v1/authentications',
         tag: 'Authentications',
         nounPlural: 'authentications',
         operationId: 'authenticationList',
@@ -257,11 +420,11 @@ describe('OpenAPI document', () => {
 
   test('should model non-paginated collection endpoints with CollectionResult envelopes', () => {
     const collectionPaths = [
-      '/api/containers/{id}/backups',
-      '/api/containers/{id}/triggers',
-      '/api/containers/{id}/update-operations',
-      '/api/agents',
-      '/api/notifications',
+      '/api/v1/containers/{id}/backups',
+      '/api/v1/containers/{id}/triggers',
+      '/api/v1/containers/{id}/update-operations',
+      '/api/v1/agents',
+      '/api/v1/notifications',
     ] as const;
 
     for (const path of collectionPaths) {
@@ -281,13 +444,13 @@ describe('OpenAPI document', () => {
       ]);
 
     expect(openApiPaths['/auth/login']).toBe(authPaths['/auth/login']);
-    expect(openApiPaths['/api/containers']).toBe(containerPaths['/api/containers']);
-    expect(openApiPaths['/api/triggers']).toBe(triggerPaths['/api/triggers']);
+    expect(openApiPaths['/api/v1/containers']).toBe(containerPaths['/api/v1/containers']);
+    expect(openApiPaths['/api/v1/triggers']).toBe(triggerPaths['/api/v1/triggers']);
   });
 
   test('should not contain the removed ghost path /api/containers/stats', () => {
     expect(
-      (openApiDocument.paths as Record<string, unknown>)['/api/containers/stats'],
+      (openApiDocument.paths as Record<string, unknown>)['/api/v1/containers/stats'],
     ).toBeUndefined();
   });
 
@@ -374,24 +537,49 @@ describe('OpenAPI document', () => {
   });
 
   test('should document /api/stats/summary and /api/stats/summary/stream paths', () => {
-    expect(openApiDocument.paths['/api/stats/summary']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/stats/summary']?.get?.operationId).toBe(
+    expect(openApiDocument.paths['/api/v1/stats/summary']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/stats/summary']?.get?.operationId).toBe(
       'getFleetStatsSummary',
     );
-    expect(openApiDocument.paths['/api/stats/summary/stream']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/stats/summary/stream']?.get?.operationId).toBe(
+    expect(openApiDocument.paths['/api/v1/stats/summary/stream']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/stats/summary/stream']?.get?.operationId).toBe(
       'streamFleetStatsSummary',
     );
   });
 
   test('should document /api/operations/{id}/cancel and /api/update-operations/{id} paths', () => {
-    expect(openApiDocument.paths['/api/operations/{id}/cancel']?.post).toBeDefined();
-    expect(openApiDocument.paths['/api/operations/{id}/cancel']?.post?.operationId).toBe(
+    expect(openApiDocument.paths['/api/v1/operations/{id}/cancel']?.post).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/operations/{id}/cancel']?.post?.operationId).toBe(
       'cancelUpdateOperation',
     );
-    expect(openApiDocument.paths['/api/update-operations/{id}']?.get).toBeDefined();
-    expect(openApiDocument.paths['/api/update-operations/{id}']?.get?.operationId).toBe(
+    expect(openApiDocument.paths['/api/v1/update-operations/{id}']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/v1/update-operations/{id}']?.get?.operationId).toBe(
       'getUpdateOperationById',
     );
+  });
+
+  test('collectSchemaDanglingRefs helper: detects missing refs and ignores resolved ones', () => {
+    const fakeDoc = {
+      components: { schemas: { KnownSchema: {} } },
+      paths: {
+        '/test': {
+          get: {
+            responses: {
+              200: { $ref: '#/components/schemas/KnownSchema' },
+              500: { $ref: '#/components/schemas/MissingSchema' },
+            },
+          },
+          tags: ['example'],
+          extra: null,
+        },
+      },
+    };
+    const result = collectSchemaDanglingRefs(fakeDoc);
+    expect(result).toStrictEqual(['#/components/schemas/MissingSchema']);
+  });
+
+  test('should have no dangling $ref pointers to #/components/schemas/* in the assembled document', () => {
+    const unresolved = collectSchemaDanglingRefs(openApiDocument);
+    expect(unresolved).toStrictEqual([]);
   });
 });

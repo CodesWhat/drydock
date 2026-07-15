@@ -5,7 +5,6 @@ import { tooltip as tooltipDirective } from '@/directives/tooltip';
 function factory(props: Record<string, any> = {}, slots: Record<string, any> = {}) {
   return mount(DataFilterBar, {
     props: {
-      modelValue: 'table',
       filteredCount: 5,
       totalCount: 10,
       showFilters: false,
@@ -16,9 +15,9 @@ function factory(props: Record<string, any> = {}, slots: Record<string, any> = {
       stubs: {
         AppIcon: { template: '<span class="app-icon-stub" />' },
         AppIconButton: {
-          props: ['icon', 'variant', 'tooltip', 'ariaLabel'],
+          props: ['icon', 'variant', 'tooltip', 'ariaLabel', 'size'],
           template:
-            '<button class="app-icon-button-stub" :data-icon="icon" :data-variant="variant" :aria-label="ariaLabel"><slot /></button>',
+            '<button class="app-icon-button-stub" :data-icon="icon" :data-variant="variant" :data-size="size" :aria-label="ariaLabel"><slot /></button>',
         },
       },
       directives: { tooltip: {} },
@@ -29,7 +28,6 @@ function factory(props: Record<string, any> = {}, slots: Record<string, any> = {
 function factoryWithTooltip(props: Record<string, any> = {}, slots: Record<string, any> = {}) {
   return mount(DataFilterBar, {
     props: {
-      modelValue: 'table',
       filteredCount: 5,
       totalCount: 10,
       showFilters: false,
@@ -51,6 +49,14 @@ function factoryWithTooltip(props: Record<string, any> = {}, slots: Record<strin
 }
 
 describe('DataFilterBar', () => {
+  it('wraps toolbar control groups instead of compressing their touch targets', () => {
+    const w = factory({ modelValue: 'table' });
+
+    expect(w.get('[data-test="data-filter-bar-controls"]').classes()).toContain('flex-wrap');
+    expect(w.get('[data-test="data-filter-bar-trailing"]').classes()).toContain('flex-wrap');
+    expect(w.get('[data-test="data-filter-bar-view-modes"]').classes()).toContain('shrink-0');
+  });
+
   describe('count display', () => {
     it('renders filtered/total count', () => {
       const w = factory({ filteredCount: 3, totalCount: 12 });
@@ -77,6 +83,11 @@ describe('DataFilterBar', () => {
       expect(filterBtn.exists()).toBe(true);
       expect(filterBtn.attributes('data-icon')).toBe('filter');
       expect(filterBtn.attributes('data-variant')).toBe('plain');
+    });
+
+    it('uses the 44px icon-button size for the filter toggle', () => {
+      const w = factory();
+      expect(w.get('button[aria-label="Toggle filters"]').attributes('data-size')).toBe('sm');
     });
 
     it('renders filter button when hideFilter is not set', () => {
@@ -123,36 +134,70 @@ describe('DataFilterBar', () => {
   });
 
   describe('view mode buttons', () => {
-    it('renders default view mode buttons (table, cards, list)', () => {
+    function viewModeButtons(wrapper: ReturnType<typeof factory>) {
+      return wrapper
+        .findAll('button')
+        .filter((button) => button.attributes('aria-label')?.endsWith('view'));
+    }
+
+    it('renders no view mode switcher when modelValue is undefined', () => {
       const w = factory();
-      const buttons = w.findAll('button');
-      // filter button + 3 view mode buttons = 4
-      const viewBtns = buttons.filter((b) => b.attributes('aria-label')?.endsWith('view'));
-      expect(viewBtns).toHaveLength(3);
-      expect(viewBtns[0].attributes('aria-label')).toBe('Table view');
-      expect(viewBtns[1].attributes('aria-label')).toBe('Cards view');
-      expect(viewBtns[2].attributes('aria-label')).toBe('List view');
+      expect(viewModeButtons(w)).toHaveLength(0);
+      expect(w.find('[role="group"][aria-label="View mode"]').exists()).toBe(false);
+    });
+
+    it('hides the view mode switcher when hideViewToggle is true even with modelValue bound', () => {
+      const w = factory({ modelValue: 'table', hideViewToggle: true });
+
+      expect(viewModeButtons(w)).toHaveLength(0);
+      expect(w.find('[role="group"][aria-label="View mode"]').exists()).toBe(false);
+    });
+
+    it('renders default table/cards view mode buttons when modelValue is provided', () => {
+      const w = factory({ modelValue: 'table' });
+      const buttons = viewModeButtons(w);
+
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0].attributes('aria-label')).toBe('Table view');
+      expect(buttons[0].attributes('aria-pressed')).toBe('true');
+      expect(buttons[0].attributes('data-icon')).toBe('table');
+      expect(buttons[1].attributes('aria-label')).toBe('Cards view');
+      expect(buttons[1].attributes('aria-pressed')).toBe('false');
+      expect(buttons[1].attributes('data-icon')).toBe('grid');
+    });
+
+    it('uses the 44px icon-button size for each view mode', () => {
+      const w = factory({ modelValue: 'table' });
+
+      expect(viewModeButtons(w).map((button) => button.attributes('data-size'))).toEqual([
+        'sm',
+        'sm',
+      ]);
     });
 
     it('renders custom view modes when provided', () => {
       const customModes = [
-        { id: 'grid', icon: 'grid' },
-        { id: 'timeline', icon: 'clock' },
+        { id: 'table', icon: 'table' },
+        { id: 'cards', icon: 'grid' },
       ];
-      const w = factory({ viewModes: customModes });
-      const viewBtns = w
-        .findAll('button')
-        .filter((b) => b.attributes('aria-label')?.endsWith('view'));
-      expect(viewBtns).toHaveLength(2);
-      expect(viewBtns[0].attributes('aria-label')).toBe('Grid view');
-      expect(viewBtns[1].attributes('aria-label')).toBe('Timeline view');
+      const w = factory({ modelValue: 'cards', viewModes: customModes });
+      const buttons = viewModeButtons(w);
+
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0].attributes('aria-label')).toBe('Table view');
+      expect(buttons[1].attributes('aria-label')).toBe('Cards view');
+      expect(buttons[1].attributes('aria-pressed')).toBe('true');
     });
 
     it('emits update:modelValue when a view mode is clicked', async () => {
       const w = factory({ modelValue: 'table' });
-      const cardBtn = w.findAll('button').find((b) => b.attributes('aria-label') === 'Cards view');
+      const cardBtn = viewModeButtons(w).find(
+        (button) => button.attributes('aria-label') === 'Cards view',
+      );
       expect(cardBtn).toBeDefined();
+
       await cardBtn?.trigger('click');
+
       expect(w.emitted('update:modelValue')?.[0]).toEqual(['cards']);
     });
   });
@@ -171,13 +216,15 @@ describe('DataFilterBar', () => {
     });
 
     it('sets aria-label on each view mode button', () => {
-      const w = factory();
+      const w = factory({ modelValue: 'table' });
       const viewBtns = w
         .findAll('button')
-        .filter((b) => b.attributes('aria-label')?.endsWith('view'));
-      expect(viewBtns[0].attributes('aria-label')).toBe('Table view');
-      expect(viewBtns[1].attributes('aria-label')).toBe('Cards view');
-      expect(viewBtns[2].attributes('aria-label')).toBe('List view');
+        .filter((button) => button.attributes('aria-label')?.endsWith('view'));
+
+      expect(viewBtns.map((button) => button.attributes('aria-label'))).toEqual([
+        'Table view',
+        'Cards view',
+      ]);
     });
   });
 
@@ -214,6 +261,13 @@ describe('DataFilterBar', () => {
       const w = factory({}, { center: '<button class="center-content">Scan Now</button>' });
       expect(w.find('.center-content').exists()).toBe(true);
     });
+
+    it('renders the sort slot in the right-side toolbar controls', () => {
+      const w = factory({}, { sort: '<span data-test="sort-slot">Sort control</span>' });
+
+      expect(w.find('[data-test="sort-slot"]').exists()).toBe(true);
+      expect(w.text()).toContain('Sort control');
+    });
   });
 
   describe('themed tooltips', () => {
@@ -240,15 +294,17 @@ describe('DataFilterBar', () => {
     });
 
     it('shows tooltip for view mode icon buttons', async () => {
-      const w = factoryWithTooltip();
+      const w = factoryWithTooltip({ modelValue: 'table' });
       const cardsButton = w
         .findAll('button')
-        .find((b) => b.attributes('aria-label') === 'Cards view');
+        .find((button) => button.attributes('aria-label') === 'Cards view');
       expect(cardsButton).toBeDefined();
+
       await cardsButton?.trigger('mouseenter');
       const tip = getTooltipPopup();
       expect(tip).not.toBeNull();
       expect(tip!.textContent).toBe('Cards view');
+
       await cardsButton?.trigger('mouseleave');
       expect(getTooltipPopup()).toBeNull();
       w.unmount();

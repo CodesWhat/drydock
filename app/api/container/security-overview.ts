@@ -273,7 +273,7 @@ function buildSecurityVulnerabilityPage(
   const total = flattenedVulnerabilities.length;
   const hasMore = pagination.limit > 0 && pagination.offset + pagedVulnerabilities.length < total;
   const links = buildPaginationLinks({
-    basePath: '/api/containers/security/vulnerabilities',
+    basePath: '/api/v1/containers/security/vulnerabilities',
     query,
     limit: pagination.limit,
     offset: pagination.offset,

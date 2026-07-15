@@ -28,12 +28,30 @@ vi.mock('../event/index.js', () => ({
   emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
   emitSecurityScanCycleComplete: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock('./manager.js', () => ({
-  addAgent: vi.fn(),
-  removeAgent: vi.fn(),
-  getAgent: vi.fn(() => undefined),
-  getAgents: vi.fn(() => []),
-}));
+// Stateful mock: mirrors the real manager.ts single-registry-slot-per-name
+// semantics closely enough for onDisconnect()'s instance-checked removal
+// (Bug 3, leg 3) to be exercised realistically. `current` tracks whichever
+// client was most recently addAgent()-ed; getAgent() only returns it while its
+// name matches, so a test that constructs a second adapter for the same name
+// (simulating a reconnect) makes the first adapter's own instance check fail,
+// exactly like the real registry would once the reconnected client displaces it.
+vi.mock('./manager.js', () => {
+  let current: { name: string } | undefined;
+  return {
+    addAgent: vi.fn((client: { name: string }) => {
+      current = client;
+    }),
+    removeAgent: vi.fn((name: string) => {
+      if (current?.name === name) {
+        current = undefined;
+        return true;
+      }
+      return false;
+    }),
+    getAgent: vi.fn((name: string) => (current?.name === name ? current : undefined)),
+    getAgents: vi.fn(() => (current ? [current] : [])),
+  };
+});
 
 // Mock AgentClient to avoid real SSE/HTTP calls — use vi.hoisted so the class
 // is available when vi.mock factory runs (factories are hoisted to top of file).
@@ -86,7 +104,20 @@ function createMockWs(): WebSocketLike & {
       existing.push(listener);
       listeners.set(event, existing);
     }),
-    off: vi.fn(),
+    // Real (not a no-op stub): removes the listener from `listeners` so tests
+    // can verify Bug 3 leg 2 — that checkLivenessAndPing() detaches 'close'/
+    // 'error' before forcing a close, so a subsequently-emitted real 'close'
+    // event does not re-invoke onDisconnect().
+    off: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      const existing = listeners.get(event);
+      if (!existing) {
+        return;
+      }
+      const index = existing.indexOf(listener);
+      if (index !== -1) {
+        existing.splice(index, 1);
+      }
+    }),
     emit: (event: string, ...args: unknown[]) => {
       const eventListeners = listeners.get(event) ?? [];
       for (const listener of eventListeners) {
@@ -114,7 +145,7 @@ function createHello(overrides: Partial<HelloMessage> = {}): HelloMessage {
   };
 }
 
-function createAdapter(hello?: Partial<HelloMessage>) {
+function createAdapter(hello?: Partial<HelloMessage>, options: { reconnected?: boolean } = {}) {
   const ws = createMockWs();
   const helloMsg = createHello(hello);
   const client = new AgentClient(`portwing-edge-${helloMsg.agentId}`, {
@@ -122,7 +153,7 @@ function createAdapter(hello?: Partial<HelloMessage>) {
     port: 0,
     secret: '',
   });
-  const adapter = new EdgeAgentAdapter(client, ws);
+  const adapter = new EdgeAgentAdapter(client, ws, options);
   return { adapter, ws, client, hello: helloMsg };
 }
 
@@ -228,7 +259,7 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     sendFrame(ws, 'metrics', {
       cpuUsage: 0.5,
       cpuCores: 4,
-      memoryTotal: 8 * 1e9,
+      memoryTotal: 8 * 1024 ** 3,
       memoryUsed: 4 * 1e9,
       uptime: 3600,
     });
@@ -512,6 +543,16 @@ describe('EdgeAgentAdapter — dd:container_sync sets connected state', () => {
     );
   });
 
+  test('emits agentConnected as a reconnect when the gateway recognizes the identity', async () => {
+    const { adapter, ws } = createAdapter(undefined, { reconnected: true });
+    adapter.activate();
+
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(emitAgentConnected).toHaveBeenCalledWith(expect.objectContaining({ reconnected: true }));
+  });
+
   test('does not emit agentConnected twice', async () => {
     const { adapter, ws } = createAdapter();
     adapter.activate();
@@ -767,6 +808,153 @@ describe('EdgeAgentAdapter — requestContainerLogs', () => {
     await adapter.onDisconnect();
 
     expect(await logPromise).toMatch(/connection closed/);
+  });
+});
+
+describe('EdgeAgentAdapter — deleteContainer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('sends dd:container_delete_request frame and resolves on success response', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-abc';
+    const deletePromise = adapter.deleteContainer(containerId);
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { containerId: string };
+    };
+    expect(sentFrame.type).toBe('dd:container_delete_request');
+    expect(sentFrame.data.containerId).toBe(containerId);
+
+    sendFrame(ws, 'dd:container_delete_response', { containerId, success: true });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(deletePromise).resolves.toBeUndefined();
+  });
+
+  test('rejects with the agent-provided error message on failure response', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-fail';
+    // Attach the rejection handler immediately (same tick) so the rejection
+    // triggered synchronously by sendFrame below is never briefly unhandled.
+    const deletePromise = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId,
+      success: false,
+      error: 'container is running',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await deletePromise).toBe('container is running');
+  });
+
+  test('rejects with a fallback message when failure response omits error', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-fail-no-msg';
+    const deletePromise = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+
+    sendFrame(ws, 'dd:container_delete_response', { containerId, success: false });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await deletePromise).toBe('delete failed');
+  });
+
+  test('deleteContainer rejects after 30s timeout', async () => {
+    vi.useFakeTimers();
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const deletePromise = adapter.deleteContainer('c-timeout');
+
+    vi.advanceTimersByTime(31_000);
+    await expect(deletePromise).rejects.toThrow(/timed out/);
+
+    vi.useRealTimers();
+  });
+
+  test('onDisconnect rejects pending delete request', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const deletePromise = adapter.deleteContainer('c-disc').catch((err: Error) => err.message);
+
+    await adapter.onDisconnect();
+
+    expect(await deletePromise).toMatch(/connection closed/);
+  });
+
+  test('handleContainerDeleteResponse with no containerId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    expect(() => sendFrame(ws, 'dd:container_delete_response', { success: true })).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('dd:container_delete_response with unknown containerId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId: 'unknown-container',
+      success: true,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — deleteContainer limit and send error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('rejects immediately when pending request limit is reached', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+
+    // Fill to limit
+    for (let i = 0; i < 100; i++) {
+      adapterInternal.pendingRequests.set(`req-${i}`, {
+        resolve: () => {},
+        reject: () => {},
+        timer: setTimeout(() => {}, 99_999),
+      });
+    }
+
+    await expect(adapter.deleteContainer('c-overflow')).rejects.toThrow(/concurrent request limit/);
+
+    // Clean up timers
+    for (const [, pending] of adapterInternal.pendingRequests) {
+      clearTimeout((pending as { timer: ReturnType<typeof setTimeout> }).timer);
+    }
+  });
+
+  test('rejects when ws.send throws during deleteContainer', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('send failed');
+    });
+
+    await expect(adapter.deleteContainer('c-throw')).rejects.toThrow('send failed');
   });
 });
 
@@ -1352,16 +1540,19 @@ describe('EdgeAgentAdapter — branch coverage for uncovered paths', () => {
     expect(ws.close).not.toHaveBeenCalled();
   });
 
-  test('onDisconnect when pingInterval is already undefined (called twice)', async () => {
+  test('onDisconnect when called twice is idempotent (Bug 3 regression)', async () => {
     const { adapter } = createAdapter();
     adapter.activate();
 
-    // First call — clears pingInterval (sets to undefined)
+    // First call — clears pingInterval, removes the agent from the registry.
     await adapter.onDisconnect();
-    // Second call — pingInterval is already undefined, covers the false branch
+    // Second call (e.g. a stale forced-close's synchronous onDisconnect()
+    // followed by the real transport's delayed 'close' event still firing)
+    // must be a no-op: cleanup — including the registry removal — must not
+    // run twice for the same adapter instance.
     await adapter.onDisconnect();
 
-    expect(manager.removeAgent).toHaveBeenCalledTimes(2);
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
   });
 
   test('exec_output to session without outputHandler is a no-op (no crash)', async () => {
@@ -1563,7 +1754,7 @@ describe('EdgeAgentAdapter — O7: metrics reads all 11 fields', () => {
     sendFrame(ws, 'metrics', {
       cpuUsage: 0.75,
       cpuCores: 8,
-      memoryTotal: 16 * 1e9,
+      memoryTotal: 16 * 1024 ** 3,
       memoryUsed: 8 * 1e9,
       memoryFree: 8 * 1e9,
       diskTotal: 500 * 1e9,
@@ -1915,5 +2106,726 @@ describe('EdgeAgentAdapter — false-branch coverage for ternary fallbacks', () 
     await new Promise((r) => setTimeout(r, 10));
 
     expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — ping/pong liveness', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('closes the connection and frees the agent slot after missing pong for 2 ping cycles (60s)', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Agent never replies with 'pong'. Two 30s ping cycles elapse with no pong.
+    vi.advanceTimersByTime(30_000 * 2);
+
+    expect(ws.close).toHaveBeenCalledWith(1001, 'ping timeout');
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+
+    vi.useRealTimers();
+  });
+
+  test('does not close the connection when the agent replies with pong every cycle', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Simulate 4 healthy ping/pong cycles (well past the 2-cycle timeout threshold
+    // if pongs were not being tracked).
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(30_000);
+      sendFrame(ws, 'pong', { timestamp: Date.now() });
+    }
+
+    expect(ws.close).not.toHaveBeenCalled();
+    expect(manager.removeAgent).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+});
+
+describe('EdgeAgentAdapter — Bug 3 regressions (double onDisconnect / stale eviction)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('forced close from checkLivenessAndPing detaches close/error listeners so a delayed real close event does not double-fire onDisconnect', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Agent never replies with 'pong'. After 2 missed 30s cycles (60s) the
+    // adapter force-closes the connection and runs onDisconnect() itself.
+    vi.advanceTimersByTime(30_000 * 2);
+
+    expect(ws.close).toHaveBeenCalledWith(1001, 'ping timeout');
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+
+    // Simulate the underlying transport still emitting a real 'close' event
+    // after ws.close() completes, as a genuine WebSocket would. Bug 3 leg 2
+    // (detaching the 'close'/'error' listeners before the forced close) means
+    // this must be a no-op: onDisconnect() must not run a second time.
+    ws.emit('close');
+    await Promise.resolve();
+
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  test('onDisconnect called twice directly is idempotent even without listener detachment', async () => {
+    const { adapter, client } = createAdapter();
+    adapter.activate();
+
+    await adapter.onDisconnect();
+    await adapter.onDisconnect();
+
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+  });
+
+  test('onDisconnect on a never-activated adapter is a no-op that still completes (pingInterval never set)', async () => {
+    // Covers the false branch of `if (this.pingInterval !== undefined)`: with
+    // the idempotency guard in place, the only way to reach onDisconnect()
+    // with pingInterval still undefined is a first-ever call, since a second
+    // call now short-circuits before that check.
+    const { adapter } = createAdapter();
+
+    await expect(adapter.onDisconnect()).resolves.toBeUndefined();
+  });
+
+  test('a stale adapter delayed onDisconnect must not evict a reconnected agent with the same name', async () => {
+    // Two independent adapter instances that share the same agentId, and
+    // therefore the same (stable, identity-derived) agent name — simulating a
+    // stale connection whose cleanup is delayed past a legitimate reconnect.
+    const stale = createAdapter();
+    stale.adapter.activate();
+
+    const reconnected = createAdapter();
+    reconnected.adapter.activate();
+    expect(reconnected.client.name).toBe(stale.client.name);
+
+    vi.clearAllMocks(); // isolate the assertions below to what happens next
+
+    // The stale connection's delayed real close event fires. manager.removeAgent()
+    // matches purely by name — without the instance check (Bug 3 leg 3) this
+    // would evict the reconnected agent's live registry entry.
+    await stale.adapter.onDisconnect();
+
+    expect(manager.removeAgent).not.toHaveBeenCalled();
+
+    // The reconnected agent's own disconnect still works normally afterwards.
+    await reconnected.adapter.onDisconnect();
+
+    expect(manager.removeAgent).toHaveBeenCalledWith(reconnected.client.name);
+  });
+});
+
+describe('EdgeAgentAdapter — torn-down adapter inertness regressions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('a frame delivered directly to onMessage after teardown is inert (dispatch guard)', async () => {
+    // Bypasses listener detachment entirely (calls the private dispatch method
+    // directly) so this exercises the this.disconnected guard itself, not the
+    // (separately covered) listener-detachment path — the guard is the
+    // defense-in-depth layer for any WebSocketLike that doesn't support `off`.
+    const { adapter, client } = createAdapter();
+    adapter.activate();
+    await adapter.onDisconnect();
+    vi.clearAllMocks();
+
+    const adapterInternal = adapter as unknown as {
+      onMessage: (raw: unknown) => Promise<void>;
+    };
+    await adapterInternal.onMessage(
+      JSON.stringify({ type: 'dd:container_sync', data: { containers: [] } }),
+    );
+
+    expect(
+      (client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }).handleContainerSync,
+    ).not.toHaveBeenCalled();
+    expect(emitAgentConnected).not.toHaveBeenCalled();
+  });
+
+  test('forced close from checkLivenessAndPing detaches the message listener so a frame arriving in the close window is not dispatched', () => {
+    vi.useFakeTimers();
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Agent never replies with 'pong'. After 2 missed 30s cycles (60s) the
+    // adapter force-closes the connection, detaching message/close/error
+    // listeners before running onDisconnect() itself.
+    vi.advanceTimersByTime(30_000 * 2);
+    expect(ws.close).toHaveBeenCalledWith(1001, 'ping timeout');
+
+    // A frame already in flight when ws.close() was called still arrives on
+    // the underlying transport. Before the fix, the message listener was
+    // never detached (only close/error were), so this frame would still be
+    // parsed/dispatched on an adapter that has already torn itself down.
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+
+    expect(
+      (client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }).handleContainerSync,
+    ).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  test('handleContainerSync resolving after a forced disconnect does not resurrect connected state or re-emit agentConnected', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Make the first container_sync's await hang so we can force a disconnect
+    // while it's still in flight — mirrors the ping timer firing mid-sync.
+    let resolveSync: () => void = () => {};
+    const pendingSync = new Promise<void>((resolve) => {
+      resolveSync = resolve;
+    });
+    const handleContainerSyncMock = (
+      client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }
+    ).handleContainerSync;
+    handleContainerSyncMock.mockReturnValueOnce(pendingSync);
+
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+    // handleContainerSync() has been called synchronously and is now awaiting
+    // pendingSync — this.connected is still false at this point.
+    expect(handleContainerSyncMock).toHaveBeenCalledTimes(1);
+
+    // Force-disconnect the adapter while the sync above is still pending.
+    await adapter.onDisconnect();
+    expect((client as unknown as { isConnected: boolean }).isConnected).toBe(false);
+
+    // Now let the original container_sync's await resolve.
+    resolveSync();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(emitAgentConnected).not.toHaveBeenCalled();
+    expect((client as unknown as { isConnected: boolean }).isConnected).toBe(false);
+    expect((adapter as unknown as { connected: boolean }).connected).toBe(false);
+  });
+});
+
+describe('EdgeAgentAdapter — Bug 4 regressions (concurrent per-container requests)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('two concurrent requestContainerLogs calls for the same container both resolve', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-concurrent-logs';
+    const first = adapter.requestContainerLogs(containerId, { tail: 10 });
+    const second = adapter.requestContainerLogs(containerId, { tail: 20 });
+
+    // Each call gets its own unique requestId/pendingRequests entry — the old
+    // bug overwrote the first entry with the second under the shared
+    // `log:${containerId}` key.
+    const sentFrames = ws.sentMessages.map(
+      (m) => JSON.parse(m) as { data: { containerId: string; requestId: string } },
+    );
+    expect(sentFrames).toHaveLength(2);
+    expect(sentFrames[0].data.requestId).toBeTruthy();
+    expect(sentFrames[0].data.requestId).not.toBe(sentFrames[1].data.requestId);
+
+    // These response frames deliberately omit requestId to exercise the legacy
+    // no-echo fallback (dequeueOldestContainerRequest), where responses are
+    // correlated in FIFO order. A current portwing agent echoes requestId for
+    // exact correlation (covered in the 'requestId echo correlation' block); the
+    // fix under test here is that BOTH resolve, not that either is silently
+    // dropped as a spurious timeout.
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'first-response' });
+    await new Promise((r) => setTimeout(r, 0));
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'second-response' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(first).resolves.toBe('first-response');
+    await expect(second).resolves.toBe('second-response');
+  });
+
+  test('a timed-out requestContainerLogs does not drop a concurrent second request for the same container', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-timeout-mix';
+    const first = adapter.requestContainerLogs(containerId).catch((err: Error) => err.message);
+
+    // Second request starts 1s later — both in flight for the same container.
+    vi.advanceTimersByTime(1_000);
+    const second = adapter.requestContainerLogs(containerId);
+
+    // Advance to exactly the first request's 30s deadline (t=30_000). Its
+    // timer fires and rejects it. Under the old bug this delete()'d the
+    // shared `log:${containerId}` key out from under the second request too.
+    vi.advanceTimersByTime(29_000);
+    expect(await first).toMatch(/timed out/);
+
+    // The second request must still be alive and resolve on its own response.
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'still-alive' });
+
+    await expect(second).resolves.toBe('still-alive');
+
+    vi.useRealTimers();
+  });
+
+  test('two concurrent deleteContainer calls for the same container both resolve/reject independently', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-concurrent-delete';
+    const first = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+    const second = adapter.deleteContainer(containerId);
+
+    const sentFrames = ws.sentMessages.map((m) => JSON.parse(m) as { data: { requestId: string } });
+    expect(sentFrames[0].data.requestId).not.toBe(sentFrames[1].data.requestId);
+
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId,
+      success: false,
+      error: 'first failed',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    sendFrame(ws, 'dd:container_delete_response', { containerId, success: true });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await first).toBe('first failed');
+    await expect(second).resolves.toBeUndefined();
+  });
+
+  test('removeContainerRequestFromQueue no-ops when no queue exists for the key (defensive branch)', () => {
+    const { adapter } = createAdapter();
+    const adapterInternal = adapter as unknown as {
+      removeContainerRequestFromQueue: (queueKey: string, pendingKey: string) => void;
+    };
+
+    expect(() =>
+      adapterInternal.removeContainerRequestFromQueue('log:no-such-queue', 'log:no-such-queue:x'),
+    ).not.toThrow();
+  });
+
+  test('removeContainerRequestFromQueue no-ops when the queue exists but does not contain the key (defensive branch)', () => {
+    const { adapter } = createAdapter();
+    const adapterInternal = adapter as unknown as {
+      containerRequestQueues: Map<string, string[]>;
+      removeContainerRequestFromQueue: (queueKey: string, pendingKey: string) => void;
+    };
+    adapterInternal.containerRequestQueues.set('log:partial', ['log:partial:kept']);
+
+    adapterInternal.removeContainerRequestFromQueue('log:partial', 'log:partial:not-present');
+
+    // The unrelated entry must be untouched.
+    expect(adapterInternal.containerRequestQueues.get('log:partial')).toEqual(['log:partial:kept']);
+  });
+
+  test('handleContainerLogResponse is a no-op if the queue references a pendingRequests key that is gone (defensive branch)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Force the desync case the dequeue-then-lookup pattern defends against:
+    // a queue entry exists, but nothing in pendingRequests matches its key.
+    const adapterInternal = adapter as unknown as {
+      containerRequestQueues: Map<string, string[]>;
+    };
+    adapterInternal.containerRequestQueues.set('log:desync', ['log:desync:ghost-id']);
+
+    expect(() =>
+      sendFrame(ws, 'dd:container_log_response', { containerId: 'desync', logs: 'x' }),
+    ).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('handleContainerDeleteResponse is a no-op if the queue references a pendingRequests key that is gone (defensive branch)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const adapterInternal = adapter as unknown as {
+      containerRequestQueues: Map<string, string[]>;
+    };
+    adapterInternal.containerRequestQueues.set('delete:desync', ['delete:desync:ghost-id']);
+
+    expect(() =>
+      sendFrame(ws, 'dd:container_delete_response', { containerId: 'desync', success: true }),
+    ).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — requestId echo correlation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('requestContainerLogs forwards timestamps:true on the wire when passed, and omits the key entirely when not passed', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const onPromise = adapter.requestContainerLogs('container-ts-on', {
+      tail: 50,
+      timestamps: true,
+    });
+
+    const onFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { containerId: string; requestId: string; tail: number; timestamps?: boolean };
+    };
+    expect(onFrame.type).toBe('dd:container_log_request');
+    expect(onFrame.data.timestamps).toBe(true);
+    expect(onFrame.data.tail).toBe(50);
+
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId: 'container-ts-on',
+      requestId: onFrame.data.requestId,
+      logs: 'x',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await onPromise;
+
+    const offPromise = adapter.requestContainerLogs('container-ts-off', { tail: 50 });
+
+    const offRaw = ws.sentMessages[ws.sentMessages.length - 1];
+    const offFrame = JSON.parse(offRaw) as {
+      data: { containerId: string; requestId: string; timestamps?: boolean };
+    };
+    expect(offFrame.data.timestamps).toBeUndefined();
+    expect(offRaw).not.toContain('timestamps');
+
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId: 'container-ts-off',
+      requestId: offFrame.data.requestId,
+      logs: 'y',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await offPromise;
+  });
+
+  test('two concurrent requestContainerLogs calls for the same container: responses arrive in REVERSE completion order, each still resolves with its OWN logs (exact echo, not FIFO)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-ooo-logs';
+    const first = adapter.requestContainerLogs(containerId, { tail: 10 });
+    const second = adapter.requestContainerLogs(containerId, { tail: 20 });
+
+    const sentFrames = ws.sentMessages.map((m) => JSON.parse(m) as { data: { requestId: string } });
+    const firstRequestId = sentFrames[0].data.requestId;
+    const secondRequestId = sentFrames[1].data.requestId;
+    expect(firstRequestId).not.toBe(secondRequestId);
+
+    // Respond to SECOND's request first, echoing its id.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: secondRequestId,
+      logs: 'second-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Then respond to FIRST's request, echoing its id.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: firstRequestId,
+      logs: 'first-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(first).resolves.toBe('first-logs');
+    await expect(second).resolves.toBe('second-logs');
+  });
+
+  test('two concurrent deleteContainer calls for the same container: responses arrive in REVERSE completion order (one success, one failure), each resolves/rejects according to its OWN echoed requestId', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-ooo-delete';
+    const first = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+    const second = adapter.deleteContainer(containerId);
+
+    const sentFrames = ws.sentMessages.map((m) => JSON.parse(m) as { data: { requestId: string } });
+    const firstRequestId = sentFrames[0].data.requestId;
+    const secondRequestId = sentFrames[1].data.requestId;
+
+    // Respond to SECOND first (success), echoing its id.
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId,
+      requestId: secondRequestId,
+      success: true,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Then respond to FIRST (failure), echoing its id.
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId,
+      requestId: firstRequestId,
+      success: false,
+      error: 'first-error',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await first).toBe('first-error');
+    await expect(second).resolves.toBeUndefined();
+  });
+
+  test('an echoed requestId that matches no pending entry does not resolve/steal a different pending request for the same container, leaves it pending, and does not close the socket; a subsequent correctly-echoed response still resolves it', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-miss';
+    let resolved = false;
+    const pending = adapter.requestContainerLogs(containerId, { tail: 5 });
+    pending
+      .then(() => {
+        resolved = true;
+      })
+      .catch(() => {});
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const realRequestId = sentFrame.data.requestId;
+
+    // Echoed id that matches nothing pending — must NOT fall back to FIFO.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: 'bogus-unknown-request-id',
+      logs: 'stolen-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(resolved).toBe(false);
+    expect(ws.close).not.toHaveBeenCalled();
+    const adapterInternal = adapter as unknown as { pendingRequests: Map<string, unknown> };
+    expect(adapterInternal.pendingRequests.has(`log:${containerId}:${realRequestId}`)).toBe(true);
+
+    // Correct echo still resolves it.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: realRequestId,
+      logs: 'real-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(pending).resolves.toBe('real-logs');
+    expect(resolved).toBe(true);
+  });
+
+  test('a response carrying a present-but-empty requestId is treated as an echoed miss (not a legacy no-echo frame): it does not FIFO-resolve the oldest pending request, and a correct echo still resolves it', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-empty-id';
+    let resolved = false;
+    const pending = adapter.requestContainerLogs(containerId, { tail: 5 });
+    pending
+      .then(() => {
+        resolved = true;
+      })
+      .catch(() => {});
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const realRequestId = sentFrame.data.requestId;
+
+    // requestId present but empty — must be treated as an exact-match miss, NOT
+    // as a legacy no-requestId frame that would FIFO-resolve the oldest request.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: '',
+      logs: 'should-not-steal',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(resolved).toBe(false);
+    expect(ws.close).not.toHaveBeenCalled();
+    const adapterInternal = adapter as unknown as { pendingRequests: Map<string, unknown> };
+    expect(adapterInternal.pendingRequests.has(`log:${containerId}:${realRequestId}`)).toBe(true);
+
+    // The correctly-echoed response still resolves it.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: realRequestId,
+      logs: 'real-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(pending).resolves.toBe('real-logs');
+    expect(resolved).toBe(true);
+  });
+
+  test('a response carrying a present-but-non-string requestId (malformed frame) is treated as an exact-match miss, not a legacy FIFO frame: it does not steal the oldest pending request', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-nonstring-id';
+    let resolved = false;
+    const pending = adapter.requestContainerLogs(containerId, { tail: 5 });
+    pending
+      .then(() => {
+        resolved = true;
+      })
+      .catch(() => {});
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const realRequestId = sentFrame.data.requestId;
+
+    // requestId present but a number, not a string — must NOT FIFO-resolve the
+    // oldest request (only a truly absent field takes the legacy fallback).
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: 12345,
+      logs: 'should-not-steal',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(resolved).toBe(false);
+    expect(ws.close).not.toHaveBeenCalled();
+    const adapterInternal = adapter as unknown as { pendingRequests: Map<string, unknown> };
+    expect(adapterInternal.pendingRequests.has(`log:${containerId}:${realRequestId}`)).toBe(true);
+
+    // The correctly-echoed response still resolves it.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: realRequestId,
+      logs: 'real-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(pending).resolves.toBe('real-logs');
+    expect(resolved).toBe(true);
+  });
+
+  test('three concurrent requestContainerLogs calls for the same container: an exact-echo response for the MIDDLE request removes it from the FIFO queue without disturbing order, and two subsequent legacy (no-requestId) responses still resolve the two remaining requests oldest-first', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-mixed-fifo';
+    const first = adapter.requestContainerLogs(containerId, { tail: 1 });
+    const second = adapter.requestContainerLogs(containerId, { tail: 2 });
+    const third = adapter.requestContainerLogs(containerId, { tail: 3 });
+
+    const sentFrames = ws.sentMessages.map((m) => JSON.parse(m) as { data: { requestId: string } });
+    const secondRequestId = sentFrames[1].data.requestId;
+
+    // Resolve the MIDDLE request first via exact echo (removes it from the
+    // middle of the FIFO queue via removeContainerRequestFromQueue).
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: secondRequestId,
+      logs: 'second-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(second).resolves.toBe('second-logs');
+
+    // Legacy response with NO requestId — must fall back to oldest-outstanding,
+    // which after the removal above is `first`.
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'first-logs' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // A second legacy response with NO requestId — the only one left is `third`.
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'third-logs' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(first).resolves.toBe('first-logs');
+    await expect(third).resolves.toBe('third-logs');
+  });
+});
+
+describe('EdgeAgentAdapter — terminate (Fix 2: revoke-path zombie frame)', () => {
+  // Regression coverage for: disconnectByKeyId (portwing-ws.ts) revoked a key
+  // by sending an error frame and calling ws.close() directly, but never tore
+  // down the corresponding adapter synchronously — its message listener
+  // stayed attached and `disconnected` stayed false until the real
+  // 'close'/'error' event eventually fired. A frame already buffered in the
+  // transport when the key was revoked could still reach onMessage() and
+  // mutate client/container/metrics state under a key that was, by the time
+  // the frame was dispatched, no longer valid. terminate() reuses the same
+  // synchronous teardown checkLivenessAndPing() already uses for ping
+  // timeouts (detach listeners -> ws.close() -> onDisconnect()) to close that
+  // window for revocation too.
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('sends an error frame with the given code/message and closes with the given close code', () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    adapter.terminate('unknown-key', 'key revoked', 1008);
+
+    const errorFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { code: string; message: string };
+    };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('unknown-key');
+    expect(errorFrame.data.message).toBe('key revoked');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'unknown-key');
+  });
+
+  test('runs onDisconnect synchronously, freeing the agent slot immediately', () => {
+    const { adapter, client } = createAdapter();
+    adapter.activate();
+
+    adapter.terminate('unknown-key', 'key revoked', 1008);
+
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+  });
+
+  test('detaches the message listener so a frame buffered in the close window is inert (revoke inertness)', () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    adapter.terminate('unknown-key', 'key revoked', 1008);
+
+    // Simulate a frame that was already in flight on the wire when the key
+    // was revoked — must be inert: the message listener was detached and
+    // this.disconnected flipped true by the synchronous teardown above.
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+
+    expect(
+      (client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }).handleContainerSync,
+    ).not.toHaveBeenCalled();
+  });
+
+  test('a delayed real close event after terminate does not double-fire onDisconnect', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    adapter.terminate('unknown-key', 'key revoked', 1008);
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+
+    // The underlying transport still emits its real 'close' event after
+    // ws.close() completes, as a genuine WebSocket would. Listener detachment
+    // (shared with the ping-timeout teardown) means this is a no-op.
+    ws.emit('close');
+    await Promise.resolve();
+
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+  });
+
+  test('a ws.send failure while sending the error frame does not prevent teardown', () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('socket already closing');
+    });
+
+    expect(() => adapter.terminate('unknown-key', 'key revoked', 1008)).not.toThrow();
+    expect(ws.close).toHaveBeenCalledWith(1008, 'unknown-key');
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
   });
 });

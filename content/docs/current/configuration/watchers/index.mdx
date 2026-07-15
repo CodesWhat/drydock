@@ -27,19 +27,21 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | `DD_WATCHER_{watcher_name}_KEYFILE` | ⚪ | Key pem file path (only for TLS connection) | | |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` | ⚪ | Allowed update schedule (checks outside this window are skipped) | [Valid CRON expression](https://crontab.guru/) | |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ` | ⚪ | Timezone used to evaluate `MAINTENANCE_WINDOW` | IANA timezone (e.g. `UTC`, `Europe/Paris`) | `UTC` |
+| `DD_WATCHER_{watcher_name}_MATURITY_MODE` | ⚪ | Default maturity policy for containers discovered by this watcher; a container label or UI/API override can replace it | `all`, `mature` | `all` (no gate) |
+| `DD_WATCHER_{watcher_name}_MATURITY_MIN_AGE_DAYS` | ⚪ | Default minimum image age when `MATURITY_MODE=mature`; a container label or UI/API override can replace it | integer (`1` to `365`) | `7` |
 | `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch | | `2375` |
 | `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
 | `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
-| `DD_WATCHER_{watcher_name}_TAG_PIN_INFO` | ⚪ | Compute the informational `updateInsight` (best newer same-family tag) for pinned containers — see the pinned-tags note below | `true`, `false` | `true` |
+| `DD_WATCHER_{watcher_name}_TAG_FAMILY` | ⚪ | Default actionable tag-family policy for this watcher; imgsets and labels can override it | `strict`, `loose` | `strict` |
+| `DD_WATCHER_{watcher_name}_TAG_PIN_INFO` | ⚪ | Default for computing informational `updateInsight` on pinned containers; imgsets and labels can override it | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHALL` | ⚪ | Include containers in **every** state (created, paused, exited, restarting, etc.) — not just running ones | `true`, `false` | `false` |
-| `DD_WATCHER_{watcher_name}_WATCHATSTART` (deprecated) | ⚪ | If drydock must check for image updates during startup | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` | ⚪ | Watch containers that don't have an explicit `dd.watch` label | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHEVENTS` | ⚪ | If drydock must monitor docker events | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_*` | ⚪ | Shared per-image defaults (image match + include/exclude/transform/link/display/trigger/lookup) | See **Image Set Presets** section below | |
 
 `WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages. `WATCHALL` controls **which container states** Docker returns (running-only vs all states). `WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set. See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.
 
-<Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in v1.6.0. Use the `dd.watch.digest` container label instead.</Callout>
+<Callout type="warn">The former `DD_WATCHER_{watcher_name}_WATCHDIGEST` and `WATCHATSTART` settings were removed in v1.6. Use the `dd.watch.digest` container label for per-container digest watching; startup scans are always scheduled.</Callout>
 
 <Callout type="warn" title="Watcher frequency and registry rate limits">
 The default cron is `0 */6 * * *` (every 6 hours). With many watched containers and tag lists that paginate to thousands of entries (a single GHCR image can take 20+ paginated calls), polling more often can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger `429` responses. Drydock honors `Retry-After` on 429s and rate-limits its own outbound calls with a per-host token bucket. Set `DD_WATCHER_{watcher_name}_CRON` to change the interval — use `0 * * * *` for near-real-time detection or `0 1 * * *` for once-daily polling. An explicit `CRON` you set is always preserved.
@@ -51,19 +53,20 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 - Multiple watchers can be configured (if you have multiple Docker hosts to watch). Give them different names.
 - Socket configuration and host/port configuration are mutually exclusive.
 - When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.
-- Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
+- `wud.*` labels are ignored as of v1.6. To rewrite old compose files, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
 - If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.
 - The watcher fan-out is capped at **10 concurrent `watchContainer` invocations** per cron cycle. On inventories with 40–200 containers this prevents a burst of simultaneous registry calls that would trigger rate limits despite the token bucket.
 - Hybrid `image:tag@sha256:digest` references (e.g. `docker.io/valkey/valkey:9@sha256:bcf6…`) are handled correctly: drydock preserves both the tag and the digest rather than falling back to digest-only mode, so the human-readable tag is displayed in the UI and the registry router resolves the provider cleanly.
-- Label-derived watcher fields (`tagFamily`, `includeTags`, `excludeTags`, `transformTags`, `triggerInclude`, `triggerExclude`) are **re-derived on Docker update events** (e.g. after `docker compose up -d`). Labels set on the recreated container take effect immediately without waiting for the next cron cycle.
+- Label-derived watcher fields (`tagFamily`, `tagPinInfo`, `includeTags`, `excludeTags`, `transformTags`, `triggerInclude`, `triggerExclude`) are **re-derived on Docker update events** (e.g. after `docker compose up -d`). Labels set on the recreated container take effect immediately without waiting for the next cron cycle; removing a tag-policy label restores its imgset/watcher default.
 - Floating semver aliases (e.g. `3.3` and `3.3.0`, which both coerce to the same semver) are excluded from the greater-than check in candidate ranking, so aliases that resolve identically are never reported as upgrades.
-- Fully-pinned specific tags (3+ numeric segments, e.g. `1.4.5`, `v1.13.3`) also compare by digest by default, the same as floating tags, so a rebuilt image republished under the same tag is detected. Version climbing across tags for a pinned image is opt-in via `dd.tag.include` or `dd.tag.family=loose`. This doesn't leave you blind to what's out there, though: drydock still computes an informational `updateInsight` — the best newer same-family tag available in the registry, shown as an informational "Newer available" badge in the UI — purely as information. It never triggers an update, a notification, or changes `updateAvailable`/`updateKind`; it only tells you a version exists so you can decide whether to opt into climbing to it. The insight reuses the same strict-style family matching used for actionable version climbing (prefix + suffix/variant compatibility + matching numeric-segment count) — that matching never restricted crossing a MAJOR version in the first place, pinned or not. What's new here is exposing the comparison at all for a pinned tag, since the pin gate itself already blocks acting on it. Disable it per watcher with `DD_WATCHER_{watcher_name}_TAG_PIN_INFO=false`.
+- Fully-pinned specific tags (3+ numeric segments, e.g. `1.4.5`, `v1.13.3`) also compare by digest by default, the same as floating tags, so a rebuilt image republished under the same tag is detected. Version climbing across tags for a pinned image is opt-in via `dd.tag.include`, `dd.tag.family=loose`, or the actionable watcher default `DD_WATCHER_{watcher_name}_TAG_FAMILY=loose`. The watcher-wide `loose` setting can make cross-version candidates actionable and therefore eligible for configured action triggers; use it deliberately. Drydock separately computes an informational `updateInsight` — the best newer same-family tag available in the registry — which never triggers an update or notification and never changes `updateAvailable`/`updateKind`. The UI renders that insight as a neutral **Pinned** state with a grey current tag → blue newer tag and a Major/Minor/Patch chip; hover text supplies additional detail. Control the informational channel with `dd.tag.pin.info`, matching-imgset `TAG_PIN_INFO`, or the watcher default `TAG_PIN_INFO`.
+- A Major insight is not automatically a mismatch: strict family matching preserves prefix, suffix/variant shape, numeric precision, and CalVer rules, but it does not impose a same-major ceiling. By contrast, a Major result shown as an actionable update means an actionable policy such as `dd.tag.family=loose` or `dd.tag.include` is in effect. The Immich `v3.0.2 Major` report in #498 was caused by `dd.tag.family=loose` on only the machine-learning container. Loose mode still preserves suffix variants — for example, `v2.7.5-openvino` can climb to `v3.0.2-openvino`, never bare `v3.0.2` — and that historical cross-suffix bug is regression-covered.
 
 <Callout type="warn">
 **Before you start — important watcher caveats:**
 
 - **Socket vs remote API** — When using socket configuration, mount the Docker socket on your drydock container. When using host/port configuration, enable the [Docker remote API](https://docs.docker.com/reference/cli/dockerd/). If the remote API is secured with TLS, mount and configure the [TLS certificates](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket).
-- **Remote auth is fail-closed** — Remote watcher auth (`AUTH_*`) requires HTTPS (`PROTOCOL=https`) or TLS certificate-based connections by default. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.
+- **Remote auth is fail-closed** — Use HTTPS (`PROTOCOL=https`) for remote watcher auth (`AUTH_*`). Mounted TLS files provide mTLS material and also satisfy the auth safety check, but they do not replace the watcher protocol setting. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.
 - **Digest watching and Hub quotas** — Watching image digests causes usage of the _Docker Registry Pull API_, which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/usage/). By default, drydock enables digest watching for both mutable floating tags (`latest`, `stable`, `v3`, `16-alpine`, `10.6`) and fully-pinned specific tags (`1.4.5`), so those tags update in place and same-tag rebuilds are detected without the container being moved to a different tag. Version climbing across tags for a pinned image is opt-in via `dd.tag.include` or `dd.tag.family=loose`. You can force or disable digest watching per container using the `dd.watch.digest` label or per image with `IMGSET_*_WATCH_DIGEST`. If you face [quota related errors](https://docs.docker.com/docker-hub/usage/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.
 </Callout>
 
@@ -688,6 +691,7 @@ Looking for ready-to-copy presets for common containers? See [Popular IMGSET Pre
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_DISPLAY_ICON`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRIGGER_INCLUDE`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_FAMILY`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_PIN_INFO`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_WATCH_DIGEST`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_INSPECT_TAG_PATH`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRIGGER_EXCLUDE`
@@ -702,7 +706,9 @@ Looking for ready-to-copy presets for common containers? See [Popular IMGSET Pre
 ### Imgset precedence
 
 - `dd.*` labels on the container (or swarm service/container merged labels) are highest priority.
-- `IMGSET` values are defaults applied only when the corresponding label is not set.
+- Matching `IMGSET` values apply when the corresponding label is not set.
+- Watcher-level `TAG_FAMILY` and `TAG_PIN_INFO` values apply when neither a label nor imgset sets that policy.
+- Built-in defaults are `strict` for tag family and `true` for pin insight.
 
 ### Imgset example
 
@@ -736,14 +742,19 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | Valid JavaScript Regex | |
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
-| `dd.tag.family` | ⚪ | Tag family policy for semver updates. In `strict` mode, floating aliases such as `16-alpine` stay on the current tag and update by digest; use `loose` to allow cross-tag semver moves such as `16-alpine` → `17-alpine`. | `strict` (default) or `loose` | `strict` |
+| `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
+| `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
+| `dd.updatePolicy.maturityMode` | ⚪ | Declarative maturity gate for this container | `all`, `mature` | Watcher default → `all` |
+| `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Declarative minimum image age for mature-only updates | integer (`1` to `365`) | Watcher default → `7` |
+| `dd.updatePolicy.skipTags` | ⚪ | Declarative comma-separated list of remote tags to suppress | CSV tags | Empty list |
+| `dd.updatePolicy.skipDigests` | ⚪ | Declarative comma-separated list of remote digests to suppress | CSV digests | Empty list |
 | `dd.action.exclude` | ⚪ | Exclude specific action triggers from automatic execution for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.action.include` | ⚪ | Only allow specific action triggers to automatically execute for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.notification.exclude` | ⚪ | Exclude specific notification triggers from this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.notification.include` | ⚪ | Only allow specific notification triggers for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.trigger.exclude` | ⚪ | **Deprecated** — use `dd.action.exclude` or `dd.notification.exclude` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.trigger.include` | ⚪ | **Deprecated** — use `dd.action.include` or `dd.notification.include` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
-| `dd.watch.digest` | ⚪ | Watch this container digest. Missing values are auto-enabled for floating tags and disabled for specific semver tags. | Valid Boolean | Automatic |
+| `dd.watch.digest` | ⚪ | Watch this container digest. Missing values are auto-enabled for both mutable floating tags and fully-pinned specific semver tags. | Valid Boolean | Automatic |
 | `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
 | `dd.compose.file` | ⚪ | Path to the docker-compose.yml file for compose-native updates (also configurable via trigger `COMPOSEFILELABEL`) | file path | |
 | `dd.source.repo` | ⚪ | Source repository override for release-notes lookup (e.g. `owner/repo`) | Valid `owner/repo` string | |
@@ -789,7 +800,20 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 <Callout type="info">**Infrastructure update mode** (`dd.update.mode=infrastructure`) is for containers that Drydock depends on for its Docker API connection, such as a socket proxy. When set, the container is updated through a helper-container path that connects directly to `/var/run/docker.sock`, bypassing the proxy so the connection isn't severed mid-update. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for details.</Callout>
 
-<Callout type="info">**Per-container update policy** (maturity gate, snooze, skip-tag, skip-digest) is set from the UI rather than via labels. Open a container row → **Update policy** menu, or call `PATCH /api/v1/containers/:id/update-policy`. Policies are stored with the container record and persist across Drydock restarts. There is no `dd.updatePolicy.*` label — earlier drafts of the v1.4 docs listed label equivalents that were never implemented. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
+<Callout type="info">**Declarative per-container update policy** is supported through the four `dd.updatePolicy.*` labels above. Watcher environment defaults are available for the two maturity fields. `snoozeUntil` remains UI/API-only because it is an operational timer rather than deployment configuration. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
+
+### Update-policy precedence
+
+Each field resolves independently. A missing value falls through to the next tier; skip lists replace the lower-tier list rather than being concatenated.
+
+| Priority | Tier | Examples |
+| :---: | --- | --- |
+| 1 (highest) | UI/API override | Update policy editor or `PATCH /api/v1/containers/:id/update-policy` |
+| 2 | Container label | `dd.updatePolicy.maturityMode=mature`, `dd.updatePolicy.skipTags=latest,stable` |
+| 3 | Watcher environment | `DD_WATCHER_LOCAL_MATURITY_MODE`, `DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS` |
+| 4 | Built-in | `maturityMode=all`; minimum age `7` when mature mode is active; empty skip lists |
+
+UI/API overrides persist across Drydock restarts, container recreation, and later label changes. Removing a label does not silently remove an override. The policy editor shows an **Overridden** badge when an override materially differs from the declarative value; **Revert** clears the selected override and immediately reveals the current label, watcher, or built-in value. Empty skip-list overrides are intentional: **Clear Skips** can suppress a declarative skip list without deleting the declaration, while **Revert** restores it.
 
 ## Label examples
 

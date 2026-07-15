@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { Container } from '../../model/container.js';
 import Trigger from '../../triggers/providers/Trigger.js';
+import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../updates/request-update.js';
 import type { ApiComponent } from '../component.js';
 import { isTriggerCompatibleWithContainer } from '../docker-trigger.js';
@@ -116,8 +117,18 @@ function createGetContainerTriggersHandler({
 
     const triggerMap = getTriggers();
     const allTriggers = mapComponentsToList(triggerMap);
-    const includedTriggers = parseTriggerList(container.triggerInclude, Trigger);
-    const excludedTriggers = parseTriggerList(container.triggerExclude, Trigger);
+    // Parsed per category (#494) — a trigger only ever consults the include/exclude
+    // list scoped to its own category, never the deprecated triggerInclude/triggerExclude mirror.
+    const actionIncludedTriggers = parseTriggerList(container.actionTriggerInclude, Trigger);
+    const actionExcludedTriggers = parseTriggerList(container.actionTriggerExclude, Trigger);
+    const notificationIncludedTriggers = parseTriggerList(
+      container.notificationTriggerInclude,
+      Trigger,
+    );
+    const notificationExcludedTriggers = parseTriggerList(
+      container.notificationTriggerExclude,
+      Trigger,
+    );
 
     const associatedTriggers = allTriggers
       .filter((trigger) => {
@@ -128,9 +139,13 @@ function createGetContainerTriggersHandler({
           container,
         );
       })
-      .map((trigger) =>
-        resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers, Trigger),
-      )
+      .map((trigger) => {
+        const [includedTriggers, excludedTriggers] =
+          getTriggerCategoryForType(trigger.type) === 'action'
+            ? [actionIncludedTriggers, actionExcludedTriggers]
+            : [notificationIncludedTriggers, notificationExcludedTriggers];
+        return resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers, Trigger);
+      })
       .filter(isDefined);
 
     res.status(200).json({

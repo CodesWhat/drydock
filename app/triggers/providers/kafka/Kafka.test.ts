@@ -82,52 +82,13 @@ test('validateConfiguration should throw error when invalid', async () => {
   }).toThrowError(joi.ValidationError);
 });
 
-test('validateConfiguration should accept legacy clientId with deprecation warning', async () => {
-  const warnSpy = vi.spyOn(kafka.log, 'warn');
-  const validatedConfiguration = kafka.validateConfiguration({
-    brokers: 'broker1:9000, broker2:9000',
-    clientId: 'legacy-client-id',
-  });
-
-  expect(validatedConfiguration.clientid).toBe('legacy-client-id');
-  expect(validatedConfiguration).not.toHaveProperty('clientId');
-  expect(warnSpy).toHaveBeenCalledWith(
-    'Kafka trigger configuration key "clientId" is deprecated and will be removed in v1.6.0. Use "clientid" instead.',
-  );
-});
-
-test('validateConfiguration should warn only once across Kafka instances for legacy clientId', async () => {
-  vi.resetModules();
-  const { default: log } = await import('../../../log/index.js');
-  const { default: FreshKafka } = await import('./Kafka.js');
-  const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => undefined);
-  const firstKafka = new FreshKafka();
-  const secondKafka = new FreshKafka();
-  const configuration = {
-    brokers: 'broker1:9000, broker2:9000',
-    clientId: 'legacy-client-id',
-  };
-
-  const firstValidatedConfiguration = firstKafka.validateConfiguration(configuration);
-  const secondValidatedConfiguration = secondKafka.validateConfiguration(configuration);
-
-  expect(firstValidatedConfiguration.clientid).toBe('legacy-client-id');
-  expect(secondValidatedConfiguration.clientid).toBe('legacy-client-id');
-  expect(warnSpy).toHaveBeenCalledTimes(1);
-  expect(warnSpy).toHaveBeenCalledWith(
-    'Kafka trigger configuration key "clientId" is deprecated and will be removed in v1.6.0. Use "clientid" instead.',
-  );
-});
-
-test('validateConfiguration should prefer explicit clientid over legacy clientId', async () => {
-  const validatedConfiguration = kafka.validateConfiguration({
-    brokers: 'broker1:9000, broker2:9000',
-    clientid: 'explicit-client',
-    clientId: 'legacy-client',
-  });
-
-  expect(validatedConfiguration.clientid).toBe('explicit-client');
-  expect(validatedConfiguration).not.toHaveProperty('clientId');
+test('validateConfiguration should reject removed clientId alias', () => {
+  expect(() =>
+    kafka.validateConfiguration({
+      brokers: 'localhost:9092',
+      clientId: 'legacy-client-id',
+    } as never),
+  ).toThrow(/clientId.*not allowed/i);
 });
 
 test.each([

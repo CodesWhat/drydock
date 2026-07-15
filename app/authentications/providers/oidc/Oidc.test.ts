@@ -1581,7 +1581,7 @@ test('initAuthentication should discover and configure client', async () => {
   await oidc.initAuthentication();
 
   const callArgs = openidClientMock.discovery.mock.calls[0];
-  expect(callArgs[4].execute).toEqual([]);
+  expect(callArgs[4].execute).toBeUndefined();
   expect(callArgs[4][openidClientMock.customFetch]).toBeUndefined();
   expect(oidc.logoutUrl).toBe('https://idp/logout');
 });
@@ -1634,40 +1634,18 @@ test('initAuthentication should include the nested cause chain in the startup wa
   expect(oidc.log.warn).toHaveBeenCalledWith(expect.stringMatching(/fetch failed.*ENOTFOUND/));
 });
 
-test('initAuthentication should pass allowInsecureRequests for HTTP discovery URLs', async () => {
-  oidc.client = undefined;
-  oidc.logoutUrl = undefined;
-  oidc.configuration = {
-    ...configurationValid,
-    discovery: 'http://dex:5556/dex/.well-known/openid-configuration',
-  };
-  const mockClient = {};
-  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
-  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
-  const insecureSymbol = Symbol('allowInsecureRequests');
-  openidClientMock.allowInsecureRequests = insecureSymbol;
-
-  await oidc.initAuthentication();
-
-  const callArgs = openidClientMock.discovery.mock.calls[0];
-  expect(callArgs[4].execute).toEqual([insecureSymbol]);
-});
-
-test('initAuthentication should log deprecation warning for HTTP discovery URL', async () => {
-  oidc.client = undefined;
-  oidc.logoutUrl = undefined;
-  oidc.configuration = {
-    ...configurationValid,
-    discovery: 'http://dex:5556/dex/.well-known/openid-configuration',
-  };
-  openidClientMock.discovery = vi.fn().mockResolvedValue({});
-  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
-
-  await oidc.initAuthentication();
-
-  expect(oidc.log.warn).toHaveBeenCalledWith(
-    'HTTP OIDC discovery URL is deprecated and will be removed in v1.6.0. Update your Identity Provider to serve discovery over HTTPS.',
-  );
+test('validateConfiguration should reject removed HTTP discovery URLs', () => {
+  configuration.ddEnvVars.DD_PUBLIC_URL = 'https://drydock.example.com';
+  try {
+    expect(() =>
+      oidc.validateConfiguration({
+        ...configurationValid,
+        discovery: 'http://dex:5556/dex/.well-known/openid-configuration',
+      }),
+    ).toThrow(/discovery.*https/i);
+  } finally {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  }
 });
 
 test('initAuthentication should handle missing end session url', async () => {

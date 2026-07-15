@@ -6,6 +6,7 @@ import { setI18nLocale } from '../boot/i18n';
 import { disableIconifyApi } from '../boot/icons';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
+import { useUpdateMode } from '../composables/useUpdateMode';
 import AppTabBar from '../components/AppTabBar.vue';
 import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
 import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
@@ -22,6 +23,7 @@ import { getStore } from '../services/store';
 import { applyFontSize } from '../preferences/font-size';
 import { applyRadius, type RadiusPresetId, RADIUS_PRESET_VALUES } from '../preferences/radius';
 import { preferences } from '../preferences/store';
+import { pushInitialSync } from '../preferences/sync';
 import { usePreference } from '../preferences/usePreference';
 import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';
@@ -133,15 +135,15 @@ const serverError = ref('');
 const webhookEnabled = ref(false);
 const webhookEndpoints = computed(() => [
   {
-    endpoint: 'POST /api/webhook/watch',
+    endpoint: 'POST /api/v1/webhook/watch',
     description: t('configView.general.webhookApi.endpoints.watchAll'),
   },
   {
-    endpoint: 'POST /api/webhook/watch/:name',
+    endpoint: 'POST /api/v1/webhook/watch/:name',
     description: t('configView.general.webhookApi.endpoints.watchOne'),
   },
   {
-    endpoint: 'POST /api/webhook/update/:name',
+    endpoint: 'POST /api/v1/webhook/update/:name',
     description: t('configView.general.webhookApi.endpoints.updateOne'),
   },
 ]);
@@ -153,13 +155,24 @@ const webhookBaseUrl = computed(() => {
 });
 const webhookExample = computed(
   () =>
-    `curl -X POST ${webhookBaseUrl.value}/api/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`,
+    `curl -X POST ${webhookBaseUrl.value}/api/v1/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`,
 );
 
 // Settings state
 const internetlessMode = ref(false);
 const settingsLoading = ref(false);
 const settingsError = ref('');
+const {
+  updateMode,
+  loaded: updateModeLoaded,
+  saving: updateModeSaving,
+  error: updateModeError,
+  setUpdateMode,
+} = useUpdateMode();
+
+// Preference sync state
+const syncLoading = ref(false);
+const syncError = ref('');
 
 // Profile state
 interface ProfileData {
@@ -194,6 +207,13 @@ const profileDisplayName = computed(
     t('configView.profile.unknownUser'),
 );
 const profileInitials = computed(() => profileDisplayName.value.slice(0, 2).toUpperCase());
+const showSyncToggle = computed(
+  () =>
+    !profileLoading.value &&
+    !profileError.value &&
+    Boolean(profileData.value.username) &&
+    profileData.value.username !== 'anonymous',
+);
 
 function formatProfileLastLogin(rawValue: unknown): string {
   if (rawValue === undefined || rawValue === null || rawValue === '') {
@@ -332,6 +352,30 @@ async function toggleInternetlessMode() {
   }
 }
 
+async function handleUpdateMode(mode: 'notify' | 'manual' | 'auto') {
+  settingsError.value = '';
+  try {
+    await setUpdateMode(mode);
+  } catch (e: unknown) {
+    settingsError.value = errorMessage(e, t('configView.general.errors.updateMode'));
+  }
+}
+
+async function toggleSync() {
+  syncError.value = '';
+  syncLoading.value = true;
+  const previousEnabled = preferences.sync.enabled;
+  try {
+    preferences.sync.enabled = !previousEnabled;
+    await pushInitialSync(profileData.value.username);
+  } catch (e: unknown) {
+    preferences.sync.enabled = previousEnabled;
+    syncError.value = errorMessage(e, t('configView.appearance.errors.updateSyncSettings'));
+  } finally {
+    syncLoading.value = false;
+  }
+}
+
 const cacheClearing = ref(false);
 const cacheCleared = ref<number | null>(null);
 const debugDumpDownloading = ref(false);
@@ -412,19 +456,22 @@ function handleSelectIconLibrary(library: string) {
       v-if="activeSettingsTab === 'general'"
       :loading="loading"
       :server-error="serverError"
-      :settings-error="settingsError"
+      :settings-error="settingsError || updateModeError || ''"
       :server-fields="serverFields"
       :store-fields="storeFields"
       :webhook-enabled="webhookEnabled"
       :webhook-endpoints="webhookEndpoints"
       :webhook-example="webhookExample"
       :internetless-mode="internetlessMode"
-      :settings-loading="settingsLoading"
+      :update-mode="updateMode"
+      :update-mode-loaded="updateModeLoaded"
+      :settings-loading="settingsLoading || updateModeSaving"
       :cache-clearing="cacheClearing"
       :cache-cleared="cacheCleared"
       :debug-dump-downloading="debugDumpDownloading"
       :debug-dump-error="debugDumpError"
       @toggle-internetless-mode="toggleInternetlessMode"
+      @update-mode="handleUpdateMode"
       @clear-icon-cache="handleClearIconCache"
       @download-debug-dump="handleDownloadDebugDump"
     />
@@ -454,6 +501,11 @@ function handleSelectIconLibrary(library: string) {
       :active-radius="activeRadius"
       :radius-presets="radiusPresets"
       :on-select-radius="setRadius"
+      :sync-enabled="preferences.sync.enabled"
+      :sync-loading="syncLoading"
+      :sync-error="syncError"
+      :show-sync-toggle="showSyncToggle"
+      :on-toggle-sync="toggleSync"
     />
 
     <ConfigProfileTab

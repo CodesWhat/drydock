@@ -122,18 +122,18 @@ describe('api/container/bulk-security', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
     });
 
-    test('returns 400 when scanner is not trivy', async () => {
+    test('accepts a Grype scanner', async () => {
       const harness = createHarness();
       harness.deps.getSecurityConfiguration.mockReturnValueOnce({
         enabled: true,
-        scanner: 'other',
+        scanner: 'grype',
         signature: { verify: false },
         sbom: { enabled: false, formats: [] },
       });
 
       const { res } = await callScanAll(harness.handlers);
 
-      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.status).toHaveBeenCalledWith(202);
     });
 
     test('returns 400 when body is an array', async () => {

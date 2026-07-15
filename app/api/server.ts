@@ -5,7 +5,7 @@ import { getServerConfiguration, getWebhookConfiguration } from '../configuratio
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { getLegacyInputSummary } from '../prometheus/compatibility.js';
-import { getSecurityRuntimeStatus } from '../security/runtime.js';
+import { getScannerAssetManager, getSecurityRuntimeStatus } from '../security/runtime.js';
 import { getErrorMessage } from '../util/error.js';
 
 const router = express.Router();
@@ -53,6 +53,36 @@ async function getSecurityRuntime(req, res) {
   }
 }
 
+async function manageSecurityAsset(req, res) {
+  const provider = `${req.params?.provider || ''}`;
+  const operation = `${req.params?.operation || ''}`;
+  if (!['trivy', 'grype', 'syft'].includes(provider) || !['pull', 'warm'].includes(operation)) {
+    res.status(400).json({ error: 'Unsupported scanner asset operation' });
+    return;
+  }
+  try {
+    const manager = getScannerAssetManager();
+    const requestAuth = req.body && typeof req.body === 'object' ? req.body : {};
+    const auth = Object.fromEntries(
+      ['username', 'password']
+        .filter((key) => typeof requestAuth[key] === 'string')
+        .map((key) => [key, requestAuth[key]]),
+    );
+    const status =
+      operation === 'pull'
+        ? await manager.pull(
+            provider as 'trivy' | 'grype' | 'syft',
+            Object.keys(auth).length > 0 ? auth : undefined,
+          )
+        : await manager.warm(provider as 'trivy' | 'grype' | 'syft');
+    res.status(200).json(status);
+  } catch (error: unknown) {
+    const details = sanitizeLogParam(getErrorMessage(error));
+    log.warn(`Scanner asset ${operation} failed (${details})`);
+    res.status(503).json({ error: 'Scanner asset operation failed' });
+  }
+}
+
 /**
  * Init Router.
  * @returns {*}
@@ -61,5 +91,6 @@ export function init() {
   router.use(nocache());
   router.get('/', getServer);
   router.get('/security/runtime', getSecurityRuntime);
+  router.post('/security/assets/:provider/:operation', manageSecurityAsset);
   return router;
 }

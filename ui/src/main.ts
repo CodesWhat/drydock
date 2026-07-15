@@ -3,15 +3,14 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import { i18n, setI18nLocale } from './boot/i18n';
 import { disableIconifyApi, registerIcons } from './boot/icons';
+import { installVitePreloadErrorHandler } from './bootstrap/stale-chunk-recovery';
 import AppButton from './components/AppButton.vue';
 import AppIcon from './components/AppIcon.vue';
 import AppToast from './components/AppToast.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import ContainerIcon from './components/ContainerIcon.vue';
 import CopyableTag from './components/CopyableTag.vue';
-import DataCardGrid from './components/DataCardGrid.vue';
 import DataFilterBar from './components/DataFilterBar.vue';
-import DataListAccordion from './components/DataListAccordion.vue';
 import DataTable from './components/DataTable.vue';
 import DataViewLayout from './components/DataViewLayout.vue';
 import DetailPanel from './components/DetailPanel.vue';
@@ -30,6 +29,8 @@ import { getSettings } from './services/settings';
 import { useOperationStore } from './stores/operations';
 import './theme/tokens.css';
 import './style.css';
+
+installVitePreloadErrorHandler();
 
 // Pre-register only the icons we use so they render offline (no CDN fetch)
 registerIcons();
@@ -68,8 +69,6 @@ app.component('ThemeToggle', ThemeToggle);
 app.component('ToggleSwitch', ToggleSwitch);
 app.component('DataFilterBar', DataFilterBar);
 app.component('DataTable', DataTable);
-app.component('DataCardGrid', DataCardGrid);
-app.component('DataListAccordion', DataListAccordion);
 app.component('DataViewLayout', DataViewLayout);
 app.component('DetailPanel', DetailPanel);
 app.component('EmptyState', EmptyState);

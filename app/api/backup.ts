@@ -152,7 +152,7 @@ async function rollbackContainer(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getBackups);
+  router.get('/backups', getBackups);
   router.get('/:id/backups', getContainerBackups);
   router.post(
     '/:id/rollback',

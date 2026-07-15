@@ -45,6 +45,10 @@ reviews:
     enabled: true
     auto_incremental_review: true
     drafts: false
+    # Default is default-branch-only; v1.6+ feature work lands via PRs into
+    # dev/vX.Y integration branches and needs the same automatic reviews.
+    base_branches:
+      - "dev/*"
     ignore_title_keywords:
       - "WIP"
       - "DO NOT MERGE"

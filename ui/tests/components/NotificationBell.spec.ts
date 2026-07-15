@@ -109,6 +109,7 @@ describe('NotificationBell', () => {
         'notification-delivery-failed',
         'security-alert',
         'agent-disconnect',
+        'container-unhealthy',
       ],
     });
   });
@@ -184,6 +185,7 @@ describe('NotificationBell', () => {
         'notification-delivery-failed',
         'security-alert',
         'agent-disconnect',
+        'container-unhealthy',
       ],
     });
   });

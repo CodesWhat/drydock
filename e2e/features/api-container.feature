@@ -1,14 +1,14 @@
 Feature: Drydock Container API Exposure
 
   Scenario: Drydock must return enough containers for e2e checks
-    When I GET /api/containers
+    When I GET /api/v1/containers
     Then response code should be 200
     And response body should be valid json
     And response body path $.data should be of type array with minimum length 7
 
   # Test one representative container per registry type + update pattern
   Scenario Outline: Drydock must handle different registry types and update patterns
-    When I GET /api/containers
+    When I GET /api/v1/containers
     Then response code should be 200
     And response body should be valid json
     And I store the index of container named <containerName> as containerIndex in scenario scope
@@ -38,10 +38,10 @@ Feature: Drydock Container API Exposure
   # Test detailed container inspection (semver)
   @requires_gitlab
   Scenario: Drydock must provide detailed container information for semver containers
-    Given I GET /api/containers
+    Given I GET /api/v1/containers
     And I store the index of container named gitlab_test as containerIndex in scenario scope
     And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
-    When I GET /api/containers/`containerId`
+    When I GET /api/v1/containers/`containerId`
     Then response code should be 200
     And response body should be valid json
     And response body path $.watcher should be local
@@ -51,10 +51,10 @@ Feature: Drydock Container API Exposure
 
   # Test detailed container inspection (digest)
   Scenario: Drydock must provide detailed container information for digest-based containers
-    Given I GET /api/containers
+    Given I GET /api/v1/containers
     And I store the index of container named hub_nginx_latest as containerIndex in scenario scope
     And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
-    When I GET /api/containers/`containerId`
+    When I GET /api/v1/containers/`containerId`
     Then response code should be 200
     And response body should be valid json
     And response body path $.watcher should be local
@@ -64,10 +64,10 @@ Feature: Drydock Container API Exposure
 
   # Test link functionality
   Scenario: Drydock must generate correct links for containers with link templates
-    Given I GET /api/containers
+    Given I GET /api/v1/containers
     And I store the index of container named hub_homeassistant_202161 as containerIndex in scenario scope
     And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
-    When I GET /api/containers/`containerId`
+    When I GET /api/v1/containers/`containerId`
     Then response code should be 200
     And response body should be valid json
     And response body path $.link should be https://github.com/home-assistant/core/releases/tag/2021.6.1
@@ -76,10 +76,10 @@ Feature: Drydock Container API Exposure
   # Test watch trigger functionality
   @requires_gitlab
   Scenario: Drydock must allow triggering container watch
-    Given I GET /api/containers
+    Given I GET /api/v1/containers
     And I store the index of container named gitlab_test as containerIndex in scenario scope
     And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
-    When I POST to /api/containers/`containerId`/watch
+    When I POST to /api/v1/containers/`containerId`/watch
     Then response code should be 200
     And response body should be valid json
     And response body path $.name should be gitlab_test

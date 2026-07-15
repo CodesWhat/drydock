@@ -5,6 +5,7 @@ describe('Docker Watcher', () => {
   let docker;
   let mockDockerApi;
   let hRegistry: any;
+  let hMockParse: any;
   let hMockTag: any;
 
   setupDockerWatcherContainerSuite((state) => {
@@ -14,11 +15,12 @@ describe('Docker Watcher', () => {
 
   beforeEach(async () => {
     hRegistry = await import('../../../registry/index.js');
+    hMockParse = (await import('parse-docker-image-name')).default;
     hMockTag = await import('../../../tag/index.js');
   });
 
-  describe('Dual-prefix dd.*/wud.* label support', () => {
-    test('should prefer dd.watch over wud.watch label', async () => {
+  describe('canonical dd.* label support', () => {
+    test('should use dd.watch and ignore wud.watch', async () => {
       const containers = [
         {
           Id: 'dd-label-1',
@@ -34,11 +36,10 @@ describe('Docker Watcher', () => {
       });
       const result = await docker.getContainers();
 
-      // dd.watch=true should override wud.watch=false
       expect(result).toHaveLength(1);
     });
 
-    test('should fall back to wud.watch when dd.watch is not set', async () => {
+    test('should ignore wud.watch when dd.watch is not set', async () => {
       const containers = [
         {
           Id: 'wud-fallback-1',
@@ -54,7 +55,7 @@ describe('Docker Watcher', () => {
       });
       const result = await docker.getContainers();
 
-      expect(result).toHaveLength(1);
+      expect(result).toHaveLength(0);
     });
 
     test('should prefer dd.tag.include over wud.tag.include label', async () => {
@@ -83,7 +84,7 @@ describe('Docker Watcher', () => {
       );
     });
 
-    describe('getLabel dual-prefix fallback for all label pairs', () => {
+    describe('getLabel canonical resolution for removed label pairs', () => {
       const labelPairs = [
         ['dd.watch', 'wud.watch'],
         ['dd.tag.include', 'wud.tag.include'],
@@ -108,20 +109,22 @@ describe('Docker Watcher', () => {
         ['dd.rollback.interval', 'wud.rollback.interval'],
       ];
 
-      test.each(labelPairs)('should prefer %s over %s when both are present', (ddKey, wudKey) => {
+      test.each(
+        labelPairs,
+      )('should use %s and ignore %s when both are present', (ddKey, wudKey) => {
         const labels = { [ddKey]: 'dd-value', [wudKey]: 'wud-value' };
-        expect(testable_getLabel(labels, ddKey, wudKey)).toBe('dd-value');
+        expect(testable_getLabel(labels, ddKey)).toBe('dd-value');
       });
 
-      test.each(labelPairs)('should fall back to %s when %s is absent', (ddKey, wudKey) => {
+      test.each(labelPairs)('should ignore %s when %s is absent', (ddKey, wudKey) => {
         const labels = { [wudKey]: 'legacy-value' };
-        expect(testable_getLabel(labels, ddKey, wudKey)).toBe('legacy-value');
+        expect(testable_getLabel(labels, ddKey)).toBeUndefined();
       });
 
       test.each(
         labelPairs,
       )('should return undefined when neither %s nor %s is set', (ddKey, wudKey) => {
-        expect(testable_getLabel({}, ddKey, wudKey)).toBeUndefined();
+        expect(testable_getLabel({}, ddKey)).toBeUndefined();
       });
     });
   });
@@ -146,7 +149,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image);
+      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image, {
+        usePollCycleCache: false,
+      });
       expect(result).toEqual({ tag: '1.0.0' });
     });
 
@@ -170,7 +175,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '1.0.0');
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '1.0.0', {
+        usePollCycleCache: false,
+      });
       expect(result).toEqual({
         tag: '1.0.0',
         publishedAt: '2026-03-10T10:00:00.000Z',
@@ -197,7 +204,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '');
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '', {
+        usePollCycleCache: false,
+      });
       expect(result.publishedAt).toEqual('2026-03-01T10:00:00.000Z');
       expect(result.tag).toEqual('');
     });
@@ -630,6 +639,81 @@ describe('Docker Watcher', () => {
       expect(result).toEqual({ tag: '1.2.4-ls133' });
     });
 
+    test('watcher tag.family=loose supplies the actionable default when no narrower override exists (#498)', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { family: 'loose' },
+      });
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.2.3-ls132', semver: true },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['1.2.4-ls133', '1.2.3-ls132']),
+      };
+      hRegistry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      const rank = { '1.2.3-ls132': 1230, '1.2.4-ls133': 1240 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => rank[version1] >= rank[version2],
+      );
+
+      const result = await docker.findNewVersion(container, {
+        error: vi.fn(),
+        warn: vi.fn(),
+      });
+
+      expect(result).toEqual({ tag: '1.2.4-ls133' });
+    });
+
+    test('matching imgset tag.family overrides a strict watcher default without labels (#498)', async () => {
+      hMockParse.mockImplementation((image: string) => {
+        if (image === 'ghcr.io/team/service') {
+          return { domain: 'ghcr.io', path: 'team/service' };
+        }
+        return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
+      });
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { family: 'strict' },
+        imgset: {
+          service: {
+            image: 'ghcr.io/team/service',
+            tag: { family: 'loose' },
+          },
+        },
+      });
+      const container = {
+        image: {
+          name: 'team/service',
+          registry: { name: 'hub', url: 'ghcr.io' },
+          tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+          digest: { watch: true },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['v1.13.3', 'v1.46.1']),
+      };
+      hRegistry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      const rank = { 'v1.13.3': 100, 'v1.46.1': 200 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => rank[version1] > rank[version2],
+      );
+
+      expect(
+        docker.getMatchingImgsetConfiguration({ path: 'team/service', domain: 'ghcr.io' }),
+      ).toMatchObject({ tagFamily: 'loose' });
+
+      const result = await docker.findNewVersion(container, {
+        error: vi.fn(),
+        warn: vi.fn(),
+      });
+
+      expect(result).toEqual({ tag: 'v1.46.1' });
+    });
+
     test('should fall back to strict mode when tagFamily is invalid', async () => {
       const container = {
         tagFamily: 'unsupported',
@@ -945,6 +1029,77 @@ describe('Docker Watcher', () => {
 
       const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result.updateInsight).toEqual({ tag: 'v1.46.1', kind: 'patch' });
+    });
+
+    test('uses the resolved per-container tag.pin.info value above the watcher default', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { pin: { info: false } },
+      });
+
+      const container = {
+        tagPinInfo: true,
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+          digest: { watch: true },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['v1.13.3', 'v1.46.1']),
+      };
+      hRegistry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      const rank = { 'v1.13.3': 100, 'v1.46.1': 200 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
+      );
+
+      const result = await docker.findNewVersion(container, {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      });
+
+      expect(result.updateInsight).toEqual({ tag: 'v1.46.1', kind: 'patch' });
+    });
+
+    test('re-resolves dd.tag.pin.info above an imgset and watcher default for persisted containers', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { pin: { info: false } },
+        imgset: {
+          service: {
+            image: 'ghcr.io/team/service',
+            tag: { pin: { info: false } },
+          },
+        },
+      });
+
+      const container = {
+        labels: { 'dd.tag.pin.info': 'true' },
+        image: {
+          name: 'team/service',
+          registry: { name: 'hub', url: 'ghcr.io' },
+          tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+          digest: { watch: true },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['v1.13.3', 'v1.46.1']),
+      };
+      hRegistry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      const rank = { 'v1.13.3': 100, 'v1.46.1': 200 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
+      );
+
+      const result = await docker.findNewVersion(container, {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      });
 
       expect(result.updateInsight).toEqual({ tag: 'v1.46.1', kind: 'patch' });
     });

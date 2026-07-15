@@ -14,6 +14,8 @@ The `gar` registry lets you configure [Google Artifact Registry](https://cloud.g
 | `DD_REGISTRY_GAR_{REGISTRY_NAME}_CLIENTEMAIL` | ⚪ | Service Account Client Email (required for private images access) | See [Service Account credentials](https://cloud.google.com/iam/docs/keys-create-delete) | |
 | `DD_REGISTRY_GAR_{REGISTRY_NAME}_PRIVATEKEY` | ⚪ | Service Account Private Key (required for private images access) | See [Service Account credentials](https://cloud.google.com/iam/docs/keys-create-delete) | |
 
+Docker and Docker Compose action triggers use this same service-account configuration when they pull private GAR images during an update. No separate action-trigger auth setting is required.
+
 ## Examples
 
 ### Configure for authenticated access
@@ -26,19 +28,28 @@ services:
   drydock:
     image: codeswhat/drydock
     ...
+    secrets:
+      - gar_private_key
     environment:
       - DD_REGISTRY_GAR_PRIVATE_CLIENTEMAIL=johndoe@myproject.iam.gserviceaccount.com
-      - DD_REGISTRY_GAR_PRIVATE_PRIVATEKEY=-----BEGIN PRIVATE KEY-----xxxxxxxxxxx\n-----END PRIVATE KEY-----\n
+      - DD_REGISTRY_GAR_PRIVATE_PRIVATEKEY__FILE=/run/secrets/gar_private_key
+
+secrets:
+  gar_private_key:
+    file: /path/to/gar-private-key.pem
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
+  -v /path/to/gar-private-key.pem:/run/secrets/gar_private_key:ro \
   -e DD_REGISTRY_GAR_PRIVATE_CLIENTEMAIL="johndoe@myproject.iam.gserviceaccount.com" \
-  -e DD_REGISTRY_GAR_PRIVATE_PRIVATEKEY="-----BEGIN PRIVATE KEY-----xxxxxxxxxxx\n-----END PRIVATE KEY-----\n" \
+  -e DD_REGISTRY_GAR_PRIVATE_PRIVATEKEY__FILE="/run/secrets/gar_private_key" \
   ...
   codeswhat/drydock
 ```
 </Tab>
 </Tabs>
+
+Keep the private-key file outside the repository, restrict its permissions, and mount it read-only. The `__FILE` suffix loads the value from the mounted secret without placing the PEM in the Compose file, shell history, or container environment metadata.

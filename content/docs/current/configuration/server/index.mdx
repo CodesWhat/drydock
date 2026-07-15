@@ -10,7 +10,8 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_PUBLIC_URL` | ⚪ | Public-facing URL for OIDC callbacks and links (auto-detected from request if not set) | URL (e.g., `https://drydock.example.com`) | auto-detected |
+| `DD_VERSION` | ⚪ | Runtime version metadata shown in the API, debug dump, startup banner, and self-update checks. Official images set this at build time; override only for custom builds or tests. | Non-empty string (`unknown` is ignored) | package version, then `unknown` |
+| `DD_PUBLIC_URL` | ⚪ | Public-facing URL for absolute links and OIDC callbacks. Required when any OIDC authentication provider is configured; other links fall back to request-based detection when unset. | URL (e.g., `https://drydock.example.com`) | auto-detected for non-OIDC request links |
 | `DD_SERVER_NAME` | ⚪ | Server name used in notifications to identify this instance (useful in multi-server setups with agents) | Any string | `os.hostname()` |
 | `DD_SERVER_ENABLED` | ⚪ | If REST API must be exposed | `true`, `false` | `true` |
 | `DD_SERVER_UI_ENABLED` | ⚪ | Serve the web UI (set to `false` for headless/API-only mode) | `true`, `false` | `true` |
@@ -22,6 +23,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_SERVER_CORS_ENABLED` | ⚪ | Enable [CORS](https://developer.mozilla.org/fr/docs/Web/HTTP/CORS) Requests | `true`, `false` | `false` |
 | `DD_SERVER_CORS_ORIGIN` | 🔴 (when CORS enabled) | Allowed CORS origin — **required** when `DD_SERVER_CORS_ENABLED=true`; startup will abort if CORS is enabled but this is unset | `*` or a single origin URL (for example `https://drydock.example.com`) | — |
 | `DD_SERVER_CORS_METHODS` | ⚪ | Supported CORS methods | Comma separated list of valid HTTP verbs | `GET,HEAD,PUT,PATCH,POST,DELETE` |
+| `DD_COMPAT_WUDCARD` | ⚪ | Mount the opt-in [wud-card compatibility endpoints](#wud-card-compatibility) at the unversioned `/api/*` path | `true`, `false` | `false` |
 | `DD_SERVER_COMPRESSION_ENABLED` | ⚪ | Enable gzip response compression (SSE responses are excluded automatically) | `true`, `false` | `true` |
 | `DD_SERVER_COMPRESSION_THRESHOLD` | ⚪ | Minimum response size in bytes before compression is applied | integer (`>=0`) | `1024` |
 | `DD_SERVER_FEATURE_CONTAINERACTIONS` | ⚪ | Enable start, stop, restart, and update actions via API and UI | `true`, `false` | `true` |
@@ -33,6 +35,8 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS` | ⚪ | Maximum concurrent authenticated sessions per user (oldest sessions are revoked first at login when limit is reached) | integer (`>=1`) | `5` |
 | `DD_SERVER_RATELIMIT_IDENTITYKEYING` | ⚪ | Key authenticated-route rate limits by session/username instead of IP (prevents collisions for multiple users behind shared proxies) | `true`, `false` | `false` |
 | `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique client identities held in the auth lockout state. Older entries are pruned when the cap is reached. | integer (`>0`) | `5000` |
+| `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | ⚪ | Interval for pruning expired auth lockout entries from memory and the persisted lockout sidecar file | integer (`>0`) | `60000` |
+| `DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS` | ⚪ | Suppress repeated `update-available` audit rows for the same agent, watcher, container, and version transition. A no-update report or a changed target starts a new transition immediately. Set to `0` to disable deduplication. | integer (`>=0`, milliseconds) | `3600000` (1 hour) |
 | `DD_SSE_MAX_CLIENTS` | ⚪ | Maximum total concurrent SSE connections across all sessions (global cap; individual sessions are also capped at 10). Connections beyond this limit receive a `429 Too Many Requests` response. | integer (`>0`) | `500` |
 | `DD_RUN_AS_ROOT` | ⚪ | Request break-glass root mode (requires `DD_ALLOW_INSECURE_ROOT=true`) | `true`, `false` | `false` |
 | `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
@@ -47,6 +51,16 @@ For production deployments, set a specific trusted origin:
 
 - `DD_SERVER_CORS_ORIGIN=https://drydock.example.com`
 - `DD_SERVER_CORS_ORIGIN=https://ops.example.com`
+
+## wud-card Compatibility
+
+The unversioned `/api/*` alias was removed in v1.6.0 — see [Deprecations](https://getdrydock.com/docs/deprecations). Setting `DD_COMPAT_WUDCARD=true` opts back in to a narrow slice of that surface: the four endpoints the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration calls. Three of them (the container list, per-container triggers list, and watch endpoints) are reshaped into the bare-array response that card expects instead of drydock's `{ data, total, limit, offset, hasMore, _links }` envelope; the fourth (running a trigger) already returns a small non-enveloped body and passes through unmodified. These endpoints stay mounted at `/api/*` even after the unversioned alias itself is removed, served by the compat router's own internal API router instance rather than by falling through to the removed alias. It exists purely to keep wud-card working against drydock and is off by default. Every other route under `/api/*` is unaffected by this flag; most of them now return `410 Gone`, except two standalone auth aliases — `GET /api/auth/methods` and `GET /api/auth/status` — that keep responding unconditionally because they're registered directly on the app rather than through the removed alias router. See [Deprecations](https://getdrydock.com/docs/deprecations#unversioned-api-paths) for details.
+
+The same flag also covers [Homepage](https://gethomepage.dev/)'s native `whatsupdocker` widget: Homepage's dashboard GETs `/api/containers` expecting the same bare array wud-card does, and proxies the request server-side, so no CORS configuration is needed for that integration.
+
+This is a best-effort compatibility shim, not a supported integration surface — it carries no compatibility guarantee and may change or be removed without the usual deprecation window. Requests through it are authenticated and rate-limited exactly like the rest of the API; there is no security bypass.
+
+If Home Assistant runs on a different origin than drydock, pair `DD_COMPAT_WUDCARD=true` with the CORS settings above: set `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` to the Home Assistant frontend's origin (for example `https://homeassistant.example.com`), not drydock's own address. CORS headers alone do not make session-cookie login work across origins — drydock's CORS middleware never sends `Access-Control-Allow-Credentials`, and wud-card's `fetch()` calls never request credentials either, so the session cookie is never sent cross-origin. The instance must be reachable either with no authentication configured or via [HTTP Basic auth](/docs/configuration/authentications/basic), the only auth mode that actually completes cross-origin. wud-card also offers a Bearer-token auth option, but drydock has no static API token equivalent yet, so that option will silently fail — configure wud-card for Basic auth (or an auth-less instance) instead.
 
 ## Container Healthcheck
 
@@ -189,15 +203,60 @@ docker run \
 
 Your proxy must forward the `X-Forwarded-Proto` header so drydock knows whether the original request used HTTPS. Most proxies (Traefik, Caddy, NGINX Proxy Manager) do this by default. For Nginx, add `proxy_set_header X-Forwarded-Proto $scheme;` to your location block. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for complete Traefik and Nginx examples.
 
+### Reverse proxy caching (blank page after an update)
+
+After you upgrade drydock, the dashboard can come up as a blank white page on some devices (a phone is the classic case) while a desktop hitting the same reverse proxy loads fine. A hard refresh or clearing the site's data on the affected device fixes it.
+
+Here's why: drydock's UI is a single-page app, and its JS/CSS bundles are content-hashed, so the filenames change with every release and the previous release's files are removed from the image. drydock serves the HTML document itself with `Cache-Control: no-store`, and serves the hashed files under `/assets/` with a long-lived `immutable` cache, which is correct and intentional. If something ignores `no-store` and hands back a stale copy of the HTML, that page references bundle files that no longer exist, so the browser has nothing to run and you get a blank page. Most reverse proxies don't cache responses unless you've explicitly turned caching on, so the usual culprits are either a proxy cache you enabled, or the device just holding on to an old copy.
+
+**Immediate recovery:** clear the browser's site data (or hard-reload) on the affected device. If you've added drydock to a phone's home screen, remove it and re-add it. If your proxy has caching enabled, purge its cache too.
+
+**Prevention:** make sure whatever sits in front of drydock doesn't cache the HTML document, or that it honors the upstream `Cache-Control: no-store`. Caching `/assets/*` is fine, in fact it's the point, those filenames are unique per build so they're safe to cache forever.
+
+<Tabs items={["Nginx / Nginx Proxy Manager", "Caddy", "Traefik"]}>
+<Tab value="Nginx / Nginx Proxy Manager">
+
+If you've turned on `proxy_cache` for drydock, exclude the HTML document from it. The simplest fix is to not enable caching on drydock's location at all and let Nginx forward drydock's own `Cache-Control` header, which it does by default:
+
+```nginx
+location / {
+    proxy_pass http://drydock:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # no proxy_cache directive here — drydock's own
+    # Cache-Control headers control caching
+}
+```
+
+</Tab>
+<Tab value="Caddy">
+
+Caddy's `reverse_proxy` doesn't cache responses on its own, so there's nothing to configure. If you've added a caching plugin or directive in front of drydock, exclude `Content-Type: text/html` from it.
+
+</Tab>
+<Tab value="Traefik">
+
+Traefik doesn't cache HTTP responses by default either, so no action is needed out of the box. If you've added a caching middleware or plugin, exclude the HTML document from it there too.
+
+</Tab>
+</Tabs>
+
+<Callout type="info">drydock already sends `Cache-Control: no-store` on the HTML document, and as of v1.6 returns a clean 404 for a hashed asset that no longer exists, so a stale page fails fast instead of rendering a blank screen. A caching layer that overrides `no-store` can still serve a stale page though, which is why this ultimately comes down to your proxy's (or device's) cache configuration.</Callout>
+
 ## Advanced Tuning
 
-These variables control the icon proxy cache used to serve container icons. Defaults are suitable for most deployments.
+These variables control outbound HTTP calls, the icon proxy cache used to serve container icons, and fleet-stat aggregation. Defaults are suitable for most deployments.
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
+| `DD_OUTBOUND_HTTP_TIMEOUT_MS` | ⚪ | Default timeout for outbound registry, trigger, and provider HTTP requests that do not set a narrower provider-specific timeout | integer (`>0`) | `30000` |
 | `DD_ICON_CACHE_TTL_MS` | ⚪ | TTL for cached icon files on disk | integer (ms) | `2592000000` (30 days) |
 | `DD_ICON_CACHE_MAX_FILES` | ⚪ | Maximum number of icon files in cache | integer (`>0`) | `5000` |
 | `DD_ICON_CACHE_MAX_BYTES` | ⚪ | Maximum total size of icon cache in bytes | integer (`>0`) | `104857600` (100 MB) |
+| `DD_ICON_CACHE_ENFORCEMENT_INTERVAL_MS` | ⚪ | Interval for enforcing icon cache file/count/byte limits | integer (`>0`) | `10000` |
+| `DD_ICON_IN_FLIGHT_TIMEOUT_MS` | ⚪ | Timeout for coalesced in-flight icon fetches before another request may retry | integer (`>0`) | `15000` |
+| `DD_ICON_PROXY_RATE_LIMIT_WINDOW_MS` | ⚪ | Sliding window for icon proxy request rate limiting | integer (`>0`) | `60000` |
+| `DD_ICON_PROXY_RATE_LIMIT_MAX` | ⚪ | Maximum icon proxy requests allowed per rate-limit window | integer (`>0`) | `100` |
 | `DD_STATS_INTERVAL` | ⚪ | Stats aggregator poll cycle in seconds — how often the fleet-stats snapshot is refreshed | integer (`>0`) | `10` |
 | `DD_STATS_HISTORY_SIZE` | ⚪ | Number of historical fleet-stat snapshots retained per container (older snapshots are evicted when the cap is exceeded) | integer (`>0`) | `60` |
 
@@ -215,16 +274,16 @@ services:
     ...
     environment:
       - DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token
-      - DD_SERVER_WEBHOOK_TOKENS_UPDATE__FILE=/run/secrets/webhook_update_token
+      - DD_SESSION_SECRET__FILE=/run/secrets/session_secret
     secrets:
       - webhook_token
-      - webhook_update_token
+      - session_secret
 
 secrets:
   webhook_token:
     file: ./webhook_token.txt
-  webhook_update_token:
-    file: ./webhook_update_token.txt
+  session_secret:
+    file: ./session_secret.txt
 ```
 
 </Tab>
@@ -232,11 +291,18 @@ secrets:
 ```bash
 docker run \
   -e DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token \
-  -e DD_SERVER_WEBHOOK_TOKENS_UPDATE__FILE=/run/secrets/webhook_update_token \
+  -e DD_SESSION_SECRET__FILE=/run/secrets/session_secret \
   -v ./webhook_token.txt:/run/secrets/webhook_token:ro \
-  -v ./webhook_update_token.txt:/run/secrets/webhook_update_token:ro \
+  -v ./session_secret.txt:/run/secrets/session_secret:ro \
   ...
   codeswhat/drydock
 ```
 </Tab>
 </Tabs>
+
+File-sourced secrets follow the common Docker `*_FILE` convention:
+
+- If both `DD_FOO` and `DD_FOO__FILE` are set, the file value wins.
+- Trailing whitespace is trimmed, so secrets created with `echo` or an editor do not include accidental trailing newlines.
+- On Unix-like systems, Drydock logs a non-fatal warning when a secret file is readable by group or others. Use `chmod 600 <secret-file>` where possible. The permission check is skipped on Windows because POSIX mode bits are not meaningful there.
+- `DD_SESSION_SECRET__FILE` is supported and uses the same rules as other `DD_*__FILE` secrets.

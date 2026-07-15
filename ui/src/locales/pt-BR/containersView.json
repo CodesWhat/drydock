@@ -40,6 +40,7 @@
       "status": "Status",
       "host": "Host",
       "registry": "Registry",
+      "resources": "Recursos",
       "uptime": "Uptime"
     },
     "status": {

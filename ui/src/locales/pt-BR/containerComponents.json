@@ -274,14 +274,10 @@
       "hidePinned": "Ocultar fixados",
       "hidePinnedTooltip": "Ocultar contêineres fixados em versões específicas",
       "clearAll": "Limpar tudo",
-      "toggleColumnsTooltip": "Alternar colunas",
       "groupByStackTooltip": "Agrupar por stack",
       "expandAll": "Expandir tudo",
       "collapseAll": "Recolher tudo",
       "recheckTooltip": "Verificar atualizações novamente",
-      "columnsHeader": "Colunas",
-      "narrowViewportSuffix": "(viewport estreita)",
-      "autoHiddenBadgeTooltip": "{count} colunas ocultadas automaticamente porque a janela é estreita. Alargue a janela ou oculte outras colunas para liberar espaço.",
       "filterSearch": "Busca: {value}",
       "filterStatus": "Status: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -324,6 +320,7 @@
     "projectLink": {
       "viewProject": "Ver projeto"
     },
+    "registryLink": { "viewRegistry": "Ver registro" },
     "releaseNotesLink": {
       "releaseNotes": "Notas da versão",
       "viewFullNotes": "Ver notas completas",
@@ -553,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Fixada — há uma versão mais recente disponível para informação."
+      }
     }
   }
 }

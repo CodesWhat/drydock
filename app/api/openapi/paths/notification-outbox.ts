@@ -9,7 +9,7 @@ const outboxEntryIdPathParam = {
 };
 
 export const notificationOutboxPaths = {
-  '/api/notifications/outbox': {
+  '/api/v1/notifications/outbox': {
     get: {
       tags: ['Notifications'],
       summary: 'List notification outbox entries',
@@ -32,10 +32,11 @@ export const notificationOutboxPaths = {
         }),
         400: errorResponse('Invalid status query parameter'),
         401: errorResponse('Authentication required'),
+        500: errorResponse('Internal server error'),
       },
     },
   },
-  '/api/notifications/outbox/{id}/retry': {
+  '/api/v1/notifications/outbox/{id}/retry': {
     post: {
       tags: ['Notifications', 'Actions'],
       summary: 'Retry a dead-letter outbox entry',
@@ -51,7 +52,7 @@ export const notificationOutboxPaths = {
       },
     },
   },
-  '/api/notifications/outbox/{id}': {
+  '/api/v1/notifications/outbox/{id}': {
     delete: {
       tags: ['Notifications', 'Actions'],
       summary: 'Delete a notification outbox entry',

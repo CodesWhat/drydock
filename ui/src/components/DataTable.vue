@@ -34,6 +34,22 @@ export interface DataTableColumn {
   icon?: boolean;
   /** Optional tooltip shown on the column header label */
   headerTooltip?: string;
+  /**
+   * Card mode (< 640px): force this column to be the card title, overriding the
+   * first-non-icon-column fallback. Table mode is unaffected — the sticky identity column
+   * always uses the first-non-icon-column rule regardless of `cardTitle`.
+   */
+  cardTitle?: boolean;
+  /**
+   * Card mode (< 640px): controls subtitle selection and body inclusion. Distinct from
+   * `priority` (used by auto-hide/responsive column sizing, where higher = dropped first) —
+   * do not reuse that field for cards. Positive values compete for the card subtitle slot
+   * (highest wins, ties broken by declared order). Negative values demote the column out of
+   * the card entirely (it's still reachable via the DetailPanel tap-through) and can never be
+   * chosen as the subtitle fallback. Zero/unset is a neutral body column and is eligible for
+   * the default subtitle fallback (first candidate by declared order).
+   */
+  cardPriority?: number;
 }
 
 const props = withDefaults(
@@ -64,6 +80,36 @@ const props = withDefaults(
     fullWidthRow?: (row: Record<string, unknown>) => boolean;
     /** Optional function controlling whether a row should behave like a clickable/selectable data row */
     rowInteractive?: (row: Record<string, unknown>) => boolean;
+    /** When true, hides column resize handles for touch-only interaction */
+    isMobile?: boolean;
+    /**
+     * Column keys hidden by a user-driven column picker — TABLE MODE ONLY. Card mode
+     * (< 640px) deliberately ignores this: mobile has no picker to un-hide a column, so
+     * every non-demoted column must stay reachable there. Orthogonal to `cardPriority`
+     * (static per-column card demotion, applies in card mode) and to the responsive
+     * auto-hide driven by `priority`/viewport width (a distinct, automatic mechanism).
+     */
+    hiddenColumnKeys?: string[];
+    /**
+     * Desktop view-mode toggle: force card rendering at >=640px container width. The
+     * automatic <640px reflow (`CARD_MODE_MAX_WIDTH`) always wins regardless of this prop —
+     * it only ever forces cards on at wider widths, never forces the table on below 640px.
+     */
+    preferCards?: boolean;
+    /**
+     * Suppress the built-in card-mode sort bar because an ancestor toolbar (DataFilterBar)
+     * is hosting the sort control instead. Views that render a DataSortControl in their
+     * filter bar set this so sorting isn't duplicated. Leave false when DataTable is the
+     * only place a card-mode sort affordance can live (e.g. views with no filter bar).
+     */
+    hoistCardSort?: boolean;
+    /**
+     * Card-mode grid: minimum width of a card before the row wraps to another column.
+     * Cards lay out as `repeat(auto-fill, minmax(cardMinWidth, 1fr))`, so wide viewports pack
+     * several cards per row and narrow ones collapse to a single column. Ignored while
+     * `virtualScroll` is on (virtualization needs a single-column vertical flow for its spacers).
+     */
+    cardMinWidth?: string;
   }>(),
   {
     showActions: false,
@@ -74,6 +120,11 @@ const props = withDefaults(
     virtualRowHeight: 56,
     virtualOverscan: 6,
     virtualMaxHeight: '70vh',
+    isMobile: false,
+    hiddenColumnKeys: () => [],
+    preferCards: false,
+    hoistCardSort: false,
+    cardMinWidth: '320px',
   },
 );
 
@@ -81,6 +132,12 @@ const emit = defineEmits<{
   'update:sortKey': [key: string];
   'update:sortAsc': [asc: boolean];
   'row-click': [row: Record<string, unknown>];
+  /**
+   * Fires when the measured-width card reflow (< 640px container) toggles. Distinct from
+   * `preferCards` (the desktop toggle): this is true ONLY when the width forces cards, so an
+   * ancestor can hide a table/cards switch that would be a dead control at this width.
+   */
+  'update:cardReflowForced': [value: boolean];
 }>();
 
 function getRowKey(
@@ -186,11 +243,16 @@ const actionsColumn = computed<ResolvedDataTableColumn>(() => {
   };
 });
 
+/** Table-mode-only hide set, sourced from `hiddenColumnKeys`. Card mode never consults this. */
+const hiddenColumnKeySet = computed(() => new Set(props.hiddenColumnKeys));
+
 const normalizedColumns = computed(() =>
-  props.columns.map((column) => ({
-    column,
-    sizing: normalizeTableColumnSizing(column),
-  })),
+  props.columns
+    .filter((column) => !hiddenColumnKeySet.value.has(column.key))
+    .map((column) => ({
+      column,
+      sizing: normalizeTableColumnSizing(column),
+    })),
 );
 
 interface ColumnWidthEntry {
@@ -207,7 +269,9 @@ interface ColumnWidthEntry {
 // widths never fall below minSize while eliminating the overflow whenever total headroom covers
 // the deficit (see #467 — rendered widths must agree with the auto-hide budget's minSize-based
 // "fits" decision). When total headroom is smaller than the deficit, every shrinkable column
-// bottoms out at minSize and the remaining overflow is left for auto-hide to resolve.
+// bottoms out at minSize and the remaining overflow is left for auto-hide to resolve. Operates
+// only on the `hiddenColumnKeys`-filtered (table-mode) column set passed in via `base` — hidden
+// columns never reach this function, and card mode never calls resolveColumnWidths() at all.
 function shrinkColumnWidthsToFit(
   base: ColumnWidthEntry[],
   widthMap: Record<string, number>,
@@ -317,9 +381,89 @@ const allResolvedColumns = computed(() =>
   props.showActions ? [...resolvedColumns.value, actionsColumn.value] : resolvedColumns.value,
 );
 
+/**
+ * Key of the first non-icon column in the FILTERED (table-visible, `hiddenColumnKeys`-aware)
+ * column set — this column is pinned sticky-left for mobile scroll. TABLE MODE ONLY: card mode
+ * uses the separate `cardFirstNonIconColKey` (declared below, over the unfiltered column set)
+ * for its title fallback.
+ */
+const firstNonIconColKey = computed<string | null>(
+  () => resolvedColumns.value.find((col) => !col.icon)?.key ?? null,
+);
+
+/**
+ * Cumulative `insetInlineStart` offset (px) for every column in the leading identity cluster:
+ * the icon column(s) immediately preceding `firstNonIconColKey`, plus `firstNonIconColKey`
+ * itself. Because `firstNonIconColKey` is by definition the FIRST non-icon column, every
+ * `resolvedColumns` entry before it is guaranteed to be an icon column — so a single
+ * left-to-right walk up to (and including) the target key both identifies the pinned cluster
+ * and accumulates each member's offset. Columns are pinned as a whole cluster so an icon column
+ * can never scroll out from under its opaque sticky neighbor (icon logos clipping/overlapping
+ * mid-scroll) — only `firstNonIconColKey` keeps the `dd-sticky-col-left` separator class.
+ */
+const pinnedColumnOffsets = computed<Map<string, number>>(() => {
+  const map = new Map<string, number>();
+  const targetKey = firstNonIconColKey.value;
+  if (targetKey === null) {
+    return map;
+  }
+  let offset = 0;
+  for (const col of resolvedColumns.value) {
+    map.set(col.key, offset);
+    if (col.key === targetKey) {
+      break;
+    }
+    offset += col.resolvedWidth;
+  }
+  return map;
+});
+
+function pinnedInsetStyle(colKey: string): Record<string, string> | undefined {
+  const offset = pinnedColumnOffsets.value.get(colKey);
+  return offset === undefined ? undefined : { insetInlineStart: `${Math.round(offset)}px` };
+}
+
 const rowOverlayWidth = computed(() =>
   viewportWidth.value > 0 ? `${Math.round(viewportWidth.value)}px` : '100%',
 );
+
+// Two uses, both gated on genuine horizontal overflow:
+//  1. The `dd-sticky-col-left` separator border (see <style> below) — the border only makes
+//     sense when there's real horizontal overflow to scroll through. With columns picker-hidden
+//     or auto-hidden down to a near-empty layout, the identity cluster's border otherwise floats
+//     as a stray full-height line over columns that never actually scroll underneath it.
+//  2. The sticky-right ACTIONS column (below): when the auto-hide budget disagrees with the
+//     real container width, or a live/persisted column drag-width is invisible to that budget,
+//     total resolved width can exceed the viewport even though DataTable itself renders fine.
+//     `position: sticky; end-0` at scrollLeft 0 then pulls the actions column left of its natural
+//     grid position by the overflow amount, painting it on top of the last data column. Dropping
+//     sticky/end-0/z-index in that case falls the actions column back to normal in-flow
+//     position — reachable by horizontal scroll, never overlapping.
+const hasHorizontalOverflow = computed(
+  () =>
+    viewportWidth.value > 0 &&
+    allResolvedColumns.value.reduce((acc, col) => acc + col.resolvedWidth, 0) > viewportWidth.value,
+);
+
+// -- Card mode (container width < 640px, or `preferCards` toggle at wider widths) --
+// This is a CONTAINER-width breakpoint (measured off scrollViewportRef via ResizeObserver),
+// deliberately separate from `props.isMobile` (a caller-supplied WINDOW-width (768px) signal
+// that only controls whether column-resize handles are shown). A narrow container can appear
+// inside a wide window (e.g. a split DetailPanel), and vice versa — do not merge these two
+// switches. While viewportWidth is 0 (pre-measurement) isCardMode stays false so the table
+// renders first, then self-corrects once onMounted's syncTableViewportWidth() measures it.
+// `preferCards` (desktop table/cards toggle) only ever forces cards ON at >=640px — the
+// automatic <640px reflow always wins regardless of the toggle's value.
+const CARD_MODE_MAX_WIDTH = 640;
+const isCardMode = computed(
+  () => viewportWidth.value > 0 && (viewportWidth.value < CARD_MODE_MAX_WIDTH || props.preferCards),
+);
+// True only when the measured width (not the desktop toggle) forces cards. Surfaced so an
+// ancestor toolbar can hide a table/cards switch that can't do anything at this width.
+const cardReflowForced = computed(
+  () => viewportWidth.value > 0 && viewportWidth.value < CARD_MODE_MAX_WIDTH,
+);
+watch(cardReflowForced, (value) => emit('update:cardReflowForced', value), { immediate: true });
 
 function resolvedColumn(colKey: string): ResolvedDataTableColumn | undefined {
   return allResolvedColumns.value.find((column) => column.key === colKey);
@@ -334,7 +478,7 @@ function parsePixelHeight(value: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-const totalColumnCount = computed(() => props.columns.length + (props.showActions ? 1 : 0));
+const totalColumnCount = computed(() => resolvedColumns.value.length + (props.showActions ? 1 : 0));
 const normalizedRowHeight = computed(() => Math.max(24, props.virtualRowHeight));
 const normalizedOverscan = computed(() => Math.max(0, props.virtualOverscan));
 const virtualizationEnabled = computed(() => props.virtualScroll && props.rows.length > 0);
@@ -357,8 +501,17 @@ function syncViewportHeight() {
   virtualViewportHeight.value = measured > 0 ? measured : fallbackViewportHeight();
 }
 
+// Epsilon-guarded: the ResizeObserver fires on sub-pixel jitter (fractional layout rounding,
+// scrollbar show/hide, etc.) with no useful change in the actual measured width. Writing
+// `viewportWidth` unconditionally forces a full column-width recompute + row re-render (and
+// re-runs every per-cell v-tooltip directive's `updated()` hook) on every such tick — skip the
+// write when the delta is sub-pixel, mirroring the rAF-gating spirit of useBreakpoints.ts.
 function syncTableViewportWidth() {
-  viewportWidth.value = scrollViewportRef.value?.clientWidth ?? 0;
+  const next = scrollViewportRef.value?.clientWidth ?? 0;
+  if (Math.abs(next - viewportWidth.value) < 1) {
+    return;
+  }
+  viewportWidth.value = next;
 }
 
 // Prefix sums over caller-estimated row heights so the visible window and spacers can be
@@ -470,8 +623,10 @@ onMounted(() => {
     tableResizeObserver = new ResizeObserver(syncTableViewportWidth);
     tableResizeObserver.observe(scrollViewportRef.value);
   }
+  // No separate window resize listener for width: the ResizeObserver above already fires on
+  // every layout change that affects scrollViewportRef's box (including window resizes), so a
+  // second unthrottled listener driving the same sync function was pure redundant overhead.
   globalThis.addEventListener('resize', syncViewportHeight);
-  globalThis.addEventListener('resize', syncTableViewportWidth);
 });
 
 onUnmounted(() => {
@@ -484,7 +639,6 @@ onUnmounted(() => {
   tableResizeObserver?.disconnect();
   tableResizeObserver = null;
   globalThis.removeEventListener('resize', syncViewportHeight);
-  globalThis.removeEventListener('resize', syncTableViewportWidth);
 });
 
 function handleVirtualScroll(event: Event) {
@@ -721,6 +875,19 @@ function isFullWidthRow(row: Record<string, unknown>): boolean {
   return props.fullWidthRow?.(row) ?? false;
 }
 
+// True when the row list carries group-header (full-width) rows, i.e. the view is grouped.
+// In card mode this flips the grid off uniform-height rows: group headers must keep their
+// natural height and span every column instead of being stretched into a tall single cell.
+const hasFullWidthRows = computed(() => props.rows.some((row) => isFullWidthRow(row)));
+
+// Grouped table view floats each stack on the page background (the gaps between stacks ARE the
+// app bg), so the sort header needs its own fill to still read as a distinct bar — it uses the
+// raised `--dd-bg-elevated` (matching the group title bars). Ungrouped tables keep the recessed
+// `--dd-bg-inset` header on their card surface.
+const tableHeaderBg = computed(() =>
+  hasFullWidthRows.value ? 'var(--dd-bg-elevated)' : 'var(--dd-bg-inset)',
+);
+
 function isInteractiveRow(row: Record<string, unknown>): boolean {
   if (props.rowInteractive) {
     return props.rowInteractive(row);
@@ -733,11 +900,24 @@ function isSelectedRow(row: Record<string, unknown>): boolean {
 }
 
 function rowBackgroundColor(row: Record<string, unknown>, localIndex: number): string {
+  // Card mode never zebra-stripes or elevates on selection — cards are flat
+  // `var(--dd-bg-card)`, selection is communicated purely via the border (see
+  // `.dd-data-table-card-selected` below). Table mode keeps zebra + elevated-on-select.
+  if (isCardMode.value) {
+    return 'var(--dd-bg-card)';
+  }
   if (isFullWidthRow(row)) {
     return 'transparent';
   }
   if (isSelectedRow(row)) {
     return 'var(--dd-bg-elevated)';
+  }
+  // Grouped table view floats each stack as a solid `--dd-bg-card` block on the darker
+  // `--dd-bg-inset` ground the wrapper paints, so drop zebra striping — an odd (inset) row at
+  // a stack's bottom edge would otherwise blend into the inset gap below it and smear the
+  // separation the grouping is trying to create.
+  if (hasFullWidthRows.value) {
+    return 'var(--dd-bg-card)';
   }
   return rowAbsoluteIndex(localIndex) % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)';
 }
@@ -751,18 +931,211 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
     toggleSort(col.key, props.sortKey, props.sortAsc);
   }
 }
+
+// -- Card mode layout helpers --
+// Card mode deliberately reads from the UNFILTERED column set (props.columns), not the
+// table's `hiddenColumnKeys`-filtered `resolvedColumns` — mobile has no column picker to
+// un-hide a column, so every non-`cardPriority`-demoted column must still surface here.
+// Resolved *widths* are meaningless off the table grid, so this just carries `sizing` through
+// (for `cellContentClass()`'s `sizing.overflow` read) without running flex redistribution.
+const cardResolvedColumns = computed<ResolvedDataTableColumn[]>(() =>
+  props.columns.map((column) => {
+    const sizing = normalizeTableColumnSizing(column);
+    return {
+      ...column,
+      resolvedWidth: sizing.size,
+      sizing,
+    };
+  }),
+);
+
+/** Card-mode counterpart to `firstNonIconColKey`, over the unfiltered column set. */
+const cardFirstNonIconColKey = computed<string | null>(
+  () => cardResolvedColumns.value.find((col) => !col.icon)?.key ?? null,
+);
+
+// Icon columns (e.g. status dot) render inline beside the title — there can be more than one.
+const cardIconColumns = computed(() => cardResolvedColumns.value.filter((col) => col.icon));
+
+// Card title key: the first non-icon column explicitly flagged `cardTitle`, else the same
+// "first non-icon column" identity used for the table's sticky column (but over the unfiltered
+// set — see `cardFirstNonIconColKey`). Table mode is always unaffected by `cardTitle` — it
+// keeps using `firstNonIconColKey` directly.
+const cardTitleColumnKey = computed<string | null>(() => {
+  const flagged = cardResolvedColumns.value.find((col) => !col.icon && col.cardTitle === true);
+  return flagged?.key ?? cardFirstNonIconColKey.value;
+});
+
+const cardTitleColumn = computed<ResolvedDataTableColumn | null>(
+  () => cardResolvedColumns.value.find((col) => col.key === cardTitleColumnKey.value) ?? null,
+);
+
+// Subtitle/body candidates: every non-icon column except the title.
+const cardBodyCandidates = computed(() =>
+  cardResolvedColumns.value.filter((col) => !col.icon && col.key !== cardTitleColumnKey.value),
+);
+
+// Card subtitle: highest `cardPriority` (> 0) among candidates, ties broken by declared order.
+// Falls back to the first candidate by order whose `cardPriority` is not negative — a negative
+// `cardPriority` (demoted out of the card body) can never become the subtitle via fallback
+// either. `priority` (auto-hide/responsive column sizing) is a distinct field and has no
+// bearing on card composition.
+const cardSubtitleColumn = computed<ResolvedDataTableColumn | null>(() => {
+  const candidates = cardBodyCandidates.value;
+  if (candidates.length === 0) {
+    return null;
+  }
+  const prioritized = candidates.filter((col) => (col.cardPriority ?? 0) > 0);
+  if (prioritized.length > 0) {
+    return prioritized.reduce((best, col) =>
+      (col.cardPriority as number) > (best.cardPriority as number) ? col : best,
+    );
+  }
+  return candidates.find((col) => (col.cardPriority ?? 0) >= 0) ?? null;
+});
+
+// Everything else (not title, not subtitle, not icon, not demoted) renders as a dt/dd field in
+// column order. A negative `cardPriority` removes a column from the card entirely — the data
+// remains reachable via the DetailPanel tap-through.
+const cardBodyColumns = computed(() =>
+  cardBodyCandidates.value.filter(
+    (col) => col.key !== cardSubtitleColumn.value?.key && (col.cardPriority ?? 0) >= 0,
+  ),
+);
+
+const sortableCardColumns = computed(() => props.columns.filter(isSortableColumn));
+
+// Selecting a *different* key always resets to ascending. Re-selecting the current key is a
+// no-op here — direction changes go through the dedicated toggle button, not this handler.
+function handleCardSortChange(event: Event): void {
+  const key = (event.target as HTMLSelectElement).value;
+  if (!key || key === props.sortKey) {
+    return;
+  }
+  emit('update:sortKey', key);
+  emit('update:sortAsc', true);
+}
 </script>
 
 <template>
   <div class="dd-rounded overflow-hidden"
-       :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+       :style="{ backgroundColor: isCardMode ? 'transparent' : (hasFullWidthRows ? 'var(--dd-bg)' : 'var(--dd-bg-card)') }">
     <div
       ref="scrollViewportRef"
-      class="overflow-x-auto"
-      :class="virtualScroll || maxHeight ? 'overflow-y-auto' : 'overflow-y-visible'"
+      class="overflow-x-auto overscroll-x-contain dd-data-table-scroll"
+      :class="[
+        virtualScroll || maxHeight ? 'overflow-y-auto' : 'overflow-y-visible',
+        hasHorizontalOverflow ? 'dd-table-has-overflow' : '',
+      ]"
       :data-test="virtualScroll ? 'data-table-scroll' : undefined"
       :style="virtualScroll ? { maxHeight: virtualMaxHeight } : maxHeight ? { maxHeight } : {}"
       @scroll="handleVirtualScroll">
+      <template v-if="isCardMode">
+        <div v-if="rows.length > 0 && sortableCardColumns.length > 0 && !hoistCardSort"
+             class="dd-data-table-card-sort-bar flex items-center gap-2 px-3 pt-3 pb-2">
+          <select
+            data-test="dd-card-sort-select"
+            class="flex-1 min-h-[44px] min-w-0 px-3 py-2 dd-rounded dd-bg-inset dd-text border dd-border-strong outline-none cursor-pointer text-2xs-plus"
+            :aria-label="t('sharedComponents.dataTable.sortBy')"
+            :value="sortKey ?? ''"
+            @change="handleCardSortChange">
+            <option value="" disabled hidden>{{ t('sharedComponents.dataTable.sortBy') }}</option>
+            <option v-for="col in sortableCardColumns" :key="col.key" :value="col.key">{{ col.label }}</option>
+          </select>
+          <AppButton
+            data-test="dd-card-sort-direction"
+            type="button"
+            size="icon-md"
+            variant="outlined"
+            :disabled="!sortKey"
+            :aria-pressed="!!sortKey && sortAsc !== false"
+            :aria-label="sortAsc === false
+              ? t('sharedComponents.dataTable.sortDirectionDescending')
+              : t('sharedComponents.dataTable.sortDirectionAscending')"
+            @click="sortKey && toggleSort(sortKey, sortKey, sortAsc)">
+            <span aria-hidden="true">{{ sortAsc === false ? '▼' : '▲' }}</span>
+          </AppButton>
+        </div>
+        <ul role="list"
+            class="gap-3 pb-3"
+            :class="virtualScroll ? 'flex flex-col' : 'grid'"
+            :style="virtualScroll ? undefined : { gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}, 1fr))`, gridAutoRows: hasFullWidthRows ? 'auto' : '1fr' }">
+          <li
+            v-if="topSpacerHeight > 0"
+            aria-hidden="true"
+            data-test="dd-card-top-spacer"
+            :style="{ height: `${topSpacerHeight}px` }" />
+          <li v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
+              :style="!virtualScroll && isFullWidthRow(row) ? { gridColumn: '1 / -1' } : undefined">
+            <template v-if="isFullWidthRow(row)">
+              <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" :card-mode="true" />
+            </template>
+            <div v-else
+                 data-test="dd-card"
+                 class="dd-data-table-card dd-rounded flex flex-col transition-colors"
+                 :class="[
+                   isInteractiveRow(row) ? 'cursor-pointer min-h-[48px] dd-data-table-card-hoverable' : '',
+                   isInteractiveRow(row) && isSelectedRow(row) ? 'dd-data-table-card-selected' : '',
+                   rowClass?.(row) ?? '',
+                   $slots.card ? 'overflow-hidden' : 'p-4 gap-3',
+                   virtualScroll ? '' : 'h-full',
+                 ]"
+                 :style="{ '--dd-data-table-row-bg': rowBackgroundColor(row, i) }"
+                 :tabindex="isInteractiveRow(row) ? 0 : undefined"
+                 @keydown="isInteractiveRow(row) && handleRowKeydown($event, row)"
+                 @click="isInteractiveRow(row) && emit('row-click', row)">
+              <template v-if="$slots.card">
+                <slot
+                  name="card"
+                  :row="row"
+                  :index="rowAbsoluteIndex(i)"
+                  :selected="isInteractiveRow(row) && isSelectedRow(row)" />
+              </template>
+              <template v-else>
+                <div class="flex items-center gap-2 min-w-0" data-test="dd-card-title-row">
+                  <template v-for="iconCol in cardIconColumns" :key="iconCol.key">
+                    <slot :name="'cell-' + iconCol.key" :row="row" :value="row[iconCol.key]" :card-mode="true">
+                      {{ row[iconCol.key] }}
+                    </slot>
+                  </template>
+                  <div v-if="cardTitleColumn" data-test="dd-card-title" class="text-sm font-semibold dd-text truncate min-w-0 flex-1">
+                    <slot :name="'cell-' + cardTitleColumn.key" :row="row" :value="row[cardTitleColumn.key]" :card-mode="true">
+                      {{ row[cardTitleColumn.key] }}
+                    </slot>
+                  </div>
+                </div>
+                <div v-if="cardSubtitleColumn" data-test="dd-card-subtitle" class="text-2xs-plus dd-text-muted -mt-2">
+                  <slot :name="'cell-' + cardSubtitleColumn.key" :row="row" :value="row[cardSubtitleColumn.key]" :card-mode="true">
+                    {{ row[cardSubtitleColumn.key] }}
+                  </slot>
+                </div>
+                <dl v-if="cardBodyColumns.length > 0" data-test="dd-card-body" class="flex flex-col gap-2">
+                  <div v-for="col in cardBodyColumns" :key="col.key"
+                       class="field flex items-baseline justify-between gap-3">
+                    <dt class="dd-text-label dd-text-muted shrink-0">{{ col.label }}</dt>
+                    <dd class="text-2xs-plus dd-text" :class="cellContentClass(col)">
+                      <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]" :card-mode="true">
+                        {{ row[col.key] }}
+                      </slot>
+                    </dd>
+                  </div>
+                </dl>
+                <div v-if="showActions"
+                     data-test="dd-card-actions"
+                     class="flex items-center justify-end gap-2 pt-2 mt-1 border-t dd-border min-h-[44px]">
+                  <slot name="actions" :row="row" :card-mode="true" />
+                </div>
+              </template>
+            </div>
+          </li>
+          <li
+            v-if="bottomSpacerHeight > 0"
+            aria-hidden="true"
+            data-test="dd-card-bottom-spacer"
+            :style="{ height: `${bottomSpacerHeight}px` }" />
+        </ul>
+      </template>
+      <template v-else>
       <table
         ref="tableRef"
         class="w-full text-xs isolate"
@@ -781,15 +1154,19 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           />
         </colgroup>
         <thead>
-          <tr :style="{ backgroundColor: 'var(--dd-bg-inset)', borderBottom: 'none' }">
+          <tr :style="{ backgroundColor: tableHeaderBg, borderBottom: 'none' }">
             <th v-for="col in resolvedColumns" :key="col.key"
                 :data-col-key="col.key"
+                scope="col"
                 :class="[
-                  col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', col.px ?? 'px-5'],
+                  col.icon ? 'text-center pl-5 pr-0 overflow-hidden' : [col.align ?? 'text-center', col.px ?? 'px-5'],
                   'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-2xs select-none transition-colors relative',
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
+                  pinnedColumnOffsets.has(col.key) ? ['sticky', 'z-20'] : '',
+                  col.key === firstNonIconColKey ? 'dd-sticky-col-left' : '',
                 ]"
+                :style="pinnedColumnOffsets.has(col.key) ? { backgroundColor: tableHeaderBg, ...pinnedInsetStyle(col.key) } : undefined"
                 :tabindex="isSortableColumn(col) ? 0 : undefined"
                 :aria-sort="ariaSort(col)"
                 @keydown="handleHeaderKeydown($event, col)"
@@ -797,7 +1174,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               <span v-tooltip="col.headerTooltip">{{ col.label }}</span>
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-4xs">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
-              <div v-if="!col.icon"
+              <div v-if="!col.icon && !isMobile"
                    role="separator"
                    :aria-label="t('sharedComponents.dataTable.resizeColumn')"
                    aria-orientation="vertical"
@@ -816,8 +1193,12 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
             </th>
             <th v-if="showActions"
                 :data-col-key="ACTIONS_COLUMN_KEY"
-                class="sticky right-0 z-20 text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative"
-                :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                scope="col"
+                :class="[
+                  'text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative',
+                  hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-20'],
+                ]"
+                :style="{ backgroundColor: tableHeaderBg }">
               {{ t('sharedComponents.dataTable.actions') }}
             </th>
           </tr>
@@ -832,7 +1213,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           <tr v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
               :class="[
                 'dd-data-table-row',
-                isInteractiveRow(row) ? 'cursor-pointer transition-colors dd-data-table-row-hoverable' : '',
+                isInteractiveRow(row) ? 'cursor-pointer transition-colors dd-data-table-row-hoverable min-h-[48px]' : '',
                 isInteractiveRow(row) && isSelectedRow(row)
                   ? 'dd-data-table-row-selected'
                   : '',
@@ -848,7 +1229,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               @click="isInteractiveRow(row) && emit('row-click', row)">
             <template v-if="isFullWidthRow(row)">
               <td :colspan="totalColumnCount" class="dd-data-table-cell p-0 border-0">
-                <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" />
+                <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" :card-mode="false" />
               </td>
             </template>
             <template v-else>
@@ -857,15 +1238,18 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                   class="dd-data-table-cell py-3 align-middle"
                   :class="[
                     colIndex === 0 ? 'dd-data-table-row-overlay-host' : '',
-                    col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
-                  ]">
+                    col.icon ? 'text-center pl-5 pr-0 overflow-hidden' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
+                    pinnedColumnOffsets.has(col.key) ? ['sticky', 'z-10'] : '',
+                    col.key === firstNonIconColKey ? 'dd-sticky-col-left' : '',
+                  ]"
+                  :style="pinnedInsetStyle(col.key)">
                 <div v-if="!col.icon" :class="cellContentClass(col)">
-                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
+                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]" :card-mode="false">
                     {{ row[col.key] }}
                   </slot>
                 </div>
                 <template v-else>
-                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
+                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]" :card-mode="false">
                     {{ row[col.key] }}
                   </slot>
                 </template>
@@ -873,9 +1257,10 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               <td
                 v-if="showActions"
                 :data-col-key="ACTIONS_COLUMN_KEY"
-                class="dd-data-table-cell dd-data-table-actions-cell sticky right-0 z-10 px-3 py-3 text-right whitespace-nowrap relative"
+                class="dd-data-table-cell dd-data-table-actions-cell px-3 py-3 text-right whitespace-nowrap relative"
+                :class="hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-10']"
               >
-                <slot name="actions" :row="row" />
+                <slot name="actions" :row="row" :card-mode="false" />
               </td>
             </template>
           </tr>
@@ -887,6 +1272,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           </tr>
         </tbody>
       </table>
+      </template>
     </div>
     <!-- Empty state -->
     <slot v-if="rows.length === 0" name="empty" />
@@ -925,5 +1311,50 @@ tbody tr.dd-data-table-row-selected > td.dd-data-table-cell:last-child {
     inset -1px 0 0 var(--dd-primary),
     inset 0 1px 0 var(--dd-primary),
     inset 0 -1px 0 var(--dd-primary);
+}
+
+/* Only draw the separator when the table actually has horizontal overflow to scroll through
+   (see `hasHorizontalOverflow` in <script>) — otherwise it's a stray full-height line floating
+   over a near-empty layout with nothing left to separate. */
+.dd-table-has-overflow th.dd-sticky-col-left,
+.dd-table-has-overflow td.dd-sticky-col-left {
+  border-inline-end: 1px solid var(--dd-sticky-separator);
+}
+
+/* Card mode (< 640px container width) — same custom-property indirection as the table rows
+   above, so :hover can override the inline zebra/selected background. */
+.dd-data-table-card {
+  background-color: var(--dd-data-table-row-bg);
+  border: 1.5px solid transparent;
+  transition:
+    background-color var(--dd-duration-enter),
+    box-shadow var(--dd-duration-enter),
+    border-color var(--dd-duration-enter);
+}
+
+.dd-data-table-card-hoverable:not(.dd-data-table-card-selected):hover {
+  background-color: var(--dd-hover-overlay);
+}
+
+.dd-data-table-card-selected {
+  border-color: var(--dd-primary);
+  box-shadow: 0 0 0 1px var(--dd-primary);
+}
+
+/* Print: keep cards intact across page breaks, drop interactive sort chrome that means
+   nothing on paper, and un-clip the table's horizontal scroll container so every column
+   prints instead of being cut off at the viewport edge. */
+@media print {
+  .dd-data-table-card {
+    break-inside: avoid;
+  }
+
+  .dd-data-table-card-sort-bar {
+    display: none;
+  }
+
+  .dd-data-table-scroll {
+    overflow: visible;
+  }
 }
 </style>

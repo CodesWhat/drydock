@@ -17,6 +17,8 @@ The `quay` registry lets you configure [QUAY](https://quay.io/) integration.
 | `DD_REGISTRY_QUAY_{REGISTRY_NAME}_ACCOUNT` | ⚪ | Quay account (required for private images) | | |
 | `DD_REGISTRY_QUAY_{REGISTRY_NAME}_TOKEN` | ⚪ | Quay token (required for private images) | | |
 
+Drydock follows Quay pagination for large repositories, including standard RFC 5988 `Link` headers and Quay's `next_page` cursor format. If a large repository appears to stop early, check the logs for Quay auth or rate-limit errors before narrowing tag filters.
+
 ## Examples
 
 ### Configure to access private images
@@ -32,7 +34,7 @@ services:
     environment:
       - DD_REGISTRY_QUAY_PRIVATE_NAMESPACE=mynamespace
       - DD_REGISTRY_QUAY_PRIVATE_ACCOUNT=myaccount
-      - DD_REGISTRY_QUAY_PRIVATE_TOKEN=BA8JI3Y2BWQDH849RYT3YD5J0J6CYEORYTQMMJK364B4P88VPTJIAI704L0BBP8D6CYE4P88V 
+      - DD_REGISTRY_QUAY_PRIVATE_TOKEN=YOUR_QUAY_ROBOT_TOKEN
 ```
 
 </Tab>
@@ -41,7 +43,7 @@ services:
 docker run \
   -e DD_REGISTRY_QUAY_PRIVATE_NAMESPACE="mynamespace" \
   -e DD_REGISTRY_QUAY_PRIVATE_ACCOUNT="myaccount" \
-  -e DD_REGISTRY_QUAY_PRIVATE_TOKEN="BA8JI3Y2BWQDH849RYT3YD5J0J6CYEORYTQMMJK364B4P88VPTJIAI704L0BBP8D6CYE4P88V" \
+  -e DD_REGISTRY_QUAY_PRIVATE_TOKEN="YOUR_QUAY_ROBOT_TOKEN" \
   ...
   codeswhat/drydock
 ```

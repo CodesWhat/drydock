@@ -8,6 +8,7 @@
   --dd-bg-code: #1e2127;
   --dd-border: #181a1f;
   --dd-border-strong: #3e4452;
+  --dd-sticky-separator: #8f97a8;
   --dd-text: #abb2bf;
   --dd-text-secondary: #5c6370;
   --dd-text-muted: #4b5263;
@@ -53,6 +54,7 @@ html.theme-one-dark.light {
   --dd-bg-code: #282c34;
   --dd-border: #e5e5e6;
   --dd-border-strong: #cecece;
+  --dd-sticky-separator: #767676;
   --dd-text: #383a42;
   --dd-text-secondary: #696c77;
   --dd-text-muted: #a0a1a7;
@@ -79,6 +81,7 @@ html.theme-github.dark {
   --dd-bg-code: #0d1117;
   --dd-border: #30363d;
   --dd-border-strong: #484f58;
+  --dd-sticky-separator: #8b949e;
   --dd-text: #c9d1d9;
   --dd-text-secondary: #8b949e;
   --dd-text-muted: #6e7681;
@@ -105,6 +108,7 @@ html.theme-github.light {
   --dd-bg-code: #24292e;
   --dd-border: #d8dee4;
   --dd-border-strong: #c5ccd3;
+  --dd-sticky-separator: #6e7681;
   --dd-text: #24292e;
   --dd-text-secondary: #57606a;
   --dd-text-muted: #6e7681;
@@ -131,6 +135,7 @@ html.theme-dracula.dark {
   --dd-bg-code: #1e1f29;
   --dd-border: #44475a;
   --dd-border-strong: #6272a4;
+  --dd-sticky-separator: #b6bcd6;
   --dd-text: #f8f8f2;
   --dd-text-secondary: #bfc4d6;
   --dd-text-muted: #6272a4;
@@ -157,6 +162,7 @@ html.theme-dracula.light {
   --dd-bg-code: #282a36;
   --dd-border: #d6d0cc;
   --dd-border-strong: #bab4b0;
+  --dd-sticky-separator: #767676;
   --dd-text: #282a36;
   --dd-text-secondary: #44475a;
   --dd-text-muted: #6272a4;
@@ -183,6 +189,7 @@ html.theme-catppuccin.dark {
   --dd-bg-code: #11111b;
   --dd-border: #313244;
   --dd-border-strong: #45475a;
+  --dd-sticky-separator: #9399b2;
   --dd-text: #cdd6f4;
   --dd-text-secondary: #a6adc8;
   --dd-text-muted: #6c7086;
@@ -209,6 +216,7 @@ html.theme-catppuccin.light {
   --dd-bg-code: #1e1e2e;
   --dd-border: #ccd0da;
   --dd-border-strong: #acb0be;
+  --dd-sticky-separator: #6c6f85;
   --dd-text: #4c4f69;
   --dd-text-secondary: #6c6f85;
   --dd-text-muted: #9ca0b0;
@@ -235,6 +243,7 @@ html.theme-gruvbox.dark {
   --dd-bg-code: #1d2021;
   --dd-border: #3c3836;
   --dd-border-strong: #504945;
+  --dd-sticky-separator: #a89984;
   --dd-text: #ebdbb2;
   --dd-text-secondary: #d5c4a1;
   --dd-text-muted: #928374;
@@ -261,6 +270,7 @@ html.theme-gruvbox.light {
   --dd-bg-code: #282828;
   --dd-border: #d5c4a1;
   --dd-border-strong: #bdae93;
+  --dd-sticky-separator: #7c6f64;
   --dd-text: #3c3836;
   --dd-text-secondary: #504945;
   --dd-text-muted: #928374;
@@ -287,6 +297,7 @@ html.theme-ayu.dark {
   --dd-bg-code: #1f2430;
   --dd-border: #171b24;
   --dd-border-strong: #2d3342;
+  --dd-sticky-separator: #9aa5b3;
   --dd-text: #cccac2;
   --dd-text-secondary: #707a8c;
   --dd-text-muted: #5c697d;
@@ -313,6 +324,7 @@ html.theme-ayu.light {
   --dd-bg-code: #242936;
   --dd-border: #e8e9eb;
   --dd-border-strong: #d4d5d7;
+  --dd-sticky-separator: #6c7680;
   --dd-text: #5c6166;
   --dd-text-secondary: #828e9f;
   --dd-text-muted: #9aa5b3;

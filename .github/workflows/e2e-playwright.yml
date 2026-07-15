@@ -17,8 +17,8 @@ run-name: >-
 # Playwright job remains a required status check via branch ruleset.
 
 on:
-  # Allows maintainers to run the pre-release browser gate against an
-  # explicitly selected ref (for example, via `gh workflow run --ref ...`).
+  # Release candidates use this trigger to run Playwright against the frozen
+  # branch before the final NAS acceptance starts.
   workflow_dispatch:
   push:
     # Only `main` — release/** branches reach main via a PR (covered by
@@ -61,7 +61,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -89,9 +89,9 @@ jobs:
       # eliminates the cdn.playwright.dev runtime dependency that used to
       # cause cold-cache install failures whenever the GitHub Actions
       # runner image rotated and dropped its pre-baked browser.
-      # Pinned by digest as well as tag so a mutated/republished :v1.60.0-noble
+      # Pinned by digest as well as tag so a mutated/republished :v1.61.1-noble
       # tag cannot silently change the image we pull and run.
-      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.60.0-noble@sha256:9bd26ad900bb5e0f4dee75839e957a89ae89c2b7ab1e76050e559790e946b948
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
 
     steps:
       - name: Harden Runner
@@ -100,7 +100,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 

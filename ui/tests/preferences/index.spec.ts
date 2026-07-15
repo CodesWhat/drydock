@@ -13,7 +13,10 @@ describe('preferences index exports', () => {
     expect(preferencesModule.preferences).toBeDefined();
     expect(typeof preferencesModule.usePreference).toBe('function');
     expect(typeof preferencesModule.useViewMode).toBe('function');
-    expect(typeof preferencesModule.isViewMode).toBe('function');
     expect(typeof preferencesModule.isValidScale).toBe('function');
+    expect(typeof preferencesModule.isViewMode).toBe('function');
+    expect(preferencesModule.isViewMode('table')).toBe(true);
+    expect(preferencesModule.isViewMode('cards')).toBe(true);
+    expect(preferencesModule.isViewMode('timeline')).toBe(false);
   });
 });

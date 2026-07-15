@@ -185,6 +185,70 @@ describe('agent/index', () => {
     expect(vi.mocked(log.warn)).toHaveBeenCalledWith(expect.stringContaining('agentY'));
   });
 
+  test('init constructs AgentClient, adds it, and calls client.init() when authmode is ed25519 with valid signingkeyid and signingkey', async () => {
+    const config = {
+      host: 'host1',
+      port: 3001,
+      authmode: 'ed25519',
+      signingkeyid: 'key-id-1',
+      signingkey: 'signing-key-1',
+    };
+    registry.getState.mockReturnValue({
+      agent: {
+        'dd.agent1': { name: 'agent1', configuration: config },
+      },
+    });
+
+    await agentIndex.init();
+
+    expect(AgentClient).toHaveBeenCalledTimes(1);
+    expect(AgentClient).toHaveBeenCalledWith('agent1', config);
+    expect(manager.addAgent).toHaveBeenCalledTimes(1);
+
+    const instance = vi.mocked(AgentClient).mock.instances[0];
+    expect(instance.init).toHaveBeenCalledTimes(1);
+  });
+
+  test('init should skip ed25519 agent missing signingkeyid', async () => {
+    registry.getState.mockReturnValue({
+      agent: {
+        'dd.agent1': {
+          name: 'agent1',
+          configuration: { host: 'host1', authmode: 'ed25519', signingkey: 'signing-key-1' },
+        },
+      },
+    });
+
+    await agentIndex.init();
+
+    expect(AgentClient).not.toHaveBeenCalled();
+    expect(manager.addAgent).not.toHaveBeenCalled();
+    expect(vi.mocked(log.warn)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(log.warn)).toHaveBeenCalledWith(
+      expect.stringContaining('Missing signingkeyid or signingkey for ed25519 authmode'),
+    );
+  });
+
+  test('init should skip ed25519 agent missing signingkey', async () => {
+    registry.getState.mockReturnValue({
+      agent: {
+        'dd.agent1': {
+          name: 'agent1',
+          configuration: { host: 'host1', authmode: 'ed25519', signingkeyid: 'key-id-1' },
+        },
+      },
+    });
+
+    await agentIndex.init();
+
+    expect(AgentClient).not.toHaveBeenCalled();
+    expect(manager.addAgent).not.toHaveBeenCalled();
+    expect(vi.mocked(log.warn)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(log.warn)).toHaveBeenCalledWith(
+      expect.stringContaining('Missing signingkeyid or signingkey for ed25519 authmode'),
+    );
+  });
+
   test('valid agent is constructed and invalid agent is skipped in mixed registry state', async () => {
     const validConfig = { host: 'host1', port: 3001, secret: 'secret1' };
     registry.getState.mockReturnValue({

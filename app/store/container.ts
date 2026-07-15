@@ -11,12 +11,23 @@ import { toPositiveInteger } from '../util/parse.js';
 
 const { validate: validateContainer } = container;
 
-import { emitContainerAdded, emitContainerRemoved, emitContainerUpdated } from '../event/index.js';
+import {
+  emitContainerAdded,
+  emitContainerHealthTransition,
+  emitContainerRemoved,
+  emitContainerUpdated,
+} from '../event/index.js';
 import {
   deriveContainerIdentityKey,
   hasRawUpdate,
   isRollbackContainerName,
 } from '../model/container.js';
+import {
+  applyDeclarativeUpdatePolicy,
+  applyUpdatePolicyOverrides,
+  getUpdatePolicyOverrides,
+} from '../model/update-policy.js';
+import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
 import { initCollection } from './util.js';
 
 let containers: ReturnType<typeof initCollection> | undefined;
@@ -84,7 +95,7 @@ const updateLifecycleCache = new Map<string, UpdateLifecycleCacheEntry>();
 // a `local` watcher with a container named `myapp` would otherwise share one slot and leak
 // one deployment's update policy into another's.
 type UpdatePolicyRetentionCacheEntry = {
-  updatePolicy: unknown;
+  updatePolicyOverrides: container.ContainerUpdatePolicy;
   expiresAt: number;
 };
 
@@ -93,6 +104,7 @@ const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEnt
 interface ContainerListPaginationOptions {
   limit?: number;
   offset?: number;
+  sort?: (containers: container.Container[]) => container.Container[];
 }
 
 function toCacheKey(watcher, name) {
@@ -100,11 +112,12 @@ function toCacheKey(watcher, name) {
 }
 
 function getResultSignature(
-  c: { result?: { tag?: unknown; digest?: unknown } } | undefined,
+  c: { result?: { tag?: unknown; digest?: unknown; created?: unknown } } | undefined,
 ): string {
   return JSON.stringify({
     tag: c?.result?.tag ?? null,
     digest: c?.result?.digest ?? null,
+    created: c?.result?.created ?? null,
   });
 }
 
@@ -254,9 +267,10 @@ export function cloneContainer(containerToClone) {
   return clonedContainer;
 }
 
-function normalizeContainerListPaginationOptions(
-  pagination: ContainerListPaginationOptions = {},
-): Required<ContainerListPaginationOptions> {
+function normalizeContainerListPaginationOptions(pagination: ContainerListPaginationOptions = {}): {
+  limit: number;
+  offset: number;
+} {
   const rawLimit = pagination.limit;
   const rawOffset = pagination.offset;
   const limit =
@@ -276,14 +290,17 @@ function applyContainerListPagination(
   pagination: ContainerListPaginationOptions = {},
 ): container.Container[] {
   const { limit, offset } = normalizeContainerListPaginationOptions(pagination);
+  const orderedContainers = pagination.sort
+    ? pagination.sort([...containersToPaginate])
+    : containersToPaginate;
 
   if (limit === 0 && offset === 0) {
-    return containersToPaginate;
+    return orderedContainers;
   }
   if (limit === 0) {
-    return containersToPaginate.slice(offset);
+    return orderedContainers.slice(offset);
   }
-  return containersToPaginate.slice(offset, offset + limit);
+  return orderedContainers.slice(offset, offset + limit);
 }
 
 function getValueByPath(source, path) {
@@ -689,16 +706,94 @@ function hasContainerChangedWithSecurityHashes(
   if (existing.status !== incoming.status) {
     return true;
   }
+  if (existing.health !== incoming.health) {
+    return true;
+  }
   if (existing.error?.message !== incoming.error?.message) {
     return true;
   }
   if (existing.image?.tag?.value !== incoming.image?.tag?.value) {
     return true;
   }
+  if (getUpdatePolicyComparisonKey(existing) !== getUpdatePolicyComparisonKey(incoming)) {
+    return true;
+  }
   if (existingSecurityHash !== incomingSecurityHash) {
     return true;
   }
   return false;
+}
+
+function getUpdatePolicyComparisonKey(containerToCompare: container.Container): string {
+  const normalizePolicy = (policy: container.ContainerUpdatePolicy | undefined) => ({
+    maturityMode: policy?.maturityMode ?? null,
+    maturityMinAgeDays: policy?.maturityMinAgeDays ?? null,
+    skipTags: policy?.skipTags ? [...policy.skipTags].sort() : null,
+    skipDigests: policy?.skipDigests ? [...policy.skipDigests].sort() : null,
+    snoozeUntil: policy?.snoozeUntil ?? null,
+  });
+  const normalizeDeclarative = (
+    policy: container.ContainerDeclarativeUpdatePolicy | undefined,
+  ) => ({
+    maturityMode: policy?.maturityMode ?? null,
+    maturityMinAgeDays: policy?.maturityMinAgeDays ?? null,
+    skipTags: policy?.skipTags ? [...policy.skipTags].sort() : null,
+    skipDigests: policy?.skipDigests ? [...policy.skipDigests].sort() : null,
+  });
+  return JSON.stringify({
+    effective: normalizePolicy(containerToCompare.updatePolicy),
+    hasDeclarative: containerToCompare.updatePolicyDeclarative !== undefined,
+    declarative: {
+      env: normalizeDeclarative(containerToCompare.updatePolicyDeclarative?.env),
+      label: normalizeDeclarative(containerToCompare.updatePolicyDeclarative?.label),
+    },
+    hasOverrides: containerToCompare.updatePolicyOverrides !== undefined,
+    overrides: normalizePolicy(containerToCompare.updatePolicyOverrides),
+    sources: containerToCompare.updatePolicySources ?? {},
+  });
+}
+
+/**
+ * Determine whether an incoming container health read represents a fresh
+ * "entered unhealthy" transition worth notifying about. Edge-triggered: once
+ * a container's stored health is 'unhealthy', later polls/events that still
+ * read 'unhealthy' do not re-fire. A container with no prior baseline (first
+ * observation, e.g. a fresh `insertContainer`) never fires, and neither does
+ * one whose existing health was never observed (`undefined` — a record
+ * predating health tracking) — "entered unhealthy" implies a transition that
+ * was actually observed, so a record with no observed baseline has none to
+ * transition from. This baseline check runs before the restart exception
+ * below: a restart can only re-fire a NEW episode of an OBSERVED unhealthy
+ * baseline, so it must not fire on the first-ever observed unhealthy either.
+ * Once a baseline exists, a restart is only inferable when BOTH the existing
+ * and incoming records carry `details.startedAt` — a `startedAt` appearing
+ * for the first time on a pre-existing record (e.g. a store written by an
+ * older version that never inspected on the cron leg) is first-capture, not
+ * a restart. When both sides do carry it and it differs, the restart is
+ * always eligible to fire its own transition, even if the previous
+ * observation was also 'unhealthy' (fast-crash-loop, two distinct episodes).
+ */
+function getHealthTransition(
+  existing: container.Container | undefined,
+  incoming: container.Container,
+): 'entered-unhealthy' | undefined {
+  if (incoming.health !== 'unhealthy') {
+    return undefined;
+  }
+  if (!existing) {
+    return undefined;
+  }
+  if (existing.health === undefined) {
+    return undefined;
+  }
+  const restarted =
+    Boolean(incoming.details?.startedAt) &&
+    Boolean(existing.details?.startedAt) &&
+    existing.details?.startedAt !== incoming.details?.startedAt;
+  if (restarted) {
+    return 'entered-unhealthy';
+  }
+  return existing.health !== 'unhealthy' ? 'entered-unhealthy' : undefined;
 }
 
 /**
@@ -785,12 +880,52 @@ export function createCollections(db) {
 }
 
 /**
+ * Normalize the four category-scoped trigger label fields (#494). Applied on
+ * every insert/update so incoming agent snapshots are repaired too, not only
+ * rows touched by store/migrate.ts's startup migration. Never overwrites an
+ * already-populated scoped field, and never touches the mirror itself.
+ *
+ * Resolved per direction. When the labels carry any trigger label for that
+ * direction, the scoped values win and the deprecated
+ * triggerInclude/triggerExclude mirror is NOT consulted — falling back to it
+ * would re-collapse a lone `dd.action.include` onto the notification field and
+ * undo the category scoping. The mirror is only a fallback for a container
+ * whose labels say nothing about that direction: a pre-1.6 stored row, or an
+ * old-agent snapshot carrying the mirror but no labels.
+ */
+function normalizeContainerTriggerLabelFields<T extends Partial<container.Container>>(
+  containerToNormalize: T,
+): T {
+  const { labels } = containerToNormalize;
+  const include = labels ? resolveTriggerLabelValuesPure(labels, 'include') : {};
+  const exclude = labels ? resolveTriggerLabelValuesPure(labels, 'exclude') : {};
+
+  if (include.mirror !== undefined) {
+    containerToNormalize.actionTriggerInclude ??= include.action;
+    containerToNormalize.notificationTriggerInclude ??= include.notification;
+  } else {
+    containerToNormalize.actionTriggerInclude ??= containerToNormalize.triggerInclude;
+    containerToNormalize.notificationTriggerInclude ??= containerToNormalize.triggerInclude;
+  }
+
+  if (exclude.mirror !== undefined) {
+    containerToNormalize.actionTriggerExclude ??= exclude.action;
+    containerToNormalize.notificationTriggerExclude ??= exclude.notification;
+  } else {
+    containerToNormalize.actionTriggerExclude ??= containerToNormalize.triggerExclude;
+    containerToNormalize.notificationTriggerExclude ??= containerToNormalize.triggerExclude;
+  }
+
+  return containerToNormalize;
+}
+
+/**
  * #496: stash a soon-to-be-replaced container's updatePolicy so the replacement (which
  * arrives under a fresh Docker id, hence via insertContainer) can inherit it.
  */
 function stashUpdatePolicyForReplacement(containerRaw) {
-  const updatePolicy = containerRaw?.updatePolicy;
-  if (updatePolicy === undefined || updatePolicy === null) {
+  const updatePolicyOverrides = getUpdatePolicyOverrides(containerRaw);
+  if (Object.keys(updatePolicyOverrides).length === 0) {
     return;
   }
   if (isRollbackContainerName(containerRaw?.name)) {
@@ -804,7 +939,7 @@ function stashUpdatePolicyForReplacement(containerRaw) {
   }
   updatePolicyRetentionCache.delete(cacheKey);
   updatePolicyRetentionCache.set(cacheKey, {
-    updatePolicy,
+    updatePolicyOverrides,
     expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
   });
   if (updatePolicyRetentionCache.size > UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES) {
@@ -842,9 +977,19 @@ function restoreRetainedUpdatePolicy(container) {
   if (entry.expiresAt <= Date.now()) {
     return;
   }
-  // A policy carried on the incoming payload is authoritative; the cache only fills a hole.
-  if (container.updatePolicy === undefined) {
-    container.updatePolicy = entry.updatePolicy;
+  // A non-empty incoming controller layer is authoritative. Watcher normalization also stamps
+  // updatePolicyOverrides={} on fresh declarative data; that empty layer carries no controller
+  // intent and must not discard the retained overrides from the container being replaced.
+  if (
+    container.updatePolicyOverrides !== undefined &&
+    Object.keys(container.updatePolicyOverrides).length > 0
+  ) {
+    return;
+  }
+  if (container.updatePolicyDeclarative !== undefined) {
+    applyUpdatePolicyOverrides(container, entry.updatePolicyOverrides);
+  } else if (!Object.hasOwn(container, 'updatePolicy')) {
+    container.updatePolicy = structuredClone(entry.updatePolicyOverrides);
   }
 }
 
@@ -893,6 +1038,7 @@ export function insertContainer(container) {
     }
   }
   const containerToSave = validateContainer(container);
+  normalizeContainerTriggerLabelFields(containerToSave);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
   storeContainerSecurityStateHash(containerToSave);
@@ -915,6 +1061,8 @@ export function insertContainer(container) {
  */
 export function updateContainer(container) {
   const hasUpdatePolicy = Object.hasOwn(container, 'updatePolicy');
+  const hasUpdatePolicyDeclarative = Object.hasOwn(container, 'updatePolicyDeclarative');
+  const hasUpdatePolicyOverrides = Object.hasOwn(container, 'updatePolicyOverrides');
   const hasUpdateRollback = Object.hasOwn(container, 'updateRollback');
   const hasSecurity = Object.hasOwn(container, 'security');
   const hasDetails = Object.hasOwn(container, 'details');
@@ -930,6 +1078,16 @@ export function updateContainer(container) {
   const containerMerged = {
     ...container,
     updatePolicy: hasUpdatePolicy ? container.updatePolicy : containerCurrent?.updatePolicy,
+    updatePolicyDeclarative: hasUpdatePolicyDeclarative
+      ? container.updatePolicyDeclarative
+      : containerCurrent?.updatePolicyDeclarative,
+    updatePolicyOverrides: hasUpdatePolicyOverrides
+      ? container.updatePolicyOverrides
+      : containerCurrent?.updatePolicyOverrides,
+    updatePolicySources:
+      hasUpdatePolicy || hasUpdatePolicyDeclarative || hasUpdatePolicyOverrides
+        ? container.updatePolicySources
+        : containerCurrent?.updatePolicySources,
     updateRollback: hasUpdateRollback ? container.updateRollback : containerCurrent?.updateRollback,
     security: hasSecurity ? container.security : containerCurrent?.security,
     details: shouldRestoreCurrentDetails
@@ -938,7 +1096,21 @@ export function updateContainer(container) {
         ? container.details
         : containerCurrent?.details,
   };
+  if (hasUpdatePolicyDeclarative && containerMerged.updatePolicyDeclarative) {
+    const overrides = hasUpdatePolicyOverrides
+      ? (containerMerged.updatePolicyOverrides ?? {})
+      : containerCurrent
+        ? getUpdatePolicyOverrides(containerCurrent)
+        : {};
+    applyDeclarativeUpdatePolicy(containerMerged, containerMerged.updatePolicyDeclarative);
+    applyUpdatePolicyOverrides(containerMerged, overrides);
+  } else if (hasUpdatePolicy && container.updatePolicy === undefined) {
+    containerMerged.updatePolicyDeclarative = undefined;
+    containerMerged.updatePolicyOverrides = undefined;
+    containerMerged.updatePolicySources = undefined;
+  }
   const containerToReturn = validateContainer(containerMerged);
+  normalizeContainerTriggerLabelFields(containerToReturn);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
   containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
   const containerCurrentSecurityHash = getStoredContainerSecurityStateHash(containerCurrent);
@@ -967,6 +1139,18 @@ export function updateContainer(container) {
   invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
   const wasRollback = isRollbackContainerName(containerCurrent?.name);
   const isRollback = isRollbackContainerName(containerToReturn.name);
+  const healthTransition = getHealthTransition(containerCurrent, containerToReturn);
+  if (healthTransition && !isRollback) {
+    // Independent of hasContainerChangedWithSecurityHashes below — a
+    // health-only transition (status/name/labels/details all unchanged) may
+    // be the only thing that changed, and must still notify.
+    void emitContainerHealthTransition({
+      containerName: containerToReturn.name,
+      container: redactContainerRuntimeEnv({ ...containerToReturn }),
+      previousHealth: containerCurrent?.health,
+      health: 'unhealthy',
+    });
+  }
   if (isRollback && containerCurrent && !wasRollback) {
     // Container just transitioned into a rollback — it disappears from the
     // user-visible list, so let subscribers prune the row instead of leaving
@@ -1070,6 +1254,14 @@ export interface ContainerStatProjection {
     id: string;
     name: string;
   };
+  security: {
+    scan: {
+      summary: {
+        critical: number;
+        high: number;
+      };
+    };
+  };
 }
 
 function projectContainerForStats(c: container.Container): ContainerStatProjection {
@@ -1083,6 +1275,14 @@ function projectContainerForStats(c: container.Container): ContainerStatProjecti
     image: {
       id: c.image.id,
       name: c.image.name,
+    },
+    security: {
+      scan: {
+        summary: {
+          critical: Number(c.security?.scan?.summary?.critical ?? 0),
+          high: Number(c.security?.scan?.summary?.high ?? 0),
+        },
+      },
     },
   };
 }

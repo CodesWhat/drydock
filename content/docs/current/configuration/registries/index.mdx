@@ -76,6 +76,8 @@ Registry instances configured with `INSECURE=true` (TLS certificate validation d
 
 Use `INSECURE=true` only for self-hosted registries on private networks where a valid TLS certificate cannot be provisioned. For production registries reachable over the internet, always use a valid certificate.
 
+Registry TLS settings apply end to end. `DD_REGISTRY_*_CAFILE`, `_CLIENTCERT`, `_CLIENTKEY`, and `_INSECURE` are used for credential/token requests, tag-list requests, manifest and blob lookups, and anonymous provider paths. A private CA, mTLS client key pair, or insecure override therefore affects the entire registry lookup flow rather than only the initial login/token exchange.
+
 ## Automatic Bearer token exchange
 
 When a registry responds to a tag-list or manifest request with `401 Unauthorized` and a `WWW-Authenticate` header containing a `Bearer realm=…,service=…,scope=…` challenge, drydock automatically performs the standard Docker Registry v2 token-auth flow: it fetches a token from the realm endpoint (anonymously for public images, or with the configured credentials for private ones) and retries the request once. The Bearer challenge can appear alongside other schemes such as `Basic`, and token responses may use either `token` or `access_token`.

@@ -131,6 +131,8 @@ export interface ContainerUpdateAppliedEventPayload {
   container?: Container;
   operationId?: string;
   batchId?: string | null;
+  /** `dryrun` means the image was pulled but the container was intentionally not replaced. */
+  phase?: 'dryrun';
 }
 
 export type ContainerUpdateAppliedEvent = string | ContainerUpdateAppliedEventPayload;
@@ -184,6 +186,13 @@ export interface SecurityScanCycleCompleteEventPayload {
   scope?: 'scheduled' | 'on-demand-single' | 'on-demand-bulk' | 'agent-forwarded';
 }
 
+export interface ContainerHealthTransitionEventPayload {
+  containerName: string;
+  container?: Container;
+  previousHealth?: string;
+  health: 'unhealthy';
+}
+
 export interface AgentConnectedEventPayload {
   agentName: string;
   reconnected: boolean;
@@ -229,6 +238,10 @@ const updateOperationChangedHandlers = new Map<
   OrderedEventHandler<UpdateOperationChangedEventPayload>
 >();
 const securityAlertHandlers = new Map<number, OrderedEventHandler<SecurityAlertEventPayload>>();
+const containerHealthTransitionHandlers = new Map<
+  number,
+  OrderedEventHandler<ContainerHealthTransitionEventPayload>
+>();
 const securityScanCycleCompleteHandlers = new Map<
   number,
   OrderedEventHandler<SecurityScanCycleCompleteEventPayload>
@@ -469,6 +482,27 @@ export function registerSecurityAlert(
 }
 
 /**
+ * Emit ContainerHealthTransition event.
+ * @param payload
+ */
+export async function emitContainerHealthTransition(
+  payload: ContainerHealthTransitionEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(containerHealthTransitionHandlers, payload);
+}
+
+/**
+ * Register to ContainerHealthTransition event.
+ * @param handler
+ */
+export function registerContainerHealthTransition(
+  handler: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(containerHealthTransitionHandlers, handler, options);
+}
+
+/**
  * Emit SecurityScanCycleComplete event. Fired after a scan cycle finishes so digest-mode
  * triggers can flush any buffered per-container alerts into a single summary notification.
  * @param payload
@@ -681,6 +715,7 @@ registerAuditLogSubscriptions({
   registerContainerUpdateApplied,
   registerContainerUpdateFailed,
   registerSecurityAlert,
+  registerContainerHealthTransition,
   registerAgentDisconnected,
   registerContainerAdded,
   registerContainerUpdated,
@@ -706,6 +741,7 @@ export function clearAllListenersForTests(): void {
   containerUpdateFailedHandlers.clear();
   updateOperationChangedHandlers.clear();
   securityAlertHandlers.clear();
+  containerHealthTransitionHandlers.clear();
   securityScanCycleCompleteHandlers.clear();
   agentConnectedHandlers.clear();
   agentDisconnectedHandlers.clear();

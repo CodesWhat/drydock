@@ -1,6 +1,7 @@
-import type { Breakpoints } from 'grid-layout-plus';
 import type { DashboardLayoutBreakpoint } from '../../preferences/schema';
 import type { DashboardWidgetId } from './dashboardTypes';
+
+type Breakpoints = Record<string, number>;
 
 export interface WidgetLayoutItem {
   i: DashboardWidgetId;
@@ -16,12 +17,11 @@ export interface WidgetLayoutItem {
 
 /**
  * Responsive breakpoints for the dashboard grid (pixel widths).
- * Measured against the grid CONTAINER width (not viewport) by grid-layout-plus.
+ * Measured against the grid container width (not the viewport).
  *
  * Widget default widths (w:3 stat cards, w:4 big widgets) only tile cleanly
  * into 12 columns (3*4=12, 4*3=12). Any other column count (6, 8, etc.)
- * creates gaps because grid-layout-plus responsive mode clamps positions
- * instead of reflowing. So we keep 12 columns all the way down to phone
+ * creates gaps in the established layouts. So we keep 12 columns down to phone
  * width, then drop to 1 column where everything stacks full-width.
  */
 export const GRID_BREAKPOINTS: Breakpoints = {

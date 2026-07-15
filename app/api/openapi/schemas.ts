@@ -10,6 +10,45 @@ export const openApiSchemas = {
     required: ['error'],
     additionalProperties: true,
   },
+  PreviewErrorResponse: {
+    type: 'object',
+    properties: {
+      code: {
+        type: 'string',
+        enum: [
+          'container-not-found',
+          'container-runtime-not-found',
+          'manifest-fetch-failed',
+          'no-trigger-configured',
+          'preview-runtime-error',
+          'registry-auth-failed',
+          'registry-network-error',
+          'registry-not-found',
+        ],
+      },
+      message: { type: 'string' },
+      details: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' },
+          registry: { type: 'string' },
+        },
+        required: ['reason'],
+        additionalProperties: false,
+      },
+      action: {
+        type: 'object',
+        properties: {
+          label: { type: 'string' },
+          href: { type: 'string', enum: ['/registries', '/triggers'] },
+        },
+        required: ['label', 'href'],
+        additionalProperties: false,
+      },
+    },
+    required: ['code', 'message'],
+    additionalProperties: false,
+  },
   GenericObject: genericObjectSchema,
   GenericArray: genericArraySchema,
   PaginationLinks: {
@@ -127,6 +166,34 @@ export const openApiSchemas = {
     required: ['message', 'operationId', 'result'],
     additionalProperties: false,
   },
+  RegistryWebhookResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      result: {
+        type: 'object',
+        properties: {
+          provider: { type: 'string' },
+          referencesMatched: { type: 'integer', minimum: 0 },
+          containersMatched: { type: 'integer', minimum: 0 },
+          checksTriggered: { type: 'integer', minimum: 0 },
+          checksFailed: { type: 'integer', minimum: 0 },
+          watchersMissing: { type: 'integer', minimum: 0 },
+        },
+        required: [
+          'provider',
+          'referencesMatched',
+          'containersMatched',
+          'checksTriggered',
+          'checksFailed',
+          'watchersMissing',
+        ],
+        additionalProperties: false,
+      },
+    },
+    required: ['message', 'result'],
+    additionalProperties: false,
+  },
   AuthUser: {
     type: 'object',
     properties: {
@@ -134,6 +201,41 @@ export const openApiSchemas = {
     },
     required: ['username'],
     additionalProperties: true,
+  },
+  AuthStatusResponse: {
+    type: 'object',
+    properties: {
+      providers: {
+        type: 'array',
+        items: { type: 'object', additionalProperties: true },
+      },
+      errors: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            provider: { type: 'string' },
+            error: { type: 'string' },
+          },
+          required: ['provider', 'error'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['providers', 'errors'],
+    additionalProperties: false,
+  },
+  AuthStrategiesResponse: {
+    type: 'object',
+    properties: {
+      strategies: {
+        type: 'array',
+        items: { type: 'object', additionalProperties: true },
+      },
+      warnings: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['strategies', 'warnings'],
+    additionalProperties: false,
   },
   RememberMeResponse: {
     type: 'object',
@@ -212,8 +314,9 @@ export const openApiSchemas = {
       total: { type: 'integer', minimum: 0 },
       env: { $ref: '#/components/schemas/LegacyInputSourceSummary' },
       label: { $ref: '#/components/schemas/LegacyInputSourceSummary' },
+      api: { $ref: '#/components/schemas/LegacyInputSourceSummary' },
     },
-    required: ['total', 'env', 'label'],
+    required: ['total', 'env', 'label', 'api'],
     additionalProperties: false,
   },
   CurlHealthcheckOverrideCompatibility: {
@@ -270,11 +373,37 @@ export const openApiSchemas = {
     required: ['enabled', 'command', 'commandAvailable', 'status', 'message'],
     additionalProperties: true,
   },
+  SecurityRuntimeProviderStatus: {
+    type: 'object',
+    allOf: [
+      { $ref: '#/components/schemas/SecurityRuntimeToolStatus' },
+      {
+        type: 'object',
+        properties: {
+          provider: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+          role: { type: 'string', enum: ['scanner', 'sbom'] },
+        },
+        required: ['provider', 'role'],
+        additionalProperties: true,
+      },
+    ],
+  },
   SecurityRuntimeStatusResponse: {
     type: 'object',
     properties: {
       checkedAt: { type: 'string', format: 'date-time' },
       ready: { type: 'boolean' },
+      backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
+      availabilityPolicy: { type: 'string', enum: ['block', 'warn'] },
+      gate: {
+        type: 'object',
+        properties: {
+          mode: { type: 'string', enum: ['on', 'off'] },
+          allowNoWorse: { type: 'boolean' },
+        },
+        required: ['mode', 'allowNoWorse'],
+        additionalProperties: false,
+      },
       scanner: {
         type: 'object',
         allOf: [
@@ -282,7 +411,7 @@ export const openApiSchemas = {
           {
             type: 'object',
             properties: {
-              scanner: { type: 'string' },
+              scanner: { type: 'string', enum: ['', 'trivy', 'grype', 'both'] },
               server: { type: 'string' },
             },
             required: ['scanner', 'server'],
@@ -299,16 +428,58 @@ export const openApiSchemas = {
             type: 'array',
             items: { type: 'string', enum: ['spdx-json', 'cyclonedx-json'] },
           },
+          generator: { type: 'string', enum: ['trivy', 'syft'] },
         },
-        required: ['enabled', 'formats'],
+        required: ['enabled', 'formats', 'generator'],
         additionalProperties: true,
+      },
+      providers: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/SecurityRuntimeProviderStatus' },
+      },
+      assets: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ScannerAssetStatus' },
       },
       requirements: {
         type: 'array',
         items: { type: 'string' },
       },
     },
-    required: ['checkedAt', 'ready', 'scanner', 'signature', 'sbom', 'requirements'],
+    required: [
+      'checkedAt',
+      'ready',
+      'backend',
+      'availabilityPolicy',
+      'gate',
+      'scanner',
+      'signature',
+      'sbom',
+      'providers',
+      'assets',
+      'requirements',
+    ],
+    additionalProperties: true,
+  },
+  ScannerAssetStatus: {
+    type: 'object',
+    properties: {
+      provider: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+      backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
+      configuredImage: { type: 'string' },
+      resolvedDigest: { type: 'string' },
+      version: { type: 'string' },
+      state: { type: 'string', enum: ['missing', 'pulling', 'warming', 'ready', 'error'] },
+      operationId: { type: 'string' },
+      inspectedAt: { type: 'string', format: 'date-time' },
+      startedAt: { type: 'string', format: 'date-time' },
+      completedAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' },
+      cacheUpdatedAt: { type: 'string', format: 'date-time' },
+      databaseUpdatedAt: { type: 'string', format: 'date-time' },
+      lastError: { type: 'string' },
+    },
+    required: ['provider', 'backend', 'configuredImage', 'state'],
     additionalProperties: true,
   },
   ContainerSummaryResponse: {
@@ -333,8 +504,10 @@ export const openApiSchemas = {
         required: ['issues'],
         additionalProperties: false,
       },
+      hotUpdates: { type: 'integer', minimum: 0 },
+      matureUpdates: { type: 'integer', minimum: 0 },
     },
-    required: ['containers', 'security'],
+    required: ['containers', 'security', 'hotUpdates', 'matureUpdates'],
     additionalProperties: false,
   },
   ContainerRecentStatusResponse: {
@@ -370,6 +543,46 @@ export const openApiSchemas = {
     },
     additionalProperties: false,
   },
+  ContainerDeclarativeUpdatePolicy: {
+    type: 'object',
+    properties: {
+      maturityMode: { type: 'string', enum: ['all', 'mature'] },
+      maturityMinAgeDays: { type: 'integer', minimum: 1, maximum: 365 },
+      skipTags: { type: 'array', items: { type: 'string' } },
+      skipDigests: { type: 'array', items: { type: 'string' } },
+    },
+    additionalProperties: false,
+  },
+  ContainerUpdatePolicy: {
+    type: 'object',
+    properties: {
+      maturityMode: { type: 'string', enum: ['all', 'mature'] },
+      maturityMinAgeDays: { type: 'integer', minimum: 1, maximum: 365 },
+      skipTags: { type: 'array', items: { type: 'string' } },
+      skipDigests: { type: 'array', items: { type: 'string' } },
+      snoozeUntil: { type: 'string', format: 'date-time' },
+    },
+    additionalProperties: false,
+  },
+  ContainerUpdatePolicyDeclarative: {
+    type: 'object',
+    properties: {
+      env: { $ref: '#/components/schemas/ContainerDeclarativeUpdatePolicy' },
+      label: { $ref: '#/components/schemas/ContainerDeclarativeUpdatePolicy' },
+    },
+    required: ['env', 'label'],
+    additionalProperties: false,
+  },
+  ContainerUpdatePolicySources: {
+    type: 'object',
+    properties: {
+      maturityMode: { type: 'string', enum: ['env', 'label', 'override'] },
+      maturityMinAgeDays: { type: 'string', enum: ['env', 'label', 'override'] },
+      skipTags: { type: 'string', enum: ['env', 'label', 'override'] },
+      skipDigests: { type: 'string', enum: ['env', 'label', 'override'] },
+    },
+    additionalProperties: false,
+  },
   ContainerResource: {
     type: 'object',
     properties: {
@@ -381,6 +594,48 @@ export const openApiSchemas = {
       identityKey: { type: 'string' },
       updateAvailable: { type: 'boolean' },
       image: { ...genericObjectSchema },
+      updatePolicy: { $ref: '#/components/schemas/ContainerUpdatePolicy' },
+      updatePolicyDeclarative: {
+        $ref: '#/components/schemas/ContainerUpdatePolicyDeclarative',
+      },
+      updatePolicyOverrides: { $ref: '#/components/schemas/ContainerUpdatePolicy' },
+      updatePolicySources: { $ref: '#/components/schemas/ContainerUpdatePolicySources' },
+      actionTriggerInclude: {
+        type: 'string',
+        example: 'dockercompose.local:minor',
+        description:
+          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label, falling back to the deprecated dd.trigger.include. Applies only to action triggers (docker, dockercompose, command).',
+      },
+      actionTriggerExclude: {
+        type: 'string',
+        example: 'docker.local',
+        description:
+          'Comma-separated action trigger ids or names that must not fire for this container. From the dd.action.exclude label, falling back to the deprecated dd.trigger.exclude. Applies only to action triggers.',
+      },
+      notificationTriggerInclude: {
+        type: 'string',
+        example: 'smtp.gmail,slack.alerts:major',
+        description:
+          'Comma-separated notification trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.notification.include label, falling back to the deprecated dd.trigger.include. Applies only to notification triggers.',
+      },
+      notificationTriggerExclude: {
+        type: 'string',
+        example: 'pushover.mobile',
+        description:
+          'Comma-separated notification trigger ids or names that must not fire for this container. From the dd.notification.exclude label, falling back to the deprecated dd.trigger.exclude. Applies only to notification triggers.',
+      },
+      triggerInclude: {
+        type: 'string',
+        deprecated: true,
+        description:
+          'Deprecated compat mirror of actionTriggerInclude/notificationTriggerInclude, kept for old API/agent consumers. Matching code no longer reads this field — use actionTriggerInclude/notificationTriggerInclude.',
+      },
+      triggerExclude: {
+        type: 'string',
+        deprecated: true,
+        description:
+          'Deprecated compat mirror of actionTriggerExclude/notificationTriggerExclude, kept for old API/agent consumers. Matching code no longer reads this field — use actionTriggerExclude/notificationTriggerExclude.',
+      },
     },
     required: ['id', 'name'],
     additionalProperties: true,
@@ -414,6 +669,7 @@ export const openApiSchemas = {
     properties: {
       scanner: { type: 'string' },
       image: { type: 'string' },
+      imageDigest: { type: 'string' },
       scannedAt: { type: 'string', format: 'date-time' },
       status: { type: 'string', enum: ['not-scanned', 'passed', 'blocked', 'error'] },
       blockSeverities: {
@@ -425,6 +681,19 @@ export const openApiSchemas = {
       vulnerabilities: {
         type: 'array',
         items: { ...genericObjectSchema },
+      },
+      relativeGate: {
+        type: 'object',
+        properties: {
+          decision: { type: 'string', enum: ['passed', 'blocked'] },
+          reason: {
+            type: 'string',
+            enum: ['no-worse-than-current', 'candidate-worse', 'current-scan-unavailable'],
+          },
+          currentSummary: { $ref: '#/components/schemas/VulnerabilitySummary' },
+        },
+        required: ['decision', 'reason'],
+        additionalProperties: false,
       },
       error: { type: 'string' },
     },
@@ -677,8 +946,25 @@ export const openApiSchemas = {
     type: 'object',
     properties: {
       internetlessMode: { type: 'boolean' },
+      updateMode: { type: 'string', enum: ['notify', 'manual', 'auto'] },
     },
-    required: ['internetlessMode'],
+    required: ['internetlessMode', 'updateMode'],
+    additionalProperties: false,
+  },
+  Preferences: {
+    type: 'object',
+    properties: {
+      apiVersion: { type: 'integer', minimum: 1 },
+      username: { type: 'string' },
+      schemaVersion: { type: ['integer', 'null'], minimum: 1 },
+      // Deliberately open — the server stores the client's PreferencesSchema
+      // blob opaquely and never validates its inner shape (same "opaque
+      // object" precedent as genericObjectSchema in common.ts). null when no
+      // synced document exists yet for this user.
+      preferences: { type: ['object', 'null'], additionalProperties: true },
+      updatedAt: { type: ['string', 'null'], format: 'date-time' },
+    },
+    required: ['apiVersion', 'username', 'schemaVersion', 'preferences', 'updatedAt'],
     additionalProperties: false,
   },
   NotificationRule: {
@@ -692,8 +978,31 @@ export const openApiSchemas = {
         type: 'array',
         items: { type: 'string' },
       },
+      bellEnabled: { type: 'boolean' },
+      bellThreshold: { type: 'string', enum: ['all', 'major', 'minor', 'patch'] },
+      templates: {
+        type: 'object',
+        additionalProperties: {
+          type: 'object',
+          properties: {
+            simpleTitle: { type: 'string' },
+            simpleBody: { type: 'string' },
+            batchTitle: { type: 'string' },
+          },
+          additionalProperties: false,
+        },
+      },
     },
-    required: ['id', 'name', 'description', 'enabled', 'triggers'],
+    required: [
+      'id',
+      'name',
+      'description',
+      'enabled',
+      'triggers',
+      'bellEnabled',
+      'bellThreshold',
+      'templates',
+    ],
     additionalProperties: false,
   },
   FleetStatsSummaryRow: {
@@ -745,6 +1054,61 @@ export const openApiSchemas = {
       data: { $ref: '#/components/schemas/FleetStatsSummary' },
     },
     required: ['data'],
+    additionalProperties: false,
+  },
+  NotificationOutboxEntry: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      eventName: { type: 'string' },
+      payload: { type: 'object', additionalProperties: true },
+      triggerId: { type: 'string' },
+      containerId: { type: 'string' },
+      attempts: { type: 'integer', minimum: 0 },
+      maxAttempts: { type: 'integer', minimum: 0 },
+      nextAttemptAt: { type: 'string', format: 'date-time' },
+      status: {
+        type: 'string',
+        enum: ['pending', 'delivered', 'dead-letter'],
+      },
+      lastError: { type: 'string' },
+      createdAt: { type: 'string', format: 'date-time' },
+      deliveredAt: { type: 'string', format: 'date-time' },
+      failedAt: { type: 'string', format: 'date-time' },
+    },
+    required: [
+      'id',
+      'eventName',
+      'payload',
+      'triggerId',
+      'attempts',
+      'maxAttempts',
+      'nextAttemptAt',
+      'status',
+      'createdAt',
+    ],
+    additionalProperties: false,
+  },
+  NotificationOutboxResult: {
+    type: 'object',
+    properties: {
+      data: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/NotificationOutboxEntry' },
+      },
+      total: { type: 'integer', minimum: 0 },
+      counts: {
+        type: 'object',
+        properties: {
+          pending: { type: 'integer', minimum: 0 },
+          delivered: { type: 'integer', minimum: 0 },
+          deadLetter: { type: 'integer', minimum: 0 },
+        },
+        required: ['pending', 'delivered', 'deadLetter'],
+        additionalProperties: false,
+      },
+    },
+    required: ['data', 'total', 'counts'],
     additionalProperties: false,
   },
   UpdateOperation: {

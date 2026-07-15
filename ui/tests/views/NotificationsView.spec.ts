@@ -1,9 +1,10 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
-import { resetPreferences } from '@/preferences/store';
+import { defineComponent, nextTick } from 'vue';
+import { preferences, resetPreferences } from '@/preferences/store';
 import {
   getAllNotificationRules,
   type NotificationRule,
+  previewNotificationTemplates,
   updateNotificationRule,
 } from '@/services/notification';
 import { getAllTriggers } from '@/services/trigger';
@@ -27,6 +28,7 @@ vi.mock('@/composables/useBreakpoints', () => ({
 
 vi.mock('@/services/notification', () => ({
   getAllNotificationRules: vi.fn(),
+  previewNotificationTemplates: vi.fn(),
   updateNotificationRule: vi.fn(),
 }));
 
@@ -35,6 +37,7 @@ vi.mock('@/services/trigger', () => ({
 }));
 
 const mockGetAllNotificationRules = getAllNotificationRules as ReturnType<typeof vi.fn>;
+const mockPreviewNotificationTemplates = previewNotificationTemplates as ReturnType<typeof vi.fn>;
 const mockUpdateNotificationRule = updateNotificationRule as ReturnType<typeof vi.fn>;
 const mockGetAllTriggers = getAllTriggers as ReturnType<typeof vi.fn>;
 
@@ -45,6 +48,9 @@ function makeRule(overrides: Partial<NotificationRule> = {}): NotificationRule {
     description: 'Critical vulnerabilities detected',
     enabled: true,
     triggers: ['trigger:slack-alerts'],
+    bellEnabled: true,
+    bellThreshold: 'all',
+    templates: {},
     ...overrides,
   };
 }
@@ -61,6 +67,88 @@ async function mountNotificationsView(stubs: Record<string, any> = {}) {
   await flushPromises();
   return wrapper;
 }
+
+const notificationCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar notification-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+    </div>
+  `,
+});
+
+const notificationCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table notification-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="notification-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+const notificationToggleSwitchStub = defineComponent({
+  props: ['modelValue', 'size', 'disabled', 'ariaLabel'],
+  emits: ['click', 'update:modelValue'],
+  template: `
+    <button
+      class="toggle-switch-stub"
+      role="switch"
+      :aria-checked="String(modelValue)"
+      :aria-label="ariaLabel"
+      :disabled="disabled"
+      :data-size="size"
+      @click="$emit('click', $event); $emit('update:modelValue', !modelValue)">
+      {{ modelValue ? 'on' : 'off' }}
+    </button>
+  `,
+});
 
 describe('NotificationsView', () => {
   beforeEach(() => {
@@ -79,6 +167,11 @@ describe('NotificationsView', () => {
       { id: 'trigger:slack-alerts', name: 'Slack Alerts', type: 'slack' },
       { id: 'trigger:docker-policy', name: 'Docker Policy', type: 'docker' },
     ]);
+    mockPreviewNotificationTemplates.mockResolvedValue({
+      simpleTitle: 'Preview title',
+      simpleBody: 'Preview body',
+      batchTitle: 'Preview batch',
+    });
 
     mockUpdateNotificationRule.mockResolvedValue(
       makeRule({
@@ -87,6 +180,21 @@ describe('NotificationsView', () => {
         triggers: [],
       }),
     );
+  });
+
+  describe('tableColumns (card-mode annotations)', () => {
+    it('flags name as the card title and triggers as the card subtitle priority', async () => {
+      const wrapper = await mountNotificationsView();
+      const vm = wrapper.vm as any;
+      const nameCol = vm.tableColumns.find((c: any) => c.key === 'name');
+      const triggersCol = vm.tableColumns.find((c: any) => c.key === 'triggers');
+      const enabledCol = vm.tableColumns.find((c: any) => c.key === 'enabled');
+      expect(nameCol.cardTitle).toBe(true);
+      expect(triggersCol.cardPriority).toBe(1);
+      // enabled keeps the default so it renders as a card body row with its ToggleSwitch.
+      expect(enabledCol.cardTitle).toBeUndefined();
+      expect(enabledCol.cardPriority).toBeUndefined();
+    });
   });
 
   it('loads rules and filters trigger assignments to notification trigger types', async () => {
@@ -104,7 +212,7 @@ describe('NotificationsView', () => {
     expect(wrapper.text()).not.toContain('Docker Policy');
   });
 
-  it('truncates compact notification surfaces across table, cards, and list modes', async () => {
+  it('truncates compact notification surfaces in table mode', async () => {
     const longRuleName = 'Security Alert With A Very Long Name That Should Not Expand Compact Rows';
     const longDescription =
       'This description is intentionally long enough to verify compact notification rows stay one line.';
@@ -138,26 +246,6 @@ describe('NotificationsView', () => {
           </div>
         `,
       }),
-      DataCardGrid: defineComponent({
-        props: ['items', 'itemKey', 'selectedKey'],
-        emits: ['item-click'],
-        template: `
-          <div class="data-card-grid" :data-item-count="items?.length ?? 0">
-            <button v-if="items?.[0]" class="card-click-first" @click="$emit('item-click', items[0])">Card 1</button>
-            <slot name="card" v-if="items?.[0]" :item="items[0]" />
-          </div>
-        `,
-      }),
-      DataListAccordion: defineComponent({
-        props: ['items', 'itemKey', 'selectedKey'],
-        emits: ['item-click'],
-        template: `
-          <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
-            <button v-if="items?.[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
-            <slot name="header" v-if="items?.[0]" :item="items[0]" />
-          </div>
-        `,
-      }),
     });
 
     const tableName = wrapper.get('.data-table .font-medium.truncate.dd-text');
@@ -172,22 +260,6 @@ describe('NotificationsView', () => {
     expect(tableBadge.classes()).toContain('shrink-0');
     expect(tableBadge.attributes('title')).toBe(longTriggerName);
     expect(tableBadge.get('span').classes()).toEqual(expect.arrayContaining(['block', 'truncate']));
-
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-
-    const cardBadge = wrapper.get('.data-card-grid .badge');
-    expect(cardBadge.classes()).toContain('shrink-0');
-    expect(cardBadge.attributes('title')).toBe(longTriggerName);
-    expect(cardBadge.get('span').classes()).toEqual(expect.arrayContaining(['block', 'truncate']));
-
-    await wrapper.find('.mode-list').trigger('click');
-    await flushPromises();
-
-    const listBadge = wrapper.get('.data-list-accordion .badge');
-    expect(listBadge.classes()).toContain('shrink-0');
-    expect(listBadge.attributes('title')).toBe(longTriggerName);
-    expect(listBadge.get('span').classes()).toEqual(expect.arrayContaining(['block', 'truncate']));
   });
 
   it('saves trigger assignment changes from the detail panel', async () => {
@@ -217,6 +289,110 @@ describe('NotificationsView', () => {
     });
   });
 
+  it('edits bell preferences and previews per-trigger notification templates', async () => {
+    const wrapper = await mountNotificationsView({ ToggleSwitch: notificationToggleSwitchStub });
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('button[aria-label="Notification bell"]')?.trigger('click');
+    expect(wrapper.find('select[aria-label="Bell severity threshold"]').exists()).toBe(false);
+    await wrapper
+      .get('textarea[aria-label="Simple notification title"]')
+      .setValue('Alert ${container.name}');
+    await wrapper
+      .get('textarea[aria-label="Simple notification body"]')
+      .setValue('${container.result.releaseNotes.body}');
+    await wrapper.get('button[aria-label="Preview notification template"]').trigger('click');
+    await flushPromises();
+
+    expect(mockPreviewNotificationTemplates).toHaveBeenCalledWith(
+      'security-alert',
+      'trigger:slack-alerts',
+      {
+        simpleTitle: 'Alert ${container.name}',
+        simpleBody: '${container.result.releaseNotes.body}',
+      },
+    );
+    expect(wrapper.text()).toContain('Preview title');
+
+    const saveButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Save changes'));
+    await saveButton?.trigger('click');
+    await flushPromises();
+    expect(mockUpdateNotificationRule).toHaveBeenCalledWith('security-alert', {
+      bellEnabled: false,
+      templates: {
+        'trigger:slack-alerts': {
+          simpleTitle: 'Alert ${container.name}',
+          simpleBody: '${container.result.releaseNotes.body}',
+        },
+      },
+    });
+  });
+
+  it('clears a rendered template preview when resetting the trigger template', async () => {
+    const wrapper = await mountNotificationsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    await wrapper
+      .get('textarea[aria-label="Simple notification title"]')
+      .setValue('Draft preview title');
+    await wrapper.get('button[aria-label="Preview notification template"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Preview title');
+
+    const resetTemplateButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Reset template'));
+    expect(resetTemplateButton).toBeDefined();
+    await resetTemplateButton?.trigger('click');
+    await nextTick();
+
+    expect(wrapper.text()).not.toContain('Preview title');
+  });
+
+  it('clears a template preview error when resetting the trigger template', async () => {
+    mockPreviewNotificationTemplates.mockRejectedValueOnce(new Error('Preview request failed'));
+    const wrapper = await mountNotificationsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    await wrapper
+      .get('textarea[aria-label="Simple notification title"]')
+      .setValue('Invalid draft title');
+    await wrapper.get('button[aria-label="Preview notification template"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Preview request failed');
+
+    const resetTemplateButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Reset template'));
+    await resetTemplateButton?.trigger('click');
+    await nextTick();
+
+    expect(wrapper.text()).not.toContain('Preview request failed');
+  });
+
+  it('hides bell controls for rules without audit-backed bell events', async () => {
+    mockGetAllNotificationRules.mockResolvedValue([
+      makeRule({
+        id: 'agent-reconnect',
+        name: 'Agent Reconnected',
+        description: 'When an agent reconnects',
+        bellEnabled: false,
+      }),
+    ]);
+    const wrapper = await mountNotificationsView({ ToggleSwitch: notificationToggleSwitchStub });
+
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('button[aria-label="Notification bell"]').exists()).toBe(false);
+    expect(wrapper.find('select[aria-label="Bell severity threshold"]').exists()).toBe(false);
+  });
+
   it('treats empty update-available assignments as all notification triggers in the UI', async () => {
     mockGetAllNotificationRules.mockResolvedValue([
       makeRule({
@@ -233,13 +409,7 @@ describe('NotificationsView', () => {
 
     const wrapper = await mountNotificationsView();
 
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('All notification triggers');
-    expect(wrapper.text()).not.toContain('No triggers');
-
-    await wrapper.find('.card-click-first').trigger('click');
+    await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
 
     expect(wrapper.text()).toContain(
@@ -260,12 +430,7 @@ describe('NotificationsView', () => {
 
     const wrapper = await mountNotificationsView();
 
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('No triggers');
-
-    await wrapper.find('.card-click-first').trigger('click');
+    await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
 
     expect(wrapper.text()).toContain(
@@ -276,7 +441,7 @@ describe('NotificationsView', () => {
     );
   });
 
-  it('renders shared switch controls in table, cards, list, and detail contexts', async () => {
+  it('renders shared switch controls in table and detail contexts', async () => {
     const wrapper = await mountNotificationsView({
       DataTable: defineComponent({
         props: ['rows', 'rowKey', 'activeRow', 'selectedKey', 'sortKey', 'sortAsc'],
@@ -291,16 +456,6 @@ describe('NotificationsView', () => {
           </div>
         `,
       }),
-      DataListAccordion: defineComponent({
-        props: ['items', 'itemKey', 'selectedKey'],
-        emits: ['item-click'],
-        template: `
-          <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
-            <button v-if="items?.[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
-            <slot name="header" v-if="items?.[0]" :item="items[0]" />
-          </div>
-        `,
-      }),
     });
 
     const tableRuleSwitch = wrapper.find('button[aria-label="Toggle notification rule"]');
@@ -309,25 +464,11 @@ describe('NotificationsView', () => {
 
     await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
-    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(2);
+    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(3);
 
     const detailSwitch = wrapper.find('button[aria-label="Rule status"]');
     expect(detailSwitch.exists()).toBe(true);
     expect(detailSwitch.classes()).toEqual(expect.arrayContaining(['w-10', 'h-5']));
-
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(2);
-
-    const cardsRuleSwitch = wrapper.find('button[aria-label="Toggle notification rule"]');
-    expect(cardsRuleSwitch.classes()).toEqual(expect.arrayContaining(['w-8', 'h-4']));
-
-    await wrapper.find('.mode-list').trigger('click');
-    await flushPromises();
-    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(2);
-
-    const listRuleSwitch = wrapper.find('button[aria-label="Toggle notification rule"]');
-    expect(listRuleSwitch.classes()).toEqual(expect.arrayContaining(['w-8', 'h-4']));
   });
 
   it('shows an inline error when rules fail to load', async () => {
@@ -350,5 +491,80 @@ describe('NotificationsView', () => {
 
     expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('security');
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('1');
+  });
+
+  it('renders notification cards and wires the footer toggle plus card reflow state', async () => {
+    preferences.views.notifications.mode = 'cards';
+    mockGetAllNotificationRules.mockResolvedValue([
+      makeRule({
+        id: 'security-alert',
+        enabled: true,
+        triggers: ['trigger:slack-alerts', 'trigger:smtp-gmail'],
+      }),
+      makeRule({
+        id: 'agent-disconnect',
+        name: 'Agent Disconnect',
+        description: 'Remote agent disconnected',
+        enabled: false,
+        triggers: [],
+      }),
+    ]);
+    mockGetAllTriggers.mockResolvedValue([
+      { id: 'trigger:slack-alerts', name: 'Slack Alerts', type: 'slack' },
+      { id: 'trigger:smtp-gmail', name: 'SMTP Gmail', type: 'smtp' },
+    ]);
+    mockUpdateNotificationRule.mockResolvedValueOnce(
+      makeRule({
+        id: 'security-alert',
+        enabled: false,
+        triggers: ['trigger:slack-alerts', 'trigger:smtp-gmail'],
+      }),
+    );
+
+    const wrapper = await mountNotificationsView({
+      DataFilterBar: notificationCardFilterBarStub,
+      DataTable: notificationCardDataTableStub,
+      ToggleSwitch: notificationToggleSwitchStub,
+    });
+
+    expect(wrapper.get('.notification-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.notification-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.notification-card-filter').attributes('data-hide-view-toggle')).toBe(
+      'false',
+    );
+
+    const enabledCard = wrapper.get('[data-card-id="security-alert"]');
+    expect(enabledCard.text()).toContain('Security Alert');
+    expect(enabledCard.text()).toContain('Critical/High vulnerability detected');
+    expect(enabledCard.text()).toContain('enabled');
+    expect(enabledCard.text()).toContain('Slack Alerts');
+    expect(enabledCard.text()).toContain('SMTP Gmail');
+    expect(enabledCard.get('.toggle-switch-stub').attributes('aria-checked')).toBe('true');
+
+    const disabledCard = wrapper.get('[data-card-id="agent-disconnect"]');
+    expect(disabledCard.text()).toContain('Agent Disconnected');
+    expect(disabledCard.text()).toContain('When a remote agent loses connection');
+    expect(disabledCard.text()).toContain('disabled');
+    expect(disabledCard.text()).toContain('No triggers');
+    expect(disabledCard.get('.toggle-switch-stub').attributes('aria-checked')).toBe('false');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.notification-card-filter').attributes('data-hide-view-toggle')).toBe(
+      'true',
+    );
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.notification-card-filter').attributes('data-hide-view-toggle')).toBe(
+      'false',
+    );
+
+    await enabledCard.get('.toggle-switch-stub').trigger('click');
+    await flushPromises();
+
+    expect(mockUpdateNotificationRule).toHaveBeenCalledWith('security-alert', {
+      enabled: false,
+    });
   });
 });

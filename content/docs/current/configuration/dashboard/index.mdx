@@ -30,7 +30,7 @@ Larger panels that visualize trends and breakdowns.
 
 | Widget | Shows |
 | --- | --- |
-| **Recent Updates** | Pending container updates with update/skip action buttons in a scrollable list. Includes an "Update All" batch button when pending updates exist. Registry failures are excluded. |
+| **Recent Updates** | Pending container updates with update/skip action buttons in a scrollable list. Includes shared release-notes and **View project** links, plus an "Update All" batch button when pending updates exist. Registry failures are excluded. |
 | **Security Overview** | Donut chart of clean / issues / not-scanned images, a 2×2 severity grid (critical / high / medium / low), and a list of the top 5 vulnerabilities. |
 | **Resource Usage** | Live CPU and memory utilization. Aggregate progress bars (green < 60%, amber 60–85%, red > 85%) plus ranked lists of the top 5 consumers by CPU and memory. |
 | **Host Status** | Agent and watcher connectivity. Shows each host's connection status (green = connected, red = disconnected), address, and running / total container count. |
@@ -51,7 +51,9 @@ While in edit mode, interactive widget content is disabled and three controls be
 - **Widget visibility** — a sidebar panel slides in from the right listing every widget with a checkbox. Toggle any widget on or off. Size capability badges (S / M / L) indicate how each widget can be resized. On mobile, the panel is opt-in — tap the **sliders icon** to open it.
 - **Reset to Default** — a button at the bottom of the sidebar restores the original layout, order, and visibility.
 
-All changes are saved automatically to `localStorage` and persist across page reloads.
+The v1.6 grid is implemented directly with CSS Grid rather than `grid-layout-plus`. Reordering repacks widgets into the earliest available cells, including natural same-row moves; mouse and touch drag gestures show the active drop target, and resize handles clamp every widget to its documented minimum and maximum size.
+
+All changes are saved automatically to `localStorage` and persist across page reloads. Signed-in users who enable **Sync across devices** in **Config > Appearance** also store dashboard layouts server-side with the rest of their UI preferences.
 
 ### Default layout
 
@@ -81,8 +83,9 @@ On narrow screens stat cards stack vertically and detail widgets fill the full w
 The dashboard refreshes automatically via SSE events from the server:
 
 - **Container change** — triggers a quick summary refresh (debounced to 1 second).
-- **Security scan completed** — triggers a full data refresh.
 - **SSE reconnected** — triggers a full data refresh after a connection drop.
+
+Container-change events patch the affected dashboard data and refresh the summary. Security-scan completion does not force a separate full-dashboard refresh; the security surfaces update through their own data flow.
 
 The **Resource Usage** widget has a dedicated stats SSE stream (`GET /api/v1/stats/summary/stream`) that pushes `dd:stats-summary` events on every aggregator tick (default 10 s). The widget connects to this stream independently of the main UI event channel, so resource stats update even when no container state changes occur.
 
@@ -96,4 +99,4 @@ Dashboard preferences are stored under the `dd-preferences` key in the browser's
 - **Hidden widgets** — which widgets are toggled off.
 - **Grid layout** — each widget's position (x, y) and size (width, height).
 
-<Callout type="info">Dashboard preferences are per-browser. They are not synced across devices or shared between users.</Callout>
+<Callout type="info">Dashboard preferences are per-browser by default. Signed-in users can opt into per-account cross-device synchronization in **Config > Appearance**; anonymous sessions remain local-only.</Callout>

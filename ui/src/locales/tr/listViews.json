@@ -22,10 +22,6 @@
       "status": "Durum",
       "details": "Ayrıntılar"
     },
-    "card": {
-      "time": "Zaman",
-      "version": "Sürüm"
-    },
     "detail": {
       "timestamp": "Zaman damgası",
       "event": "Etkinlik",
@@ -156,10 +152,6 @@
       "total": "Toplam"
     },
     "card": {
-      "vulnerabilities": "güvenlik açıkları",
-      "vsUpdate": "vs güncelleme",
-      "fixable": "tamir edilebilir",
-      "noFixesAvailable": "Hiçbir düzeltme mevcut değil",
       "total": "toplam"
     },
     "badge": {
@@ -254,10 +246,6 @@
       "private": "Özel",
       "public": "halka açık"
     },
-    "card": {
-      "auth": "Kimlik doğrulama",
-      "status": "Durum"
-    },
     "status": {
       "connected": "Bağlı",
       "error": "Hata",
@@ -289,15 +277,6 @@
       "status": "Durum",
       "containers": "Konteynerler",
       "lastSeen": "Son Görülme"
-    },
-    "card": {
-      "containers": "Konteynerler",
-      "running": "Çalışıyor",
-      "images": "Görseller",
-      "lastSeen": "Son görülme"
-    },
-    "list": {
-      "containers": "konteynerler"
     },
     "detail": {
       "containers": "Konteynerler",
@@ -340,9 +319,6 @@
       "status": "Durum",
       "refreshing": "Tetikleyici ayrıntıları yenileniyor...",
       "noConfig": "Yapılandırma özelliği yok"
-    },
-    "list": {
-      "status": "Durum"
     }
   },
   "watchersView": {
@@ -363,12 +339,6 @@
     "status": {
       "watching": "izliyorum",
       "paused": "Duraklatıldı"
-    },
-    "card": {
-      "containers": "Konteynerler",
-      "nextRun": "Sonraki çalıştırma",
-      "lastRun": "Son çalıştırma",
-      "containersWatched": "{count} kapsayıcıları izlendi"
     },
     "badge": {
       "maint": "Bakım"

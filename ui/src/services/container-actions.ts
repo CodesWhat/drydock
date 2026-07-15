@@ -84,7 +84,7 @@ async function updateContainers(containerIds: string[]): Promise<BulkContainerUp
 type CancelUpdateOperationOutcome = 'cancelled' | 'cancel-requested';
 
 async function cancelUpdateOperation(operationId: string): Promise<CancelUpdateOperationOutcome> {
-  const response = await fetch(`/api/operations/${encodeURIComponent(operationId)}/cancel`, {
+  const response = await fetch(`/api/v1/operations/${encodeURIComponent(operationId)}/cancel`, {
     method: 'POST',
     credentials: 'include',
   });

@@ -75,7 +75,7 @@ run_test_container hub_homeassistant_202161 \
 	-f /dev/null
 # Keep-alive entrypoint: drydock only reads the image reference for metadata; the
 # real home-assistant app crashes in CI (needs a valid /config) and drydock lists
-# only running containers, so an exited fixture vanishes from /api/containers.
+# only running containers, so an exited fixture vanishes from /api/v1/containers.
 run_test_container hub_homeassistant_latest --label "$LABEL_WATCH" --label 'dd.watch.digest=true' --label 'dd.tag.include=^latest$' --entrypoint tail homeassistant/home-assistant -f /dev/null
 run_test_container hub_nginx_120 --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+-alpine$' nginx:1.20-alpine
 run_test_container hub_nginx_latest --label "$LABEL_WATCH" --label 'dd.watch.digest=true' --label 'dd.tag.include=^latest$' nginx

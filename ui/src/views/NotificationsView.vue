@@ -5,12 +5,24 @@ import { useRoute } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import ToggleSwitch from '../components/ToggleSwitch.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 
 const { t, te } = useI18n();
-import { useViewMode } from '../preferences/useViewMode';
-import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
-import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
+import type {
+  NotificationBellThreshold,
+  NotificationRule,
+  NotificationRuleUpdate,
+  NotificationTemplateOverride,
+  NotificationTemplateOverrides,
+  NotificationTemplatePreview,
+} from '../services/notification';
+import {
+  getAllNotificationRules,
+  previewNotificationTemplates,
+  updateNotificationRule,
+} from '../services/notification';
 import { getAllTriggers } from '../services/trigger';
+import { isBellRuleSupported } from '../stores/notifications';
 import type { ApiComponent } from '../types/api';
 import { errorMessage } from '../utils/error';
 
@@ -20,7 +32,7 @@ interface TriggerSummary {
   type: string;
 }
 
-const NON_NOTIFICATION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+const NON_NOTIFICATION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
 
 function isNotificationTriggerType(type: string) {
   return !NON_NOTIFICATION_TRIGGER_TYPES.has(type.toLowerCase());
@@ -36,7 +48,6 @@ function ruleDisplayDescription(rule: { id: string; description: string }): stri
   return te(key) ? t(key) : rule.description;
 }
 
-const notificationsViewMode = useViewMode('notifications');
 const loading = ref(true);
 const error = ref('');
 const saveError = ref('');
@@ -51,13 +62,18 @@ const compactTriggerBadgeClass = 'shrink-0';
 const compactTriggerBadgeLabelClass = 'block max-w-[160px] truncate';
 const compactTriggerRowClass =
   'flex min-w-0 max-w-full flex-nowrap items-center justify-end gap-1 overflow-x-auto';
-const compactTriggerListRowClass =
-  'flex min-w-0 max-w-[320px] flex-nowrap items-center justify-end gap-1 overflow-x-auto';
 
 const selectedRuleId = ref<string | null>(null);
 const detailOpen = ref(false);
 const detailEnabled = ref(true);
 const detailTriggers = ref<string[]>([]);
+const detailBellEnabled = ref(true);
+const detailBellThreshold = ref<NotificationBellThreshold>('all');
+const detailTemplates = ref<NotificationTemplateOverrides>({});
+const detailTemplateTriggerId = ref('');
+const templatePreview = ref<NotificationTemplatePreview | null>(null);
+const templatePreviewError = ref('');
+const templatePreviewLoading = ref(false);
 
 function triggerTypeBadge(type: string) {
   if (type === 'slack')
@@ -148,11 +164,47 @@ function hasTriggerChanges() {
   return currentTriggers.some((triggerId, index) => triggerId !== draftTriggers[index]);
 }
 
+function normalizedTemplates(templates: NotificationTemplateOverrides) {
+  return Object.fromEntries(
+    Object.entries(templates)
+      .filter(([, template]) => Object.keys(template).length > 0)
+      .sort(([triggerA], [triggerB]) => triggerA.localeCompare(triggerB)),
+  );
+}
+
+function cloneTemplates(templates: NotificationTemplateOverrides): NotificationTemplateOverrides {
+  return Object.fromEntries(
+    Object.entries(templates).map(([triggerId, template]) => [triggerId, { ...template }]),
+  );
+}
+
+function hasTemplateChanges() {
+  if (!selectedRule.value) return false;
+  return (
+    JSON.stringify(normalizedTemplates(detailTemplates.value)) !==
+    JSON.stringify(normalizedTemplates(selectedRule.value.templates))
+  );
+}
+
+const detailBellSupported = computed(
+  () => !!selectedRule.value && isBellRuleSupported(selectedRule.value.id),
+);
+const detailBellThresholdSupported = computed(
+  () => detailBellSupported.value && selectedRule.value?.id === 'update-available',
+);
+
 const detailHasChanges = computed(() => {
   if (!selectedRule.value) {
     return false;
   }
-  return detailEnabled.value !== selectedRule.value.enabled || hasTriggerChanges();
+  return (
+    detailEnabled.value !== selectedRule.value.enabled ||
+    (detailBellSupported.value && detailBellEnabled.value !== selectedRule.value.bellEnabled) ||
+    (detailBellThresholdSupported.value &&
+      detailBellThreshold.value !== selectedRule.value.bellThreshold) ||
+    hasTriggerChanges() ||
+    hasTemplateChanges()
+  );
 });
 
 const detailSaving = computed(
@@ -161,6 +213,10 @@ const detailSaving = computed(
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const notificationViewMode = useViewMode('notifications');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -202,6 +258,7 @@ const tableColumns = computed(() => [
     minSize: 220,
     maxSize: 560,
     flex: 1,
+    cardTitle: true,
   },
   {
     key: 'triggers',
@@ -211,6 +268,7 @@ const tableColumns = computed(() => [
     size: 260,
     minSize: 180,
     maxSize: 420,
+    cardPriority: 1,
   },
 ]);
 
@@ -222,10 +280,26 @@ function syncDetailDraftFromRule() {
   if (!selectedRule.value) {
     detailEnabled.value = true;
     detailTriggers.value = [];
+    detailBellEnabled.value = true;
+    detailBellThreshold.value = 'all';
+    detailTemplates.value = {};
+    detailTemplateTriggerId.value = '';
     return;
   }
   detailEnabled.value = selectedRule.value.enabled;
   detailTriggers.value = [...selectedRule.value.triggers];
+  detailBellEnabled.value = selectedRule.value.bellEnabled;
+  detailBellThreshold.value = selectedRule.value.bellThreshold;
+  detailTemplates.value = cloneTemplates(selectedRule.value.templates);
+  const availableTriggerIds = new Set(triggersData.value.map((trigger) => trigger.id));
+  if (!availableTriggerIds.has(detailTemplateTriggerId.value)) {
+    detailTemplateTriggerId.value =
+      detailTriggers.value.find((triggerId) => availableTriggerIds.has(triggerId)) ??
+      triggersSorted.value[0]?.id ??
+      '';
+  }
+  templatePreview.value = null;
+  templatePreviewError.value = '';
 }
 
 function openDetail(rule: NotificationRule) {
@@ -251,6 +325,7 @@ function updateRuleInList(updatedRule: NotificationRule) {
     ...notificationsData.value[ruleIndex],
     ...updatedRule,
     triggers: [...updatedRule.triggers],
+    templates: cloneTemplates(updatedRule.templates),
   };
 }
 
@@ -307,6 +382,51 @@ function toggleDetailTrigger(triggerId: string) {
   detailTriggers.value = [...detailTriggers.value, triggerId].sort();
 }
 
+function currentTemplate(): NotificationTemplateOverride {
+  return detailTemplates.value[detailTemplateTriggerId.value] ?? {};
+}
+
+function templateFieldValue(field: keyof NotificationTemplateOverride): string {
+  return currentTemplate()[field] ?? '';
+}
+
+function setTemplateField(field: keyof NotificationTemplateOverride, value: string) {
+  const triggerId = detailTemplateTriggerId.value;
+  if (!triggerId) return;
+  const template = { ...currentTemplate() };
+  if (value === '') delete template[field];
+  else template[field] = value;
+  if (Object.keys(template).length === 0) delete detailTemplates.value[triggerId];
+  else detailTemplates.value[triggerId] = template;
+  templatePreview.value = null;
+  templatePreviewError.value = '';
+}
+
+function resetTemplate() {
+  const triggerId = detailTemplateTriggerId.value;
+  if (!triggerId) return;
+  delete detailTemplates.value[triggerId];
+  templatePreview.value = null;
+  templatePreviewError.value = '';
+}
+
+async function previewSelectedTemplate() {
+  if (!selectedRule.value || !detailTemplateTriggerId.value || templatePreviewLoading.value) return;
+  templatePreviewLoading.value = true;
+  templatePreviewError.value = '';
+  try {
+    templatePreview.value = await previewNotificationTemplates(
+      selectedRule.value.id,
+      detailTemplateTriggerId.value,
+      currentTemplate(),
+    );
+  } catch (e: unknown) {
+    templatePreviewError.value = errorMessage(e, t('notificationsView.detail.previewError'));
+  } finally {
+    templatePreviewLoading.value = false;
+  }
+}
+
 async function saveSelectedRule() {
   if (!selectedRule.value || !detailHasChanges.value || detailSaving.value) {
     return;
@@ -318,6 +438,18 @@ async function saveSelectedRule() {
   }
   if (hasTriggerChanges()) {
     update.triggers = normalizeTriggerIds(detailTriggers.value);
+  }
+  if (detailBellSupported.value && detailBellEnabled.value !== selectedRule.value.bellEnabled) {
+    update.bellEnabled = detailBellEnabled.value;
+  }
+  if (
+    detailBellThresholdSupported.value &&
+    detailBellThreshold.value !== selectedRule.value.bellThreshold
+  ) {
+    update.bellThreshold = detailBellThreshold.value;
+  }
+  if (hasTemplateChanges()) {
+    update.templates = normalizedTemplates(detailTemplates.value);
   }
 
   await persistRule(selectedRule.value.id, update);
@@ -344,6 +476,9 @@ onMounted(async () => {
       triggers: normalizeTriggerIds(
         rule.triggers.filter((triggerId) => allowedTriggerIds.has(triggerId)),
       ),
+      bellEnabled: rule.bellEnabled ?? false,
+      bellThreshold: rule.bellThreshold ?? 'all',
+      templates: rule.templates ?? {},
     }));
     triggersData.value = notificationTriggers;
   } catch (e: unknown) {
@@ -369,11 +504,12 @@ onMounted(async () => {
     </div>
 
     <DataFilterBar
-      v-model="notificationsViewMode"
+      v-model="notificationViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredNotifications.length"
       :total-count="notificationsData.length"
-      :active-filter-count="activeFilterCount">
+      :active-filter-count="activeFilterCount"
+      :hide-view-toggle="cardReflowForced">
       <template #filters>
         <input v-model="searchQuery"
                type="text"
@@ -390,12 +526,14 @@ onMounted(async () => {
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('notificationsView.loadingRules') }}</div>
 
     <DataTable
-      v-if="notificationsViewMode === 'table' && !loading"
+      v-if="!loading"
       :columns="tableColumns"
       storage-key="notifications"
       :rows="filteredNotifications"
       row-key="id"
       :active-row="selectedRule?.id"
+      :prefer-cards="notificationViewMode === 'cards'"
+      @update:card-reflow-forced="cardReflowForced = $event"
       @row-click="openDetail($event)">
       <template #cell-enabled="{ row }">
         <ToggleSwitch
@@ -434,6 +572,57 @@ onMounted(async () => {
           </span>
         </div>
       </template>
+      <template #card="{ row }">
+        <div class="relative flex flex-col flex-1">
+          <!-- Header: rule name/description + enabled state badge top-right -->
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="text-sm-plus font-semibold truncate dd-text">{{ ruleDisplayName(row) }}</div>
+              <div v-if="ruleDisplayDescription(row)" class="text-2xs-plus truncate mt-0.5 dd-text-muted">{{ ruleDisplayDescription(row) }}</div>
+            </div>
+            <span
+              class="inline-flex items-center gap-1.5 shrink-0 text-2xs-plus font-semibold"
+              :style="{ color: row.enabled ? 'var(--dd-success)' : 'var(--dd-text-muted)' }"
+            >
+              <span class="h-2 w-2 shrink-0 rounded-full"
+                    :style="{ backgroundColor: row.enabled ? 'var(--dd-success)' : 'var(--dd-text-muted)' }"></span>
+              {{ row.enabled ? t('notificationsView.detail.enabled') : t('notificationsView.detail.disabled') }}
+            </span>
+          </div>
+          <!-- Body: trigger chips (mirrors #cell-triggers) -->
+          <div class="px-4 py-3">
+            <div :class="compactTriggerRowClass">
+              <AppBadge v-for="triggerId in row.triggers" :key="triggerId"
+                        :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
+                        size="xs"
+                        :uppercase="false"
+                        :title="triggerNameById(triggerId)"
+                        v-tooltip.top="triggerNameById(triggerId)"
+                        :class="compactTriggerBadgeClass">
+                <span :class="compactTriggerBadgeLabelClass">{{ triggerNameById(triggerId) }}</span>
+              </AppBadge>
+              <span v-if="triggerAssignmentSummary(row)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
+                {{ triggerAssignmentSummary(row) }}
+              </span>
+            </div>
+          </div>
+          <!-- Footer: enabled toggle (mirrors #cell-enabled) -->
+          <div class="px-4 py-2.5 flex items-center justify-end mt-auto"
+               :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+            <ToggleSwitch
+              :model-value="row.enabled"
+              size="sm"
+              class="shrink-0"
+              :disabled="savingRuleId === row.id"
+              :aria-label="t('notificationsView.toggleAriaLabel')"
+              on-color="var(--dd-success)"
+              off-color="var(--dd-border-strong)"
+              @click.stop
+              @update:model-value="toggleNotification(row.id)"
+            />
+          </div>
+        </div>
+      </template>
       <template #empty>
         <EmptyState icon="notifications"
                     :message="t('notificationsView.emptyFiltered')"
@@ -441,98 +630,6 @@ onMounted(async () => {
                     @clear="clearFilters" />
       </template>
     </DataTable>
-
-    <DataCardGrid
-      v-if="notificationsViewMode === 'cards' && !loading && filteredNotifications.length > 0"
-      :items="filteredNotifications"
-      item-key="id"
-      :selected-key="selectedRule?.id"
-      @item-click="openDetail($event)">
-      <template #card="{ item: notif }">
-        <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <div class="text-sm-plus font-semibold truncate dd-text" :title="ruleDisplayName(notif)" v-tooltip.top="ruleDisplayName(notif)">{{ ruleDisplayName(notif) }}</div>
-            <div class="text-2xs-plus mt-0.5 dd-text-muted truncate"
-                 :title="ruleDisplayDescription(notif)"
-                 v-tooltip.top="ruleDisplayDescription(notif)">
-              {{ ruleDisplayDescription(notif) }}
-            </div>
-          </div>
-          <ToggleSwitch
-            :model-value="notif.enabled"
-            size="sm"
-            class="shrink-0"
-            :disabled="savingRuleId === notif.id"
-            :aria-label="t('notificationsView.toggleAriaLabel')"
-            on-color="var(--dd-success)"
-            off-color="var(--dd-border-strong)"
-            @click.stop
-            @update:model-value="toggleNotification(notif.id)"
-          />
-        </div>
-        <div :class="['px-4 py-2.5 mt-auto', compactTriggerRowClass]"
-             :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
-                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
-                    size="xs"
-                    :uppercase="false"
-                    :title="triggerNameById(triggerId)"
-                    v-tooltip.top="triggerNameById(triggerId)"
-                    :class="compactTriggerBadgeClass">
-            <span :class="compactTriggerBadgeLabelClass">{{ triggerNameById(triggerId) }}</span>
-          </AppBadge>
-          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
-            {{ triggerAssignmentSummary(notif) }}
-          </span>
-        </div>
-      </template>
-    </DataCardGrid>
-
-    <DataListAccordion
-      v-if="notificationsViewMode === 'list' && !loading && filteredNotifications.length > 0"
-      :items="filteredNotifications"
-      item-key="id"
-      :selected-key="selectedRule?.id"
-      @item-click="openDetail($event)">
-      <template #header="{ item: notif }">
-        <ToggleSwitch
-          :model-value="notif.enabled"
-          size="sm"
-          class="shrink-0"
-          :disabled="savingRuleId === notif.id"
-          :aria-label="t('notificationsView.toggleAriaLabel')"
-          on-color="var(--dd-success)"
-          off-color="var(--dd-border-strong)"
-          @click.stop
-          @update:model-value="toggleNotification(notif.id)"
-        />
-        <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ ruleDisplayName(notif) }}</span>
-        <div :class="compactTriggerListRowClass">
-          <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
-                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
-                    size="xs"
-                    :uppercase="false"
-                    :title="triggerNameById(triggerId)"
-                    v-tooltip.top="triggerNameById(triggerId)"
-                    :class="compactTriggerBadgeClass">
-            <span :class="compactTriggerBadgeLabelClass">{{ triggerNameById(triggerId) }}</span>
-          </AppBadge>
-          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
-            {{ triggerAssignmentSummary(notif) }}
-          </span>
-        </div>
-      </template>
-      <template #details="{ item: notif }">
-        <div class="text-2xs-plus dd-text-muted">{{ ruleDisplayDescription(notif) }}</div>
-      </template>
-    </DataListAccordion>
-
-    <EmptyState
-      v-if="(notificationsViewMode === 'cards' || notificationsViewMode === 'list') && !loading && filteredNotifications.length === 0"
-      icon="notifications"
-      :message="t('notificationsView.emptyFiltered')"
-      :show-clear="activeFilterCount > 0"
-      @clear="clearFilters" />
 
     <template #panel>
       <DetailPanel
@@ -610,6 +707,107 @@ onMounted(async () => {
                     {{ triggerTypeBadge(trigger.type).label }}
                   </AppBadge>
                 </label>
+              </div>
+            </div>
+
+            <div v-if="detailBellSupported">
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+                {{ t('notificationsView.detail.bellLabel') }}
+              </div>
+              <div class="flex items-center gap-3">
+                <ToggleSwitch
+                  :model-value="detailBellEnabled"
+                  :disabled="detailSaving"
+                  :aria-label="t('notificationsView.detail.bellAriaLabel')"
+                  on-color="var(--dd-success)"
+                  off-color="var(--dd-border-strong)"
+                  @update:model-value="detailBellEnabled = $event"
+                />
+                <select
+                  v-if="detailBellThresholdSupported"
+                  v-model="detailBellThreshold"
+                  :disabled="detailSaving"
+                  :aria-label="t('notificationsView.detail.bellThresholdAriaLabel')"
+                  class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-bg dd-text"
+                >
+                  <option value="all">{{ t('notificationsView.detail.thresholdAll') }}</option>
+                  <option value="major">{{ t('notificationsView.detail.thresholdMajor') }}</option>
+                  <option value="minor">{{ t('notificationsView.detail.thresholdMinor') }}</option>
+                  <option value="patch">{{ t('notificationsView.detail.thresholdPatch') }}</option>
+                </select>
+              </div>
+              <div class="text-2xs mt-1 dd-text-muted">{{ t('notificationsView.detail.bellHelp') }}</div>
+            </div>
+
+            <div v-if="triggersSorted.length > 0" class="space-y-2">
+              <div class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">
+                {{ t('notificationsView.detail.templatesLabel') }}
+              </div>
+              <div class="text-2xs dd-text-muted">{{ t('notificationsView.detail.templatesHelp') }}</div>
+              <select
+                v-model="detailTemplateTriggerId"
+                :aria-label="t('notificationsView.detail.templateTriggerAriaLabel')"
+                class="w-full px-2.5 py-1.5 dd-rounded text-2xs-plus dd-bg dd-text"
+              >
+                <option v-for="trigger in triggersSorted" :key="trigger.id" :value="trigger.id">
+                  {{ trigger.name }} ({{ trigger.id }})
+                </option>
+              </select>
+              <label class="block text-2xs dd-text-muted">
+                {{ t('notificationsView.detail.simpleTitle') }}
+                <textarea
+                  :value="templateFieldValue('simpleTitle')"
+                  :aria-label="t('notificationsView.detail.simpleTitleAriaLabel')"
+                  rows="2"
+                  class="mt-1 w-full px-2.5 py-2 dd-rounded text-2xs font-mono dd-bg dd-text"
+                  @input="setTemplateField('simpleTitle', ($event.target as HTMLTextAreaElement).value)"
+                />
+              </label>
+              <label class="block text-2xs dd-text-muted">
+                {{ t('notificationsView.detail.simpleBody') }}
+                <textarea
+                  :value="templateFieldValue('simpleBody')"
+                  :aria-label="t('notificationsView.detail.simpleBodyAriaLabel')"
+                  rows="4"
+                  class="mt-1 w-full px-2.5 py-2 dd-rounded text-2xs font-mono dd-bg dd-text"
+                  @input="setTemplateField('simpleBody', ($event.target as HTMLTextAreaElement).value)"
+                />
+              </label>
+              <label class="block text-2xs dd-text-muted">
+                {{ t('notificationsView.detail.batchTitle') }}
+                <textarea
+                  :value="templateFieldValue('batchTitle')"
+                  :aria-label="t('notificationsView.detail.batchTitleAriaLabel')"
+                  rows="2"
+                  class="mt-1 w-full px-2.5 py-2 dd-rounded text-2xs font-mono dd-bg dd-text"
+                  @input="setTemplateField('batchTitle', ($event.target as HTMLTextAreaElement).value)"
+                />
+              </label>
+              <div class="flex items-center gap-2">
+                <AppButton
+                  size="none"
+                  variant="plain"
+                  class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold"
+                  :aria-label="t('notificationsView.detail.previewAriaLabel')"
+                  :disabled="templatePreviewLoading"
+                  @click="previewSelectedTemplate"
+                >
+                  {{ templatePreviewLoading ? t('notificationsView.detail.previewing') : t('notificationsView.detail.preview') }}
+                </AppButton>
+                <AppButton
+                  size="none"
+                  variant="text-muted"
+                  class="px-3 py-1.5 text-2xs-plus"
+                  @click="resetTemplate"
+                >
+                  {{ t('notificationsView.detail.resetTemplate') }}
+                </AppButton>
+              </div>
+              <div v-if="templatePreviewError" class="text-2xs dd-text-danger">{{ templatePreviewError }}</div>
+              <div v-if="templatePreview" class="space-y-1 p-2.5 dd-rounded text-2xs dd-bg-elevated">
+                <div><strong>{{ t('notificationsView.detail.simpleTitle') }}:</strong> {{ templatePreview.simpleTitle }}</div>
+                <div class="whitespace-pre-wrap"><strong>{{ t('notificationsView.detail.simpleBody') }}:</strong> {{ templatePreview.simpleBody }}</div>
+                <div><strong>{{ t('notificationsView.detail.batchTitle') }}:</strong> {{ templatePreview.batchTitle }}</div>
               </div>
             </div>
 

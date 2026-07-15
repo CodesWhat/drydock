@@ -93,6 +93,17 @@ describe('DHI Registry', () => {
     expect(result.headers.Authorization).toBe('Bearer public-token');
   });
 
+  test('should reuse the DHI token until it expires', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { token: 'auth-token' } });
+    dhi.getAuthCredentials = vi.fn().mockReturnValue('base64credentials');
+
+    await dhi.authenticate({ name: 'python' }, { headers: {} });
+    await dhi.authenticate({ name: 'python' }, { headers: {} });
+
+    expect(axios).toHaveBeenCalledTimes(1);
+  });
+
   test('should reject ambiguous auth configuration', async () => {
     expect(() =>
       dhi.validateConfiguration({
@@ -137,7 +148,7 @@ describe('DHI Registry', () => {
   test('should propagate 429 rate limit errors from authenticate', async () => {
     const { default: axios } = await import('axios');
     const error = new Error('Request failed with status code 429');
-    (error as any).response = { status: 429 };
+    (error as any).response = { status: 429, headers: { 'retry-after': '0' } };
     axios.mockRejectedValue(error);
     const image = { name: 'python' };
 

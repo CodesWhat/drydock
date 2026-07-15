@@ -13,6 +13,12 @@ export type IdentityAwareRateLimitRequestLike = {
   };
 };
 
+export function isRequestAuthenticated(
+  request: Pick<IdentityAwareRateLimitRequestLike, 'isAuthenticated'>,
+): boolean {
+  return typeof request.isAuthenticated === 'function' && request.isAuthenticated();
+}
+
 function getTrimmedString(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -24,7 +30,7 @@ function getTrimmedString(value: unknown): string | undefined {
 function getIpRateLimitKey(
   request: Pick<IdentityAwareRateLimitRequestLike, 'ip' | 'socket'>,
 ): string {
-  const requestIp = getTrimmedString(request.socket?.remoteAddress) || getTrimmedString(request.ip);
+  const requestIp = getTrimmedString(request.ip) || getTrimmedString(request.socket?.remoteAddress);
   if (!requestIp) {
     return 'ip:unknown';
   }
@@ -34,7 +40,7 @@ function getIpRateLimitKey(
 function getAuthenticatedIdentityRateLimitKey(
   request: IdentityAwareRateLimitRequestLike,
 ): string | undefined {
-  if (typeof request.isAuthenticated !== 'function' || !request.isAuthenticated()) {
+  if (!isRequestAuthenticated(request)) {
     return undefined;
   }
 

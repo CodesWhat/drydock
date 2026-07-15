@@ -36,25 +36,30 @@ test('init should replay accumulated legacy counts into counter metrics', async 
   fresh.recordLegacyInput('env', 'WUD_REPLAY_ENV');
   fresh.recordLegacyInput('label', 'wud.replay.label');
   fresh.recordLegacyInput('label', 'wud.replay.label');
+  fresh.recordLegacyInput('api', '/containers');
   fresh.init();
 
   expect(counterInc).toHaveBeenCalledWith({ source: 'env', key: 'WUD_REPLAY_ENV' }, 1);
   expect(counterInc).toHaveBeenCalledWith({ source: 'label', key: 'wud.replay.label' }, 2);
+  expect(counterInc).toHaveBeenCalledWith({ source: 'api', key: '/containers' }, 1);
 });
 
-test('getLegacyInputSummary should include tracked env and label keys', () => {
+test('getLegacyInputSummary should include tracked env, label, and api keys', () => {
   const uniqueSuffix = Date.now().toString();
   const envKey = `WUD_SUMMARY_${uniqueSuffix}`;
   const labelKey = `wud.summary.${uniqueSuffix}`;
+  const apiKey = `/summary-${uniqueSuffix}`;
 
   compatibility.recordLegacyInput('env', envKey);
   compatibility.recordLegacyInput('label', labelKey);
+  compatibility.recordLegacyInput('api', apiKey);
 
   const summary = compatibility.getLegacyInputSummary();
 
-  expect(summary.total).toBeGreaterThanOrEqual(2);
+  expect(summary.total).toBeGreaterThanOrEqual(3);
   expect(summary.env.keys).toContain(envKey);
   expect(summary.label.keys).toContain(labelKey);
+  expect(summary.api.keys).toContain(apiKey);
 });
 
 test('init and recordLegacyInput should be no-ops when counter factory returns no counter', async () => {

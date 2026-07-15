@@ -8,6 +8,7 @@ const {
   createFsMock,
   createConfigMock,
   createCollectionsMock,
+  createContainerMock,
   createAgentKeysMock,
   createLogMock,
   registerCommonMocks,
@@ -44,6 +45,15 @@ const {
     return { createCollections: vi.fn(), completeStartupInitialization: vi.fn() };
   }
 
+  function createContainerMock(overrides = {}) {
+    return {
+      ...createCollectionsMock(),
+      getContainersRaw: vi.fn(() => []),
+      updateContainer: vi.fn(),
+      ...overrides,
+    };
+  }
+
   function createAgentKeysMock() {
     return {
       createCollections: vi.fn(),
@@ -64,6 +74,8 @@ const {
       lokiInstance?: Parameters<typeof createLokiMock>[2];
       fs?: Record<string, unknown>;
       config?: Record<string, unknown>;
+      container?: Record<string, unknown>;
+      migrateInlineSboms?: (options: Record<string, any>) => Promise<Record<string, number>>;
       portwingAuthorizedKeysPath?: string | undefined;
     } = {},
   ) {
@@ -75,16 +87,26 @@ const {
       ...createConfigMock(overrides.config ?? STORE_CONFIG),
       getPortwingAuthorizedKeysPath: vi.fn(() => overrides.portwingAuthorizedKeysPath),
     }));
+    vi.doMock('../security/sbom-migration.js', async () => {
+      const actual = await vi.importActual<typeof import('../security/sbom-migration.js')>(
+        '../security/sbom-migration.js',
+      );
+      return overrides.migrateInlineSboms
+        ? { ...actual, migrateInlineSboms: vi.fn(overrides.migrateInlineSboms) }
+        : actual;
+    });
     vi.doMock('./agent-keys', createAgentKeysMock);
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
-    vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./container', () => createContainerMock(overrides.container));
+    vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./notification-outbox', createCollectionsMock);
     vi.doMock('./secrets', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
+    vi.doMock('./ui-preferences', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
     vi.doMock('../log', createLogMock);
   }
@@ -95,6 +117,7 @@ const {
     createFsMock,
     createConfigMock,
     createCollectionsMock,
+    createContainerMock,
     createAgentKeysMock,
     createLogMock,
     registerCommonMocks,
@@ -112,13 +135,15 @@ vi.mock('../configuration', () => ({
 vi.mock('./app', createCollectionsMock);
 vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
-vi.mock('./container', createCollectionsMock);
+vi.mock('./container', createContainerMock);
+vi.mock('./name-bindings', createCollectionsMock);
 vi.mock('./notification', createCollectionsMock);
 vi.mock('./notification-history', createCollectionsMock);
 vi.mock('./agent-keys', createAgentKeysMock);
 vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
+vi.mock('./ui-preferences', createCollectionsMock);
 vi.mock('./update-operation', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
@@ -142,12 +167,14 @@ describe('Store Module', () => {
     const container = await import('./container.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
+    const uiPreferences = await import('./ui-preferences.js');
     const updateOperation = await import('./update-operation.js');
 
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
     expect(app.completeStartupInitialization).toHaveBeenCalled();
     expect(container.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
@@ -182,6 +209,32 @@ describe('Store Module', () => {
     await expect(storeWithError.init()).rejects.toThrow('Database load failed');
   });
 
+  test('should reject initialization when post-load SBOM migration rejects', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+      container: {
+        getContainersRaw: vi.fn(() => {
+          throw new Error('SBOM migration failed');
+        }),
+      },
+    });
+
+    const storeWithMigrationError = await import('./index.js');
+    const initWithDeadline = Promise.race([
+      storeWithMigrationError.init(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Store initialization did not settle')), 100);
+      }),
+    ]);
+
+    await expect(initWithDeadline).rejects.toThrow('SBOM migration failed');
+  });
+
   test('should initialize store in memory mode', async () => {
     vi.resetModules();
     registerCommonMocks({
@@ -192,17 +245,71 @@ describe('Store Module', () => {
     const storeMemory = await import('./index.js');
     await storeMemory.init({ memory: true });
 
+    expect(storeMemory.isMemoryStore()).toBe(true);
+
     const app = await import('./app.js');
     const container = await import('./container.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
+    const uiPreferences = await import('./ui-preferences.js');
     const updateOperation = await import('./update-operation.js');
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
     expect(app.completeStartupInitialization).toHaveBeenCalled();
+  });
+
+  test('should report an uninitialized store as memory-only and a loaded store as persistent', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeMode = await import('./index.js');
+    expect(storeMode.isMemoryStore()).toBe(true);
+
+    await storeMode.init();
+
+    expect(storeMode.isMemoryStore()).toBe(false);
+  });
+
+  test('should persist migrated SBOM metadata and log partial migration failures', async () => {
+    vi.resetModules();
+    const migratedContainer = { id: 'container-1', security: { sbom: { documentRefs: {} } } };
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+      migrateInlineSboms: vi.fn(async ({ persist }) => {
+        persist(migratedContainer);
+        return { migratedRecords: 1, migratedDocuments: 2, failures: 1 };
+      }),
+    });
+
+    const storeWithMigration = await import('./index.js');
+    await storeWithMigration.init();
+
+    const container = await import('./container.js');
+    const Loki = (await import('lokijs')).default;
+    const logger = (await import('../log/index.js')).default;
+    const scopedLog = logger.child.mock.results[0].value;
+    expect(container.updateContainer).toHaveBeenCalledWith(migratedContainer);
+    expect(Loki.mock.results[0].value.saveDatabase).toHaveBeenCalledOnce();
+    expect(scopedLog.info).toHaveBeenCalledWith(
+      'Migrated 2 inline SBOM document(s) across 1 record(s)',
+    );
+    expect(scopedLog.warn).toHaveBeenCalledWith(
+      'Failed to migrate 1 SBOM record(s); inline data was preserved for retry',
+    );
   });
 
   test('should save database when persistence is enabled', async () => {
@@ -274,7 +381,7 @@ describe('Store Module', () => {
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
-    vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./container', createContainerMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
@@ -357,14 +464,46 @@ describe('Store Module', () => {
       path: '/test/store/test.json',
       collectionCount: 6,
       documentCount: 8,
+      serializedBytes: 91,
       lastPersistAt: '2026-03-18T12:34:56.000Z',
       collections: [
-        { name: 'unknown', documents: 0 },
-        { name: 'unknown', documents: 0 },
-        { name: 'unknown', documents: 0 },
-        { name: 'bad-data', documents: 0 },
-        { name: 'data', documents: 3 },
-        { name: 'named', documents: 5 },
+        { name: 'unknown', documents: 0, serializedBytes: 3 },
+        { name: 'unknown', documents: 0, serializedBytes: 2 },
+        { name: 'unknown', documents: 0, serializedBytes: 2 },
+        { name: 'bad-data', documents: 0, serializedBytes: 38 },
+        { name: 'data', documents: 3, serializedBytes: 30 },
+        { name: 'named', documents: 5, serializedBytes: 16 },
+      ],
+    });
+  });
+
+  test('should attribute UTF-8 serialized bytes and tolerate an unserializable collection', async () => {
+    vi.resetModules();
+
+    const circularCollection: Record<string, unknown> = { name: 'circular', data: [] };
+    circularCollection.self = circularCollection;
+    registerCommonMocks({
+      lokiInstance: () => ({
+        collections: [
+          Symbol('unserializable'),
+          { name: 'unicode', data: [{ label: 'café 🚢' }] },
+          circularCollection,
+        ],
+        loadDatabase: vi.fn((options, callback) => callback(null)),
+        saveDatabase: vi.fn((callback) => callback(null)),
+      }),
+      fs: { existsSync: vi.fn(() => true), mkdirSync: vi.fn(), renameSync: vi.fn() },
+    });
+
+    const storeWithByteStats = await import('./index.js');
+    await storeWithByteStats.init();
+
+    expect(storeWithByteStats.getDebugSnapshot()).toMatchObject({
+      serializedBytes: 50,
+      collections: [
+        { name: 'unknown', documents: 0, serializedBytes: 0 },
+        { name: 'unicode', documents: 1, serializedBytes: 50 },
+        { name: 'circular', documents: 0, serializedBytes: 0 },
       ],
     });
   });
@@ -394,6 +533,7 @@ describe('Store Module', () => {
       path: '/test/store/test.json',
       collectionCount: 0,
       documentCount: 0,
+      serializedBytes: 0,
       lastPersistAt: undefined,
       collections: [],
     });
@@ -423,6 +563,7 @@ describe('Store Module', () => {
       path: undefined,
       collectionCount: 0,
       documentCount: 0,
+      serializedBytes: 0,
       lastPersistAt: undefined,
       collections: [],
     });
@@ -457,8 +598,9 @@ describe('Store Module', () => {
       path: '/test/store/test.json',
       collectionCount: 1,
       documentCount: 1,
+      serializedBytes: 15,
       lastPersistAt: undefined,
-      collections: [{ name: 'only', documents: 1 }],
+      collections: [{ name: 'only', documents: 1, serializedBytes: 15 }],
     });
   });
 
@@ -514,7 +656,8 @@ describe('Store Module', () => {
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
-    vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./container', createContainerMock);
+    vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./notification-outbox', createCollectionsMock);

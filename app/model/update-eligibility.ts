@@ -89,6 +89,23 @@ export function getPrimaryHardBlocker(
   return getHardBlockers(eligibility)[0];
 }
 
+type UpdateSecurityScan = NonNullable<NonNullable<Container['security']>['updateScan']>;
+
+function updateScanMatchesCandidate(container: Container, updateScan: UpdateSecurityScan): boolean {
+  const candidateDigest = container.result?.digest;
+  if (candidateDigest) {
+    return (
+      updateScan.imageDigest === candidateDigest || updateScan.image.endsWith(`@${candidateDigest}`)
+    );
+  }
+
+  const candidateTag = container.result?.tag;
+  return Boolean(
+    candidateTag &&
+      (updateScan.image === candidateTag || updateScan.image.endsWith(`:${candidateTag}`)),
+  );
+}
+
 function makeBlocker(blocker: Omit<UpdateBlocker, 'severity'>): UpdateBlocker {
   return { ...blocker, severity: BLOCKER_SEVERITY[blocker.reason] };
 }
@@ -243,9 +260,14 @@ export function computeUpdateEligibility(
   // current container's existing scan is blocked. The candidate scan reflects the
   // image we'd pull; the current scan reflects vulnerabilities we're already running.
   // Either is grounds to halt an update until the operator triages.
+  const updateScan = container.security?.updateScan;
+  const candidatePassedRelative =
+    updateScan?.status === 'passed' &&
+    updateScan.relativeGate?.decision === 'passed' &&
+    updateScanMatchesCandidate(container, updateScan);
   if (
     container.security?.updateScan?.status === 'blocked' ||
-    container.security?.scan?.status === 'blocked'
+    (container.security?.scan?.status === 'blocked' && !candidatePassedRelative)
   ) {
     blockers.push(
       makeBlocker({
@@ -350,6 +372,9 @@ export function computeUpdateEligibility(
     const maturityMinAgeMs = maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
 
     if (maturityStartMs === undefined || now - maturityStartMs < maturityMinAgeMs) {
+      const policySource =
+        container.updatePolicySources?.maturityMinAgeDays ??
+        container.updatePolicySources?.maturityMode;
       const remainingMs =
         maturityStartMs !== undefined
           ? Math.max(0, maturityMinAgeMs - (now - maturityStartMs))
@@ -363,12 +388,13 @@ export function computeUpdateEligibility(
       blockers.push(
         makeBlocker({
           reason: 'maturity-not-reached',
-          message: `Maturity policy requires updates to be at least ${maturityMinAgeDays} days old (${remainingDays} day${remainingDays !== 1 ? 's' : ''} remaining).`,
+          message: `Maturity policy requires updates to be at least ${maturityMinAgeDays} days old${policySource ? ` (from ${policySource})` : ''} (${remainingDays} day${remainingDays !== 1 ? 's' : ''} remaining).`,
           actionable: true,
           actionHint: "Change maturity mode to 'all' or wait for the gate to clear.",
           ...(liftableAt ? { liftableAt } : {}),
           details: {
             minAgeDays: maturityMinAgeDays,
+            ...(policySource ? { policySource } : {}),
             remainingMs,
           },
         }),
@@ -469,7 +495,9 @@ export function computeUpdateEligibility(
     }
 
     // 8. trigger-excluded / 9. trigger-not-included
-    const { triggerInclude, triggerExclude } = container;
+    // Action admission reads the action-scoped labels explicitly, never the deprecated mirror.
+    const { actionTriggerInclude: triggerInclude, actionTriggerExclude: triggerExclude } =
+      container;
     const included = t.isTriggerIncluded(container, triggerInclude);
     const excluded = t.isTriggerExcluded(container, triggerExclude);
 

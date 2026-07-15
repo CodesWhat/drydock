@@ -456,7 +456,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect((context.updateOperationStore as any).listActiveOperations).toHaveBeenCalledTimes(1);
@@ -508,7 +508,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation?.id).toBe('op-1');
@@ -574,7 +574,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation?.id).toBe('op-agent-a');
@@ -623,7 +623,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation?.id).toBe('op-agent-a');
@@ -665,7 +665,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(Object.getOwnPropertyDescriptor(response.data[0]!, 'updateOperation')).toEqual({
@@ -703,7 +703,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation?.id).toBe('op-legacy');
@@ -745,7 +745,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation).toEqual({
@@ -785,7 +785,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation).toEqual({
@@ -829,7 +829,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
@@ -858,7 +858,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
@@ -871,7 +871,7 @@ describe('buildContainerListResponse', () => {
     expect(response.data).toHaveLength(2);
     expect(response.hasMore).toBe(false);
     expect(response._links).toEqual({
-      self: '/api/containers?limit=10&offset=0',
+      self: '/api/v1/containers?limit=10&offset=0',
     });
   });
 
@@ -900,7 +900,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security?.scan?.vulnerabilities).toEqual([]);
@@ -932,7 +932,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { includeVulnerabilities: 'true', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security?.scan?.vulnerabilities).toEqual(['v1']);
@@ -970,7 +970,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security?.scan?.vulnerabilities).toEqual([]);
@@ -1007,7 +1007,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.id).toBe('c1');
@@ -1039,7 +1039,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { kind: 'all', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
@@ -1065,12 +1065,12 @@ describe('buildContainerListResponse', () => {
     buildContainerListResponse(
       context,
       { status: 'update-available', watcher: 'local', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
     buildContainerListResponse(
       context,
       { status: 'running', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenNthCalledWith(
@@ -1100,7 +1100,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '0', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
@@ -1113,35 +1113,38 @@ describe('buildContainerListResponse', () => {
     expect(response.hasMore).toBe(false);
   });
 
-  test('uses the full-collection path when sorting requires in-memory processing', () => {
+  test('pushes explicit sorting and pagination into the store', () => {
     const containers = [
       createContainer({ id: 'c1', name: 'beta' }),
       createContainer({ id: 'c2', name: 'alpha' }),
     ];
     const context: CrudHandlerContext = {
       ...createMockContext(),
-      getContainersFromStore: vi.fn(() => containers),
-      getContainerCountFromStore: vi.fn(),
+      getContainersFromStore: vi.fn(() => [containers[1]!]),
+      getContainerCountFromStore: vi.fn(() => 2),
       redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
     };
 
     const response = buildContainerListResponse(
       context,
       { sort: 'name', limit: '1', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
       { excludeRollbackContainers: true },
-      { limit: 0, offset: 0 },
+      { limit: 1, offset: 0, sort: 'name' },
     );
-    expect(context.getContainerCountFromStore).not.toHaveBeenCalled();
+    expect(context.getContainerCountFromStore).toHaveBeenCalledWith({
+      excludeRollbackContainers: true,
+    });
     expect(response.total).toBe(2);
     expect(response.data).toHaveLength(1);
+    expect(response.data[0]?.name).toBe('alpha');
     expect(response.hasMore).toBe(true);
   });
 
-  test('uses the full-collection path without count lookup when pagination is zeroed', () => {
+  test('delegates sorting without count lookup when pagination is zeroed', () => {
     const containers = [
       createContainer({ id: 'c1', name: 'beta' }),
       createContainer({ id: 'c2', name: 'alpha' }),
@@ -1156,12 +1159,12 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { sort: 'name', limit: '0', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
       { excludeRollbackContainers: true },
-      { limit: 0, offset: 0 },
+      { limit: 0, offset: 0, sort: 'name' },
     );
     expect(context.getContainerCountFromStore).not.toHaveBeenCalled();
     expect(response.total).toBe(2);
@@ -1200,7 +1203,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security?.sbom).toBeUndefined();
@@ -1245,7 +1248,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { includeVulnerabilities: 'true', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     // Vulnerabilities are preserved when explicitly opted in
@@ -1270,7 +1273,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security).toBeUndefined();
@@ -1295,7 +1298,7 @@ describe('buildContainerListResponse', () => {
       redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
     };
 
-    buildContainerListResponse(context, { limit: '10', offset: '0' } as any, '/api/containers');
+    buildContainerListResponse(context, { limit: '10', offset: '0' } as any, '/api/v1/containers');
 
     // The underlying store container must not be mutated
     expect((container.security as any).sbom).toBe(sbomDoc);
@@ -1306,10 +1309,11 @@ describe('buildContainerListResponse', () => {
 
 describe('attachUpdateEligibility / buildEligibilityContext', () => {
   // Helper: container with a raw tag update so computeUpdateEligibility reaches getActiveOperation
-  function createContainerWithUpdate(): Container {
+  function createContainerWithUpdate(overrides: Partial<Container> = {}): Container {
     return createContainer({
       result: { tag: '1.1.0' },
       updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0', semverDiff: 'minor' },
+      ...overrides,
     });
   }
 
@@ -1322,6 +1326,101 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
     const container = createContainerWithUpdate();
     attachUpdateEligibility(context, container);
     expect(getTriggers).toHaveBeenCalled();
+  });
+
+  test('reports a closed maintenance window from the owning watcher', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue({
+        'docker.local': { isMaintenanceWindowOpen: vi.fn().mockReturnValue(false) },
+      }),
+    };
+
+    const result = attachUpdateEligibility(context, createContainerWithUpdate());
+
+    expect(
+      (result as any).updateEligibility.blockers.find(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBeDefined();
+  });
+
+  test('uses the agent-prefixed watcher id for maintenance-window state', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue({
+        'edge.docker.local': { isMaintenanceWindowOpen: vi.fn().mockReturnValue(false) },
+      }),
+    };
+
+    const result = attachUpdateEligibility(
+      context,
+      createContainerWithUpdate({ agent: 'edge', watcher: 'local' }),
+    );
+
+    expect(
+      (result as any).updateEligibility.blockers.some(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBe(true);
+  });
+
+  test('uses masked maintenance-window state from a remote agent watcher', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue({
+        'edge.docker.local': { configuration: { maintenancewindowopen: false } },
+      }),
+    };
+
+    const result = attachUpdateEligibility(
+      context,
+      createContainerWithUpdate({ agent: 'edge', watcher: 'local' }),
+    );
+
+    expect(
+      (result as any).updateEligibility.blockers.some(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBe(true);
+  });
+
+  test('prefers the live watcher method over masked configuration', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue({
+        'docker.local': {
+          configuration: { maintenancewindowopen: false },
+          isMaintenanceWindowOpen: vi.fn().mockReturnValue(true),
+        },
+      }),
+    };
+
+    const result = attachUpdateEligibility(context, createContainerWithUpdate());
+
+    expect(
+      (result as any).updateEligibility.blockers.some(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBe(false);
+  });
+
+  test.each([
+    ['watcher is unavailable', {}],
+    ['watcher method is unavailable', { 'docker.local': {} }],
+  ])('fails open when the %s', (_scenario, watchers) => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue(watchers),
+    };
+
+    const result = attachUpdateEligibility(context, createContainerWithUpdate());
+
+    expect(
+      (result as any).updateEligibility.blockers.some(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBe(false);
   });
 
   test('returns active-operation from legacy byName operation when byId is missing', () => {

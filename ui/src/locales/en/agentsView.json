@@ -5,8 +5,6 @@
       "filterPlaceholder": "Filter by name...",
       "clearFilter": "Clear",
       "emptyFiltered": "No agents match your filters",
-      "toggleColumns": "Toggle columns",
-      "columnPickerHeading": "Columns",
       "loadError": "Failed to load agents",
       "status": {
         "connected": "Connected",
@@ -20,10 +18,6 @@
         "os": "OS",
         "version": "Version",
         "lastSeen": "Last Seen"
-      },
-      "card": {
-        "running": "running",
-        "stopped": "stopped"
       }
     },
     "detail": {
@@ -82,9 +76,6 @@
         "dockerSocket": "Docker Socket",
         "lastSeen": "Last Seen",
         "never": "never"
-      },
-      "listView": {
-        "details": "Details"
       }
     }
   }

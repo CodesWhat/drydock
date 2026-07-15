@@ -7,15 +7,15 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 The `ocir` registry lets you configure [OCIR](https://docs.oracle.com/en-us/iaas/Content/Registry/Concepts/registryoverview.htm) integration.
 
-Drydock automatically detects OCIR registries by matching `*.ocir.io` hostnames.
+Drydock automatically detects the bare `ocir.io` hostname and subdomains such as `iad.ocir.io`.
 
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_OCIR_{REGISTRY_NAME}_LOGIN` | ⚪ | OCI username (e.g. `tenancy/user`) | DD_REGISTRY_OCIR_\{REGISTRY_NAME\}_PASSWORD must be defined | |
-| `DD_REGISTRY_OCIR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Auth token | DD_REGISTRY_OCIR_\{REGISTRY_NAME\}_LOGIN must be defined | |
-| `DD_REGISTRY_OCIR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | DD_REGISTRY_OCIR_\{REGISTRY_NAME\}_LOGIN/PASSWORD must not be defined | |
+| `DD_REGISTRY_OCIR_{REGISTRY_NAME}_LOGIN` | ⚪ | OCI username (`tenancy-namespace/user@example.com` for default-domain users; `tenancy-namespace/identity-domain/user@example.com` for federated or non-default-domain users) | `DD_REGISTRY_OCIR_{REGISTRY_NAME}_PASSWORD` must be defined | |
+| `DD_REGISTRY_OCIR_{REGISTRY_NAME}_PASSWORD` | ⚪ | Auth token | `DD_REGISTRY_OCIR_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_OCIR_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | `DD_REGISTRY_OCIR_{REGISTRY_NAME}_LOGIN/PASSWORD` must not be defined | |
 
 ## Examples
 
@@ -57,14 +57,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_OCIR_PRIVATE_AUTH=dGVuYW5jeS91c2VyOnh4eHh4
+      - DD_REGISTRY_OCIR_PRIVATE_AUTH=dGVuYW5jeS9vcmFjbGVpZGVudGl0eWNsb3Vkc2VydmljZS91c2VyQGV4YW1wbGUuY29tOnh4eHh4
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e "DD_REGISTRY_OCIR_PRIVATE_AUTH=dGVuYW5jeS91c2VyOnh4eHh4" \
+  -e "DD_REGISTRY_OCIR_PRIVATE_AUTH=dGVuYW5jeS9vcmFjbGVpZGVudGl0eWNsb3Vkc2VydmljZS91c2VyQGV4YW1wbGUuY29tOnh4eHh4" \
   ...
   codeswhat/drydock
 ```

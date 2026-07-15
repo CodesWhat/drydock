@@ -88,7 +88,7 @@ function markDirty() {
 
 watch(() => preferences.schemaVersion, markDirty);
 
-const DEEP_WATCH_SECTIONS = [
+export const DEEP_WATCH_SECTIONS = [
   'theme',
   'locale',
   'font',
@@ -99,6 +99,7 @@ const DEEP_WATCH_SECTIONS = [
   'dashboard',
   'tables',
   'views',
+  'sync',
 ] as const satisfies ReadonlyArray<Exclude<keyof PreferencesSchema, 'schemaVersion'>>;
 
 for (const section of DEEP_WATCH_SECTIONS) {

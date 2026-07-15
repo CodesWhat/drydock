@@ -10,6 +10,20 @@ const mockBroadcastScanStarted = vi.hoisted(() => vi.fn());
 const mockBroadcastScanCompleted = vi.hoisted(() => vi.fn());
 const mockEmitSecurityAlert = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockEmitSecurityScanCycleComplete = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const capturedSbomStorageRoot = vi.hoisted(() => ({ current: undefined as string | undefined }));
+const mockCreateSbomStorage = vi.hoisted(() =>
+  vi.fn((options: { rootDir: string }) => {
+    capturedSbomStorageRoot.current = options.rootDir;
+    return {
+      writeDocument: vi.fn(async ({ format, document }) => ({
+        key: `sbom/${'a'.repeat(64)}/${'b'.repeat(64)}/${format}.json`,
+        sha256: 'b'.repeat(64),
+        bytes: Buffer.byteLength(JSON.stringify(document)),
+      })),
+      readDocument: vi.fn(),
+    };
+  }),
+);
 const mockGetOperationsByContainerName = vi.hoisted(() => vi.fn());
 const mockCreateAuthenticatedRouteRateLimitKeyGenerator = vi.hoisted(() => vi.fn(() => undefined));
 const mockIsIdentityAwareRateLimitKeyingEnabled = vi.hoisted(() => vi.fn(() => false));
@@ -49,6 +63,8 @@ vi.mock('express-rate-limit', () => ({ default: vi.fn(() => 'rate-limit-middlewa
 
 vi.mock('../store/container', () => ({
   getContainers: vi.fn(() => []),
+  getContainersForStats: vi.fn(() => []),
+  getContainersRaw: vi.fn(() => []),
   getContainerCount: vi.fn(() => 0),
   getContainer: vi.fn(),
   getContainerRaw: vi.fn(),
@@ -76,6 +92,10 @@ vi.mock('../store/update-operation', () => ({
   },
 }));
 
+vi.mock('../store/index', () => ({
+  getConfiguration: vi.fn(() => ({ path: '/tmp/drydock-validated-store', file: 'dd.json' })),
+}));
+
 vi.mock('../registry', () => ({
   getState: vi.fn(() => ({
     watcher: {},
@@ -85,6 +105,7 @@ vi.mock('../registry', () => ({
 
 vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
+  getStoreConfiguration: vi.fn(() => ({ path: '/tmp/drydock-unvalidated-store' })),
   getServerConfiguration: vi.fn(() => ({
     feature: { delete: true },
   })),
@@ -109,6 +130,10 @@ vi.mock('../security/scan', () => ({
   getDigestScanCacheSize: vi.fn().mockReturnValue(0),
   updateDigestScanCache: vi.fn(),
   scanImageWithDedup: vi.fn(),
+}));
+
+vi.mock('../security/sbom-storage', () => ({
+  createSbomStorage: mockCreateSbomStorage,
 }));
 
 vi.mock('../triggers/providers/Trigger', () => ({
@@ -248,6 +273,10 @@ async function waitForBulkScanCycleComplete() {
 }
 
 describe('Container Router', () => {
+  test('uses the validated store path for SBOM storage', () => {
+    expect(capturedSbomStorageRoot.current).toBe('/tmp/drydock-validated-store');
+  });
+
   beforeEach(async () => {
     vi.clearAllMocks();
     mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
@@ -613,8 +642,8 @@ describe('Container Router', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=1',
-          next: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=2',
+          self: '/api/v1/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=1',
+          next: '/api/v1/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=2',
         },
       });
     });
@@ -707,7 +736,7 @@ describe('Container Router', () => {
 
   describe('getContainerSummary', () => {
     test('should return lightweight sidebar badge summary without vulnerability arrays', () => {
-      storeContainer.getContainers.mockReturnValue([
+      storeContainer.getContainersForStats.mockReturnValue([
         {
           id: 'c1',
           status: 'running',
@@ -744,7 +773,7 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: {} }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({});
+      expect(storeContainer.getContainersForStats).toHaveBeenCalledWith({});
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         containers: {
@@ -763,7 +792,7 @@ describe('Container Router', () => {
     });
 
     test('should treat missing status and missing scan summary as zero values', () => {
-      storeContainer.getContainers.mockReturnValue([
+      storeContainer.getContainersForStats.mockReturnValue([
         {
           id: 'c1',
         },
@@ -844,7 +873,7 @@ describe('Container Router', () => {
         },
       });
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/containers/recent-status',
+        path: '/api/v1/containers/recent-status',
         method: 'get',
         statusCode: '200',
         payload: res.json.mock.calls[0][0],
@@ -920,6 +949,31 @@ describe('Container Router', () => {
       );
       expect(result).toEqual([{ id: 'c1' }]);
     });
+
+    test('should translate an API sort mode into a store sort callback', () => {
+      storeContainer.getContainers.mockReturnValue([{ id: 'c2', name: 'beta' }]);
+
+      containerRouter.getContainersFromStore(
+        { watcher: 'docker' },
+        { limit: 1, offset: 0, sort: '-name' },
+      );
+
+      const storePagination = storeContainer.getContainers.mock.calls[0][1];
+      expect(storePagination).toEqual({
+        limit: 1,
+        offset: 0,
+        sort: expect.any(Function),
+      });
+      expect(
+        storePagination.sort([
+          { id: 'c1', name: 'alpha' },
+          { id: 'c2', name: 'beta' },
+        ]),
+      ).toEqual([
+        { id: 'c2', name: 'beta' },
+        { id: 'c1', name: 'alpha' },
+      ]);
+    });
   });
 
   describe('getContainerCountFromStore', () => {
@@ -941,7 +995,7 @@ describe('Container Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', name: 'test' }));
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/containers/{id}',
+        path: '/api/v1/containers/{id}',
         method: 'get',
         statusCode: '200',
         payload: res.json.mock.calls[0][0],
@@ -1088,8 +1142,8 @@ describe('Container Router', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers/c1/update-operations?limit=1&offset=1',
-          next: '/api/containers/c1/update-operations?limit=1&offset=2',
+          self: '/api/v1/containers/c1/update-operations?limit=1&offset=1',
+          next: '/api/v1/containers/c1/update-operations?limit=1&offset=2',
         },
       });
     });
@@ -1689,7 +1743,7 @@ describe('Container Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
     });
 
-    test('should return 400 when scanner is not trivy', async () => {
+    test('should return 400 when scanner provider is unsupported', async () => {
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });
       getSecurityConfiguration.mockReturnValue({
         enabled: true,
@@ -1962,7 +2016,11 @@ describe('Container Router', () => {
         expect.objectContaining({
           security: expect.objectContaining({
             scan: scanResult,
-            sbom: sbomResult,
+            sbom: expect.objectContaining({
+              status: 'generated',
+              documents: undefined,
+              documentRefs: {},
+            }),
           }),
         }),
       );
@@ -2379,13 +2437,16 @@ describe('Container Router', () => {
       expect(res.json).toHaveBeenCalledWith({ data: expect.any(Array), total: 1 });
     });
 
-    test('should filter triggers with triggerInclude', async () => {
+    test('should filter triggers with notificationTriggerInclude', async () => {
       Trigger.parseIncludeOrIncludeTriggerString.mockReturnValue({ id: 'slack.default' });
       Trigger.doesReferenceMatchId.mockImplementation((ref, id) => ref === id);
-      const res = await callGetContainerTriggers({ id: 'c1', triggerInclude: 'slack.default' }, [
-        { type: 'slack', name: 'default', configuration: {} },
-        { type: 'email', name: 'default', configuration: {} },
-      ]);
+      const res = await callGetContainerTriggers(
+        { id: 'c1', notificationTriggerInclude: 'slack.default' },
+        [
+          { type: 'slack', name: 'default', configuration: {} },
+          { type: 'email', name: 'default', configuration: {} },
+        ],
+      );
 
       expect(res.status).toHaveBeenCalledWith(200);
       const triggers = getTriggersFromResponse(res);
@@ -2393,13 +2454,16 @@ describe('Container Router', () => {
       expect(triggers[0].type).toBe('slack');
     });
 
-    test('should filter triggers with triggerExclude', async () => {
+    test('should filter triggers with notificationTriggerExclude', async () => {
       Trigger.parseIncludeOrIncludeTriggerString.mockReturnValue({ id: 'slack.default' });
       Trigger.doesReferenceMatchId.mockImplementation((ref, id) => ref === id);
-      const res = await callGetContainerTriggers({ id: 'c1', triggerExclude: 'slack.default' }, [
-        { type: 'slack', name: 'default', configuration: {} },
-        { type: 'email', name: 'default', configuration: {} },
-      ]);
+      const res = await callGetContainerTriggers(
+        { id: 'c1', notificationTriggerExclude: 'slack.default' },
+        [
+          { type: 'slack', name: 'default', configuration: {} },
+          { type: 'email', name: 'default', configuration: {} },
+        ],
+      );
 
       expect(res.status).toHaveBeenCalledWith(200);
       const triggers = getTriggersFromResponse(res);
@@ -2429,7 +2493,7 @@ describe('Container Router', () => {
       });
       Trigger.doesReferenceMatchId.mockReturnValue(true);
       const res = await callGetContainerTriggers(
-        { id: 'c1', triggerInclude: 'slack.default(all)' },
+        { id: 'c1', notificationTriggerInclude: 'slack.default(all)' },
         [{ type: 'slack', name: 'default', configuration: {} }],
       );
 
@@ -2935,9 +2999,7 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        error: expect.stringContaining('Error fetching logs from agent'),
-      });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to fetch container logs' });
     });
 
     test('should return 500 when watcher not found', async () => {
@@ -2971,9 +3033,7 @@ describe('Container Router', () => {
       const res = await callGetContainerLogs('c1');
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        error: expect.stringContaining('Error fetching container logs'),
-      });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to fetch container logs' });
     });
 
     test('should use first id when logs route param id is an array', async () => {

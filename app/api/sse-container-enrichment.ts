@@ -4,6 +4,7 @@ import {
   computeUpdateEligibility,
   type UpdateEligibilityContext,
 } from '../model/update-eligibility.js';
+import { getContainerMaintenanceWindowOpen } from '../model/watcher-maintenance-window.js';
 import * as registry from '../registry/index.js';
 import {
   getActiveOperationByContainerId,
@@ -12,9 +13,11 @@ import {
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 
 function buildEligibilityContext(container: Container): UpdateEligibilityContext {
+  const registryState = registry.getState();
   return {
-    triggers: registry.getState().trigger,
+    triggers: registryState.trigger,
     isSelfUpdateAvailable: isSelfUpdateAvailable(container),
+    maintenanceWindowOpen: getContainerMaintenanceWindowOpen(container, registryState.watcher),
     getActiveOperation: (c: Container) => {
       const byId = getActiveOperationByContainerId(c.id);
       // Scoped by agent+watcher so cross-agent same-named ops don't pollute enrichment (issue #411).

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppButton from '../AppButton.vue';
 import AppIconButton from '../AppIconButton.vue';
@@ -6,6 +7,7 @@ import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import type { UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { findDryRunActionTrigger } from '../../views/containers/useContainerTriggers';
 
 const { t } = useI18n();
 
@@ -40,6 +42,7 @@ const {
   detailPreview,
   detailComposePreview,
   previewError,
+  previewErrorAction,
   triggersLoading,
   detailTriggers,
   getTriggerKey,
@@ -65,6 +68,11 @@ const {
   confirmForceUpdate,
   formatTimestamp,
 } = useContainersViewTemplateContext();
+
+const dryRunTrigger = computed(() => findDryRunActionTrigger(detailTriggers.value));
+const dryRunTriggerId = computed(() =>
+  dryRunTrigger.value ? getTriggerKey(dryRunTrigger.value) : undefined,
+);
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return hasTrackedContainerAction(actionInProgress.value, container);
@@ -105,13 +113,23 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
               <AppButton v-else
                       size="md" variant="outlined"
                       :disabled="!selectedContainer.newTag || isActionInProgress(selectedContainer)"
+                      :title="dryRunTrigger ? t('containerComponents.fullPageActions.dryRunUpdateTooltip') : undefined"
+                      :data-test="dryRunTrigger ? 'dry-run-update-action' : undefined"
                       @click="confirmUpdate(selectedContainer)">
-                {{ t('containerComponents.fullPageActions.updateNow') }}
+                {{ dryRunTrigger ? t('containerComponents.fullPageActions.previewOnly') : t('containerComponents.fullPageActions.updateNow') }}
               </AppButton>
               <AppButton size="md" variant="outlined" :disabled="isActionInProgress(selectedContainer)"
                       @click="scanContainer(selectedContainer)">
                 {{ t('containerComponents.fullPageActions.scanNow') }}
               </AppButton>
+            </div>
+            <div
+              v-if="dryRunTriggerId"
+              class="mt-2 px-3 py-2 dd-rounded text-2xs-plus"
+              :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+              data-test="dry-run-trigger-condition"
+            >
+              {{ t('containerComponents.fullPageActions.dryRunCondition', { trigger: dryRunTriggerId }) }}
             </div>
           </div>
           <!-- Skip & Snooze group -->
@@ -294,7 +312,18 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
           <div v-else class="dd-text-muted italic">
             {{ t('containerComponents.fullPageActions.previewEmptyState') }}
           </div>
-          <p v-if="previewError" class="text-2xs-plus" style="color: var(--dd-danger);">{{ previewError }}</p>
+          <div v-if="previewError" class="space-y-2">
+            <p class="text-2xs-plus" style="color: var(--dd-danger);">{{ previewError }}</p>
+            <a
+              v-if="previewErrorAction"
+              :href="previewErrorAction.href"
+              class="inline-flex min-h-11 items-center px-3 dd-rounded text-2xs-plus font-semibold"
+              :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+              data-test="preview-error-action"
+            >
+              {{ previewErrorAction.label }}
+            </a>
+          </div>
         </div>
       </div>
     </div>

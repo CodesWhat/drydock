@@ -60,7 +60,7 @@ async function requestJson(pathname, options = {}) {
 
 function openSseConnection(timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
-    const targetUrl = new URL('/api/events/ui', getLoadTestTarget());
+    const targetUrl = new URL('/api/v1/events/ui', getLoadTestTarget());
     const transport = targetUrl.protocol === 'https:' ? https : http;
     let settled = false;
 
@@ -144,12 +144,12 @@ async function probeSseReconnect() {
 }
 
 async function probeConnectedAgentLogs() {
-  const agentsResponse = await requestJson('/api/agents');
+  const agentsResponse = await requestJson('/api/v1/agents');
   if (agentsResponse.status !== 200) {
     throw new Error(`Failed to list agents (status ${agentsResponse.status})`);
   }
 
-  const agents = Array.isArray(agentsResponse.body) ? agentsResponse.body : [];
+  const agents = Array.isArray(agentsResponse.body?.data) ? agentsResponse.body.data : [];
   const connectedAgent = agents.find(
     (agent) => agent && agent.connected === true && typeof agent.name === 'string',
   );
@@ -160,7 +160,7 @@ async function probeConnectedAgentLogs() {
   }
 
   const logsResponse = await requestJson(
-    `/api/agents/${encodeURIComponent(connectedAgent.name)}/log/entries?tail=100`,
+    `/api/v1/agents/${encodeURIComponent(connectedAgent.name)}/log/entries?tail=100`,
   );
   if (logsResponse.status !== 200) {
     throw new Error(`Expected 200 from connected agent log endpoint, got ${logsResponse.status}`);

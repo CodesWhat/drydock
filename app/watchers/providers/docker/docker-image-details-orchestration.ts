@@ -1,4 +1,4 @@
-import type { Container } from '../../../model/container.js';
+import { type Container, normalizeContainerHealth } from '../../../model/container.js';
 import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
@@ -13,6 +13,7 @@ import {
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
   isDockerWatcher,
+  warnTriggerCategoryScopeChangeIfNeeded,
 } from './container-init.js';
 import {
   canonicalizeContainerName,
@@ -32,16 +33,24 @@ import {
   mergeRuntimeDetails,
   normalizeRuntimeDetails,
 } from './runtime-details.js';
+import { applyDockerDeclarativeUpdatePolicy } from './update-policy.js';
 
 export interface ContainerLabelOverrides {
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
+  actionTriggerInclude?: string;
+  actionTriggerExclude?: string;
+  notificationTriggerInclude?: string;
+  notificationTriggerExclude?: string;
+  /** @deprecated compat mirror — see Container.triggerInclude/triggerExclude. */
   triggerInclude?: string;
+  /** @deprecated compat mirror. */
   triggerExclude?: string;
   registryLookupImage?: string;
   registryLookupUrl?: string;
@@ -60,6 +69,12 @@ interface DockerContainerSummary {
 interface DockerContainerInspectPayload {
   Config?: {
     Image?: string;
+    [key: string]: unknown;
+  };
+  State?: {
+    Health?: {
+      Status?: string;
+    };
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -91,9 +106,14 @@ interface ResolvedContainerLabelOverrides {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
+  actionTriggerInclude?: string;
+  actionTriggerExclude?: string;
+  notificationTriggerInclude?: string;
+  notificationTriggerExclude?: string;
   triggerInclude?: string;
   triggerExclude?: string;
   lookupImage?: string;
@@ -106,9 +126,14 @@ interface ResolvedContainerConfig {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: boolean;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
+  actionTriggerInclude?: string;
+  actionTriggerExclude?: string;
+  notificationTriggerInclude?: string;
+  notificationTriggerExclude?: string;
   triggerInclude?: string;
   triggerExclude?: string;
   lookupImage?: string;
@@ -136,6 +161,14 @@ interface DockerImageDetailsWatcher {
     socket?: string;
     protocol?: string;
     port?: number;
+    maturitymode?: 'all' | 'mature';
+    maturityminagedays?: number;
+    tag?: {
+      family?: string;
+      pin?: {
+        info?: boolean;
+      };
+    };
   };
   dockerApi: {
     getContainer: (id: string) => { inspect: () => Promise<DockerContainerInspectPayload> };
@@ -158,6 +191,10 @@ interface DockerImageDetailsHelpers {
     labelOverrides: ResolvedContainerLabelOverrides,
     matchingImgset: ResolvedImgset | undefined,
     containerLabels: Record<string, string>,
+    watcherTagDefaults?: {
+      family?: string;
+      pin?: { info?: boolean };
+    },
   ) => ResolvedContainerConfig;
   normalizeContainer: (container: Container) => Container;
   resolveImageName: (
@@ -200,7 +237,8 @@ interface RefreshStoredContainerImageFieldsContext {
   containerInspect: DockerContainerInspectPayload | undefined;
 }
 
-interface RefreshContainerAlreadyInStoreContext extends RefreshStoredContainerImageFieldsContext {
+interface RefreshContainerAlreadyInStoreContext
+  extends Omit<RefreshStoredContainerImageFieldsContext, 'containerInspect'> {
   runtimeDetailsFromSummary: RuntimeDetails;
 }
 
@@ -399,12 +437,24 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   watcher.log.debug(`Container ${containerInStore.id} already in store`);
 
   refreshContainerIdentityFromSummary(containerInStore, dockerContainerName);
+  applyDockerDeclarativeUpdatePolicy(
+    containerInStore,
+    container.Labels || {},
+    watcher.configuration,
+    { logger: watcher.log, containerName: dockerContainerName },
+  );
 
-  const shouldInspectContainer =
-    !watcher.configuration.watchevents || shouldRepairStoredImageReference(containerInStore);
-  const containerInspect = shouldInspectContainer
-    ? await inspectDiscoveredContainer(watcher, container.Id)
-    : undefined;
+  // Health is read unconditionally (decoupled from shouldInspectContainer /
+  // tag-repair gating) so the cron leg is an actual fallback for the
+  // events-disconnected/backoff/reconnect-window case, not a no-op in the
+  // default watchevents=true steady state (#198). inspectDiscoveredContainer
+  // swallows failures and resolves undefined, so only overwrite health when
+  // the inspect actually succeeded — a failed inspect degrades gracefully by
+  // leaving the previously stored health value untouched.
+  const containerInspect = await inspectDiscoveredContainer(watcher, container.Id);
+  if (containerInspect) {
+    containerInStore.health = normalizeContainerHealth(containerInspect.State?.Health?.Status);
+  }
 
   const runtimeDetailsToApply = await resolveRuntimeDetailsForStoredContainer(
     runtimeDetailsFromSummary,
@@ -527,6 +577,7 @@ function resolveContainerImageState(
     resolvedLabelOverrides,
     matchingImgset,
     containerLabels,
+    watcher.configuration.tag,
   );
   const tagName = helpers.resolveTagName(
     parsedImage,
@@ -697,7 +748,6 @@ export async function addImageDetailsToContainerOrchestration(
       helpers,
       runtimeDetailsFromSummary,
       containerInStore,
-      containerInspect: undefined,
     });
   }
 
@@ -723,16 +773,19 @@ export async function addImageDetailsToContainerOrchestration(
     containerInspect,
   );
   warnWhenUntrackableImage(watcher, dockerContainerName, isSemver, watchDigest, tagPrecision);
+  warnTriggerCategoryScopeChangeIfNeeded(dockerContainerName, resolvedConfig);
 
   const containerToReturn = helpers.normalizeContainer({
     id: containerId,
     name: dockerContainerName,
     status: container.State,
+    health: normalizeContainerHealth(containerInspect?.State?.Health?.Status),
     watcher: watcher.name,
     includeTags: resolvedConfig.includeTags,
     excludeTags: resolvedConfig.excludeTags,
     transformTags: resolvedConfig.transformTags,
     tagFamily: resolvedConfig.tagFamily,
+    tagPinInfo: resolvedConfig.tagPinInfo,
     linkTemplate: resolvedConfig.linkTemplate,
     displayName: getContainerDisplayName(
       dockerContainerName,
@@ -740,6 +793,10 @@ export async function addImageDetailsToContainerOrchestration(
       resolvedConfig.displayName,
     ),
     displayIcon: resolvedConfig.displayIcon,
+    actionTriggerInclude: resolvedConfig.actionTriggerInclude,
+    actionTriggerExclude: resolvedConfig.actionTriggerExclude,
+    notificationTriggerInclude: resolvedConfig.notificationTriggerInclude,
+    notificationTriggerExclude: resolvedConfig.notificationTriggerExclude,
     triggerInclude: resolvedConfig.triggerInclude,
     triggerExclude: resolvedConfig.triggerExclude,
     image: {
@@ -762,7 +819,13 @@ export async function addImageDetailsToContainerOrchestration(
       digest: {
         watch: watchDigest,
         repo: repoDigest,
-        value: repoDigest,
+        // A rebuild of an errored container must not reset the
+        // registry-reconciled digest value; only a genuine repo-digest
+        // change (image re-pulled) may.
+        value:
+          repoDigest !== undefined && repoDigest === containerInStore?.image?.digest?.repo
+            ? (containerInStore.image.digest.value ?? repoDigest)
+            : repoDigest,
       },
       // True when the live image inspect had no RepoDigests (built locally or
       // `docker load`ed) — lets findNewVersion skip a registry lookup that
@@ -798,6 +861,19 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
+  // A rebuild of an errored container must not discard user-set policy
+  // overrides (snoozes, skipped tags) stored on the existing doc —
+  // applyDockerDeclarativeUpdatePolicy would otherwise stamp `{}` and the
+  // store merge keeps whatever key the incoming doc carries.
+  if (containerInStore?.updatePolicyOverrides !== undefined) {
+    containerToReturn.updatePolicyOverrides = structuredClone(
+      containerInStore.updatePolicyOverrides,
+    );
+  }
+  applyDockerDeclarativeUpdatePolicy(containerToReturn, containerLabels, watcher.configuration, {
+    logger: watcher.log,
+    containerName: dockerContainerName,
+  });
   removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
 
   return containerToReturn;

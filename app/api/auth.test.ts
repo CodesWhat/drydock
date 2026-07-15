@@ -6,6 +6,7 @@ const {
   mockFs,
   mockRateLimit,
   mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  mockIsRequestAuthenticated,
   mockIsIdentityAwareRateLimitKeyingEnabled,
   mockDdEnvVars,
 } = vi.hoisted(() => {
@@ -24,6 +25,10 @@ const {
     },
     mockRateLimit: vi.fn(() => rateLimitMiddleware),
     mockCreateAuthenticatedRouteRateLimitKeyGenerator: vi.fn(() => undefined),
+    mockIsRequestAuthenticated: vi.fn(
+      (request: { isAuthenticated?: () => boolean }) =>
+        typeof request.isAuthenticated === 'function' && request.isAuthenticated(),
+    ),
     mockIsIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
     mockDdEnvVars: {} as Record<string, string | undefined>,
   };
@@ -109,6 +114,7 @@ vi.mock('./openapi-contract.js', () => ({
 }));
 vi.mock('./rate-limit-key.js', () => ({
   createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  isRequestAuthenticated: mockIsRequestAuthenticated,
   isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
 }));
 
@@ -134,6 +140,7 @@ function createApp() {
 function createResponse() {
   return {
     set: vi.fn().mockReturnThis(),
+    setHeader: vi.fn(),
     status: vi.fn().mockReturnThis(),
     json: vi.fn(),
     sendStatus: vi.fn(),
@@ -1338,6 +1345,65 @@ describe('Auth Router', () => {
 
       const authLimiter = mockRouter.use.mock.calls[0][0];
       expect(app.get).toHaveBeenCalledWith('/api/auth/methods', authLimiter, expect.any(Function));
+    });
+
+    test('should log a deprecation warning on every legacy auth methods request and still return strategies', () => {
+      registry.getState.mockReturnValue({ authentication: {} });
+      const app = createApp();
+      auth.init(app);
+
+      const call = app.get.mock.calls.find((c) => c[0] === '/api/auth/methods');
+      const handler = call[call.length - 1];
+      const res = createResponse();
+
+      handler({}, res);
+
+      expect(log.warn).toHaveBeenCalledWith(
+        'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /api/v1/auth/status instead.',
+      );
+      expect(res.setHeader).toHaveBeenCalledWith('Deprecation', '@1783123200');
+      expect(res.setHeader).toHaveBeenCalledWith('Sunset', 'Thu, 01 Jul 2027 00:00:00 GMT');
+      expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
+
+      // RFC 9745: Deprecation is the instant the resource BECAME deprecated
+      // (past/current), never the same instant as the future Sunset removal
+      // date.
+      const deprecationEpochMs =
+        Number(
+          (
+            res.setHeader.mock.calls.find((call: unknown[]) => call[0] === 'Deprecation') as [
+              string,
+              string,
+            ]
+          )[1].replace('@', ''),
+        ) * 1000;
+      const sunsetEpochMs = Date.parse('Thu, 01 Jul 2027 00:00:00 GMT');
+      expect(deprecationEpochMs).toBeLessThan(sunsetEpochMs);
+
+      log.warn.mockClear();
+      res.json.mockClear();
+      handler({}, res);
+
+      expect(log.warn).toHaveBeenCalledTimes(1);
+      expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
+    });
+
+    test('should emit deprecation headers and warnings for the legacy strategies response shape', () => {
+      registry.getState.mockReturnValue({ authentication: {} });
+      const app = createApp();
+      auth.init(app);
+      const call = mockRouter.get.mock.calls.find((c) => c[0] === '/strategies');
+      const handler = call[1];
+      const res = createResponse();
+
+      handler({}, res);
+
+      expect(log.warn).toHaveBeenCalledWith(
+        'GET /auth/strategies is deprecated and will be removed in v1.8.0. Use GET /api/v1/auth/status instead.',
+      );
+      expect(res.setHeader).toHaveBeenCalledWith('Deprecation', '@1783123200');
+      expect(res.setHeader).toHaveBeenCalledWith('Sunset', 'Sat, 01 Jul 2028 00:00:00 GMT');
+      expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
     });
 
     test('should register public auth status endpoints for login-time diagnostics', () => {
@@ -3395,6 +3461,66 @@ describe('Auth Router', () => {
           windowMs: 15 * 60 * 1000,
         }),
       );
+    });
+
+    test('authLimiter authenticates before evaluating the requested method and path', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const limiterOptions = mockRateLimit.mock.calls[0][0];
+      expect(limiterOptions.skip).toEqual(expect.any(Function));
+
+      const evaluations: string[] = [];
+      const request = {
+        get method() {
+          evaluations.push('method');
+          return 'GET';
+        },
+        get path() {
+          evaluations.push('path');
+          return '/user';
+        },
+        isAuthenticated: vi.fn(() => {
+          evaluations.push('authenticated');
+          return true;
+        }),
+      };
+
+      expect(limiterOptions.skip(request)).toBe(true);
+      expect(evaluations).toEqual(['authenticated', 'method', 'path']);
+      expect(mockIsRequestAuthenticated).toHaveBeenCalledWith(request);
+    });
+
+    test('authLimiter preserves the public auth budget only for authenticated GET /user', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const limiterOptions = mockRateLimit.mock.calls[0][0];
+      const userSession = vi.fn(() => true);
+      expect(
+        limiterOptions.skip({ method: 'GET', path: '/user', isAuthenticated: userSession }),
+      ).toBe(true);
+      expect(userSession).toHaveBeenCalledOnce();
+
+      const statusSession = vi.fn(() => true);
+      expect(
+        limiterOptions.skip({ method: 'GET', path: '/status', isAuthenticated: statusSession }),
+      ).toBe(false);
+      expect(statusSession).toHaveBeenCalledOnce();
+
+      const mutationSession = vi.fn(() => true);
+      expect(
+        limiterOptions.skip({ method: 'POST', path: '/user', isAuthenticated: mutationSession }),
+      ).toBe(false);
+      expect(mutationSession).toHaveBeenCalledOnce();
+
+      const anonymousSession = vi.fn(() => false);
+      expect(
+        limiterOptions.skip({ method: 'GET', path: '/user', isAuthenticated: anonymousSession }),
+      ).toBe(false);
+      expect(anonymousSession).toHaveBeenCalledOnce();
+
+      expect(limiterOptions.skip({ method: 'GET', path: '/user' })).toBe(false);
     });
 
     test('authLimiter standardHeaders is true', () => {

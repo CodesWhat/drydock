@@ -1,6 +1,6 @@
 {
   "name": "drydock-demo",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,19 +25,19 @@
     "@fontsource/source-code-pro": "5.2.7",
     "@iconify-json/fa6-solid": "1.2.4",
     "@iconify-json/heroicons": "1.2.3",
-    "@iconify-json/iconoir": "1.2.10",
-    "@iconify-json/lucide": "1.2.99",
+    "@iconify-json/iconoir": "1.2.11",
+    "@iconify-json/lucide": "1.2.116",
     "@iconify-json/ph": "1.2.2",
-    "@iconify-json/tabler": "1.2.32",
-    "@tailwindcss/vite": "4.2.2",
-    "@types/node": "25.5.0",
-    "@vitejs/plugin-vue": "6.0.5",
+    "@iconify-json/tabler": "1.2.35",
+    "@tailwindcss/vite": "4.3.2",
+    "@types/node": "25.9.4",
+    "@vitejs/plugin-vue": "6.0.7",
     "typescript": "5.9.3",
-    "vite": "7.3.5"
+    "vite": "7.3.6"
   },
   "overrides": {
-    "postcss": "8.5.10",
-    "yaml": "2.8.3",
+    "postcss": "8.5.16",
+    "yaml": "2.9.0",
     "esbuild": "0.28.1"
   },
   "msw": {

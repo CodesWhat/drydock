@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import DataTable from '@/components/DataTable.vue';
+import type { UpdateMode } from '@/services/settings';
 
 const { t } = useI18n();
 
@@ -26,6 +27,8 @@ const props = defineProps<{
   webhookEndpoints: WebhookEndpoint[];
   webhookExample: string;
   internetlessMode: boolean;
+  updateMode: UpdateMode;
+  updateModeLoaded: boolean;
   settingsLoading: boolean;
   cacheClearing: boolean;
   cacheCleared: number | null;
@@ -35,6 +38,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'toggle-internetless-mode'): void;
+  (e: 'update-mode', mode: UpdateMode): void;
   (e: 'clear-icon-cache'): void;
   (e: 'download-debug-dump'): void;
 }>();
@@ -65,6 +69,15 @@ const webhookColumns = computed(() => [
   },
 ]);
 
+const updateModeOptions = computed<Array<{ id: UpdateMode; label: string; description: string }>>(
+  () =>
+    (['notify', 'manual', 'auto'] as const).map((id) => ({
+      id,
+      label: t(`configView.general.updateMode.options.${id}.label`),
+      description: t(`configView.general.updateMode.options.${id}.description`),
+    })),
+);
+
 function isStaticTableRow() {
   return false;
 }
@@ -86,6 +99,52 @@ function isStaticTableRow() {
       :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
     >
       {{ props.settingsError }}
+    </div>
+
+    <div
+      class="dd-rounded overflow-hidden"
+      :style="{ backgroundColor: 'var(--dd-bg-card)' }"
+    >
+      <div class="px-5 py-3.5 flex items-center gap-2">
+        <AppIcon name="updates" :size="14" class="text-drydock-secondary" />
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.general.updateMode.title') }}</h2>
+      </div>
+      <div class="p-4">
+        <p class="dd-text-card-description mb-3">
+          {{ t('configView.general.updateMode.description') }}
+        </p>
+        <div
+          class="grid grid-cols-1 sm:grid-cols-3 gap-2"
+          role="group"
+          :aria-label="t('configView.general.updateMode.title')"
+        >
+          <AppButton
+            v-for="option in updateModeOptions"
+            :key="option.id"
+            size="none"
+            variant="plain"
+            weight="none"
+            class="flex flex-col items-start gap-1 px-4 py-3 min-h-11 dd-rounded text-left border transition-colors"
+            :class="props.updateMode === option.id ? 'ring-2 ring-drydock-secondary' : ''"
+            :style="{
+              backgroundColor: props.updateMode === option.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
+              borderColor: props.updateMode === option.id ? 'var(--dd-primary)' : 'var(--dd-border)',
+            }"
+            :aria-pressed="String(props.updateMode === option.id)"
+            :disabled="props.settingsLoading || !props.updateModeLoaded"
+            :data-test="`update-mode-${option.id}`"
+            @click="emit('update-mode', option.id)"
+          >
+            <span
+              class="dd-text-choice-title"
+              :class="props.updateMode === option.id ? 'text-drydock-secondary' : 'dd-text'"
+            >
+              {{ option.label }}
+            </span>
+            <span class="dd-text-choice-description dd-text-muted">{{ option.description }}</span>
+          </AppButton>
+        </div>
+      </div>
     </div>
 
     <div
@@ -219,6 +278,7 @@ function isStaticTableRow() {
             </div>
           </div>
           <ToggleSwitch
+            data-test="internetless-mode-toggle"
             :model-value="props.internetlessMode"
             :disabled="props.settingsLoading"
             @update:model-value="emit('toggle-internetless-mode')"

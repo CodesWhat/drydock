@@ -11,8 +11,6 @@ import type { ApiComponent } from '../types/api';
 
 const { t } = useI18n();
 
-const authViewMode = useViewMode('auth');
-
 const authData = ref<Record<string, unknown>[]>([]);
 const loading = ref(true);
 const error = ref('');
@@ -43,6 +41,10 @@ function authTypeBadge(type: string) {
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const authViewMode = useViewMode('auth');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -157,7 +159,8 @@ onMounted(async () => {
         v-model:showFilters="showFilters"
         :filtered-count="filteredAuth.length"
         :total-count="authData.length"
-        :active-filter-count="activeFilterCount">
+        :active-filter-count="activeFilterCount"
+        :hide-view-toggle="cardReflowForced">
         <template #filters>
           <input v-model="searchQuery"
                  type="text"
@@ -173,12 +176,14 @@ onMounted(async () => {
 
       <!-- Table view -->
       <DataTable
-        v-if="authViewMode === 'table' && !loading"
+        v-if="!loading"
         :columns="tableColumns"
         storage-key="auth"
         :rows="filteredAuth"
         row-key="id"
         :active-row="selectedAuth?.id"
+        :prefer-cards="authViewMode === 'cards'"
+        @update:card-reflow-forced="cardReflowForced = $event"
         @row-click="openDetail($event)">
         <template #cell-name="{ row }">
           <span class="font-medium dd-text">{{ row.name }}</span>
@@ -195,77 +200,41 @@ onMounted(async () => {
             {{ row.status }}
           </AppBadge>
         </template>
+        <template #card="{ row }">
+          <div class="relative flex flex-col flex-1">
+            <!-- Header: provider name + type badge -->
+            <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+              </div>
+              <AppBadge :custom="{ bg: authTypeBadge(row.type).bg, text: authTypeBadge(row.type).text }" size="xs" class="shrink-0 ml-2">
+                {{ authTypeBadge(row.type).label }}
+              </AppBadge>
+            </div>
+            <!-- Body: config entries -->
+            <div class="px-4 py-3">
+              <div class="grid grid-cols-1 gap-2 text-2xs-plus">
+                <div v-for="(val, key) in row.config" :key="key">
+                  <span class="dd-text-muted">{{ key }}</span>
+                  <div class="font-semibold truncate dd-text font-mono text-2xs">{{ val }}</div>
+                </div>
+              </div>
+            </div>
+            <!-- Footer: status -->
+            <div class="px-4 py-2.5 mt-auto"
+                 :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+              <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                       :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
+              <AppBadge :tone="row.status === 'active' ? 'success' : 'neutral'" size="xs" class="max-md:!hidden">
+                {{ row.status }}
+              </AppBadge>
+            </div>
+          </div>
+        </template>
         <template #empty>
           <EmptyState icon="filter" :message="t('authView.emptyFiltered')" :show-clear="activeFilterCount > 0" @clear="searchQuery = ''" />
         </template>
       </DataTable>
-
-      <!-- Card view -->
-      <DataCardGrid
-        v-if="authViewMode === 'cards' && !loading"
-        :items="filteredAuth"
-        item-key="id"
-        :selected-key="selectedAuth?.id"
-        @item-click="openDetail($event)">
-        <template #card="{ item: auth }">
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-            <div class="min-w-0">
-              <div class="text-sm-plus font-semibold truncate dd-text">{{ auth.name }}</div>
-            </div>
-            <AppBadge :custom="{ bg: authTypeBadge(auth.type).bg, text: authTypeBadge(auth.type).text }" size="xs" class="shrink-0 ml-2">
-              {{ authTypeBadge(auth.type).label }}
-            </AppBadge>
-          </div>
-          <div class="px-4 py-3">
-            <div class="grid grid-cols-1 gap-2 text-2xs-plus">
-              <div v-for="(val, key) in auth.config" :key="key">
-                <span class="dd-text-muted">{{ key }}</span>
-                <div class="font-semibold truncate dd-text font-mono text-2xs">{{ val }}</div>
-              </div>
-            </div>
-          </div>
-          <div class="px-4 py-2.5 mt-auto"
-               :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-            <AppIcon :name="auth.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
-                     :style="{ color: auth.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
-            <AppBadge :tone="auth.status === 'active' ? 'success' : 'neutral'" size="xs" class="max-md:!hidden">
-              {{ auth.status }}
-            </AppBadge>
-          </div>
-        </template>
-      </DataCardGrid>
-
-      <!-- List view (accordion) -->
-      <DataListAccordion
-        v-if="authViewMode === 'list' && !loading"
-        :items="filteredAuth"
-        item-key="id"
-        :selected-key="selectedAuth?.id"
-        @item-click="openDetail($event)">
-        <template #header="{ item: auth }">
-          <AppIcon name="auth" :size="14" class="dd-text-secondary" />
-          <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ auth.name }}</span>
-          <AppBadge :custom="{ bg: authTypeBadge(auth.type).bg, text: authTypeBadge(auth.type).text }" size="xs" class="shrink-0">
-            {{ authTypeBadge(auth.type).label }}
-          </AppBadge>
-        </template>
-        <template #details="{ item: auth }">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-            <DetailField v-for="(val, key) in auth.config" :key="key" :label="String(key)" mono compact>{{ val }}</DetailField>
-            <DetailField :label="t('authView.fields.status')" compact>
-              <AppBadge :tone="auth.status === 'active' ? 'success' : 'neutral'" size="sm" :uppercase="false">{{ auth.status }}</AppBadge>
-            </DetailField>
-          </div>
-        </template>
-      </DataListAccordion>
-
-      <!-- Empty state (cards/list) -->
-      <EmptyState
-        v-if="(authViewMode === 'cards' || authViewMode === 'list') && filteredAuth.length === 0 && !loading"
-        icon="filter"
-        :message="t('authView.emptyFiltered')"
-        :show-clear="activeFilterCount > 0"
-        @clear="searchQuery = ''" />
 
     <template #panel>
       <DetailPanel

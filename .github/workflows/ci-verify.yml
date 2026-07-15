@@ -9,8 +9,8 @@ run-name: >-
   }}
 
 on:
-  # Allows maintainers to run the complete pre-release matrix against an
-  # explicitly selected ref (for example, via `gh workflow run --ref ...`).
+  # Release candidates use this trigger to run the complete matrix against the
+  # frozen branch before the final NAS acceptance starts.
   workflow_dispatch:
   push:
     # Only `main` — release/** branches reach main via a PR (covered by
@@ -62,12 +62,12 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
       - name: Run zizmor
-        uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d  # v0.5.6
+        uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa  # v0.5.7
         with:
           version: v1.25.2
           advanced-security: true
@@ -91,7 +91,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -136,21 +136,21 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4.36.2
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        uses: github/codeql-action/autobuild@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4.36.2
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4.36.2
         with:
           category: /language:${{ matrix.language }}
 
@@ -171,7 +171,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -302,7 +302,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -326,7 +326,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -346,7 +346,7 @@ jobs:
         run: npx biome check .
 
       - name: Setup Qlty
-        uses: qltysh/qlty-action/install@a19242102d17e497f437d7466aa01b528537e899  # v2.2.0
+        uses: qltysh/qlty-action/install@fd52dc852530a708d68c3b7342f8d33d1df4cd55  # v2.2.1
 
       - name: Qlty check (all plugins, enforced)
         run: ./scripts/qlty-check-gate.sh all
@@ -383,7 +383,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -475,7 +475,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -520,7 +520,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -613,7 +613,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -706,7 +706,7 @@ jobs:
 
       - name: Upload ZAP SARIF
         if: always() && hashFiles('artifacts/zap/zap-baseline.sarif') != ''
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4.36.2
         with:
           sarif_file: artifacts/zap/zap-baseline.sarif
           category: zap-baseline
@@ -811,7 +811,7 @@ jobs:
         id: nuclei_scan
         if: always()
         continue-on-error: true
-        uses: projectdiscovery/nuclei-action@32a91c0da7be14c07b0ade6c14fa0f6e78d97c9c  # v3.1.0
+        uses: projectdiscovery/nuclei-action@cc153d0541e1adf8a42bbe31c0a4fb2376147538  # v3.1.1
         with:
           version: v3.8.0
           args: >-
@@ -914,7 +914,7 @@ jobs:
 
       - name: Upload Nuclei SARIF to code scanning
         if: always() && steps.nuclei_sarif.outputs.upload == 'true'
-        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e  # v4.36.2
         with:
           sarif_file: artifacts/dast/nuclei-report.sarif
           category: nuclei
@@ -992,12 +992,17 @@ jobs:
 
   e2e:
     name: "🥒 E2E: Cucumber"
-    if: github.event_name != 'schedule' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.runtime == 'true')
+    if: github.event_name == 'workflow_dispatch' || (github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [build, changes]
     permissions:
       contents: read
+    env:
+      # Use the same immutable browser runtime as the dedicated Playwright
+      # workflow. This avoids stale cache restores and runtime CDN downloads.
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
     steps:
       - name: Harden Runner
@@ -1006,7 +1011,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -1016,29 +1021,30 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
-      # Cache Playwright's browser binary directory across runs.
-      # `npm ci` in e2e/ triggers a 167 MiB @playwright/browser-chromium
-      # postinstall fetch from cdn.playwright.dev; the CDN has repeatedly
-      # throttled the download to ~30 min, which used to time the job out.
-      # Per-ref key mirrors the cache scoping in quality-mutation-monthly.yml
-      # so an untrusted PR can't poison main's chromium binary.
-      - name: Cache Playwright browsers
-        # zizmor: ignore[cache-poisoning]
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ github.ref_name }}-${{ hashFiles('e2e/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-${{ github.ref_name }}-
-            ${{ runner.os }}-playwright-
+      - name: Verify Playwright image matches package
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      - name: Install e2e dependencies
+          package_version="$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")"
+          if [[ ! "$PLAYWRIGHT_IMAGE" =~ :v([0-9]+\.[0-9]+\.[0-9]+)-noble(@sha256:[0-9a-f]{64})?$ ]]; then
+            echo "::error title=Invalid Playwright image tag::Expected $PLAYWRIGHT_IMAGE to use :v<major>.<minor>.<patch>-noble optionally pinned with @sha256:<digest>."
+            exit 1
+          fi
+
+          image_version="${BASH_REMATCH[1]}"
+          if [[ "$package_version" != "$image_version" ]]; then
+            echo "::error title=Playwright version mismatch::PLAYWRIGHT_IMAGE uses $image_version, but e2e/package.json pins @playwright/test to $package_version."
+            exit 1
+          fi
+
+      - name: Pull Playwright container
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 15
+          timeout_minutes: 5
           max_attempts: 3
           retry_wait_seconds: 30
-          command: cd e2e && npm ci
+          command: docker pull "$PLAYWRIGHT_IMAGE"
 
       - name: Setup test containers
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -1058,10 +1064,26 @@ jobs:
         # @requires_gitlab scenarios here to match, otherwise they fail looking
         # for a missing container. The token-gated local path that runs them
         # lives in scripts/run-e2e-tests.sh.
-        run: npm run cucumber -- --tags "not @requires_gitlab" --retry 1
-        working-directory: e2e
+        # The pinned image supplies the browser revision expected by
+        # @playwright/test. Host networking keeps localhost API/browser access
+        # identical to the former host-side invocation.
         env:
           DD_PORT: ${{ steps.drydock.outputs.dd_port }}
+        run: |
+          docker run --rm \
+            --init \
+            --network host \
+            --ipc=host \
+            --user 1001:1001 \
+            -e CI=true \
+            -e HOME=/tmp \
+            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+            -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD \
+            -e DD_PORT \
+            -v "${{ github.workspace }}:/work" \
+            -w /work/e2e \
+            "$PLAYWRIGHT_IMAGE" \
+            sh -c 'npm ci --no-audit --no-fund && npm run cucumber -- --tags "not @requires_gitlab" --retry 1'
 
       - name: Show drydock logs on failure
         if: failure()
@@ -1098,7 +1120,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -1220,7 +1242,7 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 

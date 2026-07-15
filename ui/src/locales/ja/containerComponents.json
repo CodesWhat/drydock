@@ -274,14 +274,10 @@
       "hidePinned": "固定済みを非表示",
       "hidePinnedTooltip": "特定バージョンに固定されたコンテナを非表示にする",
       "clearAll": "すべてクリア",
-      "toggleColumnsTooltip": "列の表示切替",
       "groupByStackTooltip": "スタックでグループ化",
       "expandAll": "すべて展開",
       "collapseAll": "すべて折りたたむ",
       "recheckTooltip": "更新を再確認",
-      "columnsHeader": "列",
-      "narrowViewportSuffix": "（狭いビューポート）",
-      "autoHiddenBadgeTooltip": "ウィンドウが狭いため {count} 列が自動非表示になりました。ウィンドウを広げるか他の列を非表示にしてください。",
       "filterSearch": "検索：{value}",
       "filterStatus": "ステータス：{value}",
       "filterBouncer": "Bouncer：{value}",
@@ -324,6 +320,7 @@
     "projectLink": {
       "viewProject": "プロジェクトを表示"
     },
+    "registryLink": { "viewRegistry": "レジストリを表示" },
     "releaseNotesLink": {
       "releaseNotes": "リリースノート",
       "viewFullNotes": "全文を表示",
@@ -553,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "固定済み — 参考情報として新しいバージョンがあります。"
+      }
     }
   }
 }

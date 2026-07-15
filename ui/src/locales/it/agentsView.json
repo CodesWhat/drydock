@@ -5,8 +5,6 @@
       "filterPlaceholder": "Filtra per nome...",
       "clearFilter": "Cancella",
       "emptyFiltered": "Nessun agent corrisponde ai filtri",
-      "toggleColumns": "Attiva/disattiva colonne",
-      "columnPickerHeading": "Colonne",
       "loadError": "Impossibile caricare gli agent",
       "status": {
         "connected": "Connesso",
@@ -20,10 +18,6 @@
         "os": "OS",
         "version": "Versione",
         "lastSeen": "Ultima attività"
-      },
-      "card": {
-        "running": "in esecuzione",
-        "stopped": "arrestati"
       }
     },
     "detail": {
@@ -82,9 +76,6 @@
         "dockerSocket": "Socket Docker",
         "lastSeen": "Ultima attività",
         "never": "mai"
-      },
-      "listView": {
-        "details": "Dettagli"
       }
     }
   }

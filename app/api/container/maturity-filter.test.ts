@@ -19,4 +19,10 @@ describe('api/container/maturity-filter', () => {
     const filtered = applyContainerMaturityFilter(containers, 'hot');
     expect(filtered.map((container) => container.id)).toEqual(['c1']);
   });
+
+  test('applyContainerMaturityFilter returns the original collection when no filter is set', () => {
+    const containers = [{ id: 'c1', updateAge: 60_000 } as unknown as Container];
+
+    expect(applyContainerMaturityFilter(containers, undefined)).toBe(containers);
+  });
 });

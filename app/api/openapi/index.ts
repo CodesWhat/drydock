@@ -8,11 +8,11 @@ export const openApiDocument = {
     title: 'Drydock API',
     version: getVersion(),
     description:
-      'Machine-readable API specification for Drydock. Canonical API base path is /api/v1, with /api available as a compatibility alias. Authentication defaults to session cookie auth. Mutating requests using session auth must also satisfy same-origin CSRF checks.',
+      'Machine-readable API specification for Drydock. Canonical API base path is /api/v1 — the unversioned /api/* alias was removed in v1.6.0 (see DEPRECATIONS.md) and now returns 410 Gone, aside from the flag-gated wud-card compatibility endpoints and a small set of standalone auth aliases documented individually below. Authentication defaults to session cookie auth. Mutating requests using session auth must also satisfy same-origin CSRF checks.',
   },
   'x-drydock-conventions': {
     actionPostEndpoints:
-      'Side-effecting command operations use action-oriented POST endpoints under resource paths (e.g., POST /api/containers/:id/scan).',
+      'Side-effecting command operations use action-oriented POST endpoints under resource paths (e.g., POST /api/v1/containers/:id/scan).',
   },
   servers: [
     {
@@ -63,6 +63,13 @@ export const openApiDocument = {
         bearerFormat: 'Token',
         description:
           'Bearer token configured via webhook settings (shared token or endpoint-specific webhook tokens).',
+      },
+      registryWebhookSignature: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-drydock-signature',
+        description:
+          'HMAC-SHA256 registry webhook signature (x-drydock-signature). The endpoint also accepts provider-specific signature headers: x-registry-signature, x-hub-signature-256, x-quay-signature, x-harbor-signature, and x-ms-signature.',
       },
       metricsBearerAuth: {
         type: 'http',

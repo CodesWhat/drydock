@@ -41,7 +41,7 @@ describe('preferences store', () => {
     expect(preferences.theme.family).toBe('one-dark');
     expect(preferences.theme.variant).toBe('dark');
     expect(preferences.locale.language).toBe('en');
-    expect(preferences.containers.viewMode).toBe('table');
+    expect(preferences.containers.tableActions).toBe('icons');
   });
 
   it('should load persisted preferences', async () => {
@@ -89,7 +89,7 @@ describe('preferences store', () => {
     expect(preferences.theme.family).toBe('dracula');
     // Missing variant should be filled from defaults
     expect(preferences.theme.variant).toBe('dark');
-    expect(preferences.containers.viewMode).toBe('table');
+    expect(preferences.containers.tableActions).toBe('icons');
     expect(preferences.font.family).toBe('ibm-plex-mono');
   });
 
@@ -136,11 +136,11 @@ describe('preferences store', () => {
   it('should reset to defaults via resetPreferences', async () => {
     const { preferences, resetPreferences } = await loadStore();
     preferences.theme.family = 'github';
-    preferences.containers.viewMode = 'cards';
+    preferences.containers.tableActions = 'buttons';
     preferences.layout.sidebarCollapsed = true;
     resetPreferences();
     expect(preferences.theme.family).toBe('one-dark');
-    expect(preferences.containers.viewMode).toBe('table');
+    expect(preferences.containers.tableActions).toBe('icons');
     expect(preferences.layout.sidebarCollapsed).toBe(false);
   });
 
@@ -236,7 +236,7 @@ describe('preferences store', () => {
 
     preferences.theme.family = 'dracula';
     preferences.theme.variant = 'light';
-    preferences.containers.viewMode = 'cards';
+    preferences.containers.tableActions = 'buttons';
     await nextTick();
 
     expect((globalThis as any).requestIdleCallback).toHaveBeenCalledTimes(1);
@@ -248,7 +248,7 @@ describe('preferences store', () => {
     const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
     expect(raw.theme.family).toBe('dracula');
     expect(raw.theme.variant).toBe('light');
-    expect(raw.containers.viewMode).toBe('cards');
+    expect(raw.containers.tableActions).toBe('buttons');
 
     // Re-running the queued callback should be a no-op once dirty state is flushed.
     idleCallbacks[0]({ didTimeout: false, timeRemaining: () => 50 } as IdleDeadline);
