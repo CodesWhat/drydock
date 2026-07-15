@@ -279,6 +279,35 @@ describe('withRetry', () => {
     expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('reason: ECONNABORTED'));
   });
 
+  test('counts network retries independently after an HTTP retry', async () => {
+    const success = { status: 200, headers: {}, data: 'recovered' };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(503))
+      .mockRejectedValueOnce(makeNetworkError('ECONNRESET'))
+      .mockRejectedValueOnce(makeNetworkError('ECONNRESET'))
+      .mockResolvedValueOnce(success);
+    const mockLogger = { debug: vi.fn() };
+
+    const promise = withRetry(request, {
+      maxNetworkRetries: 2,
+      backoffBaseMs: 1,
+      logger: mockLogger,
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    const networkRetryLogs = mockLogger.debug.mock.calls
+      .map(([message]) => message as string)
+      .filter((message) => message.includes('reason: ECONNRESET'));
+    expect(result).toEqual(success);
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(networkRetryLogs).toEqual([
+      expect.stringContaining('attempt 1/2, reason: ECONNRESET'),
+      expect.stringContaining('attempt 2/2, reason: ECONNRESET'),
+    ]);
+  });
+
   test('throws the last network error after the default two network retries', async () => {
     const firstError = makeNetworkError('ETIMEDOUT');
     const secondError = makeNetworkError('ETIMEDOUT');

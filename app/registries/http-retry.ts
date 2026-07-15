@@ -116,6 +116,7 @@ export async function withRetry<T>(
   } = options;
 
   let lastError: unknown;
+  let networkRetryCount = 0;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -131,9 +132,14 @@ export async function withRetry<T>(
         const isRetryableNetworkError =
           code !== undefined && retryableNetworkErrorCodes.includes(code);
 
-        if (!isRetryableNetworkError || attempt >= maxNetworkRetries || attempt >= maxRetries) {
+        if (
+          !isRetryableNetworkError ||
+          networkRetryCount >= maxNetworkRetries ||
+          attempt >= maxRetries
+        ) {
           throw err;
         }
+        networkRetryCount += 1;
 
         // No Retry-After header exists on these — custom override falls
         // back straight to exponential backoff.
@@ -144,7 +150,7 @@ export async function withRetry<T>(
 
         const label = requestLabel ? `Retrying ${requestLabel}` : 'Retrying request';
         logger?.debug(
-          `${label} after ${delay}ms (attempt ${attempt + 1}/${Math.min(maxNetworkRetries, maxRetries)}, reason: ${code})`,
+          `${label} after ${delay}ms (attempt ${networkRetryCount}/${maxNetworkRetries}, reason: ${code})`,
         );
 
         await sleep(delay);
