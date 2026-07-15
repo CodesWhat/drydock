@@ -14,6 +14,14 @@ function makeAxiosError(status: number, headers: Record<string, string> = {}) {
   return err;
 }
 
+function makeNetworkError(code?: unknown) {
+  const err = new Error('network request failed') as Error & { code?: unknown };
+  if (code !== undefined) {
+    err.code = code;
+  }
+  return err;
+}
+
 describe('withRetry', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -249,6 +257,136 @@ describe('withRetry', () => {
 
     await expect(withRetry(request)).rejects.toThrow('ECONNREFUSED');
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  test('retries a response-less ECONNABORTED error and logs its reason', async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeNetworkError('ECONNABORTED'))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'recovered' });
+    const mockLogger = { debug: vi.fn() };
+
+    const promise = withRetry(request, {
+      backoffBaseMs: 10,
+      logger: mockLogger,
+      requestLabel: 'registry request',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('recovered');
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('reason: ECONNABORTED'));
+  });
+
+  test('counts network retries independently after an HTTP retry', async () => {
+    const success = { status: 200, headers: {}, data: 'recovered' };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(503))
+      .mockRejectedValueOnce(makeNetworkError('ECONNRESET'))
+      .mockRejectedValueOnce(makeNetworkError('ECONNRESET'))
+      .mockResolvedValueOnce(success);
+    const mockLogger = { debug: vi.fn() };
+
+    const promise = withRetry(request, {
+      maxNetworkRetries: 2,
+      backoffBaseMs: 1,
+      logger: mockLogger,
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    const networkRetryLogs = mockLogger.debug.mock.calls
+      .map(([message]) => message as string)
+      .filter((message) => message.includes('reason: ECONNRESET'));
+    expect(result).toEqual(success);
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(networkRetryLogs).toEqual([
+      expect.stringContaining('attempt 1/2, reason: ECONNRESET'),
+      expect.stringContaining('attempt 2/2, reason: ECONNRESET'),
+    ]);
+  });
+
+  test('throws the last network error after the default two network retries', async () => {
+    const firstError = makeNetworkError('ETIMEDOUT');
+    const secondError = makeNetworkError('ETIMEDOUT');
+    const lastError = makeNetworkError('ETIMEDOUT');
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(firstError)
+      .mockRejectedValueOnce(secondError)
+      .mockRejectedValueOnce(lastError);
+
+    const promise = withRetry(request, { backoffBaseMs: 10 });
+    const expectation = expect(promise).rejects.toBe(lastError);
+    await vi.runAllTimersAsync();
+    await expectation;
+
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  test('maxRetries caps response-less network retries', async () => {
+    const networkError = makeNetworkError('ECONNRESET');
+    const request = vi.fn().mockRejectedValueOnce(networkError);
+
+    await expect(withRetry(request, { maxRetries: 0, maxNetworkRetries: 5 })).rejects.toBe(
+      networkError,
+    );
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  test('throws a non-retryable response-less error code immediately', async () => {
+    const canceledError = makeNetworkError('ERR_CANCELED');
+    const request = vi.fn().mockRejectedValueOnce(canceledError);
+
+    await expect(withRetry(request)).rejects.toBe(canceledError);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  test('throws a response-less error without a code immediately', async () => {
+    const networkError = makeNetworkError();
+    const request = vi.fn().mockRejectedValueOnce(networkError);
+
+    await expect(withRetry(request)).rejects.toBe(networkError);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  test('throws a response-less error with a non-string code immediately', async () => {
+    const networkError = makeNetworkError(408);
+    const request = vi.fn().mockRejectedValueOnce(networkError);
+
+    await expect(withRetry(request)).rejects.toBe(networkError);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  test('an empty retryableNetworkErrorCodes list disables network retries', async () => {
+    const networkError = makeNetworkError('EAI_AGAIN');
+    const request = vi.fn().mockRejectedValueOnce(networkError);
+
+    await expect(withRetry(request, { retryableNetworkErrorCodes: [] })).rejects.toBe(networkError);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  test('retryDelayMs takes precedence over network exponential backoff', async () => {
+    const networkError = makeNetworkError('ETIMEDOUT');
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'recovered' });
+    const retryDelayMs = vi.fn().mockReturnValue(777);
+    const mockLogger = { debug: vi.fn() };
+
+    const promise = withRetry(request, {
+      backoffBaseMs: 10,
+      retryDelayMs,
+      logger: mockLogger,
+    });
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(retryDelayMs).toHaveBeenCalledWith(networkError);
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('after 777ms'));
   });
 
   test('malformed Retry-After "not-a-date" falls back to exponential backoff', async () => {
