@@ -580,7 +580,15 @@ function clearContainerIdsFilter() {
   void router.replace({ query: rest as Record<string, string> });
 }
 
-const VALID_FILTER_KIND_VALUES = ['all', 'a\u006Ey', 'major', 'minor', 'patch', 'digest'] as const;
+const VALID_FILTER_KIND_VALUES = [
+  'all',
+  'a\u006Ey',
+  'version',
+  'major',
+  'minor',
+  'patch',
+  'digest',
+] as const;
 type FilterKindQueryValue = (typeof VALID_FILTER_KIND_VALUES)[number];
 const DEFAULT_FILTER_KIND: FilterKindQueryValue = 'all';
 const VALID_FILTER_KINDS: ReadonlySet<FilterKindQueryValue> = new Set(VALID_FILTER_KIND_VALUES);
