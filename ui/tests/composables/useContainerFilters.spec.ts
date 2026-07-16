@@ -186,6 +186,25 @@ describe('useContainerFilters', () => {
       expect(filters.filteredContainers.value[0].name).toBe('postgres');
     });
 
+    it('should filter version updates to major, minor, and patch kinds', async () => {
+      const versionKinds = ref<Container[]>([
+        makeContainer({ id: 'c1', name: 'major-update', updateKind: 'major' }),
+        makeContainer({ id: 'c2', name: 'minor-update', updateKind: 'minor' }),
+        makeContainer({ id: 'c3', name: 'patch-update', updateKind: 'patch' }),
+        makeContainer({ id: 'c4', name: 'digest-update', updateKind: 'digest' }),
+        makeContainer({ id: 'c5', name: 'no-update', updateKind: null }),
+      ]);
+      const mod = await import('@/composables/useContainerFilters');
+      const filters = mod.useContainerFilters(versionKinds);
+      filters.filterKind.value = 'version';
+
+      expect(filters.filteredContainers.value.map((c) => c.name)).toEqual([
+        'major-update',
+        'minor-update',
+        'patch-update',
+      ]);
+    });
+
     it('should filter "any" to containers with a newTag', async () => {
       const filters = await loadFilters();
       filters.filterKind.value = 'any';

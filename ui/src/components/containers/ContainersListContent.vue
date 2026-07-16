@@ -115,6 +115,7 @@ const activeFilterChips = computed(() => {
   if (filterKind.value !== 'all') {
     const kindKeyMap: Record<string, string> = {
       any: 'hasUpdate',
+      version: 'versionUpdate',
       major: 'major',
       minor: 'minor',
       patch: 'patch',
@@ -202,6 +203,7 @@ const activeFilterChips = computed(() => {
           class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
           <option value="all">{{ t('containerComponents.listContent.allContainers') }}</option>
           <option value="any">{{ t('containerComponents.listContent.hasUpdate') }}</option>
+          <option value="version">{{ t('containerComponents.listContent.versionUpdate') }}</option>
           <option value="major">{{ t('containerComponents.listContent.major') }}</option>
           <option value="minor">{{ t('containerComponents.listContent.minor') }}</option>
           <option value="patch">{{ t('containerComponents.listContent.patch') }}</option>
