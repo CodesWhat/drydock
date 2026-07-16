@@ -107,15 +107,22 @@ Data tables support:
 
 ## View Modes
 
-Data views that expose view-mode controls support table, card, or list presentation depending on the page:
+Data views that expose view-mode controls toggle between table and card presentation:
 
 | Mode | Description |
 | --- | --- |
 | **Table** (default) | Rows with shared sizing, interactive column resizing, persisted widths, and sticky actions where relevant |
 | **Cards** | Grid layout |
-| **List** | Accordion-style |
 
-Toggle between modes using the view mode buttons in the toolbar where they are available. Utility pages with naturally tabular data may use table-only presentation.
+Toggle between modes using the view mode buttons in the toolbar where they are available. The choice is persisted per view. Below ~640px the layout automatically reflows to cards and the now-redundant toggle is hidden. Utility pages with naturally tabular data may use table-only presentation. The old three-way `list` (accordion) mode was removed in v1.6 — it's table or cards.
+
+### Column Visibility
+
+Containers, Agents, Audit, Security, Servers, and Watchers each expose a column show/hide picker in the toolbar, letting you hide low-priority columns from the table. Hidden columns are persisted per view and have no effect in card mode.
+
+### Card Sorting
+
+Containers, Agents, and Security cards include a sort-field and ascending/descending control in the toolbar when in card mode, so cards can be ordered the same way table rows can.
 
 ## Keyboard Shortcuts
 

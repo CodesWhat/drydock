@@ -7,7 +7,7 @@ export const faqItems: Array<{ question: string; answer: string }> = [
   {
     question: "Which container registries does Drydock support?",
     answer:
-      "Drydock ships with 23 registry providers: Docker Hub, GitHub Container Registry (GHCR), Amazon ECR, Google Container Registry (GCR), Google Artifact Registry (GAR), GitLab Registry, Red Hat Quay, LinuxServer Container Registry (LSCR), Azure Container Registry (ACR), Harbor, JFrog Artifactory, Sonatype Nexus, Gitea, Forgejo, Portus, and more — plus a generic private-registry provider for anything that speaks HTTP Basic or bearer token auth. TLS customization (CA file, insecure skip-verify) is available on every provider.",
+      "Drydock ships with 23 registry providers: Docker Hub, GitHub Container Registry (GHCR), Amazon ECR, Google Container Registry (GCR), Google Artifact Registry (GAR), GitLab Registry, Red Hat Quay, LinuxServer Container Registry (LSCR), Azure Container Registry (ACR), Harbor, JFrog Artifactory, Sonatype Nexus, Gitea, Forgejo, Codeberg, and more — plus a generic private-registry provider for anything that speaks HTTP Basic or bearer token auth. TLS customization (CA file, insecure skip-verify) is available on every provider.",
   },
   {
     question: "What is the difference between a notification and an action trigger?",
@@ -17,7 +17,7 @@ export const faqItems: Array<{ question: string; answer: string }> = [
   {
     question: "How do I control which containers Drydock watches and which tags it considers?",
     answer:
-      "Add Docker labels to your containers. dd.watch=true opts a container in (or set DD_WATCHER_LOCAL_ALLCONTAINERS=true to watch everything by default). Use dd.tag.include with a regex to restrict which tags are eligible — for example dd.tag.include=^\\d+\\.\\d+\\.\\d+$ to match only semver tags. dd.tag.exclude filters out tags that match. dd.tag.transform applies a rewrite to the tag string before matching. dd.display.name overrides the container name shown in the dashboard, and dd.group groups containers into collapsible stacks.",
+      "Drydock watches every container by default. Add dd.watch=false to opt a container out, or set DD_WATCHER_{name}_WATCHBYDEFAULT=false to flip that watcher to opt-in mode, where only containers labeled dd.watch=true are watched. Use dd.tag.include with a regex to restrict which tags are eligible — for example dd.tag.include=^\\d+\\.\\d+\\.\\d+$ to match only semver tags. dd.tag.exclude filters out tags that match. dd.tag.transform applies a rewrite to the tag string before matching. dd.display.name overrides the container name shown in the dashboard, and dd.group groups containers into collapsible stacks.",
   },
   {
     question: "What is the controller-agent architecture and when do I need it?",
@@ -27,12 +27,12 @@ export const faqItems: Array<{ question: string; answer: string }> = [
   {
     question: "How does Drydock compare to Watchtower?",
     answer:
-      "Watchtower auto-updates containers on a schedule with minimal config and no UI. Drydock is an update management platform: it detects what is available, shows you a dashboard, lets you preview and approve changes, backs up images before applying them, and rolls back automatically if the new container fails its health check. It also adds security scanning (Trivy CVEs, SBOM generation, Cosign signature verification) and per-container update policies. If you want silent automatic updates, Watchtower is simpler. If you want visibility, control, security gates, and notification integrations, Drydock fits better.",
+      "Watchtower auto-updates containers on a schedule with minimal config and no UI. Drydock is an update management platform: it detects what is available, shows you a dashboard, lets you preview and approve changes, backs up images before applying them, and rolls back automatically if the new container fails its health check. It also adds security scanning (Trivy/Grype CVEs, SBOM generation, Cosign signature verification) and per-container update policies. If you want silent automatic updates, Watchtower is simpler. If you want visibility, control, security gates, and notification integrations, Drydock fits better.",
   },
   {
     question: "Does Drydock support vulnerability scanning and image signature verification?",
     answer:
-      "Yes. Drydock integrates Trivy for CVE scanning and SBOM generation for any image in your update queue. The Update Bouncer deployment gate supports Cosign signature verification — you can block an update from being applied if the new image is unsigned or signed by an unexpected identity. Scanning and verification are opt-in per container or globally, and results surface in the dashboard alongside the available-update list so you can make an informed decision before pulling.",
+      "Yes. Drydock integrates Trivy and Grype (DD_SECURITY_SCANNER=trivy|grype|both) for CVE scanning and SBOM generation for any image in your update queue. The Update Bouncer deployment gate supports Cosign signature verification — you can block an update from being applied if the new image is unsigned or signed by an unexpected identity. Scanning and verification are opt-in per container or globally, and results surface in the dashboard alongside the available-update list so you can make an informed decision before pulling.",
   },
   {
     question: "Is Drydock open source, and how do I get started?",
