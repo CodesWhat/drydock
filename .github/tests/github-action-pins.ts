@@ -1,6 +1,6 @@
 export const expectedActionPins = new Map([
-  ['actions/cache', 'actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4'],
-  ['actions/checkout', 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2'],
+  ['actions/cache', 'actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5'],
+  ['actions/checkout', 'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3'],
   [
     'actions/dependency-review-action',
     'actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294  # v5.0.0',
