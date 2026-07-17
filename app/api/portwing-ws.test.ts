@@ -323,6 +323,9 @@ function buildHello(
 
 test('reports the canonical configuration version in the welcome frame', async () => {
   clearNonceCacheForTesting();
+  // Reset the module-level version cache so this test stays order-independent —
+  // an earlier inject or welcome would otherwise let it skip getVersion().
+  injectDrydockVersionForTesting(undefined);
   vi.mocked(getVersion).mockClear();
 
   const { privateKey, pubkeyBase64, keyId } = generateKeyPair();

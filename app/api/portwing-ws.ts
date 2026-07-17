@@ -346,8 +346,8 @@ function drydockVersion(): string {
   return _drydockVersion;
 }
 
-/** Exposed for tests to override the version string. */
-export function injectDrydockVersionForTesting(version: string): void {
+/** Exposed for tests to override the version string, or reset the cache with undefined. */
+export function injectDrydockVersionForTesting(version: string | undefined): void {
   _drydockVersion = version;
 }
 
