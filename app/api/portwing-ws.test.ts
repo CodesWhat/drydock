@@ -345,7 +345,11 @@ test('reports the canonical configuration version in the welcome frame', async (
   const ws = getUpgradedWs()!;
 
   sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  // Bounded wait instead of a fixed sleep — the async Ed25519 verification
+  // makes frame timing scheduler-dependent under CI load.
+  await vi.waitFor(() => {
+    expect(ws.sentMessages.length).toBeGreaterThan(0);
+  });
 
   const welcome = JSON.parse(ws.sentMessages[0]) as {
     data: { config: { drydockVersion: string } };
