@@ -326,31 +326,6 @@ describe('docker image details orchestration module', () => {
 
       expect(stored.image.digest.value).toBe('sha256:new-raw');
     });
-
-    test('keeps an errored broken reference on the fast path and preserves its digest', async () => {
-      const stored = createErroredStoredContainer();
-      stored.image.tag.value = 'unknown';
-      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
-      const getContainers = vi.spyOn(storeContainer, 'getContainers').mockReturnValue([]);
-      const { watcher, inspectImage } = createWatcher();
-      inspectImage.mockResolvedValue({
-        Id: 'image-new',
-        RepoDigests: ['ghcr.io/acme/service@sha256:raw'],
-        Architecture: 'amd64',
-        Os: 'linux',
-        Created: '2026-02-01T00:00:00.000Z',
-      });
-
-      await addImageDetailsToContainerOrchestration(
-        watcher as any,
-        createDockerSummaryContainer(),
-        {},
-        createHelpers() as any,
-      );
-
-      expect(getContainers).not.toHaveBeenCalled();
-      expect(stored.image.digest.value).toBe('sha256:reconciled');
-    });
   });
 
   describe('errored container fast-path eligibility', () => {
@@ -380,7 +355,7 @@ describe('docker image details orchestration module', () => {
       expect(stored.error).toEqual({ message: 'timeout of 30000ms exceeded' });
     });
 
-    test('repairs a broken reference for an errored container on the fast path', async () => {
+    test('repairs a broken reference for an errored container on the fast path and preserves its reconciled digest', async () => {
       const stored = createErroredStoredContainer();
       stored.image.tag.value = 'unknown';
       vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
