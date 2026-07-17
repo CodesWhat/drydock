@@ -5,23 +5,11 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 
 import { expectedActionPins } from './github-action-pins';
-
-interface ActionStep {
-  uses?: string;
-  with?: Record<string, unknown>;
-}
-
-interface WorkflowJob {
-  steps?: ActionStep[];
-}
-
-interface WorkflowDocument {
-  jobs?: Record<string, WorkflowJob>;
-}
+import type { WorkflowDefinition, WorkflowStep } from './workflow-test-utils';
 
 interface CompositeActionDocument {
   runs?: {
-    steps?: ActionStep[];
+    steps?: WorkflowStep[];
   };
 }
 
@@ -40,13 +28,13 @@ function collectYamlFiles(directory: string): string[] {
     .sort();
 }
 
-function collectActionSteps(file: string): ActionStep[] {
+function collectActionSteps(file: string): WorkflowStep[] {
   const document = yaml.parse(readFileSync(file, 'utf8')) as
     | CompositeActionDocument
-    | WorkflowDocument
+    | WorkflowDefinition
     | null;
 
-  const workflowSteps = Object.values((document as WorkflowDocument)?.jobs ?? {}).flatMap(
+  const workflowSteps = Object.values((document as WorkflowDefinition)?.jobs ?? {}).flatMap(
     (job) => job.steps ?? [],
   );
   const compositeSteps = (document as CompositeActionDocument)?.runs?.steps ?? [];

@@ -4,33 +4,11 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 
 import { expectedActionUse } from './github-action-pins';
-
-interface WorkflowJob {
-  env?: Record<string, string>;
-  name?: string;
-  steps?: WorkflowJobStep[];
-  'timeout-minutes'?: number;
-  if?: string;
-  needs?: string[];
-}
-
-interface WorkflowJobStep {
-  name?: string;
-  id?: string;
-  run?: string;
-  if?: string;
-  uses?: string;
-  'working-directory'?: string;
-  env?: Record<string, string>;
-  with?: Record<string, string>;
-  'continue-on-error'?: boolean;
-}
-
-interface WorkflowDefinition {
-  env?: Record<string, string>;
-  jobs?: Record<string, WorkflowJob>;
-  on?: Record<string, unknown>;
-}
+import {
+  getWorkflowStep as getWorkflowStepFrom,
+  loadWorkflow as loadWorkflowFrom,
+  type WorkflowStep,
+} from './workflow-test-utils';
 
 interface LefthookCommand {
   priority?: number;
@@ -48,23 +26,16 @@ const lefthookPath = fileURLToPath(new URL('../../lefthook.yml', import.meta.url
 const processorPath = fileURLToPath(new URL('../../test/load-test.processor.cjs', import.meta.url));
 const emojiPrefix = /^\p{Extended_Pictographic}/u;
 const workflowTestsCommand = 'npm run test:workflows';
-
-function loadWorkflow(): WorkflowDefinition {
-  return yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
-}
+const loadWorkflow = loadWorkflowFrom.bind(undefined, workflowPath);
+const getWorkflowStep = getWorkflowStepFrom.bind(undefined, workflowPath);
 
 function loadLefthook(): LefthookDefinition {
   return yaml.parse(readFileSync(lefthookPath, 'utf8')) as LefthookDefinition;
 }
 
-function getTestJobStep(name: string): WorkflowJobStep | undefined {
+function getTestJobStep(name: string): WorkflowStep | undefined {
   const workflow = loadWorkflow();
   return workflow.jobs?.test?.steps?.find((step) => step.name === name);
-}
-
-function getWorkflowStep(jobId: string, name: string): WorkflowJobStep | undefined {
-  const workflow = loadWorkflow();
-  return workflow.jobs?.[jobId]?.steps?.find((step) => step.name === name);
 }
 
 test('ci-verify job names are emoji-prefixed for GitHub checks readability', () => {

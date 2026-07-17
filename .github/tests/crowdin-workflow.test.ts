@@ -3,20 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import yaml from 'yaml';
 
-interface WorkflowStep {
-  name?: string;
-  uses?: string;
-  with?: Record<string, string>;
-  'continue-on-error'?: boolean;
-}
-
-interface WorkflowJob {
-  steps?: WorkflowStep[];
-}
-
-interface WorkflowDefinition {
-  jobs?: Record<string, WorkflowJob>;
-}
+import { loadWorkflow, type WorkflowStep } from './workflow-test-utils';
 
 interface CrowdinConfig {
   files?: Array<{
@@ -31,7 +18,7 @@ const crowdinConfigPath = fileURLToPath(new URL('../../crowdin.yml', import.meta
 const crowdinActionRef = 'crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f';
 
 function loadCrowdinWorkflowStep(): WorkflowStep {
-  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+  const workflow = loadWorkflow(workflowPath);
   const step = workflow.jobs?.sync?.steps?.find((step) =>
     step.uses?.startsWith('crowdin/github-action@'),
   );

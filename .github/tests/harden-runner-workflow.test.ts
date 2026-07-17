@@ -4,19 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import yaml from 'yaml';
 
-interface WorkflowJobStep {
-  uses?: string;
-  with?: Record<string, string>;
-}
-
-interface WorkflowJob {
-  'runs-on'?: string | string[];
-  steps?: WorkflowJobStep[];
-}
-
-interface WorkflowDefinition {
-  jobs?: Record<string, WorkflowJob>;
-}
+import type { WorkflowDefinition } from './workflow-test-utils';
 
 const workflowsDir = fileURLToPath(new URL('../workflows', import.meta.url));
 const hardenRunnerRef = 'step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411';
