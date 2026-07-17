@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **"Version update" container filter** ([#538](https://github.com/CodesWhat/drydock/issues/538)). The Containers filter bar gains a **Version Update** kind option that shows only real semver upgrades (major, minor, patch) and hides digest-only churn — the noise that dominates the dashboard on fleets that rebuild images daily in CI. Like every other container filter, it round-trips through the URL (`?filterKind=version`), so the filtered view can be saved as a bookmark for one-click access.
 
+### Fixed
+
+- **Repair rebuilds no longer reset the registry-reconciled digest** ([#541](https://github.com/CodesWhat/drydock/issues/541)). When the fast refresh path repairs a stored container's broken image reference, the reconciled `digest.value` — the security scan-group key — is now preserved unless the repo digest genuinely changed (image re-pulled), the same stickiness rule the slow-path rebuild gained for [#536](https://github.com/CodesWhat/drydock/issues/536).
+
+- **Containers with a stored watch error refresh on the fast path** ([#542](https://github.com/CodesWhat/drydock/issues/542)). An error from the previous cycle no longer routes a known container through the full first-discovery enumeration — image/label/tag re-resolution plus an O(n) stale-entry scan of the store — on every cron. Errored-but-known containers reuse the same cheap refresh as healthy ones, and broken image references still self-heal via the unconditional repair check.
+
 ## [1.6.0-rc.1] — 2026-07-15
 
 ### Added
