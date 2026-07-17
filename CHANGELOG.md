@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Last-known-good update state survives watch errors** ([#543](https://github.com/CodesWhat/drydock/issues/543)). A failed watch cycle — registry timeout, rate limit, transient network error — no longer erases the previous successful comparison. The stored `result`, `updateAvailable`, `updateKind`, and current release notes are preserved alongside the recorded error until a later cycle succeeds, so the UI keeps showing the last known update state with the error annotated next to it instead of a blank.
 
+- Portwing WS Welcome frames now report the actual server version — the endpoint had hard-coded `1.5.0` since v1.5.0, so v1.5.1/v1.5.2/v1.6.0-rc.1 servers all identified as `1.5.0` to agents ([#550](https://github.com/CodesWhat/drydock/pull/550) review finding)
+
 ## [1.6.0-rc.1] — 2026-07-15
 
 ### Added
