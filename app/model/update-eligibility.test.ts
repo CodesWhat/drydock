@@ -272,6 +272,193 @@ describe('computeUpdateEligibility', () => {
       expect(result.blockers.find((b) => b.reason === 'security-scan-blocked')).toBeUndefined();
     });
 
+    test('relative pass overrides the otherwise-blocking current scan', () => {
+      const summary = { unknown: 0, low: 0, medium: 0, high: 1, critical: 1 };
+      const container = makeContainerWithTagUpdate({
+        security: {
+          scan: {
+            scanner: 'trivy',
+            image: 'nginx:1.0.0',
+            scannedAt: new Date().toISOString(),
+            status: 'blocked',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+          },
+          updateScan: {
+            scanner: 'trivy',
+            image: 'nginx:1.1.0',
+            scannedAt: new Date().toISOString(),
+            status: 'passed',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+            relativeGate: {
+              decision: 'passed',
+              reason: 'no-worse-than-current',
+              currentSummary: summary,
+            },
+          },
+        },
+      });
+
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+
+      expect(result.blockers.find((b) => b.reason === 'security-scan-blocked')).toBeUndefined();
+    });
+
+    test.each([
+      ['matching digest metadata', { image: 'nginx:candidate', imageDigest: 'sha256:bbb' }],
+      ['matching pinned image', { image: 'nginx@sha256:bbb' }],
+    ])('relative pass accepts a digest candidate via %s', (_label, updateScanIdentity) => {
+      const summary = { unknown: 0, low: 0, medium: 0, high: 1, critical: 1 };
+      const container = makeContainerWithDigestUpdate({
+        security: {
+          scan: {
+            scanner: 'trivy',
+            image: 'nginx@sha256:aaa',
+            imageDigest: 'sha256:aaa',
+            scannedAt: new Date().toISOString(),
+            status: 'blocked',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+          },
+          updateScan: {
+            scanner: 'trivy',
+            ...updateScanIdentity,
+            scannedAt: new Date().toISOString(),
+            status: 'passed',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+            relativeGate: {
+              decision: 'passed',
+              reason: 'no-worse-than-current',
+              currentSummary: summary,
+            },
+          },
+        },
+      });
+
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+
+      expect(result.blockers.find((b) => b.reason === 'security-scan-blocked')).toBeUndefined();
+    });
+
+    test('stale relative pass does not match a different digest candidate', () => {
+      const summary = { unknown: 0, low: 0, medium: 0, high: 1, critical: 1 };
+      const container = makeContainerWithDigestUpdate({
+        security: {
+          scan: {
+            scanner: 'trivy',
+            image: 'nginx@sha256:aaa',
+            imageDigest: 'sha256:aaa',
+            scannedAt: new Date().toISOString(),
+            status: 'blocked',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+          },
+          updateScan: {
+            scanner: 'trivy',
+            image: 'nginx@sha256:ccc',
+            imageDigest: 'sha256:ccc',
+            scannedAt: new Date().toISOString(),
+            status: 'passed',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+            relativeGate: {
+              decision: 'passed',
+              reason: 'no-worse-than-current',
+              currentSummary: summary,
+            },
+          },
+        },
+      });
+
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+
+      expect(result.blockers.find((b) => b.reason === 'security-scan-blocked')).toBeDefined();
+    });
+
+    test('stale relative pass does not override a blocked current scan for a newer candidate', () => {
+      const summary = { unknown: 0, low: 0, medium: 0, high: 1, critical: 1 };
+      const container = makeContainerWithTagUpdate({
+        result: { tag: '1.2.0' },
+        security: {
+          scan: {
+            scanner: 'trivy',
+            image: 'nginx:1.0.0',
+            scannedAt: new Date().toISOString(),
+            status: 'blocked',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+          },
+          updateScan: {
+            scanner: 'trivy',
+            image: 'nginx:1.1.0',
+            scannedAt: new Date().toISOString(),
+            status: 'passed',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+            relativeGate: {
+              decision: 'passed',
+              reason: 'no-worse-than-current',
+              currentSummary: summary,
+            },
+          },
+        },
+      });
+
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+
+      expect(result.blockers.find((b) => b.reason === 'security-scan-blocked')).toBeDefined();
+    });
+
+    test('plain candidate pass does not override a blocked current scan', () => {
+      const summary = { unknown: 0, low: 0, medium: 0, high: 1, critical: 1 };
+      const container = makeContainerWithTagUpdate({
+        security: {
+          scan: {
+            scanner: 'trivy',
+            image: 'nginx:1.0.0',
+            scannedAt: new Date().toISOString(),
+            status: 'blocked',
+            blockSeverities: ['CRITICAL', 'HIGH'],
+            blockingCount: 2,
+            summary,
+            vulnerabilities: [],
+          },
+          updateScan: {
+            scanner: 'trivy',
+            image: 'nginx:1.1.0',
+            scannedAt: new Date().toISOString(),
+            status: 'passed',
+            blockSeverities: [],
+            blockingCount: 0,
+            summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+            vulnerabilities: [],
+          },
+        },
+      });
+
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+
+      expect(result.blockers.find((b) => b.reason === 'security-scan-blocked')).toBeDefined();
+    });
+
     test('no blocker when no security info present', () => {
       const trigger = makeTrigger();
       const container = makeContainerWithTagUpdate();
@@ -549,6 +736,19 @@ describe('computeUpdateEligibility', () => {
       expect(blocker?.details?.minAgeDays).toBe(7);
       expect(blocker?.details?.remainingMs).toBeGreaterThan(0);
       expect(blocker?.liftableAt).toBeDefined();
+    });
+
+    test('maturity blocker identifies the declarative source tier', () => {
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt: new Date(FIXED_NOW - 24 * 60 * 60 * 1000).toISOString(),
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        updatePolicySources: { maturityMode: 'label', maturityMinAgeDays: 'label' },
+      });
+
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
+      expect(blocker?.message).toContain('from label');
+      expect(blocker?.details?.policySource).toBe('label');
     });
 
     test('liftableAt is correct ISO date when updateDetectedAt is known', () => {
@@ -906,7 +1106,7 @@ describe('computeUpdateEligibility', () => {
         isTriggerIncluded: () => true,
       });
       const container = makeContainerWithTagUpdate({
-        triggerExclude: 'docker.update',
+        actionTriggerExclude: 'docker.update',
       });
       const result = computeUpdateEligibility(
         container,
@@ -919,6 +1119,29 @@ describe('computeUpdateEligibility', () => {
       expect(blocker).toBeDefined();
       expect(blocker?.details?.triggerExclude).toBe('docker.update');
     });
+
+    test('reads the action-scoped exclude, never the deprecated mirror (#494)', () => {
+      const isTriggerExcluded = vi.fn().mockReturnValue(false);
+      const trigger = makeTrigger({
+        isTriggerExcluded,
+        isTriggerIncluded: () => true,
+      });
+      const container = makeContainerWithTagUpdate({
+        triggerExclude: 'docker.update',
+        notificationTriggerExclude: 'docker.update',
+      });
+
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+
+      expect(isTriggerExcluded).toHaveBeenCalledWith(container, undefined);
+      expect(result.blockers.find((b) => b.reason === 'trigger-excluded')).toBeUndefined();
+    });
   });
 
   describe('trigger-not-included', () => {
@@ -928,7 +1151,7 @@ describe('computeUpdateEligibility', () => {
         isTriggerIncluded: () => false,
       });
       const container = makeContainerWithTagUpdate({
-        triggerInclude: 'other.trigger',
+        actionTriggerInclude: 'other.trigger',
       });
       const result = computeUpdateEligibility(
         container,
@@ -940,6 +1163,29 @@ describe('computeUpdateEligibility', () => {
       const blocker = result.blockers.find((b) => b.reason === 'trigger-not-included');
       expect(blocker).toBeDefined();
       expect(blocker?.details?.triggerInclude).toBe('other.trigger');
+    });
+
+    test('reads the action-scoped include, never the deprecated mirror (#494)', () => {
+      const isTriggerIncluded = vi.fn().mockReturnValue(true);
+      const trigger = makeTrigger({
+        isTriggerExcluded: () => false,
+        isTriggerIncluded,
+      });
+      const container = makeContainerWithTagUpdate({
+        triggerInclude: 'slack.alert',
+        notificationTriggerInclude: 'slack.alert',
+      });
+
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+
+      expect(isTriggerIncluded).toHaveBeenCalledWith(container, undefined);
+      expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeUndefined();
     });
 
     test('trigger-excluded takes precedence over trigger-not-included', () => {

@@ -3,8 +3,7 @@ import { useI18n } from 'vue-i18n';
 import AppButton from '../AppButton.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
-import ReleaseNotesLink from './ReleaseNotesLink.vue';
-import ProjectLink from './ProjectLink.vue';
+import ContainerLinkActions from './ContainerLinkActions.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -148,15 +147,19 @@ const {
           <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
           <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
         </div>
-        <ReleaseNotesLink
+        <ContainerLinkActions
+          :source-repo="selectedContainer.sourceRepo"
           :release-notes="selectedContainer.releaseNotes"
           :current-release-notes="selectedContainer.currentReleaseNotes"
           :release-link="selectedContainer.releaseLink"
           :container-id="selectedContainer.id"
           :from-tag="selectedContainer.currentTag"
           :to-tag="selectedContainer.newTag"
+          :registry="selectedContainer.registry"
+          :registry-name="selectedContainer.registryName"
+          :registry-url="selectedContainer.registryUrl"
+          icon-size="sm"
         />
-        <ProjectLink :source-repo="selectedContainer.sourceRepo" />
         <div class="pt-1 space-y-1.5">
           <div class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.fullPageOverview.tagFilters') }}</div>
           <div class="flex items-start gap-2 px-3 py-2 dd-rounded text-2xs-plus"

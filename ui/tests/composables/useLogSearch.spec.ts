@@ -132,6 +132,25 @@ describe('useLogSearch', () => {
     expect(search.currentMatchEntryId.value).toBe(3);
   });
 
+  it('delegates scrolling when a virtualized match has no mounted row', async () => {
+    const visibleEntries = ref<SearchEntry[]>([
+      makeEntry(1, '2026-03-15T00:00:00Z', 'alpha'),
+      makeEntry(2, '2026-03-15T00:00:01Z', 'alpha-2'),
+    ]);
+    const scrollToEntry = vi.fn();
+    const search = useLogSearch({
+      visibleEntries: computed(() => visibleEntries.value),
+      lineElements: new Map(),
+      scrollToEntry,
+    });
+
+    search.searchQuery.value = 'alpha';
+    await nextTick();
+    search.jumpToMatch('next');
+
+    expect(scrollToEntry).toHaveBeenCalledWith(2);
+  });
+
   it('resets match index when search input changes', async () => {
     const visibleEntries = ref<SearchEntry[]>([
       makeEntry(1, '2026-03-15T00:00:00Z', 'alpha'),

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import nextConfig from "../next.config.mjs";
+import { escapeRegExp, versions } from "./docs-versions.mjs";
 
 // experimental.sri must stay OFF. Turbopack DID gain SRI support in Next 16.2,
 // so "the bundler supports it now" is not a reason to turn it back on: the hash
@@ -27,21 +28,23 @@ test("production build uses Turbopack without --webpack", () => {
 
 test("docs redirects keep versioned URLs and map legacy deep links to current docs", async () => {
   const redirects = (await nextConfig.redirects?.()) ?? [];
+  const currentVersion = versions[0].slug;
+  const versionPrefixPattern = versions.map((v) => `${escapeRegExp(v.slug)}(?:/|$)`).join("|");
 
   const rootRedirect = redirects.find((rule) => rule.source === "/docs");
   assert.deepEqual(rootRedirect, {
     source: "/docs",
-    destination: "/docs/v1.5",
+    destination: `/docs/${currentVersion}`,
     permanent: false,
   });
 
   assert.ok(
     redirects.some(
       (rule) =>
-        rule.source === "/docs/:path((?!v1\\.5(?:/|$)|v1\\.4(?:/|$)|v1\\.3(?:/|$)).*)" &&
-        rule.destination === "/docs/v1.5/:path" &&
+        rule.source === `/docs/:path((?!assets(?:/|$)|${versionPrefixPattern}).*)` &&
+        rule.destination === `/docs/${currentVersion}/:path` &&
         rule.permanent === false,
     ),
-    "expected a deep-link compatibility redirect for unversioned docs paths",
+    "expected a deep-link compatibility redirect that excludes static docs assets",
   );
 });

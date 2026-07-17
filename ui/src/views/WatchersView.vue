@@ -3,9 +3,11 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
+import DataTableColumnPicker from '@/components/DataTableColumnPicker.vue';
 import DetailField from '@/components/DetailField.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllWatchers, getWatcher } from '../services/watcher';
 import type { ApiComponent } from '../types/api';
@@ -22,7 +24,6 @@ const { t } = useI18n();
 const { isMobile } = useBreakpoints();
 const route = useRoute();
 const router = useRouter();
-const watchersViewMode = useViewMode('watchers');
 const selectedWatcher = ref<Record<string, unknown> | null>(null);
 const detailOpen = ref(false);
 const detailLoading = ref(false);
@@ -58,6 +59,10 @@ function timeUntil(isoString: string): string {
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const watcherViewMode = useViewMode('watchers');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -86,6 +91,7 @@ const tableColumns = computed(() => [
     maxSize: 360,
     flex: 1,
     sortable: false,
+    required: true,
   },
   {
     key: 'status',
@@ -110,6 +116,7 @@ const tableColumns = computed(() => [
     minSize: 130,
     maxSize: 280,
     sortable: false,
+    cardPriority: -1,
   },
   {
     key: 'nextRun',
@@ -129,6 +136,19 @@ const tableColumns = computed(() => [
     sortable: false,
   },
 ]);
+
+const pickerColumns = computed<PickerColumn[]>(() =>
+  tableColumns.value.map((column) => ({
+    key: column.key,
+    label: column.label,
+    required: 'required' in column ? column.required : undefined,
+  })),
+);
+
+const { hiddenColumnKeys, toggleColumn, resetColumns } = useViewColumnVisibility(
+  'watchers',
+  pickerColumns,
+);
 
 function readWatcherContainerTotal(metadata: unknown): number {
   if (!metadata || typeof metadata !== 'object') return 0;
@@ -221,11 +241,12 @@ onMounted(async () => {
 
     <!-- Filter bar -->
     <DataFilterBar
-      v-model="watchersViewMode"
+      v-model="watcherViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredWatchers.length"
       :total-count="watchersData.length"
       :active-filter-count="activeFilterCount"
+      :hide-view-toggle="cardReflowForced"
     >
       <template #filters>
         <input v-model="searchQuery"
@@ -238,16 +259,26 @@ onMounted(async () => {
           {{ t('watchersView.clear') }}
         </AppButton>
       </template>
+      <template #extra-buttons>
+        <DataTableColumnPicker
+          :columns="pickerColumns"
+          :hidden-keys="hiddenColumnKeys"
+          @toggle="toggleColumn"
+          @reset="resetColumns" />
+      </template>
     </DataFilterBar>
 
     <!-- Table view -->
     <DataTable
-      v-if="watchersViewMode === 'table' && filteredWatchers.length > 0 && !loading"
+      v-if="filteredWatchers.length > 0 && !loading"
       :columns="tableColumns"
       storage-key="watchers"
       :rows="filteredWatchers"
       row-key="id"
+      :hidden-column-keys="hiddenColumnKeys"
       :active-row="selectedWatcher?.id"
+      :prefer-cards="watcherViewMode === 'cards'"
+      @update:card-reflow-forced="cardReflowForced = $event"
       @row-click="openDetail($event)"
     >
       <template #cell-name="{ row }">
@@ -278,88 +309,52 @@ onMounted(async () => {
       <template #cell-lastRun="{ row }">
         <span class="dd-text-muted">{{ row.lastRun }}</span>
       </template>
-    </DataTable>
-
-    <!-- Card view -->
-    <DataCardGrid
-      v-if="watchersViewMode === 'cards' && !loading"
-      :items="filteredWatchers"
-      item-key="id"
-      :selected-key="selectedWatcher?.id"
-      @item-click="openDetail($event)"
-    >
-      <template #card="{ item: watcher }">
-        <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" class="mt-1" v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')" />
-            <div class="min-w-0">
-              <div class="text-sm-plus font-semibold truncate dd-text">{{ watcher.name }}</div>
-              <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono max-w-[180px]" v-tooltip.top="watcher.cron">
-                {{ watcher.cron }}
+      <template #card="{ row }">
+        <div class="flex flex-col flex-1">
+          <!-- Header: status dot + name + cron -->
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <StatusDot :color="watcherStatusColor(row.status)" size="lg" class="mt-1"
+                         v-tooltip.top="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')" />
+              <div class="min-w-0">
+                <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+                <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono max-w-[180px]" v-tooltip.top="row.cron">
+                  {{ row.cron }}
+                </div>
+              </div>
+            </div>
+            <AppIcon :name="row.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 ml-2 md:!hidden"
+                     v-tooltip.top="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
+                     :style="{ color: watcherStatusColor(row.status) }" />
+            <AppBadge :tone="row.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
+              {{ row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused') }}
+            </AppBadge>
+          </div>
+          <!-- Body: containers / next run / last run -->
+          <div class="px-4 py-3">
+            <div class="grid grid-cols-2 gap-2 text-2xs-plus">
+              <div>
+                <span class="dd-text-muted">{{ t('watchersView.card.containers') }}</span>
+                <span class="ml-1 font-semibold dd-text">{{ row.containers }}</span>
+              </div>
+              <div>
+                <span class="dd-text-muted">{{ t('watchersView.card.nextRun') }}</span>
+                <span class="ml-1 font-semibold dd-text" v-tooltip.top="row.nextRunAt ? formatAbsoluteTime(row.nextRunAt) : ''">{{ row.nextRun }}</span>
+              </div>
+              <div>
+                <span class="dd-text-muted">{{ t('watchersView.card.lastRun') }}</span>
+                <span class="ml-1 font-semibold dd-text">{{ row.lastRun }}</span>
               </div>
             </div>
           </div>
-          <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 ml-2 md:!hidden"
-                   v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
-                   :style="{ color: watcherStatusColor(watcher.status) }" />
-          <AppBadge :tone="watcher.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
-            {{ watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused') }}
-          </AppBadge>
-        </div>
-        <div class="px-4 py-3">
-          <div class="grid grid-cols-2 gap-2 text-2xs-plus">
-            <div>
-              <span class="dd-text-muted">{{ t('watchersView.card.containers') }}</span>
-              <span class="ml-1 font-semibold dd-text">{{ watcher.containers }}</span>
-            </div>
-            <div>
-              <span class="dd-text-muted">{{ t('watchersView.card.nextRun') }}</span>
-              <span class="ml-1 font-semibold dd-text" v-tooltip.top="watcher.nextRunAt ? formatAbsoluteTime(watcher.nextRunAt) : ''">{{ watcher.nextRun }}</span>
-            </div>
-            <div>
-              <span class="dd-text-muted">{{ t('watchersView.card.lastRun') }}</span>
-              <span class="ml-1 font-semibold dd-text">{{ watcher.lastRun }}</span>
-            </div>
+          <!-- Footer: containers watched -->
+          <div class="px-4 py-2.5 mt-auto"
+               :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+            <span class="text-2xs dd-text-muted">{{ t('watchersView.card.containersWatched', { count: row.containers }) }}</span>
           </div>
         </div>
-        <div class="px-4 py-2.5 mt-auto"
-             :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <span class="text-2xs dd-text-muted">{{ t('watchersView.card.containersWatched', { count: watcher.containers }) }}</span>
-        </div>
       </template>
-    </DataCardGrid>
-
-    <!-- List view (accordion) -->
-    <DataListAccordion
-      v-if="watchersViewMode === 'list' && !loading"
-      :items="filteredWatchers"
-      item-key="id"
-      :selected-key="selectedWatcher?.id"
-      @item-click="openDetail($event)"
-    >
-      <template #header="{ item: watcher }">
-        <StatusDot :color="watcherStatusColor(watcher.status)" size="lg" v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')" />
-        <AppIcon name="watchers" :size="14" class="dd-text-secondary" />
-        <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ watcher.name }}</span>
-        <AppIcon :name="watcher.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
-                 v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
-                 :style="{ color: watcherStatusColor(watcher.status) }" />
-        <AppBadge :tone="watcher.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 max-md:!hidden">
-          {{ watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused') }}
-        </AppBadge>
-        <AppBadge v-if="watcher.config.maintenanceWindow" tone="alt" size="xs" class="shrink-0">
-          {{ t('watchersView.badge.maint') }}
-        </AppBadge>
-      </template>
-      <template #details="{ item: watcher }">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-          <DetailField :label="t('watchersView.detail.cron')" compact mono>{{ watcher.cron }}</DetailField>
-          <DetailField :label="t('watchersView.detail.lastRun')" compact mono>{{ watcher.lastRun }}</DetailField>
-          <DetailField :label="t('watchersView.detail.containersWatched')" compact mono>{{ watcher.containers }}</DetailField>
-          <DetailField v-for="(val, key) in watcher.config" :key="key" :label="String(key)" compact mono>{{ val }}</DetailField>
-        </div>
-      </template>
-    </DataListAccordion>
+    </DataTable>
 
     <!-- Empty state -->
     <EmptyState

@@ -186,7 +186,6 @@ vi.mock('@/composables/useBreakpoints', () => ({
 const mockVisibleColumns = ref(
   new Set(['icon', 'name', 'version', 'kind', 'status', 'bouncer', 'server', 'registry']),
 );
-const mockShowColumnPicker = ref(false);
 
 vi.mock('@/composables/useColumnVisibility', () => ({
   useColumnVisibility: vi.fn(() => ({
@@ -195,13 +194,10 @@ vi.mock('@/composables/useColumnVisibility', () => ({
       { key: 'name', label: 'Container', align: 'text-left', required: true },
     ],
     visibleColumns: mockVisibleColumns,
-    activeColumns: computed(() => [
-      { key: 'icon', label: '', align: 'text-center' },
-      { key: 'name', label: 'Container', align: 'text-left' },
-    ]),
     autoHiddenColumns: computed(() => []),
-    showColumnPicker: mockShowColumnPicker,
+    hiddenColumnKeys: computed(() => []),
     toggleColumn: vi.fn(),
+    resetColumns: vi.fn(),
   })),
 }));
 

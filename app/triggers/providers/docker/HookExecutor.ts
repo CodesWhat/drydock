@@ -45,7 +45,6 @@ type HookExecutorDependencies = {
   getPreferredLabelValue: (
     labels: Record<string, string> | undefined,
     ddKey: string,
-    wudKey: string,
     logger?: unknown,
   ) => string | undefined;
   getLogger: () => HookExecutorLogger | undefined;
@@ -137,29 +136,14 @@ class HookExecutor {
   buildHookConfig(container: HookContainer): HookConfig {
     const logger = this.getLogger()?.child?.({});
     return {
-      hookPre: this.getPreferredLabelValue(container.labels, 'dd.hook.pre', 'wud.hook.pre', logger),
-      hookPost: this.getPreferredLabelValue(
-        container.labels,
-        'dd.hook.post',
-        'wud.hook.post',
-        logger,
-      ),
+      hookPre: this.getPreferredLabelValue(container.labels, 'dd.hook.pre', logger),
+      hookPost: this.getPreferredLabelValue(container.labels, 'dd.hook.post', logger),
       hookPreAbort:
         (
-          this.getPreferredLabelValue(
-            container.labels,
-            'dd.hook.pre.abort',
-            'wud.hook.pre.abort',
-            logger,
-          ) ?? 'true'
+          this.getPreferredLabelValue(container.labels, 'dd.hook.pre.abort', logger) ?? 'true'
         ).toLowerCase() === 'true',
       hookTimeout: parseHookTimeout(
-        this.getPreferredLabelValue(
-          container.labels,
-          'dd.hook.timeout',
-          'wud.hook.timeout',
-          logger,
-        ),
+        this.getPreferredLabelValue(container.labels, 'dd.hook.timeout', logger),
       ),
       hookEnv: {
         DD_CONTAINER_NAME: sanitizeHookEnvValue(container.name),

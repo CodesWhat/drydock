@@ -22,10 +22,6 @@
       "status": "상태",
       "details": "상세 정보"
     },
-    "card": {
-      "time": "시간",
-      "version": "버전"
-    },
     "detail": {
       "timestamp": "타임스탬프",
       "event": "이벤트",
@@ -156,10 +152,6 @@
       "total": "전체"
     },
     "card": {
-      "vulnerabilities": "취약점",
-      "vsUpdate": "업데이트 대비",
-      "fixable": "수정 가능",
-      "noFixesAvailable": "수정 가능한 항목 없음",
       "total": "전체"
     },
     "badge": {
@@ -254,10 +246,6 @@
       "private": "비공개",
       "public": "공개"
     },
-    "card": {
-      "auth": "인증",
-      "status": "상태"
-    },
     "status": {
       "connected": "연결됨",
       "error": "오류",
@@ -289,15 +277,6 @@
       "status": "상태",
       "containers": "컨테이너",
       "lastSeen": "마지막 접속"
-    },
-    "card": {
-      "containers": "컨테이너",
-      "running": "실행 중",
-      "images": "이미지",
-      "lastSeen": "마지막 접속"
-    },
-    "list": {
-      "containers": "컨테이너"
     },
     "detail": {
       "containers": "컨테이너",
@@ -340,9 +319,6 @@
       "status": "상태",
       "refreshing": "트리거 상세 정보 새로 고침 중...",
       "noConfig": "구성 속성이 없습니다"
-    },
-    "list": {
-      "status": "상태"
     }
   },
   "watchersView": {
@@ -363,12 +339,6 @@
     "status": {
       "watching": "감시 중",
       "paused": "일시 정지됨"
-    },
-    "card": {
-      "containers": "컨테이너",
-      "nextRun": "다음 실행",
-      "lastRun": "마지막 실행",
-      "containersWatched": "{count}개 컨테이너 감시 중"
     },
     "badge": {
       "maint": "유지보수"

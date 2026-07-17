@@ -30,3 +30,6 @@ createTriggerHandlers({ ...triggerDeps, sanitizeLogParam: 123 });
 
 // @ts-expect-error uniqStrings must be a function
 createUpdatePolicyHandlers({ ...updatePolicyDeps, uniqStrings: 123 });
+
+// @ts-expect-error recordAuditEvent must be a function
+createUpdatePolicyHandlers({ ...updatePolicyDeps, recordAuditEvent: 123 });

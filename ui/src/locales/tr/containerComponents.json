@@ -274,14 +274,10 @@
       "hidePinned": "Sabitlenenleri Gizle",
       "hidePinnedTooltip": "Belirli sürümlere sabitlenmiş kapsayıcıları gizle",
       "clearAll": "Tümünü temizle",
-      "toggleColumnsTooltip": "Sütunları değiştir",
       "groupByStackTooltip": "Yığına göre gruplandır",
       "expandAll": "Tümünü genişlet",
       "collapseAll": "Tümünü daralt",
       "recheckTooltip": "Güncellemeleri tekrar kontrol edin",
-      "columnsHeader": "Sütunlar",
-      "narrowViewportSuffix": "(dar görünüm alanı)",
-      "autoHiddenBadgeTooltip": "Pencere dar olduğu için {count} sütun otomatik gizlendi. Alan açmak için pencereyi genişletin veya diğer sütunları gizleyin.",
       "filterSearch": "Arama: {value}",
       "filterStatus": "Durum: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -324,6 +320,7 @@
     "projectLink": {
       "viewProject": "Projeyi görüntüle"
     },
+    "registryLink": { "viewRegistry": "Kayıt defterini görüntüle" },
     "releaseNotesLink": {
       "releaseNotes": "Sürüm notları",
       "viewFullNotes": "Notların tamamını görüntüle",
@@ -553,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Sabitlendi — bilgilendirme amacıyla daha yeni bir sürüm mevcut."
+      }
     }
   }
 }

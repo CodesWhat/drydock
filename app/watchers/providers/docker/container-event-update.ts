@@ -1,4 +1,8 @@
-import type { Container } from '../../../model/container.js';
+import {
+  type Container,
+  getCanonicalContainerName,
+  normalizeContainerHealth,
+} from '../../../model/container.js';
 import { getErrorMessage } from '../../../util/error.js';
 
 import {
@@ -13,6 +17,9 @@ type UnknownRecord = Record<string, unknown>;
 interface DockerContainerInspectLike {
   State: {
     Status: string;
+    Health?: {
+      Status?: string;
+    };
   };
   Name?: string;
   Config?: {
@@ -210,10 +217,21 @@ export function updateContainerFromInspect(
 ) {
   const dockerContainerInspect = containerInspect as DockerContainerInspectLike;
   const newStatus = dockerContainerInspect.State.Status;
+  const newHealth = normalizeContainerHealth(dockerContainerInspect.State.Health?.Status);
+  const oldHealth = containerFound.health;
   const rawName = (dockerContainerInspect.Name || '').replace(/^\//, '');
-  const newName = canonicalizeContainerName(rawName, containerFound.id);
+  const canonicalizedName = canonicalizeContainerName(rawName, containerFound.id);
   const oldStatus = containerFound.status;
   const oldName = containerFound.name;
+  // The update executor renames the outgoing container to
+  // `${oldName}-old-${Date.now()}` before creating its replacement. Persisting
+  // that transient name would poison the doc: prune can no longer name-match
+  // it and stashUpdatePolicyForReplacement's rollback-name guard then skips
+  // the policy stash, so the replacement loses its update policy (#535). The
+  // rename is provably ours only when stripping the rollback suffix
+  // reconstructs this doc's current name — treat exactly that as a no-op.
+  const newName =
+    getCanonicalContainerName(canonicalizedName) === oldName ? oldName : canonicalizedName;
   const oldDisplayName = containerFound.displayName;
 
   const labelsFromInspect = dockerContainerInspect.Config?.Labels;
@@ -236,6 +254,12 @@ export function updateContainerFromInspect(
     containerFound.status = newStatus;
     changed = true;
     dependencies.logInfo?.(`Status changed from ${oldStatus} to ${newStatus}`);
+  }
+
+  if (oldHealth !== newHealth) {
+    containerFound.health = newHealth;
+    changed = true;
+    dependencies.logInfo?.(`Health changed from ${oldHealth} to ${newHealth}`);
   }
 
   if (newName !== '' && oldName !== newName) {

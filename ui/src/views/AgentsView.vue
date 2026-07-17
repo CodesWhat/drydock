@@ -8,10 +8,11 @@ import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
 import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.vue';
 import AppBadge from '../components/AppBadge.vue';
 import AppTabBar from '../components/AppTabBar.vue';
-import AppIconButton from '../components/AppIconButton.vue';
-import DetailField from '../components/DetailField.vue';
+import DataSortControl from '../components/DataSortControl.vue';
+import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import StatusDot from '../components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
@@ -261,6 +262,10 @@ onUnmounted(() => {
 // -- Search filter --
 const searchQuery = ref('');
 const showFilters = ref(false);
+const agentViewMode = useViewMode('agents');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -279,9 +284,6 @@ const filteredAgents = computed(() => {
   const q = searchQuery.value.toLowerCase();
   return agentsData.value.filter((item) => item.name.toLowerCase().includes(q));
 });
-
-// -- View mode --
-const agentViewMode = useViewMode('agents');
 
 // -- Sorting --
 const agentSortKey = usePreference(
@@ -331,6 +333,7 @@ const agentAllColumns = computed(() => [
     maxSize: 150,
     sortable: true,
     required: false,
+    cardPriority: 5,
   },
   {
     key: 'containers',
@@ -349,6 +352,7 @@ const agentAllColumns = computed(() => [
     maxSize: 190,
     sortable: true,
     required: false,
+    cardPriority: -1,
   },
   {
     key: 'os',
@@ -358,6 +362,7 @@ const agentAllColumns = computed(() => [
     maxSize: 180,
     sortable: true,
     required: false,
+    cardPriority: -1,
   },
   {
     key: 'version',
@@ -380,35 +385,48 @@ const agentAllColumns = computed(() => [
   },
 ]);
 
-const agentVisibleColumns = ref<Set<string>>(
-  new Set(['name', 'status', 'containers', 'docker', 'os', 'version', 'lastSeen']),
+const pickerColumns = computed<PickerColumn[]>(() =>
+  agentAllColumns.value.map((column) => ({
+    key: column.key,
+    label: column.label,
+    required: 'required' in column ? column.required : undefined,
+  })),
 );
-const showAgentColumnPicker = ref(false);
-const agentColumnPickerStyle = ref<Record<string, string>>({});
-function toggleAgentColumnPicker(event: MouseEvent) {
-  showAgentColumnPicker.value = !showAgentColumnPicker.value;
-  if (showAgentColumnPicker.value) {
-    const button = event.currentTarget as HTMLElement;
-    const rect = button.getBoundingClientRect();
-    agentColumnPickerStyle.value = {
-      position: 'fixed',
-      top: `${rect.bottom + 4}px`,
-      left: `${rect.left}px`,
-    };
-  }
-}
 
-function toggleAgentColumn(key: string) {
-  const col = agentAllColumns.value.find((c) => c.key === key);
-  if (col?.required) return;
-  if (agentVisibleColumns.value.has(key)) agentVisibleColumns.value.delete(key);
-  else agentVisibleColumns.value.add(key);
-}
+// Cards are showing when the user toggled to them OR the width forced the reflow.
+const inCardMode = computed(() => cardReflowForced.value || agentViewMode.value === 'cards');
 
-const agentActiveColumns = computed(() =>
-  agentAllColumns.value.filter(
-    (c) => agentVisibleColumns.value.has(c.key) && (!isCompact.value || c.required),
-  ),
+// Card-mode sort options, hoisted into the filter bar (table mode sorts via headers).
+// (No icon-only columns exist in this view's column set, unlike containers'.)
+const sortableColumns = computed(() =>
+  agentAllColumns.value
+    .filter((column) => column.sortable)
+    .map((column) => ({ key: column.key, label: column.label })),
+);
+
+const {
+  hiddenColumnKeys: pickerHiddenColumnKeys,
+  toggleColumn,
+  resetColumns,
+} = useViewColumnVisibility('agents', pickerColumns);
+
+/**
+ * Compact mode (< 1024px) used to swap the active column set down to just the required
+ * columns. Now `agentAllColumns` always returns the full 7-column set (so card mode can
+ * surface the `status` cardPriority annotation on mobile), and the non-required columns are
+ * force-hidden here instead — the union of the picker's hidden set with every non-required
+ * column key. The picker itself is hidden in compact mode (see template) so a user can never
+ * toggle back on a column this override is about to re-hide anyway.
+ */
+const hiddenColumnKeys = computed(() =>
+  isCompact.value
+    ? [
+        ...new Set([
+          ...pickerHiddenColumnKeys.value,
+          ...agentAllColumns.value.filter((c) => !c.required).map((c) => c.key),
+        ]),
+      ]
+    : pickerHiddenColumnKeys.value,
 );
 
 // -- Detail panel --
@@ -542,7 +560,16 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             v-model:showFilters="showFilters"
             :filtered-count="filteredAgents.length"
             :total-count="agentsData.length"
-            :active-filter-count="activeFilterCount">
+            :active-filter-count="activeFilterCount"
+            :hide-view-toggle="cardReflowForced">
+            <template v-if="inCardMode && sortableColumns.length > 0" #sort>
+              <DataSortControl
+                :columns="sortableColumns"
+                :sort-key="agentSortKey"
+                :sort-asc="agentSortAsc"
+                @update:sort-key="agentSortKey = $event"
+                @update:sort-asc="agentSortAsc = $event" />
+            </template>
             <template #filters>
               <input v-model="searchQuery"
                      type="text"
@@ -555,48 +582,30 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               </AppButton>
             </template>
             <template #extra-buttons>
-              <div v-if="agentViewMode === 'table'">
-                <AppIconButton icon="config" size="toolbar" variant="plain" class="text-2xs-plus"
-                        :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
-                        :aria-label="t('agentsView.list.toggleColumns')"
-                        v-tooltip.top="t('agentsView.list.toggleColumns')"
-                        @click.stop="toggleAgentColumnPicker" />
-              </div>
+              <DataTableColumnPicker
+                v-if="!isCompact"
+                :columns="pickerColumns"
+                :hidden-keys="pickerHiddenColumnKeys"
+                @toggle="toggleColumn"
+                @reset="resetColumns" />
             </template>
           </DataFilterBar>
 
-          <!-- Column picker popover (rendered outside DataFilterBar to avoid overflow clipping) -->
-          <div v-if="showAgentColumnPicker" @click.stop
-               class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
-               :style="{
-                 ...agentColumnPickerStyle,
-                 zIndex: 'var(--z-popover)',
-                 backgroundColor: 'var(--dd-bg-card)',
-                 border: '1px solid var(--dd-border-strong)',
-                 boxShadow: 'var(--dd-shadow-tooltip)',
-               }">
-            <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">{{ t('agentsView.list.columnPickerHeading') }}</div>
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" v-for="col in agentAllColumns" :key="col.key"
-
-                    :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
-                    @click="toggleAgentColumn(col.key)">
-              <AppIcon :name="agentVisibleColumns.has(col.key) ? 'check' : 'square'" :size="10"
-                       :style="agentVisibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
-              {{ col.label }}
-            </AppButton>
-          </div>
-
           <!-- Table view -->
-          <DataTable v-if="agentViewMode === 'table' && !loading"
-                     :columns="agentActiveColumns"
+          <DataTable v-if="!loading"
+                     :columns="agentAllColumns"
                      storage-key="agents"
                      :rows="sortedAgents"
                      row-key="id"
                      :sort-key="agentSortKey"
                      :sort-asc="agentSortAsc"
                      :selected-key="selectedAgent?.id ?? null"
+                     :hidden-column-keys="hiddenColumnKeys"
+                     :prefer-cards="agentViewMode === 'cards'"
+                     :hoist-card-sort="inCardMode"
                      @update:sort-key="agentSortKey = $event"
                      @update:sort-asc="agentSortAsc = $event"
+                     @update:card-reflow-forced="cardReflowForced = $event"
                      @row-click="selectAgent($event)">
             <template #cell-name="{ row }">
               <div class="flex items-start gap-2 min-w-0">
@@ -643,6 +652,57 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             <template #cell-lastSeen="{ row }">
               <span class="dd-text-muted">{{ row.lastSeen }}</span>
             </template>
+            <template #card="{ row }">
+              <div class="relative flex flex-col flex-1">
+                <!-- Header: status dot + name/host left, connection status badge top-right -->
+                <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2 min-w-0">
+                    <StatusDot :status="row.status" size="md" class="mt-1.5" v-tooltip.top="row.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
+                    <div class="min-w-0">
+                      <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+                      <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ row.host }}</div>
+                    </div>
+                  </div>
+                  <span
+                    class="inline-flex items-center gap-1.5 shrink-0 text-2xs-plus font-semibold"
+                    :style="{ color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }"
+                  >
+                    <span class="h-2 w-2 shrink-0 rounded-full"
+                          :style="{ backgroundColor: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }"></span>
+                    {{ row.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected') }}
+                  </span>
+                </div>
+                <!-- Body: compact facts list -->
+                <div class="px-4 py-3 flex flex-col gap-2">
+                  <div class="field flex items-baseline justify-between gap-3">
+                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.containers') }}</span>
+                    <span class="text-2xs-plus">
+                      <span class="font-bold" style="color: var(--dd-success);">{{ row.containers.running }}</span><span class="dd-text-muted">/{{ row.containers.total }}</span>
+                    </span>
+                  </div>
+                  <div class="field flex items-baseline justify-between gap-3">
+                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.version') }}</span>
+                    <span v-if="!row.version" class="text-2xs-plus dd-text-muted">-</span>
+                    <span v-else class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-bg-elevated dd-text-secondary">
+                      v{{ row.version }}
+                    </span>
+                  </div>
+                  <div class="field flex items-baseline justify-between gap-3">
+                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.docker') }}</span>
+                    <span class="text-2xs-plus font-mono" :class="row.dockerVersion ? 'dd-text-secondary' : 'dd-text-muted'">{{ row.dockerVersion ?? '—' }}</span>
+                  </div>
+                  <div class="field flex items-baseline justify-between gap-3">
+                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.os') }}</span>
+                    <span class="text-2xs-plus" :class="row.os ? 'dd-text-secondary' : 'dd-text-muted'">{{ row.os ?? '—' }}</span>
+                  </div>
+                </div>
+                <!-- Footer: last-seen timestamp (agents have no per-row actions) -->
+                <div class="px-4 py-2.5 flex items-center justify-start mt-auto"
+                     :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+                  <span class="text-2xs-plus dd-text-muted">{{ row.lastSeen }}</span>
+                </div>
+              </div>
+            </template>
             <template #empty>
               <EmptyState icon="filter"
                           :message="t('agentsView.list.emptyFiltered')"
@@ -650,130 +710,6 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                           @clear="searchQuery = ''" />
             </template>
           </DataTable>
-
-          <!-- Card view -->
-          <DataCardGrid v-if="agentViewMode === 'cards' && !loading"
-                        :items="sortedAgents"
-                        item-key="id"
-                        :selected-key="selectedAgent?.id ?? null"
-                        @item-click="selectAgent($event)">
-            <template #card="{ item: agent }">
-              <!-- Card header -->
-              <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-                <div class="flex items-center gap-2.5 min-w-0">
-                  <StatusDot :status="agent.status" size="lg" class="mt-1" v-tooltip.top="agent.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
-                  <div class="min-w-0">
-                    <div class="text-sm-plus font-semibold truncate dd-text">{{ agent.name }}</div>
-                    <div class="text-2xs-plus truncate mt-0.5 dd-text-muted">{{ agent.host }}</div>
-                  </div>
-                </div>
-                <AppBadge :tone="agent.status === 'connected' ? 'success' : 'danger'" size="xs" class="tracking-wide shrink-0 ml-2 hidden md:inline-flex">
-                  {{ agent.status }}
-                </AppBadge>
-              </div>
-              <!-- Card body -->
-              <div class="px-4 py-3">
-                <div class="grid grid-cols-2 gap-2 text-2xs-plus">
-                  <div>
-                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.docker') }}</span>
-                    <span class="ml-1 font-semibold" :class="agent.dockerVersion ? 'dd-text' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</span>
-                  </div>
-                  <div>
-                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.os') }}</span>
-                    <span class="ml-1 font-semibold" :class="agent.os ? 'dd-text' : 'dd-text-muted'">{{ agent.os ?? '—' }}</span>
-                  </div>
-                  <div>
-                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.architecture') }}</span>
-                    <span class="ml-1 font-semibold" :class="agent.arch ? 'dd-text' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</span>
-                  </div>
-                  <div>
-                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.agent') }}</span>
-                    <span class="ml-1 font-semibold" :class="agent.version ? 'dd-text' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</span>
-                  </div>
-                </div>
-              </div>
-              <!-- Card footer -->
-              <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
-                   :style="{
-                     borderTop: '1px solid var(--dd-border)',
-                     backgroundColor: 'var(--dd-bg-elevated)',
-                   }">
-                <div class="flex items-center gap-3 text-2xs-plus">
-                  <span>
-                    <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
-                    <span class="dd-text-muted"> {{ t('agentsView.list.card.running') }}</span>
-                  </span>
-                  <span v-if="agent.containers.stopped > 0">
-                    <span class="font-bold" style="color: var(--dd-danger);">{{ agent.containers.stopped }}</span>
-                    <span class="dd-text-muted"> {{ t('agentsView.list.card.stopped') }}</span>
-                  </span>
-                </div>
-                <span class="text-2xs dd-text-muted">{{ agent.lastSeen }}</span>
-              </div>
-            </template>
-          </DataCardGrid>
-
-          <!-- List view -->
-          <DataListAccordion v-if="agentViewMode === 'list' && !loading"
-                             :items="sortedAgents"
-                             item-key="id"
-                             :selected-key="selectedAgent?.id ?? null">
-            <template #header="{ item: agent }">
-              <StatusDot :status="agent.status" size="lg" v-tooltip.top="agent.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold truncate dd-text">{{ agent.name }}</div>
-                <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ agent.host }}</div>
-              </div>
-              <div class="flex items-center gap-1.5 shrink-0">
-                <AppBadge :tone="agent.status === 'connected' ? 'success' : 'danger'" size="xs" class="hidden md:inline-flex">
-                  {{ agent.status }}
-                </AppBadge>
-                <span class="text-2xs dd-text-secondary">
-                  {{ agent.containers.running }}/{{ agent.containers.total }}
-                </span>
-                <span class="text-2xs dd-text-muted">{{ agent.lastSeen }}</span>
-              </div>
-            </template>
-            <template #details="{ item: agent }">
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 mt-2">
-                <DetailField :label="t('agentsView.detail.fields.docker')" mono compact>
-                  <span :class="agent.dockerVersion ? '' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.fields.os')" compact>
-                  <span :class="agent.os ? '' : 'dd-text-muted'">{{ agent.os ?? '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.fields.architecture')" compact>
-                  <span :class="agent.arch ? '' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.fields.agent')" mono compact>
-                  <span :class="agent.version ? '' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.fields.uptime')" compact>
-                  <span :class="agent.uptime ? '' : 'dd-text-muted'">{{ agent.uptime ?? '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.overview.containers')" compact>
-                  <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
-                  <span class="dd-text-muted"> {{ t('agentsView.list.card.running') }} / </span>
-                  <span>{{ agent.containers.total }}</span>
-                </DetailField>
-              </div>
-              <!-- Action buttons -->
-              <div class="mt-4 pt-3 flex items-center gap-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
-                <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
-                        @click.stop="selectAgent(agent)">
-                  <AppIcon name="info" :size="11" />
-                  {{ t('agentsView.detail.listView.details') }}
-                </AppButton>
-              </div>
-            </template>
-          </DataListAccordion>
-
-          <!-- Empty state (when no data at all, not filtered) -->
-          <EmptyState v-if="!loading && sortedAgents.length === 0 && agentViewMode !== 'table'"
-                      icon="filter"
-                      :message="t('agentsView.list.emptyFiltered')"
-                      :show-clear="activeFilterCount > 0"
-                      @clear="searchQuery = ''" />
 
     <template #panel>
         <!-- Detail panel -->

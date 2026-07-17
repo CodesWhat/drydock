@@ -9,6 +9,7 @@ import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { fullName } from '../model/container.js';
 import * as registry from '../registry/index.js';
+import { createConfiguredSbomStorage } from '../security/configured-sbom-storage.js';
 import {
   generateImageSbom,
   SECURITY_SBOM_FORMATS,
@@ -23,6 +24,7 @@ import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
 import { uniqStrings } from '../util/string-array.js';
+import { recordAuditEvent } from './audit-events.js';
 import { mapComponentsToList } from './component.js';
 import { createBulkSecurityHandlers } from './container/bulk-security.js';
 import { createCrudHandlers } from './container/crud.js';
@@ -35,6 +37,7 @@ import {
   resolveContainerImageFullName,
   resolveContainerRegistryAuth,
 } from './container/shared.js';
+import { type ContainerSortMode, sortContainers } from './container/sorting.js';
 import { createStatsHandlers } from './container/stats.js';
 import { createTriggerHandlers } from './container/triggers.js';
 import { createUpdatePolicyHandlers } from './container/update-policy.js';
@@ -46,6 +49,7 @@ import {
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
 const log = logger.child({ component: 'container' });
+const sbomStorage = createConfiguredSbomStorage();
 
 const router = express.Router();
 const RECENT_STATUS_AUDIT_LIMIT = 100;
@@ -126,10 +130,14 @@ function getTriggers() {
  */
 export function getContainersFromStore(
   query: Record<string, unknown>,
-  pagination?: { limit: number; offset: number },
+  pagination?: { limit: number; offset: number; sort?: ContainerSortMode },
 ) {
   if (pagination) {
-    return storeContainer.getContainers(query, pagination);
+    const { sort, ...normalizedPagination } = pagination;
+    return storeContainer.getContainers(query, {
+      ...normalizedPagination,
+      ...(sort ? { sort: (containers) => sortContainers(containers, sort) } : {}),
+    });
   }
   return storeContainer.getContainers(query);
 }
@@ -157,6 +165,8 @@ async function getContainerRegistryAuth(container) {
 const crudHandlers = createCrudHandlers({
   storeApi: {
     getContainersFromStore,
+    getContainersForStats: storeContainer.getContainersForStats,
+    getContainersRawFromStore: storeContainer.getContainersRaw,
     getContainerCountFromStore,
     storeContainer,
     updateOperationStore,
@@ -199,6 +209,7 @@ const updatePolicyHandlers = createUpdatePolicyHandlers({
   uniqStrings,
   getErrorMessage,
   redactContainerRuntimeEnv,
+  recordAuditEvent,
 });
 
 const securityHandlers = createSecurityHandlers({
@@ -218,6 +229,7 @@ const securityHandlers = createSecurityHandlers({
   getContainerImageFullName,
   getContainerRegistryAuth,
   updateDigestScanCache,
+  sbomStorage,
   log,
 });
 

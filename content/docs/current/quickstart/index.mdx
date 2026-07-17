@@ -78,7 +78,7 @@ services:
       - 3000:3000
 ```
 
-<Callout type="info">If you need a **read-only** socket mount (`:ro`), break-glass root mode requires both `DD_RUN_AS_ROOT=true` and `DD_ALLOW_INSECURE_ROOT=true`. Prefer socket proxy mode for least privilege. See [Docker Socket Security](/docs/configuration/watchers/#docker-socket-security) for details.</Callout>
+<Callout type="info">If you need a **read-only** socket mount (`:ro`), break-glass root mode requires both `DD_RUN_AS_ROOT=true` and `DD_ALLOW_INSECURE_ROOT=true`. Prefer socket proxy mode for least privilege. See [Docker Socket Security](/docs/configuration/watchers#docker-socket-security) for details.</Callout>
 </Tab>
 <Tab value="Docker CLI">
 
@@ -98,13 +98,25 @@ docker run -d --name drydock \
 
 The official image is published on Docker Hub and GitHub Container Registry.
 
+Release tags use the same channel names in every registry:
+
+| Tag | Behavior |
+| --- | --- |
+| `1.6.0-rc.1` | Immutable release candidate; best for reproducible testing |
+| `1.6-rc` | Rolling release-candidate channel; moves to the newest `1.6.0-rc.N` |
+| `1.6` | Rolling stable minor channel; published only for GA releases |
+| `1` | Rolling stable major channel; published only for GA releases |
+| `latest` | Newest GA release; never points at a prerelease |
+
+Use the exact RC tag when reporting a regression. Use `1.6-rc` only when you intentionally want each candidate cut without editing your Compose file.
+
 <Callout type="warn">Authentication is **required by default** on fresh installs. The examples above use Basic auth with username `admin` and password `password`. See the [auth docs](/docs/configuration/authentications) for OIDC, anonymous access, and other options.</Callout>
 
 <Callout type="warn">**Behind a reverse proxy?** If a TLS-terminating reverse proxy (Nginx Proxy Manager, Traefik, Caddy, Synology DSM, etc.) sits in front of Drydock, set `DD_SERVER_TRUSTPROXY=1` (the number of proxy hops) — otherwise every manual action in the UI fails with `403 CSRF validation failed`. See [the FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for details.</Callout>
 
 ## Migrating from WUD
 
-If you are coming from What's Up Docker, you can switch images and keep your existing config (`WUD_*` env vars and `wud.*` labels still work).
+If you are coming from What's Up Docker, migrate `WUD_*` environment variables and `wud.*` labels before starting v1.6; those runtime aliases have been removed.
 
 To rewrite your local config to drydock naming (`DD_*` and `dd.*`), run:
 
@@ -118,6 +130,8 @@ docker exec -it drydock node dist/index.js config migrate --file .env --file com
 
 `config migrate` reads/writes only local files in your deployment. It does not send usage data to external services.
 
+If you use the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) or Homepage's native `whatsupdocker` widget against your old WUD instance, set `DD_COMPAT_WUDCARD=true` to keep them working against drydock — see [wud-card compatibility](/docs/configuration/server#wud-card-compatibility).
+
 ## Open the UI
 
 [Open the UI](http://localhost:3000) in a browser and check that everything is working as expected.
@@ -130,8 +144,8 @@ docker exec -it drydock node dist/index.js config migrate --file .env --file com
    - `@` runtime resources (containers, agents, triggers, watchers)
    - `#` config resources (registries, auth, notifications, settings)
 3. Leave the query empty to use recent results.
-4. Open **Notifications** and tune event rules (`update-available`, `update-applied`, `update-failed`, `security-alert`, `agent-disconnect`) plus trigger assignments.
-5. Reorder dashboard widgets by drag/drop; layout persists locally and can be reset.
+4. Open **Notifications** and tune all seven delivery rules, trigger assignments, audit-backed in-app bell categories, and per-provider templates. The update-available bell rule also offers a severity threshold; use **Preview** to render template drafts before saving.
+5. Reorder or resize dashboard widgets in edit mode; the custom grid persists responsive layouts locally (and across devices when signed-in preference sync is enabled) and can be reset.
 
 Keyboard shortcuts: `Enter` confirms action dialogs, `Escape` cancels dialogs and closes detail panels.
 
@@ -140,6 +154,7 @@ Keyboard shortcuts: `Enter` confirms action dialogs, `Escape` cancels dialogs an
 - [**Getting started guide**](/docs/getting-started) — step-by-step walkthrough from watching containers to notifications and auto-updates.
 - [**Add some triggers**](/docs/configuration/triggers) to get notified or auto-update containers.
 - [**Configure watchers**](/docs/configuration/watchers) to fine-tune how drydock monitors your containers.
+- [**Run with Podman**](/docs/configuration/watchers#podman-quick-start) if your host uses Podman's Docker-compatible API socket.
 - [**Multi-host monitoring**](/docs/configuration/agents) — run lightweight agents on remote hosts and aggregate them into one UI.
 - [**Integrate other registries**](/docs/configuration/registries) (ECR, GCR, GHCR, and more).
 - See a **[complete configuration example](/docs/configuration/#complete-example)** illustrating common drydock options.

@@ -17,7 +17,7 @@ Feature: Drydock WebSocket Log Stream API
     And every WebSocket message should be valid json
 
   Scenario: Container log stream must close normally with follow disabled
-    Given I GET /api/containers
+    Given I GET /api/v1/containers
     And I store the index of container named hub_nginx_120 as containerIndex in scenario scope
     And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
     When I authenticate for WebSocket
@@ -30,7 +30,7 @@ Feature: Drydock WebSocket Log Stream API
     Then WebSocket should have closed with code 4004
 
   Scenario: Container log stream must deliver valid JSON messages when logs exist
-    Given I GET /api/containers
+    Given I GET /api/v1/containers
     And I store the index of container named hub_nginx_120 as containerIndex in scenario scope
     And I store the value of body path $.data[`containerIndex`].id as containerId in scenario scope
     When I authenticate for WebSocket

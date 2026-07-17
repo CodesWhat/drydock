@@ -1,7 +1,7 @@
 Feature: Drydock Registry API Exposure
 
   Scenario: Drydock must allow to get all Registries
-    When I GET /api/registries
+    When I GET /api/v1/registries
     Then response code should be 200
     And response body should be valid json
     And response body path $.data should be of type array with minimum length 8
@@ -46,7 +46,7 @@ Feature: Drydock Registry API Exposure
     And response body path $.data[`registryIndex`].name should be public
 
   Scenario: Drydock must allow to get specific Registry state
-    When I GET /api/registries/acr/private
+    When I GET /api/v1/registries/acr/private
     Then response code should be 200
     And response body should be valid json
     And response body path $.id should be acr.private

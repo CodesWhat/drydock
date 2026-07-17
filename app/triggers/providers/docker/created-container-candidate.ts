@@ -1,8 +1,29 @@
 import { getErrorMessage } from '../../../util/error.js';
 
+const CLEANUP_OPERATION_TIMEOUT_MS = 10_000;
+
+function withCleanupTimeout<T>(operation: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`operation timed out after ${CLEANUP_OPERATION_TIMEOUT_MS}ms`));
+    }, CLEANUP_OPERATION_TIMEOUT_MS);
+
+    operation.then(
+      (result) => {
+        clearTimeout(timeout);
+        resolve(result);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+
 /**
- * Shared "orphaned replacement container" channel for the Docker (non-compose)
- * recreate path. `Docker.createContainer` creates the replacement container and
+ * Shared "orphaned replacement container" channel for Docker recreate paths.
+ * `Docker.createContainer` creates the replacement container and
  * then connects it to any additional networks; if a network connect fails after
  * the container was created, the handle would otherwise be lost to the caller,
  * leaving the orphan squatting the canonical container name with no way to clean
@@ -10,9 +31,8 @@ import { getErrorMessage } from '../../../util/error.js';
  * so any consumer up the call stack can recover it via `getCreatedContainerCandidate`
  * and best-effort clean it up before proceeding with rollback/rename.
  *
- * Field name is intentionally distinct from Dockercompose's own
- * `composeCreatedContainerCandidate` channel so the two mechanisms can never be
- * confused with one another.
+ * Docker and Docker Compose consumers use the same channel so cleanup behavior
+ * cannot diverge between recreate paths.
  */
 type CreatedContainerCandidateError = Error & {
   createdContainerCandidate?: unknown;
@@ -52,7 +72,7 @@ export async function cleanupCreatedContainerCandidate(
 
   if (typeof candidate.stop === 'function') {
     try {
-      await candidate.stop();
+      await withCleanupTimeout(candidate.stop());
     } catch (stopError: unknown) {
       logContainer.warn(
         `Unable to stop orphaned replacement container ${containerName} (${getErrorMessage(stopError)})`,
@@ -62,7 +82,7 @@ export async function cleanupCreatedContainerCandidate(
 
   if (typeof candidate.remove === 'function') {
     try {
-      await candidate.remove({ force: true });
+      await withCleanupTimeout(candidate.remove({ force: true }));
     } catch (removeError: unknown) {
       logContainer.warn(
         `Unable to remove orphaned replacement container ${containerName} (${getErrorMessage(removeError)})`,

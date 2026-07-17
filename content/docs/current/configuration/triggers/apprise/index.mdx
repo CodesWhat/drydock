@@ -37,7 +37,7 @@ services:
     ...
     environment:
       - DD_NOTIFICATION_APPRISE_LOCAL_URL=http://apprise:8000
-      - DD_NOTIFICATION_APPRISE_LOCAL_URLS=mailto://john.doe:secret@gmail.com,sns://AHIAJGNT76XIMXDBIJYA/bu1dHSdO22pfaaVy/wmNsdljF4C07D3bndi9PQJ9/us-east-2/+1(800)555-1223
+      - DD_NOTIFICATION_APPRISE_LOCAL_URLS=mailto://john.doe:secret@gmail.com,sns://replace-with-sns-access-key/replace-with-sns-secret/us-east-2/+1(800)555-1223
 ```
 
 </Tab>
@@ -45,7 +45,7 @@ services:
 ```bash
 docker run \
   -e DD_NOTIFICATION_APPRISE_LOCAL_URL="http://apprise:8000" \
-  -e DD_NOTIFICATION_APPRISE_LOCAL_URLS="mailto://john.doe:secret@gmail.com,sns://AHIAJGNT76XIMXDBIJYA/bu1dHSdO22pfaaVy/wmNsdljF4C07D3bndi9PQJ9/us-east-2/+1(800)555-1223" \
+  -e DD_NOTIFICATION_APPRISE_LOCAL_URLS="mailto://john.doe:secret@gmail.com,sns://replace-with-sns-access-key/replace-with-sns-secret/us-east-2/+1(800)555-1223" \
   ...
   codeswhat/drydock
 ```

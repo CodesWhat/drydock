@@ -7,6 +7,7 @@ import type { useDetailPanel } from '../../composables/useDetailPanel';
 import type { LogAutoFetchIntervalOption } from '../../composables/useLogViewerBehavior';
 import type { PreferencesSchema } from '../../preferences/schema';
 import type { useViewMode } from '../../preferences/useViewMode';
+import type { UpdateMode } from '../../services/settings';
 import type { Container } from '../../types/container';
 import type {
   maturityColor,
@@ -38,7 +39,7 @@ type ContainerFiltersContext = Pick<
 
 type ColumnVisibilityContext = Pick<
   ReturnType<typeof useColumnVisibility>,
-  'showColumnPicker' | 'allColumns' | 'toggleColumn' | 'visibleColumns' | 'autoHiddenColumns'
+  'allColumns' | 'toggleColumn' | 'visibleColumns' | 'hiddenColumnKeys' | 'resetColumns'
 >;
 
 type DetailPanelContext = Pick<
@@ -112,9 +113,9 @@ export interface ContainersViewTemplateContext
   loading: Ref<boolean>;
   containers: Ref<Container[]>;
   containerViewMode: ReturnType<typeof useViewMode>;
+  /** True when the DataTable's measured width (< 640px) forces card reflow. */
+  containerCardReflowForced: Ref<boolean>;
   serverNames: ComputedRef<string[]>;
-  toggleColumnPicker: (event: MouseEvent) => void;
-  columnPickerStyle: Ref<Record<string, string>>;
   tt: (label: string) => { value: string; showDelay: number };
   groupByStack: WritableComputedRef<boolean>;
   rechecking: Ref<boolean>;
@@ -148,6 +149,7 @@ export interface ContainersViewTemplateContext
   LOG_AUTO_FETCH_INTERVALS: ReadonlyArray<LogAutoFetchIntervalOption>;
   filterContainerIds: Ref<Set<string>>;
   clearContainerIdsFilter: () => void;
+  updateMode: Readonly<Ref<UpdateMode>>;
 }
 
 export const containersViewTemplateContextKey: InjectionKey<ContainersViewTemplateContext> = Symbol(

@@ -128,7 +128,7 @@ describe('handleContainerActionError', () => {
     expect(mockSendErrorResponse).toHaveBeenCalledWith(
       res,
       500,
-      'docker stop failed\nreason: timeout',
+      'Unable to complete container action',
     );
   });
 
@@ -158,6 +158,10 @@ describe('handleContainerActionError', () => {
       status: 'error',
       details: '503',
     });
-    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 500, '503');
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(
+      res,
+      500,
+      'Unable to complete container action',
+    );
   });
 });

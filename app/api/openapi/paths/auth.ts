@@ -1,7 +1,7 @@
 import { errorResponse, jsonResponse } from '../common.js';
 
 export const authPaths = {
-  '/api/auth/status': {
+  '/api/v1/auth/status': {
     get: {
       tags: ['Authentication'],
       summary: 'Get authentication provider registration status',
@@ -9,23 +9,20 @@ export const authPaths = {
       security: [],
       responses: {
         200: jsonResponse('Authentication provider status', {
-          type: 'object',
-          properties: {
-            providers: { type: 'array', items: { type: 'object' } },
-            errors: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  provider: { type: 'string' },
-                  error: { type: 'string' },
-                },
-                required: ['provider', 'error'],
-                additionalProperties: false,
-              },
-            },
-          },
-          required: ['providers', 'errors'],
+          $ref: '#/components/schemas/AuthStatusResponse',
+        }),
+      },
+    },
+  },
+  '/api/auth/status': {
+    get: {
+      tags: ['Authentication'],
+      summary: 'Get authentication provider registration status (compatibility alias)',
+      operationId: 'getAuthStatusApiAlias',
+      security: [],
+      responses: {
+        200: jsonResponse('Authentication provider status', {
+          $ref: '#/components/schemas/AuthStatusResponse',
         }),
       },
     },
@@ -38,7 +35,20 @@ export const authPaths = {
       security: [],
       responses: {
         200: jsonResponse('Authentication strategies', {
-          $ref: '#/components/schemas/GenericArray',
+          $ref: '#/components/schemas/AuthStrategiesResponse',
+        }),
+      },
+    },
+  },
+  '/auth/status': {
+    get: {
+      tags: ['Authentication'],
+      summary: 'Get authentication provider registration status (root auth route)',
+      operationId: 'getAuthStatusRoot',
+      security: [],
+      responses: {
+        200: jsonResponse('Authentication provider status', {
+          $ref: '#/components/schemas/AuthStatusResponse',
         }),
       },
     },
@@ -51,12 +61,7 @@ export const authPaths = {
       security: [],
       responses: {
         200: jsonResponse('Authentication strategies', {
-          type: 'object',
-          properties: {
-            strategies: { type: 'array', items: { type: 'object' } },
-            warnings: { type: 'array', items: { type: 'string' } },
-          },
-          required: ['strategies', 'warnings'],
+          $ref: '#/components/schemas/AuthStrategiesResponse',
         }),
       },
     },

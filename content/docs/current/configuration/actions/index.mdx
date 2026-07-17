@@ -17,7 +17,7 @@ Drydock provides direct container management actions through both the UI and API
 | **Stop** | `POST /api/v1/containers/:id/stop` | Stop a running container |
 | **Restart** | `POST /api/v1/containers/:id/restart` | Restart a container |
 | **Update** | `POST /api/v1/containers/:id/update` | Pull new image and recreate container |
-| **Delete** | `DELETE /api/v1/containers/:id` | Remove container from drydock tracking |
+| **Delete** | `DELETE /api/v1/containers/:id` | Remove the container from Drydock tracking; this does not delete the runtime container, and it may reappear after rediscovery |
 
 ## Feature flags
 
@@ -33,7 +33,7 @@ Container actions can be individually toggled with environment variables:
 
 ## Trigger configuration aliases
 
-Container updates are executed by action triggers (Docker, Docker Compose, Command). These triggers can be configured with three environment variable prefixes that are treated identically:
+Container updates are executed by the Docker and Docker Compose action triggers. The Command trigger is also classified as an action trigger for configuration taxonomy and defaults, but it runs an operator-defined command and does not enter Drydock's Docker update lifecycle queue. These triggers can be configured with three environment variable prefixes that are treated identically:
 
 | Prefix | Status |
 | --- | --- |
@@ -63,6 +63,18 @@ The update action triggers the Docker or Docker Compose trigger for the selected
 6. Monitor health (if auto-rollback is enabled)
 
 See [Lifecycle Hooks](/docs/configuration/hooks) and [Backup & Rollback](/docs/configuration/rollback) for related configuration.
+
+### Dry-run mode
+
+Set `DD_ACTION_DOCKER_<name>_DRYRUN=true` (or the equivalent Docker Compose action variable) to pull and validate candidate images without replacing containers. Dry-run is intentionally conspicuous:
+
+- the Triggers view marks the action with a yellow **Dry-run mode** badge;
+- the container Update Status panel names the effective dry-run trigger;
+- **Update now** is relabeled **Preview only** with an explanation of the remaining pull side effect;
+- each prevented replacement is logged at `WARN`; and
+- History records `update-applied-dryrun`, distinct from a completed replacement.
+
+<Callout type="warn">Dry-run still pulls the candidate image. It does not stop or replace the running container. Set the action trigger's `DRYRUN=false` and recreate Drydock before expecting updates to be applied.</Callout>
 
 ## Global concurrency cap
 
@@ -155,7 +167,7 @@ services:
 
 ## Why isn't my container auto-updating?
 
-Drydock evaluates each container against a stack of policy and trigger gates and reports the result as a pill on the row (and as `updateEligibility` on the API payload). When auto-update doesn't fire on a container with an available update, the pill identifies the active blocker — `Below threshold`, `Trigger filtered`, `No trigger`, `Agent mismatch`, `Snoozed`, etc. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference and how to clear each gate.
+Drydock evaluates each container against a stack of policy and trigger gates and reports the result on the Update action and as `updateEligibility` on the API payload. Open the container's **Update Status** panel for the plain-language summary, active conditions, and direct links to clear actionable blockers such as `Below threshold`, `Trigger filtered`, `No trigger`, `Agent mismatch`, or `Snoozed`. The server-wide **Settings → General → Update mode** chooses notifier-only, manual-only, or automatic application. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the complete reason and mode reference.
 
 ## Preview
 
@@ -163,7 +175,7 @@ Before updating, you can preview what will change using the dry-run endpoint:
 
 `POST /api/v1/containers/:id/preview`
 
-This returns the proposed changes without executing them.
+This returns the proposed changes without executing them. Preview failures use stable `code` and `message` fields instead of a generic failure. Registry and trigger configuration errors also include an in-app `action` link when Drydock can identify a safe next step.
 
 ## Metrics
 

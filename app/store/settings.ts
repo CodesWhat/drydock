@@ -4,8 +4,12 @@
 import joi from 'joi';
 import { initCollection } from './util.js';
 
+export const UPDATE_MODES = ['notify', 'manual', 'auto'] as const;
+export type UpdateMode = (typeof UPDATE_MODES)[number];
+
 interface Settings {
   internetlessMode: boolean;
+  updateMode: UpdateMode;
 }
 
 type SettingsCollectionDocument = Settings;
@@ -26,6 +30,10 @@ let settingsCache: Settings | null = null;
 
 const settingsSchema = joi.object({
   internetlessMode: joi.boolean().default(false),
+  updateMode: joi
+    .string()
+    .valid(...UPDATE_MODES)
+    .default('manual'),
 });
 
 function normalizeSettings(settingsToValidate: unknown = {}): Settings {
@@ -41,6 +49,7 @@ function normalizeSettings(settingsToValidate: unknown = {}): Settings {
 function cloneSettings(settingsToClone: Settings): Settings {
   return {
     internetlessMode: settingsToClone.internetlessMode,
+    updateMode: settingsToClone.updateMode,
   };
 }
 
@@ -67,7 +76,14 @@ function replaceSettings(settingsToSave: Settings): void {
 export function createCollections(db: SettingsStoreDb): void {
   settingsCollection = initCollection(db, 'settings') as SettingsCollection;
   const settingsSaved = settingsCollection.findOne({});
-  const settingsNormalized = normalizeSettings(settingsSaved || {});
+  // Existing installations predate the global update-mode setting and may
+  // already rely on automatic action triggers. Preserve that behavior during
+  // migration, while brand-new installations use the safer manual default.
+  const settingsToNormalize =
+    settingsSaved && settingsSaved.updateMode === undefined
+      ? { ...settingsSaved, updateMode: 'auto' }
+      : settingsSaved || {};
+  const settingsNormalized = normalizeSettings(settingsToNormalize);
   replaceSettings(settingsNormalized);
   settingsCache = settingsNormalized;
 }
@@ -106,4 +122,11 @@ export function updateSettings(settingsToUpdate: Partial<Settings> = {}): Settin
  */
 export function isInternetlessModeEnabled(): boolean {
   return getSettings().internetlessMode === true;
+}
+
+/**
+ * Get the controller-wide update dispatch mode.
+ */
+export function getUpdateMode(): UpdateMode {
+  return getSettings().updateMode;
 }

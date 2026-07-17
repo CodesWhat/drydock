@@ -622,9 +622,19 @@ describe('paginationQueryParams', () => {
 });
 
 describe('containerListQueryParams', () => {
-  test('is an array with exactly three elements', () => {
+  test('is an array with all documented list parameters', () => {
     expect(Array.isArray(containerListQueryParams)).toBe(true);
-    expect(containerListQueryParams).toHaveLength(3);
+    expect(containerListQueryParams.map((param) => param.name)).toStrictEqual([
+      'limit',
+      'offset',
+      'includeVulnerabilities',
+      'sort',
+      'order',
+      'status',
+      'kind',
+      'watcher',
+      'maturity',
+    ]);
   });
 
   test('first two elements come from paginationQueryParams', () => {

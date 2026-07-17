@@ -1,0 +1,60 @@
+---
+title: "Gotify"
+description: "The gotify trigger lets you send container update notifications via Gotify."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+![logo](/docs/assets/configuration/triggers/gotify/gotify.png)
+
+The `gotify` trigger lets you send container update notifications via [Gotify](https://gotify.net/).
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_GOTIFY_{trigger_name}_PRIORITY` | ⚪ | The Gotify message priority | Integer greater or equal than `0` | |
+| `DD_NOTIFICATION_GOTIFY_{trigger_name}_TOKEN` | 🔴 | The Gotify app token | A valid gotify app token | |
+| `DD_NOTIFICATION_GOTIFY_{trigger_name}_URL` | 🔴 | The Gotify server url | The `http` or `https` gotify server address | |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+<Callout type="info">Gotify supports `RESOLVENOTIFICATIONS=true`. When enabled, Gotify notification messages are automatically deleted after the container is successfully updated.</Callout>
+
+## Examples
+
+### Create an app on Gotify
+
+![image](/docs/assets/configuration/triggers/gotify/gotify_01.png)
+
+### Get the Gotify app token
+
+![image](/docs/assets/configuration/triggers/gotify/gotify_02.png)
+
+### Configure the trigger
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:v1.5.2
+    ...
+    environment:
+      - DD_NOTIFICATION_GOTIFY_LOCAL_URL=http://gotify.localhost
+      - DD_NOTIFICATION_GOTIFY_LOCAL_TOKEN=your-gotify-app-token
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_GOTIFY_LOCAL_URL="http://gotify.localhost" \
+  -e DD_NOTIFICATION_GOTIFY_LOCAL_TOKEN="your-gotify-app-token" \
+  ...
+  codeswhat/drydock:v1.5.2
+```
+</Tab>
+</Tabs>

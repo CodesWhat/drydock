@@ -8,21 +8,22 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 The `dhi` registry lets you configure [Docker Hardened Images](https://docs.docker.com/dhi/get-started/) integration.
 
-Supported credentials:
+Supported credential shapes:
 
-- Docker ID login + password/access token
+- Docker ID login + password (`LOGIN` + `PASSWORD`)
+- Docker ID login + access token (`LOGIN` + `TOKEN`)
 - Base64 auth string (`login:password`), like `.docker/config.json`
 
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` | ⚪ | Docker ID login | Required with `PASSWORD` | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` | ⚪ | Docker ID login | Required with `PASSWORD` or `TOKEN` | |
 | `DD_REGISTRY_DHI_{REGISTRY_NAME}_PASSWORD` | ⚪ | Docker ID password or access token | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined | |
-| `DD_REGISTRY_DHI_{REGISTRY_NAME}_TOKEN` | ⚪ | **Deprecated** — use `PASSWORD` instead (accepted as an alias until v1.6.0) | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_TOKEN` | ⚪ | Docker ID access token | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined; cannot be combined with `PASSWORD` | |
 | `DD_REGISTRY_DHI_{REGISTRY_NAME}_AUTH` | ⚪ | Base64 auth string (`login:password`) | Cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN` | |
 
-<Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD`, and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`. The `TOKEN` key is a deprecated alias for `PASSWORD` (removed in v1.6.0) — use `PASSWORD` for new configs.</Callout>
+<Callout type="warn">Registry auth fails closed for invalid combinations. Use exactly one complete shape: `LOGIN`+`PASSWORD`, `LOGIN`+`TOKEN`, `AUTH`, or no credentials. The former token-only `DD_REGISTRY_DHI_PUBLIC_TOKEN` compatibility configuration is rejected in v1.6 instead of silently falling back to anonymous access; pair it with `DD_REGISTRY_DHI_PUBLIC_LOGIN` or remove it for intentional anonymous pulls.</Callout>
 
 ## Examples
 

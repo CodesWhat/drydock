@@ -6,9 +6,10 @@ import {
 } from './trigger-policy.js';
 
 describe('notification trigger policy', () => {
-  test('isNotificationTriggerType should reject update trigger types', () => {
+  test('isNotificationTriggerType should reject action trigger types', () => {
     expect(isNotificationTriggerType('docker')).toBe(false);
     expect(isNotificationTriggerType('dockercompose')).toBe(false);
+    expect(isNotificationTriggerType('command')).toBe(false);
   });
 
   test('isNotificationTriggerType should reject empty/undefined types', () => {
@@ -30,6 +31,7 @@ describe('notification trigger policy', () => {
           'missing.ops': undefined,
           'docker.update': { type: 'docker' },
           'dockercompose.update': { type: 'dockercompose' },
+          'command.cleanup': { type: 'command' },
           'smtp.ops': { type: 'smtp' },
         }),
       ).sort(),

@@ -1,5 +1,5 @@
-import { mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { flushPromises, mount } from '@vue/test-utils';
+import { defineComponent, nextTick } from 'vue';
 import ReleaseNotesLink from '@/components/containers/ReleaseNotesLink.vue';
 
 vi.mock('@/services/container', () => ({
@@ -7,6 +7,14 @@ vi.mock('@/services/container', () => ({
 }));
 
 import { getContainerIntermediateReleaseNotes } from '@/services/container';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
 
 describe('ReleaseNotesLink', () => {
   const globalConfig = {
@@ -457,6 +465,326 @@ describe('ReleaseNotesLink', () => {
     globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await nextTick();
     expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+
+    wrapper.unmount();
+  });
+
+  it('returns focus to the icon trigger after Escape closes the popover', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+    const trigger = wrapper.find<HTMLButtonElement>('[data-test="release-notes-link"]');
+
+    trigger.element.focus();
+    await trigger.trigger('click');
+    await nextTick();
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>(
+      '[data-test="release-notes-popover"] button[aria-label="Close"]',
+    );
+    expect(closeButton).not.toBeNull();
+    closeButton?.focus();
+    expect(document.activeElement).toBe(closeButton);
+
+    globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await nextTick();
+
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger.element);
+
+    wrapper.unmount();
+  });
+
+  it('returns focus to the icon trigger after the close button closes the popover', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+    const trigger = wrapper.find<HTMLButtonElement>('[data-test="release-notes-link"]');
+
+    await trigger.trigger('click');
+    await nextTick();
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>(
+      '[data-test="release-notes-popover"] button[aria-label="Close"]',
+    );
+    expect(closeButton).not.toBeNull();
+    closeButton?.focus();
+    closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger.element);
+
+    wrapper.unmount();
+  });
+
+  it('contains scroll chaining inside the icon-only popover', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+
+    const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+    expect(popover).not.toBeNull();
+    expect(popover?.classList.contains('overscroll-contain')).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('keeps the icon-only popover open when scroll originates inside the popover', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+
+    const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+    expect(popover).not.toBeNull();
+    popover?.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await nextTick();
+
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).not.toBeNull();
+
+    wrapper.unmount();
+  });
+
+  it('closes the icon-only popover when scroll originates outside the popover', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+
+    document.dispatchEvent(new Event('scroll', { bubbles: true }));
+    await nextTick();
+
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+
+    wrapper.unmount();
+  });
+
+  it('moves focus into the icon-only dialog when it opens', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+    const trigger = wrapper.find<HTMLButtonElement>('[data-test="release-notes-link"]');
+    trigger.element.focus();
+
+    await trigger.trigger('click');
+    await nextTick();
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>(
+      '[data-test="release-notes-popover"] button[aria-label="Close"]',
+    );
+    expect(closeButton).not.toBeNull();
+    expect(document.activeElement).toBe(closeButton);
+
+    wrapper.unmount();
+  });
+
+  it('traps Tab and Shift+Tab within the icon-only dialog', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+
+    const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+    const controls = Array.from(popover?.querySelectorAll<HTMLElement>('button, a[href]') ?? []);
+    const firstControl = controls[0];
+    const lastControl = controls.at(-1);
+    expect(firstControl).toBeDefined();
+    expect(lastControl).toBeDefined();
+
+    lastControl?.focus();
+    globalThis.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement).toBe(firstControl);
+
+    firstControl?.focus();
+    globalThis.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.activeElement).toBe(lastControl);
+
+    wrapper.unmount();
+  });
+
+  it('keeps only one icon-only release-notes dialog open across rows', async () => {
+    const Host = defineComponent({
+      components: { ReleaseNotesLink },
+      setup: () => ({
+        firstNotes: sampleNotes,
+        secondNotes: { ...sampleNotes, title: 'Second release notes' },
+      }),
+      template: `
+        <div>
+          <ReleaseNotesLink :release-notes="firstNotes" icon-only />
+          <ReleaseNotesLink :release-notes="secondNotes" icon-only />
+        </div>
+      `,
+    });
+    const wrapper = mount(Host, {
+      global: globalConfig,
+      attachTo: document.body,
+    });
+    const triggers = wrapper.findAll('[data-test="release-notes-link"]');
+
+    await triggers[0].trigger('click');
+    await nextTick();
+    expect(document.body.querySelectorAll('[data-test="release-notes-popover"]')).toHaveLength(1);
+
+    await triggers[1].trigger('click');
+    await nextTick();
+
+    const popovers = document.body.querySelectorAll('[data-test="release-notes-popover"]');
+    expect(popovers).toHaveLength(1);
+    expect(popovers[0].textContent).toContain('Second release notes');
+
+    wrapper.unmount();
+  });
+
+  it('uses at least 44px touch targets for the dialog close control', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+
+    const closeButton = document.body.querySelector<HTMLButtonElement>(
+      '[data-test="release-notes-popover"] button[aria-label="Close"]',
+    );
+    expect(closeButton?.classList.contains('h-11')).toBe(true);
+    expect(closeButton?.classList.contains('w-11')).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('uses at least 44px touch targets for structured note rows and full-note links', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+
+    const panel = document.body.querySelector('[data-test="update-release-notes-panel"]');
+    const row = panel?.querySelector<HTMLButtonElement>('button');
+    expect(row?.classList.contains('min-h-11')).toBe(true);
+
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    const fullNotesLink = panel?.querySelector<HTMLAnchorElement>('a');
+    expect(fullNotesLink?.classList.contains('min-h-11')).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('uses at least a 44px touch target for the fallback release-link row', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseLink: 'https://example.com/releases', iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-link"]').trigger('click');
+    await nextTick();
+
+    const linkRow = document.body.querySelector('[data-test="release-link-row"]');
+    expect(linkRow?.classList.contains('min-h-11')).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  it('keeps the icon-only popover within the viewport margin', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+    const trigger = wrapper.find<HTMLElement>('[data-test="release-notes-link"]');
+    const widthSpy = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(320);
+    const heightSpy = vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(300);
+    const rectSpy = vi.spyOn(trigger.element, 'getBoundingClientRect').mockReturnValue({
+      top: 10,
+      right: 316,
+      bottom: 50,
+      left: 276,
+      width: 40,
+      height: 40,
+      x: 276,
+      y: 10,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    try {
+      await trigger.trigger('click');
+      await nextTick();
+
+      const popover = document.body.querySelector<HTMLElement>(
+        '[data-test="release-notes-popover"]',
+      );
+      expect(popover).not.toBeNull();
+      expect(popover?.style.left).toBe('8px');
+      expect(popover?.style.top).toBe('56px');
+      expect(popover?.style.width).toBe('304px');
+      expect(popover?.style.maxHeight).toBe('236px');
+    } finally {
+      rectSpy.mockRestore();
+      heightSpy.mockRestore();
+      widthSpy.mockRestore();
+      wrapper.unmount();
+    }
+  });
+
+  it('does not propagate icon-trigger or popover clicks to container rows', async () => {
+    const bodyClick = vi.fn();
+    document.body.addEventListener('click', bodyClick);
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+    document.body
+      .querySelector('[data-test="release-notes-popover"]')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    document.body.removeEventListener('click', bodyClick);
+    expect(bodyClick).not.toHaveBeenCalled();
 
     wrapper.unmount();
   });
@@ -932,6 +1260,111 @@ describe('ReleaseNotesLink', () => {
       await nextTick();
 
       expect(getContainerIntermediateReleaseNotes).toHaveBeenCalledTimes(1);
+
+      wrapper.unmount();
+    });
+
+    it('resets intermediate state and fetches again when the request identity changes', async () => {
+      const nextRequest = deferred<{
+        releaseNotes: (typeof intermediateNote1)[];
+        hiddenCount: number;
+      }>();
+      vi.mocked(getContainerIntermediateReleaseNotes).mockImplementation((containerId) =>
+        containerId === 'container-one'
+          ? Promise.resolve({
+              releaseNotes: [intermediateNote1],
+              hiddenCount: 3,
+            })
+          : nextRequest.promise,
+      );
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'container-one',
+          fromTag: 'v1.0.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await flushPromises();
+
+      const oldRow = wrapper.get('[data-test="intermediate-release-note-row"] button');
+      await oldRow.trigger('click');
+      expect(wrapper.text()).toContain(intermediateNote1.body);
+      expect(wrapper.find('[data-test="intermediate-older-hidden"]').exists()).toBe(true);
+
+      await wrapper.setProps({
+        containerId: 'container-two',
+        fromTag: 'v3.0.0',
+        toTag: 'v4.0.0',
+      });
+      await nextTick();
+
+      expect(getContainerIntermediateReleaseNotes).toHaveBeenNthCalledWith(
+        2,
+        'container-two',
+        'v3.0.0',
+        'v4.0.0',
+      );
+      expect(wrapper.find('[data-test="intermediate-loading"]').exists()).toBe(true);
+      expect(wrapper.text()).not.toContain(intermediateNote1.title);
+      expect(wrapper.text()).not.toContain(intermediateNote1.body);
+      expect(wrapper.find('[data-test="intermediate-older-hidden"]').exists()).toBe(false);
+
+      nextRequest.resolve({
+        releaseNotes: [intermediateNote2],
+        hiddenCount: 0,
+      });
+      await flushPromises();
+
+      expect(wrapper.text()).toContain(intermediateNote2.title);
+      expect(wrapper.text()).not.toContain(intermediateNote2.body);
+
+      wrapper.unmount();
+    });
+
+    it('ignores an obsolete in-flight response after the request identity changes', async () => {
+      const oldRequest = deferred<{
+        releaseNotes: (typeof intermediateNote1)[];
+        hiddenCount: number;
+      }>();
+      const newRequest = deferred<{
+        releaseNotes: (typeof intermediateNote2)[];
+        hiddenCount: number;
+      }>();
+      vi.mocked(getContainerIntermediateReleaseNotes).mockImplementation((containerId) =>
+        containerId === 'container-one' ? oldRequest.promise : newRequest.promise,
+      );
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'container-one',
+          fromTag: 'v1.0.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      expect(getContainerIntermediateReleaseNotes).toHaveBeenCalledTimes(1);
+
+      await wrapper.setProps({
+        containerId: 'container-two',
+        fromTag: 'v3.0.0',
+        toTag: 'v4.0.0',
+      });
+      await nextTick();
+      expect(getContainerIntermediateReleaseNotes).toHaveBeenCalledTimes(2);
+
+      newRequest.resolve({ releaseNotes: [intermediateNote2], hiddenCount: 0 });
+      await flushPromises();
+      expect(wrapper.text()).toContain(intermediateNote2.title);
+
+      oldRequest.resolve({ releaseNotes: [intermediateNote1], hiddenCount: 0 });
+      await flushPromises();
+      expect(wrapper.text()).toContain(intermediateNote2.title);
+      expect(wrapper.text()).not.toContain(intermediateNote1.title);
 
       wrapper.unmount();
     });

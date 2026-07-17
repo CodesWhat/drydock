@@ -1,5 +1,6 @@
 import type { SecurityConfiguration, SecuritySbomFormat } from '../../../configuration/index.js';
 import type { Container } from '../../../model/container.js';
+import { buildImageReference } from '../../../registries/image-reference.js';
 import type {
   ContainerSecuritySbom,
   ContainerSecurityScan,
@@ -62,6 +63,7 @@ type SecurityGateUpdateContext = {
 type SecurityScannerRequest = {
   image: string;
   auth: unknown;
+  retryTransient?: boolean;
 };
 
 type SignatureScanResult = ContainerSignatureVerification;
@@ -81,7 +83,13 @@ type SecurityAlertPayload = {
 type AuthLike = SecurityScannerRequest['auth'];
 
 type ScanImageWithDedupFn = (
-  options: { image: string; auth?: AuthLike; digest: string; trivyDbUpdatedAt?: string },
+  options: {
+    image: string;
+    auth?: AuthLike;
+    digest: string;
+    trivyDbUpdatedAt?: string;
+    retryTransient?: boolean;
+  },
   scanIntervalMs: number,
 ) => Promise<{ scanResult: VulnerabilityScanResult; fromCache: boolean }>;
 
@@ -116,6 +124,7 @@ type SecurityGateDependencies = {
   getTrivyDbUpdatedAt?: () => Promise<string | undefined>;
   getScanIntervalMs?: () => number;
   pruneImage?: PruneImageFn;
+  offloadSbom?: (sbom: SbomResult, subjectDigest?: string) => Promise<SbomResult>;
 };
 
 type SecurityGateConstructorOptions = Omit<
@@ -125,12 +134,14 @@ type SecurityGateConstructorOptions = Omit<
   | 'getTrivyDbUpdatedAt'
   | 'getScanIntervalMs'
   | 'pruneImage'
+  | 'offloadSbom'
 > & {
   recordSecurityAudit?: SecurityGateDependencies['recordSecurityAudit'];
   scanImageWithDedup?: SecurityGateDependencies['scanImageWithDedup'];
   getTrivyDbUpdatedAt?: SecurityGateDependencies['getTrivyDbUpdatedAt'];
   getScanIntervalMs?: SecurityGateDependencies['getScanIntervalMs'];
   pruneImage?: SecurityGateDependencies['pruneImage'];
+  offloadSbom?: SecurityGateDependencies['offloadSbom'];
 };
 
 const REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS = [
@@ -199,6 +210,8 @@ class SecurityGate {
     pruneImage?: PruneImageFn;
   };
 
+  offloadSbom: NonNullable<SecurityGateDependencies['offloadSbom']>;
+
   constructor(options: SecurityGateConstructorOptions) {
     const dependencies = resolveFunctionDependencies<SecurityGateDependencies>(options, {
       requiredKeys: REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS,
@@ -231,6 +244,7 @@ class SecurityGate {
       getScanIntervalMs: options.getScanIntervalMs,
       pruneImage: options.pruneImage,
     };
+    this.offloadSbom = options.offloadSbom ?? (async (sbom) => sbom);
   }
 
   createSecurityFailure(code: SecurityFailureCode, message: string): TriggerPipelineError {
@@ -278,7 +292,7 @@ class SecurityGate {
   }
 
   shouldRunSecurityGate(securityConfiguration: SecurityConfiguration): boolean {
-    return securityConfiguration.enabled && securityConfiguration.scanner === 'trivy';
+    return securityConfiguration.enabled;
   }
 
   getContainerGateModeOverride(container: SecurityContainer): 'on' | 'off' | undefined {
@@ -399,7 +413,13 @@ class SecurityGate {
         const trivyDbUpdatedAt = getTrivyDbUpdatedAt ? await getTrivyDbUpdatedAt() : undefined;
         const scanIntervalMs = getScanIntervalMs ? getScanIntervalMs() : DEFAULT_SCAN_INTERVAL_MS;
         const { scanResult, fromCache } = await scanImageWithDedup(
-          { image: context.newImage, auth: context.auth, digest, trivyDbUpdatedAt },
+          {
+            image: context.newImage,
+            auth: context.auth,
+            digest,
+            trivyDbUpdatedAt,
+            retryTransient: true,
+          },
           scanIntervalMs,
         );
         if (fromCache) {
@@ -417,6 +437,7 @@ class SecurityGate {
     const scanResult = await this.scanners.scanImageForVulnerabilities({
       image: context.newImage,
       auth: context.auth,
+      retryTransient: true,
     });
     await this.persistSecurityState(container, { slot: 'update', scan: scanResult }, logContainer);
     return scanResult;
@@ -433,11 +454,13 @@ class SecurityGate {
     }
 
     logContainer.info(`Generating SBOM for candidate image ${context.newImage}`);
-    const sbomResult = await this.scanners.generateImageSbom({
+    const generatedSbom = await this.scanners.generateImageSbom({
       image: context.newImage,
       auth: context.auth,
       formats: securityConfiguration.sbom.formats,
     });
+    const subjectDigest = await this.resolveImageDigest(context.newImage, context.dockerApi);
+    const sbomResult = await this.offloadSbom(generatedSbom, subjectDigest);
     await this.persistSecurityState(container, { slot: 'update', sbom: sbomResult }, logContainer);
 
     if (sbomResult.status === 'error') {
@@ -460,6 +483,72 @@ class SecurityGate {
 
   formatScanSummary(summary: VulnerabilitySummary): string {
     return `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
+  }
+
+  getCurrentImageReference(container: SecurityContainer): string | undefined {
+    const image = container.image;
+    if (!image?.registry?.url || !image.name || !image.tag?.value) {
+      return undefined;
+    }
+    return buildImageReference(image.registry.url, image.name, image.tag.value);
+  }
+
+  isNoWorseThanCurrent(candidate: VulnerabilitySummary, current: VulnerabilitySummary): boolean {
+    return (['critical', 'high', 'medium', 'low', 'unknown'] as const).every(
+      (severity) => candidate[severity] <= current[severity],
+    );
+  }
+
+  applyRelativeGate(
+    container: SecurityContainer,
+    scanResult: VulnerabilityScanResult,
+    securityConfiguration: SecurityConfiguration,
+  ): VulnerabilityScanResult {
+    if (!securityConfiguration.gate?.allowNoWorse || scanResult.status !== 'blocked') {
+      return scanResult;
+    }
+
+    const currentContainer = this.stateStore.getContainer(container.id) || container;
+    const currentScan = currentContainer.security?.scan || container.security?.scan;
+    const currentImage =
+      this.getCurrentImageReference(currentContainer) || this.getCurrentImageReference(container);
+    const currentDigest = currentContainer.image?.digest?.value || container.image?.digest?.value;
+    if (
+      !currentScan ||
+      currentScan.status === 'error' ||
+      !currentImage ||
+      currentScan.image !== currentImage ||
+      (currentDigest !== undefined && currentScan.imageDigest !== currentDigest)
+    ) {
+      return {
+        ...scanResult,
+        relativeGate: {
+          decision: 'blocked',
+          reason: 'current-scan-unavailable',
+        },
+      };
+    }
+
+    if (!this.isNoWorseThanCurrent(scanResult.summary, currentScan.summary)) {
+      return {
+        ...scanResult,
+        relativeGate: {
+          decision: 'blocked',
+          reason: 'candidate-worse',
+          currentSummary: currentScan.summary,
+        },
+      };
+    }
+
+    return {
+      ...scanResult,
+      status: 'passed',
+      relativeGate: {
+        decision: 'passed',
+        reason: 'no-worse-than-current',
+        currentSummary: currentScan.summary,
+      },
+    };
   }
 
   maybeEmitHighSeverityAlert(
@@ -517,12 +606,21 @@ class SecurityGate {
     const details = this.formatScanSummary(scanResult.summary);
     this.maybeEmitHighSeverityAlert(container, scanResult, details);
     this.throwIfScanBlocked(scanResult, details);
-    this.telemetry.recordSecurityAudit(
-      'security-scan-passed',
-      container,
-      'success',
-      `Security scan passed. Summary: ${details}`,
-    );
+    if (scanResult.relativeGate?.decision === 'passed') {
+      this.telemetry.recordSecurityAudit(
+        'security-scan-passed-relative',
+        container,
+        'success',
+        `Security scan passed because the candidate is no worse than current. Candidate: ${details}. Current: ${this.formatScanSummary(scanResult.relativeGate.currentSummary as VulnerabilitySummary)}`,
+      );
+    } else {
+      this.telemetry.recordSecurityAudit(
+        'security-scan-passed',
+        container,
+        'success',
+        `Security scan passed. Summary: ${details}`,
+      );
+    }
   }
 
   async verifySignaturePreUpdate(
@@ -579,7 +677,15 @@ class SecurityGate {
 
     try {
       options.setPhase?.('scanning');
-      const scanResult = await this.scanImageForUpdate(context, container, logContainer);
+      const rawScanResult = await this.scanImageForUpdate(context, container, logContainer);
+      const scanResult = this.applyRelativeGate(container, rawScanResult, securityConfiguration);
+      if (scanResult !== rawScanResult) {
+        await this.persistSecurityState(
+          container,
+          { slot: 'update', scan: scanResult },
+          logContainer,
+        );
+      }
       if (securityConfiguration.sbom.enabled) {
         options.setPhase?.('sbom-generating');
         await this.maybeGenerateSbomForUpdate(
@@ -589,11 +695,24 @@ class SecurityGate {
           securityConfiguration,
         );
       }
+      if (scanResult.status === 'error' && securityConfiguration.availabilityPolicy === 'warn') {
+        this.telemetry.recordSecurityAudit(
+          'security-scan-skipped',
+          container,
+          'error',
+          `Security scan unavailable; update allowed by DD_SECURITY_AVAILABILITY_POLICY=warn: ${scanResult.error || 'unknown scanner error'}`,
+        );
+        return;
+      }
       await this.evaluateScanOutcome(container, scanResult);
     } catch (error: unknown) {
       if (TriggerPipelineError.isTriggerPipelineError(error)) {
-        this.recordSecurityFailure(container, error as { code: string; message: string });
-        if (securityConfiguration.prune?.onBlock) {
+        const pipelineError = error as TriggerPipelineError;
+        this.recordSecurityFailure(container, pipelineError);
+        if (
+          pipelineError.code === 'security-scan-blocked' &&
+          securityConfiguration.prune?.onBlock
+        ) {
           try {
             await this.scanCache.pruneImage?.(context.newImage, context.dockerApi);
           } catch {

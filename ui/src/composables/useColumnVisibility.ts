@@ -1,5 +1,6 @@
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch } from 'vue';
+import { CONTAINER_TABLE_COLUMN_KEYS } from '../preferences/schema';
 import { preferences } from '../preferences/store';
 import { type ResponsiveSizingColumn, responsiveAutoHiddenColumns } from '../utils/table-sizing';
 
@@ -20,9 +21,13 @@ const allColumns: ColumnDef[] = [
     key: 'icon',
     label: '',
     px: 'px-0',
-    size: 40,
-    minSize: 40,
-    maxSize: 40,
+    // 56 = 32px ContainerIcon (ContainersGroupedViews.vue) + 20px pl-5 padding + 4px breathing
+    // room. Was 40 until the icon cell gained `overflow-hidden`: that class made the pre-existing
+    // ~11.9px overflow (32px icon inside a 20px content box) visibly clip instead of silently
+    // hanging past the cell edge. Keep this >= 52 (icon + padding) or the clip comes back.
+    size: 56,
+    minSize: 56,
+    maxSize: 56,
     autoSize: 'fixed',
     required: true,
     icon: true,
@@ -111,6 +116,17 @@ const allColumns: ColumnDef[] = [
     required: false,
   },
   {
+    key: 'links',
+    label: 'Resources',
+    labelKey: 'containersView.columns.resources',
+    px: 'px-1',
+    size: 152,
+    minSize: 152,
+    maxSize: 152,
+    autoSize: 'fixed',
+    required: true,
+  },
+  {
     key: 'uptime',
     label: 'Uptime',
     labelKey: 'containersView.columns.uptime',
@@ -122,8 +138,11 @@ const allColumns: ColumnDef[] = [
     required: false,
   },
 ];
+// Containers no longer carries per-column `cardPriority` annotations: this view ships a
+// hand-authored `#card` template (ContainersGroupedViews.vue) instead of DataTable's generic
+// cardPriority-driven card composition, so those annotations would be inert and misleading.
 
-const visibleColumns = ref<Set<string>>(new Set(preferences.containers.columns));
+const visibleColumns = ref<Set<string>>(new Set([...preferences.containers.columns, 'links']));
 watch(
   visibleColumns,
   (v) => {
@@ -132,14 +151,17 @@ watch(
   { deep: true },
 );
 
-const showColumnPicker = ref(false);
-
 function toggleColumn(key: string) {
   const col = allColumns.find((c) => c.key === key);
   if (!col) return;
   if (col?.required) return;
   if (visibleColumns.value.has(key)) visibleColumns.value.delete(key);
   else visibleColumns.value.add(key);
+}
+
+/** Resets picker-driven visibility back to the shipped default (opt-in columns stay hidden). */
+function resetColumns() {
+  visibleColumns.value = new Set(CONTAINER_TABLE_COLUMN_KEYS);
 }
 
 export function useColumnVisibility(availableWidth?: Ref<number> | ComputedRef<number>) {
@@ -155,20 +177,26 @@ export function useColumnVisibility(availableWidth?: Ref<number> | ComputedRef<n
     ),
   );
 
-  const activeColumns = computed(() => {
-    const prefVisible = allColumns.filter((c) => visibleColumns.value.has(c.key));
-    const width = availableWidth?.value;
-    if (!width || width <= 0) return prefVisible;
-    const dropped = new Set(autoHiddenColumns.value.map((column) => column.key));
-    return prefVisible.filter((c) => !dropped.has(c.key));
+  /**
+   * Full DataTable-facing hidden set: catalog keys the user picker-hid, unioned with
+   * width-driven auto-hidden keys. Table mode (DataTable `hiddenColumnKeys` prop) honors
+   * both; card mode (< 640px) ignores this entirely by design — see DataTable.vue. Always
+   * derived from the FULL `allColumns` catalog (not a pre-filtered subset) so card mode can
+   * still see every column object, including opt-in ones the user never enabled.
+   */
+  const hiddenColumnKeys = computed<string[]>(() => {
+    const autoHidden = new Set(autoHiddenColumns.value.map((column) => column.key));
+    return allColumns
+      .filter((column) => !visibleColumns.value.has(column.key) || autoHidden.has(column.key))
+      .map((column) => column.key);
   });
 
   return {
     allColumns,
     visibleColumns,
-    activeColumns,
     autoHiddenColumns,
-    showColumnPicker,
+    hiddenColumnKeys,
     toggleColumn,
+    resetColumns,
   };
 }

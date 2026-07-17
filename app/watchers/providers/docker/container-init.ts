@@ -1,11 +1,13 @@
-import { getPreferredLabelValue } from '../../../docker/legacy-label.js';
 import log from '../../../log/index.js';
-import type { Container } from '../../../model/container.js';
+import type { Container, TriggerCategory } from '../../../model/container.js';
 import { recordLegacyInput } from '../../../prometheus/compatibility.js';
+import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
+import { getTriggerCategoryForType } from '../../../triggers/trigger-category.js';
 import type Watcher from '../../Watcher.js';
 import {
   canonicalizeContainerName,
+  getContainerConfigBooleanValue,
   getContainerConfigValue,
   getContainerName,
   getFirstConfigString,
@@ -31,26 +33,23 @@ import {
   ddTagExclude,
   ddTagFamily,
   ddTagInclude,
+  ddTagPinInfo,
   ddTagTransform,
   ddTriggerExclude,
   ddTriggerInclude,
   ddWatchDigest,
-  wudDisplayIcon,
-  wudDisplayName,
-  wudInspectTagPath,
-  wudLinkTemplate,
-  wudRegistryLookupImage,
-  wudRegistryLookupUrl,
-  wudTagExclude,
-  wudTagInclude,
-  wudTagTransform,
-  wudTriggerExclude,
-  wudTriggerInclude,
-  wudWatchDigest,
 } from './label.js';
+import {
+  type ResolvedTriggerLabelValues,
+  resolveTriggerLabelValuesPure,
+} from './trigger-label-resolution.js';
+import {
+  applyDockerDeclarativeUpdatePolicy,
+  type DockerUpdatePolicyResolutionOptions,
+} from './update-policy.js';
 
-const warnedLegacyLabelFallbacks = new Set<string>();
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
+const warnedTriggerCategoryScopeChanges = new Set<string>();
 const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
 const RECREATED_CONTAINER_ALIAS_TRANSIENT_WINDOW_MS = 30 * 1000;
 
@@ -64,12 +63,19 @@ interface ResolvedContainerLabelOverrides {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: string;
   inspectTagPath?: string;
   inspectTagVersionOnly?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
+  actionTriggerInclude?: string;
+  actionTriggerExclude?: string;
+  notificationTriggerInclude?: string;
+  notificationTriggerExclude?: string;
+  /** @deprecated compat mirror — see Container.triggerInclude/triggerExclude. */
   triggerInclude?: string;
+  /** @deprecated compat mirror. */
   triggerExclude?: string;
   lookupImage?: string;
 }
@@ -124,128 +130,68 @@ interface DockerWatcherSourceLike {
   configuration?: DockerWatcherSourceConfiguration;
 }
 
+interface WatcherTagDefaults {
+  family?: string;
+  pin?: { info?: boolean };
+}
+
+interface TagPolicyImageReference {
+  path: string;
+  domain?: string;
+}
+
 interface GetLabelOptions {
   warn?: (message: string) => void;
   warnedLegacyTriggerLabels?: Set<string>;
 }
 
 const containerLabelOverrideMappings = [
-  { key: 'includeTags', ddKey: ddTagInclude, wudKey: wudTagInclude, overrideKey: 'includeTags' },
-  { key: 'excludeTags', ddKey: ddTagExclude, wudKey: wudTagExclude, overrideKey: 'excludeTags' },
+  { key: 'includeTags', ddKey: ddTagInclude, overrideKey: 'includeTags' },
+  { key: 'excludeTags', ddKey: ddTagExclude, overrideKey: 'excludeTags' },
   {
     key: 'transformTags',
     ddKey: ddTagTransform,
-    wudKey: wudTagTransform,
     overrideKey: 'transformTags',
   },
   {
     key: 'tagFamily',
     ddKey: ddTagFamily,
-    wudKey: undefined,
     overrideKey: 'tagFamily',
+  },
+  {
+    key: 'tagPinInfo',
+    ddKey: ddTagPinInfo,
+    overrideKey: 'tagPinInfo',
   },
   {
     key: 'inspectTagPath',
     ddKey: ddInspectTagPath,
-    wudKey: wudInspectTagPath,
     overrideKey: undefined,
   },
   {
     key: 'inspectTagVersionOnly',
     ddKey: ddInspectTagVersionOnly,
-    wudKey: undefined,
     overrideKey: undefined,
   },
   {
     key: 'linkTemplate',
     ddKey: ddLinkTemplate,
-    wudKey: wudLinkTemplate,
     overrideKey: 'linkTemplate',
   },
-  { key: 'displayName', ddKey: ddDisplayName, wudKey: wudDisplayName, overrideKey: 'displayName' },
-  { key: 'displayIcon', ddKey: ddDisplayIcon, wudKey: wudDisplayIcon, overrideKey: 'displayIcon' },
-  {
-    key: 'triggerInclude',
-    ddKey: ddTriggerInclude,
-    wudKey: wudTriggerInclude,
-    overrideKey: 'triggerInclude',
-  },
-  {
-    key: 'triggerExclude',
-    ddKey: ddTriggerExclude,
-    wudKey: wudTriggerExclude,
-    overrideKey: 'triggerExclude',
-  },
+  { key: 'displayName', ddKey: ddDisplayName, overrideKey: 'displayName' },
+  { key: 'displayIcon', ddKey: ddDisplayIcon, overrideKey: 'displayIcon' },
+  // Trigger include/exclude are NOT in this generic table: dd.action.*/dd.notification.*/
+  // dd.trigger.* resolve into 4 category-scoped fields plus a deprecated mirror, which
+  // doesn't fit the single-key shape below. See resolveTriggerLabelOverrides().
 ] as const satisfies ReadonlyArray<{
   key: keyof ResolvedContainerLabelOverrides;
   ddKey: string;
-  wudKey?: string;
   overrideKey?: ContainerLabelOverrideKey;
 }>;
 
-/**
- * Get a label value, preferring the dd.* key over the wud.* fallback.
- */
-export function getLabel(
-  labels: Record<string, string>,
-  ddKey: string,
-  wudKey?: string,
-  options: GetLabelOptions = {},
-) {
-  if (ddKey === ddTriggerInclude || ddKey === ddTriggerExclude) {
-    return getPreferredTriggerLabelValue(labels, ddKey, wudKey, options);
-  }
-
-  return getPreferredLabelValue(labels, ddKey, wudKey, {
-    warnedFallbacks: warnedLegacyLabelFallbacks,
-    warn: options.warn || ((message) => log.warn(message)),
-  });
-}
-
-function getPreferredTriggerLabelValue(
-  labels: Record<string, string>,
-  ddKey: string,
-  wudKey: string | undefined,
-  options: GetLabelOptions,
-) {
-  const warnedLegacyTriggerLabels =
-    options.warnedLegacyTriggerLabels || warnedLegacyTriggerLabelFallbacks;
-  const warn = options.warn || ((message) => log.warn(message));
-  const aliasKeys =
-    ddKey === ddTriggerInclude
-      ? [ddActionInclude, ddNotificationInclude]
-      : [ddActionExclude, ddNotificationExclude];
-  const aliasValue = getFirstLabelValue(labels, aliasKeys);
-  const legacyValue = labels[ddKey];
-
-  if (aliasValue !== undefined) {
-    if (legacyValue !== undefined) {
-      recordLegacyInput('label', ddKey);
-      warnLegacyTriggerLabel(ddKey, warnedLegacyTriggerLabels, warn);
-    }
-    return aliasValue;
-  }
-
-  if (legacyValue !== undefined) {
-    recordLegacyInput('label', ddKey);
-    warnLegacyTriggerLabel(ddKey, warnedLegacyTriggerLabels, warn);
-    return legacyValue;
-  }
-
-  return getPreferredLabelValue(labels, ddKey, wudKey, {
-    warnedFallbacks: warnedLegacyLabelFallbacks,
-    warn,
-  });
-}
-
-function getFirstLabelValue(labels: Record<string, string>, keys: readonly string[]) {
-  for (const key of keys) {
-    const value = labels[key];
-    if (value !== undefined) {
-      return value;
-    }
-  }
-  return undefined;
+/** Get a canonical Docker label value. */
+export function getLabel(labels: Record<string, string>, ddKey: string) {
+  return labels[ddKey];
 }
 
 function warnLegacyTriggerLabel(
@@ -263,6 +209,249 @@ function warnLegacyTriggerLabel(
   warn(
     `Legacy Docker label "${ddKey}" is deprecated. Please migrate to "dd.action.${aliasKeySuffix}" or "dd.notification.${aliasKeySuffix}" before removal in v1.7.0.`,
   );
+}
+
+/**
+ * Resolve one direction (include or exclude) of the trigger labels into its
+ * category-scoped values plus the deprecated compat mirror.
+ *
+ * `dd.trigger.<dir>` is a per-category fallback: it only fills in a category
+ * whose own scoped label (`dd.action.<dir>` / `dd.notification.<dir>`) is
+ * absent — it never overrides a scoped label that is present.
+ *
+ * The numeric resolution itself is delegated to the dependency-free
+ * `resolveTriggerLabelValuesPure()` — this wrapper only adds the
+ * warn/telemetry side effects for the legacy `dd.trigger.<dir>` label.
+ */
+function resolveTriggerLabelValues(
+  labels: Record<string, string>,
+  direction: 'include' | 'exclude',
+  options: GetLabelOptions,
+): ResolvedTriggerLabelValues {
+  const ddLegacyKey = direction === 'include' ? ddTriggerInclude : ddTriggerExclude;
+  const actionValue = labels[direction === 'include' ? ddActionInclude : ddActionExclude];
+  const notificationValue =
+    labels[direction === 'include' ? ddNotificationInclude : ddNotificationExclude];
+  const legacyValue = labels[ddLegacyKey];
+  const warn = options.warn || ((message) => log.error(message));
+
+  if (actionValue === undefined && notificationValue === undefined && legacyValue === undefined) {
+    return {};
+  }
+
+  if (legacyValue !== undefined) {
+    const warnedLegacyTriggerLabels =
+      options.warnedLegacyTriggerLabels || warnedLegacyTriggerLabelFallbacks;
+    recordLegacyInput('label', ddLegacyKey);
+    warnLegacyTriggerLabel(ddLegacyKey, warnedLegacyTriggerLabels, warn);
+  }
+
+  return resolveTriggerLabelValuesPure(labels, direction);
+}
+
+/**
+ * Resolve one direction, reusing already-resolved `overrides` rather than
+ * re-reading the labels when every value for that direction is present.
+ *
+ * The skip is load-bearing, not an optimization. A newly-discovered container is
+ * resolved twice over the same labels — once in Docker.ts to build the override
+ * bag, then again here via resolveLabelsFromContainer — and resolveTriggerLabelValues
+ * has side effects (recordLegacyInput, deprecation warn). Without the short-circuit
+ * a deprecated dd.trigger.* label increments the legacy-input metric twice per
+ * container. The old per-key `override || getLabel(...)` loop skipped the second
+ * read for exactly this reason.
+ */
+function resolveTriggerLabelDirection(
+  containerLabels: Record<string, string>,
+  direction: 'include' | 'exclude',
+  overrides: ContainerLabelOverrides,
+  options: GetLabelOptions,
+): ResolvedTriggerLabelValues {
+  const [actionOverride, notificationOverride, mirrorOverride] =
+    direction === 'include'
+      ? [
+          overrides.actionTriggerInclude,
+          overrides.notificationTriggerInclude,
+          overrides.triggerInclude,
+        ]
+      : [
+          overrides.actionTriggerExclude,
+          overrides.notificationTriggerExclude,
+          overrides.triggerExclude,
+        ];
+
+  if (actionOverride && notificationOverride && mirrorOverride) {
+    return { action: actionOverride, notification: notificationOverride, mirror: mirrorOverride };
+  }
+
+  const resolved = resolveTriggerLabelValues(containerLabels, direction, options);
+
+  return {
+    action: actionOverride || resolved.action,
+    notification: notificationOverride || resolved.notification,
+    mirror: mirrorOverride || resolved.mirror,
+  };
+}
+
+/**
+ * Resolve the four category-scoped trigger label fields plus the deprecated
+ * triggerInclude/triggerExclude mirror. `overrides` (already-resolved values
+ * from an earlier pass over the same labels) take priority, matching the
+ * override-vs-label precedence used for every other label-derived field.
+ */
+export function resolveTriggerLabelOverrides(
+  containerLabels: Record<string, string>,
+  overrides: ContainerLabelOverrides = {},
+  options: GetLabelOptions = {},
+): Pick<
+  ResolvedContainerLabelOverrides,
+  | 'actionTriggerInclude'
+  | 'actionTriggerExclude'
+  | 'notificationTriggerInclude'
+  | 'notificationTriggerExclude'
+  | 'triggerInclude'
+  | 'triggerExclude'
+> {
+  const includeResolved = resolveTriggerLabelDirection(
+    containerLabels,
+    'include',
+    overrides,
+    options,
+  );
+  const excludeResolved = resolveTriggerLabelDirection(
+    containerLabels,
+    'exclude',
+    overrides,
+    options,
+  );
+
+  return {
+    actionTriggerInclude: includeResolved.action,
+    actionTriggerExclude: excludeResolved.action,
+    notificationTriggerInclude: includeResolved.notification,
+    notificationTriggerExclude: excludeResolved.notification,
+    triggerInclude: includeResolved.mirror,
+    triggerExclude: excludeResolved.mirror,
+  };
+}
+
+interface TriggerCategoryScopeWarningOptions {
+  warn?: (message: string) => void;
+  warnedContainerNames?: Set<string>;
+  hasConfiguredTriggerOfCategory?: (category: TriggerCategory) => boolean;
+}
+
+function hasConfiguredTriggerOfCategoryFromRegistry(category: TriggerCategory): boolean {
+  return Object.values(registry.getState().trigger).some(
+    (trigger) => getTriggerCategoryForType(trigger.type) === category,
+  );
+}
+
+function getTriggerCategoryScopeChangeWarning(
+  containerName: string,
+  resolved: Pick<
+    ResolvedContainerLabelOverrides,
+    | 'actionTriggerInclude'
+    | 'actionTriggerExclude'
+    | 'notificationTriggerInclude'
+    | 'notificationTriggerExclude'
+  >,
+  hasConfiguredTriggerOfCategory: (category: TriggerCategory) => boolean,
+): string | undefined {
+  const asymmetricDirections: Array<{
+    setKey: string;
+    setValue: string | undefined;
+    otherKey: string;
+    otherValue: string | undefined;
+    otherCategory: TriggerCategory;
+  }> = [
+    {
+      setKey: ddActionInclude,
+      setValue: resolved.actionTriggerInclude,
+      otherKey: ddNotificationInclude,
+      otherValue: resolved.notificationTriggerInclude,
+      otherCategory: 'notification',
+    },
+    {
+      setKey: ddNotificationInclude,
+      setValue: resolved.notificationTriggerInclude,
+      otherKey: ddActionInclude,
+      otherValue: resolved.actionTriggerInclude,
+      otherCategory: 'action',
+    },
+    {
+      setKey: ddActionExclude,
+      setValue: resolved.actionTriggerExclude,
+      otherKey: ddNotificationExclude,
+      otherValue: resolved.notificationTriggerExclude,
+      otherCategory: 'notification',
+    },
+    {
+      setKey: ddNotificationExclude,
+      setValue: resolved.notificationTriggerExclude,
+      otherKey: ddActionExclude,
+      otherValue: resolved.actionTriggerExclude,
+      otherCategory: 'action',
+    },
+  ];
+
+  for (const { setKey, setValue, otherKey, otherValue, otherCategory } of asymmetricDirections) {
+    if (
+      setValue !== undefined &&
+      otherValue === undefined &&
+      hasConfiguredTriggerOfCategory(otherCategory)
+    ) {
+      return (
+        `Container "${containerName}" sets "${setKey}" but not "${otherKey}". As of v1.6 this label ` +
+        `no longer filters ${otherCategory} triggers. Set "${otherKey}" to restore the previous filtering.`
+      );
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Emit a one-time warning when a container relies on the pre-v1.6 cross-category
+ * trigger label leak: exactly one of dd.action.<dir>/dd.notification.<dir> is set
+ * (with no dd.trigger.<dir> fallback in play) while the OTHER category has at
+ * least one trigger configured. Under strict category scoping (#494) that other
+ * category is no longer gated by the lone scoped label — this is a deliberate
+ * behavior change, not a bug, but it deserves a heads-up on upgrade.
+ */
+export function warnTriggerCategoryScopeChangeIfNeeded(
+  containerName: string,
+  resolved: Pick<
+    ResolvedContainerLabelOverrides,
+    | 'actionTriggerInclude'
+    | 'actionTriggerExclude'
+    | 'notificationTriggerInclude'
+    | 'notificationTriggerExclude'
+  >,
+  options: TriggerCategoryScopeWarningOptions = {},
+): void {
+  if (!containerName) {
+    return;
+  }
+  const warnedContainerNames = options.warnedContainerNames || warnedTriggerCategoryScopeChanges;
+  if (warnedContainerNames.has(containerName)) {
+    return;
+  }
+
+  const hasConfiguredTriggerOfCategory =
+    options.hasConfiguredTriggerOfCategory || hasConfiguredTriggerOfCategoryFromRegistry;
+  const message = getTriggerCategoryScopeChangeWarning(
+    containerName,
+    resolved,
+    hasConfiguredTriggerOfCategory,
+  );
+  if (!message) {
+    return;
+  }
+
+  warnedContainerNames.add(containerName);
+  const warn = options.warn || ((warnMessage: string) => log.warn(warnMessage));
+  warn(message);
 }
 
 /**
@@ -606,11 +795,12 @@ export function resolveLabelsFromContainer(
 ) {
   const resolvedOverrides: ResolvedContainerLabelOverrides = {
     lookupImage: resolveLookupImageFromContainerLabels(containerLabels, overrides),
+    ...resolveTriggerLabelOverrides(containerLabels, overrides),
   };
 
-  for (const { key, ddKey, wudKey, overrideKey } of containerLabelOverrideMappings) {
+  for (const { key, ddKey, overrideKey } of containerLabelOverrideMappings) {
     const overrideValue = overrideKey ? overrides[overrideKey] : undefined;
-    resolvedOverrides[key] = overrideValue || getLabel(containerLabels, ddKey, wudKey);
+    resolvedOverrides[key] = overrideValue || getLabel(containerLabels, ddKey);
   }
 
   return resolvedOverrides;
@@ -625,23 +815,34 @@ export function resolveLabelsFromContainer(
  * it was first registered — e.g. after `docker compose up -d` recreates a
  * service with a new `dd.tag.family` label.
  *
- * Note: imgset configuration is intentionally NOT re-applied here because
- * imgset matching requires a parsed image reference that is not available on
- * the event path. The imgset defaults established during the last full watch
- * cycle remain in effect; only direct label values are refreshed.
+ * The caller may supply already-resolved tag-policy fallbacks so removing a
+ * direct tag label restores the matching imgset/watcher value on event paths.
+ * Other imgset-derived fields remain outside this lightweight label refresh.
  */
 export function applyDerivedLabelFieldsToContainer(
   container: Container,
   labels: Record<string, string>,
+  tagPolicyFallbacks: { tagFamily?: string; tagPinInfo?: boolean } = {},
 ): void {
   const resolved = resolveLabelsFromContainer(labels);
   container.includeTags = resolved.includeTags;
   container.excludeTags = resolved.excludeTags;
   container.transformTags = resolved.transformTags;
-  container.tagFamily = resolved.tagFamily;
+  container.tagFamily = resolved.tagFamily ?? tagPolicyFallbacks.tagFamily;
+  const tagPinInfo = getContainerConfigBooleanValue(resolved.tagPinInfo);
+  container.tagPinInfo = tagPinInfo ?? tagPolicyFallbacks.tagPinInfo;
   container.linkTemplate = resolved.linkTemplate;
+  container.actionTriggerInclude = resolved.actionTriggerInclude;
+  container.actionTriggerExclude = resolved.actionTriggerExclude;
+  container.notificationTriggerInclude = resolved.notificationTriggerInclude;
+  container.notificationTriggerExclude = resolved.notificationTriggerExclude;
   container.triggerInclude = resolved.triggerInclude;
   container.triggerExclude = resolved.triggerExclude;
+  // The category-scope warning is deliberately NOT emitted here. `resolved` comes from
+  // labels alone (no imgset pass, see above), so a container whose other-category filter
+  // is supplied by a matching imgset looks falsely asymmetric on this path and would
+  // latch a bogus one-time warning for the rest of the process. The full watch cycle
+  // evaluates the warning against the imgset-merged config instead.
   // displayName is managed separately by updateContainerFromInspect via
   // getCustomDisplayNameFromLabels, which handles the "no custom name →
   // fall back to container name" logic. We do not overwrite it here.
@@ -655,15 +856,72 @@ export function applyDerivedLabelFieldsToContainer(
   // full addImageDetailsToContainer pass, not on lightweight event updates.
 }
 
+export function resolveEffectiveContainerTagPolicy(
+  container: Container,
+  watcherTagDefaults: WatcherTagDefaults | undefined,
+  getMatchingImgset: (image: TagPolicyImageReference) => ResolvedImgset | undefined,
+) {
+  const watcherDefaults = watcherTagDefaults ?? {};
+  const labels = container.labels ?? {};
+  const usePersistedFallbacks = container.labels === undefined;
+  const persistedFallbacks = {
+    family: (usePersistedFallbacks ? container.tagFamily : undefined) ?? watcherDefaults.family,
+    pin: {
+      info: (usePersistedFallbacks ? container.tagPinInfo : undefined) ?? watcherDefaults.pin?.info,
+    },
+  };
+  return mergeConfigWithImgset(
+    resolveLabelsFromContainer(labels),
+    getMatchingImgset({
+      path: container.image.name,
+      domain: container.image.registry?.url,
+    }),
+    labels,
+    persistedFallbacks,
+  );
+}
+
+export function applyEffectiveTagPolicyFromLabels(
+  container: Container,
+  labels: Record<string, string>,
+  watcherTagDefaults: WatcherTagDefaults | undefined,
+  getMatchingImgset: (image: TagPolicyImageReference) => ResolvedImgset | undefined,
+) {
+  const tagPolicy = resolveEffectiveContainerTagPolicy(
+    { ...container, labels },
+    watcherTagDefaults,
+    getMatchingImgset,
+  );
+  applyDerivedLabelFieldsToContainer(container, labels, {
+    tagFamily: tagPolicy.tagFamily,
+    tagPinInfo: tagPolicy.tagPinInfo,
+  });
+}
+
+export function applyEffectiveDockerConfigFromLabels(
+  container: Container,
+  labels: Record<string, string>,
+  configuration: {
+    tag?: WatcherTagDefaults;
+    maturitymode?: 'all' | 'mature';
+    maturityminagedays?: number;
+  },
+  getMatchingImgset: (image: TagPolicyImageReference) => ResolvedImgset | undefined,
+  policyResolutionOptions: DockerUpdatePolicyResolutionOptions = {},
+) {
+  applyEffectiveTagPolicyFromLabels(container, labels, configuration.tag, getMatchingImgset);
+  applyDockerDeclarativeUpdatePolicy(container, labels, configuration, policyResolutionOptions);
+}
+
 function resolveLookupImageFromContainerLabels(
   containerLabels: Record<string, string>,
   overrides: ContainerLabelOverrides,
 ) {
   return (
     overrides.registryLookupImage ||
-    getLabel(containerLabels, ddRegistryLookupImage, wudRegistryLookupImage) ||
+    getLabel(containerLabels, ddRegistryLookupImage) ||
     overrides.registryLookupUrl ||
-    getLabel(containerLabels, ddRegistryLookupUrl, wudRegistryLookupUrl)
+    getLabel(containerLabels, ddRegistryLookupUrl)
   );
 }
 
@@ -671,6 +929,7 @@ export function mergeConfigWithImgset(
   labelOverrides: ResolvedContainerLabelOverrides,
   matchingImgset: ResolvedImgset | undefined,
   containerLabels: Record<string, string>,
+  watcherTagDefaults: WatcherTagDefaults = {},
 ) {
   return {
     includeTags: getContainerConfigValue(labelOverrides.includeTags, matchingImgset?.includeTags),
@@ -679,13 +938,42 @@ export function mergeConfigWithImgset(
       labelOverrides.transformTags,
       matchingImgset?.transformTags,
     ),
-    tagFamily: getContainerConfigValue(labelOverrides.tagFamily, matchingImgset?.tagFamily),
+    tagFamily:
+      getContainerConfigValue(labelOverrides.tagFamily, matchingImgset?.tagFamily) ||
+      getContainerConfigValue(undefined, watcherTagDefaults.family) ||
+      'strict',
+    tagPinInfo:
+      getContainerConfigBooleanValue(
+        labelOverrides.tagPinInfo,
+        matchingImgset?.tagPinInfo,
+        watcherTagDefaults.pin?.info,
+      ) ?? true,
     linkTemplate: getContainerConfigValue(
       labelOverrides.linkTemplate,
       matchingImgset?.linkTemplate,
     ),
     displayName: getContainerConfigValue(labelOverrides.displayName, matchingImgset?.displayName),
     displayIcon: getContainerConfigValue(labelOverrides.displayIcon, matchingImgset?.displayIcon),
+    // Imgset trigger.include/trigger.exclude are NOT category-split (by design — see
+    // #494 spec) and sit beneath the per-container labels as a category-agnostic
+    // fallback, applied to whichever category (action, notification, or the
+    // deprecated mirror) has no label-level value of its own.
+    actionTriggerInclude: getContainerConfigValue(
+      labelOverrides.actionTriggerInclude,
+      matchingImgset?.triggerInclude,
+    ),
+    actionTriggerExclude: getContainerConfigValue(
+      labelOverrides.actionTriggerExclude,
+      matchingImgset?.triggerExclude,
+    ),
+    notificationTriggerInclude: getContainerConfigValue(
+      labelOverrides.notificationTriggerInclude,
+      matchingImgset?.triggerInclude,
+    ),
+    notificationTriggerExclude: getContainerConfigValue(
+      labelOverrides.notificationTriggerExclude,
+      matchingImgset?.triggerExclude,
+    ),
     triggerInclude: getContainerConfigValue(
       labelOverrides.triggerInclude,
       matchingImgset?.triggerInclude,
@@ -703,7 +991,7 @@ export function mergeConfigWithImgset(
     ),
     inspectTagVersionOnly: labelOverrides.inspectTagVersionOnly,
     watchDigest: getContainerConfigValue(
-      getLabel(containerLabels, ddWatchDigest, wudWatchDigest),
+      getLabel(containerLabels, ddWatchDigest),
       matchingImgset?.watchDigest,
     ),
   };

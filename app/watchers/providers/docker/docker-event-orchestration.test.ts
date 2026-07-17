@@ -194,6 +194,7 @@ describe('docker event orchestration helpers', () => {
             'die',
             'update',
             'rename',
+            'health_status',
           ],
         },
       },

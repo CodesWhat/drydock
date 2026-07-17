@@ -1,3 +1,5 @@
+import type { MqttClient } from 'mqtt';
+import { recordAuditEvent } from '../../../api/audit-events.js';
 import { getVersion } from '../../../configuration/index.js';
 import {
   registerContainerAdded,
@@ -6,7 +8,19 @@ import {
   registerWatcherStart,
   registerWatcherStop,
 } from '../../../event/index.js';
+import type { Container } from '../../../model/container.js';
 import * as containerStore from '../../../store/container.js';
+import { requestContainerUpdate, UpdateRequestError } from '../../../updates/request-update.js';
+import { HassCommandRateLimiter } from './hass-command-rate-limiter.js';
+import {
+  getHassCommandTopicFilters,
+  getHassCommandTopicFromStateTopic,
+  getStateTopicFromCommandTopic,
+  HASS_COMMAND_QOS,
+  HASS_INSTALL_PAYLOAD,
+  isHassInstallPayload,
+  resolveHassCommandContainer,
+} from './hass-commands.js';
 import {
   getSanitizedCanonicalContainerName,
   getStaleSanitizedContainerNameCandidates,
@@ -16,11 +30,20 @@ const HASS_DEVICE_ID = 'drydock';
 const HASS_DEVICE_NAME = 'drydock';
 const HASS_MANUFACTURER = 'drydock';
 const HASS_ENTITY_VALUE_TEMPLATE = '{{ value_json.image_tag_value }}';
+// Newest version. When no update is pending, container.result is absent, so
+// result_tag/result_digest never appear in the flattened payload. Fall back to
+// the installed tag (image_tag_value) so HA resolves latest == installed ("up to
+// date") instead of rendering an empty string — which HA silently discards,
+// leaving both "Newest version" and the entity state permanently Unknown (#491).
+// The `if value_json.result_digest` guard also avoids the `Undefined[:15]` slice
+// error HA's Jinja throws when a digest-kind report carries no result_digest.
 const HASS_LATEST_VERSION_TEMPLATE =
-  '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] }}{% else %}{{ value_json.result_tag }}{% endif %}';
+  '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] if value_json.result_digest else value_json.image_tag_value }}{% else %}{{ value_json.result_tag if value_json.result_tag else value_json.image_tag_value }}{% endif %}';
 const HASS_DEFAULT_ENTITY_PICTURE =
   'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png';
 export const HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT = 10_000;
+// #210 — per-container hardcoded v1 rate limit for hass install commands
+const HASS_COMMAND_RATE_LIMIT_MS = 30_000;
 
 interface HassClient {
   publish: (
@@ -30,6 +53,33 @@ interface HassClient {
       retain?: boolean;
     },
   ) => Promise<unknown> | unknown;
+  // #210 — optional: only the real mqtt.MqttClient (or a fully-capable test
+  // double) needs to satisfy these; hass.commands=false should not force
+  // every caller's client to support subscriptions.
+  subscribeAsync?: (topic: string | string[], opts?: { qos?: 0 | 1 | 2 }) => Promise<unknown>;
+  unsubscribeAsync?: (topic: string | string[]) => Promise<unknown>;
+  on?: (
+    event: 'message',
+    listener: (topic: string, payload: Buffer, packet: { retain: boolean }) => void,
+  ) => unknown;
+  removeListener?: (
+    event: 'message',
+    listener: (topic: string, payload: Buffer, packet: { retain: boolean }) => void,
+  ) => unknown;
+}
+
+// #210 — the subset of the real mqtt.MqttClient needed to run hass install commands
+type HassCommandCapableClient = HassClient &
+  Pick<MqttClient, 'subscribeAsync' | 'unsubscribeAsync' | 'on' | 'removeListener'>;
+
+function hasHassCommandCapableClient(client: HassClient): client is HassCommandCapableClient {
+  const c = client as Partial<HassCommandCapableClient>;
+  return (
+    typeof c.subscribeAsync === 'function' &&
+    typeof c.unsubscribeAsync === 'function' &&
+    typeof c.on === 'function' &&
+    typeof c.removeListener === 'function'
+  );
 }
 
 interface HassConfiguration {
@@ -38,6 +88,7 @@ interface HassConfiguration {
     prefix: string;
     discovery: boolean;
     agenttopicsegment?: boolean;
+    commands?: boolean;
   };
 }
 
@@ -49,8 +100,16 @@ function normalizeAgentValue(agent: unknown): string | undefined {
   return agent === '' ? undefined : agent;
 }
 
+// Deprecation: "Agent-less Home Assistant MQTT topic layout (multi-agent)"
+// (DEPRECATIONS.md) — warn once per watcher name when the agent-less layout
+// is actually in collision (>1 distinct agent sharing the watcher name)
+// rather than on every use, since single-node deployments are unaffected.
+const warnedAgentlessHassTopicLayoutWatchers = new Set<string>();
+
 interface HassLogger {
   info: (message: string) => void;
+  warn: (message: string) => void;
+  debug: (message: string) => void;
 }
 
 /**
@@ -140,10 +199,7 @@ function resolveEntityPictureOverride(container: {
   displayPicture?: string;
   labels?: Record<string, string>;
 }): string | undefined {
-  const configuredPicture =
-    container.displayPicture ||
-    container.labels?.['dd.display.picture'] ||
-    container.labels?.['wud.display.picture'];
+  const configuredPicture = container.displayPicture || container.labels?.['dd.display.picture'];
   if (typeof configuredPicture !== 'string') {
     return undefined;
   }
@@ -166,35 +222,68 @@ class Hass {
 
   private containerStateTopicById = new Map<string, string>();
 
+  private isContainerAllowed: (container: Container) => boolean;
+
+  // #491 — containers excluded from the trigger (mustTrigger()=false) must
+  // not keep a stale discovery entity around. Tracks which excluded
+  // containers have already had their sensor cleaned up, so a repeat
+  // containerAdded/containerUpdated event for the same still-excluded
+  // container does not re-publish the (empty) removal payload on every
+  // watch cycle. Cleared when the container is re-included so a later
+  // re-exclusion cleans again.
+  private cleanedExcludedContainerKeys = new Set<string>();
+
   private unregisterContainerAdded?: () => void;
   private unregisterContainerUpdated?: () => void;
   private unregisterContainerRemoved?: () => void;
   private unregisterWatcherStart?: () => void;
   private unregisterWatcherStop?: () => void;
 
+  // #210
+  private commandTopicFilters?: string[];
+  private commandMessageHandler?: (
+    topic: string,
+    payload: Buffer,
+    packet: { retain: boolean },
+  ) => void;
+  private commandRateLimiter = new HassCommandRateLimiter({
+    minIntervalMs: HASS_COMMAND_RATE_LIMIT_MS,
+  });
+  // #210 — true only while a command subscription is actually live. The
+  // discovery payload gates the Install button on this (not just the config
+  // flag) so we never advertise a button we are not listening for — e.g. a
+  // publish-only broker ACL where subscribeAsync rejects.
+  private commandSubscriptionActive = false;
+
   constructor({
     client,
     configuration,
     log,
+    isContainerAllowed,
   }: {
     client: HassClient;
     configuration: HassConfiguration;
     log: HassLogger;
+    isContainerAllowed: (container: Container) => boolean;
   }) {
     this.client = client;
     this.configuration = configuration;
     this.log = log;
+    this.isContainerAllowed = isContainerAllowed;
 
     // Subscribe to container events to sync HA
     this.unregisterContainerAdded = registerContainerAdded((container) =>
-      this.addContainerSensor(container),
+      this.syncContainerSensor(container),
     );
     this.unregisterContainerUpdated = registerContainerUpdated((container) =>
-      this.addContainerSensor(container),
+      this.syncContainerSensor(container),
     );
-    this.unregisterContainerRemoved = registerContainerRemoved((container) =>
-      this.removeContainerSensor(container),
-    );
+    this.unregisterContainerRemoved = registerContainerRemoved((container) => {
+      // #491 — a re-included container starts clean again, so drop its key
+      // here too (not just on re-inclusion in syncContainerSensor).
+      this.cleanedExcludedContainerKeys.delete(this.getContainerSyncKey(container));
+      return this.removeContainerSensor(container);
+    });
 
     // Subscribe to watcher events to sync HA
     this.unregisterWatcherStart = registerWatcherStart((watcher) =>
@@ -205,7 +294,7 @@ class Hass {
     );
   }
 
-  deregister() {
+  async deregister(): Promise<void> {
     this.unregisterContainerAdded?.();
     this.unregisterContainerAdded = undefined;
 
@@ -221,7 +310,175 @@ class Hass {
     this.unregisterWatcherStop?.();
     this.unregisterWatcherStop = undefined;
 
+    // #210 — unwind the command subscription, if one was ever established
+    if (this.commandMessageHandler && hasHassCommandCapableClient(this.client)) {
+      this.client.removeListener('message', this.commandMessageHandler);
+    }
+    this.commandMessageHandler = undefined;
+
+    if (this.commandTopicFilters && hasHassCommandCapableClient(this.client)) {
+      try {
+        await this.client.unsubscribeAsync(this.commandTopicFilters);
+      } catch (error: unknown) {
+        this.log.warn(
+          `Failed to unsubscribe hass command topics (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
+    }
+    this.commandTopicFilters = undefined;
+    this.commandSubscriptionActive = false;
+    this.commandRateLimiter.clear();
+
     this.containerStateTopicById.clear();
+    this.cleanedExcludedContainerKeys.clear();
+  }
+
+  /**
+   * Subscribe to the fixed-depth hass install-command topic filters. No-op
+   * when `hass.commands` is off, or when the configured client does not
+   * support subscriptions (e.g. `hass.enabled=true` with a publish-only
+   * client). Called explicitly by Mqtt.ts after constructing this instance —
+   * not from the constructor — so a broker ACL that denies subscribe (but
+   * allows publish) degrades to "commands don't work" instead of failing
+   * `initTrigger()` outright.
+   * @returns {Promise<void>}
+   */
+  async initCommandSubscription(): Promise<void> {
+    if (!this.configuration.hass.commands) {
+      return;
+    }
+    if (!hasHassCommandCapableClient(this.client)) {
+      this.log.warn(
+        'Home Assistant install commands are enabled but the MQTT client does not support subscriptions; skipping.',
+      );
+      return;
+    }
+    try {
+      this.commandMessageHandler = (topic, payload, packet) => {
+        void this.handleCommandMessage(topic, payload, packet).catch((error: Error) => {
+          this.log.warn(`Error handling hass command message on [${topic}] (${error.message})`);
+        });
+      };
+      this.client.on('message', this.commandMessageHandler);
+      const filters = getHassCommandTopicFilters(this.configuration.topic);
+      await this.client.subscribeAsync(filters, { qos: HASS_COMMAND_QOS });
+      this.commandTopicFilters = filters;
+      this.commandSubscriptionActive = true;
+    } catch (error: unknown) {
+      this.log.warn(
+        `Failed to subscribe to Home Assistant command topics (${error instanceof Error ? error.message : String(error)})`,
+      );
+      if (this.commandMessageHandler && hasHassCommandCapableClient(this.client)) {
+        this.client.removeListener('message', this.commandMessageHandler);
+      }
+      this.commandMessageHandler = undefined;
+      this.commandSubscriptionActive = false;
+    }
+  }
+
+  /**
+   * Handle an inbound hass install-command message. Resolves the state topic
+   * back to a live container via a fresh `containerStore.getContainers({})`
+   * scan (see #210 plan Gotcha B — the event-driven `containerStateTopicById`
+   * cache is deliberately not reused here, since it starts empty on every
+   * trigger re-init and would silently drop commands until the next full
+   * watch cycle) and, on a clean resolve, delegates to the same
+   * `requestContainerUpdate()` used by the webhook trigger.
+   * @param topic
+   * @param payload
+   * @param packet
+   * @returns {Promise<void>}
+   */
+  private async handleCommandMessage(
+    topic: string,
+    payload: Buffer,
+    packet: { retain: boolean },
+  ): Promise<void> {
+    if (packet.retain) {
+      this.log.debug(`Ignoring retained hass command message on [${topic}]`);
+      return;
+    }
+    const stateTopic = getStateTopicFromCommandTopic(topic, this.configuration.topic);
+    if (!stateTopic) {
+      return;
+    }
+    if (!isHassInstallPayload(payload)) {
+      this.log.debug(`Ignoring hass command message on [${topic}] with unexpected payload`);
+      return;
+    }
+
+    // Explicit `Container` annotation on the callback param pins the generic
+    // inference for `resolveHassCommandContainer<C>` — `getContainers()`'s
+    // return type is itself inferred (no explicit annotation upstream in
+    // store/container.ts), and leaving this callback's parameter untyped
+    // causes TS to fall back to `C = unknown` here.
+    const resolution = resolveHassCommandContainer(
+      containerStore.getContainers({}),
+      stateTopic,
+      (container: Container) => this.getContainerStateTopic({ container }),
+    );
+    if (resolution.status === 'not-found') {
+      this.log.debug(`No tracked container for hass command topic [${topic}]`);
+      return;
+    }
+    if (resolution.status === 'ambiguous') {
+      this.log.warn(
+        `Ambiguous hass command topic [${topic}] matches ${resolution.containers.length} containers; ignoring.`,
+      );
+      return;
+    }
+
+    const container = resolution.container;
+    // #491 — a container excluded from this trigger (mustTrigger()=false)
+    // never gets a discovery entity/state publish, so an Install command
+    // addressed to it must not drive an update either.
+    if (!this.isContainerAllowed(container)) {
+      this.log.warn(
+        `Ignoring hass install command for [${container.name}]: container is excluded from this trigger`,
+      );
+      return;
+    }
+    const rateLimitKey = this.getContainerId(container) ?? stateTopic;
+    if (!this.commandRateLimiter.tryConsume(rateLimitKey)) {
+      this.log.warn(`Ignoring hass command for [${container.name}]: rate limited`);
+      return;
+    }
+
+    try {
+      const accepted = await requestContainerUpdate(container);
+      this.log.info(
+        `Accepted hass install command for container [${container.name}] (operation ${accepted.operationId})`,
+      );
+      recordAuditEvent({
+        action: 'mqtt-command-update',
+        container,
+        status: 'success',
+        details: `operation ${accepted.operationId}`,
+      });
+    } catch (error: unknown) {
+      if (error instanceof UpdateRequestError) {
+        this.log.info(
+          `Hass install command rejected for container [${container.name}] (${error.message})`,
+        );
+        recordAuditEvent({
+          action: 'mqtt-command-update',
+          container,
+          status: 'error',
+          details: error.message,
+        });
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(
+        `Unexpected error handling hass install command for container [${container.name}] (${message})`,
+      );
+      recordAuditEvent({
+        action: 'mqtt-command-update',
+        container,
+        status: 'error',
+        details: 'Unexpected error',
+      });
+    }
   }
 
   private getContainerId(container: { id?: unknown }) {
@@ -229,6 +486,13 @@ class Hass {
       return undefined;
     }
     return container.id;
+  }
+
+  // #491 — a stable per-container key for cleanedExcludedContainerKeys.
+  // Falls back to the state topic when the container has no id (mirrors
+  // the rate-limit key fallback in handleCommandMessage).
+  private getContainerSyncKey(container): string {
+    return this.getContainerId(container) ?? this.getContainerStateTopic({ container });
   }
 
   private getContainerStateTopicFromName({
@@ -408,12 +672,74 @@ class Hass {
     this.containerStateTopicById.delete(containerId);
   }
 
+  // #386 / DEPRECATIONS.md "Agent-less Home Assistant MQTT topic layout" —
+  // warn once per watcher name the first time we observe more than one
+  // distinct agent sharing it while the corrected (agent-segmented) layout
+  // is not enabled, since that is exactly the case where topics/sensors
+  // collide across agents.
+  private warnIfAgentlessHassTopicLayoutCollides(container: { watcher?: unknown }) {
+    if (this.configuration.hass.agenttopicsegment) {
+      return;
+    }
+    const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
+    if (!watcherName || warnedAgentlessHassTopicLayoutWatchers.has(watcherName)) {
+      return;
+    }
+    const distinctAgents = new Set(
+      containerStore
+        .getContainers({ watcher: watcherName })
+        .map((c) => normalizeAgentValue(c.agent) ?? ''),
+    );
+    if (distinctAgents.size <= 1) {
+      return;
+    }
+    warnedAgentlessHassTopicLayoutWatchers.add(watcherName);
+    this.log.warn(
+      `Multiple agents share watcher name "${watcherName}" but the Home Assistant MQTT topic layout has no agent segment, so their topics/sensors will collide. Set DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true to opt into the corrected layout before it becomes the default in v1.7.0.`,
+    );
+  }
+
+  /**
+   * Sync a container's hass sensor with this trigger's mustTrigger gating
+   * (rollback/agent scoping plus dd.notification.include/exclude). A
+   * container the trigger does not cover must not get a discovery entity
+   * whose state topic never receives a publish — that leaves a permanent
+   * "Unknown" ghost entity in HA (#491). Any entity created before the
+   * container became excluded (including one retained in HA from a
+   * previous run) is cleaned up the first time the container is seen here.
+   * @param container
+   * @returns {Promise<void>}
+   */
+  private syncContainerSensor(container) {
+    if (this.isContainerAllowed(container)) {
+      this.cleanedExcludedContainerKeys.delete(this.getContainerSyncKey(container));
+      return this.addContainerSensor(container);
+    }
+
+    const containerKey = this.getContainerSyncKey(container);
+    if (this.cleanedExcludedContainerKeys.has(containerKey)) {
+      this.log.debug(
+        `Skip hass sensor sync for excluded container [${this.getContainerStateTopic({ container })}]`,
+      );
+      return;
+    }
+    this.cleanedExcludedContainerKeys.add(containerKey);
+    return this.removeContainerSensor(container).catch((error) => {
+      // A failed removal must not mark the container cleaned — leaving the
+      // key in the set here would make every later event skip cleanup
+      // forever, so drop it and let the next event retry.
+      this.cleanedExcludedContainerKeys.delete(containerKey);
+      throw error;
+    });
+  }
+
   /**
    * Add container sensor.
    * @param container
    * @returns {Promise<void>}
    */
   async addContainerSensor(container) {
+    this.warnIfAgentlessHassTopicLayoutCollides(container);
     const containerStateSensor = {
       kind: 'update',
       topic: this.getContainerStateTopic({ container }),
@@ -446,6 +772,21 @@ class Hass {
           latest_version_template: HASS_LATEST_VERSION_TEMPLATE,
           release_url: container.result ? container.result.link : undefined,
           json_attributes_topic: containerStateSensor.topic,
+          // #210 — advertise the Install button ONLY when a command subscription
+          // is actually live (commandSubscriptionActive), not merely when the config
+          // flag is on: otherwise a broker that rejects subscribe would leave a
+          // clickable button whose clicks go to a topic we never listen on.
+          // command_topic and payload_install are always published together (HA has
+          // no default for payload_install, so command_topic alone renders a broken
+          // button); retain/qos are pinned explicitly since users can override them.
+          ...(this.configuration.hass.commands && this.commandSubscriptionActive
+            ? {
+                command_topic: getHassCommandTopicFromStateTopic(containerStateSensor.topic),
+                payload_install: HASS_INSTALL_PAYLOAD,
+                qos: HASS_COMMAND_QOS,
+                retain: false,
+              }
+            : {}),
         },
       });
     }

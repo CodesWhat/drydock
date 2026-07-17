@@ -189,7 +189,7 @@ jobs:
 
       - name: Checkout
         id: checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         continue-on-error: true
         with:
           persist-credentials: false
@@ -201,7 +201,7 @@ jobs:
 
       - name: Checkout (retry)
         if: steps.checkout.outcome == 'failure'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 
@@ -220,7 +220,7 @@ jobs:
           command: cd ${{ matrix.package }} && npm ci
 
       - name: Restore Stryker incremental cache
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
         with:
           path: ${{ matrix.package }}/${{ matrix.incremental_file }}
           # Append the run number so every run writes a fresh cache entry
@@ -285,7 +285,7 @@ jobs:
 
       - name: Checkout
         id: checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         continue-on-error: true
         with:
           persist-credentials: false
@@ -297,7 +297,7 @@ jobs:
 
       - name: Checkout (retry)
         if: steps.checkout.outcome == 'failure'
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           persist-credentials: false
 

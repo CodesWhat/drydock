@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
-import { resetPreferences } from '@/preferences/store';
+import { defineComponent, nextTick } from 'vue';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAllRegistries, getRegistry } from '@/services/registry';
 import RegistriesView from '@/views/RegistriesView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
@@ -59,6 +59,76 @@ async function mountRegistriesView() {
             </div>
           `,
         }),
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
+const registryCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar registry-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+    </div>
+  `,
+});
+
+const registryCardDataTableStub = defineComponent({
+  props: ['columns', 'rows', 'rowKey', 'activeRow', 'selectedKey', 'preferCards'],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table registry-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="registry-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+async function mountRegistriesCardView() {
+  const wrapper = mountWithPlugins(RegistriesView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: registryCardFilterBarStub,
+        DataTable: registryCardDataTableStub,
       },
     },
   });
@@ -140,44 +210,6 @@ describe('RegistriesView', () => {
     expect(wrapper.text()).toContain('team-a');
   });
 
-  it('opens registry details from list mode selections', async () => {
-    mockGetAllRegistries.mockResolvedValue([
-      makeRegistry({
-        id: 'registry-1',
-        name: 'AWS ECR',
-        type: 'ecr',
-        configuration: { url: 'https://list.example' },
-      }),
-    ]);
-    mockGetRegistry.mockResolvedValue(
-      makeRegistry({
-        id: 'registry-1',
-        name: 'AWS ECR',
-        type: 'ecr',
-        configuration: {
-          url: 'https://123456789012.dkr.ecr.us-east-1.amazonaws.com',
-          region: 'us-east-1',
-        },
-      }),
-    );
-
-    const wrapper = await mountRegistriesView();
-
-    await wrapper.find('.mode-list').trigger('click');
-    await flushPromises();
-    await wrapper.find('.list-click-first').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-    expect(mockGetRegistry).toHaveBeenCalledWith({
-      type: 'ecr',
-      name: 'AWS ECR',
-      agent: undefined,
-    });
-    expect(wrapper.text()).toContain('us-east-1');
-    expect(wrapper.text()).toContain('123456789012.dkr.ecr.us-east-1.amazonaws.com');
-  });
-
   it('caps long registry URLs in compact table and detail surfaces', async () => {
     const longUrl =
       'https://registry.example.internal/company/team/service/component/releases/2026/04/with-an-extra-long-path';
@@ -216,5 +248,52 @@ describe('RegistriesView', () => {
       );
     expect(detailUrl).toBeDefined();
     expect(detailUrl?.classes()).toContain('truncate');
+  });
+
+  it('renders registry cards and wires the card-mode reflow controls', async () => {
+    preferences.views.registries.mode = 'cards';
+    mockGetAllRegistries.mockResolvedValue([
+      makeRegistry({
+        id: 'registry-1',
+        name: 'Docker Hub',
+        type: 'hub',
+        configuration: { url: 'https://registry-1.docker.io', token: 'secret' },
+      }),
+      makeRegistry({
+        id: 'registry-2',
+        name: 'GitHub Container Registry',
+        type: 'ghcr',
+        configuration: {},
+      }),
+    ]);
+
+    const wrapper = await mountRegistriesCardView();
+
+    expect(wrapper.get('.registry-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.registry-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.registry-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const hubCard = wrapper.get('[data-card-id="registry-1"]');
+    expect(hubCard.text()).toContain('Docker Hub');
+    expect(hubCard.text()).toContain('https://registry-1.docker.io');
+    expect(hubCard.text()).toContain('Hub');
+    expect(hubCard.text()).toContain('Auth');
+    expect(hubCard.text()).toContain('Private');
+    expect(hubCard.text()).toContain('Status');
+    expect(hubCard.text()).toContain('Connected');
+
+    const ghcrCard = wrapper.get('[data-card-id="registry-2"]');
+    expect(ghcrCard.text()).toContain('GitHub Container Registry');
+    expect(ghcrCard.text()).toContain('GHCR');
+    expect(ghcrCard.text()).toContain('https://ghcr.io');
+    expect(ghcrCard.text()).toContain('Public');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.registry-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.registry-card-filter').attributes('data-hide-view-toggle')).toBe('false');
   });
 });

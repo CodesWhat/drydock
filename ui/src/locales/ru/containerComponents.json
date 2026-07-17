@@ -274,14 +274,10 @@
       "hidePinned": "Скрыть закреплённые",
       "hidePinnedTooltip": "Скрыть контейнеры, закреплённые на конкретных версиях",
       "clearAll": "Очистить всё",
-      "toggleColumnsTooltip": "Управление столбцами",
       "groupByStackTooltip": "Группировать по стеку",
       "expandAll": "Развернуть все",
       "collapseAll": "Свернуть все",
       "recheckTooltip": "Повторно проверить обновления",
-      "columnsHeader": "Столбцы",
-      "narrowViewportSuffix": "(узкое окно)",
-      "autoHiddenBadgeTooltip": "{count} столбцов скрыто автоматически из-за узкого окна. Расширьте окно или скройте другие столбцы.",
       "filterSearch": "Поиск: {value}",
       "filterStatus": "Статус: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -324,6 +320,7 @@
     "projectLink": {
       "viewProject": "Открыть проект"
     },
+    "registryLink": { "viewRegistry": "Открыть реестр" },
     "releaseNotesLink": {
       "releaseNotes": "Примечания к выпуску",
       "viewFullNotes": "Полные примечания",
@@ -553,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "Закреплено — для информации доступна более новая версия."
+      }
     }
   }
 }

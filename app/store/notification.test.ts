@@ -25,6 +25,14 @@ function createCollection(initialValues: any[] = []) {
   };
 }
 
+function notificationPreferences(bellEnabled = false) {
+  return {
+    bellEnabled,
+    bellThreshold: 'all',
+    templates: {},
+  };
+}
+
 describe('Notification Store', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -41,6 +49,71 @@ describe('Notification Store', () => {
 
     expect(db.addCollection).toHaveBeenCalledWith('notifications');
     expect(notification.getNotificationRules()).toEqual(notification.DEFAULT_NOTIFICATION_RULES);
+  });
+
+  test('default rules expose backward-compatible bell and template preferences', () => {
+    const collection = createCollection();
+    notification.createCollections({
+      getCollection: vi.fn(() => null),
+      addCollection: vi.fn(() => collection),
+    });
+
+    expect(notification.getNotificationRule('update-available')).toMatchObject({
+      bellEnabled: true,
+      bellThreshold: 'all',
+      templates: {},
+    });
+    expect(notification.getNotificationRule('container-unhealthy')).toMatchObject({
+      bellEnabled: false,
+      bellThreshold: 'all',
+      templates: {},
+    });
+  });
+
+  test('migrates legacy rules and persists isolated per-trigger template overrides', () => {
+    const collection = createCollection([
+      {
+        id: 'update-available',
+        name: 'Update Available',
+        description: 'legacy document',
+        enabled: true,
+        triggers: [],
+      },
+    ]);
+    notification.createCollections({
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    });
+
+    const updated = notification.updateNotificationRule('update-available', {
+      bellEnabled: false,
+      bellThreshold: 'major',
+      templates: {
+        'slack.ops': {
+          simpleTitle: 'Update for ${container.name}',
+          simpleBody: '${container.updateKind.localValue} → ${container.updateKind.remoteValue}',
+          batchTitle: '${containers.length} Slack updates',
+        },
+      },
+    } as never);
+
+    expect(updated).toMatchObject({
+      bellEnabled: false,
+      bellThreshold: 'major',
+      templates: {
+        'slack.ops': {
+          simpleTitle: 'Update for ${container.name}',
+          simpleBody: '${container.updateKind.localValue} → ${container.updateKind.remoteValue}',
+          batchTitle: '${containers.length} Slack updates',
+        },
+      },
+    });
+
+    const read = notification.getNotificationRule('update-available') as any;
+    read.templates['slack.ops'].simpleTitle = 'mutated';
+    expect(
+      notification.getNotificationTemplate('update-available', 'slack.ops', 'simpleTitle'),
+    ).toBe('Update for ${container.name}');
   });
 
   test('createCollections should normalize existing rules and preserve custom rules', () => {
@@ -75,6 +148,7 @@ describe('Notification Store', () => {
       description: 'When a container has a new version',
       enabled: false,
       triggers: ['slack.ops', 'smtp.ops'],
+      ...notificationPreferences(true),
     });
     expect(rules.find((rule) => rule.id === 'security-alert')).toEqual({
       id: 'security-alert',
@@ -82,6 +156,7 @@ describe('Notification Store', () => {
       description: 'Critical/High vulnerability detected',
       enabled: true,
       triggers: [],
+      ...notificationPreferences(true),
     });
     expect(rules.find((rule) => rule.id === 'custom-rule')).toEqual({
       id: 'custom-rule',
@@ -89,6 +164,7 @@ describe('Notification Store', () => {
       description: '',
       enabled: true,
       triggers: ['trig-1'],
+      ...notificationPreferences(),
     });
   });
 
@@ -121,6 +197,7 @@ describe('Notification Store', () => {
       description: 'When a container has a new version',
       enabled: true,
       triggers: [],
+      ...notificationPreferences(true),
     });
   });
 
@@ -150,6 +227,7 @@ describe('Notification Store', () => {
       description: '',
       enabled: true,
       triggers: ['foo'],
+      ...notificationPreferences(),
     });
   });
 
@@ -168,6 +246,7 @@ describe('Notification Store', () => {
         description: '',
         enabled: true,
         triggers: ['trig-a'],
+        ...notificationPreferences(),
       },
     ]);
     const db = {
@@ -187,6 +266,7 @@ describe('Notification Store', () => {
         description: '',
         enabled: true,
         triggers: ['trig-a'],
+        ...notificationPreferences(),
       },
       {
         id: 'z-rule',
@@ -194,6 +274,7 @@ describe('Notification Store', () => {
         description: '',
         enabled: true,
         triggers: [],
+        ...notificationPreferences(),
       },
     ]);
   });
@@ -213,6 +294,7 @@ describe('Notification Store', () => {
       description: 'After a container is successfully updated',
       enabled: true,
       triggers: [],
+      ...notificationPreferences(true),
     });
   });
 
@@ -231,6 +313,58 @@ describe('Notification Store', () => {
       description: 'When a remote agent reconnects after losing connection',
       enabled: false,
       triggers: [],
+      ...notificationPreferences(),
+    });
+  });
+
+  test('fresh stores expose the disabled container unhealthy rule with an empty allow-list', () => {
+    const collection = createCollection();
+    notification.createCollections({
+      getCollection: vi.fn(() => null),
+      addCollection: vi.fn(() => collection),
+    });
+    expect(notification.getNotificationRule('container-unhealthy')).toEqual({
+      id: 'container-unhealthy',
+      name: 'Container Unhealthy',
+      description: "When a container's Docker health check enters the unhealthy state",
+      enabled: false,
+      triggers: [],
+      ...notificationPreferences(),
+    });
+  });
+
+  test('normalization adds container unhealthy to a persisted pre-feature catalog', () => {
+    const collection = createCollection([
+      {
+        id: 'update-available',
+        name: 'Update Available',
+        description: '',
+        enabled: true,
+        triggers: [],
+      },
+    ]);
+    notification.createCollections({
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    });
+    expect(notification.getNotificationRules().map((rule) => rule.id)).toContain(
+      'container-unhealthy',
+    );
+  });
+
+  test('container unhealthy rule updates persist and round-trip', () => {
+    const collection = createCollection();
+    notification.createCollections({
+      getCollection: vi.fn(() => null),
+      addCollection: vi.fn(() => collection),
+    });
+    notification.updateNotificationRule('container-unhealthy', {
+      enabled: true,
+      triggers: ['slack.myslack'],
+    });
+    expect(notification.getNotificationRule('container-unhealthy')).toMatchObject({
+      enabled: true,
+      triggers: ['slack.myslack'],
     });
   });
 
@@ -264,6 +398,7 @@ describe('Notification Store', () => {
       description: 'When an update fails or is rolled back',
       enabled: true,
       triggers: [],
+      ...notificationPreferences(true),
     });
   });
 
@@ -298,6 +433,7 @@ describe('Notification Store', () => {
       description: 'After a container is successfully updated',
       enabled: false,
       triggers: ['slack.ops', 'smtp.ops'],
+      ...notificationPreferences(true),
     });
     expect(notification.getNotificationRule('update-applied')).toEqual(updated);
   });
@@ -394,6 +530,7 @@ describe('Notification Store', () => {
     notification.updateNotificationRule('update-available', {
       enabled: true,
       triggers: [],
+      ...notificationPreferences(true),
     });
 
     expect(
@@ -442,6 +579,7 @@ describe('Notification Store', () => {
     notification.updateNotificationRule('update-available', {
       enabled: true,
       triggers: [],
+      ...notificationPreferences(true),
     });
 
     expect(
@@ -480,6 +618,7 @@ describe('Notification Store', () => {
       description: 'When a container has a new version',
       enabled: true,
       triggers: [],
+      ...notificationPreferences(true),
     });
     expect(freshNotification.updateNotificationRule('update-available', { enabled: false })).toBe(
       undefined,

@@ -330,7 +330,7 @@ describe('api/container/stats — summary handlers', () => {
     expect(res.json).toHaveBeenCalledWith({ data: emptySummary });
 
     const contractValidation = validateOpenApiJsonResponse({
-      path: '/api/stats/summary',
+      path: '/api/v1/stats/summary',
       method: 'get',
       statusCode: '200',
       payload: res.json.mock.calls[0][0],

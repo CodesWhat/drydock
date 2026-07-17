@@ -22,10 +22,6 @@
       "status": "Статус",
       "details": "Детали"
     },
-    "card": {
-      "time": "Время",
-      "version": "Версия"
-    },
     "detail": {
       "timestamp": "Метка времени",
       "event": "Событие",
@@ -156,10 +152,6 @@
       "total": "Всего"
     },
     "card": {
-      "vulnerabilities": "уязвимостей",
-      "vsUpdate": "vs обновление",
-      "fixable": "исправимых",
-      "noFixesAvailable": "Исправлений нет",
       "total": "всего"
     },
     "badge": {
@@ -254,10 +246,6 @@
       "private": "Приватный",
       "public": "Публичный"
     },
-    "card": {
-      "auth": "Аутентификация",
-      "status": "Статус"
-    },
     "status": {
       "connected": "Подключён",
       "error": "Ошибка",
@@ -289,15 +277,6 @@
       "status": "Статус",
       "containers": "Контейнеры",
       "lastSeen": "Последняя активность"
-    },
-    "card": {
-      "containers": "Контейнеры",
-      "running": "Работает",
-      "images": "Образы",
-      "lastSeen": "Последняя активность"
-    },
-    "list": {
-      "containers": "контейнеров"
     },
     "detail": {
       "containers": "Контейнеры",
@@ -340,9 +319,6 @@
       "status": "Статус",
       "refreshing": "Обновление данных триггера...",
       "noConfig": "Свойства конфигурации отсутствуют"
-    },
-    "list": {
-      "status": "Статус"
     }
   },
   "watchersView": {
@@ -363,12 +339,6 @@
     "status": {
       "watching": "Наблюдает",
       "paused": "Приостановлен"
-    },
-    "card": {
-      "containers": "Контейнеры",
-      "nextRun": "Следующий запуск",
-      "lastRun": "Последний запуск",
-      "containersWatched": "Наблюдается контейнеров: {count}"
     },
     "badge": {
       "maint": "Обслуживание"

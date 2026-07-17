@@ -9,9 +9,6 @@
       "clickToCopy": "Натисніть для копіювання",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "Вибрати {name}"
-    },
     "dataFilterBar": {
       "filters": "Фільтри",
       "toggleFilters": "Показати/приховати фільтри",
@@ -19,13 +16,8 @@
       "viewModeLabel": "Вигляд {label}",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Показати/приховати деталі {name}",
-      "selectItem": "Вибрати {name}"
     },
     "dataTable": {
       "actions": "Дії",

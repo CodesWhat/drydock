@@ -226,6 +226,7 @@ describe('Docker Watcher', () => {
               'die',
               'update',
               'rename',
+              'health_status',
             ],
           },
         },
@@ -461,7 +462,7 @@ describe('Docker Watcher', () => {
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(existingContainer);
     });
 
-    test('should apply custom display name from labels when processing events', async () => {
+    test('should ignore removed wud display-name labels when processing events', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLogWithChild(['info']);
       mockContainer.inspect.mockResolvedValue({
@@ -481,7 +482,7 @@ describe('Docker Watcher', () => {
 
       await docker.onDockerEvent(Buffer.from('{"Action":"rename","id":"container123"}\n'));
 
-      expect(existingContainer.displayName).toBe('Custom Label Name');
+      expect(existingContainer.displayName).toBe('renamed-container');
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(existingContainer);
     });
 
@@ -757,7 +758,7 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - applyDerivedLabelFieldsToContainer wiring', () => {
-    test('should re-derive tagFamily / includeTags / transformTags from new labels on a real start event', async () => {
+    test('should re-derive tag policies and filters from new labels on a real start event', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLogWithChild(['info']);
 
@@ -772,6 +773,7 @@ describe('Docker Watcher', () => {
         excludeTags: undefined as string | undefined,
         transformTags: undefined as string | undefined,
         tagFamily: undefined as string | undefined,
+        tagPinInfo: undefined as boolean | undefined,
         image: { name: 'library/nginx' },
       };
       storeContainer.getContainer.mockReturnValue(existing);
@@ -785,6 +787,7 @@ describe('Docker Watcher', () => {
             'dd.tag.include': '^3\\.',
             'dd.tag.exclude': '^alpha',
             'dd.tag.family': 'loose',
+            'dd.tag.pin.info': 'false',
           },
         },
       });
@@ -796,7 +799,36 @@ describe('Docker Watcher', () => {
       expect(existing.includeTags).toBe('^3\\.');
       expect(existing.excludeTags).toBe('^alpha');
       expect(existing.tagFamily).toBe('loose');
+      expect(existing.tagPinInfo).toBe(false);
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(existing);
+    });
+
+    test('restores watcher tag-policy defaults when direct labels are removed on an event', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { family: 'strict', pin: { info: true } },
+      });
+      docker.log = createMockLogWithChild(['info']);
+      const existing = {
+        id: 'c-policy-removal',
+        name: 'policy-removal',
+        displayName: 'policy-removal',
+        status: 'running',
+        labels: { 'dd.tag.family': 'loose', 'dd.tag.pin.info': 'false' },
+        tagFamily: 'loose',
+        tagPinInfo: false,
+        image: { name: 'library/nginx' },
+      };
+      storeContainer.getContainer.mockReturnValue(existing);
+      mockContainer.inspect.mockResolvedValue({
+        Name: '/policy-removal',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      });
+
+      await docker.onDockerEvent(Buffer.from('{"Action":"start","id":"c-policy-removal"}\n'));
+
+      expect(existing.tagFamily).toBe('strict');
+      expect(existing.tagPinInfo).toBe(true);
     });
   });
 

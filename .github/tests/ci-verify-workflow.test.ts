@@ -6,6 +6,7 @@ import yaml from 'yaml';
 import { expectedActionUse } from './github-action-pins';
 
 interface WorkflowJob {
+  env?: Record<string, string>;
   name?: string;
   steps?: WorkflowJobStep[];
   'timeout-minutes'?: number;
@@ -19,6 +20,7 @@ interface WorkflowJobStep {
   run?: string;
   if?: string;
   uses?: string;
+  'working-directory'?: string;
   env?: Record<string, string>;
   with?: Record<string, string>;
   'continue-on-error'?: boolean;
@@ -78,34 +80,6 @@ test('ci-verify job names are emoji-prefixed for GitHub checks readability', () 
   expect(jobsWithoutEmoji).toStrictEqual([]);
 });
 
-test('manual dispatch runs the complete release-candidate matrix regardless of path filters', () => {
-  const workflow = loadWorkflow();
-  const manualDispatch = "github.event_name == 'workflow_dispatch'";
-
-  expect(Object.hasOwn(workflow.on ?? {}, 'workflow_dispatch')).toBe(true);
-  expect(getWorkflowStep('changes', 'Filter paths')?.with?.base).toContain(
-    "github.event_name == 'workflow_dispatch'",
-  );
-
-  for (const jobId of [
-    'codeql',
-    'fuzz',
-    'web',
-    'dast-zap-baseline',
-    'e2e',
-    'load-test-ci',
-    'load-test-behavior',
-  ]) {
-    expect(workflow.jobs?.[jobId]?.if, `${jobId} must run on manual dispatch`).toContain(
-      manualDispatch,
-    );
-  }
-
-  expect(workflow.jobs?.['dependency-review']?.if).toBe(
-    "github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')",
-  );
-});
-
 test('script node tests are wired into local and CI gates', () => {
   expect(getTestJobStep('Run scripts tests')).toMatchObject({
     run: 'node --test scripts/*.test.mjs',
@@ -133,11 +107,46 @@ test('workflow tests are wired outside the app coverage suite', () => {
   });
 });
 
-test('ci-verify skips Playwright browser downloads on load-test jobs but not cucumber', () => {
+test('ci-verify can dispatch the complete release-candidate matrix manually', () => {
   const workflow = loadWorkflow();
 
-  // Workflow-level skip would break the cucumber job, which actually launches
-  // a browser via @playwright/test. Scope the skip to load-test jobs only.
+  expect(workflow.on).toHaveProperty('workflow_dispatch');
+  expect(getWorkflowStep('changes', 'Filter paths')?.with?.base).toContain(
+    "github.event_name == 'workflow_dispatch'",
+  );
+
+  for (const jobId of [
+    'codeql',
+    'fuzz',
+    'web',
+    'dast-zap-baseline',
+    'e2e',
+    'load-test-ci',
+    'load-test-behavior',
+  ]) {
+    expect(workflow.jobs?.[jobId]?.if).toContain("github.event_name == 'workflow_dispatch'");
+  }
+
+  for (const jobId of ['zizmor', 'changes', 'lint', 'test', 'build']) {
+    expect(workflow.jobs?.[jobId]?.if).toBeUndefined();
+  }
+
+  expect(workflow.jobs?.codeql?.needs).toStrictEqual(['zizmor']);
+  expect(workflow.jobs?.fuzz?.needs).toStrictEqual(['zizmor']);
+  expect(workflow.jobs?.web?.needs).toStrictEqual(['changes']);
+  expect(workflow.jobs?.['dast-zap-baseline']?.needs).toStrictEqual(['build']);
+  expect(workflow.jobs?.e2e?.needs).toStrictEqual(['build', 'changes']);
+  expect(workflow.jobs?.['load-test-ci']?.needs).toStrictEqual(['build']);
+  expect(workflow.jobs?.['load-test-behavior']?.needs).toStrictEqual(['build']);
+});
+
+test('ci-verify runs Cucumber in the pinned Playwright browser image', () => {
+  const workflow = loadWorkflow();
+  const playwrightImage =
+    'mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48';
+
+  // Keep host-side installs from downloading a browser. The Cucumber browser
+  // comes from the same immutable image used by the dedicated Playwright gate.
   expect(workflow.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBeUndefined();
 
   for (const jobId of ['load-test-ci', 'load-test-behavior']) {
@@ -145,11 +154,41 @@ test('ci-verify skips Playwright browser downloads on load-test jobs but not cuc
     expect(getWorkflowStep(jobId, 'Install e2e dependencies')).toBeDefined();
   }
 
-  // Cucumber needs the browser, so it must not inherit the skip, and it gets
-  // a cache step so the postinstall fetch survives CDN throttling.
-  expect(workflow.jobs?.e2e?.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBeUndefined();
-  expect(getWorkflowStep('e2e', 'Cache Playwright browsers')).toBeDefined();
-  expect(getWorkflowStep('e2e', 'Install e2e dependencies')).toBeDefined();
+  expect(workflow.jobs?.e2e?.env).toMatchObject({
+    PLAYWRIGHT_IMAGE: playwrightImage,
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
+  });
+  expect(getWorkflowStep('e2e', 'Cache Playwright browsers')).toBeUndefined();
+  expect(getWorkflowStep('e2e', 'Install e2e dependencies')).toBeUndefined();
+
+  const verifyImage = getWorkflowStep('e2e', 'Verify Playwright image matches package')?.run;
+  expect(verifyImage).toContain(
+    "require('./e2e/package.json').devDependencies['@playwright/test']",
+  );
+  expect(verifyImage).toContain('PLAYWRIGHT_IMAGE uses $image_version');
+
+  expect(getWorkflowStep('e2e', 'Pull Playwright container')).toMatchObject({
+    with: {
+      command: 'docker pull "$PLAYWRIGHT_IMAGE"',
+    },
+  });
+
+  const cucumber = getWorkflowStep('e2e', 'Run Cucumber e2e tests');
+  expect(cucumber?.['working-directory']).toBeUndefined();
+  expect(cucumber?.run).toContain('docker run --rm');
+  expect(cucumber?.run).toContain('--network host');
+  expect(cucumber?.run).toContain('--user 1001:1001');
+  expect(cucumber?.run).toContain('-e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright');
+  expect(cucumber?.run).toContain('-e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD');
+  expect(cucumber?.run).not.toContain('PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1');
+  expect(cucumber?.env?.DD_PORT).toBe('${{ steps.drydock.outputs.dd_port }}');
+  expect(cucumber?.run).toContain('-e DD_PORT');
+  expect(cucumber?.run).toContain('-v "${{ github.workspace }}:/work"');
+  expect(cucumber?.run).toContain('-w /work/e2e');
+  expect(cucumber?.run).toContain('"$PLAYWRIGHT_IMAGE"');
+  expect(cucumber?.run).toContain(
+    'npm ci --no-audit --no-fund && npm run cucumber -- --tags "not @requires_gitlab" --retry 1',
+  );
 });
 
 test('DAST auth steps mask derived basic auth credentials', () => {
@@ -166,18 +205,18 @@ test('DAST auth steps mask derived basic auth credentials', () => {
 
 test('load-test workflow runs load profiles in parallel jobs', () => {
   const workflow = loadWorkflow();
-  const releaseCandidateCondition =
+  const releaseMatrixCondition =
     "github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))";
 
   expect(workflow.jobs?.['load-test-ci']).toMatchObject({
     name: '⚡ Load Test: CI',
-    if: releaseCandidateCondition,
+    if: releaseMatrixCondition,
     needs: ['build'],
     'timeout-minutes': expect.any(Number),
   });
   expect(workflow.jobs?.['load-test-behavior']).toMatchObject({
     name: '⚡ Load Test: Behavior + Stress (Advisory)',
-    if: releaseCandidateCondition,
+    if: releaseMatrixCondition,
     needs: ['build'],
     'timeout-minutes': expect.any(Number),
   });

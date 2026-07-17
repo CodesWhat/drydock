@@ -10,6 +10,33 @@ export interface ContainerPreviewPayload extends Record<string, unknown> {
   compose?: ContainerComposePreview;
 }
 
+export interface PreviewErrorAction {
+  label: string;
+  href: '/registries' | '/triggers';
+}
+
+export class PreviewRequestError extends Error {
+  readonly code: string;
+  readonly status: number;
+  readonly details?: Record<string, unknown>;
+  readonly action?: PreviewErrorAction;
+
+  constructor(options: {
+    code: string;
+    message: string;
+    status: number;
+    details?: Record<string, unknown>;
+    action?: PreviewErrorAction;
+  }) {
+    super(options.message);
+    this.name = 'PreviewRequestError';
+    this.code = options.code;
+    this.status = options.status;
+    this.details = options.details;
+    this.action = options.action;
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return undefined;
@@ -216,13 +243,53 @@ export function normalizePreviewPayload(payload: unknown): ContainerPreviewPaylo
   return normalized;
 }
 
+function normalizePreviewErrorAction(value: unknown): PreviewErrorAction | undefined {
+  const action = asRecord(value);
+  if (
+    typeof action?.label !== 'string' ||
+    (action.href !== '/registries' && action.href !== '/triggers')
+  ) {
+    return undefined;
+  }
+  return { label: action.label, href: action.href };
+}
+
+async function buildPreviewRequestError(response: Response): Promise<PreviewRequestError> {
+  let payload: Record<string, unknown> | undefined;
+  try {
+    payload = asRecord(await response.json());
+  } catch {
+    payload = undefined;
+  }
+
+  const code =
+    typeof payload?.code === 'string' && payload.code.trim() !== ''
+      ? payload.code
+      : 'preview-http-error';
+  const fallbackStatus = `${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+  const message =
+    typeof payload?.message === 'string' && payload.message.trim() !== ''
+      ? payload.message
+      : `Unable to prepare this update preview (${fallbackStatus})`;
+  const details = asRecord(payload?.details);
+  const action = normalizePreviewErrorAction(payload?.action);
+
+  return new PreviewRequestError({
+    code,
+    message,
+    status: response.status,
+    ...(details ? { details } : {}),
+    ...(action ? { action } : {}),
+  });
+}
+
 export async function previewContainer(id: string): Promise<ContainerPreviewPayload> {
   const response = await fetch(`/api/v1/containers/${id}/preview`, {
     method: 'POST',
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Preview failed: ${response.statusText}`);
+    throw await buildPreviewRequestError(response);
   }
   const payload = await response.json();
   return normalizePreviewPayload(payload);

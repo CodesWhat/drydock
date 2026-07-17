@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import type { PickerColumn } from '../../composables/useViewColumnVisibility';
 import AppIconButton from '../AppIconButton.vue';
+import DataSortControl from '../DataSortControl.vue';
+import DataTableColumnPicker from '../DataTableColumnPicker.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import {
   type ContainersViewTemplateContext,
@@ -15,6 +18,10 @@ const {
   error,
   loading,
   containerViewMode,
+  containerCardReflowForced,
+  containerSortKey,
+  containerSortAsc,
+  tableColumns,
   showFilters,
   filteredContainers,
   containers,
@@ -28,13 +35,10 @@ const {
   filterKind,
   filterHidePinned,
   clearFilters,
-  showColumnPicker,
-  toggleColumnPicker,
-  columnPickerStyle,
   allColumns,
   toggleColumn,
   visibleColumns,
-  autoHiddenColumns,
+  resetColumns,
   tt,
   groupByStack,
   rechecking,
@@ -45,6 +49,37 @@ const {
   filterContainerIds,
   clearContainerIdsFilter,
 } = templateContext;
+
+// Only catalog entries with a labelKey are user-toggleable table columns (matches the
+// picker's previous bespoke-popover filter — the icon column has no labelKey and is
+// `required` besides).
+// Cards are showing when the user toggled to them OR the width forced the reflow.
+const inCardMode = computed(
+  () => containerCardReflowForced.value || containerViewMode.value === 'cards',
+);
+
+// Card-mode sort options, hoisted into the filter bar (table mode sorts via headers).
+const sortableColumns = computed(() =>
+  tableColumns.value
+    .filter((column) => column.sortable && !column.icon)
+    .map((column) => ({ key: column.key, label: column.label })),
+);
+
+const pickerColumns = computed<PickerColumn[]>(() =>
+  allColumns
+    .filter((column) => column.labelKey)
+    .map((column) => ({
+      key: column.key,
+      label: column.labelKey ? t(column.labelKey) : column.label,
+      required: column.required,
+    })),
+);
+
+// Picker-hidden only (user choices) — deliberately excludes the width-driven auto-hidden
+// set, which is a separate, self-explanatory mechanism the picker doesn't need to reflect.
+const pickerHiddenColumnKeys = computed(() =>
+  pickerColumns.value.filter((column) => !visibleColumns.value.has(column.key)).map((c) => c.key),
+);
 
 const activeFilterChips = computed(() => {
   const chips: string[] = [];
@@ -115,7 +150,16 @@ const activeFilterChips = computed(() => {
       v-model:showFilters="showFilters"
       :filtered-count="filteredContainers.length"
       :total-count="containers.length"
-      :active-filter-count="activeFilterCount">
+      :active-filter-count="activeFilterCount"
+      :hide-view-toggle="containerCardReflowForced">
+      <template v-if="inCardMode && sortableColumns.length > 0" #sort>
+        <DataSortControl
+          :columns="sortableColumns"
+          :sort-key="containerSortKey"
+          :sort-asc="containerSortAsc"
+          @update:sort-key="containerSortKey = $event"
+          @update:sort-asc="containerSortAsc = $event" />
+      </template>
       <template #filters>
         <input
           v-model="filterSearch"
@@ -185,23 +229,18 @@ const activeFilterChips = computed(() => {
         </AppButton>
       </template>
       <template #extra-buttons>
-        <div v-if="containerViewMode === 'table'" class="relative inline-flex items-center">
-          <AppIconButton icon="config" size="toolbar" variant="secondary"
-            :class="showColumnPicker ? 'dd-text dd-bg-elevated' : ''"
-            :tooltip="tt(t('containerComponents.listContent.toggleColumnsTooltip'))"
-            @click.stop="toggleColumnPicker($event)" />
-          <span
-            v-if="autoHiddenColumns.length > 0"
-            class="absolute -top-1 -right-1 pointer-events-none text-3xs font-bold px-1 dd-rounded dd-text-muted dd-bg-elevated leading-tight"
-            v-tooltip="t('containerComponents.listContent.autoHiddenBadgeTooltip', { count: autoHiddenColumns.length })">
-            +{{ autoHiddenColumns.length }}
-          </span>
-        </div>
+        <DataTableColumnPicker
+          v-if="containerViewMode === 'table'"
+          :columns="pickerColumns"
+          :hidden-keys="pickerHiddenColumnKeys"
+          @toggle="toggleColumn"
+          @reset="resetColumns" />
       </template>
       <template #left>
-        <AppIconButton icon="stack" size="toolbar" variant="secondary"
+        <AppIconButton icon="stack" size="sm" variant="secondary" class="shrink-0"
           :class="groupByStack ? 'dd-text dd-bg-elevated' : ''"
           :tooltip="tt(t('containerComponents.listContent.groupByStackTooltip'))"
+          :aria-label="t('containerComponents.listContent.groupByStackTooltip')"
           @click="groupByStack = !groupByStack" />
         <AppButton
           v-if="groupByStack"
@@ -213,11 +252,12 @@ const activeFilterChips = computed(() => {
           @click="allGroupsCollapsed ? expandAllGroups() : collapseAllGroups()">
           {{ allGroupsCollapsed ? t('containerComponents.listContent.expandAll') : t('containerComponents.listContent.collapseAll') }}
         </AppButton>
-        <AppIconButton icon="restart" size="toolbar" variant="secondary"
+        <AppIconButton icon="restart" size="sm" variant="secondary" class="shrink-0"
           :class="rechecking ? 'dd-text-muted cursor-wait' : ''"
           :disabled="rechecking"
           :loading="rechecking"
           :tooltip="tt(t('containerComponents.listContent.recheckTooltip'))"
+          :aria-label="t('containerComponents.listContent.recheckTooltip')"
           @click="recheckAll" />
       </template>
       <template #center>
@@ -254,40 +294,6 @@ const activeFilterChips = computed(() => {
         </div>
       </template>
     </DataFilterBar>
-
-    <Teleport to="body">
-      <div
-        v-if="showColumnPicker"
-        data-test="containers-column-picker"
-        class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
-        :style="{
-          ...columnPickerStyle,
-          zIndex: 'var(--z-popover)',
-          backgroundColor: 'var(--dd-bg-card)',
-          border: '1px solid var(--dd-border-strong)',
-          boxShadow: 'var(--dd-shadow-tooltip)',
-        }"
-        @click.stop>
-        <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.listContent.columnsHeader') }}</div>
-        <AppButton
-          v-for="column in allColumns.filter((columnItem) => columnItem.labelKey)"
-          :key="column.key"
-          size="md"
-          variant="plain"
-          weight="medium"
-          class="w-full text-left flex items-center gap-2 hover:dd-bg-elevated"
-          :class="column.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
-          @click="toggleColumn(column.key)">
-          <AppIcon
-            :name="visibleColumns.has(column.key) ? 'check' : 'square'"
-            :size="13"
-            :style="visibleColumns.has(column.key) ? { color: 'var(--dd-primary)' } : {}" />
-          {{ column.labelKey ? t(column.labelKey) : column.label }}<em
-            v-if="visibleColumns.has(column.key) && autoHiddenColumns.some((c) => c.key === column.key)"
-            class="not-italic dd-text-muted"> {{ t('containerComponents.listContent.narrowViewportSuffix') }}</em>
-        </AppButton>
-      </div>
-    </Teleport>
 
     <ContainersGroupedViews />
   </div>

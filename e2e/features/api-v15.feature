@@ -1,13 +1,13 @@
 Feature: Drydock v1.5 API exposure
 
   Scenario: Drydock must expose operation cancellation errors as JSON
-    When I POST to /api/operations/e2e-missing-operation/cancel
+    When I POST to /api/v1/operations/e2e-missing-operation/cancel
     Then response code should be 404
     And response body should be valid json
     And response body path $.error should be Operation not found
 
   Scenario: Drydock must expose notification outbox status buckets
-    When I GET /api/notifications/outbox
+    When I GET /api/v1/notifications/outbox
     Then response code should be 200
     And response body should be valid json
     And response body path $.data should be of type array with minimum length 0
@@ -15,17 +15,17 @@ Feature: Drydock v1.5 API exposure
     And response body path $.counts.pending should be of type number
     And response body path $.counts.delivered should be of type number
     And response body path $.counts.deadLetter should be of type number
-    When I GET /api/notifications/outbox?status=pending
+    When I GET /api/v1/notifications/outbox?status=pending
     Then response code should be 200
     And response body should be valid json
     And response body path $.data should be of type array with minimum length 0
-    When I GET /api/notifications/outbox?status=invalid
+    When I GET /api/v1/notifications/outbox?status=invalid
     Then response code should be 400
     And response body should be valid json
     And response body path $.error should be Invalid status query parameter. Must be one of: pending, delivered, dead-letter
 
   Scenario: Drydock must expose fleet stats summary
-    When I GET /api/stats/summary
+    When I GET /api/v1/stats/summary
     Then response code should be 200
     And response body should be valid json
     And response body path $.data.timestamp should be of type string

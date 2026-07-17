@@ -7,7 +7,10 @@ const withMDX = createMDX();
 // Derived from the single source of truth in scripts/docs-versions.mjs.
 // First entry = current/default version; all slugs feed the prefix regex.
 const docsCurrentVersion = versions[0].slug;
-const docsVersionPrefixes = versions.map((v) => escapeRegExp(v.slug) + "(?:/|$)").join("|");
+const docsRedirectExclusions = [
+  "assets(?:/|$)",
+  ...versions.map((v) => escapeRegExp(v.slug) + "(?:/|$)"),
+].join("|");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -38,7 +41,7 @@ const nextConfig = {
       permanent: false,
     },
     {
-      source: `/docs/:path((?!${docsVersionPrefixes}).*)`,
+      source: `/docs/:path((?!${docsRedirectExclusions}).*)`,
       destination: `/docs/${docsCurrentVersion}/:path`,
       permanent: false,
     },

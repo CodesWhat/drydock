@@ -426,13 +426,14 @@ describe('api/container/filters', () => {
     ]);
   });
 
-  test('applyContainerWatchedKindFilter recognizes wud.watch legacy label', () => {
+  test('applyContainerWatchedKindFilter ignores removed wud.watch labels', () => {
     const containers = [
       { id: 'c1', labels: { 'wud.watch': 'true' } },
       { id: 'c2', labels: { 'wud.watch': 'false' } },
     ] as unknown as Container[];
-    expect(applyContainerWatchedKindFilter(containers, 'watched').map((c) => c.id)).toEqual(['c1']);
+    expect(applyContainerWatchedKindFilter(containers, 'watched').map((c) => c.id)).toEqual([]);
     expect(applyContainerWatchedKindFilter(containers, 'unwatched').map((c) => c.id)).toEqual([
+      'c1',
       'c2',
     ]);
   });

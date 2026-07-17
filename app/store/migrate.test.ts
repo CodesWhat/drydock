@@ -177,3 +177,83 @@ test('migrate should skip tagPrecision backfill after crossing version 1.5.0', a
   expect(container.getContainersRaw).not.toHaveBeenCalled();
   expect(container.updateContainer).not.toHaveBeenCalled();
 });
+
+describe('trigger label category re-derivation (#494)', () => {
+  test('re-derives the scoped fields for containers that only carry the deprecated mirror', () => {
+    container.getContainersRaw.mockReturnValue([
+      {
+        id: 'legacy-mirror',
+        labels: { 'dd.action.include': 'docker', 'dd.notification.include': 'slack' },
+        triggerInclude: 'docker',
+      },
+    ]);
+
+    migrate.migrate('1.5.1', '1.6.0');
+
+    // updateContainer() re-runs the label-driven normalization, which recovers the
+    // notification value the collapsed first-match mirror discarded.
+    expect(container.updateContainer).toHaveBeenCalledTimes(1);
+    expect(container.updateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'legacy-mirror', triggerInclude: 'docker' }),
+    );
+  });
+
+  test.each([
+    'actionTriggerInclude',
+    'actionTriggerExclude',
+    'notificationTriggerInclude',
+    'notificationTriggerExclude',
+  ])('leaves a container that already has %s untouched', (field) => {
+    container.getContainersRaw.mockReturnValue([
+      { id: 'already-scoped', triggerInclude: 'docker', [field]: 'docker' },
+    ]);
+
+    migrate.migrate('1.5.1', '1.6.0');
+
+    expect(container.updateContainer).not.toHaveBeenCalled();
+  });
+
+  test('re-derives a container with no trigger fields at all', () => {
+    container.getContainersRaw.mockReturnValue([{ id: 'no-triggers' }]);
+
+    migrate.migrate('1.5.1', '1.6.0');
+
+    expect(container.updateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'no-triggers' }),
+    );
+  });
+
+  test('does not run when the target version is below 1.6.0', () => {
+    migrate.migrate('1.5.0', '1.5.1');
+
+    expect(container.getContainersRaw).not.toHaveBeenCalled();
+  });
+
+  test('does not run when the target version is not valid semver', () => {
+    migrate.migrate('1.5.1', 'not-a-semver');
+
+    expect(container.getContainersRaw).not.toHaveBeenCalled();
+  });
+
+  test('does not run when the from version is missing', () => {
+    migrate.migrate(undefined, '1.6.0');
+
+    expect(container.getContainersRaw).not.toHaveBeenCalled();
+  });
+
+  test('does not run when the from version is already at or past 1.6.0', () => {
+    migrate.migrate('1.6.0', '1.6.1');
+
+    expect(container.getContainersRaw).not.toHaveBeenCalled();
+  });
+
+  test('runs when the from version is not valid semver', () => {
+    container.getContainersRaw.mockReturnValue([{ id: 'invalid-from' }]);
+
+    migrate.migrate('not-a-semver', '1.6.0');
+
+    expect(container.updateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'invalid-from' }),
+    );
+  });
+});

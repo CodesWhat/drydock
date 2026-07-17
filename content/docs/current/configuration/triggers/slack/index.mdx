@@ -33,7 +33,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-        - DD_NOTIFICATION_SLACK_TEST_TOKEN=xoxp-743817063446-xxx
+        - DD_NOTIFICATION_SLACK_TEST_TOKEN=replace-with-slack-token
         - DD_NOTIFICATION_SLACK_TEST_CHANNEL=drydock
 ```
 
@@ -41,7 +41,7 @@ services:
 <Tab value="Docker">
 ```bash
 docker run \
-    -e DD_NOTIFICATION_SLACK_TEST_TOKEN="xoxp-743817063446-xxx" \
+    -e DD_NOTIFICATION_SLACK_TEST_TOKEN="replace-with-slack-token" \
     -e DD_NOTIFICATION_SLACK_TEST_CHANNEL="drydock" \
   ...
   codeswhat/drydock

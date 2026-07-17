@@ -233,6 +233,7 @@ function sanitizeUpdateAppliedPayloadForAgentSse(
     containerId: p.containerId ?? '',
     containerName: p.containerName,
     batchId: p.batchId ?? null,
+    ...(p.phase === 'dryrun' ? { phase: 'dryrun' } : {}),
     ...(p.container && typeof p.container === 'object' ? { container: p.container } : {}),
   };
 }

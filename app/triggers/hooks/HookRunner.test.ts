@@ -715,7 +715,7 @@ describe('HookRunner', () => {
       expect(resultDenied.exitCode).toBe(1);
     });
 
-    test('when allowlist entry has no slash, basename match works for full path commands', async () => {
+    test('when allowlist entry has no slash, a path-qualified command is rejected', async () => {
       process.env.DD_HOOKS_ALLOWED_COMMANDS = 'curl';
 
       var execFileCalls = 0;
@@ -730,10 +730,10 @@ describe('HookRunner', () => {
         return { exitCode: 0 };
       };
 
-      // /usr/bin/curl basename is "curl" which matches the allowlist entry "curl"
-      const result = await runHook('/usr/bin/curl https://example.com', { label: 'test' });
-      expect(execFileCalls).toBe(1);
-      expect(result.exitCode).toBe(0);
+      const result = await runHook('/tmp/curl https://example.com', { label: 'test' });
+      expect(execFileCalls).toBe(0);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('not in DD_HOOKS_ALLOWED_COMMANDS');
     });
   });
 });

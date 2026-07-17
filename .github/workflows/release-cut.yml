@@ -63,7 +63,7 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
           fetch-depth: 0
           persist-credentials: true
@@ -291,6 +291,7 @@ jobs:
             latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ steps.next.outputs.release_tag }}
+            type=match,pattern=^v(\d+\.\d+)\.\d+-rc\.\d+$,group=1,suffix=-rc,value=${{ steps.next.outputs.release_tag }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
             type=semver,pattern={{major}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
             type=raw,value=latest,enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
@@ -451,7 +452,7 @@ jobs:
           DIGEST: ${{ steps.digest.outputs.value }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
-          TRIVY_IMAGE: aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c  # 0.69.3
+          TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f  # 0.72.0
         run: |
           set -euo pipefail
           mkdir -p dist

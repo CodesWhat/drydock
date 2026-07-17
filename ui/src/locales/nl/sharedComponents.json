@@ -9,9 +9,6 @@
       "clickToCopy": "Klik om te kopiëren",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "Selecteer {name}"
-    },
     "dataFilterBar": {
       "filters": "Filters",
       "toggleFilters": "Schakel tussen filters",
@@ -19,13 +16,8 @@
       "viewModeLabel": "{label} weergave",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Schakel {name} details in of uit",
-      "selectItem": "Selecteer {name}"
     },
     "dataTable": {
       "actions": "Acties",

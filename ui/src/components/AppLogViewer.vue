@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, shallowRef, triggerRef, watch } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  shallowRef,
+  triggerRef,
+  watch,
+} from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
@@ -7,11 +16,7 @@ import { writeToClipboard } from '../composables/useClipboard';
 import { useLogSearch } from '../composables/useLogSearch';
 import type { AppLogEntry } from '../types/log-entry';
 import type { AnsiColor, AnsiTextSegment } from '../utils/container-logs';
-
-interface JsonToken {
-  text: string;
-  type: 'key' | 'string' | 'number' | 'boolean' | 'null' | 'punctuation' | 'text';
-}
+import { type JsonToken, tokenizeJson } from '../utils/json-tokenizer';
 
 const props = withDefaults(
   defineProps<{
@@ -49,7 +54,13 @@ const lineElements = new Map<number, HTMLElement>();
 const logViewport = ref<HTMLElement | null>(null);
 const copySuccess = ref(false);
 const copyFailed = ref(false);
+const virtualScrollTop = ref(0);
+const virtualViewportHeight = ref(0);
+const measuredRowHeights = shallowRef(new Map<number, number>());
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+let rowResizeObserver: ResizeObserver | null = null;
+let viewportResizeObserver: ResizeObserver | null = null;
+let lastViewportWidth = 0;
 
 function isNearEdge(element: HTMLElement): boolean {
   if (props.newestFirst) {
@@ -62,7 +73,9 @@ function scrollToEdge(): void {
   if (!logViewport.value) {
     return;
   }
-  logViewport.value.scrollTop = props.newestFirst ? 0 : logViewport.value.scrollHeight;
+  const targetScrollTop = props.newestFirst ? 0 : logViewport.value.scrollHeight;
+  logViewport.value.scrollTop = targetScrollTop;
+  virtualScrollTop.value = logViewport.value.scrollTop;
 }
 
 function handleLogScroll(): void {
@@ -70,6 +83,8 @@ function handleLogScroll(): void {
     return;
   }
 
+  virtualScrollTop.value = logViewport.value.scrollTop;
+  syncVirtualViewport();
   const nearEdge = isNearEdge(logViewport.value);
   if (nearEdge !== props.autoScrollPinned) {
     emit('toggle-pin');
@@ -85,12 +100,18 @@ function togglePin(): void {
 }
 
 function setLineElement(entryId: number, element: Element | null): void {
+  const previousElement = lineElements.get(entryId);
+  if (previousElement && previousElement !== element) {
+    rowResizeObserver?.unobserve(previousElement);
+  }
   if (!(element instanceof HTMLElement)) {
     lineElements.delete(entryId);
     return;
   }
 
   lineElements.set(entryId, element);
+  rowResizeObserver?.observe(element);
+  recordMeasuredRowHeight(entryId, element.offsetHeight);
 }
 
 const {
@@ -111,6 +132,7 @@ const {
     [entry.timestamp, entry.level, entry.channel, entry.component, entry.plainLine]
       .filter(Boolean)
       .join(' '),
+  scrollToEntry,
 });
 
 const searchFilterMode = ref(false);
@@ -123,6 +145,9 @@ const displayEntries = shallowRef<AppLogEntry[]>(props.entries);
 let cachedNewestFirstSource: AppLogEntry[] | null = null;
 let cachedNewestFirstLength = 0;
 let cachedNewestFirstEntries: AppLogEntry[] = [];
+let pendingPrependScrollTop: number | null = null;
+let pendingPrependHeight = 0;
+let prependAdjustmentScheduled = false;
 
 function setDisplayEntries(entries: AppLogEntry[]): void {
   if (displayEntries.value === entries) {
@@ -147,6 +172,38 @@ function canAppendToNewestFirstCache(entries: AppLogEntry[]): boolean {
   return true;
 }
 
+function preserveUnpinnedPrependPosition(entries: AppLogEntry[]): void {
+  const viewport = logViewport.value;
+  if (entries.length === 0 || !viewport || props.autoScrollPinned) {
+    return;
+  }
+
+  pendingPrependScrollTop ??= viewport.scrollTop;
+  pendingPrependHeight += entries.reduce(
+    (total, entry) => total + (measuredRowHeights.value.get(entry.id) ?? estimateRowHeight(entry)),
+    0,
+  );
+  virtualScrollTop.value = pendingPrependScrollTop + pendingPrependHeight;
+  if (prependAdjustmentScheduled) {
+    return;
+  }
+
+  prependAdjustmentScheduled = true;
+  void nextTick(() => {
+    const nextScrollTop = (pendingPrependScrollTop ?? 0) + pendingPrependHeight;
+    pendingPrependScrollTop = null;
+    pendingPrependHeight = 0;
+    prependAdjustmentScheduled = false;
+
+    const currentViewport = logViewport.value;
+    if (!currentViewport || !props.newestFirst || props.autoScrollPinned) {
+      return;
+    }
+    currentViewport.scrollTop = nextScrollTop;
+    virtualScrollTop.value = currentViewport.scrollTop;
+  });
+}
+
 function syncDisplayEntries(): void {
   if (searchFilterMode.value && searchQuery.value) {
     const filteredEntries = props.entries.filter((entry) => matchedEntryIdSet.value.has(entry.id));
@@ -162,6 +219,7 @@ function syncDisplayEntries(): void {
   if (canAppendToNewestFirstCache(props.entries)) {
     const appendedEntries = props.entries.slice(cachedNewestFirstLength).reverse();
     if (appendedEntries.length > 0) {
+      preserveUnpinnedPrependPosition(appendedEntries);
       cachedNewestFirstEntries.splice(0, 0, ...appendedEntries);
     }
 
@@ -189,6 +247,184 @@ watch(
   syncDisplayEntries,
   { immediate: true },
 );
+
+const VIRTUALIZATION_THRESHOLD = 200;
+const VIRTUAL_OVERSCAN = 8;
+const DEFAULT_VIEWPORT_HEIGHT = 420;
+
+const virtualizationEnabled = computed(
+  () => displayEntries.value.length > VIRTUALIZATION_THRESHOLD,
+);
+
+function estimateRowHeight(entry: AppLogEntry): number {
+  const baseHeight = props.compact ? 24 : 28;
+  if (!entry.json?.pretty) {
+    return baseHeight;
+  }
+  const lineCount = entry.json.pretty.split('\n').length;
+  return Math.max(baseHeight, 12 + lineCount * 14);
+}
+
+function recordMeasuredRowHeight(entryId: number, height: number): void {
+  if (!Number.isFinite(height) || height <= 0) {
+    return;
+  }
+  const previousHeight = measuredRowHeights.value.get(entryId);
+  if (previousHeight !== undefined && Math.abs(previousHeight - height) < 1) {
+    return;
+  }
+  measuredRowHeights.value.set(entryId, height);
+  triggerRef(measuredRowHeights);
+}
+
+const rowOffsets = computed<number[]>(() => {
+  const entries = displayEntries.value;
+  const offsets = new Array<number>(entries.length + 1);
+  offsets[0] = 0;
+  let total = 0;
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    total += measuredRowHeights.value.get(entry.id) ?? estimateRowHeight(entry);
+    offsets[index + 1] = total;
+  }
+  return offsets;
+});
+
+const totalContentHeight = computed(() => rowOffsets.value.at(-1) ?? 0);
+
+function findRowIndexAtOffset(offset: number): number {
+  const offsets = rowOffsets.value;
+  let low = 0;
+  let high = Math.max(0, offsets.length - 1);
+  while (low < high) {
+    const middle = (low + high + 1) >>> 1;
+    if (offsets[middle] <= offset) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+  return Math.min(low, Math.max(0, displayEntries.value.length - 1));
+}
+
+function syncVirtualViewport(): void {
+  const viewport = logViewport.value;
+  if (!viewport) {
+    return;
+  }
+  const nextHeight = viewport.clientHeight;
+  virtualViewportHeight.value = nextHeight > 0 ? nextHeight : DEFAULT_VIEWPORT_HEIGHT;
+
+  const nextWidth = viewport.clientWidth;
+  if (lastViewportWidth > 0 && nextWidth > 0 && Math.abs(nextWidth - lastViewportWidth) >= 1) {
+    measuredRowHeights.value = new Map();
+  }
+  if (nextWidth > 0) {
+    lastViewportWidth = nextWidth;
+  }
+}
+
+const visibleRangeStart = computed(() => {
+  if (!virtualizationEnabled.value) {
+    return 0;
+  }
+  return Math.max(0, findRowIndexAtOffset(virtualScrollTop.value) - VIRTUAL_OVERSCAN);
+});
+
+const visibleRangeEnd = computed(() => {
+  if (!virtualizationEnabled.value) {
+    return displayEntries.value.length;
+  }
+  const viewportHeight = virtualViewportHeight.value || DEFAULT_VIEWPORT_HEIGHT;
+  const lastVisibleIndex = findRowIndexAtOffset(virtualScrollTop.value + viewportHeight);
+  return Math.min(displayEntries.value.length, lastVisibleIndex + 1 + VIRTUAL_OVERSCAN);
+});
+
+const renderedEntries = computed(() =>
+  virtualizationEnabled.value
+    ? displayEntries.value.slice(visibleRangeStart.value, visibleRangeEnd.value)
+    : displayEntries.value,
+);
+
+const topSpacerHeight = computed(() =>
+  virtualizationEnabled.value ? (rowOffsets.value[visibleRangeStart.value] ?? 0) : 0,
+);
+
+const bottomSpacerHeight = computed(() => {
+  if (!virtualizationEnabled.value) {
+    return 0;
+  }
+  return Math.max(
+    0,
+    totalContentHeight.value -
+      (rowOffsets.value[visibleRangeEnd.value] ?? totalContentHeight.value),
+  );
+});
+
+function absoluteRowIndex(localIndex: number): number {
+  return virtualizationEnabled.value ? visibleRangeStart.value + localIndex : localIndex;
+}
+
+function clampVirtualScrollTop(): void {
+  if (!virtualizationEnabled.value) {
+    virtualScrollTop.value = 0;
+    return;
+  }
+  const maximum = Math.max(
+    0,
+    totalContentHeight.value - (virtualViewportHeight.value || DEFAULT_VIEWPORT_HEIGHT),
+  );
+  if (virtualScrollTop.value <= maximum) {
+    return;
+  }
+  virtualScrollTop.value = maximum;
+  if (logViewport.value) {
+    logViewport.value.scrollTop = maximum;
+  }
+}
+
+function scrollToEntry(entryId: number): void {
+  const mountedElement = lineElements.get(entryId);
+  if (mountedElement && typeof mountedElement.scrollIntoView === 'function') {
+    mountedElement.scrollIntoView({ block: 'center' });
+    return;
+  }
+  const entryIndex = displayEntries.value.findIndex((entry) => entry.id === entryId);
+  const viewport = logViewport.value;
+  if (entryIndex < 0 || !viewport) {
+    return;
+  }
+  syncVirtualViewport();
+  const entryTop = rowOffsets.value[entryIndex] ?? 0;
+  const entryBottom = rowOffsets.value[entryIndex + 1] ?? entryTop;
+  const targetScrollTop = Math.max(
+    0,
+    entryTop - (virtualViewportHeight.value - (entryBottom - entryTop)) / 2,
+  );
+  viewport.scrollTop = targetScrollTop;
+  virtualScrollTop.value = targetScrollTop;
+  void nextTick(() => {
+    const element = lineElements.get(entryId);
+    if (element && typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView({ block: 'center' });
+    }
+  });
+}
+
+watch(displayEntries, (entries) => {
+  const visibleIds = new Set(entries.map((entry) => entry.id));
+  let pruned = false;
+  for (const entryId of measuredRowHeights.value.keys()) {
+    if (!visibleIds.has(entryId)) {
+      measuredRowHeights.value.delete(entryId);
+      pruned = true;
+    }
+  }
+  if (pruned) {
+    triggerRef(measuredRowHeights);
+  }
+  void nextTick(clampVirtualScrollTop);
+});
 
 const renderedLineCount = computed(() => {
   const total = props.lineCount ?? props.entries.length;
@@ -228,8 +464,40 @@ watch(
 );
 
 onMounted(() => {
+  syncVirtualViewport();
+  if (typeof ResizeObserver !== 'undefined') {
+    rowResizeObserver = new ResizeObserver((entries) => {
+      for (const observedEntry of entries) {
+        const entryId = Number.parseInt(
+          (observedEntry.target as HTMLElement).dataset.logEntryId ?? '',
+          10,
+        );
+        if (Number.isFinite(entryId)) {
+          recordMeasuredRowHeight(entryId, (observedEntry.target as HTMLElement).offsetHeight);
+        }
+      }
+    });
+    for (const element of lineElements.values()) {
+      rowResizeObserver.observe(element);
+    }
+    if (logViewport.value) {
+      viewportResizeObserver = new ResizeObserver(syncVirtualViewport);
+      viewportResizeObserver.observe(logViewport.value);
+    }
+  }
   if (props.autoScrollPinned) {
     void nextTick(() => scrollToEdge());
+  }
+});
+
+onBeforeUnmount(() => {
+  rowResizeObserver?.disconnect();
+  viewportResizeObserver?.disconnect();
+  rowResizeObserver = null;
+  viewportResizeObserver = null;
+  if (copyResetTimer) {
+    clearTimeout(copyResetTimer);
+    copyResetTimer = null;
   }
 });
 
@@ -267,92 +535,6 @@ function ansiSegmentStyle(segment: AnsiTextSegment): Record<string, string> {
   }
 
   return style;
-}
-
-function tokenizeJson(prettyJson: string): JsonToken[] {
-  const tokens: JsonToken[] = [];
-  let cursor = 0;
-  const numberPattern = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
-  const hasEscapingBackslash = (value: string, index: number): boolean => {
-    let backslashCount = 0;
-    let cursor = index - 1;
-
-    while (cursor >= 0 && value[cursor] === '\\') {
-      backslashCount += 1;
-      cursor -= 1;
-    }
-
-    return backslashCount % 2 === 1;
-  };
-
-  while (cursor < prettyJson.length) {
-    const character = prettyJson[cursor];
-
-    if (/\s/u.test(character)) {
-      let end = cursor + 1;
-      while (end < prettyJson.length && /\s/u.test(prettyJson[end])) {
-        end += 1;
-      }
-      tokens.push({ text: prettyJson.slice(cursor, end), type: 'text' });
-      cursor = end;
-      continue;
-    }
-
-    if ('{}[],:'.includes(character)) {
-      tokens.push({ text: character, type: 'punctuation' });
-      cursor += 1;
-      continue;
-    }
-
-    if (character === '"') {
-      let end = cursor + 1;
-      while (end < prettyJson.length) {
-        if (prettyJson[end] === '"' && !hasEscapingBackslash(prettyJson, end)) {
-          end += 1;
-          break;
-        }
-        end += 1;
-      }
-
-      let lookAhead = end;
-      while (lookAhead < prettyJson.length && /\s/u.test(prettyJson[lookAhead])) {
-        lookAhead += 1;
-      }
-
-      tokens.push({
-        text: prettyJson.slice(cursor, end),
-        type: prettyJson[lookAhead] === ':' ? 'key' : 'string',
-      });
-      cursor = end;
-      continue;
-    }
-
-    const remaining = prettyJson.slice(cursor);
-    if (remaining.startsWith('true') || remaining.startsWith('false')) {
-      const value = remaining.startsWith('true') ? 'true' : 'false';
-      tokens.push({ text: value, type: 'boolean' });
-      cursor += value.length;
-      continue;
-    }
-
-    if (remaining.startsWith('null')) {
-      tokens.push({ text: 'null', type: 'null' });
-      cursor += 4;
-      continue;
-    }
-
-    const numberMatch = remaining.match(numberPattern);
-    if (numberMatch?.[0]) {
-      tokens.push({ text: numberMatch[0], type: 'number' });
-      cursor += numberMatch[0].length;
-      continue;
-    }
-
-    tokens.push({ text: character, type: 'text' });
-    cursor += 1;
-  }
-
-  return tokens;
 }
 
 function tokenClassName(token: JsonToken): string {
@@ -519,6 +701,12 @@ function toggleSortOrder(): void {
     </div>
 
     <div class="relative flex-1 min-h-[120px] flex flex-col">
+      <span
+        v-if="virtualizationEnabled"
+        data-test="app-log-virtual-status"
+        class="sr-only"
+        role="status"
+      >{{ displayEntries.length }} {{ t('appShell.logViewer.footer.lines') }}</span>
       <AppIconButton
         :icon="copyFailed ? 'xmark' : copySuccess ? 'check' : 'copy'"
         size="xs"
@@ -530,6 +718,7 @@ function toggleSortOrder(): void {
       />
     <div
       ref="logViewport"
+      data-test="app-log-viewport"
       class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden font-mono"
       :class="props.compact ? 'text-2xs' : 'text-2xs-plus'"
       @scroll="handleLogScroll"
@@ -539,9 +728,17 @@ function toggleSortOrder(): void {
       </div>
 
       <div
-        v-for="(entry, index) in displayEntries"
+        v-if="topSpacerHeight > 0"
+        data-test="app-log-top-spacer"
+        aria-hidden="true"
+        :style="{ height: `${topSpacerHeight}px` }"
+      />
+
+      <div
+        v-for="(entry, index) in renderedEntries"
         :key="entry.id"
         :ref="(element) => setLineElement(entry.id, element as Element | null)"
+        :data-log-entry-id="entry.id"
         data-test="container-log-row"
         class="px-3 py-1.5 transition-colors"
         :class="[
@@ -550,7 +747,11 @@ function toggleSortOrder(): void {
         ]"
       >
         <div class="flex items-start gap-2">
-          <span v-if="props.showLineNumbers" class="shrink-0 w-8 text-right whitespace-nowrap tabular-nums dd-text-muted">{{ index + 1 }}</span>
+          <span
+            v-if="props.showLineNumbers"
+            data-test="container-log-line-number"
+            class="shrink-0 w-8 text-right whitespace-nowrap tabular-nums dd-text-muted"
+          >{{ absoluteRowIndex(index) + 1 }}</span>
           <span class="shrink-0 whitespace-nowrap tabular-nums" style="color: var(--dd-log-text-muted)">{{ entry.timestamp || '-' }}</span>
 
           <slot name="entry-prefix" :entry="entry" />
@@ -569,6 +770,13 @@ function toggleSortOrder(): void {
           </span>
         </div>
       </div>
+
+      <div
+        v-if="bottomSpacerHeight > 0"
+        data-test="app-log-bottom-spacer"
+        aria-hidden="true"
+        :style="{ height: `${bottomSpacerHeight}px` }"
+      />
     </div>
     </div>
 

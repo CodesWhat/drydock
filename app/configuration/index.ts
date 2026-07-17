@@ -1,20 +1,26 @@
 import fs from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
 import os from 'node:os';
 import type { Request } from 'express';
 import joi from 'joi';
 import setValue from 'set-value';
-import { logWarn } from '../log/warn.js';
+import { logError, logWarn } from '../log/warn.js';
 import { recordLegacyInput } from '../prometheus/compatibility.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
 const MAX_SECRET_FILE_SIZE_BYTES = 1024 * 1024;
+const SECRET_FILE_READ_CHUNK_BYTES = 64 * 1024;
 export const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as const;
 const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
+const DEFAULT_TRIVY_WORKER_IMAGE =
+  'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f';
+const DEFAULT_GRYPE_WORKER_IMAGE =
+  'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1';
+const DEFAULT_SYFT_WORKER_IMAGE =
+  'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36';
 
 export type SecuritySeverity = (typeof SECURITY_SEVERITY_VALUES)[number];
 export type SecuritySbomFormat = (typeof SECURITY_SBOM_FORMAT_VALUES)[number];
@@ -37,6 +43,36 @@ export function get(prop: string, env: Record<string, string | undefined> = proc
   return object;
 }
 
+function secretFileTooLargeError(secretFileEnvVar: string): Error {
+  return new Error(
+    `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
+  );
+}
+
+async function readBoundedSecretFile(
+  secretFile: fs.promises.FileHandle,
+  secretFileEnvVar: string,
+): Promise<string> {
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  while (totalBytes <= MAX_SECRET_FILE_SIZE_BYTES) {
+    const bytesRemaining = MAX_SECRET_FILE_SIZE_BYTES + 1 - totalBytes;
+    const buffer = Buffer.allocUnsafe(Math.min(SECRET_FILE_READ_CHUNK_BYTES, bytesRemaining));
+    const { bytesRead } = await secretFile.read(buffer, 0, buffer.length, null);
+    if (bytesRead === 0) {
+      break;
+    }
+    chunks.push(buffer.subarray(0, bytesRead));
+    totalBytes += bytesRead;
+  }
+
+  if (totalBytes > MAX_SECRET_FILE_SIZE_BYTES) {
+    throw secretFileTooLargeError(secretFileEnvVar);
+  }
+  return Buffer.concat(chunks, totalBytes).toString('utf-8');
+}
+
 /**
  * Lookup external secrets defined in files.
  * @param ddEnvVars
@@ -51,25 +87,31 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
       label: `${secretFileEnvVar} path`,
     });
 
-    const secretFileValue = await readFile(secretFilePath, 'utf-8');
-    if (Buffer.byteLength(secretFileValue, 'utf-8') > MAX_SECRET_FILE_SIZE_BYTES) {
-      throw new Error(
-        `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
-      );
-    }
+    const secretFile = await fs.promises.open(secretFilePath, 'r');
+    let secretFileValue: string;
+    try {
+      const secretStats = await secretFile.stat();
+      if (!secretStats.isFile()) {
+        throw new Error(`Secret file for ${secretFileEnvVar} must be a regular file`);
+      }
+      if (secretStats.size > MAX_SECRET_FILE_SIZE_BYTES) {
+        throw secretFileTooLargeError(secretFileEnvVar);
+      }
 
-    // Permission check: warn if the file is readable by group or others.
-    // On non-POSIX platforms (Windows), mode bits are synthetic and do not reflect
-    // ACL-based access control, so we skip the check there to avoid false warnings.
-    if (os.platform() !== 'win32') {
-      const secretStats = await stat(secretFilePath);
-      if ((secretStats.mode & 0o077) !== 0) {
+      // Permission check: warn if the opened file is readable by group or others.
+      // On non-POSIX platforms (Windows), mode bits are synthetic and do not reflect
+      // ACL-based access control, so we skip the check there to avoid false warnings.
+      if (os.platform() !== 'win32' && (secretStats.mode & 0o077) !== 0) {
         logWarn(
           `Secret file "${secretFilePath}" (${secretFileEnvVar}) is readable by group or others ` +
             `(mode 0${(secretStats.mode & 0o777).toString(8).padStart(3, '0')}). ` +
             `Restrict permissions with: chmod 600 "${secretFilePath}"`,
         );
       }
+
+      secretFileValue = await readBoundedSecretFile(secretFile, secretFileEnvVar);
+    } finally {
+      await secretFile.close();
     }
 
     delete ddEnvVars[secretFileEnvVar];
@@ -81,38 +123,14 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
   }
 }
 
-// 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
+// 1. Get a copy of all DD_ environment variables.
 export const ddEnvVars: Record<string, string | undefined> = {};
-const mappedLegacyEnvVars = new Set<string>();
 const warnedLegacyTriggerEnvVars = new Set<string>();
 const triggerLegacyPrefixUsage = new Set<string>();
 let packageVersionCache: string | undefined;
 let packageVersionResolved = false;
 let detectedServerName: string | undefined;
 
-// First, collect legacy WUD_ vars and remap to DD_ keys
-Object.keys(process.env)
-  .filter((envVar) => envVar.toUpperCase().startsWith('WUD_'))
-  .forEach((envVar) => {
-    const ddKey = `DD_${envVar.substring(4)}`; // WUD_FOO → DD_FOO
-    ddEnvVars[ddKey] = process.env[envVar];
-    const envVarUpper = envVar.toUpperCase();
-    mappedLegacyEnvVars.add(envVarUpper);
-    recordLegacyInput('env', envVarUpper);
-  });
-
-if (mappedLegacyEnvVars.size > 0) {
-  const legacyEnvVarNames = Array.from(mappedLegacyEnvVars).sort();
-  const MAX_LEGACY_ENV_WARNING_KEYS = 10;
-  const envVarPreview = legacyEnvVarNames.slice(0, MAX_LEGACY_ENV_WARNING_KEYS).join(', ');
-  const additionalCount = legacyEnvVarNames.length - MAX_LEGACY_ENV_WARNING_KEYS;
-  const suffix = additionalCount > 0 ? ` (+${additionalCount} more)` : '';
-  console.warn(
-    `Detected legacy WUD_* environment variables, deprecated and scheduled for removal in v1.6.0. Please migrate to DD_* equivalents: ${envVarPreview}${suffix}`,
-  );
-}
-
-// Then, collect DD_ vars (overrides WUD_ if both set)
 Object.keys(process.env)
   .filter((envVar) => envVar.toUpperCase().startsWith('DD_'))
   .forEach((envVar) => {
@@ -180,6 +198,21 @@ export function getLogLevel() {
   return ddEnvVars.DD_LOG_LEVEL || 'info';
 }
 
+const DEFAULT_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = 60 * 60 * 1000;
+
+export function getAuditUpdateAvailableDedupeMs(): number {
+  const rawValue = ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS?.trim();
+  if (rawValue === undefined || rawValue === '') {
+    return DEFAULT_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+  }
+
+  const parsedValue = Number(rawValue);
+  if (!Number.isSafeInteger(parsedValue) || parsedValue < 0) {
+    throw new Error('DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS must be a non-negative integer');
+  }
+  return parsedValue;
+}
+
 export function getLogFormat() {
   return ddEnvVars.DD_LOG_FORMAT?.toLowerCase() === 'json' ? 'json' : 'text';
 }
@@ -198,6 +231,15 @@ function envFlagEnabled(value: string | undefined) {
 
 export function getExperimentalPortwingEnabled() {
   return envFlagEnabled(ddEnvVars.DD_EXPERIMENTAL_PORTWING);
+}
+
+/**
+ * Return whether the wud-card compatibility mount (a narrow, opt-in shim
+ * that serves WUD-shaped responses for the Home Assistant "wud-card"
+ * integration at /api) is enabled. Defaults to false/OFF.
+ */
+export function getWudCardCompatEnabled() {
+  return envFlagEnabled(ddEnvVars.DD_COMPAT_WUDCARD);
 }
 
 /**
@@ -264,6 +306,34 @@ function normalizeWatcherMaintenanceEnvAliases(
   });
 }
 
+function normalizeWatcherMaturityEnvAliases(
+  watcherConfigurations: Record<string, Record<string, unknown>>,
+) {
+  const aliases = [
+    ['_MATURITY_MIN_AGE_DAYS', 'maturityminagedays'],
+    ['_MATURITY_MODE', 'maturitymode'],
+  ] as const;
+  Object.entries(ddEnvVars).forEach(([envKey, envValue]) => {
+    const envKeyUpper = envKey.toUpperCase();
+    if (!envKeyUpper.startsWith('DD_WATCHER_') || envValue === undefined) {
+      return;
+    }
+    const alias = aliases.find(([suffix]) => envKeyUpper.endsWith(suffix));
+    if (!alias) {
+      return;
+    }
+    const watcherName = envKeyUpper.slice('DD_WATCHER_'.length, -alias[0].length).toLowerCase();
+    if (!watcherName) {
+      return;
+    }
+    watcherConfigurations[watcherName] ??= {};
+    watcherConfigurations[watcherName][alias[1]] = envValue;
+  });
+  Object.values(watcherConfigurations).forEach((configuration) => {
+    delete configuration.maturity;
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -322,7 +392,7 @@ function collectLegacyTriggerUsage() {
       if (!warnedLegacyTriggerEnvVars.has(envKeyUpper)) {
         warnedLegacyTriggerEnvVars.add(envKeyUpper);
         recordLegacyInput('env', envKeyUpper);
-        logWarn(
+        logError(
           `Legacy trigger environment variable "${envKeyUpper}" is deprecated and will be removed in v1.7.0. Use DD_ACTION_* or DD_NOTIFICATION_* instead.`,
         );
       }
@@ -341,6 +411,7 @@ export function getWatcherConfigurations() {
     Record<string, unknown>
   >;
   normalizeWatcherMaintenanceEnvAliases(watcherConfigurations);
+  normalizeWatcherMaturityEnvAliases(watcherConfigurations);
   return watcherConfigurations;
 }
 
@@ -612,6 +683,26 @@ function parseSecuritySbomFormatList(rawValue: string | undefined): SecuritySbom
   );
 }
 
+function parseSecurityExtraArgs(rawValue: string | undefined, envName: string): string[] {
+  if (!rawValue || rawValue.trim() === '') {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (
+      !Array.isArray(parsed) ||
+      parsed.some(
+        (value) => typeof value !== 'string' || value.trim() === '' || value.includes('\0'),
+      )
+    ) {
+      throw new Error('invalid');
+    }
+    return parsed.map((value) => value.trim());
+  } catch {
+    throw new Error(`${envName} must be a JSON array of strings`);
+  }
+}
+
 function parseDelimitedEnumList<T extends string>(
   rawValue: string | undefined,
   defaultRawValue: string,
@@ -688,7 +779,23 @@ function validateCosignKeyPath(rawKeyPath: string): string {
 export function getSecurityConfiguration() {
   const configurationFromEnv = get('dd.security', ddEnvVars);
   const configurationSchema = joi.object().keys({
-    scanner: joi.string().insensitive().valid('trivy').allow('').default(''),
+    scanner: joi.string().insensitive().valid('trivy', 'grype', 'both').allow('').default(''),
+    backend: joi.string().insensitive().valid('command', 'docker', 'remote').default('command'),
+    availability: joi
+      .object({
+        policy: joi.string().insensitive().valid('block', 'warn').default('block'),
+      })
+      .default({}),
+    docker: joi
+      .object({
+        socket: joi.string().default('/var/run/docker.sock'),
+        host: joi.string().allow('').default(''),
+        port: joi.number().integer().min(1).max(65535).default(2375),
+        protocol: joi.string().valid('http', 'https').default('http'),
+        network: joi.string().default('bridge'),
+        cache: joi.object({ volume: joi.string().default('drydock-scanner-cache') }).default({}),
+      })
+      .default({}),
     block: joi
       .object({
         severity: joi.string().allow('').default(DEFAULT_SECURITY_BLOCK_SEVERITY),
@@ -698,10 +805,28 @@ export function getSecurityConfiguration() {
       .object({
         server: joi.string().allow('').default(''),
         command: joi.string().default('trivy'),
-        timeout: joi.number().integer().min(1000).default(120000),
+        timeout: joi.number().integer().min(1000).default(600000),
+        args: joi.string().allow('').default('[]'),
         image: joi
           .object({
             src: joi.string().allow('').default(''),
+          })
+          .default({}),
+        worker: joi
+          .object({
+            image: joi.string().default(DEFAULT_TRIVY_WORKER_IMAGE),
+          })
+          .default({}),
+      })
+      .default({}),
+    grype: joi
+      .object({
+        command: joi.string().default('grype'),
+        timeout: joi.number().integer().min(1000).default(600000),
+        args: joi.string().allow('').default('[]'),
+        worker: joi
+          .object({
+            image: joi.string().default(DEFAULT_GRYPE_WORKER_IMAGE),
           })
           .default({}),
       })
@@ -728,11 +853,25 @@ export function getSecurityConfiguration() {
       .object({
         enabled: joi.boolean().default(false),
         formats: joi.string().allow('').default(DEFAULT_SECURITY_SBOM_FORMATS),
+        generator: joi.string().insensitive().valid('auto', 'trivy', 'syft').default('auto'),
+      })
+      .default({}),
+    syft: joi
+      .object({
+        command: joi.string().default('syft'),
+        timeout: joi.number().integer().min(1000).default(600000),
+        args: joi.string().allow('').default('[]'),
+        worker: joi
+          .object({
+            image: joi.string().default(DEFAULT_SYFT_WORKER_IMAGE),
+          })
+          .default({}),
       })
       .default({}),
     gate: joi
       .object({
         mode: joi.string().insensitive().valid('on', 'off').default('on'),
+        relative: joi.boolean().default(false),
       })
       .default({}),
     prune: joi
@@ -765,6 +904,15 @@ export function getSecurityConfiguration() {
 
   const configuration = configurationToValidate.value;
   const scanner = configuration.scanner ? configuration.scanner.toLowerCase() : '';
+  const backend = configuration.backend.toLowerCase() as 'command' | 'docker' | 'remote';
+  if (
+    backend === 'remote' &&
+    (scanner !== 'trivy' || !`${configuration.trivy?.server || ''}`.trim())
+  ) {
+    throw new Error(
+      'DD_SECURITY_BACKEND=remote requires DD_SECURITY_SCANNER=trivy and DD_SECURITY_TRIVY_SERVER',
+    );
+  }
   const blockSeverities = parseSecuritySeverityList(configuration.block?.severity);
   const sbomFormats = parseSecuritySbomFormatList(configuration.sbom?.formats);
   const cosignKey = validateCosignKeyPath(configuration.cosign?.key || '');
@@ -772,12 +920,32 @@ export function getSecurityConfiguration() {
   return {
     enabled: scanner !== '',
     scanner,
+    backend,
+    availabilityPolicy: (configuration.availability?.policy || 'block').toLowerCase() as
+      | 'block'
+      | 'warn',
+    docker: {
+      socket: configuration.docker?.socket || '/var/run/docker.sock',
+      host: configuration.docker?.host || '',
+      port: configuration.docker?.port || 2375,
+      protocol: (configuration.docker?.protocol || 'http') as 'http' | 'https',
+      network: configuration.docker?.network || 'bridge',
+      cacheVolumePrefix: configuration.docker?.cache?.volume || 'drydock-scanner-cache',
+    },
     blockSeverities,
     trivy: {
       server: configuration.trivy?.server || '',
       command: configuration.trivy?.command || 'trivy',
-      timeout: configuration.trivy?.timeout || 120000,
+      timeout: configuration.trivy?.timeout || 600000,
       imageSrc: configuration.trivy?.image?.src || '',
+      extraArgs: parseSecurityExtraArgs(configuration.trivy?.args, 'DD_SECURITY_TRIVY_ARGS'),
+      workerImage: configuration.trivy?.worker?.image || DEFAULT_TRIVY_WORKER_IMAGE,
+    },
+    grype: {
+      command: configuration.grype?.command || 'grype',
+      timeout: configuration.grype?.timeout || 600000,
+      extraArgs: parseSecurityExtraArgs(configuration.grype?.args, 'DD_SECURITY_GRYPE_ARGS'),
+      workerImage: configuration.grype?.worker?.image || DEFAULT_GRYPE_WORKER_IMAGE,
     },
     signature: {
       verify: Boolean(configuration.verify?.signatures),
@@ -792,9 +960,20 @@ export function getSecurityConfiguration() {
     sbom: {
       enabled: Boolean(configuration.sbom?.enabled),
       formats: sbomFormats,
+      generator: (configuration.sbom?.generator || 'auto').toLowerCase() as
+        | 'auto'
+        | 'trivy'
+        | 'syft',
+    },
+    syft: {
+      command: configuration.syft?.command || 'syft',
+      timeout: configuration.syft?.timeout || 600000,
+      extraArgs: parseSecurityExtraArgs(configuration.syft?.args, 'DD_SECURITY_SYFT_ARGS'),
+      workerImage: configuration.syft?.worker?.image || DEFAULT_SYFT_WORKER_IMAGE,
     },
     gate: {
       mode: (configuration.gate?.mode || 'on').toLowerCase() as 'on' | 'off',
+      allowNoWorse: Boolean(configuration.gate?.relative),
     },
     prune: {
       onBlock: configuration.prune?.onblock !== false,
@@ -811,8 +990,12 @@ export function getSecurityConfiguration() {
 
 export type SecurityConfiguration = Pick<
   ReturnType<typeof getSecurityConfiguration>,
-  'enabled' | 'scanner' | 'sbom' | 'gate' | 'prune'
+  'enabled' | 'scanner' | 'gate' | 'prune'
 > & {
+  backend?: ReturnType<typeof getSecurityConfiguration>['backend'];
+  availabilityPolicy?: ReturnType<typeof getSecurityConfiguration>['availabilityPolicy'];
+  sbom: Pick<ReturnType<typeof getSecurityConfiguration>['sbom'], 'enabled' | 'formats'> &
+    Partial<Pick<ReturnType<typeof getSecurityConfiguration>['sbom'], 'generator'>>;
   signature: Pick<ReturnType<typeof getSecurityConfiguration>['signature'], 'verify'>;
 };
 

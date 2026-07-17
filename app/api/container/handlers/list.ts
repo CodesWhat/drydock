@@ -10,6 +10,7 @@ import {
   type UpdateEligibility,
   type UpdateEligibilityContext,
 } from '../../../model/update-eligibility.js';
+import { getContainerMaintenanceWindowOpen } from '../../../model/watcher-maintenance-window.js';
 import { isSelfUpdateAvailable } from '../../../triggers/providers/docker/self-update-availability.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
@@ -31,7 +32,7 @@ import {
 } from '../filters.js';
 import { parseBooleanQueryParam } from '../request-helpers.js';
 
-export type ContainerListBasePath = '/api/containers' | '/api/containers/watch';
+export type ContainerListBasePath = '/api/v1/containers' | '/api/v1/containers/watch';
 
 function parsePositiveInteger(value: unknown): number | undefined {
   if (typeof value === 'number') {
@@ -239,6 +240,7 @@ export function attachUpdateEligibility(
   context: CrudHandlerContext,
   container: Container,
   eligibilityContext?: UpdateEligibilityContext,
+  watchers: Readonly<Record<string, unknown>> = context.getWatchers(),
 ): Container {
   // isSelfUpdateAvailable is always resolved per-container regardless of whether
   // a pre-built eligibilityContext was supplied, because it depends on the
@@ -246,6 +248,7 @@ export function attachUpdateEligibility(
   const ctx: UpdateEligibilityContext = {
     ...(eligibilityContext ?? buildEligibilityContext(context)),
     isSelfUpdateAvailable: isSelfUpdateAvailable(container),
+    maintenanceWindowOpen: getContainerMaintenanceWindowOpen(container, watchers),
   };
   const updateEligibility: UpdateEligibility = computeUpdateEligibility(container, ctx);
   return createProjectionView(container, [['updateEligibility', updateEligibility]]);
@@ -436,16 +439,18 @@ export function buildContainerListResponse(
     ...(validatedQuery.watcher ? { watcher: validatedQuery.watcher } : {}),
   };
   const pagination = normalizeContainerListPagination(query);
+  const hasExplicitSort =
+    getFirstNonEmptyQueryValue(query.sort) !== undefined ||
+    getFirstNonEmptyQueryValue(query.order) !== undefined;
 
-  // Sort/order, maturity, and watched-kind filters require loading the full
-  // collection before pagination because they inspect in-memory properties
-  // (container labels, update age) that cannot be pushed down to the store.
+  // Maturity and watched-kind filters require loading the full collection
+  // before pagination because they inspect in-memory properties that cannot
+  // be pushed down to the store. Explicit sorting is delegated to the store,
+  // which orders cached live objects before cloning only the requested page.
   // status and update-kind are already pushed down to filteredQuery as
   // store-level filters (updateAvailable, updateKind.*), so the store handles
   // those efficiently without loading everything into memory first.
   const needsFullCollection =
-    getFirstNonEmptyQueryValue(query.sort) !== undefined ||
-    getFirstNonEmptyQueryValue(query.order) !== undefined ||
     maturityFilter !== undefined ||
     (watchedKindFilter !== undefined && watchedKindFilter !== 'all');
   let pagedContainers: Container[];
@@ -468,8 +473,13 @@ export function buildContainerListResponse(
     total = sortedContainers.length;
     pagedContainers = paginateCollection(sortedContainers, pagination);
   } else {
-    pagedContainers = context.getContainersFromStore(filteredQuery, pagination);
-    const sortedPagedContainers = sortContainers(pagedContainers, sortMode);
+    pagedContainers = context.getContainersFromStore(filteredQuery, {
+      ...pagination,
+      ...(hasExplicitSort ? { sort: sortMode } : {}),
+    });
+    const sortedPagedContainers = hasExplicitSort
+      ? pagedContainers
+      : sortContainers(pagedContainers, sortMode);
     total =
       pagination.limit === 0 && pagination.offset === 0
         ? sortedPagedContainers.length
@@ -487,11 +497,12 @@ export function buildContainerListResponse(
     context.updateOperationStore.listActiveOperations?.() ?? [],
   );
   const eligibilityContext = buildEligibilityContext(context);
+  const watchers = context.getWatchers();
   const data = strippedContainers.map((container) => {
     const withOperation = preloadedActiveOperationLookup
       ? attachPreloadedActiveUpdateOperation(preloadedActiveOperationLookup, container)
       : attachInProgressUpdateOperation(context, container);
-    return attachUpdateEligibility(context, withOperation, eligibilityContext);
+    return attachUpdateEligibility(context, withOperation, eligibilityContext, watchers);
   });
   const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
   const links = buildPaginationLinks({
@@ -515,7 +526,7 @@ export function buildContainerListResponse(
 export function createGetContainersHandler(context: CrudHandlerContext) {
   return function getContainers(req: Request, res: Response) {
     try {
-      res.status(200).json(buildContainerListResponse(context, req.query, '/api/containers'));
+      res.status(200).json(buildContainerListResponse(context, req.query, '/api/v1/containers'));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Invalid request';
       sendErrorResponse(res, 400, message);

@@ -34,6 +34,38 @@ describe('Settings Store', () => {
     expect(db.addCollection).toHaveBeenCalledWith('settings');
     expect(collection.insert).toHaveBeenCalledWith({
       internetlessMode: false,
+      updateMode: 'manual',
+    });
+  });
+
+  test('createCollections should preserve automatic updates for existing pre-update-mode settings', () => {
+    const collection = createCollection({ internetlessMode: true });
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+
+    expect(collection.insert).toHaveBeenCalledWith({
+      internetlessMode: true,
+      updateMode: 'auto',
+    });
+    expect(settings.getSettings().updateMode).toBe('auto');
+  });
+
+  test('createCollections should preserve an explicitly stored update mode', () => {
+    const collection = createCollection({ internetlessMode: false, updateMode: 'notify' });
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+
+    expect(collection.insert).toHaveBeenCalledWith({
+      internetlessMode: false,
+      updateMode: 'notify',
     });
   });
 
@@ -56,6 +88,7 @@ describe('Settings Store', () => {
     });
     expect(collection.insert).toHaveBeenCalledWith({
       internetlessMode: true,
+      updateMode: 'auto',
     });
   });
 
@@ -70,6 +103,7 @@ describe('Settings Store', () => {
 
     expect(settings.getSettings()).toEqual({
       internetlessMode: false,
+      updateMode: 'manual',
     });
   });
 
@@ -87,6 +121,7 @@ describe('Settings Store', () => {
     settings.createCollections(db);
     expect(settings.getSettings()).toEqual({
       internetlessMode: false,
+      updateMode: 'manual',
     });
   });
 
@@ -106,9 +141,11 @@ describe('Settings Store', () => {
 
     expect(settingsUpdated).toEqual({
       internetlessMode: true,
+      updateMode: 'auto',
     });
     expect(settings.getSettings()).toEqual({
       internetlessMode: true,
+      updateMode: 'auto',
     });
   });
 
@@ -125,7 +162,23 @@ describe('Settings Store', () => {
     const settingsUpdated = settings.updateSettings();
     expect(settingsUpdated).toEqual({
       internetlessMode: true,
+      updateMode: 'auto',
     });
+  });
+
+  test('updateSettings should persist and expose each update mode', () => {
+    const collection = createCollection();
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    };
+
+    settings.createCollections(db);
+
+    for (const updateMode of ['notify', 'manual', 'auto'] as const) {
+      expect(settings.updateSettings({ updateMode }).updateMode).toBe(updateMode);
+      expect(settings.getUpdateMode()).toBe(updateMode);
+    }
   });
 
   test('isInternetlessModeEnabled should return mode state', () => {
@@ -177,7 +230,7 @@ describe('Settings Store', () => {
     settings.updateSettings({ internetlessMode: true });
     const readCountBeforeGetAfterWrite = collection.findOne.mock.calls.length;
     const settingsAfterWrite = settings.getSettings();
-    expect(settingsAfterWrite).toEqual({ internetlessMode: true });
+    expect(settingsAfterWrite).toEqual({ internetlessMode: true, updateMode: 'auto' });
     expect(collection.findOne.mock.calls.length).toBe(readCountBeforeGetAfterWrite + 1);
   });
 
@@ -194,7 +247,7 @@ describe('Settings Store', () => {
     settings.updateSettings({ internetlessMode: true });
     collection.findOne.mockClear();
 
-    expect(settings.getSettings()).toEqual({ internetlessMode: true });
+    expect(settings.getSettings()).toEqual({ internetlessMode: true, updateMode: 'auto' });
     expect(collection.findOne).toHaveBeenCalledWith({});
   });
 
@@ -211,7 +264,7 @@ describe('Settings Store', () => {
     settings.updateSettings({ internetlessMode: true });
     collection.findOne.mockImplementationOnce(() => null);
 
-    expect(settings.getSettings()).toEqual({ internetlessMode: false });
+    expect(settings.getSettings()).toEqual({ internetlessMode: false, updateMode: 'manual' });
   });
 
   test('getSettings should strip $loki and meta from LokiJS documents', () => {
@@ -227,7 +280,7 @@ describe('Settings Store', () => {
 
     settings.createCollections(db);
     const result = settings.getSettings();
-    expect(result).toEqual({ internetlessMode: true });
+    expect(result).toEqual({ internetlessMode: true, updateMode: 'auto' });
     expect(result).not.toHaveProperty('$loki');
     expect(result).not.toHaveProperty('meta');
   });
@@ -249,7 +302,7 @@ describe('Settings Store', () => {
 
     settings.createCollections(db);
     const result = settings.updateSettings({ internetlessMode: true });
-    expect(result).toEqual({ internetlessMode: true });
+    expect(result).toEqual({ internetlessMode: true, updateMode: 'auto' });
     expect(result).not.toHaveProperty('$loki');
     expect(result).not.toHaveProperty('meta');
   });
@@ -262,6 +315,6 @@ describe('Settings Store', () => {
       freshSettings.updateSettings({
         internetlessMode: true,
       }),
-    ).toEqual({ internetlessMode: true });
+    ).toEqual({ internetlessMode: true, updateMode: 'manual' });
   });
 });

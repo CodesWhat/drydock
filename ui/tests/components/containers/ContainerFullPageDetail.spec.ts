@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils';
 import { ref } from 'vue';
 import ContainerFullPageDetail from '@/components/containers/ContainerFullPageDetail.vue';
 
-const selectedContainer = ref({
+const selectedContainer = ref<any>({
   id: 'container-1',
   name: 'nginx',
   image: 'nginx',
@@ -16,6 +16,7 @@ const selectedContainer = ref({
 });
 
 const activeDetailTab = ref('overview');
+const updateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
 const closeFullPage = vi.fn();
 const confirmStop = vi.fn();
@@ -52,6 +53,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     updateKindColor: () => ({ bg: '#eee', text: '#333' }),
     detailTabs: [{ id: 'overview', label: 'Overview', icon: 'info' }],
     activeDetailTab,
+    updateMode,
   }),
 }));
 
@@ -69,6 +71,7 @@ function factory() {
 describe('ContainerFullPageDetail', () => {
   afterEach(() => {
     activeDetailTab.value = 'overview';
+    updateMode.value = 'manual';
     actionInProgress.value = new Map();
     isContainerUpdateInProgress.mockReset();
     isContainerUpdateInProgress.mockReturnValue(false);
@@ -109,6 +112,39 @@ describe('ContainerFullPageDetail', () => {
   it('renders container name', () => {
     const wrapper = factory();
     expect(wrapper.text()).toContain('nginx');
+  });
+
+  it('hides header update and force-update controls in notify mode', () => {
+    updateMode.value = 'notify';
+    (selectedContainer as any).value = {
+      ...selectedContainer.value,
+      newTag: '1.2.3',
+      bouncer: 'blocked',
+    };
+
+    const wrapper = factory();
+
+    expect(wrapper.find('button[aria-label="Update container"]').exists()).toBe(false);
+    expect(wrapper.find('button[aria-label="Update blocked by security scan"]').exists()).toBe(
+      false,
+    );
+  });
+
+  it('shows the header update control for a suppressed raw candidate', () => {
+    selectedContainer.value = {
+      ...selectedContainer.value,
+      newTag: null,
+      newDigest: null,
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-07-12T00:00:00.000Z',
+        blockers: [{ reason: 'skip-tag', severity: 'soft', message: 'Skipped.', actionable: true }],
+      },
+    };
+
+    const wrapper = factory();
+
+    expect(wrapper.find('button[aria-label="Update container"]').exists()).toBe(true);
   });
 
   it('shows Updating when the selected container is still mid-update', () => {

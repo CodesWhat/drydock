@@ -273,7 +273,7 @@ describe('Container Actions Service', () => {
 
       await expect(cancelUpdateOperation('op-123')).resolves.toBe('cancelled');
 
-      expect(fetch).toHaveBeenCalledWith('/api/operations/op-123/cancel', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/operations/op-123/cancel', {
         method: 'POST',
         credentials: 'include',
       });
@@ -298,7 +298,7 @@ describe('Container Actions Service', () => {
 
       await cancelUpdateOperation('op/with/slashes');
 
-      expect(fetch).toHaveBeenCalledWith('/api/operations/op%2Fwith%2Fslashes/cancel', {
+      expect(fetch).toHaveBeenCalledWith('/api/v1/operations/op%2Fwith%2Fslashes/cancel', {
         method: 'POST',
         credentials: 'include',
       });

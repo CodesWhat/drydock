@@ -4,7 +4,12 @@ import {
   type RouteLocationNormalized,
   type RouteRecordRaw,
 } from 'vue-router';
+import {
+  clearStaleChunkReloadGuard,
+  requestStaleChunkReload,
+} from '@/bootstrap/stale-chunk-recovery';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { hydrateFromServer } from '@/preferences/sync';
 import { getUser } from '@/services/auth';
 import { ROUTES } from './routes';
 
@@ -93,6 +98,10 @@ function createLoginRedirect(to: RouteLocationNormalized) {
   };
 }
 
+interface AuthenticatedUser {
+  username?: string;
+}
+
 /**
  * Apply authentication navigation guard.
  */
@@ -101,9 +110,14 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
     return true;
   }
 
-  const user = await getUser();
+  const user = (await getUser()) as AuthenticatedUser | undefined;
 
   if (user !== undefined) {
+    if (user.username && user.username !== 'anonymous') {
+      // Fire-and-forget — the preference fetch has no timeout, and navigation
+      // must never block on it; hydrateFromServer swallows its own errors.
+      void hydrateFromServer(user.username);
+    }
     return validateAndGetNextRoute(to);
   }
 
@@ -115,6 +129,16 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
  */
 router.beforeEach(async (to) => {
   return await applyAuthNavigationGuard(to);
+});
+
+router.onError((error) => {
+  requestStaleChunkReload(error);
+});
+
+router.afterEach((_to, _from, failure) => {
+  if (!failure) {
+    clearStaleChunkReloadGuard();
+  }
 });
 
 export default router;

@@ -778,6 +778,32 @@ describe('container-mapper', () => {
 
       expect((c as any).updatePolicyState).toBe('maturity-blocked');
       expect((c as any).suppressedUpdateTag).toBe('1.26');
+      expect(c.newTag).toBe('1.26');
+      expect(c.updateKind).toBe('minor');
+    });
+
+    it('exposes a maturity-blocked digest candidate without marking other suppressed updates available', () => {
+      const freshDate = new Date(Date.now() - daysToMs(2)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'digest',
+            semverDiff: 'unknown',
+            localValue: 'sha256:old',
+            remoteValue: 'sha256:new',
+          },
+          result: { tag: 'latest', digest: 'sha256:new' },
+          updateDetectedAt: freshDate,
+          updatePolicy: {
+            maturityMode: 'mature',
+          },
+        }),
+      );
+
+      expect(c.updatePolicyState).toBe('maturity-blocked');
+      expect(c.updateKind).toBe('digest');
+      expect(c.newDigest).toBe('sha256:new');
     });
 
     it('marks maturity-blocked when updateDetectedAt is missing', () => {
@@ -1893,6 +1919,27 @@ describe('container-mapper', () => {
       );
 
       expect(c.updateEligibility?.blockers[0].actionable).toBe(false);
+    });
+
+    it('preserves the backend blocker severity used by manual override controls', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-04-25T12:00:00.000Z',
+            blockers: [
+              {
+                reason: 'maturity-not-reached',
+                severity: 'soft',
+                message: 'Still maturing.',
+                actionable: true,
+              },
+            ],
+          },
+        }),
+      );
+
+      expect(c.updateEligibility?.blockers[0].severity).toBe('soft');
     });
 
     it('omits optional blocker fields when absent', () => {

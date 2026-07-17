@@ -10,6 +10,7 @@ import type { NotificationOutboxEntry } from './model/notification-outbox.js';
 import { startOutboxWorker } from './notifications/outbox-worker.js';
 import * as prometheus from './prometheus/index.js';
 import * as registry from './registry/index.js';
+import { warmTrivyDatabase } from './security/scan.js';
 import * as securityScheduler from './security/scheduler.js';
 import * as store from './store/index.js';
 import { recoverQueuedOperationsOnStartup } from './updates/recovery.js';
@@ -47,6 +48,10 @@ if (commandExitCode !== null) {
 
   // Init store
   await store.init({ memory: isAgent });
+
+  // Start local Trivy database warm-up early in both controller and agent mode.
+  // The first scan shares and awaits this best-effort single-flight operation.
+  void warmTrivyDatabase();
 
   if (!isAgent) {
     // Start Prometheus registry

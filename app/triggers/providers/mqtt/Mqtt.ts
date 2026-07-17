@@ -45,6 +45,7 @@ interface MqttConfiguration extends TriggerConfiguration {
     prefix: string;
     discovery: boolean;
     agenttopicsegment: boolean;
+    commands: boolean;
     attributes: HassAttributePreset;
     filter: {
       include: string;
@@ -89,6 +90,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
       prefix: hassDefaultPrefix,
       discovery: false,
       agenttopicsegment: false,
+      commands: false,
       attributes: 'short',
       filter: {
         include: '',
@@ -145,6 +147,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
           prefix: this.joi.string().default(hassDefaultPrefix),
           discovery: this.joi.boolean().default((parent) => !!parent?.enabled),
           agenttopicsegment: this.joi.boolean().default(false),
+          commands: this.joi.boolean().default(false),
           attributes: this.joi
             .string()
             .valid(...HASS_ATTRIBUTE_PRESET_VALUES)
@@ -164,6 +167,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
           prefix: hassDefaultPrefix,
           discovery: false,
           agenttopicsegment: false,
+          commands: false,
           attributes: 'short',
           filter: {
             include: '',
@@ -196,7 +200,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
 
   async initTrigger() {
     this.clearContainerEventSubscriptions();
-    this.hass?.deregister();
+    await this.hass?.deregister();
     this.hass = undefined;
 
     // Enforce simple mode
@@ -243,7 +247,9 @@ class Mqtt extends Trigger<MqttConfiguration> {
         client: this.client,
         configuration: this.configuration,
         log: this.log,
+        isContainerAllowed: (container) => this.mustTrigger(container),
       });
+      await this.hass.initCommandSubscription(); // #210
     }
     this.unregisterContainerAdded = registerContainerAdded((container) =>
       this.handleContainerEvent(container),
@@ -255,7 +261,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
 
   async deregisterComponent(): Promise<void> {
     this.clearContainerEventSubscriptions();
-    this.hass?.deregister();
+    await this.hass?.deregister();
     this.hass = undefined;
     await super.deregisterComponent();
   }

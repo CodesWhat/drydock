@@ -6,15 +6,19 @@ import { createHash, sign as cryptoSign, generateKeyPairSync } from 'node:crypto
 import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
 import type { AgentKeyRecord } from '../store/agent-keys.js';
+import type { NameBindingRecord } from '../store/name-bindings.js';
+import * as nameBindingsStore from '../store/name-bindings.js';
 import {
   attachPortwingWsServer,
   clearLiveSessionsForTesting,
   clearNonceCacheForTesting,
   createPortwingWsGateway,
   disconnectByKeyId,
+  fillNameBindingsForTesting,
   fillNonceCacheForTesting,
   fillNoncesPerKeyForTesting,
   injectDrydockVersionForTesting,
+  nameBindingsSizeForTesting,
   PORTWING_WS_ROUTE_PATTERN,
 } from './portwing-ws.js';
 
@@ -22,14 +26,31 @@ vi.mock('../configuration/index.js', () => ({
   getServerConfiguration: vi.fn(() => ({})),
 }));
 
+// Hoisted so tests can assert on the durable-flush call (Fix 1: new-bind
+// durability + revoke-release fail-safe flush) — mirrors the established
+// `vi.mock('../store/index.js', () => ({ save: vi.fn() }))` pattern already
+// used in registry/index.test.ts. Defaults to a resolved promise (a no-op
+// success) matching the real save()'s self-guard when the store was never
+// init()-ed, which is always true in this file's unit tests.
+const { mockSaveStore } = vi.hoisted(() => ({
+  mockSaveStore: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../store/index.js', () => ({
+  save: mockSaveStore,
+}));
+
+// Hoisted so tests can assert on log calls (e.g. the compat-level mismatch
+// warning) — the module-level `log` in portwing-ws.ts is `logger.child(...)`,
+// called once at import time, so it always returns this same singleton.
+const mockLogChild = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
 vi.mock('../log/index.js', () => ({
   default: {
-    child: vi.fn(() => ({
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    })),
+    child: vi.fn(() => mockLogChild),
   },
 }));
 
@@ -37,12 +58,21 @@ vi.mock('../log/index.js', () => ({
 // works in portwing-ws.ts. Arrow-factory implementations are not usable as
 // constructors in newer Vitest versions — use vi.hoisted() exactly like
 // EdgeAgentAdapter.test.ts does.
-const { MockAgentClient, MockEdgeAgentAdapter } = vi.hoisted(() => {
+const {
+  MockAgentClient,
+  MockEdgeAgentAdapter,
+  getLastAgentClientInstance,
+  getLastEdgeAgentAdapterInstance,
+} = vi.hoisted(() => {
+  let lastInstance: InstanceType<typeof _MockAgentClient> | undefined;
+  let lastAdapterInstance: InstanceType<typeof _MockEdgeAgentAdapter> | undefined;
+
   class _MockAgentClient {
     name: string;
     config: { host: string; port: number; secret: string };
     isConnected = false;
     info: Record<string, unknown> = {};
+    edgeAdapter?: unknown;
     handleEvent = vi.fn().mockResolvedValue(undefined);
     handleContainerSync = vi.fn().mockResolvedValue(undefined);
     handleComponentSync = vi.fn().mockResolvedValue(undefined);
@@ -52,15 +82,49 @@ const { MockAgentClient, MockEdgeAgentAdapter } = vi.hoisted(() => {
     constructor(name: string) {
       this.name = name;
       this.config = { host: 'http://edge-agent-placeholder', port: 0, secret: '' };
+      lastInstance = this;
     }
   }
 
   class _MockEdgeAgentAdapter {
+    private readonly ws: {
+      send: (data: string) => void;
+      close: (code?: number, reason?: string) => void;
+    };
     activate = vi.fn();
     onDisconnect = vi.fn().mockResolvedValue(undefined);
+    readonly reconnected: boolean;
+    // Mirrors the real EdgeAgentAdapter.terminate(): sends an error frame in
+    // the same shape as sendErrorAndClose (`{ type: 'error', data: { message,
+    // code } }`), then closes with (closeCode, errorCode) — so
+    // disconnectByKeyId's revoke tests can assert on the raw ws exactly as
+    // they did before Fix 2 routed revocation through the adapter.
+    terminate = vi.fn((errorCode: string, message: string, closeCode: number) => {
+      try {
+        this.ws.send(JSON.stringify({ type: 'error', data: { message, code: errorCode } }));
+      } catch {
+        // best effort
+      }
+      this.ws.close(closeCode, errorCode);
+    });
+
+    constructor(
+      _client: unknown,
+      ws: { send: (data: string) => void; close: (code?: number, reason?: string) => void },
+      options: { reconnected?: boolean } = {},
+    ) {
+      this.ws = ws;
+      this.reconnected = options.reconnected ?? false;
+      lastAdapterInstance = this;
+    }
   }
 
-  return { MockAgentClient: _MockAgentClient, MockEdgeAgentAdapter: _MockEdgeAgentAdapter };
+  return {
+    MockAgentClient: _MockAgentClient,
+    MockEdgeAgentAdapter: _MockEdgeAgentAdapter,
+    getLastAgentClientInstance: () => lastInstance,
+    getLastEdgeAgentAdapterInstance: () => lastAdapterInstance,
+  };
 });
 
 vi.mock('../agent/AgentClient.js', () => ({
@@ -923,6 +987,339 @@ describe('hello verification — happy path', () => {
   });
 });
 
+describe('edgeAdapter wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  test('client.edgeAdapter is set after a successful hello handshake', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'f1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const client = getLastAgentClientInstance();
+    expect(client?.edgeAdapter).toBeInstanceOf(MockEdgeAgentAdapter);
+  });
+});
+
+describe('name-binding durability — immediate flush on new bind (Fix 1: hard-kill squat window)', () => {
+  // Regression coverage for: a just-written name→key binding only lived in
+  // Loki's in-memory collection until the next autosave (5 min) or graceful
+  // shutdown (app/store/index.ts). A hard-kill/OOM/power-loss in between lost
+  // it; a restarted server rehydrated from the stale on-disk file believing
+  // the name unbound, reopening the exact squat window the binding exists to
+  // close. Fixed by awaiting store/index.ts's save() immediately after a
+  // brand-new binding, before the welcome is sent (see processHello Step 10c).
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+    mockSaveStore.mockReset().mockResolvedValue(undefined);
+  });
+
+  test('a brand-new agent name triggers exactly one durable flush, completed before the welcome is sent', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'e0000000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const welcomeFrame = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(welcomeFrame.type).toBe('welcome');
+    expect(mockSaveStore).toHaveBeenCalledTimes(1);
+    // The flush must complete before the welcome frame is sent on the wire.
+    expect(mockSaveStore.mock.invocationCallOrder[0]).toBeLessThan(
+      ws.send.mock.invocationCallOrder[0],
+    );
+  });
+
+  test('a reconnect under an already-owned name does not trigger a new durable flush', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const ts1 = Math.floor(Date.now() / 1000);
+    const nonce1 = 'e0100000000000000000000000000001';
+    const sig1 = signHello(privateKey, ts1, nonce1);
+    const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(record);
+    gw1.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws1 = getWs1()!;
+    sendMessageToGateway(ws1, buildHello(keyId, ts1, nonce1, sig1));
+    await new Promise((r) => setTimeout(r, 10));
+    expect((JSON.parse(ws1.sentMessages[0]) as { type: string }).type).toBe('welcome');
+    expect(mockSaveStore).toHaveBeenCalledTimes(1);
+    mockSaveStore.mockClear();
+
+    // Same key, same (default) agentName, fresh connection — a reconnect.
+    const ts2 = Math.floor(Date.now() / 1000);
+    const nonce2 = 'e0100000000000000000000000000002';
+    const sig2 = signHello(privateKey, ts2, nonce2);
+    const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(record);
+    gw2.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws2 = getWs2()!;
+    sendMessageToGateway(ws2, buildHello(keyId, ts2, nonce2, sig2));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect((JSON.parse(ws2.sentMessages[0]) as { type: string }).type).toBe('welcome');
+    expect(mockSaveStore).not.toHaveBeenCalled();
+    expect(getLastEdgeAgentAdapterInstance()?.reconnected).toBe(true);
+  });
+
+  test('a save failure on new-bind flush denies the hello and rolls back all reserved state', async () => {
+    mockSaveStore.mockRejectedValueOnce(new Error('disk full'));
+
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'e0200000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(mockSaveStore).toHaveBeenCalledTimes(1); // confirms the rejection was actually exercised
+
+    const errorFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { code: string; message: string };
+    };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('internal-error');
+    expect(ws.close).toHaveBeenCalledWith(1011, 'internal-error');
+
+    // Rolled back: the name is not left claimed in the in-memory map...
+    expect(nameBindingsSizeForTesting()).toBe(0);
+
+    // ...and a fresh hello for the SAME name (any key) is admitted rather than
+    // rejected as agent-name-claimed or agent-already-connected, proving the
+    // nameToKeyId binding and the inFlightAgents reservation both rolled back.
+    mockSaveStore.mockResolvedValue(undefined);
+    const retryTs = Math.floor(Date.now() / 1000);
+    const retryNonce = 'e0200000000000000000000000000002';
+    const retrySig = signHello(privateKey, retryTs, retryNonce);
+    const { gateway: retryGateway, getUpgradedWs: getRetryWs } = createGateway(record);
+    retryGateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const retryWs = getRetryWs()!;
+    sendMessageToGateway(retryWs, buildHello(keyId, retryTs, retryNonce, retrySig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const retryWelcome = JSON.parse(retryWs.sentMessages[0]) as { type: string };
+    expect(retryWelcome.type).toBe('welcome');
+  });
+});
+
+describe('hello verification — agentName sanitization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  async function helloWithAgentName(
+    agentId: string,
+    nonce: string,
+    agentNameOverride: Record<string, unknown>,
+  ) {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { agentId, ...agentNameOverride }));
+    await new Promise((r) => setTimeout(r, 10));
+    return getLastAgentClientInstance();
+  }
+
+  test('a clean agentName is used verbatim, lowercased', async () => {
+    const client = await helloWithAgentName('agent-clean-1', 'a1000000000000000000000000000001', {
+      agentName: 'Clean-Name',
+    });
+    expect(client?.name).toBe('clean-name');
+  });
+
+  test('an agentName with invalid characters is sanitized to a safe slug', async () => {
+    const client = await helloWithAgentName('agent-dirty-1', 'a1000000000000000000000000000002', {
+      agentName: 'My Agent!!formatted_Name日本語',
+    });
+    expect(client?.name).toBe('my-agent-formatted-name');
+  });
+
+  test('an empty agentName falls back to portwing-edge-<agentId>', async () => {
+    const client = await helloWithAgentName('agent-empty-1', 'a1000000000000000000000000000003', {
+      agentName: '',
+    });
+    expect(client?.name).toBe('portwing-edge-agent-empty-1');
+  });
+
+  test('an agentName that sanitizes to empty falls back to portwing-edge-<agentId>', async () => {
+    const client = await helloWithAgentName('agent-allbad-1', 'a1000000000000000000000000000004', {
+      agentName: '###',
+    });
+    expect(client?.name).toBe('portwing-edge-agent-allbad-1');
+  });
+
+  test('an omitted agentName falls back to portwing-edge-<agentId> without crashing', async () => {
+    const client = await helloWithAgentName('agent-none-1', 'a1000000000000000000000000000005', {
+      agentName: undefined,
+    });
+    expect(client?.name).toBe('portwing-edge-agent-none-1');
+  });
+
+  test('a null agentName falls back to portwing-edge-<agentId> without crashing', async () => {
+    const client = await helloWithAgentName('agent-null-1', 'a1000000000000000000000000000006', {
+      agentName: null,
+    });
+    expect(client?.name).toBe('portwing-edge-agent-null-1');
+  });
+});
+
+describe('hello verification — agentName type validation (Bug 1 regression)', () => {
+  // Regression coverage for: computeAgentName() called hello.agentName?.trim() with
+  // no type check, so a number/boolean/array/object agentName threw a TypeError
+  // (unhandled promise rejection from processHello). Non-string agentName values
+  // must now be rejected gracefully via an 'invalid-agent-name' error frame + 1008
+  // close, never throw.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  // Type validation (Step 2b) runs before protocol/auth checks, so no real
+  // Ed25519 key material is needed to reach it — a syntactically-complete but
+  // otherwise-unauthenticated hello is enough to exercise the rejection path.
+  function sendHelloWithAgentName(agentName: unknown) {
+    const { gateway, getUpgradedWs } = createGateway(null);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, {
+      type: 'hello',
+      data: {
+        version: '0.2.0',
+        protocol: 'portwing/1.0',
+        agentId: 'agentname-type-test',
+        agentName,
+        dockerVersion: '27.0.0',
+        hostname: 'test-host',
+        capabilities: [],
+        pubKeyId: 'deadbeefdeadbeef',
+        timestamp: Math.floor(Date.now() / 1000),
+        nonce: makeNonce(),
+        signature: 'x'.repeat(86),
+      },
+    });
+    return ws;
+  }
+
+  test.each([
+    ['number', 42],
+    ['boolean', true],
+    ['array', ['a', 'b']],
+    ['object', { evil: true }],
+  ])('rejects a %s agentName with invalid-agent-name instead of throwing', async (_label, badValue) => {
+    const ws = sendHelloWithAgentName(badValue);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('invalid-agent-name');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'invalid-agent-name');
+  });
+
+  test('rejects an agentName exceeding the maximum input length', async () => {
+    // MAX_AGENT_NAME_INPUT_LENGTH in portwing-ws.ts is 256; 257 chars must be rejected.
+    const ws = sendHelloWithAgentName('a'.repeat(257));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('invalid-agent-name');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'invalid-agent-name');
+  });
+});
+
 describe('version handshake', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1030,6 +1427,339 @@ describe('duplicate-agent guard', () => {
     };
     expect(lastMsg.data.code).toBe('agent-already-connected');
     expect(ws.close).toHaveBeenCalledWith(1008, 'agent-already-connected');
+  });
+});
+
+describe('identity binding — agentName bound to authenticating pubKeyId (Bug 2 regression)', () => {
+  // Regression coverage for: the sanitized hello.agentName became the sole
+  // registry/display identity with zero binding to the Ed25519 pubKeyId that
+  // authenticated the connection, so any holder of ANY valid registered key
+  // could squat or steal another agent's name. Fix binds name -> pubKeyId on
+  // first use (see nameToKeyId in portwing-ws.ts).
+  beforeEach(() => {
+    // resetAllMocks (not clearAllMocks): the preceding 'duplicate-agent guard'
+    // describe leaves getAgent's mockReturnValue overridden to a truthy stub;
+    // clearAllMocks only clears call history, not that implementation override.
+    vi.resetAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  function makeRecord(keyId: string, pubkeyBase64: string): AgentKeyRecord {
+    return {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+  }
+
+  async function helloAs(
+    record: AgentKeyRecord,
+    privateKey: import('node:crypto').KeyObject,
+    keyId: string,
+    nonce: string,
+    overrides: Record<string, unknown>,
+  ) {
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = signHello(privateKey, ts, nonce);
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, overrides));
+    await new Promise((r) => setTimeout(r, 10));
+    return ws;
+  }
+
+  test('the same key reconnecting under the same agentName is admitted', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record = makeRecord(keyId, pubkeyBase64);
+
+    const ws1 = await helloAs(record, privateKey, keyId, 'b0000000000000000000000000000001', {
+      agentId: 'reconnect-agent',
+      agentName: 'shared-fleet-agent',
+    });
+    const welcome1 = JSON.parse(ws1.sentMessages[0]) as { type: string };
+    expect(welcome1.type).toBe('welcome');
+
+    // Same key, same claimed name, fresh connection (e.g. after a network blip).
+    const ws2 = await helloAs(record, privateKey, keyId, 'b0000000000000000000000000000002', {
+      agentId: 'reconnect-agent',
+      agentName: 'shared-fleet-agent',
+    });
+    const welcome2 = JSON.parse(ws2.sentMessages[0]) as { type: string };
+    expect(welcome2.type).toBe('welcome');
+  });
+
+  test('a different key claiming an in-use agentName is rejected as a squat attempt', async () => {
+    const owner = generateKeyPair();
+    const attacker = generateKeyPair();
+    const ownerRecord = makeRecord(owner.keyId, owner.pubkeyBase64);
+    const attackerRecord = makeRecord(attacker.keyId, attacker.pubkeyBase64);
+
+    const ws1 = await helloAs(
+      ownerRecord,
+      owner.privateKey,
+      owner.keyId,
+      'b1000000000000000000000000000001',
+      { agentId: 'owner-agent', agentName: 'production-worker' },
+    );
+    const welcome1 = JSON.parse(ws1.sentMessages[0]) as { type: string };
+    expect(welcome1.type).toBe('welcome');
+
+    // A different, otherwise-valid key tries to register under the same name.
+    const ws2 = await helloAs(
+      attackerRecord,
+      attacker.privateKey,
+      attacker.keyId,
+      'b1000000000000000000000000000002',
+      { agentId: 'attacker-agent', agentName: 'production-worker' },
+    );
+    const errorFrame = JSON.parse(ws2.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('agent-name-claimed');
+    expect(ws2.close).toHaveBeenCalledWith(1008, 'agent-name-claimed');
+  });
+
+  test('revoking a key releases only ITS name binding, leaving other bindings intact', async () => {
+    const owner = generateKeyPair();
+    const successor = generateKeyPair();
+    const bystander = generateKeyPair();
+    const attacker = generateKeyPair();
+    const ownerRecord = makeRecord(owner.keyId, owner.pubkeyBase64);
+    const successorRecord = makeRecord(successor.keyId, successor.pubkeyBase64);
+    const bystanderRecord = makeRecord(bystander.keyId, bystander.pubkeyBase64);
+    const attackerRecord = makeRecord(attacker.keyId, attacker.pubkeyBase64);
+
+    const ws1 = await helloAs(
+      ownerRecord,
+      owner.privateKey,
+      owner.keyId,
+      'b2000000000000000000000000000001',
+      { agentId: 'decommissioned-agent', agentName: 'edge-node-7' },
+    );
+    expect((JSON.parse(ws1.sentMessages[0]) as { type: string }).type).toBe('welcome');
+
+    // A second, unrelated agent under a different key — its binding must survive
+    // the owner's revocation below (exercises the non-matching-entry loop branch
+    // in disconnectByKeyId's nameToKeyId purge).
+    const wsBystander = await helloAs(
+      bystanderRecord,
+      bystander.privateKey,
+      bystander.keyId,
+      'b2000000000000000000000000000002',
+      { agentId: 'bystander-agent', agentName: 'edge-node-8' },
+    );
+    expect((JSON.parse(wsBystander.sentMessages[0]) as { type: string }).type).toBe('welcome');
+
+    // Operator revokes the old key; disconnectByKeyId is called from the
+    // revocation route (app/api/portwing.ts) and must free only its own binding.
+    disconnectByKeyId(owner.keyId);
+
+    // A newly-provisioned key can now claim the freed name.
+    const ws2 = await helloAs(
+      successorRecord,
+      successor.privateKey,
+      successor.keyId,
+      'b2000000000000000000000000000003',
+      { agentId: 'replacement-agent', agentName: 'edge-node-7' },
+    );
+    const welcome2 = JSON.parse(ws2.sentMessages[0]) as { type: string };
+    expect(welcome2.type).toBe('welcome');
+
+    // The bystander's binding was untouched by the owner's revocation — a third
+    // key still cannot squat its name.
+    const wsAttacker = await helloAs(
+      attackerRecord,
+      attacker.privateKey,
+      attacker.keyId,
+      'b2000000000000000000000000000004',
+      { agentId: 'squatter-agent', agentName: 'edge-node-8' },
+    );
+    const errorFrame = JSON.parse(wsAttacker.sentMessages[0]) as {
+      type: string;
+      data: { code: string };
+    };
+    expect(errorFrame.data.code).toBe('agent-name-claimed');
+  });
+});
+
+describe('name binding registry cap (memory-exhaustion regression)', () => {
+  // Regression coverage for: nameToKeyId had no size cap, TTL, or pruning, so a
+  // single already-authenticated, never-revoked key could grow it without bound
+  // by reconnecting under a fresh agentName every time. Fixed by capping the
+  // map at MAX_NAME_BINDINGS (10,000, mirroring nonceCache) and pruning entries
+  // that are both idle past NAME_BINDING_STALE_MS and not backing a live agent.
+  beforeEach(() => {
+    vi.resetAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  async function helloAsNewAgent(nonce: string, agentName: string, agentId: string) {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = signHello(privateKey, ts, nonce);
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { agentId, agentName }));
+    await new Promise((r) => setTimeout(r, 10));
+    return ws;
+  }
+
+  function fillBindingsAtCap(lastSeenAt: number): void {
+    const bindings = new Map<string, { keyId: string; lastSeenAt: number }>();
+    for (let i = 0; i < 10_000; i++) {
+      bindings.set(`filler-agent-${i}`, { keyId: `filler-key-${i}`, lastSeenAt });
+    }
+    fillNameBindingsForTesting(bindings);
+  }
+
+  test('rejects a brand-new name with registry-full when the cap is full of fresh (non-prunable) bindings', async () => {
+    fillBindingsAtCap(Date.now());
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+
+    const ws = await helloAsNewAgent(
+      'c0000000000000000000000000000001',
+      'brand-new-agent',
+      'brand-new-agent-id',
+    );
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('registry-full');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'registry-full');
+  });
+
+  test('evicts idle bindings past the cap and admits a new name once space is freed', async () => {
+    // 24h + 1s in the past — past NAME_BINDING_STALE_MS and not backing a live
+    // agent (getAgent defaults to () => undefined in this file's manager mock).
+    fillBindingsAtCap(Date.now() - (24 * 60 * 60 * 1000 + 1_000));
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+
+    const ws = await helloAsNewAgent(
+      'c0000000000000000000000000000002',
+      'freshly-admitted-agent',
+      'freshly-admitted-agent-id',
+    );
+
+    const welcome = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(welcome.type).toBe('welcome');
+    // The idle fillers were pruned, freeing room for exactly the one new binding.
+    expect(nameBindingsSizeForTesting()).toBe(1);
+  });
+
+  test('does not evict idle-by-timestamp bindings that are still backing a live agent', async () => {
+    // Stale by lastSeenAt, but getAgent() returns truthy for every one of them —
+    // simulating agents that are still connected and simply haven't sent
+    // another hello recently. None of these should be evicted.
+    fillBindingsAtCap(Date.now() - (24 * 60 * 60 * 1000 + 1_000));
+    const { getAgent } = await import('../agent/manager.js');
+    vi.mocked(getAgent).mockReturnValue({ name: 'still-connected' } as unknown as ReturnType<
+      typeof getAgent
+    >);
+
+    const ws = await helloAsNewAgent(
+      'c0000000000000000000000000000003',
+      'yet-another-new-agent',
+      'yet-another-new-agent-id',
+    );
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('registry-full');
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+  });
+
+  test('a reconnect under an already-owned name is admitted even while the registry is at cap', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    // Fill the cap, including this exact key's own existing binding — a
+    // reconnect reuses that entry rather than growing the map, so the cap
+    // check (which only guards brand-new names) must not block it.
+    const bindings = new Map<string, { keyId: string; lastSeenAt: number }>();
+    for (let i = 0; i < 9_999; i++) {
+      bindings.set(`filler-agent-${i}`, { keyId: `filler-key-${i}`, lastSeenAt: Date.now() });
+    }
+    bindings.set('owned-agent', { keyId, lastSeenAt: Date.now() - 1_000 });
+    fillNameBindingsForTesting(bindings);
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'c0000000000000000000000000000004';
+    const sig = signHello(privateKey, ts, nonce);
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(
+      ws,
+      buildHello(keyId, ts, nonce, sig, {
+        agentId: 'reconnect-agent-id',
+        agentName: 'owned-agent',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    const welcome = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(welcome.type).toBe('welcome');
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+  });
+});
+
+describe('startNoncePruning — also prunes idle name bindings', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('prunes idle, non-live name bindings after 60s but leaves live ones intact', () => {
+    vi.useFakeTimers();
+    createGateway();
+
+    fillNameBindingsForTesting(
+      new Map([
+        [
+          'idle-agent',
+          { keyId: 'idle-key', lastSeenAt: Date.now() - (24 * 60 * 60 * 1000 + 1_000) },
+        ],
+      ]),
+    );
+    expect(nameBindingsSizeForTesting()).toBe(1);
+
+    vi.advanceTimersByTime(61_000);
+
+    expect(nameBindingsSizeForTesting()).toBe(0);
   });
 });
 
@@ -1263,6 +1993,41 @@ describe('hello verification — drydockCompat version warning', () => {
 
     const firstFrame = JSON.parse(ws.sentMessages[0]) as { type: string };
     expect(firstFrame.type).toBe('welcome');
+  });
+
+  test('warns when drydockCompat majorVersion is LOWER than server (sends welcome)', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'ac000000000000000000000000000002';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    // drydockCompat '0.9.0' has majorVersion=0, server implements '1.4.0' (major=1).
+    // Previously only the higher-than-server direction warned; now any mismatch does.
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { drydockCompat: '0.9.0' }));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const firstFrame = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(firstFrame.type).toBe('welcome');
+    expect(mockLogChild.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Edge agent requires drydockCompat 0.9.0 but server implements 1.4.0',
+      ),
+    );
   });
 });
 
@@ -2240,5 +3005,335 @@ describe('disconnectByKeyId', () => {
 
     // The session is gone; disconnectByKeyId returns 0
     expect(disconnectByKeyId(keyId)).toBe(0);
+  });
+});
+
+describe('disconnectByKeyId — revoke-release durability (Fix 1 fail-safe flush)', () => {
+  // Regression coverage for: releasing a revoked key's name bindings
+  // (nameBindingsStore.deleteBindingsForKey above) only mutated Loki's
+  // in-memory collection. A crash right after revocation, before the next
+  // autosave, could resurrect a binding to the now-dead key on restart. Fixed
+  // by a best-effort (not awaited — see the doc comment on the call site)
+  // flush of the release in disconnectByKeyId itself.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+    mockSaveStore.mockReset().mockResolvedValue(undefined);
+  });
+
+  test('revoking a key triggers a best-effort durable flush of the released binding', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'e0300000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mockSaveStore).toHaveBeenCalledTimes(1); // the new-bind flush (Fix 1)
+
+    disconnectByKeyId(keyId);
+    // The revoke-release flush is fire-and-forget (not awaited) — give its
+    // microtask a tick to run before asserting.
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockSaveStore).toHaveBeenCalledTimes(2);
+  });
+
+  test('a save failure during revoke-release is swallowed (best-effort, fail-safe by design)', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'e0400000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    mockSaveStore.mockRejectedValueOnce(new Error('disk full'));
+
+    // Revocation itself must not throw even though the fail-safe flush rejects.
+    expect(() => disconnectByKeyId(keyId)).not.toThrow();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockSaveStore).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('name-bindings persistence (identity binding survives a restart)', () => {
+  // Regression coverage for: nameToKeyId was a bare in-memory Map, wiped on
+  // every process restart — including the restart that deploys this very
+  // protection — which reopens the exact name-squatting window it exists to
+  // close until every agent happens to reconnect. Fixed by write-through'ing
+  // every bind/prune/release to app/store/name-bindings.ts's durable LokiJS
+  // collection and reloading it into the map once at gateway creation (see
+  // rehydrateNameBindings() in portwing-ws.ts).
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  afterEach(() => {
+    // nameBindingCollection is a module-level singleton in
+    // app/store/name-bindings.ts — reset it so later test files that import
+    // this store (and every other describe block above, which never
+    // initializes it) keep seeing the uninitialized/no-op behavior they were
+    // written against.
+    nameBindingsStore.clearCollectionForTesting();
+  });
+
+  /**
+   * A LokiJS-shaped mock db backed by a plain array that outlives any single
+   * createCollections() call — mirrors how a real Loki instance reloads the
+   * same on-disk documents into a fresh collection object after a restart.
+   * Re-invoking createCollections(db) against the SAME returned db object is
+   * exactly "re-init the collection from the same db" for a simulated reload.
+   */
+  function createPersistentMockDb() {
+    const docs: NameBindingRecord[] = [];
+    const matches = (doc: NameBindingRecord, query: Record<string, unknown>) =>
+      Object.entries(query).every(([k, v]) => (doc as unknown as Record<string, unknown>)[k] === v);
+    const collection = {
+      findOne: vi.fn(
+        (query: Record<string, unknown>) => docs.find((doc) => matches(doc, query)) ?? null,
+      ),
+      find: vi.fn((query?: Record<string, unknown>) =>
+        query ? docs.filter((doc) => matches(doc, query)) : [...docs],
+      ),
+      insert: vi.fn((doc: NameBindingRecord) => {
+        docs.push(doc);
+      }),
+      update: vi.fn(),
+      remove: vi.fn((doc: NameBindingRecord) => {
+        const index = docs.indexOf(doc);
+        if (index !== -1) {
+          docs.splice(index, 1);
+        }
+      }),
+    };
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(() => collection),
+    };
+    return { db, docs };
+  }
+
+  function makeKeyRecord(keyId: string, pubkeyBase64: string): AgentKeyRecord {
+    return {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+  }
+
+  test('a binding survives a simulated process restart and still rejects a different key', async () => {
+    const { db, docs } = createPersistentMockDb();
+
+    // "Boot 1": wire the durable store and let the owner claim a name.
+    nameBindingsStore.createCollections(db);
+
+    const owner = generateKeyPair();
+    const ownerRecord = makeKeyRecord(owner.keyId, owner.pubkeyBase64);
+
+    const ts1 = Math.floor(Date.now() / 1000);
+    const nonce1 = 'd0000000000000000000000000000001';
+    const sig1 = signHello(owner.privateKey, ts1, nonce1);
+    const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(ownerRecord);
+    gw1.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws1 = getWs1()!;
+    sendMessageToGateway(
+      ws1,
+      buildHello(owner.keyId, ts1, nonce1, sig1, {
+        agentId: 'owner-agent-id',
+        agentName: 'edge-node-restart-test',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect((JSON.parse(ws1.sentMessages[0]) as { type: string }).type).toBe('welcome');
+
+    // The binding was write-through'd to the durable store, not just the map.
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({ agentName: 'edge-node-restart-test', keyId: owner.keyId });
+
+    // Simulate a process restart: wipe every in-memory cache (this is exactly
+    // what a fresh process would start with)...
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+
+    // ...then re-init the collection from the SAME db (a real restart reloads
+    // the same on-disk JSON) and create a fresh gateway, exactly like a real
+    // server boot (store.init() → attachPortwingWsServer()).
+    nameBindingsStore.createCollections(db);
+    expect(nameBindingsSizeForTesting()).toBe(0); // map really was wiped
+
+    const attacker = generateKeyPair();
+    const attackerRecord = makeKeyRecord(attacker.keyId, attacker.pubkeyBase64);
+    const ts2 = Math.floor(Date.now() / 1000);
+    const nonce2 = 'd0000000000000000000000000000002';
+    const sig2 = signHello(attacker.privateKey, ts2, nonce2);
+    const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(attackerRecord);
+    gw2.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws2 = getWs2()!;
+    sendMessageToGateway(
+      ws2,
+      buildHello(attacker.keyId, ts2, nonce2, sig2, {
+        agentId: 'attacker-agent-id',
+        agentName: 'edge-node-restart-test',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    // The binding survived the restart: a different key is still rejected.
+    const errorFrame = JSON.parse(ws2.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('agent-name-claimed');
+  });
+
+  test('revoking a key releases its persisted binding too, so a successor can claim the name after a restart', async () => {
+    const { db, docs } = createPersistentMockDb();
+    nameBindingsStore.createCollections(db);
+
+    const owner = generateKeyPair();
+    const ownerRecord = makeKeyRecord(owner.keyId, owner.pubkeyBase64);
+    const ts1 = Math.floor(Date.now() / 1000);
+    const nonce1 = 'd1000000000000000000000000000001';
+    const sig1 = signHello(owner.privateKey, ts1, nonce1);
+    const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(ownerRecord);
+    gw1.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws1 = getWs1()!;
+    sendMessageToGateway(
+      ws1,
+      buildHello(owner.keyId, ts1, nonce1, sig1, {
+        agentId: 'decommissioned-agent',
+        agentName: 'edge-node-revoke-test',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(docs).toHaveLength(1);
+
+    // Revoke the owner's key — must release the PERSISTED binding, not just
+    // the in-memory one.
+    disconnectByKeyId(owner.keyId);
+    expect(docs).toHaveLength(0);
+
+    // Simulate a restart with the successor connecting fresh.
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+    nameBindingsStore.createCollections(db);
+
+    const successor = generateKeyPair();
+    const successorRecord = makeKeyRecord(successor.keyId, successor.pubkeyBase64);
+    const ts2 = Math.floor(Date.now() / 1000);
+    const nonce2 = 'd1000000000000000000000000000002';
+    const sig2 = signHello(successor.privateKey, ts2, nonce2);
+    const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(successorRecord);
+    gw2.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws2 = getWs2()!;
+    sendMessageToGateway(
+      ws2,
+      buildHello(successor.keyId, ts2, nonce2, sig2, {
+        agentId: 'replacement-agent',
+        agentName: 'edge-node-revoke-test',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    const welcome = JSON.parse(ws2.sentMessages[0]) as { type: string };
+    expect(welcome.type).toBe('welcome');
+  });
+
+  test('a stale persisted binding is pruned on reload (load-time pruning), same as the periodic sweep', async () => {
+    const { db, docs } = createPersistentMockDb();
+    nameBindingsStore.createCollections(db);
+
+    // Seed the durable store directly with a binding that was already idle
+    // past NAME_BINDING_STALE_MS (24h) before the "restart" below — as if it
+    // had been written well before the process stopped.
+    const staleOwner = generateKeyPair();
+    nameBindingsStore.upsertBinding(
+      'long-idle-agent',
+      staleOwner.keyId,
+      Date.now() - (24 * 60 * 60 * 1000 + 1_000),
+    );
+    expect(docs).toHaveLength(1);
+
+    // "Restart": wipe in-memory state, re-init the collection from the same
+    // db, and create a fresh gateway — rehydrateNameBindings() checks each
+    // loaded record's own staleness before adding it back to the map.
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+    nameBindingsStore.createCollections(db);
+
+    const newcomer = generateKeyPair();
+    const newcomerRecord = makeKeyRecord(newcomer.keyId, newcomer.pubkeyBase64);
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'd2000000000000000000000000000001';
+    const sig = signHello(newcomer.privateKey, ts, nonce);
+    const { gateway, getUpgradedWs } = createGateway(newcomerRecord);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(
+      ws,
+      buildHello(newcomer.keyId, ts, nonce, sig, {
+        agentId: 'newcomer-agent',
+        agentName: 'long-idle-agent',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    // The stale binding was pruned on load, so a brand-new key can claim the
+    // name — and the persisted store no longer carries the pruned entry.
+    const welcome = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(welcome.type).toBe('welcome');
   });
 });

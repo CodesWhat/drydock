@@ -175,7 +175,7 @@ describe('api/container/triggers', () => {
 
     test('applies include thresholds and trims include entries before parsing', async () => {
       const harness = createHarness({
-        container: { id: 'c1', triggerInclude: ' notify:patch , slack.alert : all ' },
+        container: { id: 'c1', notificationTriggerInclude: ' notify:patch , slack.alert : all ' },
         triggerMap: {
           'slack.notify': createTrigger({ id: 'slack.notify', name: 'notify' }),
           'slack.alert': createTrigger({ id: 'slack.alert', name: 'alert' }),
@@ -208,8 +208,8 @@ describe('api/container/triggers', () => {
       const harness = createHarness({
         container: {
           id: 'c1',
-          triggerInclude: 'slack.notify:major',
-          triggerExclude: 'notify',
+          notificationTriggerInclude: 'slack.notify:major',
+          notificationTriggerExclude: 'notify',
         },
         triggerMap: {
           'slack.notify': createTrigger({ id: 'slack.notify', name: 'notify' }),
@@ -226,7 +226,7 @@ describe('api/container/triggers', () => {
       const harness = createHarness({
         container: {
           id: 'c1',
-          triggerInclude: 'slack.alert:major',
+          notificationTriggerInclude: 'slack.alert:major',
         },
         triggerMap: {
           'slack.notify': createTrigger({ id: 'slack.notify', name: 'notify' }),
@@ -239,11 +239,57 @@ describe('api/container/triggers', () => {
       expect(res.json).toHaveBeenCalledWith({ data: [], total: 0 });
     });
 
+    test('parses each trigger against the list scoped to its own category (#494)', async () => {
+      const harness = createHarness({
+        container: {
+          id: 'c1',
+          actionTriggerInclude: 'docker.local',
+          notificationTriggerInclude: 'slack.notify',
+          triggerInclude: 'docker.local',
+        },
+        triggerMap: {
+          'docker.local': createTrigger({ id: 'docker.local', type: 'docker', name: 'local' }),
+          'slack.notify': createTrigger({ id: 'slack.notify', type: 'slack', name: 'notify' }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(payload.data.map((trigger) => trigger.id).sort()).toEqual([
+        'docker.local',
+        'slack.notify',
+      ]);
+    });
+
+    test('an action-only include list leaves notification triggers ungated (#494)', async () => {
+      const harness = createHarness({
+        container: {
+          id: 'c1',
+          actionTriggerInclude: 'docker.local',
+          triggerInclude: 'docker.local',
+        },
+        triggerMap: {
+          'docker.local': createTrigger({ id: 'docker.local', type: 'docker', name: 'local' }),
+          'slack.notify': createTrigger({ id: 'slack.notify', type: 'slack', name: 'notify' }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data.map((trigger) => trigger.id).sort()).toEqual([
+        'docker.local',
+        'slack.notify',
+      ]);
+    });
+
     test('excludes triggers when only an exclude list is configured', async () => {
       const harness = createHarness({
         container: {
           id: 'c1',
-          triggerExclude: 'notify',
+          notificationTriggerExclude: 'notify',
         },
         triggerMap: {
           'slack.notify': createTrigger({ id: 'slack.notify', name: 'notify' }),

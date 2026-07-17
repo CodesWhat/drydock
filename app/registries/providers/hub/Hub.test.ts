@@ -196,6 +196,8 @@ describe('Docker Hub Registry', () => {
 
   test('should fetch published date from Docker Hub tag metadata', async () => {
     const { default: axios } = await import('axios');
+    const { withRetry } = await import('../../http-retry.js');
+    const { acquireToken, getBucketForUrl } = await import('../../token-bucket.js');
     axios.mockResolvedValue({ data: { last_updated: '2026-03-01T12:34:56.000Z' } });
 
     const publishedAt = await hub.getImagePublishedAt(
@@ -206,11 +208,37 @@ describe('Docker Hub Registry', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://hub.docker.com/v2/repositories/library/nginx/tags/1.26.0',
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       },
     });
+    expect(getBucketForUrl).toHaveBeenCalledWith(
+      'https://hub.docker.com/v2/repositories/library/nginx/tags/1.26.0',
+    );
+    expect(acquireToken).toHaveBeenCalledWith(expect.objectContaining({ key: 'mock-host' }));
+    expect(withRetry).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ requestLabel: expect.stringContaining('Docker Hub metadata') }),
+    );
     expect(publishedAt).toBe('2026-03-01T12:34:56.000Z');
+  });
+
+  test('should acquire a rate-limit token for every metadata retry attempt', async () => {
+    const { default: axios } = await import('axios');
+    const { withRetry } = await import('../../http-retry.js');
+    const { acquireToken } = await import('../../token-bucket.js');
+    axios
+      .mockRejectedValueOnce(new Error('transient'))
+      .mockResolvedValueOnce({ data: { last_updated: '2026-03-01T12:34:56.000Z' } });
+    withRetry.mockImplementationOnce(async (requestFn) => {
+      await requestFn().catch(() => undefined);
+      return requestFn();
+    });
+
+    await hub.getImagePublishedAt({ name: 'library/nginx', tag: { value: 'latest' } }, '1.26.0');
+
+    expect(acquireToken).toHaveBeenCalledTimes(2);
   });
 
   test('should return undefined when Docker Hub tag metadata has no last_updated', async () => {

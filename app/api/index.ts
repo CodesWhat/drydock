@@ -14,11 +14,14 @@ import {
   ddEnvVars,
   getExperimentalPortwingEnabled,
   getServerConfiguration,
+  getWudCardCompatEnabled,
 } from '../configuration/index.js';
+import { recordLegacyInput } from '../prometheus/compatibility.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
 import { getAllIds } from './auth-strategies.js';
+import * as wudCardCompatRouter from './compat/wudcard.js';
 import { attachContainerLogStreamWebSocketServer } from './container/log-stream.js';
 import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
@@ -122,6 +125,90 @@ function configurePermissionsPolicy(app) {
   });
 }
 
+// Unversioned /api/* alias removal (v1.6.0, DEPRECATIONS.md) — track real
+// usage through the same compatibility/legacyInputs mechanism the WUD_*
+// env/label sources use (recordLegacyInput + dd_legacy_input_total), so the
+// UI deprecation banner keeps reflecting live traffic against the removed
+// path instead of going dark the moment it starts 410ing. Mounted only on
+// the former alias mount below (not on /api/v1), and mounted BEFORE the
+// (optional) wud-card compat router so every request under the unversioned
+// /api prefix is counted. This ordering matters now: the compat router owns
+// its own internal apiRouter instance and answers its whitelisted requests
+// directly, without calling next() into anything mounted after it — so if
+// this tracking middleware were mounted after the compat router instead,
+// whitelisted requests would never reach it.
+//
+// The v1 router's catch-all (app/api/api.ts) is GET-only, so a non-GET
+// request to an unmatched /api/v1/* path never resolves inside that router
+// at all — Express falls through past the /api/v1 mount and back into this
+// '/api'-mounted middleware, arriving with req.path like '/v1/bogus'. Guard
+// explicitly against that so genuine /api/v1/* traffic (any method) is never
+// misrecorded as unversioned-alias usage.
+//
+// The recorded key MUST be a bounded route *pattern* (e.g.
+// "/api/containers/:id/stats"), never the raw request path — every dynamic
+// route beneath the alias embeds a live identifier (container id, operation
+// id, agent name, trigger name...), so keying by req.path would grow the
+// legacyInputCounts map and the dd_legacy_input_total series unboundedly,
+// one entry per distinct id ever seen. Express's router sets req.route and
+// req.baseUrl synchronously the instant a route matches — before the
+// handler runs — and they persist on the request for its lifetime, so
+// reading them once the response has finished reliably yields the literal
+// `:param` template the request resolved to, capping the key space at the
+// size of the API surface (same order of magnitude as the fixed env/label
+// name sets those other legacy-input sources use). Now that the real alias
+// router is gone, req.route is only ever set for the compat router's four
+// whitelisted routes (when DD_COMPAT_WUDCARD is enabled) — every other hit
+// falls straight through to the tombstone below without matching a route,
+// so getLegacyApiAliasRouteKey's 'unmatched' fallback is the common case.
+function trackLegacyApiAliasUsage(req, res, next) {
+  if (req.path === '/v1' || req.path.startsWith('/v1/')) {
+    next();
+    return;
+  }
+  res.on('finish', () => {
+    recordLegacyInput('api', getLegacyApiAliasRouteKey(req));
+  });
+  next();
+}
+
+function getLegacyApiAliasRouteKey(req) {
+  return req.route ? `${req.baseUrl}${req.route.path}` : 'unmatched';
+}
+
+// Tombstone for the removed unversioned /api/* alias (removed in v1.6.0 —
+// see DEPRECATIONS.md). Mounted last in the '/api' chain, after the legacy
+// usage tracker and the optional wud-card compat router, so it only ever
+// answers requests neither of those handled. A plain function mounted via
+// app.use('/api', ...) — rather than a Router with its own catch-all route —
+// matches every method and every subpath beneath /api (including /api
+// itself), exactly like the apiRouter mount it replaces.
+//
+// Needs the same /v1 fallthrough guard as trackLegacyApiAliasUsage above, for
+// the same reason: the v1 router's catch-all (app/api/api.ts) is GET-only, so
+// a non-GET request to an otherwise-valid /api/v1/* path that only defines a
+// GET handler (e.g. DELETE /api/v1/app) never resolves inside the /api/v1
+// mount and falls through into this '/api'-mounted chain with req.path like
+// '/v1/app'. Without the guard this middleware would answer that fallthrough
+// with a false "unversioned alias removed" 410 instead of letting it continue
+// past this mount to Express's own 404 handling, exactly like it did before
+// this middleware existed.
+function sendUnversionedApiTombstone(req, res, next) {
+  if (req.path === '/v1' || req.path.startsWith('/v1/')) {
+    next();
+    return;
+  }
+  sendErrorResponse(res, 410, {
+    message: 'The unversioned /api/* path was removed in v1.6.0. Use /api/v1/* instead.',
+    details: {
+      canonicalBasePath: '/api/v1',
+      compat:
+        'WUD-era clients (wud-card, Homepage whatsupdocker widget) can enable DD_COMPAT_WUDCARD',
+      docs: 'https://getdrydock.com/docs/deprecations#unversioned-api-paths',
+    },
+  });
+}
+
 function registerRoutes(app) {
   // Wire the health readiness gate before auth.init() so that /health
   // returns 503 if somehow a request arrives before passport strategies
@@ -132,11 +219,19 @@ function registerRoutes(app) {
   healthRouter.setAuthReadyFn(() => getAllIds().length > 0);
   auth.init(app);
   app.use('/health', healthRouter.init());
-  app.use('/api/v1', apiRouter.init());
-  log.warn(
-    'Unversioned /api/* path is deprecated and will be removed in v1.6.0. Use /api/v1/* instead.',
-  );
-  app.use('/api', apiRouter.init());
+  // Built exactly once and reused for both mounts below (rather than calling
+  // apiRouter.init() a second time for the wud-card compat router) so the
+  // whitelisted compat endpoints share the exact same rate limiter — and
+  // every other stateful middleware — that /api/v1 uses, instead of getting
+  // an independent budget. See compat/wudcard.ts's module doc comment.
+  const versionedApiRouter = apiRouter.init();
+  app.use('/api/v1', versionedApiRouter);
+  app.use('/api', trackLegacyApiAliasUsage);
+  if (getWudCardCompatEnabled()) {
+    log.info('wud-card compatibility enabled at /api (DD_COMPAT_WUDCARD=true)');
+    app.use('/api', wudCardCompatRouter.init(versionedApiRouter));
+  }
+  app.use('/api', sendUnversionedApiTombstone);
   app.use('/metrics', prometheusRouter.init());
   if (configuration.ui?.enabled !== false) {
     app.use('/', uiRouter.init());

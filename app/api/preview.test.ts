@@ -28,6 +28,7 @@ vi.mock('../log', () => ({
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import * as previewRouter from './preview.js';
+import * as previewErrors from './preview-errors.js';
 
 function getHandler(method, path) {
   previewRouter.init();
@@ -60,7 +61,10 @@ describe('Preview Router', () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       const res = await callPreview('missing');
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'container-not-found',
+        message: 'Container not found',
+      });
     });
 
     test('should return 404 when no docker trigger found', async () => {
@@ -69,7 +73,12 @@ describe('Preview Router', () => {
       const res = await callPreview();
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
-        error: expect.stringContaining('No docker trigger found'),
+        code: 'no-trigger-configured',
+        message: 'No action trigger configured for this container',
+        action: {
+          label: 'Open trigger settings',
+          href: '/triggers',
+        },
       });
     });
 
@@ -106,22 +115,105 @@ describe('Preview Router', () => {
       expect(res.json).toHaveBeenCalledWith(previewResult);
     });
 
-    test('should return 500 when preview throws', async () => {
+    test('should return an actionable registry authentication error when preview receives 401', async () => {
+      const authenticationError = Object.assign(new Error('request failed: 401 Unauthorized'), {
+        response: { status: 401 },
+      });
       const mockTrigger = {
         type: 'docker',
-        preview: vi.fn().mockRejectedValue(new Error('Docker API error')),
+        preview: vi.fn().mockRejectedValue(authenticationError),
       };
-      storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        image: { registry: { url: 'ghcr.io' } },
+      });
       registry.getState.mockReturnValue({
         trigger: { 'docker.default': mockTrigger },
       });
 
       const res = await callPreview();
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'registry-auth-failed',
+        message: 'Authentication failed for ghcr.io: 401 Unauthorized',
+        details: { reason: 'request failed: 401 Unauthorized', registry: 'ghcr.io' },
+        action: {
+          label: 'Open registry settings',
+          href: '/registries',
+        },
+      });
     });
 
-    test('should stringify non-Error preview failures', async () => {
+    test('should return an actionable registry configuration error', async () => {
+      const configurationError = Object.assign(
+        new Error('Unsupported registry manager "ghcr". Configure a matching registry.'),
+        { code: 'registry-manager-unsupported' },
+      );
+      const mockTrigger = {
+        type: 'docker',
+        preview: vi.fn().mockRejectedValue(configurationError),
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        image: { name: 'private/image', registry: { url: 'ghcr.io' } },
+      });
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+      });
+
+      const res = await callPreview();
+      expect(res.status).toHaveBeenCalledWith(422);
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'registry-not-found',
+        message: 'No matching registry configured for ghcr.io/private/image',
+        details: {
+          reason: 'Unsupported registry manager "ghcr". Configure a matching registry.',
+          registry: 'ghcr.io',
+        },
+        action: {
+          label: 'Open registry settings',
+          href: '/registries',
+        },
+      });
+    });
+
+    test('should return an actionable network error without reflecting credentials', async () => {
+      const networkError = Object.assign(
+        new Error('connect ECONNREFUSED https://user:secret@registry.example/v2/'),
+        { code: 'ECONNREFUSED' },
+      );
+      const mockTrigger = {
+        type: 'docker',
+        preview: vi.fn().mockRejectedValue(networkError),
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        image: { registry: { url: 'registry.example' } },
+      });
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+      });
+
+      const res = await callPreview();
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'registry-network-error',
+        message: 'Unable to reach registry.example while preparing the update preview',
+        details: {
+          reason: 'connect ECONNREFUSED https://[REDACTED]@registry.example/v2/',
+          registry: 'registry.example',
+        },
+        action: {
+          label: 'Open registry settings',
+          href: '/registries',
+        },
+      });
+    });
+
+    test('should type unknown preview failures instead of returning a generic error shape', async () => {
       const mockTrigger = {
         type: 'docker',
         preview: vi.fn().mockRejectedValue('preview failed as string'),
@@ -133,7 +225,55 @@ describe('Preview Router', () => {
 
       const res = await callPreview();
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.any(String) }));
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'preview-runtime-error',
+        message: 'Unable to prepare this update preview',
+      });
+    });
+
+    test('should use the typed message when an error has no diagnostic reason', async () => {
+      const classifySpy = vi.spyOn(previewErrors, 'classifyPreviewError').mockReturnValueOnce({
+        status: 500,
+        payload: {
+          code: 'preview-runtime-error',
+          message: 'Unable to prepare this update preview',
+        },
+      });
+      const mockTrigger = {
+        type: 'docker',
+        preview: vi.fn().mockRejectedValue(new Error('opaque preview failure')),
+      };
+      storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+      });
+
+      const res = await callPreview();
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'preview-runtime-error',
+        message: 'Unable to prepare this update preview',
+      });
+      classifySpy.mockRestore();
+    });
+
+    test('should turn trigger-level preview errors into typed API failures', async () => {
+      const mockTrigger = {
+        type: 'docker',
+        preview: vi.fn().mockResolvedValue({ error: 'Container not found in Docker' }),
+      };
+      storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+      });
+
+      const res = await callPreview();
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'container-runtime-not-found',
+        message: 'Container was not found by the configured Docker watcher',
+      });
     });
 
     test('should skip docker triggers with mismatched agent', async () => {

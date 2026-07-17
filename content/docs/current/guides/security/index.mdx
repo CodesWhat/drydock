@@ -20,6 +20,9 @@ Before you run Drydock, verify the image or archive you downloaded. See [Verify 
 
 The Docker socket gives full control over the host's containers. Never mount it directly in production — use a socket proxy to expose only the API endpoints Drydock needs.
 
+<Tabs items={["Tecnativa", "sockguard"]}>
+<Tab value="Tecnativa">
+
 ```yaml
 services:
   socket-proxy:
@@ -55,14 +58,54 @@ services:
 
 The proxy's environment variables (`CONTAINERS=1`, `EVENTS=1`, etc.) are the security boundary — they control which Docker API endpoints are forwarded. Everything else is blocked.
 
-**Other options:** If a socket proxy doesn't fit your environment, Drydock also supports remote Docker over mTLS and rootless Docker. See the [full comparison table](/docs/configuration/watchers#docker-socket-security) for trade-offs.
+The socket proxy can use infrastructure self-update because its own container mounts the Docker socket directly. The helper uses that target-container bind for the replacement; Drydock itself does not need a direct socket mount for this proxy-based setup.
+
+</Tab>
+<Tab value="sockguard">
+
+[sockguard](https://github.com/CodesWhat/sockguard) is a default-deny Docker socket filter from the same CodesWhat ecosystem as Drydock and portwing. Instead of an allowlist of environment flags, it ships a YAML preset built for this exact use case — see [`examples/compose/portwing/`](https://github.com/CodesWhat/sockguard/tree/dev/v1.5/examples/compose/portwing) for a runnable compose stack and the [`portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml) preset it's built from.
+
+```yaml
+services:
+  sockguard:
+    image: codeswhat/sockguard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./sockguard.yaml:/etc/sockguard/config.yaml:ro
+    environment:
+      - SOCKGUARD_CONFIG_FILE=/etc/sockguard/config.yaml
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      sockguard:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=sockguard
+      - DD_WATCHER_LOCAL_PORT=2375
+```
+
+The preset's allow-rules are the security boundary, in the same spirit as the proxy's environment flags — everything not explicitly allowed is denied.
+
+</Tab>
+</Tabs>
+
+**Other options:** If a socket proxy doesn't fit your environment, Drydock also supports remote Docker over mTLS, rootless Docker, and Podman through Podman's Docker-compatible API socket. See the [full comparison table](/docs/configuration/watchers#docker-socket-security) and [Podman Quick Start](/docs/configuration/watchers#podman-quick-start) for trade-offs.
+
+For remote Docker APIs that require basic, bearer, or OIDC auth, use HTTPS or mTLS. Drydock fails closed for remote watcher credentials on plain HTTP unless `AUTH_INSECURE=true` is explicitly configured for a trusted legacy network.
 
 </Step>
 <Step>
 
 ## Require authentication
 
-Since v1.4.0, authentication is required by default. If you haven't configured it yet, you'll see a setup prompt on first access.
+Since v1.4.0, authentication is required by default. Fresh installs require authentication configuration before access unless anonymous access is explicitly confirmed with `DD_ANONYMOUS_AUTH_CONFIRM=true`. Existing upgrades that were already anonymous remain accessible with a warning until authentication is configured.
 
 <Tabs items={["Basic Auth", "OIDC (SSO)"]}>
 <Tab value="Basic Auth">
@@ -70,7 +113,7 @@ Since v1.4.0, authentication is required by default. If you haven't configured i
 Generate an Argon2id hash for your password:
 
 ```bash
-npx argon2-cli "your-password" --type argon2id
+printf '%s' 'your-password' | argon2 "$(openssl rand -base64 32)" -id -m 16 -t 3 -p 4 -l 64 -e
 ```
 
 Then configure:
@@ -78,7 +121,7 @@ Then configure:
 ```yaml
 environment:
   - DD_AUTH_BASIC_ADMIN_USER=admin
-  - DD_AUTH_BASIC_ADMIN_HASH=$argon2id$v=19$m=65536,t=3,p=4$...
+  - DD_AUTH_BASIC_ADMIN_HASH=$$argon2id$$v=19$$m=65536,t=3,p=4$$...
 ```
 
 </Tab>
@@ -88,10 +131,10 @@ Connect to any OpenID Connect provider (Authelia, Authentik, Auth0, Dex, etc.):
 
 ```yaml
 environment:
-  - DD_AUTH_OIDC_ISSUER=https://auth.example.com
-  - DD_AUTH_OIDC_CLIENT_ID=drydock
-  - DD_AUTH_OIDC_CLIENT_SECRET=xxxxx
-  - DD_AUTH_OIDC_REDIRECT_URI=https://drydock.example.com/api/v1/auth/oidc/callback
+  - DD_PUBLIC_URL=https://drydock.example.com
+  - DD_AUTH_OIDC_SSO_DISCOVERY=https://auth.example.com/.well-known/openid-configuration
+  - DD_AUTH_OIDC_SSO_CLIENTID=drydock
+  - DD_AUTH_OIDC_SSO_CLIENTSECRET=xxxxx
 ```
 
 </Tab>
@@ -128,6 +171,12 @@ secrets:
 ```
 
 The `__FILE` suffix tells Drydock to read the value from the file path instead of using the environment variable directly. This works for **any** `DD_*` environment variable.
+
+Drydock trims trailing whitespace from file-sourced secrets and warns if a Unix secret file is readable by group or others. Keep secret files at `0600` permissions where possible:
+
+```bash
+chmod 600 secrets/*
+```
 
 ### Environment file
 
@@ -424,12 +473,15 @@ Use this checklist to verify your deployment covers each layer:
 
 | Layer | What to check | Reference |
 | --- | --- | --- |
-| Socket isolation | Using socket proxy or remote TLS — not a direct mount | [Watchers](/docs/configuration/watchers#docker-socket-security) |
+| Socket isolation | Using socket proxy, remote mTLS, rootless Docker, or rootless Podman — not a direct host Docker socket mount | [Watchers](/docs/configuration/watchers#docker-socket-security) |
+| Remote watcher auth | `DD_WATCHER_{name}_AUTH_*` credentials stay on HTTPS/mTLS watchers; `AUTH_INSECURE=true` is avoided except as a temporary trusted-network exception | [Remote watcher auth](/docs/configuration/watchers#watch-a-remote-docker-host-behind-https-with-oidc-auth) |
+| Podman | Direct rootless Podman socket mounts are preferred first; socket proxy/TCP Podman paths depend on Podman's Docker-compatible HTTP API | [Podman Quick Start](/docs/configuration/watchers#podman-quick-start) |
 | Authentication | Basic Auth or OIDC configured and enforced | [Authentication](/docs/configuration/authentications) |
 | Secret management | All credentials use `__FILE` or Docker secrets — none in compose files | [Configuration](/docs/configuration) |
 | Vulnerability scanning | `DD_SECURITY_SCANNER=trivy` set, blocking severities configured | [Update Bouncer](/docs/configuration/security) |
 | Scheduled scans | `DD_SECURITY_SCAN_CRON` set for regular background scanning | [Update Bouncer](/docs/configuration/security#scheduled-scanning) |
 | Signature verification | `DD_SECURITY_VERIFY_SIGNATURES=true` for supply chain integrity | [Update Bouncer](/docs/configuration/security#signature-verification-cosign) |
 | SBOM generation | `DD_SECURITY_SBOM_ENABLED=true` for compliance and auditing | [Update Bouncer](/docs/configuration/security#sbom-generation) |
+| Update authority | Docker triggers and socket-proxy `POST`/`NETWORKS` permissions are enabled only where Drydock should recreate containers | [Docker trigger](/docs/configuration/triggers/docker) |
 | Reverse proxy | `DD_SERVER_TRUSTPROXY` set if behind TLS-terminating proxy | [Server](/docs/configuration/server) |
 | Non-root operation | Default — no `DD_RUN_AS_ROOT` unless break-glass override needed | [FAQ](/docs/faq#socket-permission-errors-eacces) |

@@ -729,7 +729,7 @@ class ContainerUpdateExecutor {
     }
 
     if (configuration.dryrun) {
-      logContainer.info('Do not replace the existing container because dry-run mode is enabled');
+      logContainer.warn('Do not replace the existing container because dry-run mode is enabled');
       updateOperationStore.markOperationTerminal(operation.id, {
         status: 'succeeded',
         phase: 'dryrun',

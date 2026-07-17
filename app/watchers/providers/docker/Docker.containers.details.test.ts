@@ -26,6 +26,13 @@ describe('Docker Watcher', () => {
     hMockParse = (await import('parse-docker-image-name')).default;
     hStoreContainer = await import('../../../store/container.js');
     hMockTag = await import('../../../tag/index.js');
+    const containerModule = await import('../../../model/container.js');
+    const realContainerModule = await vi.importActual<typeof import('../../../model/container.js')>(
+      '../../../model/container.js',
+    );
+    vi.mocked(containerModule.normalizeContainerHealth).mockImplementation(
+      realContainerModule.normalizeContainerHealth,
+    );
   });
 
   describe('Container Details', () => {
@@ -52,7 +59,7 @@ describe('Docker Watcher', () => {
       expect(result).toBe(existingContainer);
     });
 
-    test('should skip container inspect for store container when watch events are enabled', async () => {
+    test('should inspect store container health when watch events are enabled', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['debug']);
       const existingContainer = {
@@ -75,6 +82,9 @@ describe('Docker Watcher', () => {
         RepoDigests: ['nginx@sha256:abc'],
         Created: '2023-01-01',
       });
+      mockContainer.inspect.mockResolvedValue({
+        State: { Health: { Status: 'healthy' } },
+      });
 
       const result = await docker.addImageDetailsToContainer({
         Id: '123',
@@ -84,7 +94,8 @@ describe('Docker Watcher', () => {
       });
 
       expect(result).toBe(existingContainer);
-      expect(mockContainer.inspect).not.toHaveBeenCalled();
+      expect(mockContainer.inspect).toHaveBeenCalledTimes(1);
+      expect(result.health).toBe('healthy');
       expect(result.details).toEqual({
         ports: ['0.0.0.0:18080->8080/tcp'],
         volumes: ['/host/data:/data:ro'],
@@ -601,6 +612,70 @@ describe('Docker Watcher', () => {
       const result = await docker.addImageDetailsToContainer(container);
 
       expect(result.tagFamily).toBe('loose');
+    });
+
+    test('resolves declarative update policy with labels above watcher defaults', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        registerConfig: {
+          maturitymode: 'mature',
+          maturityminagedays: 7,
+        },
+        container: {
+          Image: 'docker.io/library/nginx:1.0.0',
+          Names: ['/nginx'],
+          Labels: {
+            'dd.updatePolicy.maturityMinAgeDays': '14',
+            'dd.updatePolicy.skipTags': '2.0.0, 3.0.0,2.0.0',
+            'dd.updatePolicy.skipDigests': 'sha256:abc,sha256:def',
+          },
+        },
+        parsedImage: { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' },
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.updatePolicy).toEqual({
+        maturityMode: 'mature',
+        maturityMinAgeDays: 14,
+        skipTags: ['2.0.0', '3.0.0'],
+        skipDigests: ['sha256:abc', 'sha256:def'],
+      });
+      expect(result.updatePolicyDeclarative).toEqual({
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: {
+          maturityMinAgeDays: 14,
+          skipTags: ['2.0.0', '3.0.0'],
+          skipDigests: ['sha256:abc', 'sha256:def'],
+        },
+      });
+      expect(result.updatePolicySources).toEqual({
+        maturityMode: 'env',
+        maturityMinAgeDays: 'label',
+        skipTags: 'label',
+        skipDigests: 'label',
+      });
+    });
+
+    test('warns with the container name when a maturity-mode label is invalid', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'docker.io/library/nginx:1.0.0',
+          Names: ['/nginx'],
+          Labels: { 'dd.updatePolicy.maturityMode': 'fresh' },
+        },
+        parsedImage: { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' },
+      });
+      const containerLog = createMockLog(['warn', 'debug']);
+      docker.log = containerLog;
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(containerLog.warn).toHaveBeenCalledWith(
+        'Container "nginx" has invalid dd.updatePolicy.maturityMode value "fresh"; expected "all" or "mature". Ignoring label.',
+      );
+      expect(result.updatePolicy?.maturityMode).toBeUndefined();
+      expect(result.updatePolicyDeclarative?.label.maturityMode).toBeUndefined();
+      expect(result.updatePolicySources?.maturityMode).toBeUndefined();
     });
 
     test('should apply imgset watchDigest when label is missing', async () => {

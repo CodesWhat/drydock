@@ -3,7 +3,20 @@ import type { ViewMode } from './schema';
 import { preferences } from './store';
 import { isViewMode } from './validators';
 
-type ViewKey = Exclude<keyof typeof preferences.views, 'logs'> | 'containers';
+/** Every list view wired into the table/cards toggle. As of v1.6 this covers all of
+ * them — `audit`, `watchers`, `servers`, `registries`, and `auth` each gained a `mode`
+ * field and a card view too. */
+type ViewKey =
+  | 'containers'
+  | 'agents'
+  | 'notifications'
+  | 'security'
+  | 'triggers'
+  | 'audit'
+  | 'watchers'
+  | 'servers'
+  | 'registries'
+  | 'auth';
 
 /**
  * Shorthand for binding a view's mode preference.

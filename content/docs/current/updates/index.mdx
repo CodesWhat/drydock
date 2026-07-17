@@ -3,7 +3,42 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
-## Release Highlights — v1.5.0 (May 2026)
+## v1.6.0-rc.1 Highlights — July 15, 2026
+
+- **Notification rules are now a complete control surface** — configure delivery routing, audit-backed in-app bell categories, update severity threshold, and per-provider simple/batch templates in one detail panel; preview drafts before saving. Container-unhealthy events are bell-capable, and agent status changes refresh the bell promptly.
+  Docs: [Actions & Notifications](/docs/configuration/triggers#notification-rules), [Notification rules API](/docs/api#notification-rules).
+- **The dashboard uses a custom zero-dependency grid** — edit-mode mouse/touch reorder, bounded resize, deterministic packing, hidden widgets, responsive layouts, reset, and local or opt-in cross-device persistence replace `grid-layout-plus`.
+  Docs: [Dashboard customization](/docs/configuration/dashboard#customizing-the-layout), [UI preference sync](/docs/configuration/ui#sync-across-devices).
+- **v1.6 deprecation removals are enforced** — only argon2id Basic hashes, HTTPS OIDC discovery, `DD_*` environment variables, and `dd.*` labels are active at runtime. Removed WUD names remain recognized only by the migration CLI. Trigger-taxonomy aliases stay functional for their final warning release but now log at `error` level.
+  Docs: [Deprecation schedule](/docs/deprecations), [Migrating from WUD](/docs/quickstart#migrating-from-wud).
+- **Polling and log-view hot paths are hardened** — per-poll repository tag lists are deduplicated, aggregate endpoints avoid full-collection deep clones, large log collections are virtualized, and the 2,000-row live system-log client buffer rolls forward without freezing newest-first views.
+  Docs: [Logs](/docs/configuration/logs#application-log-viewer).
+- **Compose updates resolve the active file chain explicitly** — configured label, standard Compose project labels, live inspect fallback, then trigger-level `FILE`, with multi-file ordering, working-directory resolution, bind-mount mapping, and optional mount-prefix matching.
+  Docs: [Docker Compose auto-detection](/docs/configuration/triggers/docker-compose#auto-detection).
+
+## Documentation Refresh — v1.5.2
+
+- **Podman and Docker socket security docs refreshed** — The watcher docs now cover Podman's Docker-compatible API path ([#152](https://github.com/CodesWhat/drydock/issues/152)), direct socket vs proxy/TCP caveats, rootful/rootless socket paths, SELinux troubleshooting, remote Docker over TLS, and OIDC remote watcher auth. This is documentation and compatibility guidance; native Podman support remains a future roadmap item.
+  Docs: [Podman Quick Start](/docs/configuration/watchers#podman-quick-start), [Docker Socket Security](/docs/configuration/watchers#docker-socket-security), [Podman FAQ](/docs/faq#podman-api-compatibility-vs-native-podman-support).
+- **Config and API reference parity** — The current docs were reconciled against runtime config schemas, Express routes, and the OpenAPI spec. Configuration tables now match the implemented env vars and defaults more closely, while the API docs cover canonical `/api/v1` routes, authentication component endpoints, registry webhook signature auth, notification outbox actions, bulk container updates, backup listing, and auth status aliases.
+  Docs: [Configuration](/docs/configuration), [REST API](/docs/api), [OpenAPI spec](/docs/api#openapi).
+
+## Release Highlights — v1.5.1-rc.4 (June 29, 2026)
+
+- **Container Version and Uptime fields** — `image.softwareVersion` now powers detail panels and the new **Version** column, while Docker `State.StartedAt` powers detail uptime and the optional **Uptime** column.
+  Docs: [Watcher container runtime details](/docs/configuration/watchers#container-runtime-details), [Tag and Version columns](/docs/configuration/watchers#tag-and-version-columns).
+- **Release notes expanded** — The release-notes popover includes current, available, and intermediate semver releases. Trigger templates can reference `${currentReleaseNotes}` alongside `${releaseNotes}`.
+  Docs: [Release notes popover](/docs/configuration/watchers#labels), [Trigger template variables](/docs/configuration/triggers#template-variable-reference), [Container release-notes API](/docs/api/container#get-intermediate-release-notes).
+- **Docker Compose mount-prefix fallback** — `DD_ACTION_DOCKERCOMPOSE_{name}_MOUNTPREFIXFALLBACK=true` can match compose paths by trailing `<project-dir>/<file>` when bind mounts expose a different prefix inside Drydock.
+  Docs: [Docker Compose trigger — Mount-prefix fallback](/docs/configuration/triggers/docker-compose#mount-prefix-fallback).
+- **Maintenance and maturity gates tightened** — Auto-apply now respects maintenance windows on every detection path, Docker Hub/GHCR publish dates can clear mature updates immediately, and a changed pending tag/digest restarts the soak clock.
+  Docs: [Update eligibility blockers](/docs/configuration/actions/update-eligibility), [Maturity filter configuration](/docs/api/container#maturity-filter-configuration).
+- **Upgrade note for v1.5.1+ stores** — Newer `dd.json` fields are tolerated on later downgrades, but rolling back from v1.5.1 to v1.5.0 still requires removing `details.startedAt` and `image.softwareVersion`.
+  Docs: [Storage](/docs/configuration/storage#downgrade-notes).
+- **One-time mature-update burst** — On the first poll after upgrade, Docker Hub or GHCR updates that are already older than `maturityMinAgeDays` may immediately fire notifications or action triggers.
+  Docs: [Maturity policy gate](/docs/api/container#policy-gate-holds-updates).
+
+## Release Highlights — v1.5.0 (June 22, 2026)
 
 - **Default watcher cron changed to every 6 hours** — The default `DD_WATCHER_{name}_CRON` value changed from `0 * * * *` (hourly) to `0 */6 * * *` (every 6 hours) to stay within anonymous Docker Hub and GHCR rate limits on larger inventories. Deployments that set `DD_WATCHER_{name}_CRON` explicitly are unaffected. To keep near-real-time detection, set `DD_WATCHER_LOCAL_CRON=0 * * * *`.
   Docs: [Watchers configuration](/docs/configuration/watchers).
@@ -97,7 +132,16 @@ Example:
 dd.action.exclude=update
 ```
 
-This applies to all triggers named `update` (for example `docker.update`, `discord.update`). The legacy labels `dd.trigger.include` / `dd.trigger.exclude` still work as aliases until v1.7.0.
+This applies to every **action** trigger named `update` (for example `docker.update` and `dockercompose.update`).
+
+Each label filters only its own trigger category. `dd.action.include` / `dd.action.exclude` never filter notification triggers, and `dd.notification.include` / `dd.notification.exclude` never filter action triggers. To exclude both `docker.update` and `discord.update`, set both labels:
+
+```bash
+dd.action.exclude=update
+dd.notification.exclude=update
+```
+
+The legacy labels `dd.trigger.include` / `dd.trigger.exclude` still work as aliases until v1.7.0, and apply to both categories — but only for a category whose own scoped label is absent.
 
 #### 3. Shared threshold by trigger name
 

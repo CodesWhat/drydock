@@ -4,6 +4,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -12,6 +13,10 @@ import {
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  rewriteChangelogLinksForVersion,
+  rewriteDocsLinksForVersion,
+} from "./docs-link-rewriter.mjs";
 import { versions } from "./docs-versions.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +80,25 @@ description: "All notable changes to this project will be documented in this fil
   console.warn(`No CHANGELOG.md at ${changelogPath}; skipping changelog generation`);
 }
 
+function rewriteDocsLinksInDirectory(dir, versionSlug) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const target = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      rewriteDocsLinksInDirectory(target, versionSlug);
+      continue;
+    }
+    if (!entry.isFile() || !/\.(md|mdx)$/.test(entry.name)) {
+      continue;
+    }
+
+    const before = readFileSync(target, "utf8");
+    const after = rewriteDocsLinksForVersion(before, versionSlug);
+    if (after !== before) {
+      writeFileSync(target, after);
+    }
+  }
+}
+
 // Build into a temp directory so a mid-run crash can't leave a blank docs site.
 if (existsSync(tmpDir)) {
   rmSync(tmpDir, { recursive: true, force: true });
@@ -99,6 +123,8 @@ for (const ver of versions) {
     JSON.stringify({ ...existingMeta, title: ver.title, root: true }, null, 2),
   );
 
+  rewriteDocsLinksInDirectory(dest, ver.slug);
+
   console.log(`Synced ${ver.source} -> ${dest} (root folder: ${ver.title})`);
 }
 
@@ -107,7 +133,13 @@ for (const ver of versions) {
 if (changelogMdx !== null) {
   const changelogDir = join(tmpDir, versions[0].slug, "changelog");
   mkdirSync(changelogDir, { recursive: true });
-  writeFileSync(join(changelogDir, "index.mdx"), changelogMdx);
+  writeFileSync(
+    join(changelogDir, "index.mdx"),
+    rewriteDocsLinksForVersion(
+      rewriteChangelogLinksForVersion(changelogMdx, versions[0].slug),
+      versions[0].slug,
+    ),
+  );
 }
 
 // Write top-level meta.json listing version folders

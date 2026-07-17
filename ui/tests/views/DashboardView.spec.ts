@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { nextTick, ref } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import { useToast } from '@/composables/useToast';
 import type { Container } from '@/types/container';
@@ -28,6 +28,7 @@ const {
   mockUpdateContainer: vi.fn(),
   mockUpdateContainers: vi.fn(),
 }));
+const mockUpdateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -68,6 +69,10 @@ vi.mock('@/services/registry', () => ({
 vi.mock('@/services/container-actions', () => ({
   updateContainer: mockUpdateContainer,
   updateContainers: mockUpdateContainers,
+}));
+
+vi.mock('@/composables/useUpdateMode', () => ({
+  useUpdateMode: () => ({ updateMode: mockUpdateMode }),
 }));
 
 vi.mock('@/utils/container-mapper', () => ({
@@ -233,6 +238,7 @@ describe('DashboardView', () => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
     mockBuildDashboardContainerMetrics.mockClear();
+    mockUpdateMode.value = 'manual';
     // Default stats mocks (overridden per-test via mountDashboard overrides.statsSummary)
     mockGetStatsSummary.mockResolvedValue({
       timestamp: '2026-04-30T00:00:00.000Z',
@@ -315,9 +321,10 @@ describe('DashboardView', () => {
       expect(scrollArea.classes()).toContain('sm:pr-6');
     });
 
-    it('limits edit-mode dragging to explicit drag handles', async () => {
+    it('uses the zero-dependency custom dashboard grid', async () => {
       await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
-      expect(dashboardViewSource).toContain('drag-allow-from=".drag-handle"');
+      expect(dashboardViewSource).toContain('<DashboardGrid');
+      expect(dashboardViewSource).not.toContain('grid-layout-plus');
     });
 
     it('keeps editable widgets vertically pannable while customizing', async () => {
@@ -1455,6 +1462,8 @@ describe('DashboardView', () => {
 
     it('reorders widgets on drop and persists the new order', async () => {
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      (document.querySelector('[data-test="dashboard-edit-toggle"]') as HTMLButtonElement).click();
+      await flushPromises();
 
       const draggedWidget = wrapper.find('[data-widget-id="update-breakdown"]');
       const targetWidget = wrapper.find('[data-widget-id="recent-updates"]');
@@ -1465,6 +1474,7 @@ describe('DashboardView', () => {
         dropEffect: 'move',
       };
 
+      await draggedWidget.get('.drag-handle').trigger('pointerdown');
       await draggedWidget.trigger('dragstart', { dataTransfer });
       await targetWidget.trigger('dragover', { dataTransfer });
       await targetWidget.trigger('drop', { dataTransfer });
@@ -1472,10 +1482,10 @@ describe('DashboardView', () => {
 
       expect(
         wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order'),
-      ).toBe('8');
+      ).toBe('4');
       expect(
         wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order'),
-      ).toBe('4');
+      ).toBe('5');
       const { flushPreferences } = await import('@/preferences/store');
       flushPreferences();
       const prefs = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) || '{}');
@@ -1484,16 +1494,18 @@ describe('DashboardView', () => {
         'stat-updates',
         'stat-security',
         'stat-registries',
+        'update-breakdown',
         'recent-updates',
         'security-overview',
         'resource-usage',
         'host-status',
-        'update-breakdown',
       ]);
     });
 
     it('reorders stat cards on drop', async () => {
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      (document.querySelector('[data-test="dashboard-edit-toggle"]') as HTMLButtonElement).click();
+      await flushPromises();
 
       const draggedStat = wrapper.find('[data-widget-id="stat-registries"]');
       const targetStat = wrapper.find('[data-widget-id="stat-containers"]');
@@ -1504,6 +1516,7 @@ describe('DashboardView', () => {
         dropEffect: 'move',
       };
 
+      await draggedStat.get('.drag-handle').trigger('pointerdown');
       await draggedStat.trigger('dragstart', { dataTransfer });
       await targetStat.trigger('dragover', { dataTransfer });
       await targetStat.trigger('drop', { dataTransfer });
@@ -1511,10 +1524,10 @@ describe('DashboardView', () => {
 
       expect(
         wrapper.find('[data-widget-id="stat-registries"]').attributes('data-widget-order'),
-      ).toBe('3');
+      ).toBe('0');
       expect(
         wrapper.find('[data-widget-id="stat-containers"]').attributes('data-widget-order'),
-      ).toBe('0');
+      ).toBe('1');
     });
   });
 
@@ -1654,6 +1667,69 @@ describe('DashboardView', () => {
       );
       const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
       expect(updateAllBtn.exists()).toBe(true);
+    });
+
+    it('hides managed update controls and guards dashboard handlers in notify mode', async () => {
+      mockUpdateMode.value = 'notify';
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+
+      expect(wrapper.find('[data-test="dashboard-update-btn"]').exists()).toBe(false);
+      expect(wrapper.find('[data-test="dashboard-update-all-btn"]').exists()).toBe(false);
+
+      const row = (wrapper.vm as any).recentUpdates[0];
+      (wrapper.vm as any).confirmDashboardUpdate(row);
+      (wrapper.vm as any).confirmDashboardUpdateAll();
+      await flushPromises();
+
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect(mockUpdateContainers).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).dashboardUpdateInProgress).toBeNull();
+      expect((wrapper.vm as any).dashboardUpdateAllInProgress).toBe(false);
+    });
+
+    it('does not start a single dashboard update when mode changes to notify before confirmation', async () => {
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        { recentStatuses: { nginx: 'pending' } },
+      );
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      mockUpdateMode.value = 'notify';
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).dashboardUpdateInProgress).toBeNull();
+    });
+
+    it('does not start dashboard update-all when mode changes to notify before confirmation', async () => {
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        { recentStatuses: { nginx: 'pending' } },
+      );
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-all-btn"]').trigger('click');
+      mockUpdateMode.value = 'notify';
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockUpdateContainers).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).dashboardUpdateAllInProgress).toBe(false);
     });
 
     it('does not show Update All button when no pending updates', async () => {
@@ -2056,6 +2132,37 @@ describe('DashboardView', () => {
       await flushPromises();
 
       expect(mockUpdateContainer).not.toHaveBeenCalled();
+    });
+
+    it('warns before manually overriding a maturity-blocked update from the dashboard', async () => {
+      const maturingContainer = makeContainer({
+        id: 'c-maturing',
+        name: 'maturing-nginx',
+        newTag: '2.0.0',
+        updateKind: 'major',
+        updatePolicyState: 'maturity-blocked',
+        updateEligibility: {
+          eligible: false,
+          evaluatedAt: '2026-07-12T12:00:00.000Z',
+          blockers: [
+            {
+              reason: 'maturity-not-reached',
+              severity: 'soft',
+              message: 'Update is still maturing for 3 more days.',
+              actionable: true,
+              liftableAt: '2026-07-15T12:00:00.000Z',
+            },
+          ],
+        },
+      });
+      const wrapper = await mountDashboard([maturingContainer]);
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+
+      expect(confirm.current.value?.message).toContain('Update is still maturing for 3 more days.');
+      expect(confirm.current.value?.acceptLabel).toBe('Update anyway');
     });
 
     it('shows the shared update-started toast when a single dashboard update starts successfully', async () => {

@@ -25,7 +25,7 @@ async function openContainersView(page: Page): Promise<void> {
 
 async function switchToCardsView(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Cards view' }).click();
-  await expect(page.getByRole('button', { name: /Select / }).first()).toBeVisible({
+  await expect(page.locator('[data-test="dd-card"]').first()).toBeVisible({
     timeout: 30_000,
   });
 }
@@ -97,17 +97,14 @@ function readContainerActionsFeatureFlag(payload: unknown): boolean | undefined 
 }
 
 test.describe('Containers', () => {
-  test('container list loads and supports table/cards/list view toggles', async ({ page }) => {
+  test('container list loads and supports table/cards view toggles', async ({ page }) => {
     await openContainersView(page);
 
     await page.getByRole('button', { name: 'Table view' }).click();
     await expect(page.locator('th', { hasText: 'Container' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Cards view' }).click();
-    await expect(page.getByRole('button', { name: /Select / }).first()).toBeVisible();
-
-    await page.getByRole('button', { name: 'List view' }).click();
-    await expect(page.getByRole('button', { name: /Select / }).first()).toBeVisible();
+    await switchToCardsView(page);
+    await expect(page.getByRole('button', { name: 'List view' })).toHaveCount(0);
   });
 
   test('stack grouping and search filtering narrow the container list', async ({ page }) => {
@@ -115,7 +112,7 @@ test.describe('Containers', () => {
     await switchToCardsView(page);
     await dismissAnnouncementBanners(page);
 
-    const allCards = page.getByRole('button', { name: /Select / });
+    const allCards = page.locator('[data-test="dd-card"]');
     const initialCount = await allCards.count();
     expect(initialCount).toBeGreaterThan(0);
 
@@ -132,7 +129,7 @@ test.describe('Containers', () => {
     await searchInput.fill('nginx');
 
     await expect(page.getByText(/nginx/i).first()).toBeVisible({ timeout: 10000 });
-    const filteredCards = page.getByRole('button', { name: /Select / });
+    const filteredCards = page.locator('[data-test="dd-card"]');
     const filteredRows = page.locator('[data-test="containers-grouped-views"] tr');
     const filteredCount = (await filteredCards.count()) + (await filteredRows.count());
     expect(filteredCount).toBeGreaterThan(0);
@@ -185,7 +182,7 @@ test.describe('Containers', () => {
       .count();
     expect(updateNowCount + forceUpdateCount).toBeGreaterThan(0);
 
-    const serverResponse = await page.request.get('/api/server');
+    const serverResponse = await page.request.get('/api/v1/server');
     let actionsEnabled = true;
     if (serverResponse.ok()) {
       actionsEnabled = readContainerActionsFeatureFlag(await serverResponse.json()) ?? true;

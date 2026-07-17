@@ -113,7 +113,7 @@ function getAuditEntries(req: Request, res: Response) {
   const data = result.entries;
   const hasMore = offset + data.length < result.total;
   const links = buildPaginationLinks({
-    basePath: '/api/audit',
+    basePath: '/api/v1/audit',
     query: req.query,
     limit,
     offset,

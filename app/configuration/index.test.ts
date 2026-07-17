@@ -38,6 +38,29 @@ test('getLogLevel should return info by default', async () => {
   expect(configuration.getLogLevel()).toStrictEqual('info');
 });
 
+test('getAuditUpdateAvailableDedupeMs should default to one hour', () => {
+  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+  expect(configuration.getAuditUpdateAvailableDedupeMs()).toBe(60 * 60 * 1000);
+});
+
+test('getAuditUpdateAvailableDedupeMs should accept a non-negative integer', () => {
+  configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = '120000';
+  expect(configuration.getAuditUpdateAvailableDedupeMs()).toBe(120_000);
+  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+});
+
+test.each([
+  '-1',
+  '1.5',
+  'not-a-number',
+])('getAuditUpdateAvailableDedupeMs should reject invalid values (%s)', (value) => {
+  configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = value;
+  expect(() => configuration.getAuditUpdateAvailableDedupeMs()).toThrow(
+    'DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS must be a non-negative integer',
+  );
+  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+});
+
 test('getLogLevel should return debug when overridden', async () => {
   configuration.ddEnvVars.DD_LOG_LEVEL = 'debug';
   expect(configuration.getLogLevel()).toStrictEqual('debug');
@@ -115,6 +138,35 @@ test('getExperimentalPortwingEnabled should return false for non-"true" values',
   delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
 });
 
+test('getWudCardCompatEnabled should default to false', () => {
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(false);
+});
+
+test('getWudCardCompatEnabled should return true when set to "true"', () => {
+  configuration.ddEnvVars.DD_COMPAT_WUDCARD = 'true';
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+});
+
+test('getWudCardCompatEnabled should normalize casing', () => {
+  configuration.ddEnvVars.DD_COMPAT_WUDCARD = 'TRUE';
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+});
+
+test('getWudCardCompatEnabled should trim whitespace before comparing', () => {
+  configuration.ddEnvVars.DD_COMPAT_WUDCARD = '  true  ';
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+});
+
+test('getWudCardCompatEnabled should return false for non-"true" values', () => {
+  configuration.ddEnvVars.DD_COMPAT_WUDCARD = '1';
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(false);
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+});
+
 test('getDnsMode should default to ipv4first', () => {
   delete configuration.ddEnvVars.DD_DNS_MODE;
   expect(configuration.getDnsMode()).toBe('ipv4first');
@@ -150,32 +202,6 @@ test('getDnsMode should trim whitespace', () => {
   delete configuration.ddEnvVars.DD_DNS_MODE;
 });
 
-test('should include additional legacy env count in warning suffix when more than 10 WUD vars are present', async () => {
-  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-  const legacyKeys = Array.from({ length: 12 }, (_, index) => `WUD_LEGACY_${index}`);
-  const previousValues = new Map<string, string | undefined>();
-  for (const key of legacyKeys) {
-    previousValues.set(key, process.env[key]);
-    process.env[key] = '1';
-  }
-
-  try {
-    vi.resetModules();
-    await import('./index.js');
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('(+2 more)'));
-  } finally {
-    for (const key of legacyKeys) {
-      const previousValue = previousValues.get(key);
-      if (previousValue === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = previousValue;
-      }
-    }
-    warnSpy.mockRestore();
-  }
-});
-
 test('getWatcherConfiguration should return empty object by default', async () => {
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_X;
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_Y;
@@ -202,6 +228,48 @@ test('getWatcherConfiguration should surface DD_WATCHER_*_TAG_PIN_INFO as a nest
   expect(watcherConfigurations.test.tag.pin.info).toBe('false');
 
   delete configuration.ddEnvVars.DD_WATCHER_TEST_TAG_PIN_INFO;
+});
+
+test('getWatcherConfiguration should surface DD_WATCHER_*_TAG_FAMILY as a nested lowercase path (#498)', async () => {
+  configuration.ddEnvVars.DD_WATCHER_TEST_TAG_FAMILY = 'loose';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.test.tag.family).toBe('loose');
+
+  delete configuration.ddEnvVars.DD_WATCHER_TEST_TAG_FAMILY;
+});
+
+test('getWatcherConfiguration should surface IMGSET tag.pin.info as a nested lowercase path (#498)', async () => {
+  configuration.ddEnvVars.DD_WATCHER_TEST_IMGSET_SERVICE_IMAGE = 'ghcr.io/team/service';
+  configuration.ddEnvVars.DD_WATCHER_TEST_IMGSET_SERVICE_TAG_PIN_INFO = 'false';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.test.imgset.service.tag.pin.info).toBe('false');
+
+  delete configuration.ddEnvVars.DD_WATCHER_TEST_IMGSET_SERVICE_IMAGE;
+  delete configuration.ddEnvVars.DD_WATCHER_TEST_IMGSET_SERVICE_TAG_PIN_INFO;
+});
+
+test('getWatcherConfiguration should normalize declarative maturity defaults to watcher runtime keys', () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MODE = 'mature';
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS = '14';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.local.maturitymode).toBe('mature');
+  expect(watcherConfigurations.local.maturityminagedays).toBe('14');
+  expect(watcherConfigurations.local.maturity).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MODE;
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS;
+});
+
+test('getWatcherConfiguration should not apply maturity aliases without a watcher name', () => {
+  configuration.ddEnvVars.DD_WATCHER__MATURITY_MODE = 'mature';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+
+  expect(watcherConfigurations['']).toEqual({});
+  delete configuration.ddEnvVars.DD_WATCHER__MATURITY_MODE;
 });
 
 test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases', async () => {
@@ -289,6 +357,22 @@ test('getTriggerConfigurations should return configured triggers when overridden
     trigger1: { x: 'x', y: 'y' },
     trigger2: { x: 'x', y: 'y' },
   });
+});
+
+test('getTriggerConfigurations logs every legacy DD_TRIGGER key at error level', () => {
+  const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => log);
+  const legacyKey = 'DD_TRIGGER_PHASE3ERROR_UNIQUE_ENABLED';
+  configuration.ddEnvVars[legacyKey] = 'true';
+
+  try {
+    configuration.getTriggerConfigurations();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`Legacy trigger environment variable "${legacyKey}"`),
+    );
+  } finally {
+    delete configuration.ddEnvVars[legacyKey];
+    errorSpy.mockRestore();
+  }
 });
 
 test('getRegistryConfigurations should return empty object by default', async () => {
@@ -579,12 +663,32 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: false,
       scanner: '',
+      backend: 'command',
+      availabilityPolicy: 'block',
+      docker: {
+        socket: '/var/run/docker.sock',
+        host: '',
+        port: 2375,
+        protocol: 'http',
+        network: 'bridge',
+        cacheVolumePrefix: 'drydock-scanner-cache',
+      },
       blockSeverities: ['CRITICAL', 'HIGH'],
       trivy: {
         server: '',
         command: 'trivy',
-        timeout: 120000,
+        timeout: 600000,
         imageSrc: '',
+        extraArgs: [],
+        workerImage:
+          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+      },
+      grype: {
+        command: 'grype',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
       },
       signature: {
         verify: false,
@@ -599,9 +703,18 @@ describe('getSecurityConfiguration', () => {
       sbom: {
         enabled: false,
         formats: ['spdx-json'],
+        generator: 'auto',
+      },
+      syft: {
+        command: 'syft',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
       },
       gate: {
         mode: 'on',
+        allowNoWorse: false,
       },
       prune: {
         onBlock: true,
@@ -638,12 +751,32 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: true,
       scanner: 'trivy',
+      backend: 'command',
+      availabilityPolicy: 'block',
+      docker: {
+        socket: '/var/run/docker.sock',
+        host: '',
+        port: 2375,
+        protocol: 'http',
+        network: 'bridge',
+        cacheVolumePrefix: 'drydock-scanner-cache',
+      },
       blockSeverities: ['CRITICAL', 'MEDIUM'],
       trivy: {
         server: 'http://trivy:4954',
         command: '/usr/local/bin/trivy',
         timeout: 60000,
         imageSrc: '',
+        extraArgs: [],
+        workerImage:
+          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+      },
+      grype: {
+        command: 'grype',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
       },
       signature: {
         verify: true,
@@ -658,9 +791,18 @@ describe('getSecurityConfiguration', () => {
       sbom: {
         enabled: true,
         formats: ['cyclonedx-json', 'spdx-json'],
+        generator: 'auto',
+      },
+      syft: {
+        command: 'syft',
+        timeout: 600000,
+        extraArgs: [],
+        workerImage:
+          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
       },
       gate: {
         mode: 'on',
+        allowNoWorse: false,
       },
       prune: {
         onBlock: true,
@@ -788,6 +930,136 @@ describe('getSecurityConfiguration', () => {
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
   });
 
+  test('should parse scanner backend, worker, provider argument, and Docker runtime settings', () => {
+    const values = {
+      DD_SECURITY_SCANNER: 'BoTh',
+      DD_SECURITY_BACKEND: 'Docker',
+      DD_SECURITY_AVAILABILITY_POLICY: 'Warn',
+      DD_SECURITY_DOCKER_SOCKET: '/run/user/1000/podman.sock',
+      DD_SECURITY_DOCKER_HOST: 'scanner-docker',
+      DD_SECURITY_DOCKER_PORT: '2376',
+      DD_SECURITY_DOCKER_PROTOCOL: 'https',
+      DD_SECURITY_DOCKER_NETWORK: 'scanner-net',
+      DD_SECURITY_DOCKER_CACHE_VOLUME: 'scanner-cache',
+      DD_SECURITY_TRIVY_ARGS: '["--skip-dirs", " /tmp/cache "]',
+      DD_SECURITY_TRIVY_WORKER_IMAGE: 'example/trivy@sha256:test',
+      DD_SECURITY_GRYPE_COMMAND: '/usr/local/bin/grype',
+      DD_SECURITY_GRYPE_TIMEOUT: '45000',
+      DD_SECURITY_GRYPE_ARGS: '["--only-fixed"]',
+      DD_SECURITY_GRYPE_WORKER_IMAGE: 'example/grype@sha256:test',
+      DD_SECURITY_SBOM_GENERATOR: 'SyFt',
+      DD_SECURITY_SYFT_COMMAND: '/usr/local/bin/syft',
+      DD_SECURITY_SYFT_TIMEOUT: '46000',
+      DD_SECURITY_SYFT_ARGS: '["--scope", "all-layers"]',
+      DD_SECURITY_SYFT_WORKER_IMAGE: 'example/syft@sha256:test',
+    };
+    Object.assign(configuration.ddEnvVars, values);
+
+    try {
+      const result = configuration.getSecurityConfiguration();
+
+      expect(result).toMatchObject({
+        scanner: 'both',
+        backend: 'docker',
+        availabilityPolicy: 'warn',
+        docker: {
+          socket: '/run/user/1000/podman.sock',
+          host: 'scanner-docker',
+          port: 2376,
+          protocol: 'https',
+          network: 'scanner-net',
+          cacheVolumePrefix: 'scanner-cache',
+        },
+        trivy: {
+          extraArgs: ['--skip-dirs', '/tmp/cache'],
+          workerImage: 'example/trivy@sha256:test',
+        },
+        grype: {
+          command: '/usr/local/bin/grype',
+          timeout: 45000,
+          extraArgs: ['--only-fixed'],
+          workerImage: 'example/grype@sha256:test',
+        },
+        sbom: { generator: 'syft' },
+        syft: {
+          command: '/usr/local/bin/syft',
+          timeout: 46000,
+          extraArgs: ['--scope', 'all-layers'],
+          workerImage: 'example/syft@sha256:test',
+        },
+      });
+    } finally {
+      for (const key of Object.keys(values)) {
+        delete configuration.ddEnvVars[key];
+      }
+    }
+  });
+
+  test('should accept remote Trivy only when a server is configured', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'trivy';
+    configuration.ddEnvVars.DD_SECURITY_BACKEND = 'remote';
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER = 'http://trivy:4954';
+
+    try {
+      expect(configuration.getSecurityConfiguration()).toMatchObject({
+        scanner: 'trivy',
+        backend: 'remote',
+        trivy: { server: 'http://trivy:4954' },
+      });
+    } finally {
+      delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+      delete configuration.ddEnvVars.DD_SECURITY_BACKEND;
+      delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
+    }
+  });
+
+  test.each([
+    ['a non-Trivy scanner', 'grype', 'http://trivy:4954'],
+    ['an empty Trivy server', 'trivy', '   '],
+  ])('should reject remote backend with %s', (_label, scanner, server) => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = scanner;
+    configuration.ddEnvVars.DD_SECURITY_BACKEND = 'remote';
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER = server;
+
+    try {
+      expect(() => configuration.getSecurityConfiguration()).toThrow(
+        'DD_SECURITY_BACKEND=remote requires DD_SECURITY_SCANNER=trivy and DD_SECURITY_TRIVY_SERVER',
+      );
+    } finally {
+      delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+      delete configuration.ddEnvVars.DD_SECURITY_BACKEND;
+      delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
+    }
+  });
+
+  test.each([
+    ['malformed JSON', '{', 'DD_SECURITY_TRIVY_ARGS'],
+    ['a non-array value', '{}', 'DD_SECURITY_GRYPE_ARGS'],
+    ['a non-string entry', '[42]', 'DD_SECURITY_GRYPE_ARGS'],
+    ['an empty entry', '["  "]', 'DD_SECURITY_SYFT_ARGS'],
+    ['a NUL byte', '["bad\\u0000arg"]', 'DD_SECURITY_SYFT_ARGS'],
+  ])('should reject %s in provider extra arguments', (_label, value, key) => {
+    configuration.ddEnvVars[key] = value;
+
+    try {
+      expect(() => configuration.getSecurityConfiguration()).toThrow(
+        `${key} must be a JSON array of strings`,
+      );
+    } finally {
+      delete configuration.ddEnvVars[key];
+    }
+  });
+
+  test('should treat an explicitly empty provider argument string as no arguments', () => {
+    configuration.ddEnvVars.DD_SECURITY_GRYPE_ARGS = '';
+
+    try {
+      expect(configuration.getSecurityConfiguration().grype.extraArgs).toEqual([]);
+    } finally {
+      delete configuration.ddEnvVars.DD_SECURITY_GRYPE_ARGS;
+    }
+  });
+
   test('should read DD_SECURITY_TRIVY_IMAGE_SRC into trivy.imageSrc', () => {
     configuration.ddEnvVars.DD_SECURITY_TRIVY_IMAGE_SRC = 'remote';
 
@@ -906,32 +1178,6 @@ describe('getSecurityConfiguration', () => {
     expect(result.prune.onBlock).toBe(true);
 
     delete configuration.ddEnvVars.DD_SECURITY_PRUNE_ONBLOCK;
-  });
-});
-
-describe('WUD_ legacy dual-prefix support', () => {
-  test('WUD_ env vars should be remapped to DD_ keys in ddEnvVars', () => {
-    // Simulate WUD_ var being set at module init time by directly inserting
-    configuration.ddEnvVars.DD_TEST_DUAL = 'from-wud';
-    expect(configuration.ddEnvVars.DD_TEST_DUAL).toBe('from-wud');
-    delete configuration.ddEnvVars.DD_TEST_DUAL;
-  });
-
-  test('DD_ prefix should take precedence over WUD_ when both present', () => {
-    // Set DD_ directly
-    configuration.ddEnvVars.DD_LOG_LEVEL = 'warn';
-    expect(configuration.getLogLevel()).toBe('warn');
-    // Override with a new DD_ value
-    configuration.ddEnvVars.DD_LOG_LEVEL = 'error';
-    expect(configuration.getLogLevel()).toBe('error');
-    delete configuration.ddEnvVars.DD_LOG_LEVEL;
-  });
-
-  test('get() should work with remapped WUD_ vars', () => {
-    configuration.ddEnvVars.DD_WATCHER_DUALTEST_HOST = 'example.com';
-    const result = configuration.getWatcherConfigurations();
-    expect(result.dualtest).toStrictEqual({ host: 'example.com' });
-    delete configuration.ddEnvVars.DD_WATCHER_DUALTEST_HOST;
   });
 });
 
@@ -1373,7 +1619,7 @@ describe('module bootstrap env mapping', () => {
     delete process.env[DD_KEY];
   });
 
-  test('should remap WUD_ vars and let DD_ override them at module init', async () => {
+  test('should load DD_ vars and ignore removed WUD_ aliases at module init', async () => {
     process.env[WUD_KEY] = 'legacy-value';
     process.env[DD_KEY] = 'new-value';
 
@@ -1381,6 +1627,17 @@ describe('module bootstrap env mapping', () => {
     const freshConfiguration = await import('./index.js');
 
     expect(freshConfiguration.ddEnvVars.DD_TEST_BOOTSTRAP_VAR).toBe('new-value');
+    expect(freshConfiguration.ddEnvVars.WUD_TEST_BOOTSTRAP_VAR).toBeUndefined();
+  });
+
+  test('should not remap a removed WUD_ variable when no DD_ variable exists', async () => {
+    process.env[WUD_KEY] = 'legacy-value';
+
+    vi.resetModules();
+    const freshConfiguration = await import('./index.js');
+
+    expect(freshConfiguration.ddEnvVars.DD_TEST_BOOTSTRAP_VAR).toBeUndefined();
+    expect(freshConfiguration.ddEnvVars.WUD_TEST_BOOTSTRAP_VAR).toBeUndefined();
   });
 });
 
@@ -1424,10 +1681,10 @@ describe('trigger env aliases', () => {
     });
   });
 
-  test('should warn once per legacy DD_TRIGGER key and record legacy env usage', async () => {
+  test('should log one error per legacy DD_TRIGGER key and record legacy env usage', async () => {
     const freshConfiguration = await importFreshConfiguration();
     const freshLegacyInput = await import('../prometheus/compatibility.js');
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const legacyKey = 'DD_TRIGGER_DISCORD_NOTIFY_URL';
     freshConfiguration.ddEnvVars[legacyKey] = 'https://example.invalid/webhook';
     freshConfiguration.ddEnvVars.DD_NOTIFICATION_DISCORD_NOTIFY_ENABLED = 'true';
@@ -1437,15 +1694,15 @@ describe('trigger env aliases', () => {
     freshConfiguration.getTriggerConfigurations();
     freshConfiguration.getTriggerConfigurations();
 
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Legacy trigger environment variable'),
     );
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('v1.7.0'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('v1.7.0'));
     expect(freshLegacyInput.getLegacyInputSummary().env.total).toBeGreaterThan(summaryBefore);
     expect(freshLegacyInput.getLegacyInputSummary().env.keys).toContain(legacyKey);
 
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 });
 
@@ -1545,253 +1802,6 @@ describe('replaceSecrets – boundary and label coverage', () => {
       expect(vars.DD_SOME_VAL).toBe('hello-world');
     } finally {
       fs.rmSync(tempDirectory, { recursive: true, force: true });
-    }
-  });
-});
-
-describe('WUD_ legacy env-var remapping bootstrap coverage', () => {
-  test('legacy warning message contains the DD_* prefix migration hint', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const keys = ['WUD_BOOTSTRAP_A', 'WUD_BOOTSTRAP_B'];
-    for (const k of keys) process.env[k] = '1';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DD_*'));
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('v1.6.0'));
-    } finally {
-      for (const k of keys) delete process.env[k];
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning includes the first env var name (not empty)', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    process.env.WUD_HELLO_WORLD = 'test';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WUD_HELLO_WORLD'));
-    } finally {
-      delete process.env.WUD_HELLO_WORLD;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning uses the uppercased env var name in the preview', async () => {
-    // Kills 80:25 [MethodExpression] envVar.toUpperCase()
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    process.env.wud_lower_case_key = 'val';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      // If the uppercase conversion is mutated to lowercase/empty the warning won't contain the uppercased key
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WUD_LOWER_CASE_KEY'));
-    } finally {
-      delete process.env.wud_lower_case_key;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('WUD_ vars are remapped to DD_ keys (not raw WUD_ keys) in ddEnvVars', async () => {
-    // Kills 78:19 [StringLiteral] `` (the 'DD_' prefix)
-    // and 78:25 [MethodExpression] envVar (the substring(4) call)
-    process.env.WUD_REMAP_TEST_VAR = 'wud-value';
-    delete process.env.DD_REMAP_TEST_VAR;
-    try {
-      vi.resetModules();
-      const fresh = await import('./index.js');
-      // Should be stored under DD_REMAP_TEST_VAR, not WUD_REMAP_TEST_VAR or DD_WUD_REMAP_TEST_VAR
-      expect(fresh.ddEnvVars.DD_REMAP_TEST_VAR).toBe('wud-value');
-      expect(fresh.ddEnvVars.WUD_REMAP_TEST_VAR).toBeUndefined();
-    } finally {
-      delete process.env.WUD_REMAP_TEST_VAR;
-    }
-  });
-
-  test('WUD_ remapped key strips exactly the 3-char WUD prefix (not more)', async () => {
-    // Kills 78:25 [MethodExpression] envVar – if envVar used instead of envVar.substring(4),
-    // the key would be DD_WUD_X instead of DD_X
-    process.env.WUD_X = 'x-value';
-    delete process.env.DD_X;
-    try {
-      vi.resetModules();
-      const fresh = await import('./index.js');
-      expect(fresh.ddEnvVars.DD_X).toBe('x-value');
-      expect(fresh.ddEnvVars.DD_WUD_X).toBeUndefined();
-    } finally {
-      delete process.env.WUD_X;
-    }
-  });
-
-  test('legacy warning key preview uses comma-space separator between keys', async () => {
-    // Kills 88:86 [StringLiteral] "" – the join separator
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    process.env.WUD_JOIN_A = '1';
-    process.env.WUD_JOIN_B = '2';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      // With "" separator mutant, 'WUD_JOIN_A, WUD_JOIN_B' → 'WUD_JOIN_AWUD_JOIN_B'
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(', '));
-    } finally {
-      delete process.env.WUD_JOIN_A;
-      delete process.env.WUD_JOIN_B;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning key preview sorts the env var names', async () => {
-    // Kills 86:29 [MethodExpression] Array.from(mappedLegacyEnvVars) – removes sort
-    // and 88:25 [MethodExpression] legacyEnvVarNames
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    process.env.WUD_Z_FIRST = '1';
-    process.env.WUD_A_FIRST = '2';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_'));
-      expect(call).toBeDefined();
-      const msg = call![0] as string;
-      // A should appear before Z in sorted order
-      const aIndex = msg.indexOf('WUD_A_FIRST');
-      const zIndex = msg.indexOf('WUD_Z_FIRST');
-      expect(aIndex).toBeGreaterThan(-1);
-      expect(zIndex).toBeGreaterThan(-1);
-      expect(aIndex).toBeLessThan(zIndex);
-    } finally {
-      delete process.env.WUD_Z_FIRST;
-      delete process.env.WUD_A_FIRST;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning suffix uses the actual additional count, not >= 0 form', async () => {
-    // Kills 90:18 [ConditionalExpression] true and 90:18 [EqualityOperator] additionalCount >= 0
-    // With mutation to `true`, suffix always shows even when additionalCount <= 0
-    // With >= 0, suffix shows even when count is 0
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    // Set exactly 1 WUD_ key (no overflow)
-    process.env.WUD_ONLY_ONE = '1';
-    const existing = Object.keys(process.env).filter(
-      (k) => k.toUpperCase().startsWith('WUD_') && k !== 'WUD_ONLY_ONE',
-    );
-    const saved = new Map(existing.map((k) => [k, process.env[k]]));
-    for (const k of existing) delete process.env[k];
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_'));
-      if (call) {
-        // With 1 WUD_ key, there should be NO "(+N more)" suffix
-        expect(call[0]).not.toMatch(/\(\+\d+ more\)/);
-      }
-    } finally {
-      delete process.env.WUD_ONLY_ONE;
-      for (const [k, v] of saved) process.env[k] = v;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning suffix "more" string is not empty or replaced', async () => {
-    // Kills 90:72 [StringLiteral] "Stryker was here!" – the more suffix string
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const legacyKeys = Array.from({ length: 12 }, (_, i) => `WUD_SUFFIX_${i}`);
-    for (const k of legacyKeys) process.env[k] = '1';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      // The suffix must be " (+2 more)" not " (+2 Stryker was here!)"
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(' more)'));
-    } finally {
-      for (const k of legacyKeys) delete process.env[k];
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning key preview is capped at first 10 keys', async () => {
-    // Kills 88:25 [MethodExpression] legacyEnvVarNames – removes .slice(0, 10)
-    // Without the slice mutant, all 12 keys appear in the preview instead of just the first 10
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    // Use keys that sort deterministically: WUD_CAP_00 through WUD_CAP_11
-    const legacyKeys = Array.from(
-      { length: 12 },
-      (_, i) => `WUD_CAP_${String(i).padStart(2, '0')}`,
-    );
-    for (const k of legacyKeys) process.env[k] = '1';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_CAP_'));
-      expect(call).toBeDefined();
-      const msg = call![0] as string;
-      // First 10 keys (WUD_CAP_00..WUD_CAP_09) should be in the preview
-      expect(msg).toContain('WUD_CAP_00');
-      expect(msg).toContain('WUD_CAP_09');
-      // Keys 11th and 12th (WUD_CAP_10, WUD_CAP_11) must NOT appear – they are truncated
-      expect(msg).not.toContain('WUD_CAP_10');
-      expect(msg).not.toContain('WUD_CAP_11');
-      // The (+2 more) suffix should appear
-      expect(msg).toContain('(+2 more)');
-    } finally {
-      for (const k of legacyKeys) delete process.env[k];
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning shows no suffix when exactly 10 WUD_ keys are set', async () => {
-    // Kills 90:18 [ConditionalExpression] true / 90:18 [EqualityOperator] additionalCount >= 0
-    // With exactly 10 keys, additionalCount = 0. With >= 0 mutant: shows "(+0 more)" suffix.
-    // With "true" mutant: always shows suffix.
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const legacyKeys = Array.from(
-      { length: 10 },
-      (_, i) => `WUD_EXACT_${String(i).padStart(2, '0')}`,
-    );
-    for (const k of legacyKeys) process.env[k] = '1';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_EXACT_'));
-      expect(call).toBeDefined();
-      const msg = call![0] as string;
-      // With exactly 10 keys no overflow suffix should appear
-      expect(msg).not.toMatch(/\(\+\d+ more\)/);
-      // All 10 keys should appear
-      expect(msg).toContain('WUD_EXACT_00');
-      expect(msg).toContain('WUD_EXACT_09');
-    } finally {
-      for (const k of legacyKeys) delete process.env[k];
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('should not emit legacy warning when no WUD_ vars are set', async () => {
-    // Remove all WUD_ keys from process.env first
-    const existing = Object.keys(process.env).filter((k) => k.toUpperCase().startsWith('WUD_'));
-    const saved = new Map(existing.map((k) => [k, process.env[k]]));
-    for (const k of existing) delete process.env[k];
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('WUD_'));
-    } finally {
-      for (const [k, v] of saved) process.env[k] = v;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('DD_ env vars are included in ddEnvVars at module init', async () => {
-    process.env.DD_BOOTSTRAP_TEST_UNIQUE = 'sentinel';
-    try {
-      vi.resetModules();
-      const fresh = await import('./index.js');
-      // Kills 97:1 [MethodExpression] Object.keys(process.env)
-      // and 98:55 [StringLiteral] ""
-      expect(fresh.ddEnvVars.DD_BOOTSTRAP_TEST_UNIQUE).toBe('sentinel');
-    } finally {
-      delete process.env.DD_BOOTSTRAP_TEST_UNIQUE;
     }
   });
 });
@@ -2385,11 +2395,11 @@ describe('getSecurityConfiguration – trivy/sbom/scan/prune field coverage', ()
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_COMMAND;
   });
 
-  test('trivy timeout defaults to 120000', () => {
+  test('trivy timeout defaults to 600000', () => {
     // Kills 662:36 [StringLiteral]
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
     const result = configuration.getSecurityConfiguration();
-    expect(result.trivy.timeout).toBe(120000);
+    expect(result.trivy.timeout).toBe(600000);
   });
 
   test('trivy image src defaults to empty string', () => {
@@ -2525,11 +2535,11 @@ describe('getSecurityConfiguration – trivy/sbom/scan/prune field coverage', ()
     expect(result.trivy.command).toBe('trivy');
   });
 
-  test('getSecurityConfiguration optional chain on trivy.timeout returns 120000 when not set', () => {
+  test('getSecurityConfiguration optional chain on trivy.timeout returns 600000 when not set', () => {
     // Kills 742:16 [OptionalChaining]
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
     const result = configuration.getSecurityConfiguration();
-    expect(result.trivy.timeout).toBe(120000);
+    expect(result.trivy.timeout).toBe(600000);
   });
 
   test('getSecurityConfiguration optional chain on verify.signatures returns false when not set', () => {
@@ -3096,6 +3106,98 @@ describe('replaceSecrets – secret file hardening', () => {
   // When a secret file's permissions allow group or others to read it, replaceSecrets
   // emits a logWarn naming the file and recommending chmod 600.
   // The check is skipped on non-POSIX platforms (Windows) where mode bits are synthetic.
+
+  test('should reject non-regular secret paths before attempting to read them', async () => {
+    const handle = {
+      stat: vi.fn().mockResolvedValue({
+        size: 0,
+        mode: 0o600,
+        isFile: () => false,
+      }),
+      read: vi.fn(),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const openSpy = vi
+      .spyOn(fs.promises, 'open')
+      .mockResolvedValue(handle as unknown as Awaited<ReturnType<typeof fs.promises.open>>);
+
+    try {
+      await expect(
+        configuration.replaceSecrets({ DD_DEVICE__FILE: '/dev/not-a-regular-file' }),
+      ).rejects.toThrow('Secret file for DD_DEVICE__FILE must be a regular file');
+      expect(handle.read).not.toHaveBeenCalled();
+      expect(handle.close).toHaveBeenCalledOnce();
+    } finally {
+      openSpy.mockRestore();
+    }
+  });
+
+  test('should inspect and read a secret through the same open file handle', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-handle-'));
+    const secretPath = path.join(tempDir, 'secret.txt');
+    fs.writeFileSync(secretPath, 'descriptor-secret');
+    fs.chmodSync(secretPath, 0o600);
+    const handle = {
+      stat: vi.fn().mockResolvedValue(fs.statSync(secretPath)),
+      read: vi
+        .fn()
+        .mockImplementationOnce(async (buffer: Buffer) => {
+          const value = Buffer.from('descriptor-secret');
+          value.copy(buffer);
+          return { bytesRead: value.length, buffer };
+        })
+        .mockImplementationOnce(async (buffer: Buffer) => ({ bytesRead: 0, buffer })),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const openSpy = vi
+      .spyOn(fs.promises, 'open')
+      .mockResolvedValue(handle as unknown as Awaited<ReturnType<typeof fs.promises.open>>);
+
+    try {
+      const vars: Record<string, string | undefined> = { DD_HANDLE__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+
+      expect(openSpy).toHaveBeenCalledWith(secretPath, 'r');
+      expect(handle.stat).toHaveBeenCalledOnce();
+      expect(handle.read).toHaveBeenCalled();
+      expect(handle.stat.mock.invocationCallOrder[0]).toBeLessThan(
+        handle.read.mock.invocationCallOrder[0],
+      );
+      expect(handle.close).toHaveBeenCalledOnce();
+      expect(vars.DD_HANDLE).toBe('descriptor-secret');
+    } finally {
+      openSpy.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should enforce the size limit again if an opened secret grows before it is read', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-growth-'));
+    const secretPath = path.join(tempDir, 'secret.txt');
+    fs.writeFileSync(secretPath, 'x');
+    const secretStats = fs.statSync(secretPath);
+    const handle = {
+      stat: vi.fn().mockResolvedValue({ ...secretStats, size: 1, isFile: () => true }),
+      read: vi.fn().mockImplementation(async (buffer: Buffer, _offset: number, length: number) => {
+        buffer.fill('x', 0, length);
+        return { bytesRead: length, buffer };
+      }),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+    const openSpy = vi
+      .spyOn(fs.promises, 'open')
+      .mockResolvedValue(handle as unknown as Awaited<ReturnType<typeof fs.promises.open>>);
+
+    try {
+      await expect(configuration.replaceSecrets({ DD_GROWING__FILE: secretPath })).rejects.toThrow(
+        'exceeds maximum size of 1048576 bytes',
+      );
+      expect(handle.close).toHaveBeenCalledOnce();
+    } finally {
+      openSpy.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 
   test('should warn when secret file has world-readable permissions (0644)', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-perms-'));

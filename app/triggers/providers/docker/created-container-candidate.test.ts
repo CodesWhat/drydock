@@ -43,7 +43,7 @@ describe('created-container-candidate', () => {
       expect(getCreatedContainerCandidate(undefined)).toBeUndefined();
     });
 
-    test('uses a field name distinct from the compose channel', () => {
+    test('uses the shared candidate field without a legacy compose channel', () => {
       const error = new Error('connect failed');
       const candidate = { id: 'orphan' };
 
@@ -96,6 +96,31 @@ describe('created-container-candidate', () => {
       );
     });
 
+    test('times out a hung stop and continues with force-remove', async () => {
+      vi.useFakeTimers();
+      try {
+        const stop = vi.fn().mockReturnValue(new Promise(() => {}));
+        const remove = vi.fn().mockResolvedValue(undefined);
+        const log = createLog();
+        let settled = false;
+
+        const cleanup = cleanupCreatedContainerCandidate({ stop, remove }, 'web', log).then(() => {
+          settled = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(10_000);
+
+        expect(settled).toBe(true);
+        expect(remove).toHaveBeenCalledWith({ force: true });
+        expect(log.warn).toHaveBeenCalledWith(
+          'Unable to stop orphaned replacement container web (operation timed out after 10000ms)',
+        );
+        await cleanup;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     test('warns but does not throw when remove fails', async () => {
       const stop = vi.fn().mockResolvedValue(undefined);
       const remove = vi.fn().mockRejectedValue('remove exploded as string');
@@ -106,6 +131,30 @@ describe('created-container-candidate', () => {
       expect(log.warn).toHaveBeenCalledWith(
         'Unable to remove orphaned replacement container web (remove exploded as string)',
       );
+    });
+
+    test('times out a hung force-remove without blocking rollback', async () => {
+      vi.useFakeTimers();
+      try {
+        const stop = vi.fn().mockResolvedValue(undefined);
+        const remove = vi.fn().mockReturnValue(new Promise(() => {}));
+        const log = createLog();
+        let settled = false;
+
+        const cleanup = cleanupCreatedContainerCandidate({ stop, remove }, 'web', log).then(() => {
+          settled = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(10_000);
+
+        expect(settled).toBe(true);
+        expect(log.warn).toHaveBeenCalledWith(
+          'Unable to remove orphaned replacement container web (operation timed out after 10000ms)',
+        );
+        await cleanup;
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     test('tolerates a candidate with no stop/remove functions', async () => {

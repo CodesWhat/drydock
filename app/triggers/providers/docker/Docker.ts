@@ -2,8 +2,11 @@ import crypto from 'node:crypto';
 import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 import { getSelfUpdateFinalizeSecretForOperation } from '../../../api/internal-self-update.js';
-import { getSecurityConfiguration, getServerConfiguration } from '../../../configuration/index.js';
-import { getPreferredLabelValue as resolvePreferredLabelValue } from '../../../docker/legacy-label.js';
+import {
+  getSecurityConfiguration,
+  getServerConfiguration,
+  getStoreConfiguration,
+} from '../../../configuration/index.js';
 import {
   emitContainerUpdateApplied,
   emitContainerUpdateFailed,
@@ -15,7 +18,10 @@ import { getAuditCounter } from '../../../prometheus/audit.js';
 import { getRollbackCounter } from '../../../prometheus/rollback.js';
 import { buildImageReference } from '../../../registries/image-reference.js';
 import { getState } from '../../../registry/index.js';
+import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getTrivyDatabaseStatus } from '../../../security/runtime.js';
+import { offloadSbomDocuments } from '../../../security/sbom-migration.js';
+import { createSbomStorage } from '../../../security/sbom-storage.js';
 import {
   generateImageSbom,
   scanImageForVulnerabilities,
@@ -27,6 +33,7 @@ import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
+import { isMemoryStore } from '../../../store/index.js';
 import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
@@ -80,18 +87,13 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
 
 export type DockerContainerHandle = Awaited<ReturnType<ContainerUpdateExecutor['createContainer']>>;
 
-const warnedLegacyTriggerLabelFallbacks = new Set<string>();
-
 type ContainerFullNameReference = {
   name: string;
   watcher?: unknown;
 };
 
-function getPreferredLabelValue(labels, ddKey, wudKey, logger) {
-  return resolvePreferredLabelValue(labels, ddKey, wudKey, {
-    warnedFallbacks: warnedLegacyTriggerLabelFallbacks,
-    warn: (message) => logger?.warn?.(message),
-  });
+function getPreferredLabelValue(labels, ddKey, _logger?) {
+  return labels?.[ddKey];
 }
 
 function hasRepoTags(image) {
@@ -601,6 +603,20 @@ class Docker<
           return status?.updatedAt;
         },
         getScanIntervalMs: () => getSchedulerScanIntervalMs(),
+        offloadSbom: async (sbom, subjectDigest) => {
+          if (isMemoryStore()) {
+            return sbom;
+          }
+          const rootDir = resolveConfiguredPath(
+            (getStoreConfiguration() as { path?: string }).path || '/store',
+            { label: 'DD_STORE_PATH' },
+          );
+          return offloadSbomDocuments({
+            sbom,
+            subjectDigest,
+            storage: createSbomStorage({ rootDir }),
+          });
+        },
         pruneImage: async (image, dockerApi) => {
           try {
             await dockerApi?.getImage(image).remove();

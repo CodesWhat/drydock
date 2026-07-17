@@ -93,9 +93,9 @@ describe('HookExecutor', () => {
     );
 
     expect(withLabels.hookPre).toBe('echo pre');
-    expect(withLabels.hookPost).toBe('echo post');
+    expect(withLabels.hookPost).toBeUndefined();
     expect(withLabels.hookPreAbort).toBe(false);
-    expect(withLabels.hookTimeout).toBe(120000);
+    expect(withLabels.hookTimeout).toBe(60000);
     expect(withLabels.hookEnv.DD_UPDATE_FROM).toBe('');
     expect(withLabels.hookEnv.DD_UPDATE_TO).toBe('');
   });

@@ -18,6 +18,10 @@ interface RegistryManifest {
   created?: string;
 }
 
+export interface RegistryLookupOptions {
+  usePollCycleCache?: boolean;
+}
+
 export interface RegistryTagsList {
   name: string;
   tags: string[];
@@ -199,7 +203,7 @@ class Registry<
    * @param image
    * @returns {*}
    */
-  async getTags(image: ContainerImage): Promise<string[]> {
+  async getTags(image: ContainerImage, _options?: RegistryLookupOptions): Promise<string[]> {
     this.log.debug(`Get ${image.name} tags`);
     const tags: string[] = [];
     let page: AxiosResponse<RegistryTagsList> | undefined = undefined;
@@ -247,7 +251,11 @@ class Registry<
    * @param digest (optional)
    * @returns {Promise<undefined|*>}
    */
-  async getImageManifestDigest(image: ContainerImage, digest?: string): Promise<RegistryManifest> {
+  async getImageManifestDigest(
+    image: ContainerImage,
+    digest?: string,
+    _options?: RegistryLookupOptions,
+  ): Promise<RegistryManifest> {
     const tagOrDigest = digest || image.tag.value;
     this.log.debug(`${this.getId()} - Get ${image.name}:${tagOrDigest} manifest`);
     const responseManifests = await this.callRegistry<RegistryManifestResponse>({
@@ -280,13 +288,21 @@ class Registry<
    * Resolve published date for an image tag.
    * Registries with richer metadata endpoints can override this.
    */
-  async getImagePublishedAt(image: ContainerImage, tag?: string): Promise<string | undefined> {
+  async getImagePublishedAt(
+    image: ContainerImage,
+    tag?: string,
+    options?: RegistryLookupOptions,
+  ): Promise<string | undefined> {
     const imageToInspect = structuredClone(image);
     const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : imageToInspect.tag?.value;
     if (tagToLookup && imageToInspect.tag) {
       imageToInspect.tag.value = tagToLookup;
+    } else if (tagToLookup) {
+      imageToInspect.tag = { value: tagToLookup, semver: false };
     }
-    const manifest = await this.getImageManifestDigest(imageToInspect);
+    const manifest = options
+      ? await this.getImageManifestDigest(imageToInspect, undefined, options)
+      : await this.getImageManifestDigest(imageToInspect);
     if (typeof manifest?.created !== 'string') {
       return undefined;
     }

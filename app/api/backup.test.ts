@@ -64,7 +64,7 @@ describe('Backup Router', () => {
     test('should register routes', () => {
       backupRouter.init();
       expect(mockRouter.use).toHaveBeenCalledWith('nocache-middleware');
-      expect(mockRouter.get).toHaveBeenCalledWith('/', expect.any(Function));
+      expect(mockRouter.get).toHaveBeenCalledWith('/backups', expect.any(Function));
       expect(mockRouter.get).toHaveBeenCalledWith('/:id/backups', expect.any(Function));
       expect(mockRouter.post).toHaveBeenCalledWith(
         '/:id/rollback',
@@ -76,7 +76,7 @@ describe('Backup Router', () => {
 
   describe('getBackups', () => {
     test('should return all backups when no containerId filter', () => {
-      const handler = getHandler('get', '/');
+      const handler = getHandler('get', '/backups');
       const allBackups = [
         { id: 'b1', containerId: 'c1' },
         { id: 'b2', containerId: 'c2' },
@@ -93,7 +93,7 @@ describe('Backup Router', () => {
     });
 
     test('should return filtered backups when containerName provided', () => {
-      const handler = getHandler('get', '/');
+      const handler = getHandler('get', '/backups');
       const filtered = [{ id: 'b1', containerName: 'nginx' }];
       mockGetBackupsByName.mockReturnValue(filtered);
 
@@ -474,7 +474,7 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Pull failed' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
 
     test('should stringify non-Error rollback failures', async () => {
@@ -509,7 +509,7 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'pull failed as string' });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
 
     test('cleans up an orphaned candidate attached to a recreateContainer failure', async () => {
@@ -559,9 +559,7 @@ describe('Backup Router', () => {
       expect(orphanCandidate.stop).toHaveBeenCalledTimes(1);
       expect(orphanCandidate.remove).toHaveBeenCalledWith({ force: true });
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'connect EACCES: denied by socket proxy',
-      });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
 
     test('warns but still reports rollback error when orphaned-candidate cleanup itself fails', async () => {
@@ -615,9 +613,7 @@ describe('Backup Router', () => {
         'Unable to remove orphaned replacement container nginx (remove exploded as string)',
       );
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'connect EACCES: denied by socket proxy',
-      });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
 
     test('recovers the orphan through the REAL Docker.recreateContainer create-then-start path when start fails', async () => {
@@ -674,9 +670,7 @@ describe('Backup Router', () => {
       expect(newContainerHandle.stop).toHaveBeenCalledTimes(1);
       expect(newContainerHandle.remove).toHaveBeenCalledWith({ force: true });
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'start failed: denied by socket proxy',
-      });
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
     });
   });
 });

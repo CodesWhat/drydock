@@ -1,6 +1,7 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick, ref } from 'vue';
-import { resetPreferences } from '@/preferences/store';
+import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAgents } from '@/services/agent';
 import { getServer } from '@/services/server';
 import { getAllWatchers } from '@/services/watcher';
@@ -31,10 +32,17 @@ const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 
 const richDataTableStub = defineComponent({
-  props: ['columns', 'rows', 'rowKey', 'activeRow'],
+  props: ['columns', 'rows', 'rowKey', 'activeRow', 'hiddenColumnKeys'],
   emits: ['row-click'],
   template: `
     <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+      <div
+        v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+        :key="col.key"
+        class="dt-header"
+        :data-col-key="col.key">
+        {{ col.label }}
+      </div>
       <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
         <button v-if="row" class="row-click-first" @click="$emit('row-click', row)">Open</button>
         <slot name="cell-name" :row="row" />
@@ -71,6 +79,87 @@ async function mountServersView() {
   return wrapper;
 }
 
+const serverCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar server-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+      <slot name="extra-buttons" />
+    </div>
+  `,
+});
+
+const serverCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+    'hiddenColumnKeys',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table server-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="server-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+async function mountServersCardView() {
+  const wrapper = mountWithPlugins(ServersView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: serverCardFilterBarStub,
+        DataTable: serverCardDataTableStub,
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
 describe('ServersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -91,6 +180,58 @@ describe('ServersView', () => {
         },
       },
     ]);
+  });
+
+  describe('tableColumns (card-mode annotations)', () => {
+    it('flags status with cardPriority so it wins the card subtitle over the mono host address', async () => {
+      const wrapper = await mountServersView();
+      const table = wrapper.findComponent(richDataTableStub as any);
+      const columns = table.props('columns') as Array<{ key: string; cardPriority?: number }>;
+      const statusCol = columns.find((c) => c.key === 'status');
+      expect(statusCol?.cardPriority).toBe(1);
+    });
+  });
+
+  describe('column picker', () => {
+    it('tableColumns keys match VIEW_TABLE_COLUMN_KEYS.servers (schema/view sync guard)', async () => {
+      const wrapper = await mountServersView();
+      const table = wrapper.findComponent(richDataTableStub as any);
+      const keys = new Set((table.props('columns') as Array<{ key: string }>).map((c) => c.key));
+      expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.servers));
+    });
+
+    it('marks the name column as required', async () => {
+      const wrapper = await mountServersView();
+      const table = wrapper.findComponent(richDataTableStub as any);
+      const nameCol = (table.props('columns') as Array<{ key: string; required?: boolean }>).find(
+        (c) => c.key === 'name',
+      );
+      expect(nameCol?.required).toBe(true);
+    });
+
+    it('renders the column picker in the filter bar', async () => {
+      const wrapper = await mountServersView();
+      expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+    });
+
+    it('toggling a column via the picker removes its header from the table', async () => {
+      const wrapper = await mountServersView();
+      expect(wrapper.find('[data-col-key="host"]').exists()).toBe(true);
+
+      await wrapper.find('[data-test="column-picker-toggle-host"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[data-col-key="host"]').exists()).toBe(false);
+    });
+
+    it('toggling a column via the picker persists the key to preferences.views.servers.hiddenColumns', async () => {
+      const wrapper = await mountServersView();
+
+      await wrapper.find('[data-test="column-picker-toggle-host"]').trigger('click');
+      await nextTick();
+
+      expect(preferences.views.servers.hiddenColumns).toContain('host');
+    });
   });
 
   it('loads Local and remote agent rows on successful fetch', async () => {
@@ -285,23 +426,6 @@ describe('ServersView', () => {
     expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
   });
 
-  it('opens the detail panel from cards mode selections', async () => {
-    mockGetAgents.mockResolvedValue([
-      { name: 'Edge-1', connected: true, host: '10.0.0.21', port: 2376 },
-    ]);
-
-    const wrapper = await mountServersView();
-
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-    await wrapper.find('.card-click-first').trigger('click');
-    await nextTick();
-
-    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-    expect(wrapper.text()).toContain('Refresh');
-    expect(wrapper.text()).toContain('unix:///var/run/docker.sock');
-  });
-
   it('caps long host values in compact table and detail surfaces', async () => {
     const longHost =
       'https://very-long-edge-hostname.example.internal:2376/with/a/path/that/should/not/reflow';
@@ -383,5 +507,61 @@ describe('ServersView', () => {
     const agentRow = rows.find((r) => r.name === 'Edge-1') as any;
 
     expect(agentRow.containers).toEqual({ total: 4, running: 3, stopped: 1 });
+  });
+
+  it('renders server cards and wires the card-mode reflow controls', async () => {
+    preferences.views.servers.mode = 'cards';
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'docker.local',
+        type: 'docker',
+        name: 'local',
+        configuration: { socket: '/var/run/docker.sock', host: '', port: 2375, protocol: 'http' },
+        metadata: { containers: { total: 4, running: 3, stopped: 1 }, images: 6 },
+      },
+    ]);
+    mockGetAgents.mockResolvedValue([
+      {
+        name: 'Edge-1',
+        connected: false,
+        host: '10.0.0.21',
+        port: 2376,
+        containers: { total: 2, running: 0, stopped: 2, updatesAvailable: 0 },
+        images: 3,
+      },
+    ]);
+
+    const wrapper = await mountServersCardView();
+
+    expect(wrapper.get('.server-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.server-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.server-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const localCard = wrapper.get('[data-card-id="docker.local"]');
+    expect(localCard.text()).toContain('Local');
+    expect(localCard.text()).toContain('unix:///var/run/docker.sock');
+    expect(localCard.text()).toContain('Connected');
+    expect(localCard.text()).toContain('Containers');
+    expect(localCard.text()).toContain('Running');
+    expect(localCard.text()).toContain('Images');
+    expect(localCard.text()).toContain('Last seen');
+    expect(localCard.text()).toContain('4');
+    expect(localCard.text()).toContain('6');
+    expect(localCard.text()).toContain('Just now');
+    expect(localCard.text()).toContain('3/4 running');
+
+    const edgeCard = wrapper.get('[data-card-id="Edge-1"]');
+    expect(edgeCard.text()).toContain('Edge-1');
+    expect(edgeCard.text()).toContain('Disconnected');
+    expect(edgeCard.text()).toContain('Never');
+    expect(edgeCard.text()).toContain('0/2 running');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.server-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.server-card-filter').attributes('data-hide-view-toggle')).toBe('false');
   });
 });

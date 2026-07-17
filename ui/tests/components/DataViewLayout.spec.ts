@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import DataViewLayout from '@/components/DataViewLayout.vue';
 
 describe('DataViewLayout', () => {
@@ -124,6 +125,155 @@ describe('DataViewLayout', () => {
     });
     expect(wrapper.text()).toContain('First');
     expect(wrapper.text()).toContain('Second');
+  });
+});
+
+describe('DataViewLayout content-width measurement', () => {
+  let originalClientWidthDescriptor: PropertyDescriptor | undefined;
+  let mockedClientWidth = 0;
+  let capturedResizeCallback: ResizeObserverCallback | undefined;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  class CapturingResizeObserver {
+    constructor(callback: ResizeObserverCallback) {
+      capturedResizeCallback = callback;
+    }
+    observe() {
+      // No-op — tests fire the captured callback directly.
+    }
+    unobserve() {
+      // No-op for tests.
+    }
+    disconnect() {
+      // No-op for tests.
+    }
+  }
+
+  beforeEach(() => {
+    mockedClientWidth = 0;
+    capturedResizeCallback = undefined;
+    originalClientWidthDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientWidth',
+    );
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() {
+        return mockedClientWidth;
+      },
+    });
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      value: CapturingResizeObserver,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    if (originalClientWidthDescriptor) {
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidthDescriptor);
+    } else {
+      delete (HTMLElement.prototype as any).clientWidth;
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      value: originalResizeObserver,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  it('emits content-width with the measured clientWidth on mount', async () => {
+    mockedClientWidth = 900;
+    const wrapper = mount(DataViewLayout, { slots: { default: '<p>Content</p>' } });
+    await nextTick();
+
+    const emitted = wrapper.emitted('content-width');
+    expect(emitted).toBeTruthy();
+    expect(emitted?.at(-1)).toEqual([900]);
+  });
+
+  it('subtracts the content div own left/right padding from clientWidth (real content-box width)', async () => {
+    mockedClientWidth = 900;
+    // getComputedStyle only resolves inline styles for elements connected to the document, so
+    // this test needs a real attachTo target (unlike the other tests here, which only assert on
+    // the emitted number and don't care about actual computed padding).
+    const wrapper = mount(DataViewLayout, {
+      slots: { default: '<p>Content</p>' },
+      attachTo: document.body,
+    });
+    await nextTick();
+
+    // The measured div is the flex-1 content column — apply real padding the way the browser
+    // would from the sm:pl-6/sm:pr-[24px] Tailwind classes, and confirm the emitted width
+    // reflects the content-box (padding excluded), not the raw padding-box clientWidth.
+    const contentDiv = wrapper.findAll('div').find((d) => d.classes().includes('overflow-y-auto'));
+    expect(contentDiv).toBeDefined();
+    contentDiv!.element.style.paddingLeft = '24px';
+    contentDiv!.element.style.paddingRight = '24px';
+
+    mockedClientWidth = 900; // unchanged — only padding changed
+    capturedResizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+    await nextTick();
+
+    const emitted = wrapper.emitted('content-width');
+    expect(emitted?.at(-1)).toEqual([852]);
+
+    wrapper.unmount();
+  });
+
+  it('does not emit content-width while nothing is measured yet (clientWidth 0)', async () => {
+    mockedClientWidth = 0;
+    const wrapper = mount(DataViewLayout, { slots: { default: '<p>Content</p>' } });
+    await nextTick();
+
+    expect(wrapper.emitted('content-width')).toBeUndefined();
+  });
+
+  it('re-emits content-width when the ResizeObserver reports a new measurement', async () => {
+    mockedClientWidth = 900;
+    const wrapper = mount(DataViewLayout, { slots: { default: '<p>Content</p>' } });
+    await nextTick();
+    expect(wrapper.emitted('content-width')?.at(-1)).toEqual([900]);
+
+    mockedClientWidth = 640;
+    capturedResizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+    await nextTick();
+
+    expect(wrapper.emitted('content-width')?.at(-1)).toEqual([640]);
+  });
+
+  it('applies an epsilon guard to content-width emission: sub-pixel RO deltas emit once, a real change emits again', async () => {
+    mockedClientWidth = 900;
+    const wrapper = mount(DataViewLayout, { slots: { default: '<p>Content</p>' } });
+    await nextTick();
+    expect(wrapper.emitted('content-width')).toHaveLength(1);
+    expect(wrapper.emitted('content-width')?.at(-1)).toEqual([900]);
+
+    // Two RO callbacks with sub-epsilon deltas relative to the last emitted value — no new emit.
+    mockedClientWidth = 900.4;
+    capturedResizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+    await nextTick();
+    mockedClientWidth = 900.7;
+    capturedResizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+    await nextTick();
+    expect(wrapper.emitted('content-width')).toHaveLength(1);
+
+    // A delta at/above the epsilon threshold emits again.
+    mockedClientWidth = 902;
+    capturedResizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+    await nextTick();
+    expect(wrapper.emitted('content-width')).toHaveLength(2);
+    expect(wrapper.emitted('content-width')?.at(-1)).toEqual([902]);
+  });
+
+  it('disconnects the ResizeObserver on unmount', async () => {
+    const disconnectSpy = vi.spyOn(CapturingResizeObserver.prototype, 'disconnect');
+    mockedClientWidth = 900;
+    const wrapper = mount(DataViewLayout, { slots: { default: '<p>Content</p>' } });
+    await nextTick();
+
+    wrapper.unmount();
+    expect(disconnectSpy).toHaveBeenCalled();
   });
 });
 

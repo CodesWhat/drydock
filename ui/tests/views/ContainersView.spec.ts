@@ -172,7 +172,6 @@ const mockVisibleColumns = ref(
     'registry',
   ]),
 );
-const mockShowColumnPicker = ref(false);
 
 vi.mock('@/composables/useColumnVisibility', () => ({
   useColumnVisibility: vi.fn(() => ({
@@ -188,14 +187,10 @@ vi.mock('@/composables/useColumnVisibility', () => ({
       { key: 'registry', label: 'Registry', align: 'text-center', required: false },
     ],
     visibleColumns: mockVisibleColumns,
-    activeColumns: computed(() => [
-      { key: 'icon', label: '', align: 'text-center' },
-      { key: 'name', label: 'Container', align: 'text-left' },
-      { key: 'status', label: 'Status', align: 'text-center' },
-    ]),
     autoHiddenColumns: computed(() => []),
-    showColumnPicker: mockShowColumnPicker,
+    hiddenColumnKeys: computed(() => []),
     toggleColumn: vi.fn(),
+    resetColumns: vi.fn(),
   })),
 }));
 
@@ -255,14 +250,36 @@ vi.mock('@/composables/useDetailPanel', () => ({
 
 // --- Stub child components ---
 const childStubs = {
-  DataViewLayout: {
+  DataViewLayout: defineComponent({
+    emits: ['content-width'],
     template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
-  },
-  DataFilterBar: {
-    template:
-      '<div class="data-filter-bar"><slot v-if="showFilters" name="filters" /><slot name="extra-buttons" /><slot name="left" /><slot name="center" /></div>',
-    props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
-  },
+  }),
+  DataFilterBar: defineComponent({
+    props: [
+      'modelValue',
+      'showFilters',
+      'filteredCount',
+      'totalCount',
+      'activeFilterCount',
+      'hideViewToggle',
+    ],
+    emits: ['update:modelValue', 'update:showFilters'],
+    template: `
+      <div class="data-filter-bar" :data-model-value="modelValue" :data-hide-view-toggle="String(!!hideViewToggle)">
+        <button type="button" data-test="set-container-view-cards" @click="$emit('update:modelValue', 'cards')">
+          Cards
+        </button>
+        <button type="button" data-test="set-container-view-table" @click="$emit('update:modelValue', 'table')">
+          Table
+        </button>
+        <slot name="sort" />
+        <slot v-if="showFilters" name="filters" />
+        <slot name="extra-buttons" />
+        <slot name="left" />
+        <slot name="center" />
+      </div>
+    `,
+  }),
   DataTable: defineComponent({
     props: [
       'columns',
@@ -280,9 +297,12 @@ const childStubs = {
       'fullWidthRow',
       'rowInteractive',
       'rowClass',
+      'preferCards',
+      'hoistCardSort',
     ],
+    emits: ['update:card-reflow-forced'],
     template: `
-      <div class="data-table">
+      <div class="data-table" :data-prefer-cards="String(preferCards)" :data-hoist-card-sort="String(!!hoistCardSort)">
         <div v-for="row in rows" :key="rowKey ? (typeof rowKey === 'function' ? rowKey(row) : row[rowKey]) : row.id ?? row.name">
           <slot v-if="typeof fullWidthRow === 'function' && fullWidthRow(row)" name="full-row" :row="row" />
           <div v-else class="data-table-first-row">
@@ -293,22 +313,6 @@ const childStubs = {
             <slot name="actions" :row="row" />
           </div>
         </div>
-      </div>
-    `,
-  }),
-  DataCardGrid: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    template: `
-      <div class="data-card-grid">
-        <slot v-if="items?.[0]" name="card" :item="items[0]" />
-      </div>
-    `,
-  }),
-  DataListAccordion: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    template: `
-      <div class="data-list-accordion">
-        <slot v-if="items?.[0]" name="header" :item="items[0]" />
       </div>
     `,
   }),
@@ -571,6 +575,47 @@ describe('ContainersView', () => {
 
         // The containers array reference must be the same object (no reassignment occurred)
         expect(vm.containers).toBe(firstRef);
+      });
+
+      it('refreshes raw policy metadata without reassigning an identical mapped list', async () => {
+        const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
+        const wrapper = await mountContainersView(
+          [container],
+          [
+            {
+              ...container,
+              displayName: container.name,
+              updatePolicy: { maturityMode: 'mature' },
+              updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+              updatePolicyOverrides: {},
+              updatePolicySources: { maturityMode: 'env' },
+            },
+          ],
+        );
+        const vm = wrapper.vm as any;
+        const firstRef = vm.containers;
+
+        mockGetAllContainers.mockResolvedValue([
+          {
+            ...container,
+            displayName: container.name,
+            updatePolicy: { maturityMode: 'all' },
+            updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+            updatePolicyOverrides: { maturityMode: 'all' },
+            updatePolicySources: { maturityMode: 'override' },
+          },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([{ ...container }]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        expect(vm.containers).toBe(firstRef);
+        expect(vm.containerMetaMap.c1).toMatchObject({
+          updatePolicyOverrides: { maturityMode: 'all' },
+          updatePolicySources: { maturityMode: 'override' },
+        });
       });
 
       it('reassigns containers.value when a field changes', async () => {
@@ -1034,36 +1079,51 @@ describe('ContainersView', () => {
       expect(wrapper.find('.data-filter-bar').exists()).toBe(true);
     });
 
+    it('provides containerViewMode to the list content and forwards it to DataTable preferCards', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const dataTable = () => wrapper.findComponent(childStubs.DataTable as any);
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-model-value')).toBe('table');
+      expect((wrapper.vm as any).containerViewMode).toBe('table');
+      expect(dataTable().props('preferCards')).toBe(false);
+
+      await wrapper.find('[data-test="set-container-view-cards"]').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-model-value')).toBe('cards');
+      expect((wrapper.vm as any).containerViewMode).toBe('cards');
+      expect(dataTable().props('preferCards')).toBe(true);
+
+      await wrapper.find('[data-test="set-container-view-table"]').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-model-value')).toBe('table');
+      expect((wrapper.vm as any).containerViewMode).toBe('table');
+      expect(dataTable().props('preferCards')).toBe(false);
+    });
+
+    it('wires measured card reflow from DataTable into the toolbar and hoisted card sorting', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const dataTable = () => wrapper.findComponent(childStubs.DataTable as any);
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-hide-view-toggle')).toBe('false');
+      expect(dataTable().props('hoistCardSort')).toBe(false);
+      expect(wrapper.find('[data-test="dd-toolbar-sort-select"]').exists()).toBe(false);
+
+      dataTable().vm.$emit('update:card-reflow-forced', true);
+      await flushPromises();
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-hide-view-toggle')).toBe('true');
+      expect(dataTable().props('hoistCardSort')).toBe(true);
+      expect(wrapper.find('[data-test="dd-toolbar-sort-select"]').exists()).toBe(true);
+    });
+
     it('shows registry error indicator in table rows', async () => {
       const c = makeContainer() as Container & { registryError?: string };
       c.registryError = 'Registry request failed: unauthorized';
       const wrapper = await mountContainersView([c]);
 
       expect(wrapper.find('.data-table [aria-label="Registry error"]').exists()).toBe(true);
-    });
-
-    it('shows registry error indicator in card rows', async () => {
-      const c = makeContainer() as Container & { registryError?: string };
-      c.registryError = 'Registry request failed: unauthorized';
-      const wrapper = await mountContainersView([c]);
-
-      (wrapper.vm as any).containerViewMode = 'cards';
-      await flushPromises();
-
-      expect(wrapper.find('.data-card-grid [aria-label="Registry error"]').exists()).toBe(true);
-    });
-
-    it('shows registry error indicator in list rows', async () => {
-      const c = makeContainer() as Container & { registryError?: string };
-      c.registryError = 'Registry request failed: unauthorized';
-      const wrapper = await mountContainersView([c]);
-
-      (wrapper.vm as any).containerViewMode = 'list';
-      await flushPromises();
-
-      expect(wrapper.find('.data-list-accordion [aria-label="Registry error"]').exists()).toBe(
-        true,
-      );
     });
 
     it('shows no-update reason icon badge in table version cell', async () => {
@@ -1473,14 +1533,50 @@ describe('ContainersView', () => {
   });
 
   describe('tableColumns', () => {
-    it('maps headerTooltip from headerTooltipKey when present in activeColumns', async () => {
+    it('keeps Resources out of table-header and card-mode sorting', async () => {
       const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
       const mockedVisibility = vi.mocked(useColumnVisibility);
       const prevImpl = mockedVisibility.getMockImplementation();
       mockedVisibility.mockReturnValueOnce({
-        allColumns: [],
+        allColumns: [
+          { key: 'icon', label: '', align: 'text-center', required: true },
+          { key: 'name', label: 'Container', align: 'text-left', required: true },
+          {
+            key: 'links',
+            label: 'Resources',
+            align: 'text-center',
+            required: true,
+            px: 'px-1',
+            size: 152,
+            minSize: 152,
+            maxSize: 152,
+            autoSize: 'fixed',
+          },
+        ],
         visibleColumns: mockVisibleColumns,
-        activeColumns: computed(() => [
+        autoHiddenColumns: computed(() => []),
+        hiddenColumnKeys: computed(() => []),
+        toggleColumn: vi.fn(),
+        resetColumns: vi.fn(),
+      } as any);
+
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      expect(vm.tableColumns.find((column: any) => column.key === 'links')).toMatchObject({
+        sortable: false,
+        px: 'px-1',
+      });
+
+      if (prevImpl) mockedVisibility.mockImplementation(prevImpl);
+    });
+
+    it('maps headerTooltip from headerTooltipKey when present in allColumns', async () => {
+      const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
+      const mockedVisibility = vi.mocked(useColumnVisibility);
+      const prevImpl = mockedVisibility.getMockImplementation();
+      mockedVisibility.mockReturnValueOnce({
+        allColumns: [
           {
             key: 'kind',
             label: 'Update',
@@ -1505,10 +1601,12 @@ describe('ContainersView', () => {
             minSize: 220,
             maxSize: 640,
           },
-        ]),
+        ],
+        visibleColumns: mockVisibleColumns,
         autoHiddenColumns: computed(() => []),
-        showColumnPicker: mockShowColumnPicker,
+        hiddenColumnKeys: computed(() => []),
         toggleColumn: vi.fn(),
+        resetColumns: vi.fn(),
       } as any);
 
       const wrapper = await mountContainersView([makeContainer()]);
@@ -1534,6 +1632,84 @@ describe('ContainersView', () => {
       for (const col of vm.tableColumns) {
         expect(col.headerTooltip).toBeUndefined();
       }
+    });
+
+    it('omits inert cardPriority metadata while preserving auto-hide priority', async () => {
+      const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
+      const mockedVisibility = vi.mocked(useColumnVisibility);
+      const prevImpl = mockedVisibility.getMockImplementation();
+      mockedVisibility.mockReturnValueOnce({
+        allColumns: [
+          { key: 'name', label: 'Container', align: 'text-left', required: true },
+          { key: 'kind', label: 'Update', align: 'text-center', priority: 60, cardPriority: 10 },
+          { key: 'server', label: 'Host', align: 'text-center', priority: 70, cardPriority: -1 },
+        ],
+        visibleColumns: mockVisibleColumns,
+        autoHiddenColumns: computed(() => []),
+        hiddenColumnKeys: computed(() => []),
+        toggleColumn: vi.fn(),
+        resetColumns: vi.fn(),
+      } as any);
+
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      const kindCol = vm.tableColumns.find((c: any) => c.key === 'kind');
+      expect(kindCol).not.toHaveProperty('cardPriority');
+      expect(kindCol.priority).toBe(60);
+
+      const serverCol = vm.tableColumns.find((c: any) => c.key === 'server');
+      expect(serverCol).not.toHaveProperty('cardPriority');
+      expect(serverCol.priority).toBe(70);
+
+      if (prevImpl) mockedVisibility.mockImplementation(prevImpl);
+    });
+  });
+
+  describe('availableContentWidth', () => {
+    it('falls back to the sidebar/panel estimate before any content-width measurement arrives', async () => {
+      mockWindowWidth.value = 1440;
+      mockDetailPanelOpen.value = false;
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+      // sidebarPx=240 (desktop, sidebar not collapsed by default) + contentPx=48, panel closed.
+      expect(vm.availableContentWidth).toBe(1440 - 240 - 48);
+    });
+
+    it.each([
+      'sm',
+      'md',
+      'lg',
+    ] as const)('uses the real DataViewLayout measurement once emitted, regardless of panelSize=%s', async (size) => {
+      mockDetailPanelOpen.value = true;
+      mockPanelSize.value = size;
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
+      layout.vm.$emit('content-width', 905);
+      await flushPromises();
+
+      // The old hand-rolled formula subtracted a fixed PANEL_WIDTH_PX[panelSize] (sm=420,
+      // md=560, lg=720) and was ~23px too generous versus the real box. Once a real
+      // measurement has been emitted, availableContentWidth must equal it exactly — the same
+      // number for every panelSize — because DataViewLayout's ResizeObserver already accounts
+      // for the actual panel width, the flexbox gap, and the panel's own margins.
+      expect(vm.availableContentWidth).toBe(905);
+    });
+
+    it('prefers the latest measurement over the fallback once one has arrived', async () => {
+      mockWindowWidth.value = 1440;
+      mockDetailPanelOpen.value = false;
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+      expect(vm.availableContentWidth).toBe(1440 - 240 - 48);
+
+      const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
+      layout.vm.$emit('content-width', 1111);
+      await flushPromises();
+
+      expect(vm.availableContentWidth).toBe(1111);
     });
   });
 
@@ -2854,7 +3030,7 @@ describe('ContainersView', () => {
       expect(vm.panelSize).toBe('lg');
     });
 
-    it('covers menu/picker/global/sse handlers and registry fallback tooltip', async () => {
+    it('covers menu/global/sse handlers and registry fallback tooltip', async () => {
       vi.useFakeTimers();
       try {
         const c = makeContainer({ id: 'c1', name: 'nginx' });
@@ -2879,18 +3055,10 @@ describe('ContainersView', () => {
         vm.closeActionsMenu();
         expect(vm.openActionsMenu).toBeNull();
 
-        vm.toggleColumnPicker(event);
-        expect(vm.showColumnPicker).toBe(true);
-        expect(vm.columnPickerStyle.left).toBe('80px');
-        vm.toggleColumnPicker(event);
-        expect(vm.showColumnPicker).toBe(false);
-
         vm.openActionsMenu = 'nginx';
-        vm.showColumnPicker = true;
         document.dispatchEvent(new MouseEvent('click'));
         await flushPromises();
         expect(vm.openActionsMenu).toBeNull();
-        expect(vm.showColumnPicker).toBe(false);
 
         vm.selectedContainer = null;
         globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
@@ -3080,29 +3248,6 @@ describe('ContainersView', () => {
       expect(vm.actionsMenuStyle.top).toBeUndefined();
     });
 
-    it('column picker flips up when trigger is near the bottom of the viewport', async () => {
-      const c = makeContainer({ id: 'c1', name: 'nginx' });
-      const wrapper = await mountContainersView(
-        [c],
-        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-      );
-      const vm = wrapper.vm as any;
-
-      // bottom: 700, top: 680 → spaceBelow = 68 < 360 (COLUMN_PICKER_ESTIMATED_HEIGHT_PX)
-      // spaceAbove = 680 > 68 → flip up
-      // bottom style = 768 - 680 + 4 = 92px
-      const event = {
-        currentTarget: {
-          getBoundingClientRect: () => ({ bottom: 700, top: 680, right: 400, left: 80 }),
-        },
-      } as unknown as MouseEvent;
-
-      vm.toggleColumnPicker(event);
-      expect(vm.showColumnPicker).toBe(true);
-      expect(vm.columnPickerStyle.bottom).toBe('92px');
-      expect(vm.columnPickerStyle.top).toBeUndefined();
-    });
-
     it('global scroll closes the actions menu', async () => {
       const c = makeContainer({ id: 'c1', name: 'nginx' });
       const wrapper = await mountContainersView(
@@ -3117,20 +3262,6 @@ describe('ContainersView', () => {
       expect(vm.openActionsMenu).toBeNull();
     });
 
-    it('global scroll closes the column picker', async () => {
-      const c = makeContainer({ id: 'c1', name: 'nginx' });
-      const wrapper = await mountContainersView(
-        [c],
-        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-      );
-      const vm = wrapper.vm as any;
-
-      vm.showColumnPicker = true;
-      document.dispatchEvent(new Event('scroll', { bubbles: false }));
-      await flushPromises();
-      expect(vm.showColumnPicker).toBe(false);
-    });
-
     it('global scroll is a no-op when nothing is open', async () => {
       const c = makeContainer({ id: 'c1', name: 'nginx' });
       const wrapper = await mountContainersView(
@@ -3140,12 +3271,10 @@ describe('ContainersView', () => {
       const vm = wrapper.vm as any;
 
       expect(vm.openActionsMenu).toBeNull();
-      expect(vm.showColumnPicker).toBe(false);
       // Dispatching scroll when nothing is open should not throw or change state
       document.dispatchEvent(new Event('scroll', { bubbles: false }));
       await flushPromises();
       expect(vm.openActionsMenu).toBeNull();
-      expect(vm.showColumnPicker).toBe(false);
     });
 
     it('scroll listener is removed on unmount', async () => {

@@ -47,6 +47,10 @@ const props = withDefaults(
     fontSize?: number;
     activeRadius?: RadiusPresetId;
     radiusPresets: RadiusPresetOption[];
+    syncEnabled?: boolean;
+    syncLoading?: boolean;
+    syncError?: string;
+    showSyncToggle?: boolean;
     onSelectThemeFamily: (familyId: string, event: Event) => void;
     onSelectLocale: (locale: SupportedLocale) => void;
     onSelectFont: (fontId: string) => void;
@@ -54,6 +58,7 @@ const props = withDefaults(
     onChangeIconScale: (value: number) => void;
     onChangeFontSize: (value: number) => void;
     onSelectRadius: (id: RadiusPresetId) => void;
+    onToggleSync: () => void;
   }>(),
   {
     themeFamily: '',
@@ -65,6 +70,10 @@ const props = withDefaults(
     iconScale: 1,
     fontSize: 1,
     activeRadius: 'sharp',
+    syncEnabled: false,
+    syncLoading: false,
+    syncError: '',
+    showSyncToggle: false,
   },
 );
 
@@ -81,6 +90,43 @@ function handleFontSizeInput(event: Event) {
 
 <template>
   <div class="space-y-6">
+    <!-- Sync Across Devices -->
+    <div
+      v-if="props.showSyncToggle"
+      class="dd-rounded overflow-hidden"
+      :style="{
+        backgroundColor: 'var(--dd-bg-card)',
+      }"
+    >
+      <div class="flex items-center gap-2 px-5 py-3" :style="{ borderBottom: '1px solid var(--dd-border)' }">
+        <AppIcon name="cloud-download" :size="14" class="text-drydock-secondary" />
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.sync.title') }}</h2>
+      </div>
+      <div class="p-5 space-y-3">
+        <div
+          v-if="props.syncError"
+          class="px-3 py-2 dd-text-body dd-rounded"
+          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+        >
+          {{ props.syncError }}
+        </div>
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="dd-text-card-title dd-text">{{ t('configView.appearance.sync.label') }}</div>
+            <div class="dd-text-card-description mt-0.5">
+              {{ t('configView.appearance.sync.description') }}
+            </div>
+          </div>
+          <ToggleSwitch
+            data-test="sync-toggle"
+            :model-value="props.syncEnabled"
+            :disabled="props.syncLoading"
+            @update:model-value="props.onToggleSync()"
+          />
+        </div>
+      </div>
+    </div>
+
     <!-- Language -->
     <div
       class="dd-rounded overflow-hidden"

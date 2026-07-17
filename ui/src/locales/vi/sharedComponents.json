@@ -9,9 +9,6 @@
       "clickToCopy": "Nhấn để sao chép",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "Chọn {name}"
-    },
     "dataFilterBar": {
       "filters": "Bộ lọc",
       "toggleFilters": "Bật/tắt bộ lọc",
@@ -19,13 +16,8 @@
       "viewModeLabel": "Chế độ xem {label}",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Bật/tắt chi tiết {name}",
-      "selectItem": "Chọn {name}"
     },
     "dataTable": {
       "actions": "Thao tác",

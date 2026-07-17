@@ -1,8 +1,3 @@
-const mockLogWarn = vi.hoisted(() => vi.fn());
-vi.mock('../../log/index.js', () => ({
-  default: { child: () => ({ warn: mockLogWarn, info: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
-}));
-
 import { renderBatch, renderSimple, renderTemplate } from './trigger-expression-parser.js';
 
 const baseContainer = {
@@ -203,12 +198,25 @@ describe('trigger-expression-parser', () => {
     expect(output).toBe('');
   });
 
+  test.each([
+    ['${container.__proto__.toString()}', baseContainer],
+    ['${container.constructor.name}', baseContainer],
+    [
+      '${container.prototype.secret}',
+      {
+        ...baseContainer,
+        prototype: { secret: 'must-not-render' },
+      },
+    ],
+  ])('rejects prototype-chain traversal expression %s', (template, container) => {
+    expect(renderSimple(template, container as any)).toBe('');
+  });
+
   // ---- isValidPropertyPath (line 32): parts.length > 0, parts.every vs some ----
   test('isValidPropertyPath: single valid identifier is accepted', () => {
     // parts.length > 0 ensures at least one part; single segment should work
-    const output = renderSimple('${name}', baseContainer as any);
-    // 'name' is a LEGACY_SIMPLE_VAR that maps to container.name = 'demo'
-    expect(output).toBe('demo');
+    const output = renderSimple('${suggestedTag}', baseContainer as any);
+    expect(output).toBe('1.2.3');
   });
 
   // ---- parseMethodCall conditions (lines 41-55) ----
@@ -565,35 +573,6 @@ describe('trigger-expression-parser', () => {
     expect(renderSimple('${container.name.indexOf("m")}', baseContainer as any)).toBe('2');
   });
 
-  // ---- warnLegacyTemplateVars (lines 331-343) ----
-  test('legacy count variable maps to containers.length', async () => {
-    vi.resetModules();
-    const { renderBatch: freshRenderBatch } = await import('./trigger-expression-parser.js');
-    // ${count} should be warned, and the warning includes the replacement
-    const output = freshRenderBatch('Count: ${count}', [baseContainer, baseContainer]);
-    expect(output).toBe('Count: 2');
-    expect(mockLogWarn).toHaveBeenCalledWith(expect.stringContaining('${containers.length}'));
-  });
-
-  // Line 335: varName === 'count' for count-specific replacement path
-  test('legacy count warning specifies containers.length as replacement', async () => {
-    vi.resetModules();
-    const { renderBatch: freshRenderBatch } = await import('./trigger-expression-parser.js');
-    freshRenderBatch('Total: ${count}', [baseContainer]);
-    expect(mockLogWarn).toHaveBeenCalledWith(
-      expect.stringContaining('Use "${containers.length}" instead'),
-    );
-  });
-
-  test('legacy non-count var warning specifies container.varname as replacement', async () => {
-    vi.resetModules();
-    const { renderSimple: freshRenderSimple } = await import('./trigger-expression-parser.js');
-    freshRenderSimple('Name: ${name}', baseContainer as any);
-    expect(mockLogWarn).toHaveBeenCalledWith(
-      expect.stringContaining('Use "${container.name}" instead'),
-    );
-  });
-
   // ---- renderSimple (lines 349-368): event and container field mutations ----
   test('renderSimple: event object is exposed as template var', () => {
     const container = {
@@ -630,79 +609,10 @@ describe('trigger-expression-parser', () => {
     expect(output).toBe('');
   });
 
-  // Lines 363-367: updateKind field mutations
-  test('renderSimple: kind field from updateKind', () => {
-    const output = renderSimple('${kind}', baseContainer as any);
-    expect(output).toBe('tag');
-  });
-
-  test('renderSimple: semver field from updateKind.semverDiff', () => {
-    const output = renderSimple('${semver}', baseContainer as any);
-    expect(output).toBe('minor');
-  });
-
-  test('renderSimple: local field from updateKind.localValue', () => {
-    const output = renderSimple('${local}', baseContainer as any);
-    expect(output).toBe('1.0.0');
-  });
-
-  test('renderSimple: remote field from updateKind.remoteValue', () => {
-    const output = renderSimple('${remote}', baseContainer as any);
-    expect(output).toBe('1.1.0');
-  });
-
-  test('renderSimple: link field from result.link', () => {
-    const output = renderSimple('${link}', baseContainer as any);
-    expect(output).toBe('https://example.com/release');
-  });
-
-  // Lines 363-367: LogicalOperator mutations (&&, || on updateKind fields)
-  test('renderSimple: kind defaults to empty when updateKind is undefined', () => {
-    const output = renderSimple('${kind}', { ...baseContainer, updateKind: undefined } as any);
-    expect(output).toBe('');
-  });
-
-  test('renderSimple: semver defaults to empty when semverDiff is undefined', () => {
-    const output = renderSimple('${semver}', {
-      ...baseContainer,
-      updateKind: { ...baseContainer.updateKind, semverDiff: undefined },
-    } as any);
-    expect(output).toBe('');
-  });
-
-  test('renderSimple: local defaults to empty when localValue is undefined', () => {
-    const output = renderSimple('${local}', {
-      ...baseContainer,
-      updateKind: { ...baseContainer.updateKind, localValue: undefined },
-    } as any);
-    expect(output).toBe('');
-  });
-
-  test('renderSimple: remote defaults to empty when remoteValue is undefined', () => {
-    const output = renderSimple('${remote}', {
-      ...baseContainer,
-      updateKind: { ...baseContainer.updateKind, remoteValue: undefined },
-    } as any);
-    expect(output).toBe('');
-  });
-
-  test('renderSimple: link defaults to empty when result.link is undefined', () => {
-    const output = renderSimple('${link}', {
-      ...baseContainer,
-      result: { ...baseContainer.result, link: undefined },
-    } as any);
-    expect(output).toBe('');
-  });
-
   // Line 373: renderBatch template variable mutations
   test('renderBatch: containers variable is accessible', () => {
     const output = renderBatch('count=${containers.length}', [baseContainer, baseContainer]);
     expect(output).toBe('count=2');
-  });
-
-  test('renderBatch: count deprecated var returns containers length', () => {
-    const output = renderBatch('${count}', [baseContainer, baseContainer, baseContainer]);
-    expect(output).toBe('3');
   });
 
   // Line 349: suggestedTag prefers result.suggestedTag then result.tag then empty
@@ -802,42 +712,9 @@ describe('renderTemplate — TASK 2 export', () => {
   });
 });
 
-describe('legacy template variable deprecation warnings', () => {
-  beforeEach(() => {
-    mockLogWarn.mockClear();
-  });
-
-  test('renderSimple should warn about legacy template variables', async () => {
-    vi.resetModules();
-    const { renderSimple: freshRenderSimple } = await import('./trigger-expression-parser.js');
-
-    freshRenderSimple('Hello ${name}, id=${id}', baseContainer);
-
-    expect(mockLogWarn).toHaveBeenCalledWith(
-      expect.stringContaining('Legacy trigger template variable "${name}" is deprecated'),
-    );
-    expect(mockLogWarn).toHaveBeenCalledWith(
-      expect.stringContaining('Legacy trigger template variable "${id}" is deprecated'),
-    );
-  });
-
-  test('renderBatch should warn about legacy count variable', async () => {
-    vi.resetModules();
-    const { renderBatch: freshRenderBatch } = await import('./trigger-expression-parser.js');
-
-    freshRenderBatch('Total: ${count}', [baseContainer]);
-
-    expect(mockLogWarn).toHaveBeenCalledWith(
-      expect.stringContaining('Legacy trigger template variable "${count}" is deprecated'),
-    );
-  });
-
-  test('should not warn for non-legacy template variables', async () => {
-    vi.resetModules();
-    const { renderSimple: freshRenderSimple } = await import('./trigger-expression-parser.js');
-
-    freshRenderSimple('Hello ${container.name}', baseContainer);
-
-    expect(mockLogWarn).not.toHaveBeenCalled();
+describe('removed template variable aliases', () => {
+  test('removed simple and batch aliases no longer resolve', () => {
+    expect(renderSimple('${name}:${id}', baseContainer)).toBe(':');
+    expect(renderBatch('${count}', [baseContainer])).toBe('');
   });
 });

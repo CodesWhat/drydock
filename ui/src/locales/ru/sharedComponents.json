@@ -9,9 +9,6 @@
       "clickToCopy": "Нажмите для копирования",
       "failed": "Copy failed"
     },
-    "dataCardGrid": {
-      "selectItem": "Выбрать {name}"
-    },
     "dataFilterBar": {
       "filters": "Фильтры",
       "toggleFilters": "Переключить фильтры",
@@ -19,13 +16,8 @@
       "viewModeLabel": "Вид {label}",
       "viewModes": {
         "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "cards": "Cards"
       }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Переключить детали {name}",
-      "selectItem": "Выбрать {name}"
     },
     "dataTable": {
       "actions": "Действия",

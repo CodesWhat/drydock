@@ -1,6 +1,8 @@
 import { gzipSync } from 'node:zlib';
 import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
+import logger from '../../log/index.js';
+import { sanitizeLogParam } from '../../log/sanitize.js';
 import type { Container } from '../../model/container.js';
 import { sendErrorResponse } from '../error-response.js';
 import {
@@ -46,6 +48,9 @@ interface LogHandlerDependencies {
   getWatchers: () => Record<string, unknown>;
   getErrorMessage: (error: unknown) => string;
 }
+
+const log = logger.child({ component: 'api-container-logs' });
+const CONTAINER_LOG_ERROR_MESSAGE = 'Unable to fetch container logs';
 
 export function isLocalDockerWatcherApi(value: unknown): value is LocalDockerWatcherApi {
   if (!value || typeof value !== 'object') {
@@ -222,7 +227,8 @@ async function handleAgentContainerLogs({
       logs: getAgentLogPayload(result),
     });
   } catch (error: unknown) {
-    sendErrorResponse(res, 500, `Error fetching logs from agent (${getErrorMessage(error)})`);
+    log.warn(`Error fetching logs from agent (${sanitizeLogParam(getErrorMessage(error), 500)})`);
+    sendErrorResponse(res, 500, CONTAINER_LOG_ERROR_MESSAGE);
   }
   return true;
 }
@@ -257,7 +263,8 @@ async function handleLocalContainerLogs({
     const logs = demuxDockerStream(logsBuffer);
     sendLogDownloadResponse({ req, res, container, logs });
   } catch (error: unknown) {
-    sendErrorResponse(res, 500, `Error fetching container logs (${getErrorMessage(error)})`);
+    log.warn(`Error fetching container logs (${sanitizeLogParam(getErrorMessage(error), 500)})`);
+    sendErrorResponse(res, 500, CONTAINER_LOG_ERROR_MESSAGE);
   }
 }
 

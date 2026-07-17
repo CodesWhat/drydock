@@ -24,12 +24,27 @@ interface NotificationStoreDb {
 let notifications: NotificationCollection | undefined;
 let notificationRulesCache: NotificationRule[] | null = null;
 
-interface NotificationRule {
+export const NOTIFICATION_BELL_THRESHOLDS = ['all', 'major', 'minor', 'patch'] as const;
+export type NotificationBellThreshold = (typeof NOTIFICATION_BELL_THRESHOLDS)[number];
+
+export interface NotificationTemplateOverride {
+  simpleTitle?: string;
+  simpleBody?: string;
+  batchTitle?: string;
+}
+
+export type NotificationTemplateField = keyof NotificationTemplateOverride;
+export type NotificationTemplateOverrides = Record<string, NotificationTemplateOverride>;
+
+export interface NotificationRule {
   id: string;
   name: string;
   description: string;
   enabled: boolean;
   triggers: string[];
+  bellEnabled: boolean;
+  bellThreshold: NotificationBellThreshold;
+  templates: NotificationTemplateOverrides;
 }
 
 export interface NotificationRuleDispatchOptions {
@@ -58,6 +73,9 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     name: 'Update Available',
     enabled: true,
     triggers: [],
+    bellEnabled: true,
+    bellThreshold: 'all',
+    templates: {},
     description: 'When a container has a new version',
   },
   {
@@ -65,6 +83,9 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     name: 'Update Applied',
     enabled: true,
     triggers: [],
+    bellEnabled: true,
+    bellThreshold: 'all',
+    templates: {},
     description: 'After a container is successfully updated',
   },
   {
@@ -72,6 +93,9 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     name: 'Update Failed',
     enabled: true,
     triggers: [],
+    bellEnabled: true,
+    bellThreshold: 'all',
+    templates: {},
     description: 'When an update fails or is rolled back',
   },
   {
@@ -79,6 +103,9 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     name: 'Security Alert',
     enabled: true,
     triggers: [],
+    bellEnabled: true,
+    bellThreshold: 'all',
+    templates: {},
     description: 'Critical/High vulnerability detected',
   },
   {
@@ -86,6 +113,9 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     name: 'Agent Disconnected',
     enabled: false,
     triggers: [],
+    bellEnabled: true,
+    bellThreshold: 'all',
+    templates: {},
     description: 'When a remote agent loses connection',
   },
   {
@@ -93,9 +123,30 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     name: 'Agent Reconnected',
     enabled: false,
     triggers: [],
+    bellEnabled: false,
+    bellThreshold: 'all',
+    templates: {},
     description: 'When a remote agent reconnects after losing connection',
   },
+  {
+    id: 'container-unhealthy',
+    name: 'Container Unhealthy',
+    enabled: false,
+    triggers: [],
+    bellEnabled: false,
+    bellThreshold: 'all',
+    templates: {},
+    description: "When a container's Docker health check enters the unhealthy state",
+  },
 ];
+
+const notificationTemplateOverrideSchema = joi
+  .object({
+    simpleTitle: joi.string().allow('').max(10_000),
+    simpleBody: joi.string().allow('').max(50_000),
+    batchTitle: joi.string().allow('').max(10_000),
+  })
+  .min(1);
 
 const notificationRuleSchema = joi.object({
   id: joi
@@ -108,6 +159,15 @@ const notificationRuleSchema = joi.object({
   description: joi.string().allow('').default(''),
   enabled: joi.boolean().default(true),
   triggers: joi.array().items(joi.string().trim().min(1)).default([]),
+  bellEnabled: joi.boolean().default(false),
+  bellThreshold: joi
+    .string()
+    .valid(...NOTIFICATION_BELL_THRESHOLDS)
+    .default('all'),
+  templates: joi
+    .object()
+    .pattern(/^[a-zA-Z0-9_.:-]+$/, notificationTemplateOverrideSchema)
+    .default({}),
 });
 
 function normalizeRule(ruleToValidate: Partial<NotificationRule>): NotificationRule {
@@ -151,6 +211,9 @@ function normalizeRules(rulesToNormalize: unknown): NotificationRule[] {
         ...defaultRule,
         enabled: existingRule?.enabled ?? defaultRule.enabled,
         triggers: existingRule?.triggers ?? defaultRule.triggers,
+        bellEnabled: existingRule?.bellEnabled ?? defaultRule.bellEnabled,
+        bellThreshold: existingRule?.bellThreshold ?? defaultRule.bellThreshold,
+        templates: existingRule?.templates ?? defaultRule.templates,
       }),
     );
   });
@@ -166,6 +229,9 @@ function cloneRules(rules: NotificationRule[]): NotificationRule[] {
   return rules.map((rule) => ({
     ...rule,
     triggers: [...rule.triggers],
+    templates: Object.fromEntries(
+      Object.entries(rule.templates).map(([triggerId, templates]) => [triggerId, { ...templates }]),
+    ),
   }));
 }
 
@@ -219,6 +285,14 @@ export function getNotificationRule(id: string): NotificationRule | undefined {
     return undefined;
   }
   return getNotificationRules().find((rule) => rule.id === idNormalized);
+}
+
+export function getNotificationTemplate(
+  ruleId: string,
+  triggerId: string,
+  field: NotificationTemplateField,
+): string | undefined {
+  return getNotificationRule(ruleId)?.templates[triggerId]?.[field];
 }
 
 /**

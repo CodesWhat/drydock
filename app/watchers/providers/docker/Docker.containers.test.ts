@@ -227,6 +227,13 @@ describe('Docker Watcher', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     _resetRegistryWebhookFreshStateForTests();
+    const containerModule = await import('../../../model/container.js');
+    const realContainerModule = await vi.importActual<typeof import('../../../model/container.js')>(
+      '../../../model/container.js',
+    );
+    vi.mocked(containerModule.normalizeContainerHealth).mockImplementation(
+      realContainerModule.normalizeContainerHealth,
+    );
 
     // Setup dockerode mock
     mockDockerApi = {
@@ -334,7 +341,9 @@ describe('Docker Watcher', () => {
 
       await docker.watchContainer(container);
 
-      expect(docker.findNewVersion).toHaveBeenCalledWith(container, expect.any(Object));
+      expect(docker.findNewVersion).toHaveBeenCalledWith(container, expect.any(Object), {
+        useRegistryPollCache: false,
+      });
       expect(event.emitContainerReport).toHaveBeenCalled();
     });
 
@@ -837,8 +846,8 @@ describe('Docker Watcher', () => {
     });
   });
 
-  describe('Dual-prefix dd.*/wud.* label support', () => {
-    test('should prefer dd.watch over wud.watch label', async () => {
+  describe('canonical dd.* label support', () => {
+    test('should use dd.watch and ignore wud.watch', async () => {
       const containers = [
         {
           Id: 'dd-label-1',
@@ -854,11 +863,10 @@ describe('Docker Watcher', () => {
       });
       const result = await docker.getContainers();
 
-      // dd.watch=true should override wud.watch=false
       expect(result).toHaveLength(1);
     });
 
-    test('should fall back to wud.watch when dd.watch is not set', async () => {
+    test('should ignore wud.watch when dd.watch is not set', async () => {
       const containers = [
         {
           Id: 'wud-fallback-1',
@@ -874,7 +882,7 @@ describe('Docker Watcher', () => {
       });
       const result = await docker.getContainers();
 
-      expect(result).toHaveLength(1);
+      expect(result).toHaveLength(0);
     });
 
     test('should prefer dd.tag.include over wud.tag.include label', async () => {
@@ -903,7 +911,7 @@ describe('Docker Watcher', () => {
       );
     });
 
-    describe('getLabel dual-prefix fallback for all label pairs', () => {
+    describe('getLabel canonical resolution for removed label pairs', () => {
       const labelPairs = [
         ['dd.watch', 'wud.watch'],
         ['dd.tag.include', 'wud.tag.include'],
@@ -928,20 +936,22 @@ describe('Docker Watcher', () => {
         ['dd.rollback.interval', 'wud.rollback.interval'],
       ];
 
-      test.each(labelPairs)('should prefer %s over %s when both are present', (ddKey, wudKey) => {
+      test.each(
+        labelPairs,
+      )('should use %s and ignore %s when both are present', (ddKey, wudKey) => {
         const labels = { [ddKey]: 'dd-value', [wudKey]: 'wud-value' };
-        expect(testable_getLabel(labels, ddKey, wudKey)).toBe('dd-value');
+        expect(testable_getLabel(labels, ddKey)).toBe('dd-value');
       });
 
-      test.each(labelPairs)('should fall back to %s when %s is absent', (ddKey, wudKey) => {
+      test.each(labelPairs)('should ignore %s when %s is absent', (ddKey, wudKey) => {
         const labels = { [wudKey]: 'legacy-value' };
-        expect(testable_getLabel(labels, ddKey, wudKey)).toBe('legacy-value');
+        expect(testable_getLabel(labels, ddKey)).toBeUndefined();
       });
 
       test.each(
         labelPairs,
       )('should return undefined when neither %s nor %s is set', (ddKey, wudKey) => {
-        expect(testable_getLabel({}, ddKey, wudKey)).toBeUndefined();
+        expect(testable_getLabel({}, ddKey)).toBeUndefined();
       });
     });
   });
@@ -966,7 +976,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image);
+      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image, {
+        usePollCycleCache: false,
+      });
       expect(result).toEqual({ tag: '1.0.0' });
     });
 
@@ -990,7 +1002,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '1.0.0');
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '1.0.0', {
+        usePollCycleCache: false,
+      });
       expect(result).toEqual({
         tag: '1.0.0',
         publishedAt: '2026-03-10T10:00:00.000Z',
@@ -1017,7 +1031,9 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '');
+      expect(mockRegistry.getImagePublishedAt).toHaveBeenCalledWith(container.image, '', {
+        usePollCycleCache: false,
+      });
       expect(result.publishedAt).toEqual('2026-03-01T10:00:00.000Z');
       expect(result.tag).toEqual('');
     });
@@ -1734,7 +1750,7 @@ describe('Docker Watcher', () => {
       expect(result).toBe(existingContainer);
     });
 
-    test('should skip container inspect for store container when watch events are enabled', async () => {
+    test('should inspect store container health when watch events are enabled', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['debug']);
       const existingContainer = {
@@ -1757,6 +1773,9 @@ describe('Docker Watcher', () => {
         RepoDigests: ['nginx@sha256:abc'],
         Created: '2023-01-01',
       });
+      mockContainer.inspect.mockResolvedValue({
+        State: { Health: { Status: 'healthy' } },
+      });
 
       const result = await docker.addImageDetailsToContainer({
         Id: '123',
@@ -1766,7 +1785,8 @@ describe('Docker Watcher', () => {
       });
 
       expect(result).toBe(existingContainer);
-      expect(mockContainer.inspect).not.toHaveBeenCalled();
+      expect(mockContainer.inspect).toHaveBeenCalledTimes(1);
+      expect(result.health).toBe('healthy');
       expect(result.details).toEqual({
         ports: ['0.0.0.0:18080->8080/tcp'],
         volumes: ['/host/data:/data:ro'],
@@ -3409,11 +3429,11 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - Docker helper functions', () => {
-    test('getLabel should fallback to wud key when dd key is absent', () => {
+    test('getLabel should ignore removed wud keys', () => {
       const labels = {
         'wud.display.name': 'Legacy Name',
       };
-      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Legacy Name');
+      expect(testable_getLabel(labels, 'dd.display.name')).toBeUndefined();
     });
 
     test('getLabel should prefer dd key when both dd and wud keys are present', () => {
@@ -3421,63 +3441,11 @@ describe('Docker Watcher', () => {
         'dd.display.name': 'Preferred',
         'wud.display.name': 'Legacy Name',
       };
-      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Preferred');
+      expect(testable_getLabel(labels, 'dd.display.name')).toBe('Preferred');
     });
 
     test('getLabel should return undefined when fallback key is not provided', () => {
       expect(testable_getLabel({}, 'dd.display.name')).toBeUndefined();
-    });
-
-    test.each([
-      {
-        aliasKey: 'dd.action.include',
-        legacyKey: 'dd.trigger.include',
-        fallbackKey: 'wud.trigger.include',
-        preferredValue: 'action-include',
-      },
-      {
-        aliasKey: 'dd.notification.exclude',
-        legacyKey: 'dd.trigger.exclude',
-        fallbackKey: 'wud.trigger.exclude',
-        preferredValue: 'notification-exclude',
-      },
-    ])('getLabel should prefer $aliasKey over $legacyKey and warn once for the legacy key', ({
-      aliasKey,
-      legacyKey,
-      fallbackKey,
-      preferredValue,
-    }) => {
-      const warnedLegacyTriggerLabels = new Set<string>();
-      const warn = vi.fn();
-      const labels = {
-        [aliasKey]: preferredValue,
-        [legacyKey]: 'legacy-value',
-        [fallbackKey]: 'legacy-fallback',
-      } as Record<string, string>;
-
-      expect(
-        testable_getLabel(labels, legacyKey, fallbackKey, {
-          warn,
-          warnedLegacyTriggerLabels,
-        }),
-      ).toBe(preferredValue);
-      expect(
-        testable_getLabel(
-          {
-            [legacyKey]: 'legacy-value',
-            [fallbackKey]: 'legacy-fallback',
-          } as Record<string, string>,
-          legacyKey,
-          fallbackKey,
-          {
-            warn,
-            warnedLegacyTriggerLabels,
-          },
-        ),
-      ).toBe('legacy-value');
-
-      expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0][0]).toContain(legacyKey);
     });
 
     test('getCurrentPrefix should return the non-numeric prefix before the first digit', () => {

@@ -236,110 +236,8 @@ function mergeProviderConfigurations(
   return mergedConfiguration;
 }
 
-const LEGACY_PUBLIC_TOKEN_AUTH_PROVIDERS = ['hub', 'dhi'] as const;
-const TOKEN_AUTH_CREDENTIAL_KEYS = ['login', 'password', 'token', 'auth'] as const;
-type TokenAuthCredentialKey = (typeof TOKEN_AUTH_CREDENTIAL_KEYS)[number];
-type CredentialKeyPresence = Record<TokenAuthCredentialKey, boolean>;
-
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function hasOwnKey(value: Record<string, unknown>, key: string): boolean {
-  return Object.hasOwn(value, key);
-}
-
-function hasNonEmptyString(value: Record<string, unknown>, key: string): boolean {
-  const candidate = value[key];
-  return typeof candidate === 'string' && candidate.trim().length > 0;
-}
-
-function hasExactlyCredentialKeys(
-  keyPresence: CredentialKeyPresence,
-  expectedKeys: readonly TokenAuthCredentialKey[],
-): boolean {
-  const expectedKeySet = new Set(expectedKeys);
-  return TOKEN_AUTH_CREDENTIAL_KEYS.every((key) => keyPresence[key] === expectedKeySet.has(key));
-}
-
-function shouldFallbackLegacyPublicTokenAuthConfiguration(configuration: unknown): boolean {
-  if (!isObjectRecord(configuration)) {
-    return false;
-  }
-
-  const hasAnyCredentialKey = TOKEN_AUTH_CREDENTIAL_KEYS.some((key) =>
-    hasOwnKey(configuration, key),
-  );
-  if (!hasAnyCredentialKey) {
-    return false;
-  }
-
-  const keyPresence: CredentialKeyPresence = {
-    login: hasOwnKey(configuration, 'login'),
-    password: hasOwnKey(configuration, 'password'),
-    token: hasOwnKey(configuration, 'token'),
-    auth: hasOwnKey(configuration, 'auth'),
-  };
-
-  const validLoginPasswordConfiguration =
-    hasExactlyCredentialKeys(keyPresence, ['login', 'password']) &&
-    hasNonEmptyString(configuration, 'login') &&
-    hasNonEmptyString(configuration, 'password');
-
-  const validLoginTokenConfiguration =
-    hasExactlyCredentialKeys(keyPresence, ['login', 'token']) &&
-    hasNonEmptyString(configuration, 'login') &&
-    hasNonEmptyString(configuration, 'token');
-
-  const validAuthConfiguration =
-    hasExactlyCredentialKeys(keyPresence, ['auth']) && hasNonEmptyString(configuration, 'auth');
-
-  return !(
-    validLoginPasswordConfiguration ||
-    validLoginTokenConfiguration ||
-    validAuthConfiguration
-  );
-}
-
-function getConfiguredCredentialKeys(configuration: Record<string, unknown>): string[] {
-  return TOKEN_AUTH_CREDENTIAL_KEYS.filter((key) => hasOwnKey(configuration, key));
-}
-
-function sanitizeLegacyPublicTokenAuthConfigurations(
-  configurations: ProviderConfigurationsByProvider | null | undefined,
-) {
-  if (!configurations || typeof configurations !== 'object' || Array.isArray(configurations)) {
-    return configurations;
-  }
-
-  let sanitizedConfigurations = configurations;
-  for (const provider of LEGACY_PUBLIC_TOKEN_AUTH_PROVIDERS) {
-    const providerConfiguration = sanitizedConfigurations[provider];
-    if (!isObjectRecord(providerConfiguration)) {
-      continue;
-    }
-    if (!shouldFallbackLegacyPublicTokenAuthConfiguration(providerConfiguration.public)) {
-      continue;
-    }
-
-    const publicConfiguration = providerConfiguration.public as Record<string, unknown>;
-    const configuredCredentialKeys = getConfiguredCredentialKeys(publicConfiguration);
-    const configuredCredentialKeysSuffix = ` Configured keys: ${configuredCredentialKeys.join(', ')}.`;
-
-    log.warn(
-      `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials for ${provider}.public.${configuredCredentialKeysSuffix} Falling back to anonymous ${provider}.public registry for backward compatibility. This fallback is deprecated and will be removed in v1.6.0; migrate to LOGIN+PASSWORD, LOGIN+TOKEN, AUTH, or no credentials.`,
-    );
-
-    sanitizedConfigurations = {
-      ...sanitizedConfigurations,
-      [provider]: {
-        ...providerConfiguration,
-        public: '',
-      },
-    };
-  }
-
-  return sanitizedConfigurations;
 }
 
 function applySharedTriggerConfigurationByName(
@@ -594,9 +492,10 @@ async function registerRegistries() {
     quay: { public: '' },
     trueforge: { public: '' },
   };
-  const configuredRegistries = sanitizeLegacyPublicTokenAuthConfigurations(
-    getRegistryConfigurations() as ProviderConfigurationsByProvider | null | undefined,
-  );
+  const configuredRegistries = getRegistryConfigurations() as
+    | ProviderConfigurationsByProvider
+    | null
+    | undefined;
   const providers = new Set([
     ...Object.keys(defaultRegistries),
     ...Object.keys(configuredRegistries || {}),
@@ -942,6 +841,7 @@ export {
   deregisterWatchers as testable_deregisterWatchers,
   getKnownProviderSet as testable_getKnownProviderSet,
   log as testable_log,
+  mergeProviderConfigurations as testable_mergeProviderConfigurations,
   pruneOrphanedAgentContainers as testable_pruneOrphanedAgentContainers,
   registerAuthentications as testable_registerAuthentications,
   registerComponent as testable_registerComponent,

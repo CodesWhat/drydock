@@ -267,21 +267,6 @@ const searchActiveIndex = ref(0);
 const searchContainers = ref<SearchContainerIndexItem[]>([]);
 const searchResourceResults = ref<SearchResultItem[]>([]);
 const searchResourcesLoading = ref(false);
-const oidcHttpDiscoveryDetected = ref(false);
-const hideOidcHttpBannerForSession = ref(false);
-const hideOidcHttpBannerPermanently = useStorageRef<boolean>(
-  'dd-banner-oidc-http-discovery-v1',
-  false,
-  (value): value is boolean => typeof value === 'boolean',
-);
-const legacyHashDetected = ref(false);
-const hideLegacyHashBannerForSession = ref(false);
-const hideLegacyHashBannerPermanently = useStorageRef<boolean>(
-  'dd-banner-sha-hash-v1',
-  false,
-  (value): value is boolean => typeof value === 'boolean',
-);
-
 interface LegacyInputSourceSummary {
   total: number;
   keys: string[];
@@ -618,29 +603,6 @@ function buildSearchIndexResults(resources: {
   return results;
 }
 
-function isHttpOidcDiscovery(authentication: unknown): boolean {
-  if (!authentication || typeof authentication !== 'object') {
-    return false;
-  }
-  const authRecord = authentication as Record<string, unknown>;
-  if (authRecord.type !== 'oidc') {
-    return false;
-  }
-  const configuration = authRecord.configuration;
-  if (!configuration || typeof configuration !== 'object') {
-    return false;
-  }
-  const discovery = (configuration as Record<string, unknown>).discovery;
-  if (typeof discovery !== 'string') {
-    return false;
-  }
-  try {
-    return new URL(discovery).protocol === 'http:';
-  } catch {
-    return false;
-  }
-}
-
 function normalizeLegacyInputSourceSummary(rawValue: unknown): LegacyInputSourceSummary {
   const parsedTotal = Number((rawValue as { total?: unknown })?.total);
   const parsedKeys = Array.isArray((rawValue as { keys?: unknown })?.keys)
@@ -728,43 +690,6 @@ const legacyApiPathKeysPreview = computed(() =>
   summarizeLegacyKeys(legacyInputSummary.value?.api?.keys ?? []),
 );
 
-const showOidcHttpCompatibilityBanner = computed(
-  () =>
-    oidcHttpDiscoveryDetected.value &&
-    !hideOidcHttpBannerForSession.value &&
-    !hideOidcHttpBannerPermanently.value,
-);
-
-function dismissOidcHttpBannerForSession() {
-  hideOidcHttpBannerForSession.value = true;
-}
-
-function dismissOidcHttpBannerPermanently() {
-  hideOidcHttpBannerPermanently.value = true;
-}
-
-function isLegacyBasicHash(authentication: unknown): boolean {
-  if (!authentication || typeof authentication !== 'object') {
-    return false;
-  }
-  const authRecord = authentication as Record<string, unknown>;
-  if (authRecord.type !== 'basic') {
-    return false;
-  }
-  const metadata = authRecord.metadata;
-  if (!metadata || typeof metadata !== 'object') {
-    return false;
-  }
-  return (metadata as Record<string, unknown>).usesLegacyHash === true;
-}
-
-const showLegacyHashDeprecationBanner = computed(
-  () =>
-    legacyHashDetected.value &&
-    !hideLegacyHashBannerForSession.value &&
-    !hideLegacyHashBannerPermanently.value,
-);
-
 const showLegacyConfigDeprecationBanner = computed(
   () => legacyConfigDeprecationBanner.visible.value,
 );
@@ -787,20 +712,10 @@ const legacyApiPathBannerTitle = computed(() =>
 );
 const hasVisibleAnnouncementBanners = computed(
   () =>
-    showOidcHttpCompatibilityBanner.value ||
-    showLegacyHashDeprecationBanner.value ||
     showLegacyConfigDeprecationBanner.value ||
     showLegacyApiPathDeprecationBanner.value ||
     showCurlHealthcheckDeprecationBanner.value,
 );
-
-function dismissLegacyHashBannerForSession() {
-  hideLegacyHashBannerForSession.value = true;
-}
-
-function dismissLegacyHashBannerPermanently() {
-  hideLegacyHashBannerPermanently.value = true;
-}
 
 async function refreshLegacyInputSummary() {
   const serverData = await getServer().catch(() => null);
@@ -828,12 +743,6 @@ async function refreshSearchResources() {
         getAllAuthentications().catch(() => []),
         getAllNotificationRules().catch(() => []),
       ]);
-    oidcHttpDiscoveryDetected.value = Array.isArray(authentications)
-      ? authentications.some((authentication) => isHttpOidcDiscovery(authentication))
-      : false;
-    legacyHashDetected.value = Array.isArray(authentications)
-      ? authentications.some((authentication) => isLegacyBasicHash(authentication))
-      : false;
     searchResourceResults.value = buildSearchIndexResults({
       agents,
       triggers,
@@ -1411,6 +1320,10 @@ function handleSseEvent(event: string, payload?: unknown) {
     emitUiSseEvent('dd:sse-batch-update-completed', payload);
     return;
   }
+  if (event === 'preferences-updated') {
+    emitUiSseEvent('dd:sse-preferences-updated', payload);
+    return;
+  }
   if (event === 'connection-lost') {
     connectionLost.value = true;
     startConnectivityPolling();
@@ -1656,54 +1569,22 @@ onUnmounted(() => {
         class="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl flex flex-col gap-2"
       >
         <AnnouncementBanner
-          v-if="showOidcHttpCompatibilityBanner"
-          data-testid="oidc-http-compat-banner"
-          :title="t('appShell.banners.oidcHttpTitle')"
-          :permanent-dismiss-label="t('appShell.banners.dontShowAgain')"
-          link-href="https://getdrydock.com/docs/deprecations#oidc-http-discovery"
-          :link-label="t('appShell.announcementBanner.defaultLinkLabel')"
-          :style="stackedBannerInlineStyle"
-          @dismiss="dismissOidcHttpBannerForSession"
-          @dismiss-permanent="dismissOidcHttpBannerPermanently">
-          <i18n-t keypath="appShell.banners.oidcHttpBody" tag="span">
-            <template #httpCode><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code></template>
-            <template #envVar><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_AUTH_OIDC_{name}_ALLOW_INSECURE_HTTP=true</code></template>
-          </i18n-t>
-        </AnnouncementBanner>
-
-        <AnnouncementBanner
-          v-if="showLegacyHashDeprecationBanner"
-          data-testid="sha-hash-deprecation-banner"
-          :title="t('appShell.banners.legacyHashTitle')"
-          :permanent-dismiss-label="t('appShell.banners.dontShowAgain')"
-          link-href="https://getdrydock.com/docs/deprecations#legacy-password-hashes"
-          :link-label="t('appShell.announcementBanner.defaultLinkLabel')"
-          :style="stackedBannerInlineStyle"
-          @dismiss="dismissLegacyHashBannerForSession"
-          @dismiss-permanent="dismissLegacyHashBannerPermanently">
-          <i18n-t keypath="appShell.banners.legacyHashBody" tag="span">
-            <template #argon><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">argon2id</code></template>
-          </i18n-t>
-        </AnnouncementBanner>
-
-        <AnnouncementBanner
           v-if="showLegacyConfigDeprecationBanner"
           data-testid="legacy-config-deprecation-banner"
           :title="legacyConfigBannerTitle"
           :permanent-dismiss-label="t('appShell.banners.dontShowAgain')"
-          link-href="https://getdrydock.com/docs/deprecations#legacy-env-vars"
+          link-href="https://getdrydock.com/docs/deprecations#legacy-trigger-prefix"
           :link-label="t('appShell.announcementBanner.defaultLinkLabel')"
           :style="stackedBannerInlineStyle"
           @dismiss="legacyConfigDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyConfigDeprecationBanner.dismissPermanently">
           <i18n-t keypath="appShell.banners.legacyConfigBody" tag="span">
-            <template #wudEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">WUD_*</code></template>
-            <template #ddEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_*</code></template>
-            <template #wudLabel><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">wud.*</code></template>
-            <template #ddLabel><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.*</code></template>
             <template #triggerEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_TRIGGER_*</code></template>
             <template #actionEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_ACTION_*</code></template>
             <template #notificationEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_NOTIFICATION_*</code></template>
+            <template #triggerLabel><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.trigger.*</code></template>
+            <template #actionLabel><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.action.*</code></template>
+            <template #notificationLabel><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.notification.*</code></template>
           </i18n-t>
           <span v-if="legacyEnvKeysPreview" class="block mt-1 truncate">
             {{ t('appShell.banners.envKeysLabel', { count: legacyInputSummary?.env.total, keys: legacyEnvKeysPreview }) }}
@@ -1724,8 +1605,10 @@ onUnmounted(() => {
           @dismiss="legacyApiPathDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyApiPathDeprecationBanner.dismissPermanently">
           <i18n-t keypath="appShell.banners.legacyApiBody" tag="span">
-            <template #v1Prefix><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code></template>
             <template #oldPrefix><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/*</code></template>
+            <template #statusCode><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">410</code></template>
+            <template #v1Prefix><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code></template>
+            <template #compatFlag><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_COMPAT_WUDCARD=true</code></template>
           </i18n-t>
           <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
             {{ t('appShell.banners.apiPathsLabel', { count: legacyInputSummary?.api?.total, keys: legacyApiPathKeysPreview }) }}
@@ -1743,8 +1626,7 @@ onUnmounted(() => {
           @dismiss="curlHealthcheckDeprecationBanner.dismissForSession"
           @dismiss-permanent="curlHealthcheckDeprecationBanner.dismissPermanently">
           <i18n-t keypath="appShell.banners.curlHealthcheckBody" tag="span">
-            <template #envVar><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_DISABLE_WGET_HEALTHCHECK=true</code></template>
-            <template #bin><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck</code></template>
+            <template #bin><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck ${DD_SERVER_PORT:-3000}</code></template>
           </i18n-t>
           <span v-if="curlHealthcheckOverrideSummary?.commandPreview" class="block mt-1 truncate">
             {{ t('appShell.banners.healthcheckCommandLabel', { command: curlHealthcheckOverrideSummary.commandPreview }) }}

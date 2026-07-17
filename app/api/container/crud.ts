@@ -27,7 +27,7 @@ import {
 } from './security-overview.js';
 
 function getContainerSummaryHandler(context: CrudHandlerContext, _req: Request, res: Response) {
-  const containers = context.getContainersFromStore({});
+  const containers = context.getContainersForStats({});
   const summary = buildContainerDashboardSummary(containers);
   res.status(200).json({
     containers: summary.status,
@@ -42,7 +42,7 @@ function getContainerSecurityVulnerabilitiesHandler(
   req: Request,
   res: Response<SecurityVulnerabilityOverviewResponse>,
 ) {
-  const containers = context.getContainersFromStore({});
+  const containers = context.getContainersRawFromStore({});
   const totalContainers = containers.length;
   if (totalContainers <= 0) {
     res.status(200).json(buildSecurityVulnerabilityOverviewResponse([], req.query, 0));

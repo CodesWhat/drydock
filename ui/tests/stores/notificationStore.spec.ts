@@ -4,9 +4,14 @@ import { useEventStreamStore } from '@/stores/eventStream';
 import { BELL_ACTIONS, useNotificationStore } from '@/stores/notifications';
 
 const mockGetAuditLog = vi.fn();
+const mockGetAllNotificationRules = vi.fn();
 
 vi.mock('@/services/audit', () => ({
   getAuditLog: (...args: unknown[]) => mockGetAuditLog(...args),
+}));
+
+vi.mock('@/services/notification', () => ({
+  getAllNotificationRules: (...args: unknown[]) => mockGetAllNotificationRules(...args),
 }));
 
 const entries = [
@@ -31,6 +36,13 @@ describe('useNotificationStore', () => {
     setActivePinia(createPinia());
     localStorage.clear();
     mockGetAuditLog.mockReset().mockResolvedValue({ entries });
+    mockGetAllNotificationRules.mockReset().mockResolvedValue(
+      BELL_ACTIONS.filter((action) => action !== 'notification-delivery-failed').map((id) => ({
+        id,
+        bellEnabled: true,
+        bellThreshold: 'all',
+      })),
+    );
   });
 
   it('fetches bell entries with the actionable action filter', async () => {
@@ -55,6 +67,179 @@ describe('useNotificationStore', () => {
     expect(store.unreadCount).toBe(2);
     expect(store.error).toBe('network unavailable');
     expect(store.loading).toBe(false);
+  });
+
+  it('uses saved bell categories and update severity thresholds', async () => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'update-available', bellEnabled: true, bellThreshold: 'major' },
+      { id: 'update-applied', bellEnabled: false, bellThreshold: 'all' },
+      { id: 'update-failed', bellEnabled: true, bellThreshold: 'all' },
+    ]);
+    mockGetAuditLog.mockResolvedValueOnce({
+      entries: [
+        { ...entries[0], id: 'minor', action: 'update-available', semverDiff: 'minor' },
+        { ...entries[0], id: 'major', action: 'update-available', semverDiff: 'major' },
+        entries[1],
+      ],
+    });
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenCalledWith({
+      limit: 20,
+      actions: ['update-available', 'update-failed', 'notification-delivery-failed'],
+    });
+    expect(store.visibleEntries.map((entry) => entry.id)).toEqual(['major', '2']);
+  });
+
+  it('backfills older matching severities when the first audit page is filtered out', async () => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'update-available', bellEnabled: true, bellThreshold: 'major' },
+    ]);
+    const minorEntries = Array.from({ length: 20 }, (_, index) => ({
+      ...entries[0],
+      id: `minor-${index}`,
+      action: 'update-available',
+      semverDiff: 'minor',
+    }));
+    const majorEntry = {
+      ...entries[0],
+      id: 'older-major',
+      action: 'update-available',
+      semverDiff: 'major',
+    };
+    mockGetAuditLog
+      .mockResolvedValueOnce({
+        entries: minorEntries,
+        total: 21,
+        limit: 20,
+        offset: 0,
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        entries: [majorEntry],
+        total: 21,
+        limit: 20,
+        offset: 20,
+        hasMore: false,
+      });
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenNthCalledWith(1, {
+      limit: 20,
+      actions: ['update-available', 'notification-delivery-failed'],
+    });
+    expect(mockGetAuditLog).toHaveBeenNthCalledWith(2, {
+      limit: 20,
+      offset: 20,
+      actions: ['update-available', 'notification-delivery-failed'],
+    });
+    expect(store.visibleEntries.map((entry) => entry.id)).toEqual(['older-major']);
+  });
+
+  it('bounds severity backfill when no matching audit entries are found', async () => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'update-available', bellEnabled: true, bellThreshold: 'major' },
+    ]);
+    mockGetAuditLog.mockResolvedValue({
+      entries: Array.from({ length: 20 }, (_, index) => ({
+        ...entries[0],
+        id: `minor-${index}`,
+        action: 'update-available',
+        semverDiff: 'minor',
+      })),
+      total: 1_000,
+      limit: 20,
+      hasMore: true,
+    });
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenCalledTimes(10);
+    expect(mockGetAuditLog).toHaveBeenLastCalledWith({
+      limit: 20,
+      offset: 180,
+      actions: ['update-available', 'notification-delivery-failed'],
+    });
+    expect(store.visibleEntries).toEqual([]);
+  });
+
+  it('stops severity backfill when a page is empty', async () => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'update-available', bellEnabled: true, bellThreshold: 'major' },
+    ]);
+    mockGetAuditLog.mockResolvedValue({
+      entries: [],
+      total: 20,
+      limit: 20,
+      offset: 0,
+      hasMore: true,
+    });
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+    expect(store.visibleEntries).toEqual([]);
+  });
+
+  it('queries container health audit entries when that bell rule is enabled', async () => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'container-unhealthy', bellEnabled: true, bellThreshold: 'all' },
+    ]);
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenCalledWith({
+      limit: 20,
+      actions: ['notification-delivery-failed', 'container-unhealthy'],
+    });
+  });
+
+  it.each([
+    ['all', ['unknown', 'digest', 'major', 'minor', 'patch']],
+    ['major', ['digest', 'major']],
+    ['minor', ['digest', 'major', 'minor']],
+    ['patch', ['digest', 'major', 'minor', 'patch']],
+  ] as const)('applies the %s update severity threshold', async (bellThreshold, expectedIds) => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'update-available', bellEnabled: true, bellThreshold },
+    ]);
+    mockGetAuditLog.mockResolvedValueOnce({
+      entries: [
+        { ...entries[0], id: 'unknown', action: 'update-available' },
+        {
+          ...entries[0],
+          id: 'digest',
+          action: 'update-available',
+          updateKind: 'digest',
+          semverDiff: 'unknown',
+        },
+        { ...entries[0], id: 'major', action: 'update-available', semverDiff: 'major' },
+        { ...entries[0], id: 'minor', action: 'update-available', semverDiff: 'minor' },
+        { ...entries[0], id: 'patch', action: 'update-available', semverDiff: 'patch' },
+      ],
+    });
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(store.visibleEntries.map((entry) => entry.id)).toEqual(expectedIds);
+  });
+
+  it('falls back to the default bell actions when notification preferences cannot load', async () => {
+    mockGetAllNotificationRules.mockRejectedValueOnce(new Error('preferences unavailable'));
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenCalledWith({ limit: 20, actions: BELL_ACTIONS });
+    expect(store.visibleEntries).toHaveLength(2);
   });
 
   it('records string refresh failures without clearing entries', async () => {
@@ -120,15 +305,16 @@ describe('useNotificationStore', () => {
       store.start();
       store.start();
       await Promise.resolve();
+      await Promise.resolve();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
 
-      eventStream.publish('update-failed');
-      eventStream.publish('container-changed');
+      eventStream.publish('agent-status-changed');
       vi.advanceTimersByTime(799);
       await Promise.resolve();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
 
       vi.advanceTimersByTime(1);
+      await Promise.resolve();
       await Promise.resolve();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
 
@@ -140,5 +326,112 @@ describe('useNotificationStore', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('refetches after the post-audit unhealthy event', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useNotificationStore();
+      const eventStream = useEventStreamStore();
+
+      store.start();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
+
+      eventStream.publish('container-unhealthy', {
+        containerName: 'web',
+        health: 'unhealthy',
+      });
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not let an older lifecycle refresh overwrite a newer unhealthy refresh', async () => {
+    vi.useFakeTimers();
+    try {
+      const store = useNotificationStore();
+      const eventStream = useEventStreamStore();
+
+      store.start();
+      await Promise.resolve();
+      await Promise.resolve();
+      mockGetAuditLog.mockClear();
+
+      let resolveOlder!: (value: { entries: typeof entries }) => void;
+      let resolveNewer!: (value: { entries: typeof entries }) => void;
+      const olderRequest = new Promise<{ entries: typeof entries }>((resolve) => {
+        resolveOlder = resolve;
+      });
+      const newerRequest = new Promise<{ entries: typeof entries }>((resolve) => {
+        resolveNewer = resolve;
+      });
+      mockGetAuditLog.mockReturnValueOnce(olderRequest).mockReturnValueOnce(newerRequest);
+
+      eventStream.publish('container-changed');
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      eventStream.publish('container-unhealthy');
+      vi.advanceTimersByTime(800);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
+
+      const unhealthyEntries = [
+        {
+          id: 'health',
+          timestamp: '2026-04-29T12:02:00.000Z',
+          action: 'container-unhealthy',
+          containerName: 'web',
+          status: 'error' as const,
+        },
+      ];
+      resolveNewer({ entries: unhealthyEntries });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(store.visibleEntries.map((entry) => entry.id)).toEqual(['health']);
+
+      resolveOlder({ entries: [] });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(store.visibleEntries.map((entry) => entry.id)).toEqual(['health']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores a stale refresh failure after a newer request succeeds', async () => {
+    let rejectOlder!: (reason: Error) => void;
+    let resolveNewer!: (value: { entries: typeof entries }) => void;
+    const olderRequest = new Promise<{ entries: typeof entries }>((_resolve, reject) => {
+      rejectOlder = reject;
+    });
+    const newerRequest = new Promise<{ entries: typeof entries }>((resolve) => {
+      resolveNewer = resolve;
+    });
+    mockGetAuditLog.mockReturnValueOnce(olderRequest).mockReturnValueOnce(newerRequest);
+    const store = useNotificationStore();
+
+    const olderFetch = store.fetchEntries();
+    const newerFetch = store.fetchEntries();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    resolveNewer({ entries });
+    await newerFetch;
+    rejectOlder(new Error('stale network failure'));
+    await olderFetch;
+
+    expect(store.visibleEntries).toEqual(entries);
+    expect(store.error).toBeNull();
+    expect(store.loading).toBe(false);
   });
 });

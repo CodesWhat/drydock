@@ -20,13 +20,19 @@ import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import * as notificationHistoryStore from '../../store/notification-history.js';
 import { enqueueOutboxEntry } from '../../store/notification-outbox.js';
+import { getUpdateMode } from '../../store/settings.js';
 import { listRecentSucceededOperations } from '../../store/update-operation.js';
 import {
   dispatchAccepted,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
+  isUpdateModeAdmissionRejection,
   UpdateRequestError,
 } from '../../updates/request-update.js';
+import {
+  getContainerTriggerFiltersForCategory,
+  getTriggerCategoryForType,
+} from '../trigger-category.js';
 import { BatchDispatcher } from './trigger-batch-dispatcher.js';
 import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplicator.js';
 import { DigestBuffer } from './trigger-digest-buffer.js';
@@ -76,7 +82,18 @@ type NotificationRuleId =
   | 'update-failed'
   | 'security-alert'
   | 'agent-disconnect'
-  | 'agent-reconnect';
+  | 'agent-reconnect'
+  | 'container-unhealthy';
+
+const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
+  'update-available',
+  'update-applied',
+  'update-failed',
+  'security-alert',
+  'agent-disconnect',
+  'agent-reconnect',
+  'container-unhealthy',
+]);
 
 type ContainerUpdateFailedPayload = event.ContainerUpdateFailedEventPayload;
 
@@ -138,12 +155,18 @@ interface AgentReconnectedNotificationEvent {
   agentName: string;
 }
 
+interface ContainerUnhealthyNotificationEvent {
+  kind: 'container-unhealthy';
+  previousHealth?: string;
+}
+
 type TriggerNotificationEvent =
   | UpdateAppliedNotificationEvent
   | UpdateFailedNotificationEvent
   | SecurityAlertNotificationEvent
   | AgentDisconnectedNotificationEvent
-  | AgentReconnectedNotificationEvent;
+  | AgentReconnectedNotificationEvent
+  | ContainerUnhealthyNotificationEvent;
 
 type TriggerContainer = Container & {
   notificationEvent?: TriggerNotificationEvent;
@@ -191,26 +214,11 @@ export const BUFFER_ENTRY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
  * and therefore must NOT be routed through the admission/accept queue.
  *
  * If you add a new update-executing type here, also add it to
- * `ACTION_TRIGGER_TYPES` below so the category taxonomy stays in sync.
+ * `ACTION_TRIGGER_TYPES` in `triggers/trigger-category.ts` so the category
+ * taxonomy stays in sync. That module owns the action/notification split; this
+ * set is the narrower "actually runs the Docker update lifecycle" subset.
  */
 const UPDATE_ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
-
-/**
- * Trigger types classified as "action" triggers for configuration-taxonomy
- * purposes. Determines:
- *   - The default `auto` value (`'oninclude'` instead of `true`/`'all'`).
- *   - The `category` metadata field returned by `getMetadata()`.
- *
- * This is a strict superset of `UPDATE_ACTION_TRIGGER_TYPES`. The only
- * additional member is `'command'`: a command trigger is an "action" in the
- * sense that it executes something on the host, but it does NOT implement the
- * Docker update lifecycle and must NOT enter the admission queue — so it must
- * not appear in `UPDATE_ACTION_TRIGGER_TYPES`.
- *
- * Derived from `UPDATE_ACTION_TRIGGER_TYPES` plus `'command'` so the two sets
- * cannot silently diverge if a new update-executing type is added.
- */
-const ACTION_TRIGGER_TYPES = new Set([...UPDATE_ACTION_TRIGGER_TYPES, 'command']);
 
 function getContainerNotificationKey(
   container: Pick<Container, 'id' | 'name' | 'watcher'> | undefined,
@@ -302,6 +310,8 @@ const UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('c
 const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
 const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}`;
 const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
+const CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} is unhealthy`;
+const CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} has entered the unhealthy state${buildLiteralTemplateExpression('event.previousHealth ? " (was " + event.previousHealth + ")" : ""')}`;
 const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
 > = {
@@ -310,6 +320,7 @@ const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   'security-alert': SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE,
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
+  'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE,
 };
 const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
@@ -319,6 +330,7 @@ const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   'security-alert': SECURITY_ALERT_SIMPLE_BODY_TEMPLATE,
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE,
+  'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE,
 };
 const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
@@ -326,6 +338,7 @@ const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   'update-applied': `${buildLiteralTemplateExpression('containers.length')} updates applied`,
   'update-failed': `${buildLiteralTemplateExpression('containers.length')} updates failed`,
   'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
+  'container-unhealthy': `${buildLiteralTemplateExpression('containers.length')} containers became unhealthy`,
 };
 
 /** Per-container row used in the security digest body template. */
@@ -492,6 +505,15 @@ function getSecurityAlertNotificationEvent(
   };
 }
 
+function getContainerUnhealthyNotificationEvent(
+  notificationEvent: unknown,
+): ContainerUnhealthyNotificationEvent {
+  return {
+    kind: 'container-unhealthy',
+    previousHealth: getNonEmptyString(notificationEvent, 'previousHealth'),
+  };
+}
+
 function getAgentNotificationEvent(
   kind: unknown,
   notificationEvent: unknown,
@@ -535,6 +557,10 @@ export function getNotificationEvent(
 
   if (kind === 'security-alert') {
     return getSecurityAlertNotificationEvent(notificationEvent);
+  }
+
+  if (kind === 'container-unhealthy') {
+    return getContainerUnhealthyNotificationEvent(notificationEvent);
   }
 
   return getAgentNotificationEvent(kind, notificationEvent);
@@ -610,6 +636,7 @@ class Trigger<
   private unregisterSecurityAlert?: () => void;
   private unregisterAgentConnected?: () => void;
   private unregisterAgentDisconnected?: () => void;
+  private unregisterContainerHealthTransition?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
   /**
@@ -656,9 +683,12 @@ class Trigger<
   private readonly securityDigestBuffer: Map<string, Map<string, SecurityDigestEntry>> = new Map();
   private digestBufferUpdatedAt: Map<string, number> = new Map();
   private batchRetryBufferUpdatedAt: Map<string, number> = new Map();
+  private securityDigestBufferUpdatedAt: Map<string, number> = new Map();
   private bufferEntryRetentionMs = BUFFER_ENTRY_RETENTION_MS;
   private digestBufferMaxEntries = 5_000;
   private batchRetryBufferMaxEntries = 5_000;
+  private securityDigestBufferMaxCycles = 100;
+  private securityDigestCycleMaxEntries = 5_000;
   private readonly digestBufferStore = new DigestBuffer<Container>({
     name: 'digest buffer',
     entries: this.digestBuffer,
@@ -676,6 +706,17 @@ class Trigger<
     timestamps: this.batchRetryBufferUpdatedAt,
     retentionMs: () => this.bufferEntryRetentionMs,
     maxEntries: () => this.batchRetryBufferMaxEntries,
+    log: {
+      debug: (message) => this.log.debug(message),
+      warn: (message) => this.log.warn(message),
+    },
+  });
+  private readonly securityDigestBufferStore = new DigestBuffer<Map<string, SecurityDigestEntry>>({
+    name: 'security digest cycle buffer',
+    entries: this.securityDigestBuffer,
+    timestamps: this.securityDigestBufferUpdatedAt,
+    retentionMs: () => this.bufferEntryRetentionMs,
+    maxEntries: () => this.securityDigestBufferMaxCycles,
     log: {
       debug: (message) => this.log.debug(message),
       warn: (message) => this.log.warn(message),
@@ -744,7 +785,11 @@ class Trigger<
   }
 
   private getCategory() {
-    return ACTION_TRIGGER_TYPES.has(this.type.toLowerCase()) ? 'action' : 'notification';
+    return getTriggerCategoryForType(this.type);
+  }
+
+  private isAutomaticActionDispatchBlocked() {
+    return this.getCategory() === 'action' && getUpdateMode() !== 'auto';
   }
 
   private getAutoMode() {
@@ -928,6 +973,37 @@ class Trigger<
 
   private pruneBatchRetryBuffer(now = Date.now()) {
     this.batchRetryBufferStore.prune(now);
+  }
+
+  private pruneSecurityDigestBuffer(now = Date.now()) {
+    this.securityDigestBufferStore.prune(now);
+  }
+
+  private bufferSecurityDigestEntry(
+    cycleId: string,
+    containerKey: string,
+    entry: Omit<SecurityDigestEntry, 'bufferedAt'>,
+  ): number {
+    const now = Date.now();
+    const cycleEntries = this.securityDigestBuffer.get(cycleId) ?? new Map();
+    cycleEntries.delete(containerKey);
+    cycleEntries.set(containerKey, {
+      ...entry,
+      bufferedAt: new Date(now).toISOString(),
+    });
+    this.securityDigestBufferStore.set(cycleId, cycleEntries, now);
+
+    while (cycleEntries.size > this.securityDigestCycleMaxEntries) {
+      const oldestContainerKey = cycleEntries.keys().next().value as string;
+      cycleEntries.delete(oldestContainerKey);
+      this.log.warn(
+        `Evicted oldest security digest entry ${cycleId}/${oldestContainerKey} after reaching the ${this.securityDigestCycleMaxEntries}-entry cycle limit`,
+      );
+    }
+    if (cycleEntries.size === 0) {
+      this.securityDigestBufferStore.delete(cycleId);
+    }
+    return cycleEntries.size;
   }
 
   private shouldDispatchNotificationEventInBatch(
@@ -1170,18 +1246,14 @@ class Trigger<
         (container ? getContainerNotificationKey(container) : undefined) ?? payload.containerName;
       const containerName = (container ? fullName(container) : undefined) ?? payload.containerName;
 
-      if (!this.securityDigestBuffer.has(cycleId)) {
-        this.securityDigestBuffer.set(cycleId, new Map());
-      }
       // Last-write-wins within same cycle.
-      this.securityDigestBuffer.get(cycleId)!.set(containerKey, {
+      const cycleBufferSize = this.bufferSecurityDigestEntry(cycleId, containerKey, {
         containerName,
         summary: payload.summary ?? { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
         status: payload.status,
-        bufferedAt: new Date().toISOString(),
       });
       this.log.debug(
-        `Buffered security alert for ${containerName} in cycle ${cycleId} (cycle buffer size: ${this.securityDigestBuffer.get(cycleId)!.size})`,
+        `Buffered security alert for ${containerName} in cycle ${cycleId} (cycle buffer size: ${cycleBufferSize})`,
       );
       return;
     }
@@ -1250,6 +1322,22 @@ class Trigger<
         skipThreshold: true,
       },
     );
+  }
+
+  async handleContainerHealthTransitionEvent(payload: event.ContainerHealthTransitionEventPayload) {
+    const container = payload.container || this.findContainerByBusinessId(payload.containerName);
+    const notificationContainer = container
+      ? withNotificationEvent(container, {
+          kind: 'container-unhealthy',
+          previousHealth: payload.previousHealth,
+        })
+      : undefined;
+
+    await this.dispatchContainerForEvent('container-unhealthy', notificationContainer, {
+      allowAllWhenNoTriggers: true,
+      defaultWhenRuleMissing: true,
+      skipThreshold: true,
+    });
   }
 
   private isUpdateAvailableAutoTriggerEnabled() {
@@ -1649,14 +1737,16 @@ class Trigger<
       };
     }
 
-    const { triggerInclude, triggerExclude } = containerResult;
+    const category = this.getCategory();
+    const { include: triggerInclude, exclude: triggerExclude } =
+      getContainerTriggerFiltersForCategory(containerResult, category);
     const included = this.isTriggerIncluded(containerResult, triggerInclude);
     const excluded = this.isTriggerExcluded(containerResult, triggerExclude);
 
     if (!included || excluded) {
       return {
         allowed: false,
-        reason: `triggerInclude=${triggerInclude ?? '<none>'}, triggerExclude=${triggerExclude ?? '<none>'}, included=${included}, excluded=${excluded}`,
+        reason: `category=${category}, triggerInclude=${triggerInclude ?? '<none>'}, triggerExclude=${triggerExclude ?? '<none>'}, included=${included}, excluded=${excluded}`,
       };
     }
 
@@ -1833,6 +1923,10 @@ class Trigger<
     }
 
     logContainer.debug('Run');
+    if (this.isAutomaticActionDispatchBlocked()) {
+      logContainer.debug('Global update mode does not allow automatic actions => ignore');
+      return;
+    }
     if (this.isUpdateActionTrigger()) {
       if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
         logContainer.debug(
@@ -1845,6 +1939,7 @@ class Trigger<
           type: string;
           trigger: (container: Container, runtimeContext?: unknown) => Promise<unknown>;
         },
+        source: 'automatic',
       });
       dispatchAccepted([accepted]);
       return;
@@ -1896,6 +1991,20 @@ class Trigger<
   async handleContainerReport(containerReport: ContainerReport) {
     // Strip Docker recreate alias prefixes before any trigger processing
     Trigger.canonicalizeReportName(containerReport);
+
+    // Confirmation cleanup must run regardless of the current global mode or
+    // notification-rule routing. Otherwise an auto -> manual/notify -> auto
+    // cycle can retain the recently-applied key forever and suppress the next
+    // genuine update. shouldHandleSimpleContainerReport repeats this cleanup
+    // on the normal auto-enabled path; liftSuppressionIfConfirmed is idempotent.
+    if (!containerReport.container.updateAvailable) {
+      this.liftSuppressionIfConfirmed(containerReport.container, 'update confirmed');
+    }
+
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug('Global update mode does not allow automatic actions => ignore');
+      return;
+    }
 
     const dispatchDecision = this.getUpdateAvailableAutoTriggerDispatchDecision();
     if (!dispatchDecision.enabled) {
@@ -1956,6 +2065,11 @@ class Trigger<
       }
     }
 
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug('Global update mode does not allow automatic batch actions => ignore');
+      return;
+    }
+
     // Filter on containers with update available and passing trigger threshold
     const containersToSendByBusinessId = new Map<string, Container>();
     for (const container of this.getBatchRetryContainers(containerReports)) {
@@ -1982,7 +2096,10 @@ class Trigger<
     try {
       this.log.debug('Run batch');
       if (this.isUpdateActionTrigger()) {
-        await this.runAcceptedUpdateBatch(containersToSend);
+        const dispatched = await this.runAcceptedUpdateBatch(containersToSend);
+        if (!dispatched) {
+          return;
+        }
       } else {
         await this.triggerBatch(containersToSend);
       }
@@ -2053,6 +2170,10 @@ class Trigger<
     }
 
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
+      return;
+    }
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug('Global update mode does not allow automatic digest actions => ignore');
       return;
     }
     if (!this.shouldHandleDigestContainerReport(containerReport)) {
@@ -2148,6 +2269,12 @@ class Trigger<
       this.log.debug('Digest cron fired — buffer empty, nothing to send');
       return;
     }
+    if (this.isAutomaticActionDispatchBlocked()) {
+      this.log.debug(
+        'Global update mode does not allow automatic digest action flushes => preserve buffer',
+      );
+      return;
+    }
     this.pruneDigestBuffer();
     if (this.digestBuffer.size === 0) {
       this.log.debug('Digest cron fired — no buffered updates remain after eviction');
@@ -2206,7 +2333,10 @@ class Trigger<
     this.isDigestFlushInProgress = true;
     try {
       if (this.isUpdateActionTrigger()) {
-        await this.runAcceptedUpdateBatch(containers);
+        const dispatched = await this.runAcceptedUpdateBatch(containers);
+        if (!dispatched) {
+          return;
+        }
       } else {
         await this.triggerBatch(containers);
       }
@@ -2239,6 +2369,7 @@ class Trigger<
     cycleId: string,
     cyclePayload: event.SecurityScanCycleCompleteEventPayload,
   ): Promise<void> {
+    this.pruneSecurityDigestBuffer();
     const cycleEntries = this.securityDigestBuffer.get(cycleId);
     if (!cycleEntries || cycleEntries.size === 0) {
       this.log.debug(
@@ -2314,7 +2445,7 @@ class Trigger<
       });
       status = 'success';
       // Drain the cycle's entries after successful flush.
-      this.securityDigestBuffer.delete(cycleId);
+      this.securityDigestBufferStore.delete(cycleId);
     } catch (e: unknown) {
       const errorMessage = Trigger.getErrorMessage(e);
       this.log.warn(`Security digest flush failed for cycle ${cycleId} (${errorMessage})`);
@@ -2507,6 +2638,13 @@ class Trigger<
         order: this.configuration.order,
       },
     );
+    this.unregisterContainerHealthTransition = event.registerContainerHealthTransition(
+      async (payload) => this.handleContainerHealthTransitionEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
 
     if (this.configuration.resolvenotifications) {
       this.log.info('Registering for notification resolution');
@@ -2544,6 +2682,9 @@ class Trigger<
     this.unregisterAgentDisconnected?.();
     this.unregisterAgentDisconnected = undefined;
 
+    this.unregisterContainerHealthTransition?.();
+    this.unregisterContainerHealthTransition = undefined;
+
     this.unregisterContainerUpdateAppliedForResolution?.();
     this.unregisterContainerUpdateAppliedForResolution = undefined;
 
@@ -2553,6 +2694,7 @@ class Trigger<
     this.digestBuffer.clear();
     this.digestBufferUpdatedAt.clear();
     this.securityDigestBuffer.clear();
+    this.securityDigestBufferUpdatedAt.clear();
     this.batchRetryBuffer.clear();
     this.batchRetryBufferUpdatedAt.clear();
     this.clearEventBatchDispatches();
@@ -2690,7 +2832,12 @@ class Trigger<
     return !watcher.isMaintenanceWindowOpen();
   }
 
-  private async runAcceptedUpdateBatch(containers: Container[]): Promise<void> {
+  private async runAcceptedUpdateBatch(containers: Container[]): Promise<boolean> {
+    if (getUpdateMode() !== 'auto') {
+      this.log.debug('Global update mode does not allow automatic batch updates => ignore');
+      return false;
+    }
+
     const deferred: Container[] = [];
     const ready = containers.filter((container) => {
       if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
@@ -2707,7 +2854,7 @@ class Trigger<
     }
 
     if (ready.length === 0) {
-      return;
+      return true;
     }
 
     const { accepted, rejected } = await enqueueContainerUpdates(ready, {
@@ -2715,7 +2862,9 @@ class Trigger<
         type: string;
         trigger: (container: Container, runtimeContext?: unknown) => Promise<unknown>;
       },
+      source: 'automatic',
     });
+    const modeChangedDuringAdmission = rejected.some(isUpdateModeAdmissionRejection);
 
     for (const entry of rejected) {
       this.log.debug(
@@ -2729,10 +2878,16 @@ class Trigger<
     }
 
     if (accepted.length === 0) {
-      return;
+      return !modeChangedDuringAdmission;
     }
 
+    // A mode switch can happen midway through a multi-container admission
+    // pass. Dispatch the prefix that was already accepted, but return false so
+    // callers retain the complete batch/digest state and do not mark rejected
+    // suffix entries as notified. Subsequent watcher state reconciles accepted
+    // operations normally while preserving the unaccepted entries for later.
     dispatchAccepted(accepted);
+    return !modeChangedDuringAdmission;
   }
 
   getMetadata(): Record<string, unknown> {
@@ -2923,6 +3078,148 @@ class Trigger<
     };
   }
 
+  private getStoredNotificationTemplate(
+    notificationEvent: TriggerNotificationEvent | undefined,
+    field: notificationStore.NotificationTemplateField,
+    fallback: string,
+  ): string {
+    const ruleId: NotificationRuleId = notificationEvent?.kind ?? 'update-available';
+    return notificationStore.getNotificationTemplate(ruleId, this.getId(), field) ?? fallback;
+  }
+
+  private buildNotificationPreviewContainer(ruleId: NotificationRuleId): Container {
+    const notificationEvent =
+      ruleId === 'update-available'
+        ? undefined
+        : ruleId === 'update-failed'
+          ? { kind: ruleId, error: 'Example update failure', rollbackAttempted: true }
+          : ruleId === 'security-alert'
+            ? {
+                kind: ruleId,
+                details: '1 critical vulnerability',
+                summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 1 },
+                blockingCount: 1,
+              }
+            : ruleId === 'agent-disconnect'
+              ? { kind: ruleId, agentName: 'preview-agent', reason: 'Connection timed out' }
+              : ruleId === 'agent-reconnect'
+                ? { kind: ruleId, agentName: 'preview-agent' }
+                : ruleId === 'container-unhealthy'
+                  ? { kind: ruleId, health: 'unhealthy', previousHealth: 'healthy' }
+                  : { kind: ruleId };
+
+    return {
+      id: 'drydock-preview',
+      name: 'drydock-preview',
+      displayName: 'Drydock Preview',
+      displayIcon: '',
+      watcher: 'local',
+      status: 'running',
+      image: {
+        id: 'sha256:preview',
+        registry: { name: 'ghcr', url: 'https://ghcr.io' },
+        name: 'getwud/drydock',
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: true, value: 'sha256:current' },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      result: {
+        tag: '1.1.0',
+        digest: 'sha256:updated',
+        link: 'https://github.com/getwud/drydock/releases/tag/v1.1.0',
+        releaseNotes: {
+          title: 'Drydock 1.1.0',
+          body: 'Example release notes for the notification preview.',
+          url: 'https://github.com/getwud/drydock/releases/tag/v1.1.0',
+          publishedAt: '2026-01-01T00:00:00.000Z',
+          provider: 'github',
+        },
+      },
+      security: {
+        updateScan: {
+          scanner: 'trivy',
+          image: 'ghcr.io/getwud/drydock:1.1.0',
+          scannedAt: '2026-01-01T00:00:00.000Z',
+          status: 'blocked',
+          blockSeverities: ['CRITICAL'],
+          blockingCount: 1,
+          summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 1 },
+          vulnerabilities: [
+            {
+              id: 'CVE-2026-0001',
+              packageName: 'example-package',
+              installedVersion: '1.0.0',
+              fixedVersion: '1.0.1',
+              severity: 'CRITICAL',
+            },
+          ],
+        },
+      },
+      updateAvailable: true,
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '1.1.0',
+        semverDiff: 'minor',
+      },
+      notificationEvent,
+    } as Container;
+  }
+
+  previewNotificationTemplates(
+    ruleId: string,
+    templates: notificationStore.NotificationTemplateOverride = {},
+  ): Required<notificationStore.NotificationTemplateOverride> {
+    if (!NOTIFICATION_RULE_IDS.has(ruleId as NotificationRuleId)) {
+      throw new Error(`Unsupported notification rule: ${ruleId}`);
+    }
+    const previewContainer = this.buildNotificationPreviewContainer(ruleId as NotificationRuleId);
+    const previewContainers = [
+      previewContainer,
+      { ...previewContainer, id: 'drydock-preview-2', name: 'drydock-preview-2' },
+    ];
+    const notificationEvent = getNotificationEvent(previewContainer);
+    const resolvePreviewTemplate = (
+      field: notificationStore.NotificationTemplateField,
+      defaults: Partial<Record<TriggerNotificationEvent['kind'], string>>,
+      fallback: string,
+    ) =>
+      templates[field] ??
+      this.getStoredNotificationTemplate(
+        notificationEvent,
+        field,
+        resolveNotificationTemplate(notificationEvent, defaults, fallback),
+      );
+
+    return {
+      simpleTitle: renderSimple(
+        resolvePreviewTemplate(
+          'simpleTitle',
+          NOTIFICATION_SIMPLE_TITLE_TEMPLATES,
+          this.configuration.simpletitle ?? '',
+        ),
+        this.getTemplateContainer(previewContainer),
+      ),
+      simpleBody: renderSimple(
+        resolvePreviewTemplate(
+          'simpleBody',
+          NOTIFICATION_SIMPLE_BODY_TEMPLATES,
+          this.configuration.simplebody ?? '',
+        ),
+        this.getTemplateContainer(previewContainer),
+      ),
+      batchTitle: renderBatch(
+        resolvePreviewTemplate(
+          'batchTitle',
+          NOTIFICATION_BATCH_TITLE_TEMPLATES,
+          this.configuration.batchtitle ?? '',
+        ),
+        previewContainers,
+      ),
+    };
+  }
+
   /**
    * Render trigger title simple.
    * @param container
@@ -2930,10 +3227,15 @@ class Trigger<
    */
   renderSimpleTitle(container: Container) {
     const notificationEvent = getNotificationEvent(container);
-    const template = resolveNotificationTemplate(
+    const defaultTemplate = resolveNotificationTemplate(
       notificationEvent,
       NOTIFICATION_SIMPLE_TITLE_TEMPLATES,
       this.configuration.simpletitle ?? '',
+    );
+    const template = this.getStoredNotificationTemplate(
+      notificationEvent,
+      'simpleTitle',
+      defaultTemplate,
     );
     return renderSimple(template, this.getTemplateContainer(container));
   }
@@ -2945,10 +3247,15 @@ class Trigger<
    */
   renderSimpleBody(container: Container) {
     const notificationEvent = getNotificationEvent(container);
-    const template = resolveNotificationTemplate(
+    const defaultTemplate = resolveNotificationTemplate(
       notificationEvent,
       NOTIFICATION_SIMPLE_BODY_TEMPLATES,
       this.configuration.simplebody ?? '',
+    );
+    const template = this.getStoredNotificationTemplate(
+      notificationEvent,
+      'simpleBody',
+      defaultTemplate,
     );
     return renderSimple(template, this.getTemplateContainer(container));
   }
@@ -2966,10 +3273,15 @@ class Trigger<
     }
     const notificationEvent =
       containers.length > 0 ? getNotificationEvent(containers[0]) : undefined;
-    const template = resolveNotificationTemplate(
+    const defaultTemplate = resolveNotificationTemplate(
       notificationEvent,
       NOTIFICATION_BATCH_TITLE_TEMPLATES,
       this.configuration.batchtitle ?? '',
+    );
+    const template = this.getStoredNotificationTemplate(
+      notificationEvent,
+      'batchTitle',
+      defaultTemplate,
     );
     return renderBatch(template, containers);
   }

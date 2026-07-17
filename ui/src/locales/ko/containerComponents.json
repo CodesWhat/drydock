@@ -274,14 +274,10 @@
       "hidePinned": "고정됨 숨기기",
       "hidePinnedTooltip": "특정 버전에 고정된 컨테이너 숨기기",
       "clearAll": "모두 초기화",
-      "toggleColumnsTooltip": "열 표시/숨기기",
       "groupByStackTooltip": "스택으로 그룹화",
       "expandAll": "모두 펼치기",
       "collapseAll": "모두 접기",
       "recheckTooltip": "업데이트 재확인",
-      "columnsHeader": "열",
-      "narrowViewportSuffix": "(좁은 화면)",
-      "autoHiddenBadgeTooltip": "화면이 좁아 {count}개 열이 자동 숨겨짐. 창을 넓히거나 다른 열을 숨겨 공간을 확보하세요.",
       "filterSearch": "검색: {value}",
       "filterStatus": "상태: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -324,6 +320,7 @@
     "projectLink": {
       "viewProject": "프로젝트 보기"
     },
+    "registryLink": { "viewRegistry": "레지스트리 보기" },
     "releaseNotesLink": {
       "releaseNotes": "릴리스 노트",
       "viewFullNotes": "전체 노트 보기",
@@ -553,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "고정됨 — 참고용으로 더 최신 버전을 사용할 수 있습니다."
+      }
     }
   }
 }

@@ -5,7 +5,7 @@ description: "Customize the drydock dashboard appearance with themes, icon libra
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-All UI preferences are configured in **Config > Appearance** and persisted in the browser's localStorage. No server-side environment variables are needed.
+All UI preferences are configured in **Config > Appearance** and persisted in the browser's localStorage by default. No server-side environment variables are needed. Signed-in users can optionally turn on cross-device sync — see [Sync across devices](#sync-across-devices) below.
 
 ## Themes
 
@@ -89,7 +89,7 @@ Select a preset in **Config > Appearance**. The choice is persisted in localStor
 
 ## Dashboard
 
-The dashboard is a customizable grid of 9 widgets — 4 stat cards and 5 detail widgets — with drag-to-reorder, resize, and per-widget visibility controls. See the dedicated [Dashboard guide](/docs/configuration/dashboard) for full details on widgets, edit mode, responsive breakpoints, and real-time updates.
+The dashboard is a customizable grid of 9 widgets — 4 stat cards and 5 detail widgets — with drag-to-reorder, resize, and per-widget visibility controls. v1.6 uses a zero-dependency CSS Grid implementation with natural same-row reorder, touch support, bounded resizing, and separate responsive layouts. See the dedicated [Dashboard guide](/docs/configuration/dashboard) for full details on widgets, edit mode, responsive breakpoints, and real-time updates.
 
 ## Data Tables
 
@@ -160,4 +160,14 @@ Drydock ships with 17 locales in v1.5.0. Switch language in **Config > Appearanc
 
 Translation strings are managed via [Crowdin](https://crowdin.com/project/drydock). Want to help translate Drydock into your language? See the [Translations guide](/docs/guides/translations).
 
-<Callout type="info">All UI preferences are stored in the browser's localStorage. They are not synced across devices or browsers.</Callout>
+## Sync across devices
+
+Preferences are local to the browser by default. Signed-in users can turn on **Sync across devices**, a toggle at the top of **Config > Appearance**, to also store the full preference set (theme, icon library, font, font size, border radius, dashboard layout, data table column choices, view mode, language, and this toggle's own state) server-side, keyed to the signed-in account.
+
+- **Off by default.** Nothing changes until the toggle is turned on.
+- **Live propagation.** Once enabled, changes push to the server and are pushed out to every other signed-in device or open tab in real time, so a change made on one device shows up on others without a manual refresh.
+- **Turning it off** stops syncing but keeps the server-side copy — localStorage becomes authoritative on that device again. Turning it back on overwrites the server copy with the device's current local state.
+- **Not available in anonymous mode.** With authentication disabled or an anonymous session, the toggle doesn't appear — there's no durable per-user identity to key a synced copy on.
+- **Conflict handling.** If two devices change preferences around the same time, the last write wins; there's no merge.
+
+<Callout type="info">UI preferences are stored in the browser's localStorage by default. Enable **Sync across devices** in Config > Appearance to also store them server-side and propagate changes to your other signed-in devices.</Callout>

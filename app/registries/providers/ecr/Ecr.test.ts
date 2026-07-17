@@ -19,11 +19,21 @@ const mockGetAuthorizationTokenCommand = vi.hoisted(() =>
     return {};
   }),
 );
+const mockNodeHttpHandler = vi.hoisted(() =>
+  // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
+  vi.fn().mockImplementation(function (options) {
+    return { options };
+  }),
+);
 const mockAxios = vi.hoisted(() => vi.fn());
 
 vi.mock('@aws-sdk/client-ecr', () => ({
   ECRClient: mockEcrClient,
   GetAuthorizationTokenCommand: mockGetAuthorizationTokenCommand,
+}));
+
+vi.mock('@smithy/node-http-handler', () => ({
+  NodeHttpHandler: mockNodeHttpHandler,
 }));
 
 const ecr = new Ecr();
@@ -282,6 +292,32 @@ test('fetchPrivateEcrAuthToken should construct the ECR client with configured c
     region: 'region',
   });
   expect(mockGetAuthorizationTokenCommand).toHaveBeenCalledWith({});
+  expect(mockNodeHttpHandler).not.toHaveBeenCalled();
+});
+
+test('fetchPrivateEcrAuthToken should pass custom TLS settings to the AWS SDK transport', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+    insecure: true,
+  };
+
+  await expect(ecrPrivate.fetchPrivateEcrAuthToken()).resolves.toBe('QVdTOnh4eHg=');
+
+  expect(mockNodeHttpHandler).toHaveBeenCalledWith({
+    httpsAgent: expect.objectContaining({
+      options: expect.objectContaining({ rejectUnauthorized: false }),
+    }),
+  });
+  expect(mockEcrClient).toHaveBeenCalledWith(
+    expect.objectContaining({
+      requestHandler: expect.objectContaining({
+        options: expect.objectContaining({ httpsAgent: expect.anything() }),
+      }),
+    }),
+  );
 });
 
 test('fetchPrivateEcrAuthToken should reuse cached private tokens before the refresh window', async () => {
@@ -480,6 +516,7 @@ test('authenticate should fetch public ECR gallery token for public images', asy
   expect(mockAxios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://public.ecr.aws/token/',
+    maxRedirects: 0,
     headers: {
       Accept: 'application/json',
     },
@@ -489,6 +526,18 @@ test('authenticate should fetch public ECR gallery token for public images', asy
       Authorization: 'Bearer public-token-123',
     },
   });
+});
+
+test('authenticate should reuse the public ECR gallery token until it expires', async () => {
+  mockAxios.mockResolvedValue({ data: { token: 'public-token-123' } });
+  const ecrPublic = new Ecr();
+  ecrPublic.configuration = {};
+  const image = { registry: { url: 'https://public.ecr.aws/v2' } };
+
+  await ecrPublic.authenticate(image, { headers: {} });
+  await ecrPublic.authenticate(image, { headers: {} });
+
+  expect(mockAxios).toHaveBeenCalledTimes(1);
 });
 
 test('authenticate should preserve existing headers for public ECR', async () => {

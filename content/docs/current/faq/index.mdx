@@ -86,6 +86,21 @@ Common fixes:
 
 <Callout type="info">A single reconnect that immediately recovers is expected in many proxy setups. Repeated reconnect failures (not recovering) indicate a real connectivity issue.</Callout>
 
+## Remote watcher auth is blocked because HTTPS is required
+
+Remote Docker API auth (`DD_WATCHER_{name}_AUTH_*`) is fail-closed by default. Basic auth, bearer tokens, and OIDC token auth are only applied to host-based watchers, and production configurations should set `DD_WATCHER_{name}_PROTOCOL=https`.
+
+Mount `DD_WATCHER_{name}_CAFILE`, `DD_WATCHER_{name}_CERTFILE`, and `DD_WATCHER_{name}_KEYFILE` when the HTTPS listener requires mTLS. TLS file settings provide trust/client material and also satisfy the auth safety check, but the Docker client scheme is still controlled by `PROTOCOL`.
+
+If auth is configured on a plain HTTP watcher, Drydock refuses to attach those credentials unless you explicitly set:
+
+```yaml
+environment:
+  - DD_WATCHER_REMOTE_AUTH_INSECURE=true
+```
+
+Use `AUTH_INSECURE=true` only on a trusted, isolated network or while migrating a legacy setup. For production, expose the Docker API over mTLS or behind an HTTPS-authenticated proxy. See [remote watcher auth examples](/docs/configuration/watchers#watch-a-remote-docker-host-behind-https-with-bearer-auth) and [OIDC watcher auth](/docs/configuration/watchers#watch-a-remote-docker-host-behind-https-with-oidc-auth).
+
 ## SELinux blocks Podman socket access (Permission denied)
 
 On RHEL, Rocky Linux, Fedora, and CentOS with SELinux enforcing, you may see `permission denied` or `EACCES` when Drydock tries to connect to the Podman socket. This is caused by SELinux denying the container access to the host socket file.
@@ -102,12 +117,25 @@ services:
 
 <Callout type="info">The `:Z` flag applies a private SELinux label, granting exclusive access to this container. If multiple containers need the same socket, use `:z` (lowercase) for a shared label instead. Check `ausearch -m avc -ts recent` to confirm SELinux denials are the cause.</Callout>
 
+## Podman API compatibility vs native Podman support
+
+Drydock does not have a native Podman provider. It talks to Podman through Podman's Docker-compatible API socket, configured as a Docker watcher.
+
+Direct Unix-socket Podman watchers get the most compatibility handling: Drydock attempts to probe `/version` during startup, pins the Docker API version when Podman reports one, and disables redirect-following behavior that can break on Podman's unversioned paths. Podman behind a socket proxy or TCP endpoint still uses the Docker-compatible HTTP API, but it does not get that direct-socket redirect guard.
+
+If Podman containers are missing or update actions fail:
+
+1. Start with a direct socket mount from [Podman Quick Start](/docs/configuration/watchers#podman-quick-start).
+2. Confirm the socket answers `/version`.
+3. Confirm your application containers have an image name; Podman pod infrastructure containers with an empty `Image` field are skipped intentionally.
+4. Add a Docker trigger for UI actions or updates; there are no Podman-specific trigger env vars.
+
 ## `podman-compose` vs `podman compose` networking
 
 If service-name DNS (e.g. `socket-proxy`) fails between containers, check which compose tool you are using:
 
 - **`podman-compose`** (third-party Python tool) groups containers into a single **pod** where all containers share `localhost`. Service names are not resolvable — containers communicate via `localhost:<port>` instead.
-- **`podman compose`** (Podman 4.0+ built-in) uses proper container networking with service-name DNS, matching Docker Compose behavior.
+- **`podman compose`** (Podman 4.0+ built-in) generally follows Docker Compose-style networking more closely, including service-name DNS inside the same project network.
 
 **Recommendation:** Use `podman compose` (built-in, Podman 4.0+) or Docker Compose with the Podman socket for proper service-name DNS resolution. If you must use `podman-compose`, replace hostname references like `socket-proxy` with `localhost` and ensure port mappings are correct.
 
@@ -161,6 +189,7 @@ There are no Podman-specific trigger variables in v1.5. Trigger setup is the sam
 
 - Add a Docker trigger (`DD_ACTION_DOCKER_{name}_AUTO=false` or `true`).
 - If using socket proxy, include `POST=1` and `NETWORKS=1` on the proxy.
+- The Docker Compose trigger (`DD_ACTION_DOCKERCOMPOSE_*`) is not a native `podman compose` executor; it depends on Docker Compose labels and compose files being visible inside Drydock.
 
 Without a Docker trigger, UI actions show `No docker trigger found for this container`.
 See [Socket proxy permissions](/docs/configuration/watchers#proxy-permissions-by-feature) for the required proxy env vars.
@@ -298,7 +327,9 @@ This usually happens when the registry has tags from different naming families (
 
 Since v1.4.0, **tag family detection** (`dd.tag.family`) defaults to `strict`, which infers the current tag's prefix, suffix, and segment structure and only considers candidates within the same family.
 
-This applies to floating tags (`latest`, `v3`, `16-alpine`) as well as fully-pinned specific tags (e.g. `1.4.5`, `v1.13.3`) — a pinned container compares by digest by default so a rebuilt image republished under the same tag is still detected, but it will not climb to a different tag on its own. Since v1.5.2, this doesn't leave you blind to what's out there: drydock still computes an informational `updateInsight` for pinned containers — the best newer same-family tag available in the registry, shown as an informational "Newer available" badge in the UI. It's purely informational; it never triggers an update, a notification, or changes the actionable update state. Disable it per watcher with `DD_WATCHER_{watcher_name}_TAG_PIN_INFO=false`.
+This applies to floating tags (`latest`, `v3`, `16-alpine`) as well as fully-pinned specific tags (e.g. `1.4.5`, `v1.13.3`) — a pinned container compares by digest by default so a rebuilt image republished under the same tag is still detected, but it will not climb to a different tag on its own. Drydock also computes informational `updateInsight` for pinned containers. The UI shows it as a neutral **Pinned** state with the grey current tag → blue newer tag and a Major/Minor/Patch chip. It never triggers an update or notification and never changes actionable update state. Configure it with precedence `dd.tag.pin.info` → matching imgset `TAG_PIN_INFO` → watcher `TAG_PIN_INFO` → `true`.
+
+A Major chip by itself can be a valid informational insight: strict matching preserves the tag's prefix, suffix/variant shape, numeric precision, and CalVer rules, but does not impose a same-major ceiling. If the container instead shows an actionable Major update, inspect its resolved `dd.tag.family`, `dd.tag.include`, matching imgset, and watcher defaults. In #498, the reported Immich `v3.0.2 Major` action was traced to `dd.tag.family=loose` on only the machine-learning container. Loose mode still preserves suffix variants (`-openvino` stays `-openvino`); the older behavior that could select a bare tag from a suffixed reference is fixed and regression-covered.
 
 If you still see cross-family false positives, verify that your `dd.tag.include` regex is specific enough. If you intentionally want cross-family updates (e.g. you want to jump from one naming scheme to another, or let a pinned tag climb to a newer version), set:
 
@@ -308,6 +339,8 @@ labels:
 ```
 
 Managing many containers through an `IMGSET` preset instead of per-container labels? Set it via the equivalent env var on the preset: `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_FAMILY=loose`.
+
+To make `loose` the actionable default for an entire watcher, use `DD_WATCHER_{watcher_name}_TAG_FAMILY=loose`. This can make cross-version candidates eligible for automatic action triggers, so prefer a label or imgset when only selected images should climb.
 
 See [Docker Watchers](/docs/configuration/watchers#labels) for the full label reference.
 
@@ -385,8 +418,8 @@ The `__FILE` suffix works on any `DD_*` variable. Add `.env` and `secrets/` to y
 
 If scans take a long time or fail with timeout errors:
 
-1. **Increase the timeout:** Set `DD_SECURITY_TRIVY_TIMEOUT=300000` (5 minutes). The default is 2 minutes, which may not be enough for large images on the first scan.
-2. **Use a Trivy server:** A dedicated Trivy server caches the vulnerability database, avoiding repeated downloads. See [Trivy server mode](/docs/configuration/security#server-mode-trivy-server).
+1. **Increase the timeout:** The default is `DD_SECURITY_TRIVY_TIMEOUT=600000` (10 minutes). Increase it further if unusually large images still exceed that budget.
+2. **Use `DD_SECURITY_TRIVY_SERVER`:** A dedicated Trivy server caches the vulnerability database, which is especially useful for large images and repeated scans. See [Trivy server mode](/docs/configuration/security#server-mode-trivy-server).
 3. **Tune concurrency:** For scheduled scans, lower `DD_SECURITY_SCAN_CONCURRENCY` if the host is resource-constrained.
 
 ## Temporary container names during recreation (hex prefix aliases)
@@ -426,7 +459,7 @@ Upgrading to 1.5.2 or later prevents this from happening again. Note that if you
 
 ## Legacy WUD environment variables or labels
 
-Drydock accepts legacy `WUD_*` environment variables and `wud.*` container labels as fallback, but emits deprecation warnings when they are used. Each legacy fallback increments the `dd_legacy_input_total{source,key}` Prometheus counter.
+Drydock v1.6 ignores legacy `WUD_*` environment variables and `wud.*` container labels. Convert them to `DD_*` and `dd.*` before starting the upgraded service.
 
 To convert your configuration in place, use the built-in migration CLI:
 
@@ -439,3 +472,7 @@ docker exec drydock node dist/index.js config migrate --file /path/to/compose.ym
 ```
 
 See the [Quick start](/docs/quickstart) for the recommended `DD_*` / `dd.*` configuration format.
+
+## Home Assistant wud-card or Homepage widget shows no data
+
+The Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) and Homepage's native `whatsupdocker` widget both speak WUD's old unversioned, bare-array API shape rather than drydock's `/api/v1` envelope. Set `DD_COMPAT_WUDCARD=true` (default `false`) to reshape the handful of endpoints those integrations call back into the shape they expect — see [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) for details, including the CORS setup needed if Home Assistant runs on a different origin than drydock. Homepage doesn't need CORS configuration, since it proxies the request server-side.

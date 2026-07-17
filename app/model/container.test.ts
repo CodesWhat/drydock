@@ -82,6 +82,33 @@ function createValidContainer(overrides: Record<string, unknown> = {}) {
   };
 }
 
+test.each(['starting', 'healthy', 'unhealthy'])('validate round-trips health=%s', (health) => {
+  expect(container.validate(createValidContainer({ health })).health).toBe(health);
+});
+
+test.each([true, false])('validate round-trips effective tagPinInfo=%s (#498)', (tagPinInfo) => {
+  expect(container.validate(createValidContainer({ tagPinInfo })).tagPinInfo).toBe(tagPinInfo);
+});
+
+test('validate accepts absent health and degrades an unknown health without mutating its input', () => {
+  expect(container.validate(createValidContainer())).not.toHaveProperty('health');
+  const input = createValidContainer({ health: 'bogus' });
+  expect(container.validate(input).health).toBeUndefined();
+  expect(input.health).toBe('bogus');
+});
+
+test.each([
+  ['starting', 'starting'],
+  ['healthy', 'healthy'],
+  ['unhealthy', 'unhealthy'],
+  [undefined, undefined],
+  [null, undefined],
+  ['none', undefined],
+  [42, undefined],
+])('normalizeContainerHealth(%s) returns %s', (value, expected) => {
+  expect(container.normalizeContainerHealth(value)).toBe(expected);
+});
+
 const UNKNOWN_UPDATE_KIND = {
   kind: 'unknown',
   localValue: undefined,
@@ -2824,6 +2851,7 @@ test('model should validate security update schemas', async () => {
       updateScan: {
         scanner: 'trivy',
         image: 'organization/image:1.0.1',
+        imageDigest: 'sha256:current',
         scannedAt: '2026-03-04T12:00:00.000Z',
         status: 'blocked',
         blockSeverities: ['CRITICAL', 'HIGH'],
@@ -2836,6 +2864,17 @@ test('model should validate security update schemas', async () => {
           critical: 5,
         },
         vulnerabilities: [{ id: 'CVE-2026-0001', severity: 'CRITICAL' }],
+        relativeGate: {
+          decision: 'passed',
+          reason: 'no-worse-than-current',
+          currentSummary: {
+            unknown: 1,
+            low: 2,
+            medium: 3,
+            high: 4,
+            critical: 5,
+          },
+        },
       },
       updateSignature: {
         verifier: 'cosign',
@@ -2865,8 +2904,95 @@ test('model should validate security update schemas', async () => {
     high: 4,
     critical: 5,
   });
+  expect(containerValidated.security?.updateScan?.imageDigest).toBe('sha256:current');
+  expect(containerValidated.security?.updateScan?.relativeGate).toEqual({
+    decision: 'passed',
+    reason: 'no-worse-than-current',
+    currentSummary: {
+      unknown: 1,
+      low: 2,
+      medium: 3,
+      high: 4,
+      critical: 5,
+    },
+  });
   expect(containerValidated.security?.updateSignature?.status).toBe('verified');
   expect(containerValidated.security?.updateSbom?.formats).toEqual(['spdx-json', 'cyclonedx-json']);
+});
+
+test.each(['grype', 'both'])('model should validate %s scan records', (scanner) => {
+  const validated = container.validate(
+    createContainerWithSecurity({
+      scan: {
+        scanner,
+        image: 'organization/image:1.0.1',
+        scannedAt: '2026-07-12T12:00:00.000Z',
+        status: 'blocked',
+        blockSeverities: ['CRITICAL'],
+        blockingCount: 1,
+        summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 1 },
+        vulnerabilities: [
+          {
+            id: 'CVE-2026-0001',
+            severity: 'CRITICAL',
+            scanners: scanner === 'both' ? ['grype', 'trivy'] : ['grype'],
+          },
+        ],
+      },
+    }),
+  );
+
+  expect(validated.security?.scan?.scanner).toBe(scanner);
+  expect(validated.security?.scan?.vulnerabilities[0].scanners).toContain('grype');
+});
+
+test.each(['trivy', 'syft'])('model should validate %s SBOM document references', (generator) => {
+  const validated = container.validate(
+    createContainerWithSecurity({
+      sbom: {
+        generator,
+        image: 'organization/image:1.0.1',
+        subjectDigest: 'sha256:abc',
+        generatedAt: '2026-07-12T12:00:00.000Z',
+        status: 'generated',
+        formats: ['spdx-json'],
+        documentRefs: {
+          'spdx-json': {
+            key: `sbom/${'a'.repeat(64)}/spdx-json.json`,
+            sha256: 'b'.repeat(64),
+            bytes: 123,
+          },
+        },
+      },
+    }),
+  );
+
+  expect(validated.security?.sbom?.generator).toBe(generator);
+  expect(validated.security?.sbom?.documentRefs?.['spdx-json']?.bytes).toBe(123);
+});
+
+test('model should validate content-addressed SBOM document references', () => {
+  const validated = container.validate(
+    createContainerWithSecurity({
+      sbom: {
+        generator: 'trivy',
+        image: 'organization/image:1.0.1',
+        subjectDigest: `sha256:${'a'.repeat(64)}`,
+        generatedAt: '2026-07-13T15:24:28.934Z',
+        status: 'generated',
+        formats: ['spdx-json'],
+        documentRefs: {
+          'spdx-json': {
+            key: `sbom/${'b'.repeat(64)}/${'c'.repeat(64)}/spdx-json.json`,
+            sha256: 'c'.repeat(64),
+            bytes: 456,
+          },
+        },
+      },
+    }),
+  );
+
+  expect(validated.security?.sbom?.documentRefs?.['spdx-json']?.bytes).toBe(456);
 });
 
 test('model should reject invalid updateScan schema payloads', async () => {

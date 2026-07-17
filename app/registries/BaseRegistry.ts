@@ -10,7 +10,7 @@ import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../s
 import { getErrorMessage } from '../util/error.js';
 import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 import { withRetry } from './http-retry.js';
-import Registry from './Registry.js';
+import Registry, { type RegistryLookupOptions } from './Registry.js';
 import { acquireToken, getBucketForUrl } from './token-bucket.js';
 import { parseBearerChallenge } from './www-authenticate.js';
 
@@ -66,6 +66,10 @@ class BaseRegistry<
   private bearerTokenCache = new Map<string, { token: string; expiresAt: number }>();
   private digestManifestCache = new Map<string, DigestCacheEntry>();
   private digestManifestCacheInFlight = new Map<string, Promise<RegistryManifestLookupResult>>();
+  private tagListCache = new Map<string, string[]>();
+  private tagListCacheInFlight = new Map<string, Promise<string[]>>();
+  private digestCachePollCycleActive = false;
+  private digestCachePollCycleGeneration = 0;
   private digestCacheHits = 0;
   private digestCacheMisses = 0;
 
@@ -79,6 +83,15 @@ class BaseRegistry<
         this.bearerTokenCache.delete(key);
       }
     }
+  }
+
+  private getBearerTokenCacheTtlMs(responseData: Record<string, unknown> | undefined): number {
+    const expiresInSeconds = responseData?.expires_in;
+    if (typeof expiresInSeconds !== 'number' || !Number.isFinite(expiresInSeconds)) {
+      return REGISTRY_BEARER_TOKEN_CACHE_TTL_MS;
+    }
+
+    return Math.min(REGISTRY_BEARER_TOKEN_CACHE_TTL_MS, Math.max(0, expiresInSeconds * 1000));
   }
 
   private getCanonicalRegistryHost(registryUrl: string | undefined): string {
@@ -135,6 +148,26 @@ class BaseRegistry<
     return `${registryHost}/${repository}:${tagOrDigest}|${os}/${architecture}${variant}`;
   }
 
+  private buildTagListCacheKey(image: ContainerImage): string {
+    let normalizedImage: ContainerImage;
+    try {
+      normalizedImage = this.normalizeImage(structuredClone(image));
+    } catch (error) {
+      this.log.warn(
+        `Unable to normalize image metadata for tag-list cache key generation: ${sanitizeLogParam(this.getDigestCacheImageLabel(image))} (${sanitizeLogParam(getErrorMessage(error))})`,
+      );
+      normalizedImage = image;
+    }
+
+    const registryHost = this.getCanonicalRegistryHost(normalizedImage?.registry?.url);
+    const imageName = normalizedImage?.name || '';
+    const repository =
+      registryHost === 'docker.io' && imageName.length > 0 && !imageName.includes('/')
+        ? `library/${imageName}`
+        : imageName;
+    return `${registryHost}/${repository}`;
+  }
+
   private recordDigestCacheHit() {
     this.digestCacheHits += 1;
     const counter = registryPrometheus.getDigestCacheHitsCounter?.();
@@ -152,10 +185,54 @@ class BaseRegistry<
   }
 
   public startDigestCachePollCycle() {
+    this.digestCachePollCycleGeneration += 1;
+    this.digestCachePollCycleActive = true;
     this.digestManifestCache.clear();
     this.digestManifestCacheInFlight.clear();
+    this.tagListCache.clear();
+    this.tagListCacheInFlight.clear();
     this.digestCacheHits = 0;
     this.digestCacheMisses = 0;
+  }
+
+  override async getTags(
+    image: ContainerImage,
+    options?: RegistryLookupOptions,
+  ): Promise<string[]> {
+    if (!this.digestCachePollCycleActive || options?.usePollCycleCache === false) {
+      return options ? super.getTags(image, options) : super.getTags(image);
+    }
+
+    const cacheKey = this.buildTagListCacheKey(image);
+    const cachedTags = this.tagListCache.get(cacheKey);
+    if (cachedTags) {
+      return [...cachedTags];
+    }
+
+    const inFlightLookup = this.tagListCacheInFlight.get(cacheKey);
+    if (inFlightLookup) {
+      return [...(await inFlightLookup)];
+    }
+
+    const pollCycleGeneration = this.digestCachePollCycleGeneration;
+    const tagLookup = super.getTags(image).then((tags) => {
+      const cachedCopy = [...tags];
+      if (
+        this.digestCachePollCycleActive &&
+        this.digestCachePollCycleGeneration === pollCycleGeneration
+      ) {
+        this.tagListCache.set(cacheKey, cachedCopy);
+      }
+      return cachedCopy;
+    });
+    this.tagListCacheInFlight.set(cacheKey, tagLookup);
+    try {
+      return [...(await tagLookup)];
+    } finally {
+      if (Object.is(this.tagListCacheInFlight.get(cacheKey), tagLookup)) {
+        this.tagListCacheInFlight.delete(cacheKey);
+      }
+    }
   }
 
   public endDigestCachePollCycle() {
@@ -166,6 +243,12 @@ class BaseRegistry<
         `${this.getId()} digest cache hit rate ${hitRate.toFixed(2)}% (${this.digestCacheHits} hits, ${this.digestCacheMisses} misses)`,
       );
     }
+    this.digestCachePollCycleGeneration += 1;
+    this.digestCachePollCycleActive = false;
+    this.digestManifestCache.clear();
+    this.digestManifestCacheInFlight.clear();
+    this.tagListCache.clear();
+    this.tagListCacheInFlight.clear();
     return {
       hits: this.digestCacheHits,
       misses: this.digestCacheMisses,
@@ -228,7 +311,7 @@ class BaseRegistry<
     return Array.from(hosts);
   }
 
-  private validateAuthUrlHost(authUrl: string, requestOptions: RegistryRequestOptions): void {
+  protected validateAuthUrlHost(authUrl: string, requestOptions: RegistryRequestOptions): void {
     let requestScheme: string;
     try {
       requestScheme = new URL(requestOptions?.url ?? '').protocol;
@@ -378,7 +461,14 @@ class BaseRegistry<
   async getImageManifestDigest(
     image: ContainerImage,
     digest?: string,
+    options?: RegistryLookupOptions,
   ): Promise<RegistryManifestLookupResult> {
+    if (!this.digestCachePollCycleActive || options?.usePollCycleCache === false) {
+      return options
+        ? super.getImageManifestDigest(image, digest, options)
+        : super.getImageManifestDigest(image, digest);
+    }
+
     const cacheKey = this.buildDigestCacheKey(image, digest);
     const cachedEntry = this.digestManifestCache.get(cacheKey);
     if (cachedEntry) {
@@ -397,9 +487,15 @@ class BaseRegistry<
     }
 
     this.recordDigestCacheMiss();
+    const pollCycleGeneration = this.digestCachePollCycleGeneration;
     const manifestLookup = (async () => {
       const manifest = await super.getImageManifestDigest(image, digest);
-      if (typeof manifest?.digest === 'string' && manifest.digest.length > 0) {
+      if (
+        this.digestCachePollCycleActive &&
+        this.digestCachePollCycleGeneration === pollCycleGeneration &&
+        typeof manifest?.digest === 'string' &&
+        manifest.digest.length > 0
+      ) {
         this.digestManifestCache.set(cacheKey, {
           digest: manifest.digest,
           created: manifest.created,
@@ -414,7 +510,9 @@ class BaseRegistry<
     try {
       return await manifestLookup;
     } finally {
-      this.digestManifestCacheInFlight.delete(cacheKey);
+      if (Object.is(this.digestManifestCacheInFlight.get(cacheKey), manifestLookup)) {
+        this.digestManifestCacheInFlight.delete(cacheKey);
+      }
     }
   }
 
@@ -426,6 +524,7 @@ class BaseRegistry<
    * @param authUrl - the URL to fetch the bearer token from
    * @param credentials - optional Base64 credentials for Basic auth on the token request
    * @param tokenExtractor - function to extract the token from the axios response (default: response.data.token || response.data.access_token)
+   * @param validationUrl - optional known registry URL used only when the outgoing request options do not carry their destination URL
    * @returns the request options with Authorization header set
    */
   async authenticateBearerFromAuthUrl(
@@ -435,8 +534,12 @@ class BaseRegistry<
     tokenExtractor: (response: { data?: Record<string, unknown> }) => unknown = (response) =>
       response.data?.token || response.data?.access_token,
     tokenFailureMessage = `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`,
+    validationUrl?: string,
   ) {
-    this.validateAuthUrlHost(authUrl, requestOptions);
+    this.validateAuthUrlHost(authUrl, {
+      ...requestOptions,
+      url: requestOptions.url || validationUrl,
+    });
 
     const requestOptionsWithAuth = this.withTlsRequestOptions({
       ...requestOptions,
@@ -492,10 +595,13 @@ class BaseRegistry<
     }
 
     const token = requireAuthString(tokenExtractor(response), tokenFailureMessage);
-    this.bearerTokenCache.set(cacheKey, {
-      token,
-      expiresAt: Date.now() + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS,
-    });
+    const cacheTtlMs = this.getBearerTokenCacheTtlMs(response?.data);
+    if (cacheTtlMs > 0) {
+      this.bearerTokenCache.set(cacheKey, {
+        token,
+        expiresAt: Date.now() + cacheTtlMs,
+      });
+    }
 
     return withAuthorizationHeader(requestOptionsWithAuth, 'Bearer', token, tokenFailureMessage);
   }
@@ -682,7 +788,11 @@ class BaseRegistry<
    * Resolve the remote image publish date from manifest metadata.
    * Provider-specific implementations can override this when richer APIs exist.
    */
-  async getImagePublishedAt(image, tag?: string): Promise<string | undefined> {
+  async getImagePublishedAt(
+    image,
+    tag?: string,
+    options?: RegistryLookupOptions,
+  ): Promise<string | undefined> {
     const imageToInspect = structuredClone(image);
     const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : imageToInspect.tag?.value;
     if (typeof tagToLookup === 'string' && tagToLookup.length > 0) {
@@ -692,7 +802,9 @@ class BaseRegistry<
       };
     }
 
-    const manifest = await this.getImageManifestDigest(imageToInspect);
+    const manifest = options
+      ? await this.getImageManifestDigest(imageToInspect, undefined, options)
+      : await this.getImageManifestDigest(imageToInspect);
     if (typeof manifest?.created !== 'string') {
       return undefined;
     }

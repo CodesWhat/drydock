@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 
 interface WorkflowStep {
-  if?: string;
   name?: string;
   uses?: string;
   with?: Record<string, string>;
@@ -13,6 +12,7 @@ interface WorkflowStep {
 interface WorkflowJob {
   env?: Record<string, string>;
   if?: string;
+  needs?: string[];
   steps?: WorkflowStep[];
 }
 
@@ -46,14 +46,14 @@ test('Playwright workflow disables browser downloads for host-side npm installs'
   });
 });
 
-test('manual dispatch runs Playwright against the selected ref regardless of path filters', () => {
+test('Playwright can be dispatched against a frozen release candidate', () => {
   const workflow = loadWorkflow();
 
-  expect(Object.hasOwn(workflow.on ?? {}, 'workflow_dispatch')).toBe(true);
+  expect(workflow.on).toHaveProperty('workflow_dispatch');
   expect(getWorkflowStep('changes', 'Filter paths')?.with?.base).toContain(
     "github.event_name == 'workflow_dispatch'",
   );
-  expect(workflow.jobs?.playwright?.if).toBe(
-    "github.event_name == 'workflow_dispatch' || needs.changes.outputs.runtime == 'true'",
-  );
+  expect(workflow.jobs?.playwright?.if).toContain("github.event_name == 'workflow_dispatch'");
+  expect(workflow.jobs?.changes?.if).toBeUndefined();
+  expect(workflow.jobs?.playwright?.needs).toStrictEqual(['changes']);
 });

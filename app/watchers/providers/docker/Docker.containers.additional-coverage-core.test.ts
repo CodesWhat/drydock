@@ -206,7 +206,9 @@ describe('Docker Watcher', () => {
         created: '2023-01-01',
         noUpdateReason: 'Running by digest — no tag to compare',
       });
-      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image);
+      expect(mockRegistry.getTags).toHaveBeenCalledWith(container.image, {
+        usePollCycleCache: false,
+      });
       expect(mockRegistry.getImageManifestDigest).toHaveBeenCalledTimes(2);
       expect(mockRegistry.getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
       expect(mockRegistry.getImageManifestDigest.mock.calls[1][1]).toBe('sha256:abc123def456');

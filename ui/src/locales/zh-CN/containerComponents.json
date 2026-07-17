@@ -274,14 +274,10 @@
       "hidePinned": "隐藏已固定",
       "hidePinnedTooltip": "隐藏已固定到特定版本的容器",
       "clearAll": "全部清除",
-      "toggleColumnsTooltip": "切换列",
       "groupByStackTooltip": "按堆栈分组",
       "expandAll": "全部展开",
       "collapseAll": "全部折叠",
       "recheckTooltip": "重新检查更新",
-      "columnsHeader": "列",
-      "narrowViewportSuffix": "(窄视图)",
-      "autoHiddenBadgeTooltip": "因窗口宽度不足，自动隐藏了 {count} 列。请拉宽窗口，或隐藏其他列以腾出空间。",
       "filterSearch": "搜索：{value}",
       "filterStatus": "状态：{value}",
       "filterBouncer": "Bouncer：{value}",
@@ -324,6 +320,7 @@
     "projectLink": {
       "viewProject": "查看项目"
     },
+    "registryLink": { "viewRegistry": "查看镜像仓库" },
     "releaseNotesLink": {
       "releaseNotes": "发布说明",
       "viewFullNotes": "查看完整说明",
@@ -553,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "已固定 — 有更新版本可供参考。"
+      }
     }
   }
 }

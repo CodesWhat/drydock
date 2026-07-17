@@ -66,6 +66,7 @@ vi.mock('./group', mockInit);
 vi.mock('./log', mockInit);
 vi.mock('./notification', mockInit);
 vi.mock('./settings', mockInit);
+vi.mock('./preferences', mockInit);
 vi.mock('./store', mockInit);
 vi.mock('./debug', mockInit);
 vi.mock('./server', mockInit);
@@ -322,6 +323,7 @@ describe('API Router', () => {
     const logRouter = await import('./log.js');
     const notificationRouter = await import('./notification.js');
     const settingsRouter = await import('./settings.js');
+    const preferencesRouter = await import('./preferences.js');
     const storeRouter = await import('./store.js');
     const debugRouter = await import('./debug.js');
     const serverRouter = await import('./server.js');
@@ -346,6 +348,7 @@ describe('API Router', () => {
     expect(logRouter.init).toHaveBeenCalled();
     expect(notificationRouter.init).toHaveBeenCalled();
     expect(settingsRouter.init).toHaveBeenCalled();
+    expect(preferencesRouter.init).toHaveBeenCalled();
     expect(storeRouter.init).toHaveBeenCalled();
     expect(debugRouter.init).toHaveBeenCalled();
     expect(serverRouter.init).toHaveBeenCalled();
@@ -357,6 +360,25 @@ describe('API Router', () => {
     expect(auditRouter.init).toHaveBeenCalled();
     expect(webhookRouter.init).toHaveBeenCalled();
     expect(webhooksRouter.init).toHaveBeenCalled();
+  });
+
+  test('should mount backup routes before generic container id routes', async () => {
+    const backupRouter = await import('./backup.js');
+    const containerRouter = await import('./container.js');
+    const backupRouterInstance = vi.mocked(backupRouter.init).mock.results[0]?.value;
+    const containerRouterInstance = vi.mocked(containerRouter.init).mock.results[0]?.value;
+    const useCalls = router.use.mock.calls;
+
+    const backupIndex = useCalls.findIndex(
+      (call) => call[0] === '/containers' && call[1] === backupRouterInstance,
+    );
+    const containerIndex = useCalls.findIndex(
+      (call) => call[0] === '/containers' && call[1] === containerRouterInstance,
+    );
+
+    expect(backupIndex).toBeGreaterThan(-1);
+    expect(containerIndex).toBeGreaterThan(-1);
+    expect(backupIndex).toBeLessThan(containerIndex);
   });
 
   test('should use requireAuthentication middleware', async () => {
@@ -450,6 +472,50 @@ describe('API Router', () => {
       expect.objectContaining({
         keyGenerator,
       }),
+    );
+  });
+
+  test('should exempt only valid icon reads from the outer API rate limiter', async () => {
+    const limiterOptions = mockRateLimit.mock.calls[0]?.[0];
+    expect(limiterOptions).toBeDefined();
+    expect(typeof limiterOptions.skip).toBe('function');
+
+    const authenticated = { isAuthenticated: () => true };
+    const unauthenticated = { isAuthenticated: () => false };
+
+    expect(
+      await limiterOptions.skip({ ...authenticated, method: 'GET', path: '/icons/selfhst/docker' }),
+    ).toBe(true);
+    expect(
+      await limiterOptions.skip({
+        ...authenticated,
+        method: 'HEAD',
+        path: '/icons/selfhst/docker/',
+      }),
+    ).toBe(true);
+    expect(
+      await limiterOptions.skip({
+        ...unauthenticated,
+        method: 'GET',
+        path: '/icons/selfhst/docker',
+      }),
+    ).toBe(false);
+    expect(await limiterOptions.skip({ method: 'GET', path: '/icons/selfhst/docker' })).toBe(false);
+    expect(
+      await limiterOptions.skip({ ...authenticated, method: 'DELETE', path: '/icons/cache' }),
+    ).toBe(false);
+    expect(
+      await limiterOptions.skip({ ...authenticated, method: 'GET', path: '/containers' }),
+    ).toBe(false);
+    expect(
+      await limiterOptions.skip({
+        ...authenticated,
+        method: 'GET',
+        path: '/icons/selfhst/docker/extra',
+      }),
+    ).toBe(false);
+    expect(await limiterOptions.skip({ ...authenticated, method: 'GET', path: '/icons' })).toBe(
+      false,
     );
   });
 

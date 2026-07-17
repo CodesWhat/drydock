@@ -7,13 +7,21 @@ describe('Dockerfile release defaults', () => {
     expect(dockerfile).toMatch(/FROM base AS release\s+ENV DD_LOG_FORMAT=text/u);
   });
 
-  test('base stage pins the available Alpine tzdata revision', () => {
+  test('release image copies Trivy from the digest-pinned multi-arch image', () => {
     const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
-    const baseStage = dockerfile.match(
-      /^FROM node:[^\n]+ AS base\n(?<content>[\s\S]*?)(?=^FROM )/mu,
-    )?.groups?.content;
 
-    expect(baseStage).toMatch(/^[ \t]+tzdata=2026c-r0[ \t]+\\$/mu);
-    expect(baseStage).not.toContain('tzdata=2026b-r0');
+    expect(dockerfile).toContain(
+      'FROM aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f AS trivy-bin',
+    );
+    expect(dockerfile).toContain('COPY --from=trivy-bin /usr/local/bin/trivy /usr/local/bin/trivy');
+    expect(dockerfile).not.toContain('alpine/edge/testing');
+    expect(dockerfile).not.toMatch(/apk add[^\n]*trivy/u);
+  });
+
+  test('release image pins the available Alpine tzdata revision', () => {
+    const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
+
+    expect(dockerfile).toContain('tzdata=2026c-r0');
+    expect(dockerfile).not.toContain('tzdata=2026b-r0');
   });
 });

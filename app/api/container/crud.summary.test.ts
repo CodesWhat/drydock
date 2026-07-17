@@ -21,10 +21,16 @@ function createResponse() {
   };
 }
 
-function createHandlers(getContainersFromStore: () => unknown) {
+function createHandlers(
+  getContainersFromStore: () => unknown,
+  getContainersForStats: () => unknown = getContainersFromStore,
+  getContainersRawFromStore: () => unknown = getContainersFromStore,
+) {
   return createCrudHandlers({
     storeApi: {
       getContainersFromStore: getContainersFromStore as never,
+      getContainersForStats: getContainersForStats as never,
+      getContainersRawFromStore: getContainersRawFromStore as never,
       getContainerCountFromStore: vi.fn(() => 0),
       storeContainer: {
         getContainer: vi.fn(),
@@ -59,6 +65,10 @@ function createHandlers(getContainersFromStore: () => unknown) {
 describe('api/container/crud summary partitioning', () => {
   test('getContainerSummary delegates to a single-pass dashboard summary builder', () => {
     const containers = [{ id: 'c1' }, { id: 'c2' }];
+    const getContainersFromStore = vi.fn(() => {
+      throw new Error('full container clones should not be requested');
+    });
+    const getContainersForStats = vi.fn(() => containers);
     mockBuildContainerDashboardSummary.mockReturnValue({
       status: { total: 2, running: 2, stopped: 0, updatesAvailable: 1 },
       securityIssues: 1,
@@ -66,13 +76,15 @@ describe('api/container/crud summary partitioning', () => {
       matureUpdates: 0,
     });
 
-    const handlers = createHandlers(() => containers);
+    const handlers = createHandlers(getContainersFromStore, getContainersForStats);
     const res = createResponse();
 
     handlers.getContainerSummary({} as never, res as never);
 
     expect(mockBuildContainerDashboardSummary).toHaveBeenCalledTimes(1);
     expect(mockBuildContainerDashboardSummary).toHaveBeenCalledWith(containers);
+    expect(getContainersForStats).toHaveBeenCalledWith({});
+    expect(getContainersFromStore).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({
       containers: { total: 2, running: 2, stopped: 0, updatesAvailable: 1 },

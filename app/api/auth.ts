@@ -38,6 +38,7 @@ import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
+  isRequestAuthenticated,
 } from './rate-limit-key.js';
 
 const LokiStore = ConnectLoki(session);
@@ -46,6 +47,18 @@ const router = express.Router();
 const AUTH_USER_CACHE_CONTROL = 'private, no-cache, no-store, must-revalidate';
 const LOGIN_SESSION_ERROR_RESPONSE = 'Unable to establish session';
 const LOGIN_SUCCESS_AUDIT_MESSAGE = 'Login succeeded';
+const DEPRECATED_AUTH_METHODS_WARNING =
+  'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /api/v1/auth/status instead.';
+const DEPRECATED_AUTH_STRATEGIES_WARNING =
+  'GET /auth/strategies is deprecated and will be removed in v1.8.0. Use GET /api/v1/auth/status instead.';
+// '@1783123200' = 2026-07-04T00:00:00Z, the date this endpoint actually
+// started sending the deprecation signal (v1.6.0) — the RFC 9745
+// Deprecation value must be the instant the resource became deprecated, a
+// past/current date, never the same instant as the future Sunset removal
+// date below.
+const DEPRECATED_AUTH_METHODS_DEPRECATION = '@1783123200';
+const DEPRECATED_AUTH_METHODS_SUNSET = 'Thu, 01 Jul 2027 00:00:00 GMT';
+const DEPRECATED_AUTH_STRATEGIES_SUNSET = 'Sat, 01 Jul 2028 00:00:00 GMT';
 let sessionMiddleware: ReturnType<typeof session> | undefined;
 
 type LoginFinish = () => void;
@@ -290,6 +303,29 @@ function logout(req: AuthRequest, res: Response): void {
   });
 }
 
+/**
+ * Return auth strategies via the deprecated, unversioned /api/auth/methods
+ * alias. Logs a deprecation warning on every request per DEPRECATIONS.md and
+ * sets the RFC 9745 Deprecation / RFC 8594 Sunset headers (same treatment as
+ * PUT /api/settings), then delegates to getStrategies for the actual
+ * (unchanged) response body.
+ * @param req
+ * @param res
+ */
+function getStrategiesDeprecatedMethodsAlias(req: Request, res: Response): void {
+  log.warn(DEPRECATED_AUTH_METHODS_WARNING);
+  res.setHeader('Deprecation', DEPRECATED_AUTH_METHODS_DEPRECATION);
+  res.setHeader('Sunset', DEPRECATED_AUTH_METHODS_SUNSET);
+  getStrategies(req, res);
+}
+
+function getStrategiesDeprecatedResponse(req: Request, res: Response): void {
+  log.warn(DEPRECATED_AUTH_STRATEGIES_WARNING);
+  res.setHeader('Deprecation', DEPRECATED_AUTH_METHODS_DEPRECATION);
+  res.setHeader('Sunset', DEPRECATED_AUTH_STRATEGIES_SUNSET);
+  getStrategies(req, res);
+}
+
 function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
   if (trustproxy === true) {
     return true;
@@ -377,6 +413,13 @@ export function init(app: Application): void {
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 100,
+    // Authenticated UI navigations re-read the current user. Keep that safe
+    // probe from exhausting the public discovery and login budget for clients
+    // behind the same address; every other auth route remains capped. Check
+    // authentication before request-controlled route data so the request
+    // cannot decide whether the security check runs.
+    skip: (req: Request) =>
+      isRequestAuthenticated(req) && req.method === 'GET' && req.path === '/user',
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },
@@ -396,12 +439,13 @@ export function init(app: Application): void {
   });
 
   // Return strategies
-  router.get('/strategies', getStrategies);
+  router.get('/strategies', getStrategiesDeprecatedResponse);
   router.get('/status', getAuthStatus);
 
   // Compatibility alias for clients that still call the legacy API path.
   // This endpoint must stay unauthenticated so the login screen can render.
-  app.get('/api/auth/methods', authLimiter, getStrategies);
+  // Deprecated in v1.6.0, scheduled for removal in v1.7.0 — see DEPRECATIONS.md.
+  app.get('/api/auth/methods', authLimiter, getStrategiesDeprecatedMethodsAlias);
   app.get('/api/v1/auth/status', authLimiter, getAuthStatus);
   app.get('/api/auth/status', authLimiter, getAuthStatus);
 

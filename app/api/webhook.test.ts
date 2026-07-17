@@ -16,8 +16,10 @@ const {
   mockTimingSafeEqual,
   mockLogWarn,
   mockResolveWatcherIdForContainer,
+  mockRecordLegacyInput,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), post: vi.fn() },
+  mockRecordLegacyInput: vi.fn(),
   mockGetWebhookConfiguration: vi.fn(() => ({
     enabled: true,
     token: 'test-token',
@@ -110,6 +112,10 @@ vi.mock('../prometheus/audit.js', () => ({
 
 vi.mock('../prometheus/webhook.js', () => ({
   getWebhookCounter: mockGetWebhookCounter,
+}));
+
+vi.mock('../prometheus/compatibility.js', () => ({
+  recordLegacyInput: mockRecordLegacyInput,
 }));
 
 vi.mock('../log/index.js', () => ({
@@ -497,7 +503,7 @@ describe('Webhook Router', () => {
         result: { watchers: 2 },
       });
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/webhook/watch',
+        path: '/api/v1/webhook/watch',
         method: 'post',
         statusCode: '200',
         payload: res.json.mock.calls[0][0],
@@ -520,7 +526,7 @@ describe('Webhook Router', () => {
         result: { watchers: 0 },
       });
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/webhook/watch',
+        path: '/api/v1/webhook/watch',
         method: 'post',
         statusCode: '200',
         payload: res.json.mock.calls[0][0],
@@ -700,20 +706,26 @@ describe('Webhook Router', () => {
       });
     });
 
-    test('should return 403 when container has wud.webhook.enabled=false (legacy)', async () => {
+    test('should ignore removed wud.webhook.enabled on watch', async () => {
       const container = {
         name: 'my-nginx',
+        watcher: 'local',
         image: { name: 'nginx' },
         labels: { 'wud.webhook.enabled': 'false' },
       };
       mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: { 'docker.local': { watchContainer: vi.fn().mockResolvedValue(undefined) } },
+        trigger: {},
+      });
 
       const handler = getHandler('post', '/watch/:containerName');
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockRecordLegacyInput).not.toHaveBeenCalled();
     });
 
     test('should allow watch when dd.webhook.enabled=true', async () => {
@@ -1191,20 +1203,38 @@ describe('Webhook Router', () => {
       });
     });
 
-    test('should return 403 when container has wud.webhook.enabled=false (legacy)', async () => {
+    test('should ignore removed wud.webhook.enabled on update', async () => {
       const container = {
+        id: 'c1',
         name: 'my-nginx',
         image: { name: 'nginx' },
+        updateAvailable: true,
         labels: { 'wud.webhook.enabled': 'false' },
       };
       mockGetContainers.mockReturnValue([container]);
+      const mockTrigger = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: {
+          'docker.default': {
+            type: 'docker',
+            trigger: mockTrigger,
+            agent: undefined,
+            configuration: { threshold: 'all' },
+            getId: () => 'docker.default',
+            isTriggerIncluded: () => true,
+            isTriggerExcluded: () => false,
+          },
+        },
+      });
 
       const handler = getHandler('post', '/update/:containerName');
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(mockRecordLegacyInput).not.toHaveBeenCalled();
     });
 
     test('should return 404 when no docker trigger found', async () => {

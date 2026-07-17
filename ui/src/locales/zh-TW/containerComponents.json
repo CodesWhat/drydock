@@ -274,14 +274,10 @@
       "hidePinned": "隱藏已固定",
       "hidePinnedTooltip": "隱藏已固定到特定版本的容器",
       "clearAll": "全部清除",
-      "toggleColumnsTooltip": "切換列",
       "groupByStackTooltip": "按堆疊分組",
       "expandAll": "全部展開",
       "collapseAll": "全部摺疊",
       "recheckTooltip": "重新檢查更新",
-      "columnsHeader": "列",
-      "narrowViewportSuffix": "(窄視圖)",
-      "autoHiddenBadgeTooltip": "視窗寬度不足，已自動隱藏 {count} 欄。請拉寬視窗，或隱藏其他欄位以釋放空間。",
       "filterSearch": "搜尋：{value}",
       "filterStatus": "狀態：{value}",
       "filterBouncer": "Bouncer：{value}",
@@ -324,6 +320,7 @@
     "projectLink": {
       "viewProject": "檢視專案"
     },
+    "registryLink": { "viewRegistry": "查看映像檔倉庫" },
     "releaseNotesLink": {
       "releaseNotes": "發行說明",
       "viewFullNotes": "檢視完整說明",
@@ -553,6 +550,11 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "updateStatus": {
+      "summary": {
+        "pinned": "已固定 — 有較新版本可供參考。"
+      }
     }
   }
 }

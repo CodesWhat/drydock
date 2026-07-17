@@ -1,7 +1,10 @@
 import { readJsonResponse } from '../utils/api';
 
+export type UpdateMode = 'notify' | 'manual' | 'auto';
+
 interface Settings {
   internetlessMode: boolean;
+  updateMode: UpdateMode;
 }
 
 async function getSettings(): Promise<Settings> {

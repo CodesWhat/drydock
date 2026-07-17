@@ -14,6 +14,7 @@ export interface ResolvedImgset {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: boolean;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -185,6 +186,23 @@ function normalizeConfigStringValue(value: unknown) {
   return valueTrimmed === '' ? undefined : valueTrimmed;
 }
 
+export function normalizeConfigBooleanValue(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const valueNormalized = value.trim().toLowerCase();
+  if (valueNormalized === 'true') {
+    return true;
+  }
+  if (valueNormalized === 'false') {
+    return false;
+  }
+  return undefined;
+}
+
 function getNestedValue(value: unknown, path: string) {
   return path
     .split('.')
@@ -202,6 +220,26 @@ export function getFirstConfigString(value: unknown, paths: string[]) {
     const pathValue = normalizeConfigStringValue(getNestedValue(value, path));
     if (pathValue !== undefined) {
       return pathValue;
+    }
+  }
+  return undefined;
+}
+
+export function getFirstConfigBoolean(value: unknown, paths: string[]) {
+  for (const path of paths) {
+    const pathValue = normalizeConfigBooleanValue(getNestedValue(value, path));
+    if (pathValue !== undefined) {
+      return pathValue;
+    }
+  }
+  return undefined;
+}
+
+export function getContainerConfigBooleanValue(...values: unknown[]) {
+  for (const value of values) {
+    const valueNormalized = normalizeConfigBooleanValue(value);
+    if (valueNormalized !== undefined) {
+      return valueNormalized;
     }
   }
   return undefined;
@@ -297,6 +335,7 @@ export function getResolvedImgsetConfiguration(
       'transform',
     ]),
     tagFamily: getFirstConfigString(imgsetConfiguration, ['tag.family']),
+    tagPinInfo: getFirstConfigBoolean(imgsetConfiguration, ['tag.pin.info']),
     linkTemplate: getFirstConfigString(imgsetConfiguration, ['link.template', 'linkTemplate']),
     displayName: getFirstConfigString(imgsetConfiguration, ['display.name', 'displayName']),
     displayIcon: getFirstConfigString(imgsetConfiguration, ['display.icon', 'displayIcon']),

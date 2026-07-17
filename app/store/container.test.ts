@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as event from '../event/index.js';
 import { createContainerFixture } from '../test/helpers.js';
+import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
+import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
 import * as container from './container.js';
 
 vi.mock('./migrate');
@@ -123,6 +125,100 @@ test('updateContainer should update doc and emit an event', async () => {
   expect(spyEvent).toHaveBeenCalled();
 });
 
+describe('category-scoped trigger label normalization (#494)', () => {
+  function saveAndCapture(overrides) {
+    const collection = { findOne: () => {}, insert: () => {} };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    return container.insertContainer({ ...createContainerFixture(), ...overrides });
+  }
+
+  test('derives both scoped fields independently from both labels', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker', 'dd.notification.include': 'slack' },
+      triggerInclude: 'docker',
+    });
+
+    expect(saved.actionTriggerInclude).toBe('docker');
+    expect(saved.notificationTriggerInclude).toBe('slack');
+  });
+
+  test('a lone action label does not leak onto the notification field via the mirror', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker' },
+      triggerInclude: 'docker',
+    });
+
+    expect(saved.actionTriggerInclude).toBe('docker');
+    expect(saved.notificationTriggerInclude).toBeUndefined();
+  });
+
+  test('a lone notification label does not leak onto the action field via the mirror', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.notification.exclude': 'slack' },
+      triggerExclude: 'slack',
+    });
+
+    expect(saved.notificationTriggerExclude).toBe('slack');
+    expect(saved.actionTriggerExclude).toBeUndefined();
+  });
+
+  test('recovers the notification value the old collapsed mirror discarded', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker', 'dd.notification.include': 'slack' },
+      triggerInclude: 'docker',
+      actionTriggerInclude: undefined,
+      notificationTriggerInclude: undefined,
+    });
+
+    expect(saved.notificationTriggerInclude).toBe('slack');
+  });
+
+  test('falls back to the mirror for both categories when the container has no labels', () => {
+    const saved = saveAndCapture({
+      labels: undefined,
+      triggerInclude: 'docker',
+      triggerExclude: 'compose',
+    });
+
+    expect(saved.actionTriggerInclude).toBe('docker');
+    expect(saved.notificationTriggerInclude).toBe('docker');
+    expect(saved.actionTriggerExclude).toBe('compose');
+    expect(saved.notificationTriggerExclude).toBe('compose');
+  });
+
+  test('falls back to the mirror for a direction the labels say nothing about', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker' },
+      triggerInclude: 'docker',
+      triggerExclude: 'compose',
+    });
+
+    expect(saved.notificationTriggerInclude).toBeUndefined();
+    expect(saved.actionTriggerExclude).toBe('compose');
+    expect(saved.notificationTriggerExclude).toBe('compose');
+  });
+
+  test('never overwrites an already-populated scoped field', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker' },
+      actionTriggerInclude: 'explicit',
+      triggerInclude: 'docker',
+    });
+
+    expect(saved.actionTriggerInclude).toBe('explicit');
+  });
+
+  test('preserves the deprecated mirror untouched', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker', 'dd.notification.include': 'slack' },
+      triggerInclude: 'docker',
+    });
+
+    expect(saved.triggerInclude).toBe('docker');
+  });
+});
+
 test('updateContainer should use collection update when available for existing containers', async () => {
   const existingContainer = {
     data: createContainerFixture({
@@ -211,6 +307,121 @@ test('updateContainer should clear updatePolicy when explicitly set to undefined
   container.createCollections(db);
   const updated = container.updateContainer(containerToSave);
   expect(updated.updatePolicy).toBeUndefined();
+});
+
+test('updateContainer should preserve controller overrides across declarative refreshes', () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updatePolicy: { maturityMode: 'all', skipTags: ['ui-tag'] },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: { skipTags: ['old-label'] },
+      },
+      updatePolicyOverrides: { maturityMode: 'all', skipTags: ['ui-tag'] },
+      updatePolicySources: {
+        maturityMode: 'override',
+        maturityMinAgeDays: 'env',
+        skipTags: 'override',
+      },
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    update: vi.fn(),
+  };
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 14, skipTags: ['new-label'] },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: { maturityMinAgeDays: 14, skipTags: ['new-label'] },
+      },
+      updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'label', skipTags: 'label' },
+    }),
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({ maturityMode: 'all', skipTags: ['ui-tag'] });
+  expect(updated.updatePolicy).toEqual({
+    maturityMode: 'all',
+    maturityMinAgeDays: 14,
+    skipTags: ['ui-tag'],
+  });
+  expect(updated.updatePolicySources).toEqual({
+    maturityMode: 'override',
+    maturityMinAgeDays: 'label',
+    skipTags: 'override',
+  });
+});
+
+test('updateContainer should keep overrides when a declarative label is removed', () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updatePolicy: { skipTags: [] },
+      updatePolicyDeclarative: { env: {}, label: { skipTags: ['old-label'] } },
+      updatePolicyOverrides: { skipTags: [] },
+      updatePolicySources: { skipTags: 'override' },
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    update: vi.fn(),
+  };
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: undefined,
+      updatePolicyDeclarative: { env: {}, label: {} },
+      updatePolicySources: {},
+    }),
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({ skipTags: [] });
+  expect(updated.updatePolicy).toEqual({ skipTags: [] });
+  expect(updated.updatePolicySources).toEqual({ skipTags: 'override' });
+});
+
+test('updateContainer should honor an explicit empty override layer', () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updatePolicy: { maturityMode: 'all' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: { maturityMode: 'all' },
+      updatePolicySources: { maturityMode: 'override' },
+    }),
+  };
+  const collection = { findOne: () => existingContainer, update: vi.fn() };
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: { maturityMode: 'mature' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: undefined,
+      updatePolicySources: { maturityMode: 'env' },
+    }),
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({});
+  expect(updated.updatePolicy).toEqual({ maturityMode: 'mature' });
+});
+
+test('updateContainer should resolve a declarative policy without a current stored container', () => {
+  const collection = createFilterableCollection([]);
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: { maturityMode: 'mature' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicySources: { maturityMode: 'env' },
+    }),
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({});
+  expect(updated.updatePolicySources).toEqual({ maturityMode: 'env' });
 });
 
 test('updateContainer should preserve updateRollback when omitted from payload', async () => {
@@ -1286,6 +1497,38 @@ test('getContainers should apply pagination options', async () => {
   expect(results[0].name).toEqual('container2');
 });
 
+test('getContainers should apply a caller sort before pagination and cloning', async () => {
+  const containerExample = createContainerFixture();
+  const containers = [
+    { data: { ...containerExample, name: 'container3' } },
+    { data: { ...containerExample, name: 'container2' } },
+    { data: { ...containerExample, name: 'container1' } },
+  ];
+  const collection = {
+    find: () => containers,
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const results = container.getContainers(
+    {},
+    {
+      limit: 1,
+      offset: 0,
+      sort: (items) => [...items].reverse(),
+    },
+  );
+
+  expect(results).toHaveLength(1);
+  expect(results[0].name).toEqual('container3');
+});
+
 test('getContainers should support offset-only pagination when limit is zero', async () => {
   const containerExample = createContainerFixture();
   const containers = [
@@ -1577,9 +1820,14 @@ test('getContainersForStats should return projected stat fields only', async () 
   expect(typeof projection.updateAvailable).toBe('boolean');
   expect(projection.image.id).toBe(containerExample.image.id);
   expect(projection.image.name).toBe(containerExample.image.name);
+  expect(projection.security).toEqual({
+    scan: {
+      summary: { critical: 0, high: 0 },
+    },
+  });
 
   // Heavy fields are NOT present on the projection
-  expect((projection as Record<string, unknown>).security).toBeUndefined();
+  expect((projection.security?.scan as Record<string, unknown>).vulnerabilities).toBeUndefined();
   expect((projection as Record<string, unknown>).details).toBeUndefined();
   expect((projection as Record<string, unknown>).labels).toBeUndefined();
   expect((projection as Record<string, unknown>).result).toBeUndefined();
@@ -2892,6 +3140,37 @@ describe('hasContainerChanged', () => {
     expect(container.hasContainerChanged(a, b)).toBe(true);
   });
 
+  test('should return true when declarative update policy metadata changes', () => {
+    const a = createContainerFixture({
+      updatePolicy: {
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+        skipDigests: ['sha256:a'],
+      },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7, skipDigests: ['sha256:a'] },
+        label: {},
+      },
+      updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'env' },
+      updatePolicyOverrides: { skipDigests: ['sha256:a'] },
+    });
+    const b = createContainerFixture({
+      updatePolicy: {
+        maturityMode: 'mature',
+        maturityMinAgeDays: 14,
+        skipDigests: ['sha256:a'],
+      },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7, skipDigests: ['sha256:a'] },
+        label: { maturityMinAgeDays: 14 },
+      },
+      updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'label' },
+      updatePolicyOverrides: { skipDigests: ['sha256:a'] },
+    });
+
+    expect(container.hasContainerChanged(a, b)).toBe(true);
+  });
+
   test('should return true when security state changes', () => {
     const a = createContainerFixture({ security: undefined });
     const b = createContainerFixture({
@@ -3246,6 +3525,166 @@ test('updateContainer where a rollback-named container is renamed back to a norm
 
   expect(spyUpdated).toHaveBeenCalledTimes(1);
   expect(spyUpdated.mock.calls[0][0]).toMatchObject({ name: 'service' });
+});
+
+describe('container unhealthy transition emission', () => {
+  function healthFixture(overrides: Record<string, any>) {
+    const fixture = createContainerFixture(overrides);
+    return {
+      ...fixture,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+        ...fixture.details,
+        ...(overrides.details ?? {}),
+      },
+    };
+  }
+  function initialize(existing?: any) {
+    const doc = existing ? { data: existing } : undefined;
+    const collection = {
+      findOne: vi.fn(() => doc),
+      update: vi.fn(),
+      insert: vi.fn(),
+      chain: vi.fn(() => ({ find: () => ({ remove: () => ({}) }) })),
+    };
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    return collection;
+  }
+
+  test('fresh unhealthy insert has no previous baseline and does not emit', () => {
+    initialize();
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.insertContainer(createContainerFixture({ health: 'unhealthy' }));
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('update fallback stores first-observation unhealthy without emitting a transition', () => {
+    const collection = initialize();
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    const incoming = healthFixture({ id: 'unknown-unhealthy', health: 'unhealthy' });
+
+    const result = container.updateContainer(incoming);
+
+    expect(result).toMatchObject({ id: 'unknown-unhealthy', health: 'unhealthy' });
+    expect(collection.insert).toHaveBeenCalledWith({ data: result });
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('healthy to unhealthy emits even when health is the only changed field', () => {
+    const existing = healthFixture({ health: 'healthy', details: { startedAt: '2026-01-01' } });
+    initialize(existing);
+    const emittedHealthTransition = vi.spyOn(event, 'emitContainerHealthTransition');
+    const emittedContainerUpdate = vi.spyOn(event, 'emitContainerUpdated');
+    container.updateContainer({ ...existing, health: 'unhealthy' });
+    expect(emittedHealthTransition).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerName: existing.name,
+        previousHealth: 'healthy',
+        health: 'unhealthy',
+      }),
+    );
+    expect(emittedContainerUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: existing.id,
+        health: 'unhealthy',
+      }),
+    );
+  });
+
+  test.each([
+    {
+      title: 'health was never observed and startedAt is unchanged',
+      existingDetails: { startedAt: '2026-01-01T00:00:00.000Z' },
+      incomingDetails: { startedAt: '2026-01-01T00:00:00.000Z' },
+    },
+    {
+      title: 'health was never observed and startedAt is absent on both sides',
+      existingDetails: {},
+      incomingDetails: {},
+    },
+    {
+      title: 'startedAt appears for the first time on a record without observed health',
+      existingDetails: {},
+      incomingDetails: { startedAt: '2026-01-01T00:00:00.000Z' },
+    },
+  ])('does not emit when $title', ({ existingDetails, incomingDetails }) => {
+    const existing = healthFixture({ health: undefined, details: existingDetails });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+
+    container.updateContainer({
+      ...existing,
+      health: 'unhealthy',
+      details: { ...existing.details, ...incomingDetails },
+    });
+
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('does not treat differing startedAt values as a restart without an observed health baseline', () => {
+    const existing = healthFixture({
+      health: undefined,
+      details: { startedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+
+    container.updateContainer({
+      ...existing,
+      health: 'unhealthy',
+      details: { ...existing.details, startedAt: '2026-01-02T00:00:00.000Z' },
+    });
+
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { previous: 'unhealthy', incoming: 'unhealthy', change: { status: 'stopped' } },
+    { previous: 'unhealthy', incoming: 'healthy', change: {} },
+    { previous: 'unhealthy', incoming: undefined, change: {} },
+  ])('does not emit for previous=$previous incoming=$incoming', ({
+    previous,
+    incoming,
+    change,
+  }) => {
+    const existing = healthFixture({
+      health: previous,
+      status: 'running',
+      details: { startedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.updateContainer({ ...existing, ...change, health: incoming });
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('consecutive unhealthy observations emit again when startedAt changes', () => {
+    const existing = healthFixture({
+      health: 'unhealthy',
+      details: { startedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.updateContainer({
+      ...existing,
+      details: { ...existing.details, startedAt: '2026-01-02T00:00:00.000Z' },
+    });
+    expect(emitted).toHaveBeenCalledWith(expect.objectContaining({ previousHealth: 'unhealthy' }));
+  });
+
+  test('rollback tracking containers suppress otherwise valid unhealthy transitions', () => {
+    const existing = healthFixture({
+      name: 'foo-old-1234567890',
+      health: 'healthy',
+      details: { startedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.updateContainer({ ...existing, health: 'unhealthy' });
+    expect(emitted).not.toHaveBeenCalled();
+  });
 });
 
 test('deleteContainer with a rollback-named container does NOT emit emitContainerRemoved', () => {
@@ -3823,6 +4262,42 @@ describe('updateLifecycleCache carry-forward', () => {
     }
   });
 
+  test('restarts recreated-container soak when a mutable tag candidate changes by created time', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
+      const oldDetectedAt = '2026-06-01T12:00:00.000Z';
+      const oldFixture = makeDigestUpdateFixture({
+        id: 'lifecycle-created-old',
+        image: {
+          ...createContainerFixture().image,
+          digest: { watch: false, repo: undefined },
+        },
+        result: { tag: 'version', created: '2026-06-01T00:00:00.000Z' },
+        updateDetectedAt: oldDetectedAt,
+        firstSeenAt: oldDetectedAt,
+      });
+      const collection = createFilterableCollection([{ data: oldFixture }]);
+      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+      container.deleteContainer('lifecycle-created-old', { replacementExpected: true });
+
+      const newFixture = makeDigestUpdateFixture({
+        id: 'lifecycle-created-new',
+        image: {
+          ...createContainerFixture().image,
+          digest: { watch: false, repo: undefined },
+        },
+        result: { tag: 'version', created: '2026-06-02T00:00:00.000Z' },
+      });
+      const inserted = container.insertContainer(newFixture);
+
+      expect(inserted.updateDetectedAt).toBe('2026-06-03T12:00:00.000Z');
+      expect(inserted.updateDetectedAt).not.toBe(oldDetectedAt);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('mature-mode soak clock survives container recreation', () => {
     const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
     const oldFixture = makeDigestUpdateFixture({
@@ -4031,6 +4506,130 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     const inserted = container.insertContainer(makePolicyFixture({ id: 'policy-new-1' }));
 
     expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+  });
+
+  test('carries only controller overrides onto a replacement declarative policy', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-layered-old',
+      updatePolicy: { maturityMode: 'all', maturityMinAgeDays: 7, skipTags: ['ui-tag'] },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: { skipTags: ['old-label'] },
+      },
+      updatePolicyOverrides: { maturityMode: 'all', skipTags: ['ui-tag'] },
+      updatePolicySources: {
+        maturityMode: 'override',
+        maturityMinAgeDays: 'env',
+        skipTags: 'override',
+      },
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-layered-old', { replacementExpected: true });
+    const inserted = container.insertContainer(
+      makePolicyFixture({
+        id: 'policy-layered-new',
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 14, skipTags: ['new-label'] },
+        updatePolicyDeclarative: {
+          env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          label: { maturityMinAgeDays: 14, skipTags: ['new-label'] },
+        },
+        updatePolicySources: {
+          maturityMode: 'env',
+          maturityMinAgeDays: 'label',
+          skipTags: 'label',
+        },
+      }),
+    );
+
+    expect(inserted.updatePolicyOverrides).toEqual({ maturityMode: 'all', skipTags: ['ui-tag'] });
+    expect(inserted.updatePolicy).toEqual({
+      maturityMode: 'all',
+      maturityMinAgeDays: 14,
+      skipTags: ['ui-tag'],
+    });
+    expect(inserted.updatePolicyDeclarative?.label).toEqual({
+      maturityMinAgeDays: 14,
+      skipTags: ['new-label'],
+    });
+  });
+
+  test('restores retained overrides when a replacement watcher stamps an empty override layer', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-layered-agent-old',
+      agent: 'remote1',
+      updatePolicy: { maturityMode: 'all', maturityMinAgeDays: 7, skipTags: ['ui-tag'] },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: { skipTags: ['old-label'] },
+      },
+      updatePolicyOverrides: { maturityMode: 'all', skipTags: ['ui-tag'] },
+      updatePolicySources: {
+        maturityMode: 'override',
+        maturityMinAgeDays: 'env',
+        skipTags: 'override',
+      },
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-layered-agent-old', { replacementExpected: true });
+    const inserted = container.insertContainer(
+      makePolicyFixture({
+        id: 'policy-layered-agent-new',
+        agent: 'remote1',
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 14, skipTags: ['new-label'] },
+        updatePolicyDeclarative: {
+          env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          label: { maturityMinAgeDays: 14, skipTags: ['new-label'] },
+        },
+        // applyDeclarativeUpdatePolicy() materializes this empty object on fresh watcher data.
+        updatePolicyOverrides: {},
+        updatePolicySources: {
+          maturityMode: 'env',
+          maturityMinAgeDays: 'label',
+          skipTags: 'label',
+        },
+      }),
+    );
+
+    expect(inserted.id).toBe('policy-layered-agent-new');
+    expect(inserted.updatePolicyOverrides).toEqual({
+      maturityMode: 'all',
+      skipTags: ['ui-tag'],
+    });
+    expect(inserted.updatePolicy).toEqual({
+      maturityMode: 'all',
+      maturityMinAgeDays: 14,
+      skipTags: ['ui-tag'],
+    });
+    expect(inserted.updatePolicyDeclarative?.label).toEqual({
+      maturityMinAgeDays: 14,
+      skipTags: ['new-label'],
+    });
+  });
+
+  test('uses an explicit replacement override instead of the retained controller override', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-layered-explicit-old',
+      updatePolicy: { maturityMode: 'all' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: { maturityMode: 'all' },
+      updatePolicySources: { maturityMode: 'override' },
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-layered-explicit-old', { replacementExpected: true });
+    const inserted = container.insertContainer(
+      makePolicyFixture({
+        id: 'policy-layered-explicit-new',
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 21 },
+        updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+        updatePolicyOverrides: { maturityMinAgeDays: 21 },
+        updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'override' },
+      }),
+    );
+
+    expect(inserted.updatePolicyOverrides).toEqual({ maturityMinAgeDays: 21 });
   });
 
   // The reported topology. insertContainer's security/lifecycle restores are gated behind
@@ -4289,5 +4888,55 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     // preceding replacement-delete must not inherit anything
     const later = container.insertContainer(makePolicyFixture({ id: 'policy-once-later' }));
     expect(later.updatePolicy).toBeUndefined();
+  });
+});
+
+describe('rollback rename policy retention regression (#535)', () => {
+  test('preserves updatePolicy through rename poisoning, prune, and replacement insertion', async () => {
+    const updatePolicy = { maturityMode: 'mature' as const, maturityMinAgeDays: 5 };
+    const oldContainer = createContainerFixture({
+      id: 'rename-policy-old',
+      watcher: 'docker',
+      name: 'app1',
+      displayName: 'app1',
+      status: 'running',
+      labels: {},
+      details: { ports: [], volumes: [], env: [] },
+      updatePolicy,
+    });
+    const collection = createFilterableCollection([{ data: oldContainer }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    const liveContainer = container.getContainer('rename-policy-old');
+
+    updateContainerFromInspect(
+      liveContainer as any,
+      {
+        Name: '/app1-old-1752019200000',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer: container.updateContainer,
+      },
+    );
+
+    const staleContainer = container.getContainer('rename-policy-old');
+    const dockerApi = {
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+      }),
+    };
+
+    await pruneOldContainers([], [staleContainer] as any, dockerApi as any);
+    const inserted = container.insertContainer(
+      createContainerFixture({
+        id: 'rename-policy-replacement',
+        watcher: 'docker',
+        name: 'app1',
+      }),
+    );
+
+    expect(inserted.updatePolicy).toEqual(updatePolicy);
   });
 });

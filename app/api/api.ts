@@ -14,6 +14,7 @@ import { requireSameOriginForMutations } from './csrf.js';
 import * as debugRouter from './debug.js';
 import { sendErrorResponse } from './error-response.js';
 import * as groupRouter from './group.js';
+import { isIconProxyApiPath } from './icons/route.js';
 import * as iconsRouter from './icons.js';
 import * as internalSelfUpdateRouter from './internal-self-update.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
@@ -22,6 +23,7 @@ import * as notificationRouter from './notification.js';
 import * as notificationOutboxRouter from './notification-outbox.js';
 import * as operationRouter from './operation.js';
 import * as portwingRouter from './portwing.js';
+import * as preferencesRouter from './preferences.js';
 import * as previewRouter from './preview.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
@@ -40,6 +42,13 @@ import * as watcherRouter from './watcher.js';
 import * as webhookRouter from './webhook.js';
 import * as webhooksRouter from './webhooks.js';
 
+function shouldSkipOuterApiRateLimit(req: Request): boolean {
+  const isSafeRead = req.method === 'GET' || req.method === 'HEAD';
+  const isAuthenticated =
+    typeof req.isAuthenticated === 'function' && req.isAuthenticated() === true;
+  return isAuthenticated && isSafeRead && isIconProxyApiPath(req.path);
+}
+
 /**
  * Init the API router.
  * @returns {*|Router}
@@ -54,6 +63,11 @@ export function init(): express.Router {
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1000,
+    // Icon reads have their own stricter limiter in icons.ts. Do not charge
+    // those immutable assets against this outer API budget as well; Playwright
+    // routing and cache-disabled clients otherwise exhaust it while the
+    // dedicated icon limiter is still providing endpoint-specific protection.
+    skip: shouldSkipOuterApiRateLimit,
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },
@@ -131,14 +145,14 @@ export function init(): express.Router {
   // Mount container groups router BEFORE container router (/:id would shadow /groups)
   router.use('/containers', groupRouter.init());
 
+  // Mount backup router BEFORE container router (/:id would shadow /backups)
+  router.use('/containers', backupRouter.init());
+
   // Mount container router
   router.use('/containers', containerRouter.init());
 
   // Mount preview router (container preview/dry-run)
   router.use('/containers', previewRouter.init());
-
-  // Mount backup router (image backup/rollback)
-  router.use('/containers', backupRouter.init());
 
   // Mount container actions router (start/stop/restart)
   router.use('/containers', containerActionsRouter.init());
@@ -186,6 +200,9 @@ export function init(): express.Router {
 
   // Mount settings
   router.use('/settings', settingsRouter.init());
+
+  // Mount preferences (per-user synced UI preferences, #220)
+  router.use('/preferences', preferencesRouter.init());
 
   // All other API routes => 404
   router.get('/{*path}', (_req: Request, res: Response) => {

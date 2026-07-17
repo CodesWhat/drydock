@@ -10,3 +10,14 @@ const invalidThemeFamily: PreferencesSchema = {
 };
 
 void invalidThemeFamily;
+
+const invalidContainerViewMode: PreferencesSchema = {
+  ...DEFAULTS,
+  containers: {
+    ...DEFAULTS.containers,
+    // @ts-expect-error 'list' is not a valid ViewMode — the 3-way mode is gone for good
+    viewMode: 'list',
+  },
+};
+
+void invalidContainerViewMode;

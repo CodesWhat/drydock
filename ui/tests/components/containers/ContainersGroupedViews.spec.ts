@@ -1,8 +1,15 @@
 import { defineComponent, nextTick, onMounted, ref } from 'vue';
+import CopyableTag from '@/components/CopyableTag.vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
+import DataTable from '@/components/DataTable.vue';
 import { useToast } from '@/composables/useToast';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { Container } from '@/types/container';
+import {
+  expectContainerQuickLinks,
+  QUICK_LINK_SELECTOR,
+  quickLinkTestIds,
+} from '../../helpers/containerQuickLinks';
 import { mountWithPlugins } from '../../helpers/mount';
 
 const mocked = vi.hoisted(() => ({
@@ -15,6 +22,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 
 const DataTableStub = defineComponent({
   props: [
+    'columns',
+    'hiddenColumnKeys',
     'rows',
     'rowClass',
     'rowClickable',
@@ -24,8 +33,10 @@ const DataTableStub = defineComponent({
     'virtualMaxHeight',
     'rowHeight',
     'maxHeight',
+    'preferCards',
+    'hoistCardSort',
   ],
-  emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
+  emits: ['update:sort-key', 'update:sort-asc', 'update:card-reflow-forced', 'row-click'],
   setup(props, { emit }) {
     const isFullWidth = (row: Record<string, unknown>) =>
       typeof props.fullWidthRow === 'function' ? props.fullWidthRow(row) : false;
@@ -61,14 +72,15 @@ const DataTableStub = defineComponent({
     };
   },
   template: `
-    <div class="data-table-stub">
+    <div class="data-table-stub" :data-hidden-column-keys="JSON.stringify(hiddenColumnKeys || [])">
       <div
         v-for="row in rows"
         :key="keyFor(row)"
         :class="[
           isFullWidth(row) ? 'full-row-stub' : 'table-row-stub',
           !isFullWidth(row) && typeof rowClass === 'function' ? rowClass(row) : '',
-        ]">
+        ]"
+        @click="!isFullWidth(row) && isClickable(row) && $emit('row-click', row)">
         <template v-if="isFullWidth(row)">
           <slot name="full-row" :row="row" />
         </template>
@@ -84,35 +96,10 @@ const DataTableStub = defineComponent({
             <slot name="cell-server" :row="row" />
             <slot name="cell-registry" :row="row" />
             <slot name="cell-uptime" :row="row" />
+            <div class="links-cell-stub"><slot name="cell-links" :row="row" /></div>
             <slot name="actions" :row="row" />
           </div>
         </template>
-      </div>
-    </div>
-  `,
-});
-
-const DataCardGridStub = defineComponent({
-  props: ['items', 'itemMemo'],
-  emits: ['item-click'],
-  template: `
-    <div class="data-card-grid-stub">
-      <div v-for="item in items" :key="item.name" class="card-item-stub">
-        <button class="emit-card-click" @click="$emit('item-click', item)">emit-card-click</button>
-        <slot name="card" :item="item" />
-      </div>
-    </div>
-  `,
-});
-
-const DataListAccordionStub = defineComponent({
-  props: ['items'],
-  emits: ['item-click'],
-  template: `
-    <div class="data-list-accordion-stub">
-      <div v-for="item in items" :key="item.name" class="list-item-stub">
-        <button class="emit-list-click" @click="$emit('item-click', item)">emit-list-click</button>
-        <slot name="header" :item="item" />
       </div>
     </div>
   `,
@@ -156,11 +143,13 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const groupUpdateQueue = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
   const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
-  const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
+  const containerViewMode = ref<'table' | 'cards'>('table');
+  const containerCardReflowForced = ref(false);
   const tableColumns = ref([
     { key: 'icon', label: '', align: 'text-center' },
     { key: 'name', label: 'Container', align: 'text-left' },
   ]);
+  const hiddenColumnKeys = ref<string[]>([]);
   const containerSortKey = ref('name');
   const containerSortAsc = ref(true);
   const selectedContainer = ref<Container | null>(null);
@@ -226,6 +215,8 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     filteredContainers,
     renderGroups,
     groupByStack,
+    containerViewMode,
+    containerCardReflowForced,
     toggleGroupCollapse: spies.toggleGroupCollapse,
     collapsedGroups,
     groupUpdateInProgress,
@@ -264,8 +255,8 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
-    containerViewMode,
     tableColumns,
+    hiddenColumnKeys,
     containerSortKey,
     containerSortAsc,
     selectedContainer,
@@ -328,6 +319,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       groupUpdateInProgress,
       groupUpdateQueue,
       containerViewMode,
+      containerCardReflowForced,
       tableActionStyle,
       openActionsMenu,
       displayContainers,
@@ -358,14 +350,36 @@ function rowByName(wrapper: any, name: string) {
 }
 
 let activeWrapper: ReturnType<typeof mountWithPlugins> | null = null;
+let restoreClientWidthMock: (() => void) | null = null;
+
+function mockElementClientWidth(width: number) {
+  if (!restoreClientWidthMock) {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientWidth',
+    );
+    restoreClientWidthMock = () => {
+      if (originalDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalDescriptor);
+      } else {
+        delete (HTMLElement.prototype as any).clientWidth;
+      }
+      restoreClientWidthMock = null;
+    };
+  }
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+    configurable: true,
+    get() {
+      return width;
+    },
+  });
+}
 
 function mountSubject() {
   const wrapper = mountWithPlugins(ContainersGroupedViews, {
     global: {
       stubs: {
         DataTable: DataTableStub,
-        DataCardGrid: DataCardGridStub,
-        DataListAccordion: DataListAccordionStub,
         EmptyState: {
           props: ['showClear'],
           template:
@@ -379,6 +393,68 @@ function mountSubject() {
   return wrapper;
 }
 
+function mountSubjectWithRealDataTable(width = 800) {
+  mockElementClientWidth(width);
+  const wrapper = mountWithPlugins(ContainersGroupedViews, {
+    global: {
+      components: { CopyableTag, DataTable },
+      stubs: {
+        EmptyState: {
+          props: ['showClear'],
+          template:
+            '<div class="empty-state-stub"><button v-if="showClear" class="empty-clear" @click="$emit(\'clear\')">clear</button></div>',
+        },
+        Teleport: true,
+      },
+    },
+  });
+  activeWrapper = wrapper as any;
+  return wrapper;
+}
+
+async function mountCardsWithContainers(containers: Container[], width = 800) {
+  const { context, refs, spies } = makeContext();
+  refs.containerViewMode.value = 'cards';
+  refs.filteredContainers.value = containers;
+  refs.displayContainers.value = containers;
+  refs.renderGroups.value = [
+    {
+      key: '__flat__',
+      name: null,
+      containers,
+      containerCount: containers.length,
+      updatesAvailable: containers.filter((container) => Boolean(container.newTag)).length,
+      updatableCount: containers.filter((container) => Boolean(container.newTag)).length,
+    },
+  ];
+  mocked.context = context;
+  const wrapper = mountSubjectWithRealDataTable(width);
+  await nextTick();
+  return { wrapper, context, refs, spies };
+}
+
+function cardByName(wrapper: any, name: string) {
+  const card = wrapper
+    .findAll('[data-test="dd-card"]')
+    .find((candidate: any) => candidate.text().includes(name));
+  expect(card).toBeDefined();
+  return card!;
+}
+
+function cardIconButton(card: any, icon: string) {
+  const matches = card
+    .findAll('button, a')
+    .filter((candidate: any) => candidate.find(`[data-icon="${icon}"]`).exists());
+  const button =
+    matches.find((candidate: any) => candidate.classes().includes('min-w-8')) ?? matches[0];
+  expect(button).toBeDefined();
+  return button!;
+}
+
+function shortDigest(digest: string) {
+  return `${digest.slice(0, 'sha256:'.length + 12)}…`;
+}
+
 describe('ContainersGroupedViews', () => {
   afterEach(() => {
     if (activeWrapper) {
@@ -389,12 +465,374 @@ describe('ContainersGroupedViews', () => {
       }
       activeWrapper = null;
     }
+    restoreClientWidthMock?.();
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
     useUpdateBatches().batches.value = new Map();
     useToast().toasts.value = [];
+  });
+
+  it('passes tableColumns and hiddenColumnKeys straight through to DataTable', () => {
+    const container = makeContainer({ id: 'c-wiring', name: 'alpha' });
+    const { context } = makeContext();
+    context.filteredContainers.value = [container];
+    context.displayContainers.value = [container];
+    context.renderGroups.value = [
+      {
+        key: 'g',
+        name: 'g',
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    context.hiddenColumnKeys.value = ['registry', 'uptime'];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const dataTable = wrapper.find('.data-table-stub');
+
+    expect(JSON.parse(dataTable.attributes('data-hidden-column-keys')!)).toEqual([
+      'registry',
+      'uptime',
+    ]);
+  });
+
+  it('hoists card sorting when cards are selected or measured card reflow is forced', async () => {
+    const container = makeContainer({ id: 'c-hoist', name: 'alpha' });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const dataTable = wrapper.findComponent(DataTableStub);
+
+    expect(dataTable.props('hoistCardSort')).toBe(false);
+
+    dataTable.vm.$emit('update:card-reflow-forced', true);
+    await nextTick();
+
+    expect(refs.containerCardReflowForced.value).toBe(true);
+    expect(wrapper.findComponent(DataTableStub).props('hoistCardSort')).toBe(true);
+
+    dataTable.vm.$emit('update:card-reflow-forced', false);
+    refs.containerViewMode.value = 'cards';
+    await nextTick();
+
+    expect(refs.containerCardReflowForced.value).toBe(false);
+    expect(wrapper.findComponent(DataTableStub).props('hoistCardSort')).toBe(true);
+  });
+
+  it('renders container cards through DataTable preferCards at wide container widths', async () => {
+    const container = makeContainer({ id: 'c-card-path', name: 'alpha', newTag: '1.1.0' });
+
+    const { wrapper } = await mountCardsWithContainers([container], 800);
+
+    expect(wrapper.find('table').exists()).toBe(false);
+    expect(wrapper.findAll('[data-test="dd-card"]')).toHaveLength(1);
+    expect(cardByName(wrapper, 'alpha').text()).toContain('nginx:1.0.0');
+  });
+
+  it('keeps the #356/#370 digest guard in card mode for floating tags and digest-pinned rows', async () => {
+    const currentDigest = 'sha256:111111111111aaaaaaaaaaaa';
+    const newDigest = 'sha256:222222222222bbbbbbbbbbbb';
+    const floatingDigest = makeContainer({
+      id: 'c-floating-digest',
+      name: 'floating',
+      currentTag: 'v8.13.2',
+      newTag: null,
+      updateKind: 'digest',
+      currentDigest,
+      newDigest,
+      isDigestPinned: false,
+    } as Partial<Container>);
+    const pinnedDigest = makeContainer({
+      id: 'c-pinned-digest',
+      name: 'pinned',
+      currentTag: currentDigest,
+      newTag: null,
+      updateKind: 'digest',
+      currentDigest,
+      newDigest,
+      isDigestPinned: true,
+    } as Partial<Container>);
+
+    const { wrapper } = await mountCardsWithContainers([floatingDigest, pinnedDigest], 800);
+    const floatingCard = cardByName(wrapper, 'floating');
+    const pinnedCard = cardByName(wrapper, 'pinned');
+
+    expect(floatingCard.text()).toContain('v8.13.2');
+    expect(floatingCard.text()).not.toContain(shortDigest(currentDigest));
+    expect(floatingCard.text()).not.toContain(shortDigest(newDigest));
+    expect(floatingCard.text()).not.toContain('→');
+
+    const floatingTag = floatingCard
+      .findAll('[title]')
+      .find((candidate: any) =>
+        candidate
+          .attributes('title')
+          ?.includes(`v8.13.2 — ${shortDigest(currentDigest)} → ${shortDigest(newDigest)}`),
+      );
+    expect(floatingTag).toBeDefined();
+    expect(floatingTag!.text()).toContain('v8.13.2');
+
+    expect(pinnedCard.text()).toContain(shortDigest(currentDigest));
+    expect(pinnedCard.text()).toContain(shortDigest(newDigest));
+  });
+
+  it('renders card update states for new tags, no-update reasons, and up-to-date containers', async () => {
+    const available = makeContainer({
+      id: 'c-available',
+      name: 'available',
+      currentTag: '1.0.0',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      updateMaturity: 'fresh',
+    });
+    const noUpdate = makeContainer({
+      id: 'c-no-update',
+      name: 'no-update',
+      newTag: null,
+      updateKind: null,
+      noUpdateReason: 'Pinned by policy',
+    });
+    const current = makeContainer({
+      id: 'c-current',
+      name: 'current',
+      newTag: null,
+      updateKind: null,
+    });
+
+    const { wrapper } = await mountCardsWithContainers([available, noUpdate, current], 800);
+
+    const availableCard = cardByName(wrapper, 'available');
+    expect(availableCard.text()).toContain('1.0.0');
+    expect(availableCard.text()).toContain('1.1.0');
+    expect(availableCard.get('[data-test="container-card-update-state"]').text()).toContain(
+      'Minor',
+    );
+    expect(availableCard.text()).toContain('NEW');
+
+    const noUpdateCard = cardByName(wrapper, 'no-update');
+    expect(noUpdateCard.get('[data-test="no-update-reason-badge"]').attributes('aria-label')).toBe(
+      'Pinned by policy',
+    );
+
+    const currentCard = cardByName(wrapper, 'current');
+    expect(currentCard.get('[data-test="container-card-update-state"]').text()).toContain(
+      'Current',
+    );
+  });
+
+  it('renders card overlays and header registry/policy indicators', async () => {
+    const updating = makeContainer({
+      id: 'c-updating-card',
+      name: 'updating',
+      newTag: '2.0.0',
+      updateKind: 'major',
+    });
+    const registryError = makeContainer({
+      id: 'c-registry-error-card',
+      name: 'alpha',
+      registryError: '401 unauthorized',
+    });
+    const snoozed = makeContainer({ id: 'c-snoozed-card', name: 'beta' });
+    const skipped = makeContainer({ id: 'c-skipped-card', name: 'gamma' });
+    const maturityBlocked = makeContainer({ id: 'c-maturity-card', name: 'epsilon' });
+
+    const { wrapper, refs } = await mountCardsWithContainers(
+      [updating, registryError, snoozed, skipped, maturityBlocked],
+      800,
+    );
+    refs.actionInProgress.value = new Map([['c-updating-card', 'update']]);
+    await nextTick();
+
+    const updatingCard = cardByName(wrapper, 'updating');
+    expect(updatingCard.classes()).toContain('dd-row-updating');
+    expect(updatingCard.text()).toContain('Updating');
+    expect(updatingCard.find('.dd-spin').exists()).toBe(true);
+
+    expect(cardByName(wrapper, 'alpha').find('[aria-label="Registry error"]').exists()).toBe(true);
+    expect(cardByName(wrapper, 'beta').find('[aria-label="Snoozed updates"]').exists()).toBe(true);
+    expect(cardByName(wrapper, 'gamma').find('[aria-label="Skipped updates"]').exists()).toBe(true);
+    expect(
+      cardByName(wrapper, 'epsilon').find('[aria-label="Maturity-blocked updates"]').exists(),
+    ).toBe(true);
+  });
+
+  it('renders card footer links and 44px action targets, with recheck reachable from the kebab', async () => {
+    const linked = makeContainer({
+      id: 'c-linked-card',
+      name: 'linked',
+      currentTag: 'latest',
+      newTag: '1.2.0',
+      updateKind: 'minor',
+      suggestedTag: '1.2.0',
+      releaseLink: 'https://example.test/releases/1.2.0',
+      sourceRepo: 'github.com/example/project',
+    });
+
+    const { wrapper, spies } = await mountCardsWithContainers([linked], 800);
+    const card = cardByName(wrapper, 'linked');
+
+    expect(card.find('[data-test="suggested-tag-badge"]').exists()).toBe(true);
+    expect(card.findAll('[data-test="release-link"]').length).toBeGreaterThan(0);
+    expect(card.find('[data-test="project-link"]').exists()).toBe(true);
+
+    for (const icon of ['file-text', 'github', 'cloud-download', 'more']) {
+      const action = cardIconButton(card, icon);
+      expect(action.classes()).toEqual(expect.arrayContaining(['w-11', 'h-11']));
+    }
+
+    await cardIconButton(card, 'more').trigger('click');
+    await nextTick();
+
+    expect(spies.toggleActionsMenu).toHaveBeenCalledWith('c-linked-card', expect.any(MouseEvent));
+
+    const recheck = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === 'Recheck for updates');
+    expect(recheck).toBeDefined();
+    await recheck!.trigger('click');
+    expect(spies.recheckContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-linked-card' }),
+    );
+  });
+
+  it('uses the same ordered 44px quick-link group in cards without selecting the card (#295)', async () => {
+    const linked = makeContainer({
+      id: 'c-card-quick-links',
+      name: 'quick-links',
+      sourceRepo: 'github.com/example/quick-links',
+      releaseLink: 'https://example.test/releases/2.0.0',
+      registry: 'custom',
+      registryName: 'registry.example.com',
+      registryUrl: 'https://registry.example.com/v2',
+    });
+
+    const { wrapper, spies } = await mountCardsWithContainers([linked], 800);
+    const card = cardByName(wrapper, 'quick-links');
+    const group = card.get('[data-test="container-quick-links"]');
+    expectContainerQuickLinks(group, 'registry.example.com');
+
+    const lifecycleAction = cardIconButton(card, 'more');
+    const resourceRow = group.element.parentElement;
+    const lifecycleRow = lifecycleAction.element.parentElement;
+    expect(resourceRow).not.toBe(lifecycleRow);
+    expect(resourceRow?.classList.contains('flex-wrap')).toBe(true);
+    expect(resourceRow?.classList.contains('w-full')).toBe(true);
+
+    const rowSelectionsBeforeLinkClicks = spies.selectContainer.mock.calls.length;
+    for (const action of group.findAll(QUICK_LINK_SELECTOR)) {
+      action.element.addEventListener('click', (event) => event.preventDefault(), { once: true });
+      await action.trigger('click');
+    }
+    expect(spies.selectContainer).toHaveBeenCalledTimes(rowSelectionsBeforeLinkClicks);
+  });
+
+  it('keeps registry in the card subtitle, moves update state to the header, and leaves release/project links in the footer', async () => {
+    const linked = makeContainer({
+      id: 'c-card-body-layout',
+      name: 'linked',
+      currentTag: 'latest',
+      newTag: '1.2.0',
+      updateKind: 'minor',
+      updateMaturity: 'fresh',
+      registry: 'custom',
+      registryName: 'Private Registry',
+      releaseLink: 'https://example.test/releases/1.2.0',
+      sourceRepo: 'github.com/example/project',
+      suggestedTag: '1.2.0',
+    });
+
+    const { wrapper } = await mountCardsWithContainers([linked], 800);
+    const card = cardByName(wrapper, 'linked');
+    const header = card.get('.px-4.pt-4.pb-2');
+    const body = card.get('.px-4.py-3.min-w-0');
+    const footer = card.get('.mt-auto');
+
+    expect(header.get('[data-test="container-card-registry-text"]').text()).toBe(
+      'Private Registry',
+    );
+    expect(header.get('[data-test="container-card-update-state"]').text()).toContain('Minor');
+    expect(body.text()).toContain('latest');
+    expect(body.text()).toContain('→');
+    expect(body.text()).toContain('1.2.0');
+    expect(body.text()).not.toContain('Current');
+    expect(body.text()).not.toContain('Latest');
+    expect(body.find('[data-test="suggested-tag-badge"]').exists()).toBe(true);
+    expect(body.find('[data-test="release-link"]').exists()).toBe(false);
+    expect(body.find('[data-test="project-link"]').exists()).toBe(false);
+    expect(footer.find('[data-test="release-link"]').exists()).toBe(true);
+    expect(footer.find('[data-test="project-link"]').exists()).toBe(true);
+  });
+
+  it('suppresses the header update-state badge when the registry is in error', async () => {
+    const registryError = makeContainer({
+      id: 'c-card-registry-error',
+      name: 'registry-error',
+      registryError: '401 unauthorized',
+    });
+
+    const { wrapper } = await mountCardsWithContainers([registryError], 800);
+    const card = cardByName(wrapper, 'registry-error');
+    const header = card.get('.px-4.pt-4.pb-2');
+
+    expect(header.find('[data-test="container-card-update-state"]').exists()).toBe(false);
+    expect(header.find('[aria-label="Registry error"]').exists()).toBe(true);
+  });
+
+  it('renders grouped card headers as full-width rows spanning the card grid', async () => {
+    const alpha = makeContainer({ id: 'c-group-card-a', name: 'alpha', newTag: '2.0.0' });
+    const beta = makeContainer({ id: 'c-group-card-b', name: 'beta', newTag: '1.1.0' });
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = [alpha, beta];
+    refs.displayContainers.value = [alpha, beta];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [alpha],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+      {
+        key: 'stack-b',
+        name: 'stack-b',
+        containers: [beta],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubjectWithRealDataTable(800);
+    await nextTick();
+
+    const listItems = wrapper.findAll('ul[role="list"] > li');
+    expect(listItems[0].attributes('style')).toContain('grid-column: 1 / -1');
+    expect(listItems[0].text()).toContain('stack-a');
+    expect(listItems[2].attributes('style')).toContain('grid-column: 1 / -1');
+    expect(listItems[2].text()).toContain('stack-b');
+    expect(wrapper.findAll('[data-test="dd-card"]')).toHaveLength(2);
   });
 
   it('covers grouped table interactions in icon action mode', async () => {
@@ -442,7 +880,6 @@ describe('ContainersGroupedViews', () => {
     const { context, spies } = makeContext();
     const containers = [blocked, updatable, runningNoUpdate, stoppedNoUpdate];
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
     context.filteredContainers.value = containers;
     context.displayContainers.value = containers;
@@ -540,7 +977,6 @@ describe('ContainersGroupedViews', () => {
     const { context, spies } = makeContext();
     const containers = [blockedNewTag, safeNewTag, runningNoTag, stoppedNoTag];
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'buttons';
     context.filteredContainers.value = containers;
     context.displayContainers.value = containers;
@@ -608,7 +1044,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context } = makeContext();
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.filteredContainers.value = [container];
     context.displayContainers.value = [container];
     context.renderGroups.value = [
@@ -642,18 +1077,6 @@ describe('ContainersGroupedViews', () => {
       );
     expect(tableRegistry).toBeDefined();
     expect(tableRegistry?.classes()).toContain('truncate');
-
-    context.containerViewMode.value = 'cards';
-    await nextTick();
-
-    const cardRegistry = wrapper
-      .findAll('span')
-      .find(
-        (candidate) =>
-          candidate.text().trim() === longRegistry && candidate.classes().includes('max-w-[140px]'),
-      );
-    expect(cardRegistry).toBeDefined();
-    expect(cardRegistry?.classes()).toContain('truncate');
   });
 
   it('renders normal table metadata quietly and uses concise update labels', async () => {
@@ -680,7 +1103,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs } = makeContext();
     const containers = [current, minor];
-    refs.containerViewMode.value = 'table';
     refs.filteredContainers.value = containers;
     refs.displayContainers.value = containers;
     refs.renderGroups.value = [
@@ -733,7 +1155,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs } = makeContext();
     const containers = [suggested];
-    refs.containerViewMode.value = 'table';
     refs.filteredContainers.value = containers;
     refs.displayContainers.value = containers;
     refs.renderGroups.value = [
@@ -773,7 +1194,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs } = makeContext();
     const containers = [pinned];
-    refs.containerViewMode.value = 'table';
     refs.filteredContainers.value = containers;
     refs.displayContainers.value = containers;
     refs.renderGroups.value = [
@@ -790,17 +1210,19 @@ describe('ContainersGroupedViews', () => {
 
     const wrapper = mountSubject();
 
-    const updateState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
-    const badge = updateState.get('[data-test="update-insight-badge"]');
-    expect(badge.text()).toBe('Newer available');
-    // The insight tag must only surface via the badge's tooltip binding, never as
-    // bare unlabeled text — it is pure information, not an actionable update.
+    const row = rowByName(wrapper, 'alpha');
+    const updateState = row.get('[data-test="container-update-state"]');
+    expect(updateState.text()).toContain('Pinned');
+    expect(updateState.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    const kindBadge = updateState.get('[data-test="update-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
     expect(updateState.text()).not.toContain('v1.46.1');
+    expect(row.text()).toContain('v1.46.1');
   });
 
-  it('renders the informational update-insight badge in card and list modes (#498)', async () => {
+  it('renders the informational update-insight badge in card mode (#498)', async () => {
     const pinned = makeContainer({
-      id: 'c-insight-card-list',
+      id: 'c-insight-card',
       name: 'alpha',
       currentTag: 'v1.13.3',
       newTag: null,
@@ -811,48 +1233,68 @@ describe('ContainersGroupedViews', () => {
       updateInsight: { tag: 'v1.46.1', kind: 'minor' },
     });
 
+    const { wrapper } = await mountCardsWithContainers([pinned], 800);
+    const card = cardByName(wrapper, 'alpha');
+
+    expect(card.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    const cardBadge = card.get('[data-test="update-insight-kind-badge"]');
+    expect(cardBadge.text()).toBe('Minor');
+    expect(card.text()).toContain('v1.13.3');
+    expect(card.text()).toContain('v1.46.1');
+    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Pinned');
+  });
+
+  it('keeps the stacked pinned-tag insight visible beside an actionable digest update (#498)', async () => {
+    const digestAndInsight = makeContainer({
+      id: 'c-digest-and-insight',
+      name: 'alpha',
+      currentTag: 'v2.7.5-openvino',
+      newTag: null,
+      updateKind: 'digest',
+      currentDigest: `sha256:${'a'.repeat(64)}`,
+      newDigest: `sha256:${'b'.repeat(64)}`,
+      isDigestPinned: false,
+      status: 'running',
+      server: 'local-main',
+      registry: 'ghcr',
+      updateInsight: { tag: 'v3.0.2-openvino', kind: 'major' },
+    });
+
     const { context, refs } = makeContext();
-    const containers = [pinned];
-    refs.containerViewMode.value = 'cards';
-    refs.filteredContainers.value = containers;
-    refs.displayContainers.value = containers;
+    refs.filteredContainers.value = [digestAndInsight];
+    refs.displayContainers.value = [digestAndInsight];
     refs.renderGroups.value = [
       {
         key: '__flat__',
         name: null,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: 0,
-        updatableCount: 0,
+        containers: [digestAndInsight],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
       },
     ];
     mocked.context = context;
 
-    const wrapper = mountSubject();
+    const tableWrapper = mountSubject();
+    const row = rowByName(tableWrapper, 'alpha');
+    expect(row.text()).toContain('v2.7.5-openvino');
+    expect(row.text()).toContain('v3.0.2-openvino');
+    expect(row.get('[data-test="container-update-state"]').text()).toContain('Digest');
+    expect(row.get('[data-test="update-insight-kind-badge"]').text()).toBe('Major');
 
-    const card = wrapper
-      .findAll('.card-item-stub')
-      .find((candidate) => candidate.text().includes('alpha'));
-    expect(card).toBeDefined();
-    const cardBadge = card!.get('[data-test="update-insight-badge"]');
-    expect(cardBadge.text()).toBe('Newer available');
-    expect(card!.text()).not.toContain('v1.46.1');
-
-    refs.containerViewMode.value = 'list';
-    await nextTick();
-
-    const listItem = wrapper
-      .findAll('.list-item-stub')
-      .find((candidate) => candidate.text().includes('alpha'));
-    expect(listItem).toBeDefined();
-    const listBadge = listItem!.get('[data-test="update-insight-badge"]');
-    expect(listBadge.text()).toBe('Newer available');
-    expect(listItem!.text()).not.toContain('v1.46.1');
+    const { wrapper: cardWrapper } = await mountCardsWithContainers([digestAndInsight], 800);
+    const card = cardByName(cardWrapper, 'alpha');
+    expect(card.text()).toContain('v2.7.5-openvino');
+    expect(card.text()).toContain('v3.0.2-openvino');
+    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Digest');
+    expect(card.get('[data-test="update-insight-kind-badge"]').text()).toBe('Major');
   });
 
-  it('includes updateInsight in the card/list memo so a container that only gains an insight is not skipped (#501)', async () => {
-    const withoutInsight = makeContainer({
-      id: 'c-memo-insight',
+  it('keeps the actionable no-update reason alongside pinned insight in card mode (#498)', async () => {
+    const remedy =
+      'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
+    const pinnedDigestOff = makeContainer({
+      id: 'c-insight-plus-reason-card',
       name: 'alpha',
       currentTag: 'v1.13.3',
       newTag: null,
@@ -860,49 +1302,18 @@ describe('ContainersGroupedViews', () => {
       status: 'running',
       server: 'local-main',
       registry: 'dockerhub',
+      noUpdateReason: `Pinned tag "v1.13.3": digest watching is disabled for this container, so no actionable update detection is running (a newer same-family tag is still shown for information). ${remedy}`,
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
     });
 
-    const { context, refs } = makeContext();
-    const containers = [withoutInsight];
-    refs.containerViewMode.value = 'cards';
-    refs.filteredContainers.value = containers;
-    refs.displayContainers.value = containers;
-    refs.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: 0,
-        updatableCount: 0,
-      },
-    ];
-    mocked.context = context;
+    const { wrapper } = await mountCardsWithContainers([pinnedDigestOff], 800);
+    const card = cardByName(wrapper, 'alpha');
 
-    const wrapper = mountSubject();
-
-    // The DataCardGrid stub declares 'itemMemo' as a real prop, so this pulls
-    // the exact function ContainersGroupedViews wires up as :item-memo — the
-    // v-memo dependency array DataCardGrid/DataListAccordion use to decide
-    // whether a card/list row needs to re-render at all.
-    const cardGrid = wrapper.findComponent(DataCardGridStub);
-    const itemMemo = cardGrid.props('itemMemo') as (item: Record<string, unknown>) => unknown[];
-    expect(typeof itemMemo).toBe('function');
-
-    const memoWithoutInsight = itemMemo(withoutInsight as unknown as Record<string, unknown>);
-    const withInsight = {
-      ...withoutInsight,
-      updateInsight: { tag: 'v1.46.1', kind: 'minor' as const },
-    };
-    const memoWithInsight = itemMemo(withInsight as unknown as Record<string, unknown>);
-
-    // Before the fix, the memo array is identical for both containers (the
-    // insight fields are missing entirely), so v-memo would skip re-rendering
-    // the card/list row even though the insight badge should now appear.
-    expect(memoWithInsight).not.toEqual(memoWithoutInsight);
-    expect(memoWithInsight).toContain('v1.46.1');
-    expect(memoWithInsight).toContain('minor');
-    expect(memoWithoutInsight).not.toContain('v1.46.1');
+    expect(card.get('[data-test="update-insight-kind-badge"]').text()).toBe('Minor');
+    expect(card.text()).toContain('v1.46.1');
+    const reasonText = card.get('[data-test="no-update-reason-badge"]').attributes('aria-label');
+    expect(reasonText).toContain('no actionable update detection is running');
+    expect(reasonText).not.toContain('so no update detection is running');
   });
 
   it('renders the no-update-reason and update-insight badges together without contradictory copy when digest watching is off (#498)', async () => {
@@ -923,7 +1334,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs } = makeContext();
     const containers = [pinnedDigestOff];
-    refs.containerViewMode.value = 'table';
     refs.filteredContainers.value = containers;
     refs.displayContainers.value = containers;
     refs.renderGroups.value = [
@@ -942,8 +1352,9 @@ describe('ContainersGroupedViews', () => {
 
     const row = rowByName(wrapper, 'alpha');
 
-    const insightBadge = row.get('[data-test="update-insight-badge"]');
-    expect(insightBadge.text()).toBe('Newer available');
+    const kindBadge = row.get('[data-test="update-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
+    expect(row.text()).toContain('v1.46.1');
 
     const reasonBadge = row.get('[data-test="no-update-reason-badge"]');
     const reasonText = reasonBadge.attributes('aria-label');
@@ -953,31 +1364,23 @@ describe('ContainersGroupedViews', () => {
     expect(reasonText).not.toContain('so no update detection is running');
   });
 
-  it('renders normal card and list metadata quietly with concise update labels', async () => {
-    const current = makeContainer({
-      id: 'c-quiet-card-current',
+  it('reserves Pinned for insight and labels version-skip policy as Skipped (#498)', () => {
+    const skipped = makeContainer({
+      id: 'c-skip-label',
+      name: 'gamma',
+      newTag: null,
+      updateKind: null,
+    });
+    const pinnedInsight = makeContainer({
+      id: 'c-pin-label',
       name: 'alpha',
       newTag: null,
       updateKind: null,
-      status: 'running',
-      server: 'local-main',
-      registry: 'dockerhub',
-    });
-    const minor = makeContainer({
-      id: 'c-quiet-card-minor',
-      name: 'beta',
-      currentTag: '1.0.0',
-      newTag: '1.1.0',
-      updateKind: 'minor',
-      updateMaturity: 'fresh',
-      status: 'running',
-      server: 'local-main',
-      registry: 'dockerhub',
+      updateInsight: { tag: 'v2.0.0', kind: 'patch' },
     });
 
     const { context, refs } = makeContext();
-    const containers = [current, minor];
-    refs.containerViewMode.value = 'cards';
+    const containers = [skipped, pinnedInsight];
     refs.filteredContainers.value = containers;
     refs.displayContainers.value = containers;
     refs.renderGroups.value = [
@@ -986,63 +1389,23 @@ describe('ContainersGroupedViews', () => {
         name: null,
         containers,
         containerCount: containers.length,
-        updatesAvailable: 1,
-        updatableCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
       },
     ];
     mocked.context = context;
 
     const wrapper = mountSubject();
+    const skippedState = rowByName(wrapper, 'gamma').get('[data-test="container-update-state"]');
+    expect(skippedState.text()).toContain('Skipped');
+    expect(skippedState.text()).not.toContain('Pinned');
 
-    const currentCard = wrapper
-      .findAll('.card-item-stub')
-      .find((candidate) => candidate.text().includes('alpha'));
-    expect(currentCard).toBeDefined();
-    expect(currentCard!.get('[data-test="container-card-update-state"]').text()).toContain(
-      'Current',
-    );
-    expect(currentCard!.get('[data-test="container-card-runtime-status"]').text()).toContain(
-      'running',
-    );
-    expect(currentCard!.get('[data-test="container-card-server-text"]').text()).toContain('Local');
-    expect(currentCard!.get('[data-test="container-card-registry-text"]').text()).toBe('dockerhub');
-    expect(currentCard!.find('[data-test="container-card-runtime-status"] .badge').exists()).toBe(
-      false,
-    );
-
-    const minorCardUpdate = wrapper
-      .findAll('.card-item-stub')
-      .find((candidate) => candidate.text().includes('beta'))!
-      .get('[data-test="container-card-update-state"]');
-    expect(minorCardUpdate.text()).toContain('Minor');
-    expect(minorCardUpdate.text()).not.toContain('Minor update');
-
-    refs.containerViewMode.value = 'list';
-    await nextTick();
-
-    const currentListItem = wrapper
-      .findAll('.list-item-stub')
-      .find((candidate) => candidate.text().includes('alpha'));
-    expect(currentListItem).toBeDefined();
-    expect(currentListItem!.get('[data-test="container-list-update-state"]').text()).toContain(
-      'Current',
-    );
-    expect(currentListItem!.get('[data-test="container-list-runtime-status"]').text()).toContain(
-      'running',
-    );
-    expect(currentListItem!.get('[data-test="container-list-server-text"]').text()).toContain(
-      'Local',
-    );
-    expect(
-      currentListItem!.find('[data-test="container-list-runtime-status"] .badge').exists(),
-    ).toBe(false);
-
-    const minorListUpdate = wrapper
-      .findAll('.list-item-stub')
-      .find((candidate) => candidate.text().includes('beta'))!
-      .get('[data-test="container-list-update-state"]');
-    expect(minorListUpdate.text()).toContain('Minor');
-    expect(minorListUpdate.text()).not.toContain('Minor update');
+    const pinnedState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
+    expect(pinnedState.text()).toContain('Pinned');
+    const pinnedLabel = pinnedState.find('.font-semibold');
+    expect(pinnedLabel.attributes('style')).toContain('var(--dd-info)');
+    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-warning)');
+    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-success)');
   });
 
   it('covers dropdown menu actions across blocked/updateable states', async () => {
@@ -1064,7 +1427,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs, spies } = makeContext();
     const containers = [blockedNoTag, blockedWithTag];
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
     context.filteredContainers.value = containers;
     context.displayContainers.value = containers;
@@ -1146,7 +1508,6 @@ describe('ContainersGroupedViews', () => {
     });
 
     const { context, refs, spies } = makeContext();
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
     context.filteredContainers.value = [hardBlocked];
     context.displayContainers.value = [hardBlocked];
@@ -1197,7 +1558,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs } = makeContext();
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'buttons';
     context.filteredContainers.value = [alpha, beta];
     context.displayContainers.value = [alpha, beta];
@@ -1249,7 +1609,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context } = makeContext();
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.filteredContainers.value = [alpha, beta];
     context.displayContainers.value = [alpha, beta];
     context.renderGroups.value = [
@@ -1293,7 +1652,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context } = makeContext();
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.filteredContainers.value = [normalRow];
     context.displayContainers.value = [normalRow];
     context.renderGroups.value = [
@@ -1316,86 +1674,6 @@ describe('ContainersGroupedViews', () => {
     expect(dataTable.props('virtualMaxHeight')).toBeUndefined();
     expect(dataTable.props('maxHeight')).toBeUndefined();
     expect(dataTable.props('rowHeight')).toBeUndefined();
-  });
-
-  it('covers card/list view events and footer action handlers', async () => {
-    const running = makeContainer({
-      id: 'c-card-1',
-      name: 'alpha',
-      newTag: '2.0.0',
-      updateKind: 'major',
-      updateMaturity: 'fresh',
-      status: 'running',
-      bouncer: 'safe',
-      registryError: 'timeout',
-      server: 'local-main',
-    });
-    const stoppedWithReason = makeContainer({
-      id: 'c-card-2',
-      name: 'beta',
-      newTag: null,
-      status: 'stopped',
-      bouncer: 'unsafe',
-      noUpdateReason: 'Image pinned',
-      server: 'remote-east',
-    });
-    const stoppedPolicy = makeContainer({
-      id: 'c-card-3',
-      name: 'gamma',
-      newTag: null,
-      status: 'stopped',
-      bouncer: 'safe',
-      noUpdateReason: undefined,
-    });
-    const stoppedClean = makeContainer({
-      id: 'c-card-4',
-      name: 'delta',
-      newTag: null,
-      status: 'stopped',
-      bouncer: 'safe',
-      noUpdateReason: undefined,
-    });
-
-    const { context, refs, spies } = makeContext();
-    const containers = [running, stoppedWithReason, stoppedPolicy, stoppedClean];
-    context.containerViewMode.value = 'cards';
-    context.filteredContainers.value = containers;
-    context.displayContainers.value = containers;
-    context.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: 1,
-        updatableCount: 1,
-      },
-    ];
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-
-    await wrapper.find('.emit-card-click').trigger('click');
-    await iconButtons(wrapper, 'stop')[0].trigger('click');
-    await iconButtons(wrapper, 'play')[0].trigger('click');
-    await iconButtons(wrapper, 'restart')[0].trigger('click');
-    await iconButtons(wrapper, 'security')[0].trigger('click');
-    await iconButtons(wrapper, 'cloud-download')[0].trigger('click');
-
-    refs.containerViewMode.value = 'list';
-    await nextTick();
-    await wrapper.find('.emit-list-click').trigger('click');
-
-    expect(spies.selectContainer).toHaveBeenCalled();
-    expect(spies.confirmStop).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'c-card-1', name: 'alpha' }),
-    );
-    expect(spies.startContainer).toHaveBeenCalled();
-    expect(spies.confirmRestart).toHaveBeenCalled();
-    expect(spies.scanContainer).toHaveBeenCalled();
-    expect(spies.confirmUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'c-card-1', name: 'alpha' }),
-    );
   });
 
   it('shows empty state and clears filters', async () => {
@@ -1421,7 +1699,6 @@ describe('ContainersGroupedViews', () => {
       status: 'running',
     });
     const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'table';
     refs.filteredContainers.value = [maturityBlocked];
     refs.displayContainers.value = [maturityBlocked];
     refs.renderGroups.value = [
@@ -1559,7 +1836,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 2,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'icons';
     refs.actionInProgress.value = new Map([['c-local', 'update']]);
     mocked.context = context;
@@ -1617,7 +1893,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs } = makeContext();
     const containers = [majorBlocked, minorUnsafe, patchSafe, digestSafe];
-    refs.containerViewMode.value = 'table';
     refs.isCompact.value = true;
     refs.filteredContainers.value = containers;
     refs.displayContainers.value = containers;
@@ -1678,7 +1953,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 1,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'buttons';
     refs.actionInProgress.value = new Map([['c-progress-1', 'update']]);
     mocked.context = context;
@@ -1719,7 +1993,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 1,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.actionInProgress.value = new Map([['c-progress-1', 'update']]);
     mocked.context = context;
 
@@ -1752,7 +2025,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 0,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.actionInProgress.value = new Map([['c-scan-1', 'scan']]);
     mocked.context = context;
 
@@ -1787,7 +2059,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 1,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.actionInProgress.value = new Map([['c-both-1', 'update']]);
     mocked.context = context;
 
@@ -1821,7 +2092,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 0,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.actionInProgress.value = new Map();
     mocked.context = context;
 
@@ -1855,7 +2125,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 0,
       },
     ];
-    refs.containerViewMode.value = 'table';
     mocked.context = context;
 
     const wrapper = mountSubject();
@@ -1887,7 +2156,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 1,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.groupUpdateQueue.value = new Set(['c-queued-1']);
     mocked.context = context;
 
@@ -2049,199 +2317,7 @@ describe('ContainersGroupedViews', () => {
     expect(batch?.succeededCount).toBe(0);
   });
 
-  it('covers card and list pending/disabled/update-kind branches', async () => {
-    const pendingCard = makeContainer({
-      id: 'c-card-pending',
-      name: 'alpha',
-      newTag: null,
-      status: 'running',
-      bouncer: 'safe',
-      _pending: true as any,
-    });
-    const runningCard = makeContainer({
-      id: 'c-card-running',
-      name: 'beta',
-      newTag: '2.0.0',
-      updateKind: 'major',
-      updateMaturity: 'settled',
-      status: 'running',
-      bouncer: 'unsafe',
-    });
-    const minorList = makeContainer({
-      id: 'c-list-minor',
-      name: 'gamma',
-      newTag: '1.1.0',
-      updateKind: 'minor',
-      updateMaturity: 'settled',
-      status: 'stopped',
-      bouncer: 'safe',
-    });
-    const patchList = makeContainer({
-      id: 'c-list-patch',
-      name: 'delta',
-      newTag: '1.0.1',
-      updateKind: 'patch',
-      updateMaturity: 'settled',
-      status: 'running',
-      bouncer: 'safe',
-    });
-    const digestList = makeContainer({
-      id: 'c-list-digest',
-      name: 'epsilon',
-      newTag: 'sha256:aaa',
-      updateKind: 'digest',
-      updateMaturity: 'settled',
-      status: 'stopped',
-      bouncer: 'safe',
-    });
-
-    const { context, refs } = makeContext();
-    const containers = [pendingCard, runningCard, minorList, patchList, digestList];
-    refs.containerViewMode.value = 'cards';
-    refs.filteredContainers.value = containers;
-    refs.displayContainers.value = containers;
-    refs.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: 4,
-        updatableCount: 4,
-      },
-    ];
-    refs.actionInProgress.value = new Map([['c-card-running', 'update']]);
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-
-    refs.actionInProgress.value = new Map([['c-list-minor', 'update']]);
-    await nextTick();
-
-    refs.containerActionsEnabled.value = false;
-    refs.actionInProgress.value = new Map();
-    await nextTick();
-    const cardLockButtons = wrapper
-      .findAll('button[disabled]')
-      .filter((b) => b.classes().includes('w-10') || b.classes().includes('w-8'));
-    const cardLockBtn = cardLockButtons[0];
-    expect(cardLockBtn).toBeDefined();
-    (cardLockBtn!.element as HTMLButtonElement).disabled = false;
-    await cardLockBtn!.trigger('click');
-
-    refs.containerViewMode.value = 'list';
-    refs.containerActionsEnabled.value = true;
-    await nextTick();
-    await wrapper.find('.emit-list-click').trigger('click');
-  });
-
-  it('renders dimmed card overlay with updating and queued labels for the cards view', async () => {
-    const updatingCard = makeContainer({
-      id: 'c-card-updating',
-      name: 'alpha',
-      newTag: '2.0.0',
-      updateKind: 'major',
-      status: 'running',
-      bouncer: 'safe',
-      updateOperation: {
-        id: 'op-updating',
-        status: 'in-progress',
-        phase: 'pulling',
-        updatedAt: '2026-04-12T00:00:00.000Z',
-      },
-    });
-    const queuedCard = makeContainer({
-      id: 'c-card-queued',
-      name: 'beta',
-      newTag: '2.1.0',
-      updateKind: 'minor',
-      status: 'running',
-      bouncer: 'safe',
-      updateOperation: {
-        id: 'op-queued',
-        status: 'queued',
-        phase: 'queued',
-        updatedAt: '2026-04-12T00:00:00.000Z',
-      },
-    });
-
-    const { context, refs } = makeContext();
-    const containers = [updatingCard, queuedCard];
-    refs.containerViewMode.value = 'cards';
-    refs.filteredContainers.value = containers;
-    refs.displayContainers.value = containers;
-    refs.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: 2,
-        updatableCount: 2,
-      },
-    ];
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-    await nextTick();
-
-    const cards = wrapper.findAll('.card-item-stub');
-    expect(cards).toHaveLength(2);
-
-    const updatingWrapper = cards[0]!.find('.transition-opacity');
-    expect(updatingWrapper.classes()).toContain('opacity-30');
-    const updatingOverlay = cards[0]!.find('.absolute.inset-0');
-    expect(updatingOverlay.exists()).toBe(true);
-    expect(updatingOverlay.text()).toBe('Pulling…');
-
-    const queuedWrapper = cards[1]!.find('.transition-opacity');
-    expect(queuedWrapper.classes()).toContain('opacity-30');
-    const queuedOverlay = cards[1]!.find('.absolute.inset-0');
-    expect(queuedOverlay.exists()).toBe(true);
-    expect(queuedOverlay.text()).toBe('Queued');
-  });
-
-  it('renders ReleaseNotesLink and ProjectLink in the list view when the container exposes them (#295)', async () => {
-    // rc.10 wired project/release-notes links into the cards view only. Users on
-    // the list accordion view (the default on many installs) never saw the new
-    // links. Assert the list view renders both when sourceRepo / releaseLink
-    // are populated.
-    const container = makeContainer({
-      id: 'c-list-links',
-      name: 'grafana',
-      newTag: '12.3.3',
-      updateKind: 'patch',
-      sourceRepo: 'github.com/grafana/grafana',
-      releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
-    });
-    const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'list';
-    refs.filteredContainers.value = [container];
-    refs.displayContainers.value = [container];
-    refs.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers: [container],
-        containerCount: 1,
-        updatesAvailable: 1,
-        updatableCount: 1,
-      },
-    ];
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-    await nextTick();
-
-    expect(wrapper.find('[data-test="project-link"]').exists()).toBe(true);
-    expect(wrapper.find('[data-test="release-link"]').exists()).toBe(true);
-  });
-
-  it('renders icon-only ReleaseNotesLink and ProjectLink inside the table actions column (#295)', async () => {
-    // rc.10 wired project/release-notes links into the cards + detail panel
-    // only. Table rows never showed them. We surface them as icon-style
-    // AppIconButton links in the actions column itself so they match the
-    // existing action icons and give finger-friendly tap targets.
+  it('renders the standardized source, release, and registry quick-link group in table rows (#295)', async () => {
     const container = makeContainer({
       id: 'c-table-actions-links',
       name: 'grafana',
@@ -2249,9 +2325,11 @@ describe('ContainersGroupedViews', () => {
       updateKind: 'patch',
       sourceRepo: 'github.com/grafana/grafana',
       releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
+      registry: 'custom',
+      registryName: 'registry.example.com',
+      registryUrl: 'https://registry.example.com/v2',
     });
-    const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'table';
+    const { context, refs, spies } = makeContext();
     refs.filteredContainers.value = [container];
     refs.displayContainers.value = [container];
     refs.renderGroups.value = [
@@ -2269,23 +2347,74 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     await nextTick();
 
-    const projectLink = wrapper.find('[data-test="project-link"]');
-    const releaseLink = wrapper.find('[data-test="release-link"]');
-    expect(projectLink.exists()).toBe(true);
-    expect(releaseLink.exists()).toBe(true);
-    expect(projectLink.element.tagName).toBe('A');
-    // releaseLink is the popover trigger (button) — clicking it opens the
-    // unified release-notes popover; the external link lives inside the
-    // popover body. See discussion #295.
-    expect(releaseLink.element.tagName).toBe('BUTTON');
-    expect(releaseLink.attributes('aria-haspopup')).toBe('dialog');
+    const group = wrapper.get('.links-cell-stub').get('[data-test="container-quick-links"]');
+    expectContainerQuickLinks(group, 'registry.example.com');
+
+    const rowSelectionsBeforeLinkClicks = spies.selectContainer.mock.calls.length;
+    for (const action of group.findAll(QUICK_LINK_SELECTOR)) {
+      action.element.addEventListener('click', (event) => event.preventDefault(), { once: true });
+      await action.trigger('click');
+    }
+    expect(spies.selectContainer).toHaveBeenCalledTimes(rowSelectionsBeforeLinkClicks);
+  });
+
+  it('renders each table quick link independently when the other link data is absent (#295)', async () => {
+    const sourceOnly = makeContainer({
+      id: 'c-source-only',
+      name: 'source-only',
+      sourceRepo: 'github.com/example/source-only',
+      registry: 'dockerhub',
+    });
+    const releaseOnly = makeContainer({
+      id: 'c-release-only',
+      name: 'release-only',
+      releaseLink: 'https://example.test/releases/1.0.0',
+      registry: 'dockerhub',
+    });
+    const registryOnly = makeContainer({
+      id: 'c-registry-only',
+      name: 'registry-only',
+      registry: 'ghcr',
+      registryName: 'ghcr.io',
+      registryUrl: 'https://ghcr.io/v2',
+    });
+    const containers = [sourceOnly, releaseOnly, registryOnly];
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const rows = wrapper.findAll('.table-row-stub');
+    expect(quickLinkTestIds(rows[0].get('[data-test="container-quick-links"]'))).toEqual([
+      'project-link',
+      'registry-link',
+    ]);
+    expect(quickLinkTestIds(rows[1].get('[data-test="container-quick-links"]'))).toEqual([
+      'release-link',
+      'registry-link',
+    ]);
+    expect(quickLinkTestIds(rows[2].get('[data-test="container-quick-links"]'))).toEqual([
+      'registry-link',
+    ]);
   });
 
   it('flat-mode tableRows reads from renderGroups[0].containers, not displayContainers', async () => {
     const containerA = makeContainer({ id: 'c-a', name: 'alpha' });
     const containerB = makeContainer({ id: 'c-b', name: 'beta' });
     const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'table';
     refs.groupByStack.value = false;
     // renderGroups holds only containerA
     refs.renderGroups.value = [
@@ -2314,7 +2443,6 @@ describe('ContainersGroupedViews', () => {
   it('tableRows falls back to displayContainers when renderGroups is empty', async () => {
     const oneContainer = makeContainer({ id: 'c-only', name: 'only' });
     const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'table';
     refs.groupByStack.value = false;
     // renderGroups is empty — flat branch falls back to displayContainers
     refs.renderGroups.value = [];
@@ -2483,7 +2611,6 @@ describe('ContainersGroupedViews', () => {
           updatableCount: 1,
         },
       ];
-      refs.containerViewMode.value = 'table';
       mocked.context = context;
       return mountSubject();
     }
@@ -2555,7 +2682,6 @@ describe('ContainersGroupedViews', () => {
         ...digestOverrides,
       });
       const { context } = makeContext(contextOverrides);
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2645,7 +2771,6 @@ describe('ContainersGroupedViews', () => {
         bouncer: 'safe',
       });
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2679,7 +2804,6 @@ describe('ContainersGroupedViews', () => {
         registryErrorKind: 'rate-limited',
       } as any);
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2696,79 +2820,6 @@ describe('ContainersGroupedViews', () => {
       const wrapper = mountSubject();
       const row = rowByName(wrapper, 'alpha');
       expect(row.text()).toContain('Rate limited');
-    });
-
-    it('renders the human-readable tag in the card body for a hybrid tag+digest update (fix #356, #370)', async () => {
-      const container = makeContainer({
-        id: 'c-card-hybrid-digest',
-        name: 'alpha',
-        currentTag: '14-vectorchord0.4.3-pgvectors0.2.0',
-        newTag: '14-vectorchord0.4.3-pgvectors0.2.0',
-        updateKind: 'digest',
-        currentDigest: digestLocal,
-        newDigest: digestRemote,
-        isDigestPinned: false,
-        status: 'running',
-        bouncer: 'safe',
-      });
-      const { context } = makeContext();
-      context.containerViewMode.value = 'cards';
-      context.filteredContainers.value = [container];
-      context.displayContainers.value = [container];
-      context.renderGroups.value = [
-        {
-          key: 'g',
-          name: null,
-          containers: [container],
-          containerCount: 1,
-          updatesAvailable: 1,
-          updatableCount: 1,
-        },
-      ];
-      mocked.context = context;
-      const wrapper = mountSubject();
-      const card = wrapper.findAll('.card-item-stub').find((c) => c.text().includes('alpha'));
-      expect(card).toBeDefined();
-      const text = card!.text();
-      expect(text).toContain('14-vectorchord0.4.3-pgvectors0.2.0');
-      expect(text).not.toContain('sha256:bcf6335aabbb…');
-      expect(text).not.toContain('sha256:deadbeefcafe…');
-    });
-
-    it('renders digest-pinned update in the card body (pure-digest, regression for #342 fix)', async () => {
-      const container = makeContainer({
-        id: 'c-card-pure-digest',
-        name: 'alpha',
-        currentTag: digestLocal,
-        newTag: digestLocal,
-        updateKind: 'digest',
-        currentDigest: digestLocal,
-        newDigest: digestRemote,
-        isDigestPinned: true,
-        status: 'running',
-        bouncer: 'safe',
-      });
-      const { context } = makeContext();
-      context.containerViewMode.value = 'cards';
-      context.filteredContainers.value = [container];
-      context.displayContainers.value = [container];
-      context.renderGroups.value = [
-        {
-          key: 'g',
-          name: null,
-          containers: [container],
-          containerCount: 1,
-          updatesAvailable: 1,
-          updatableCount: 1,
-        },
-      ];
-      mocked.context = context;
-      const wrapper = mountSubject();
-      const card = wrapper.findAll('.card-item-stub').find((c) => c.text().includes('alpha'));
-      expect(card).toBeDefined();
-      const text = card!.text();
-      expect(text).toContain('sha256:bcf6335aabbb…');
-      expect(text).toContain('sha256:deadbeefcafe…');
     });
 
     it('renders the human-readable currentTag for a hybrid both-halves-change row (fix #356, #370)', async () => {
@@ -2818,7 +2869,6 @@ describe('ContainersGroupedViews', () => {
         registryErrorKind: 'rate-limited',
       } as any);
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2859,10 +2909,7 @@ describe('ContainersGroupedViews', () => {
     const digestLocal = 'sha256:bcf6335aabbb1234567890abcdef1234567890abcdef1234567890abcdef12';
     const digestRemote = 'sha256:deadbeefcafe1234567890abcdef1234567890abcdef1234567890abcdef12';
 
-    function mountGuardContainer(
-      overrides: Partial<Container> = {},
-      viewMode: 'table' | 'cards' = 'table',
-    ) {
+    function mountGuardContainer(overrides: Partial<Container> = {}) {
       const container = makeContainer({
         id: 'c-guard',
         name: 'alpha',
@@ -2875,13 +2922,12 @@ describe('ContainersGroupedViews', () => {
         ...overrides,
       });
       const { context } = makeContext();
-      context.containerViewMode.value = viewMode;
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
         {
           key: 'g',
-          name: viewMode === 'table' ? 'g' : null,
+          name: 'g',
           containers: [container],
           containerCount: 1,
           updatesAvailable: 1,
@@ -2904,34 +2950,21 @@ describe('ContainersGroupedViews', () => {
       currentTag,
       newTag,
     }) => {
-      const { wrapper } = mountGuardContainer({ currentTag, newTag }, 'table');
+      const { wrapper } = mountGuardContainer({ currentTag, newTag });
       const text = rowByName(wrapper, 'alpha').text();
       expect(text).toContain(currentTag);
       expect(text).not.toContain('sha256:');
     });
 
     it('table view — hybrid both-halves change (1.2.3 → 1.2.4, digest also changes) shows currentTag, never sha256', async () => {
-      const { wrapper } = mountGuardContainer(
-        { currentTag: '1.2.3', newTag: '1.2.4', updateKind: 'digest', isDigestPinned: false },
-        'table',
-      );
+      const { wrapper } = mountGuardContainer({
+        currentTag: '1.2.3',
+        newTag: '1.2.4',
+        updateKind: 'digest',
+        isDigestPinned: false,
+      });
       const text = rowByName(wrapper, 'alpha').text();
       expect(text).toContain('1.2.3');
-      expect(text).not.toContain('sha256:');
-    });
-
-    it.each([
-      { label: 'floating tag `latest`', currentTag: 'latest', newTag: 'latest' },
-      { label: 'specific tag `v8.13.2`', currentTag: 'v8.13.2', newTag: 'v8.13.2' },
-    ])('card view — $label shows human-readable tag, never sha256 (non-pinned digest)', async ({
-      currentTag,
-      newTag,
-    }) => {
-      const { wrapper } = mountGuardContainer({ currentTag, newTag }, 'cards');
-      const card = wrapper.findAll('.card-item-stub').find((c) => c.text().includes('alpha'));
-      expect(card).toBeDefined();
-      const text = card!.text();
-      expect(text).toContain(currentTag);
       expect(text).not.toContain('sha256:');
     });
 
@@ -2952,7 +2985,6 @@ describe('ContainersGroupedViews', () => {
         bouncer: 'safe',
       });
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2985,7 +3017,6 @@ describe('ContainersGroupedViews', () => {
         softwareVersion,
       });
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -3028,7 +3059,6 @@ describe('ContainersGroupedViews', () => {
       details: { ports: [], volumes: [], env: [], labels: [], startedAt },
     });
     const { context } = makeContext();
-    context.containerViewMode.value = 'table';
     context.filteredContainers.value = [container];
     context.displayContainers.value = [container];
     context.renderGroups.value = [
@@ -3058,7 +3088,6 @@ describe('ContainersGroupedViews', () => {
     });
 
     const { context, refs, spies } = makeContext();
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
     context.filteredContainers.value = [container];
     context.displayContainers.value = [container];

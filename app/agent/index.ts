@@ -14,8 +14,17 @@ export async function init(): Promise<void> {
     const name = agentComponent.name;
     const config = agentComponent.configuration as AgentClientConfig;
 
-    if (!config.host || !config.secret) {
-      log.warn(`Skipping agent ${name}: Missing host or secret`);
+    if (!config.host) {
+      log.warn(`Skipping agent ${name}: Missing host`);
+      return;
+    }
+    if (config.authmode === 'ed25519') {
+      if (!config.signingkeyid || !config.signingkey) {
+        log.warn(`Skipping agent ${name}: Missing signingkeyid or signingkey for ed25519 authmode`);
+        return;
+      }
+    } else if (!config.secret) {
+      log.warn(`Skipping agent ${name}: Missing secret`);
       return;
     }
 

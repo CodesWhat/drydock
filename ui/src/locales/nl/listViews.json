@@ -22,10 +22,6 @@
       "status": "Status",
       "details": "Details"
     },
-    "card": {
-      "time": "Tijd",
-      "version": "Versie"
-    },
     "detail": {
       "timestamp": "Tijdstempel",
       "event": "Evenement",
@@ -156,10 +152,6 @@
       "total": "Totaal"
     },
     "card": {
-      "vulnerabilities": "kwetsbaarheden",
-      "vsUpdate": "versus bijwerken",
-      "fixable": "repareerbaar",
-      "noFixesAvailable": "Geen oplossingen beschikbaar",
       "total": "totaal"
     },
     "badge": {
@@ -254,10 +246,6 @@
       "private": "Privé",
       "public": "Openbaar"
     },
-    "card": {
-      "auth": "Authenticatie",
-      "status": "Status"
-    },
     "status": {
       "connected": "Verbonden",
       "error": "Fout",
@@ -289,15 +277,6 @@
       "status": "Status",
       "containers": "Containers",
       "lastSeen": "Laatst gezien"
-    },
-    "card": {
-      "containers": "Containers",
-      "running": "Actief",
-      "images": "Images",
-      "lastSeen": "Laatst gezien"
-    },
-    "list": {
-      "containers": "containers"
     },
     "detail": {
       "containers": "Containers",
@@ -340,9 +319,6 @@
       "status": "Status",
       "refreshing": "Triggerdetails vernieuwen...",
       "noConfig": "Geen configuratie-eigenschappen"
-    },
-    "list": {
-      "status": "Status"
     }
   },
   "watchersView": {
@@ -363,12 +339,6 @@
     "status": {
       "watching": "Kijken",
       "paused": "Gepauzeerd"
-    },
-    "card": {
-      "containers": "Containers",
-      "nextRun": "Volgende run",
-      "lastRun": "Laatste run",
-      "containersWatched": "{count} containers bekeken"
     },
     "badge": {
       "maint": "Onderhoud"

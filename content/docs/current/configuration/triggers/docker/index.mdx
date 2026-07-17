@@ -117,6 +117,8 @@ A non-zero exit code or timeout is treated as failure. When `dd.hook.pre.abort` 
 
 <Callout type="warn">Hook commands are validated against a restricted shell-safe grammar at configuration time. Commands containing `$(...)`, backticks, redirections (`<`, `>`), or chaining metacharacters (`;`, `&`, `|`) are rejected with a clear error at startup. Allowed: a single command with arguments, single/double-quoted strings, and `$VAR` / `${VAR}` variable references.</Callout>
 
+<Callout type="info">Drydock-provided hook environment values are sanitized before execution: control characters and `` ` ``, `$`, `;`, `&`, `|`, `<`, `>`, `(`, `)` are replaced with `_`.</Callout>
+
 <Callout type="warn">Hook labels are ignored unless `DD_HOOKS_ENABLED=true` is set on the Drydock container.</Callout>
 
 Lifecycle hooks are **not** executed during self-updates. When hook labels are present, Drydock records `hook-configured` in the audit log before execution, then `hook-pre-*` / `hook-post-*` based on outcomes.
