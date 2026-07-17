@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.2] — 2026-07-18
+
+### Added
+
+- **"Version update" container filter** ([#538](https://github.com/CodesWhat/drydock/issues/538)). The Containers filter bar gains a **Version Update** kind option that shows only real semver upgrades (major, minor, patch) and hides digest-only churn — the noise that dominates the dashboard on fleets that rebuild images daily in CI. Like every other container filter, it round-trips through the URL (`?filterKind=version`), so the filtered view can be saved as a bookmark for one-click access.
+
+### Fixed
+
+- **Repair rebuilds no longer reset the registry-reconciled digest** ([#541](https://github.com/CodesWhat/drydock/issues/541)). When the fast refresh path repairs a stored container's broken image reference, the reconciled `digest.value` — the security scan-group key — is now preserved unless the repo digest genuinely changed (image re-pulled), the same stickiness rule the slow-path rebuild gained for [#536](https://github.com/CodesWhat/drydock/issues/536).
+
+- **Containers with a stored watch error refresh on the fast path** ([#542](https://github.com/CodesWhat/drydock/issues/542)). An error from the previous cycle no longer routes a known container through the full first-discovery enumeration — image/label/tag re-resolution plus an O(n) stale-entry scan of the store — on every cron. Errored-but-known containers reuse the same cheap refresh as healthy ones, and broken image references still self-heal via the unconditional repair check.
+
+- **Last-known-good update state survives watch errors** ([#543](https://github.com/CodesWhat/drydock/issues/543)). A failed watch cycle — registry timeout, rate limit, transient network error — no longer erases the previous successful comparison. The stored `result`, `updateAvailable`, `updateKind`, and current release notes are preserved alongside the recorded error until a later cycle succeeds, so the UI keeps showing the last known update state with the error annotated next to it instead of a blank.
+
+- Portwing WS Welcome frames now report the actual server version — the endpoint had hard-coded `1.5.0` since v1.5.0, so v1.5.1/v1.5.2/v1.6.0-rc.1 servers all identified as `1.5.0` to agents ([#550](https://github.com/CodesWhat/drydock/pull/550) review finding)
+
 ## [1.6.0-rc.1] — 2026-07-15
 
 ### Added
@@ -2143,7 +2159,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...HEAD
+[1.6.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...v1.6.0-rc.2
 [1.6.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.5.2...v1.6.0-rc.1
 [1.5.2]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.5...v1.5.2
 [1.5.2-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.4...v1.5.2-rc.5

@@ -1,36 +1,13 @@
-import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import yaml from 'yaml';
-
-interface WorkflowStep {
-  name?: string;
-  uses?: string;
-  with?: Record<string, string>;
-}
-
-interface WorkflowJob {
-  env?: Record<string, string>;
-  if?: string;
-  needs?: string[];
-  steps?: WorkflowStep[];
-}
-
-interface WorkflowDefinition {
-  env?: Record<string, string>;
-  jobs?: Record<string, WorkflowJob>;
-  on?: Record<string, unknown>;
-}
+import {
+  getWorkflowStep as getWorkflowStepFrom,
+  loadWorkflow as loadWorkflowFrom,
+} from './workflow-test-utils';
 
 const workflowPath = fileURLToPath(new URL('../workflows/e2e-playwright.yml', import.meta.url));
-
-function loadWorkflow(): WorkflowDefinition {
-  return yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
-}
-
-function getWorkflowStep(jobId: string, name: string): WorkflowStep | undefined {
-  return loadWorkflow().jobs?.[jobId]?.steps?.find((step) => step.name === name);
-}
+const loadWorkflow = loadWorkflowFrom.bind(undefined, workflowPath);
+const getWorkflowStep = getWorkflowStepFrom.bind(undefined, workflowPath);
 
 test('Playwright workflow disables browser downloads for host-side npm installs', () => {
   const workflow = loadWorkflow();

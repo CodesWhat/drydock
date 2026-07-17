@@ -283,6 +283,23 @@ describe('ContainersListContent', () => {
     expect(wrapper.find('[data-test="dd-toolbar-sort-select"]').exists()).toBe(false);
   });
 
+  it('renders the version update kind option with its translated label', () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+
+    expect(wrapper.get('option[value="version"]').text()).toBe('Version Update');
+  });
+
+  it('shows the translated version update active-filter chip', () => {
+    const context = makeTemplateContext({
+      filterKind: ref('version'),
+      activeFilterCount: computed(() => 1),
+    });
+    wrapper = mountWithContext(context);
+
+    expect(wrapper.text()).toContain('Kind: Version Update');
+  });
+
   it('passes only labelled catalog columns (translated) to the picker', () => {
     const context = makeTemplateContext();
     wrapper = mountWithContext(context);

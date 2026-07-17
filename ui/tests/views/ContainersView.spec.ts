@@ -827,6 +827,12 @@ describe('ContainersView', () => {
       expect(mockFilterKind.value).toBe('any');
     });
 
+    it('applies version filterKind from route query', async () => {
+      mockRoute.query = { filterKind: 'version' };
+      await mountContainersView([makeContainer({ newTag: '2.0.0', updateKind: 'major' })]);
+      expect(mockFilterKind.value).toBe('version');
+    });
+
     it('applies filterKind from array route query', async () => {
       mockRoute.query = { filterKind: ['major'] };
       await mountContainersView([makeContainer({ newTag: '2.0.0', updateKind: 'major' })]);
@@ -904,6 +910,18 @@ describe('ContainersView', () => {
           groupByStack: 'true',
           sort: 'status-desc',
         }),
+      });
+    });
+
+    it('syncs version filterKind to the URL query', async () => {
+      await mountContainersView([makeContainer()]);
+
+      mockFilterKind.value = 'version';
+      await flushPromises();
+
+      const lastCall = mockRouterReplace.mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual({
+        query: expect.objectContaining({ filterKind: 'version' }),
       });
     });
   });

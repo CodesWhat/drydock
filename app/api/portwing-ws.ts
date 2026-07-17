@@ -19,7 +19,7 @@ import {
   type WebSocketLike,
 } from '../agent/EdgeAgentAdapter.js';
 import { getAgent } from '../agent/manager.js';
-import { getServerConfiguration } from '../configuration/index.js';
+import { getServerConfiguration, getVersion } from '../configuration/index.js';
 import logger from '../log/index.js';
 import * as agentKeys from '../store/agent-keys.js';
 import { save as saveStore } from '../store/index.js';
@@ -334,20 +334,20 @@ function sendErrorAndClose(
   ws.close(closeCode, code);
 }
 
-// Package version sourced at module init time from the app package.json.
-// This is the server-side version operators can verify externally.
+// Server version reported in the welcome frame — the canonical getVersion()
+// (DD_VERSION override, else package.json), cached after first read.
 let _drydockVersion: string | undefined;
 function drydockVersion(): string {
   if (_drydockVersion !== undefined) {
     return _drydockVersion;
   }
-  // Populated by injectDrydockVersionForTesting() in tests, or from package.json at runtime.
-  _drydockVersion = '1.5.0';
+  // Populated by injectDrydockVersionForTesting() in tests, or from getVersion() at runtime.
+  _drydockVersion = getVersion();
   return _drydockVersion;
 }
 
-/** Exposed for tests to override the version string. */
-export function injectDrydockVersionForTesting(version: string): void {
+/** Exposed for tests to override the version string, or reset the cache with undefined. */
+export function injectDrydockVersionForTesting(version: string | undefined): void {
   _drydockVersion = version;
 }
 

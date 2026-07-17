@@ -3,19 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import yaml from 'yaml';
 
-interface WorkflowStep {
-  id?: string;
-  uses?: string;
-  with?: Record<string, string>;
-}
-
-interface WorkflowJob {
-  steps?: WorkflowStep[];
-}
-
-interface WorkflowDefinition {
-  jobs?: Record<string, WorkflowJob>;
-}
+import { loadWorkflow, type WorkflowStep } from './workflow-test-utils';
 
 interface RuntimeFilterDefinition {
   runtime?: string[];
@@ -26,10 +14,6 @@ const e2ePlaywrightWorkflowPath = fileURLToPath(
   new URL('../workflows/e2e-playwright.yml', import.meta.url),
 );
 const runtimeFiltersPath = fileURLToPath(new URL('../filters/runtime.yml', import.meta.url));
-
-function loadWorkflow(path: string): WorkflowDefinition {
-  return yaml.parse(readFileSync(path, 'utf8')) as WorkflowDefinition;
-}
 
 function getPathFilterStep(path: string): WorkflowStep | undefined {
   const workflow = loadWorkflow(path);

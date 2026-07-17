@@ -2,24 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import yaml from 'yaml';
-
-interface WorkflowStep {
-  env?: Record<string, string>;
-  id?: string;
-  name?: string;
-  uses?: string;
-  run?: string;
-  with?: Record<string, unknown>;
-}
-
-interface WorkflowJob {
-  steps?: WorkflowStep[];
-}
-
-interface WorkflowDefinition {
-  jobs?: Record<string, WorkflowJob>;
-}
+import { loadWorkflow, type WorkflowStep } from './workflow-test-utils';
 
 const workflowPath = fileURLToPath(new URL('../workflows/release-cut.yml', import.meta.url));
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -41,7 +24,7 @@ const transientRetryStepNames = [
 ];
 
 function loadReleaseSteps(): WorkflowStep[] {
-  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+  const workflow = loadWorkflow(workflowPath);
   return workflow.jobs?.release?.steps ?? [];
 }
 

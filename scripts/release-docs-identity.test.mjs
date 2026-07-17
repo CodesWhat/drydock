@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.6.0-rc.1';
-const RC_DATE = '2026-07-15';
-const RC_DISPLAY_DATE = 'July 15, 2026';
+const RC_VERSION = '1.6.0-rc.2';
+const RC_DATE = '2026-07-18';
+const RC_DISPLAY_DATE = 'July 18, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
 
 function read(path) {
@@ -21,16 +21,16 @@ test('public release surfaces identify the v1.6 release candidate', () => {
   const quickstart = read('content/docs/current/quickstart/index.mdx');
   const changelog = read('CHANGELOG.md');
 
-  assert.match(readme, /version-1\.6\.0--rc\.1-blue/u);
-  assert.match(readme, /v1\.6\.0-rc\.1 highlights/u);
+  assert.match(readme, /version-1\.6\.0--rc\.2-blue/u);
+  assert.match(readme, /v1\.6\.0-rc\.2 highlights/u);
   assert.match(siteConfig, new RegExp(`version: "${RC_VERSION.replaceAll('.', '\\.')}"`, 'u'));
   assert.ok(updates.includes(`## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`));
-  assert.match(appApi, /"version":"1\.6\.0-rc\.1"/u);
-  assert.match(agentApi, /"version": "1\.6\.0-rc\.1"/u);
-  assert.match(portwingApi, /"version": "1\.6\.0-rc\.1"/u);
-  assert.match(portwingApi, /"drydockVersion": "1\.6\.0-rc\.1"/u);
-  assert.match(quickstart, /\| `1\.6\.0-rc\.1` \| Immutable release candidate/u);
-  assert.doesNotMatch(quickstart, /\| `1\.6\.0-rc\.(?!1\b)\d+` \| Immutable release candidate/u);
+  assert.match(appApi, /"version":"1\.6\.0-rc\.2"/u);
+  assert.match(agentApi, /"version": "1\.6\.0-rc\.2"/u);
+  assert.match(portwingApi, /"version": "1\.6\.0-rc\.2"/u);
+  assert.match(portwingApi, /"drydockVersion": "1\.6\.0-rc\.2"/u);
+  assert.match(quickstart, /\| `1\.6\.0-rc\.2` \| Immutable release candidate/u);
+  assert.doesNotMatch(quickstart, /\| `1\.6\.0-rc\.(?!2\b)\d+` \| Immutable release candidate/u);
   assert.ok(changelog.includes(`## [${RC_VERSION}] — ${RC_DATE}`));
   assert.ok(
     changelog.includes(
@@ -39,7 +39,7 @@ test('public release surfaces identify the v1.6 release candidate', () => {
   );
   assert.ok(
     changelog.includes(
-      `[${RC_VERSION}]: https://github.com/CodesWhat/drydock/compare/v1.5.2...v${RC_VERSION}`,
+      `[${RC_VERSION}]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...v${RC_VERSION}`,
     ),
   );
 });
@@ -53,7 +53,7 @@ test('v1.5.2 is archived and public release routing advances to v1.6', () => {
 
   assert.match(readme, /<summary><strong>v1\.5\.2 highlights<\/strong><\/summary>/u);
   assert.match(siteContent, /version: "v1\.5\.2",[\s\S]{0,500}?status: "released"/u);
-  assert.match(siteContent, /version: "v1\.6\.0-rc\.1",[\s\S]{0,500}?status: "next"/u);
+  assert.match(siteContent, /version: "v1\.6\.0-rc\.2",[\s\S]{0,500}?status: "next"/u);
   assert.match(
     docsVersions,
     /\{ slug: "v1\.6", source: "current", title: "v1\.6" \},\s+\{ slug: "v1\.5", source: "v1\.5", title: "v1\.5" \}/u,
