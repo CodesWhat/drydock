@@ -67,6 +67,11 @@ export async function watchContainer(
   const containerWithResult = container;
   const watchStartedAtMs = Date.now();
 
+  const previousResult = containerWithResult.result;
+  const previousUpdateAvailable = containerWithResult.updateAvailable;
+  const previousUpdateKind = containerWithResult.updateKind;
+  const previousCurrentReleaseNotes = containerWithResult.currentReleaseNotes;
+
   // Reset previous results if so
   delete containerWithResult.result;
   delete containerWithResult.error;
@@ -82,6 +87,15 @@ export async function watchContainer(
     containerWithResult.error = {
       message: errorMessage,
     };
+    // Restore only when this cycle produced no fresh comparison — a failure
+    // after findNewVersion resolved (e.g. enrichment) must not clobber the
+    // fresh result with the stale snapshot.
+    if (containerWithResult.result === undefined && previousResult !== undefined) {
+      containerWithResult.result = previousResult;
+      containerWithResult.updateAvailable = previousUpdateAvailable;
+      containerWithResult.updateKind = previousUpdateKind;
+      containerWithResult.currentReleaseNotes = previousCurrentReleaseNotes;
+    }
   }
 
   const containerReport = mapContainerToContainerReport(containerWithResult, watchStartedAtMs);
