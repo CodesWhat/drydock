@@ -379,6 +379,35 @@ describe('docker image details orchestration module', () => {
       expect(inspectContainer).toHaveBeenCalledTimes(1);
       expect(stored.error).toEqual({ message: 'timeout of 30000ms exceeded' });
     });
+
+    test('repairs a broken reference for an errored container on the fast path', async () => {
+      const stored = createErroredStoredContainer();
+      stored.image.tag.value = 'unknown';
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const getContainers = vi.spyOn(storeContainer, 'getContainers').mockReturnValue([]);
+      const { watcher, inspectContainer, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['ghcr.io/acme/service@sha256:raw'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(getContainers).not.toHaveBeenCalled();
+      expect(inspectContainer).toHaveBeenCalledTimes(1);
+      expect(stored.image.tag.value).toBe('1.2.3');
+      expect(stored.image.id).toBe('image-new');
+      expect(stored.image.digest.value).toBe('sha256:reconciled');
+      expect(stored.error).toEqual({ message: 'timeout of 30000ms exceeded' });
+    });
   });
 
   test.each([
