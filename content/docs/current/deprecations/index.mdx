@@ -44,6 +44,16 @@ The unversioned `/api/*` path was a backward-compatible alias for `/api/v1/*`. A
 | **Removed since** | v1.6.0 |
 | **Migration** | Replace `/api/` with `/api/v1/` in all integrations. If you depend on wud-card or Homepage's `whatsupdocker` widget and can't change their base path, set `DD_COMPAT_WUDCARD=true` |
 
+### Unversioned WebSocket alias (`WS /api/log/stream`) {#unversioned-ws-log-stream}
+
+The system log stream WebSocket accepted both the versioned `/api/v1/log/stream` path and the unversioned `/api/log/stream` alias, following the same transition-alias policy as the REST `/api/*` path above. As of v1.6.0, an upgrade request to the unversioned path is rejected with a 410-style upgrade failure instead of completing the WebSocket handshake.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Point WebSocket clients at `/api/v1/log/stream` |
+
 ### Legacy `WUD_*` environment variables {#legacy-env-vars}
 
 `WUD_*` prefixed environment variables are ignored as of v1.6.0. Only `DD_*` variables are loaded at runtime; the migration CLI still recognizes old names so it can rewrite existing files.

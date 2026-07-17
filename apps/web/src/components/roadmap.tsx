@@ -8,8 +8,9 @@ import { type Milestone, roadmap } from "@/lib/site-content";
 // the vibe — not literally `git log` output.
 
 const released = roadmap.filter((m) => m.status === "released");
-// HEAD release: last released milestone
-const headRelease = released[released.length - 1] as Milestone;
+// HEAD: an in-progress "next" release (active RC) takes priority; otherwise the last released milestone.
+const headRelease = (roadmap.find((m) => m.status === "next") ??
+  released[released.length - 1]) as Milestone;
 
 function GitItem({ item, isReleased }: { item: string; isReleased: boolean }) {
   return (
@@ -27,8 +28,8 @@ function GitItem({ item, isReleased }: { item: string; isReleased: boolean }) {
 }
 
 function GitLogRow({ milestone }: { milestone: Milestone }) {
-  const isReleased = milestone.status === "released";
   const isHead = milestone.version === headRelease.version;
+  const isReleased = milestone.status === "released" || isHead;
   const preview = milestone.items.slice(0, 2);
   const rest = milestone.items.slice(2);
 
