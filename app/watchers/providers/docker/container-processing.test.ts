@@ -1,3 +1,4 @@
+import { validate } from '../../../model/container.js';
 import { createContainerFixture } from '../../../test/helpers.js';
 import { watchContainer } from './container-processing.js';
 import { enrichContainerWithReleaseNotes } from './release-notes-enrichment.js';
@@ -31,6 +32,31 @@ function createDependencies(findNewVersion: ReturnType<typeof vi.fn>) {
   };
 }
 
+function createValidatedContainer(overrides: Record<string, unknown> = {}) {
+  return validate(
+    createContainerFixture({
+      image: {
+        id: 'image-123456789',
+        registry: {
+          name: 'registry',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: '1.3.0',
+          semver: true,
+        },
+        digest: {
+          watch: false,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      ...overrides,
+    }),
+  );
+}
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -51,15 +77,13 @@ describe('watchContainer error result preservation', () => {
       publishedAt: '2026-01-01T00:00:00.000Z',
       provider: 'github' as const,
     };
-    const container = createContainerFixture({
+    const container = createValidatedContainer({
       result: originalResult,
-      updateAvailable: true,
-      updateKind: originalUpdateKind,
       currentReleaseNotes: originalCurrentReleaseNotes,
     });
     const dependencies = createDependencies(vi.fn().mockRejectedValue(new Error('ETIMEDOUT')));
 
-    const report = await watchContainer(container as any, dependencies);
+    const report = await watchContainer(container, dependencies);
 
     expect(report.container.error?.message).toBe('ETIMEDOUT');
     expect(report.container.result).toEqual(originalResult);
@@ -68,33 +92,76 @@ describe('watchContainer error result preservation', () => {
     expect(report.container.currentReleaseNotes).toEqual(originalCurrentReleaseNotes);
   });
 
+  test('restores the previous result on a validated container without writing to getter-only properties', async () => {
+    const previousResult = { tag: '1.4.0' };
+    const previousCurrentReleaseNotes = {
+      title: 'Version 1.2.0',
+      body: 'Previously fetched release notes',
+      url: 'https://example.com/releases/1.2.0',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      provider: 'github' as const,
+    };
+    const container = createValidatedContainer({
+      image: {
+        id: 'image-123456789',
+        registry: {
+          name: 'registry',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: '1.2.0',
+          semver: true,
+        },
+        digest: {
+          watch: false,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      result: previousResult,
+      currentReleaseNotes: previousCurrentReleaseNotes,
+    });
+    const dependencies = createDependencies(
+      vi.fn().mockRejectedValue(new Error('registry timeout')),
+    );
+
+    const report = await watchContainer(container, dependencies);
+
+    expect(report.container.error?.message).toBe('registry timeout');
+    expect(report.container.result).toEqual(previousResult);
+    expect(report.container.currentReleaseNotes).toEqual(previousCurrentReleaseNotes);
+    expect(report.container.updateAvailable).toBe(true);
+  });
+
   // Behavior pin: a successful cycle replaces stale data and clears the old error.
   test('clears a stale error and replaces the result after a successful watch', async () => {
-    const container = createContainerFixture({
+    const container = createValidatedContainer({
       error: { message: 'old error' },
-      result: { tag: 'old-good-tag' },
-      updateAvailable: true,
-      updateKind: { kind: 'tag' },
+      result: { tag: '1.3.0' },
     });
-    const dependencies = createDependencies(vi.fn().mockResolvedValue({ tag: 'new-tag' }));
+    const dependencies = createDependencies(vi.fn().mockResolvedValue({ tag: '1.4.0' }));
 
-    const report = await watchContainer(container as any, dependencies);
+    const report = await watchContainer(container, dependencies);
 
     expect(report.container.error).toBeUndefined();
-    expect(report.container.result?.tag).toBe('new-tag');
+    expect(report.container.result?.tag).toBe('1.4.0');
   });
 
   // Behavior pin: the fix must only restore a result when a previous result existed.
   test('handles a first failing cycle without creating a result', async () => {
-    const originalUpdateKind = { kind: 'unknown' as const };
-    const container = createContainerFixture({
+    const originalUpdateKind = {
+      kind: 'unknown' as const,
+      localValue: undefined,
+      remoteValue: undefined,
+      semverDiff: 'unknown' as const,
+    };
+    const container = createValidatedContainer({
       result: undefined,
-      updateAvailable: false,
-      updateKind: originalUpdateKind,
     });
     const dependencies = createDependencies(vi.fn().mockRejectedValue(new Error('ETIMEDOUT')));
 
-    const report = await watchContainer(container as any, dependencies);
+    const report = await watchContainer(container, dependencies);
 
     expect(report.container.result).toBeUndefined();
     expect(report.container.updateAvailable).toBe(false);
@@ -103,17 +170,15 @@ describe('watchContainer error result preservation', () => {
   });
 
   test('keeps a fresh comparison when only release-notes enrichment fails', async () => {
-    const container = createContainerFixture({
+    const container = createValidatedContainer({
       result: { tag: '1.3.0' },
-      updateAvailable: true,
-      updateKind: { kind: 'tag' },
     });
     const dependencies = createDependencies(vi.fn().mockResolvedValue({ tag: '1.4.0' }));
     vi.mocked(enrichContainerWithReleaseNotes).mockRejectedValueOnce(
       new Error('notes fetch failed'),
     );
 
-    const report = await watchContainer(container as any, dependencies);
+    const report = await watchContainer(container, dependencies);
 
     expect(report.container.result?.tag).toBe('1.4.0');
     expect(report.container.error?.message).toBe('notes fetch failed');
