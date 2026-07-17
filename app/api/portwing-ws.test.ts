@@ -323,6 +323,7 @@ function buildHello(
 
 test('reports the canonical configuration version in the welcome frame', async () => {
   clearNonceCacheForTesting();
+  vi.mocked(getVersion).mockClear();
 
   const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
   const ts = Math.floor(Date.now() / 1000);
@@ -354,7 +355,10 @@ test('reports the canonical configuration version in the welcome frame', async (
   const welcome = JSON.parse(ws.sentMessages[0]) as {
     data: { config: { drydockVersion: string } };
   };
-  expect(welcome.data.config.drydockVersion).toBe(getVersion());
+  // Assert the literal sentinel, not getVersion()'s return — comparing against
+  // the same mock production calls would pass even if the frame hard-coded it.
+  expect(welcome.data.config.drydockVersion).toBe('9.9.9-test');
+  expect(getVersion).toHaveBeenCalled();
 });
 
 describe('PORTWING_WS_ROUTE_PATTERN', () => {
