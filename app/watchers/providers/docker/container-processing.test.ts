@@ -1,5 +1,6 @@
 import { createContainerFixture } from '../../../test/helpers.js';
 import { watchContainer } from './container-processing.js';
+import { enrichContainerWithReleaseNotes } from './release-notes-enrichment.js';
 
 const eventMocks = vi.hoisted(() => ({
   emitContainerReport: vi.fn().mockResolvedValue(undefined),
@@ -99,5 +100,22 @@ describe('watchContainer error result preservation', () => {
     expect(report.container.updateAvailable).toBe(false);
     expect(report.container.updateKind).toEqual(originalUpdateKind);
     expect(report.container.error?.message).toBe('ETIMEDOUT');
+  });
+
+  test('keeps a fresh comparison when only release-notes enrichment fails', async () => {
+    const container = createContainerFixture({
+      result: { tag: '1.3.0' },
+      updateAvailable: true,
+      updateKind: { kind: 'tag' },
+    });
+    const dependencies = createDependencies(vi.fn().mockResolvedValue({ tag: '1.4.0' }));
+    vi.mocked(enrichContainerWithReleaseNotes).mockRejectedValueOnce(
+      new Error('notes fetch failed'),
+    );
+
+    const report = await watchContainer(container as any, dependencies);
+
+    expect(report.container.result?.tag).toBe('1.4.0');
+    expect(report.container.error?.message).toBe('notes fetch failed');
   });
 });

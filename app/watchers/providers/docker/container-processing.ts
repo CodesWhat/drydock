@@ -87,7 +87,10 @@ export async function watchContainer(
     containerWithResult.error = {
       message: errorMessage,
     };
-    if (previousResult !== undefined) {
+    // Restore only when this cycle produced no fresh comparison — a failure
+    // after findNewVersion resolved (e.g. enrichment) must not clobber the
+    // fresh result with the stale snapshot.
+    if (containerWithResult.result === undefined && previousResult !== undefined) {
       containerWithResult.result = previousResult;
       containerWithResult.updateAvailable = previousUpdateAvailable;
       containerWithResult.updateKind = previousUpdateKind;
