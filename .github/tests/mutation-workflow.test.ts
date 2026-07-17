@@ -1,42 +1,13 @@
 import { globSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import yaml from 'yaml';
-
 import uiStrykerConfig from '../../ui/stryker.conf.mjs';
-
-interface WorkflowTrigger {
-  schedule?: Array<{
-    cron?: string;
-  }>;
-}
+import { loadWorkflow } from './workflow-test-utils';
 
 interface WorkflowMatrixEntry {
   name?: string;
   package?: string;
   mutate?: string;
-}
-
-interface WorkflowJobStep {
-  name?: string;
-  run?: string;
-  uses?: string;
-  with?: Record<string, string>;
-}
-
-interface WorkflowJob {
-  env?: Record<string, string>;
-  strategy?: {
-    matrix?: {
-      include?: WorkflowMatrixEntry[];
-    };
-  };
-  steps?: WorkflowJobStep[];
-}
-
-interface WorkflowDefinition {
-  on?: WorkflowTrigger;
-  jobs?: Record<string, WorkflowJob>;
 }
 
 const workflowPath = fileURLToPath(
@@ -94,7 +65,7 @@ function splitMutateEntry(entry: WorkflowMatrixEntry): string[] {
 }
 
 test('mutation workflow runs monthly with 27 logical slices and aggregate count parity', () => {
-  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+  const workflow = loadWorkflow(workflowPath);
 
   expect(workflow.on?.schedule).toStrictEqual([{ cron: '15 6 1 * *' }]);
 
@@ -114,7 +85,7 @@ test('mutation workflow runs monthly with 27 logical slices and aggregate count 
 });
 
 test('mutation aggregate job verifies downloaded artifact layout before merging', () => {
-  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+  const workflow = loadWorkflow(workflowPath);
   const aggregateSteps = workflow.jobs?.aggregate?.steps ?? [];
 
   expect(aggregateSteps.find((step) => step.name === 'Download mutation artifacts')).toMatchObject({
@@ -133,7 +104,7 @@ test('mutation aggregate job verifies downloaded artifact layout before merging'
 });
 
 test('mutation shards publish distinct dashboard reports when configured', () => {
-  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+  const workflow = loadWorkflow(workflowPath);
 
   expect(workflow.jobs?.stryker?.env).toMatchObject({
     STRYKER_DASHBOARD_API_KEY: '${{ secrets.STRYKER_DASHBOARD_API_KEY }}',
@@ -154,7 +125,7 @@ test('mutation shards publish distinct dashboard reports when configured', () =>
 });
 
 test('mutation workflow slices cover the app and ui Stryker targets without overlap', () => {
-  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+  const workflow = loadWorkflow(workflowPath);
   const matrixEntries = workflow.jobs?.stryker?.strategy?.matrix?.include ?? [];
 
   const appEntries = matrixEntries.filter((entry) => entry.package === 'app');
