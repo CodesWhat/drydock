@@ -90,6 +90,10 @@ describe('watchContainer error result preservation', () => {
     expect(report.container.updateAvailable).toBe(true);
     expect(report.container.updateKind).toEqual(originalUpdateKind);
     expect(report.container.currentReleaseNotes).toEqual(originalCurrentReleaseNotes);
+    // The E2E symptom was the report never persisting (the TypeError escaped
+    // before the emit) — pin that the persistence path actually ran.
+    expect(eventMocks.emitContainerReport).toHaveBeenCalledTimes(1);
+    expect(eventMocks.emitContainerReport).toHaveBeenCalledWith(report);
   });
 
   test('restores the previous result on a validated container without writing to getter-only properties', async () => {
