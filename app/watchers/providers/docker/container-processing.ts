@@ -68,8 +68,6 @@ export async function watchContainer(
   const watchStartedAtMs = Date.now();
 
   const previousResult = containerWithResult.result;
-  const previousUpdateAvailable = containerWithResult.updateAvailable;
-  const previousUpdateKind = containerWithResult.updateKind;
   const previousCurrentReleaseNotes = containerWithResult.currentReleaseNotes;
 
   // Reset previous results if so
@@ -89,11 +87,12 @@ export async function watchContainer(
     };
     // Restore only when this cycle produced no fresh comparison — a failure
     // after findNewVersion resolved (e.g. enrichment) must not clobber the
-    // fresh result with the stale snapshot.
+    // fresh result with the stale snapshot. Only plain data properties are
+    // restored: updateAvailable/updateKind are getter-only derived properties
+    // (see addUpdateAvailableProperty in the container model) and recompute
+    // from the restored result — assigning them throws on a validated container.
     if (containerWithResult.result === undefined && previousResult !== undefined) {
       containerWithResult.result = previousResult;
-      containerWithResult.updateAvailable = previousUpdateAvailable;
-      containerWithResult.updateKind = previousUpdateKind;
       containerWithResult.currentReleaseNotes = previousCurrentReleaseNotes;
     }
   }
