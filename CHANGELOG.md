@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.2] — 2026-07-18
+
 ### Added
 
 - **"Version update" container filter** ([#538](https://github.com/CodesWhat/drydock/issues/538)). The Containers filter bar gains a **Version Update** kind option that shows only real semver upgrades (major, minor, patch) and hides digest-only churn — the noise that dominates the dashboard on fleets that rebuild images daily in CI. Like every other container filter, it round-trips through the URL (`?filterKind=version`), so the filtered view can be saved as a bookmark for one-click access.
@@ -2155,7 +2157,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...HEAD
+[1.6.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...v1.6.0-rc.2
 [1.6.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.5.2...v1.6.0-rc.1
 [1.5.2]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.5...v1.5.2
 [1.5.2-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.4...v1.5.2-rc.5
