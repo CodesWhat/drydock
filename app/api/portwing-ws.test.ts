@@ -1844,8 +1844,8 @@ describe('injectDrydockVersionForTesting', () => {
     };
     expect(welcome.data.config.drydockVersion).toBe('9.9.9');
 
-    // Restore default version so other tests are not affected
-    injectDrydockVersionForTesting('1.5.0');
+    // Clear the version cache so later tests re-prime from getVersion().
+    injectDrydockVersionForTesting(undefined);
   });
 });
 
