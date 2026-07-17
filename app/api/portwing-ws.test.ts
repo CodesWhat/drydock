@@ -5,6 +5,7 @@
 import { createHash, sign as cryptoSign, generateKeyPairSync } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
+import { getVersion } from '../configuration/index.js';
 import type { AgentKeyRecord } from '../store/agent-keys.js';
 import type { NameBindingRecord } from '../store/name-bindings.js';
 import * as nameBindingsStore from '../store/name-bindings.js';
@@ -24,6 +25,7 @@ import {
 
 vi.mock('../configuration/index.js', () => ({
   getServerConfiguration: vi.fn(() => ({})),
+  getVersion: vi.fn(() => '9.9.9-test'),
 }));
 
 // Hoisted so tests can assert on the durable-flush call (Fix 1: new-bind
@@ -318,6 +320,42 @@ function buildHello(
 }
 
 // ---- Tests ----
+
+test('reports the canonical configuration version in the welcome frame', async () => {
+  clearNonceCacheForTesting();
+
+  const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+  const ts = Math.floor(Date.now() / 1000);
+  const nonce = 'd2b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+  const sig = signHello(privateKey, ts, nonce);
+  const record: AgentKeyRecord = {
+    keyId,
+    pubkey: pubkeyBase64,
+    label: 'test',
+    createdAt: new Date().toISOString(),
+    revokedAt: null,
+  };
+
+  const { gateway, getUpgradedWs } = createGateway(record);
+  gateway.handleUpgrade(
+    createRequest('/api/portwing/ws'),
+    createMockSocket() as unknown as Socket,
+    Buffer.alloc(0),
+  );
+  const ws = getUpgradedWs()!;
+
+  sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+  // Bounded wait instead of a fixed sleep — the async Ed25519 verification
+  // makes frame timing scheduler-dependent under CI load.
+  await vi.waitFor(() => {
+    expect(ws.sentMessages.length).toBeGreaterThan(0);
+  });
+
+  const welcome = JSON.parse(ws.sentMessages[0]) as {
+    data: { config: { drydockVersion: string } };
+  };
+  expect(welcome.data.config.drydockVersion).toBe(getVersion());
+});
 
 describe('PORTWING_WS_ROUTE_PATTERN', () => {
   test('matches canonical /api/portwing/ws', () => {
