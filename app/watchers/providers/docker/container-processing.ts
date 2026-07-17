@@ -85,9 +85,11 @@ export async function watchContainer(
     containerWithResult.error = {
       message: errorMessage,
     };
-    // Restore only when this cycle produced no fresh comparison — a failure
-    // after findNewVersion resolved (e.g. enrichment) must not clobber the
-    // fresh result with the stale snapshot. Only plain data properties are
+    // Restore only when this cycle produced no fresh comparison. Today the
+    // only rejection path is findNewVersion itself (enrichContainerWithReleaseNotes
+    // swallows its own errors), so the guard on result is defense-in-depth for
+    // if that contract ever changes: a failure after a fresh result must not
+    // clobber it with the stale snapshot. Only plain data properties are
     // restored: updateAvailable/updateKind are getter-only derived properties
     // (see addUpdateAvailableProperty in the container model) and recompute
     // from the restored result — assigning them throws on a validated container.

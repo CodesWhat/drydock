@@ -323,6 +323,9 @@ function buildHello(
 
 test('reports the canonical configuration version in the welcome frame', async () => {
   clearNonceCacheForTesting();
+  // Reset the module-level version cache so this test stays order-independent —
+  // an earlier inject or welcome would otherwise let it skip getVersion().
+  injectDrydockVersionForTesting(undefined);
   vi.mocked(getVersion).mockClear();
 
   const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
@@ -1841,8 +1844,8 @@ describe('injectDrydockVersionForTesting', () => {
     };
     expect(welcome.data.config.drydockVersion).toBe('9.9.9');
 
-    // Restore default version so other tests are not affected
-    injectDrydockVersionForTesting('1.5.0');
+    // Clear the version cache so later tests re-prime from getVersion().
+    injectDrydockVersionForTesting(undefined);
   });
 });
 
