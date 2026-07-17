@@ -3,6 +3,12 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
+## v1.6.0-rc.2 Highlights — July 18, 2026
+
+- **Watch errors no longer erase update state** — a container whose registry check fails keeps its last successful comparison alongside the recorded error instead of appearing never-compared, errored containers reuse the same fast refresh path as healthy ones, and repair rebuilds preserve the registry-reconciled digest that keys security scan grouping.
+- **"Version Update" container filter** — a new filter kind shows only real semver upgrades (major/minor/patch) and hides digest-only churn; bookmarkable via `?filterKind=version`.
+- **Docs aligned with shipped behavior** — FAQ and README corrections (registry list, scanner parity, runnable `config migrate` commands), the removed `WS /api/log/stream` alias documented in Deprecations, and the quickstart registry/tag matrix refreshed.
+
 ## v1.6.0-rc.1 Highlights — July 15, 2026
 
 - **Notification rules are now a complete control surface** — configure delivery routing, audit-backed in-app bell categories, update severity threshold, and per-provider simple/batch templates in one detail panel; preview drafts before saving. Container-unhealthy events are bell-capable, and agent status changes refresh the bell promptly.
