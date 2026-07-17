@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Containers with a stored watch error refresh on the fast path** ([#542](https://github.com/CodesWhat/drydock/issues/542)). An error from the previous cycle no longer routes a known container through the full first-discovery enumeration — image/label/tag re-resolution plus an O(n) stale-entry scan of the store — on every cron. Errored-but-known containers reuse the same cheap refresh as healthy ones, and broken image references still self-heal via the unconditional repair check.
 
+- **Last-known-good update state survives watch errors** ([#543](https://github.com/CodesWhat/drydock/issues/543)). A failed watch cycle — registry timeout, rate limit, transient network error — no longer erases the previous successful comparison. The stored `result`, `updateAvailable`, `updateKind`, and current release notes are preserved alongside the recorded error until a later cycle succeeds, so the UI keeps showing the last known update state with the error annotated next to it instead of a blank.
+
 ## [1.6.0-rc.1] — 2026-07-15
 
 ### Added
