@@ -276,6 +276,7 @@
       "allHosts": "All Hosts",
       "allContainers": "All Containers",
       "hasUpdate": "Has Update",
+      "versionUpdate": "Version Update",
       "major": "Major",
       "minor": "Minor",
       "patch": "Patch",

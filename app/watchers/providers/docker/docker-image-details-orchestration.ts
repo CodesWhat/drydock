@@ -364,7 +364,11 @@ async function refreshStoredContainerImageFields(
               ...containerInStore.image.digest,
               watch: resolvedImageState.watchDigest,
               repo: resolvedImageState.repoDigest,
-              value: resolvedImageState.repoDigest ?? containerInStore.image.digest.value,
+              value:
+                resolvedImageState.repoDigest !== undefined &&
+                resolvedImageState.repoDigest !== containerInStore.image.digest.repo
+                  ? resolvedImageState.repoDigest
+                  : (containerInStore.image.digest.value ?? resolvedImageState.repoDigest),
             },
             architecture: currentImage.Architecture ?? containerInStore.image.architecture,
             os: currentImage.Os ?? containerInStore.image.os,
@@ -737,9 +741,13 @@ export async function addImageDetailsToContainerOrchestration(
 
   const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
 
-  // Is container already in store? Refresh volatile image fields, then return it
+  // Is container already in store (including ones stuck in an errored state)?
+  // Refresh volatile image fields, then return it. refreshContainerAlreadyInStore
+  // self-heals broken image references unconditionally via
+  // shouldRepairStoredImageReference, so an errored container no longer needs
+  // to be routed down the slow first-discovery path just to get repaired.
   const containerInStore = storeContainer.getContainer(containerId);
-  if (containerInStore !== undefined && containerInStore.error === undefined) {
+  if (containerInStore !== undefined) {
     return refreshContainerAlreadyInStore({
       watcher,
       container,
@@ -819,13 +827,7 @@ export async function addImageDetailsToContainerOrchestration(
       digest: {
         watch: watchDigest,
         repo: repoDigest,
-        // A rebuild of an errored container must not reset the
-        // registry-reconciled digest value; only a genuine repo-digest
-        // change (image re-pulled) may.
-        value:
-          repoDigest !== undefined && repoDigest === containerInStore?.image?.digest?.repo
-            ? (containerInStore.image.digest.value ?? repoDigest)
-            : repoDigest,
+        value: repoDigest,
       },
       // True when the live image inspect had no RepoDigests (built locally or
       // `docker load`ed) — lets findNewVersion skip a registry lookup that
@@ -861,15 +863,6 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
-  // A rebuild of an errored container must not discard user-set policy
-  // overrides (snoozes, skipped tags) stored on the existing doc —
-  // applyDockerDeclarativeUpdatePolicy would otherwise stamp `{}` and the
-  // store merge keeps whatever key the incoming doc carries.
-  if (containerInStore?.updatePolicyOverrides !== undefined) {
-    containerToReturn.updatePolicyOverrides = structuredClone(
-      containerInStore.updatePolicyOverrides,
-    );
-  }
   applyDockerDeclarativeUpdatePolicy(containerToReturn, containerLabels, watcher.configuration, {
     logger: watcher.log,
     containerName: dockerContainerName,

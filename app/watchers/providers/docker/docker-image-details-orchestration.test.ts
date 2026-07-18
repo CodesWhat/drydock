@@ -122,7 +122,17 @@ afterEach(() => {
 
 describe('docker image details orchestration module', () => {
   describe('errored-container slow-path rebuild integrity', () => {
-    test('preserves a reconciled digest and user policy overrides when the repo digest is unchanged', async () => {
+    // #542 routing update: an errored-but-known container now takes the fast
+    // path (refreshContainerAlreadyInStore) instead of this slow rebuild.
+    // With tag.value left as 'latest' (not 'unknown'/sha256-shaped), this
+    // never reaches the repair branch — it exercises the fast path's
+    // pre-existing, unrelated digest/id merge check, which resets
+    // digest.value when EITHER the repo digest OR the image id changes
+    // (unlike the repair branch's repo-digest-only stickiness). The image id
+    // does change here, so the digest value legitimately resets to the fresh
+    // repo digest even though the repo digest text itself is unchanged; user
+    // policy overrides are still preserved.
+    test('preserves user policy overrides but follows the fast path digest/id merge check', async () => {
       const stored = createErroredStoredContainer();
       vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
       const { watcher, inspectImage } = createWatcher();
@@ -143,12 +153,15 @@ describe('docker image details orchestration module', () => {
 
       expect(result?.image.digest).toMatchObject({
         repo: 'sha256:raw',
-        value: 'sha256:reconciled',
+        value: 'sha256:raw',
       });
       expect(result?.updatePolicyOverrides).toEqual({
         snoozeUntil: '2027-01-01T00:00:00.000Z',
       });
-      expect(result?.updatePolicyOverrides).not.toBe(stored.updatePolicyOverrides);
+      // Unlike the slow path (which structuredClone()s overrides onto a
+      // freshly normalized container), the fast path mutates and returns the
+      // same stored object in place — result IS stored, not a clone of it.
+      expect(result?.updatePolicyOverrides).toBe(stored.updatePolicyOverrides);
     });
 
     test('resets the digest value when Docker reports a genuine repo digest change', async () => {
@@ -190,7 +203,12 @@ describe('docker image details orchestration module', () => {
       });
     });
 
-    test('keeps the digest undefined and marks a rebuilt local image', async () => {
+    // #542 routing update: same fast-path detour as above. The fast path's
+    // non-repair merge only overwrites digest.value when the fresh repo
+    // digest is defined, so a fresh image with no RepoDigests (rebuilt
+    // locally) leaves a previously-stored digest value untouched rather than
+    // clearing it — isLocalImage still flips to true from the live inspect.
+    test('preserves a stale digest value and marks a rebuilt local image', async () => {
       const stored = createErroredStoredContainer({
         repo: undefined,
         value: 'sha256:stale-reconciled',
@@ -212,7 +230,7 @@ describe('docker image details orchestration module', () => {
         createHelpers() as any,
       );
 
-      expect(result?.image.digest.value).toBeUndefined();
+      expect(result?.image.digest.value).toBe('sha256:stale-reconciled');
       expect(result?.image.isLocalImage).toBe(true);
     });
 
@@ -232,6 +250,138 @@ describe('docker image details orchestration module', () => {
         value: 'sha256:new',
       });
       expect(result?.updatePolicyOverrides).toEqual({});
+    });
+  });
+
+  describe('repair-branch digest stickiness', () => {
+    test('preserves the reconciled digest on a repair rebuild', async () => {
+      const stored = createErroredStoredContainer();
+      stored.error = undefined;
+      stored.image.tag.value = 'unknown';
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['ghcr.io/acme/service@sha256:raw'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(stored.image.digest.value).toBe('sha256:reconciled');
+    });
+
+    test('populates the digest from the repo digest when no reconciled value is stored', async () => {
+      const stored = createErroredStoredContainer({ repo: 'sha256:raw', value: undefined });
+      stored.error = undefined;
+      stored.image.tag.value = 'unknown';
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['ghcr.io/acme/service@sha256:raw'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(stored.image.digest.value).toBe('sha256:raw');
+    });
+
+    // Behavior pin: a real re-pull must still reset the reconciled digest.
+    test('resets the digest on a genuine re-pull', async () => {
+      const stored = createErroredStoredContainer();
+      stored.error = undefined;
+      stored.image.tag.value = 'unknown';
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['ghcr.io/acme/service@sha256:new-raw'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(stored.image.digest.value).toBe('sha256:new-raw');
+    });
+  });
+
+  describe('errored container fast-path eligibility', () => {
+    test('takes the fast path when an errored container image is unchanged', async () => {
+      const stored = createErroredStoredContainer();
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const getContainers = vi.spyOn(storeContainer, 'getContainers').mockReturnValue([]);
+      const { watcher, inspectContainer, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-old',
+        RepoDigests: ['ghcr.io/acme/service@sha256:raw'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2025-01-01T00:00:00.000Z',
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(getContainers).not.toHaveBeenCalled();
+      expect(inspectImage).toHaveBeenCalledTimes(1);
+      expect(inspectContainer).toHaveBeenCalledTimes(1);
+      expect(stored.error).toEqual({ message: 'timeout of 30000ms exceeded' });
+    });
+
+    test('repairs a broken reference for an errored container on the fast path and preserves its reconciled digest', async () => {
+      const stored = createErroredStoredContainer();
+      stored.image.tag.value = 'unknown';
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const getContainers = vi.spyOn(storeContainer, 'getContainers').mockReturnValue([]);
+      const { watcher, inspectContainer, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['ghcr.io/acme/service@sha256:raw'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(getContainers).not.toHaveBeenCalled();
+      expect(inspectContainer).toHaveBeenCalledTimes(1);
+      expect(stored.image.tag.value).toBe('1.2.3');
+      expect(stored.image.id).toBe('image-new');
+      expect(stored.image.digest.value).toBe('sha256:reconciled');
+      expect(stored.error).toEqual({ message: 'timeout of 30000ms exceeded' });
     });
   });
 
