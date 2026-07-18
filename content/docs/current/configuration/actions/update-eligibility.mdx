@@ -87,6 +87,8 @@ Likely **`threshold-not-reached`** — the trigger's `THRESHOLD` is set to somet
 
 That blocker only fires when the effective `maturityMode === 'mature'`. Check the blocker text and policy editor for its source: a `dd.updatePolicy.maturityMode=mature` container label, the watcher's `DD_WATCHER_{watcher_name}_MATURITY_MODE=mature` default, or a UI/API override. With none of those configured, the built-in mode is `all` and no maturity gate applies.
 
+<Callout type="info">The registry publish-date fast path only applies when Drydock has a trusted timestamp for that registry: Docker Hub works anonymously, but GHCR and lscr.io only qualify once that registry is configured with a GitHub username and a classic personal access token scoped `read:packages` — even for public images. Credentials are per-registry (`DD_REGISTRY_GHCR_{REGISTRY_NAME}_USERNAME`/`_TOKEN`, `DD_REGISTRY_LSCR_{REGISTRY_NAME}_USERNAME`/`_TOKEN`); a GHCR token does not cover lscr.io. Without a trusted publish date, the gate falls back to `updateDetectedAt` — drydock's own first-detection timestamp, which lives in the store. Persist `/store` as a volume, or the clock resets every time the drydock container is recreated.</Callout>
+
 ### "Update Status says 'Agent mismatch'"
 
 The trigger and the container are bound to different agents. In the controller-agent topology, an action trigger only updates containers on the agent it runs on. Either configure an additional trigger on the container's agent, or merge the topology.
