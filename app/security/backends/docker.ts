@@ -350,14 +350,20 @@ async function terminateWorker(container: DockerScannerContainer): Promise<void>
   }
 }
 
-function waitForTimeout(timeoutMs: number): {
+function waitForTimeout(
+  timeoutMs: number,
+  reportedTimeoutMs: number = timeoutMs,
+): {
   promise: Promise<never>;
   clear: () => void;
 } {
   let timer: ReturnType<typeof setTimeout>;
   const promise = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(
-      () => reject(new DockerScannerTimeoutError(`Scanner worker timed out after ${timeoutMs}ms`)),
+      () =>
+        reject(
+          new DockerScannerTimeoutError(`Scanner worker timed out after ${reportedTimeoutMs}ms`),
+        ),
       timeoutMs,
     );
   });
@@ -462,7 +468,7 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
       );
     }
 
-    const timeout = waitForTimeout(remainingTimeoutMs);
+    const timeout = waitForTimeout(remainingTimeoutMs, runOptions.timeoutMs);
     let container: DockerScannerContainer | undefined;
     let createContainerPromise: Promise<DockerScannerContainer> | undefined;
     try {
