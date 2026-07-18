@@ -9,6 +9,7 @@ const withMDX = createMDX();
 const docsCurrentVersion = versions[0].slug;
 const docsRedirectExclusions = [
   "assets(?:/|$)",
+  "current(?:/|$)",
   ...versions.map((v) => escapeRegExp(v.slug) + "(?:/|$)"),
 ].join("|");
 
@@ -38,6 +39,11 @@ const nextConfig = {
     {
       source: "/docs",
       destination: `/docs/${docsCurrentVersion}`,
+      permanent: false,
+    },
+    {
+      source: "/docs/current/:path*",
+      destination: `/docs/${docsCurrentVersion}/:path*`,
       permanent: false,
     },
     {
