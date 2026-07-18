@@ -198,6 +198,45 @@ docker run \
 </Tab>
 </Tabs>
 
+### Watch a remote docker host behind HTTPS with OIDC auth
+
+<Tabs items={["Docker Compose (HTTPS OIDC)", "Docker (HTTPS OIDC)"]}>
+<Tab value="Docker Compose (HTTPS OIDC)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+        - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
+        - DD_WATCHER_MYREMOTEHOST_PORT=443
+        - DD_WATCHER_MYREMOTEHOST_PROTOCOL=https
+        - DD_WATCHER_MYREMOTEHOST_AUTH_TYPE=OIDC
+        - DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_TOKENURL=https://idp.example.com/oauth/token
+        - DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTID=my-client-id
+        - DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTSECRET=my-client-secret
+```
+
+</Tab>
+<Tab value="Docker (HTTPS OIDC)">
+```bash
+docker run \
+    -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
+    -e DD_WATCHER_MYREMOTEHOST_PORT="443" \
+    -e DD_WATCHER_MYREMOTEHOST_PROTOCOL="https" \
+    -e DD_WATCHER_MYREMOTEHOST_AUTH_TYPE="OIDC" \
+    -e DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_TOKENURL="https://idp.example.com/oauth/token" \
+    -e DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTID="my-client-id" \
+    -e DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTSECRET="my-client-secret" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+Drydock requests a `client_credentials` token from `AUTH_OIDC_TOKENURL` and refreshes it automatically before it expires. Optional variables narrow or extend the request: `AUTH_OIDC_SCOPE`, `AUTH_OIDC_AUDIENCE`, and `AUTH_OIDC_RESOURCE` scope the token; `AUTH_OIDC_GRANTTYPE` overrides the auto-detected grant type; `AUTH_OIDC_DEVICEURL` switches to the device-authorization flow.
+
 ### Watch a remote docker host via TCP with TLS enabled on 2376
 
 <Tabs items={["Docker Compose (TLS)", "Docker (TLS)"]}>
@@ -1260,15 +1299,13 @@ The first reconnect attempt is logged at **info** level since it is expected beh
 
 Container lifecycle events (create, start, stop, destroy) that occur during the brief reconnect window are not captured until the next scheduled poll cycle. The reconnect window is typically ~1 second under normal conditions. In practice this is rarely noticeable because the next cron poll will pick up the current container state, but it means Drydock does not guarantee zero missed events across a reconnect.
 
-A future release will wire the reconnect path to request events from the last-seen timestamp, closing this gap entirely.
-
 ### Native socket proxy
 
-The root cause of proxy-timeout reconnects is that Drydock cannot control idle timeout behavior on third-party proxies. A purpose-built Drydock socket proxy is on the [roadmap](https://github.com/CodesWhat/drydock#roadmap).
+The root cause of proxy-timeout reconnects is that Drydock cannot control idle timeout behavior on third-party proxies.
 
 ### Reduce proxy-timeout reconnect churn
 
-Until the native proxy ships, you can reduce reconnect noise:
+To reduce reconnect noise:
 
 1. Increase your proxy idle timeout (for example, linuxserver socket-proxy `TIMEOUT=86400s`).
 2. Prefer direct socket mount when your environment allows it.
