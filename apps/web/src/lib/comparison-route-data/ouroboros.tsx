@@ -33,7 +33,7 @@ eye|Monitor-First Design|Drydock is monitor-first by design — it detects updat
 shield|Security Scanning|Drydock integrates Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), and cosign image signature verification. Ouroboros has no security scanning.
 radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more — far beyond Ouroboros's Docker-config-based approach.
 rotate|Rollback & Backup|Pre-update image backups with configurable retention and automatic rollback on health check failure. Ouroboros has no rollback or backup mechanism.
-bell|20 Notification Services|Drydock notifies on image update availability across 20 native services — Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more. Ouroboros delegates notifications to Apprise (any Apprise-compatible URL works), but has no native trigger system — no scheduling, templating, threshold filtering, or batch mode.
+bell|20 Trigger Integrations|Drydock notifies across 17 native channels — Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more — plus Docker, Docker Compose, and Command actions. Ouroboros delegates notifications to Apprise (any Apprise-compatible URL works), but has no native trigger system — no scheduling, templating, threshold filtering, or batch mode.
 `,
   highlightIconMap: {
     monitor: Monitor,

@@ -24,7 +24,7 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Documentation Refresh — v1.5.2
 
-- **Podman and Docker socket security docs refreshed** — The watcher docs now cover Podman's Docker-compatible API path ([#152](https://github.com/CodesWhat/drydock/issues/152)), direct socket vs proxy/TCP caveats, rootful/rootless socket paths, SELinux troubleshooting, remote Docker over TLS, and OIDC remote watcher auth. This is documentation and compatibility guidance; native Podman support remains a future roadmap item.
+- **Podman and Docker socket security docs refreshed** — The watcher docs now cover Podman's Docker-compatible API path ([#152](https://github.com/CodesWhat/drydock/issues/152)), direct socket vs proxy/TCP caveats, rootful/rootless socket paths, SELinux troubleshooting, remote Docker over TLS, and OIDC remote watcher auth. This is documentation and compatibility guidance.
   Docs: [Podman Quick Start](/docs/configuration/watchers#podman-quick-start), [Docker Socket Security](/docs/configuration/watchers#docker-socket-security), [Podman FAQ](/docs/faq#podman-api-compatibility-vs-native-podman-support).
 - **Config and API reference parity** — The current docs were reconciled against runtime config schemas, Express routes, and the OpenAPI spec. Configuration tables now match the implemented env vars and defaults more closely, while the API docs cover canonical `/api/v1` routes, authentication component endpoints, registry webhook signature auth, notification outbox actions, bulk container updates, backup listing, and auth status aliases.
   Docs: [Configuration](/docs/configuration), [REST API](/docs/api), [OpenAPI spec](/docs/api#openapi).

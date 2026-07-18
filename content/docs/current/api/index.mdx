@@ -359,7 +359,7 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
 
 ### Action types
 
-`update-available`, `update-applied`, `update-failed`, `container-update`, `security-alert`, `agent-disconnect`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`
+`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`, `env-reveal`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `mqtt-command-update`
 
 ## Server-Sent Events (SSE)
 
@@ -388,12 +388,19 @@ The replay buffer is an in-memory 5-minute ring buffer. If the requested event i
 | `dd:container-added` | Container object | A new container was discovered by a watcher |
 | `dd:container-updated` | Container object | An existing container's state changed (new tag, status, scan result) |
 | `dd:container-removed` | Container object | A container was removed |
+| `dd:container-unhealthy` | `{ "containerName": "...", "health": "unhealthy", "previousHealth": "...", "container": {...} }` | A watched container's health check transitioned to unhealthy |
 | `dd:scan-started` | `{ "containerId": "..." }` | A security scan started for a container |
 | `dd:scan-completed` | `{ "containerId": "...", "status": "..." }` | A security scan finished |
 | `dd:self-update` | `{ "opId": "...", "requiresAck": bool, "ackTimeoutMs": int, "startedAt": "..." }` | Drydock is updating its own container. If `requiresAck` is true, the UI should POST an acknowledgment before the timeout. |
+| `dd:update-operation-changed` | `{ "operationId": "...", "containerName": "...", "status": "...", "phase": "...", "queuePosition": int, "queueTotal": int }` | An in-flight update operation's status or queue position changed |
+| `dd:update-applied` | `{ "containerName": "...", "containerId": "...", "newContainerId": "...", "operationId": "...", "batchId": "..." }` | An update was successfully applied to a container |
+| `dd:update-failed` | `{ "containerName": "...", "error": "...", "operationId": "...", "batchId": "...", "phase": "...", "rollbackReason": "..." }` | An update attempt failed (or was rolled back) |
+| `dd:batch-update-completed` | `{ "batchId": "...", "total": int, "succeeded": int, "failed": int, "durationMs": int, "items": [...] }` | A batch update run finished |
 | `dd:agent-connected` | Agent payload | A remote agent connected to the controller |
 | `dd:agent-disconnected` | Agent payload | A remote agent disconnected |
+| `dd:agent-stats-changed` | `{ "agentName": "..." }` | A remote agent's stats changed and should be refetched |
 | `dd:resync-required` | `{ "reason": "..." }` | Replay could not cover the requested event range; clients should refresh full state |
+| `dd:preferences-updated` | `{}` | A user's preferences changed on another device/tab; clients should refetch their own session-scoped preferences |
 
 ### Self-update acknowledgment
 

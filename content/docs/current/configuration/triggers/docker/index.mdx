@@ -115,7 +115,7 @@ Hooks execute via `/bin/sh -c` inside the Drydock container. The following envir
 
 A non-zero exit code or timeout is treated as failure. When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook prevents the update from proceeding.
 
-<Callout type="warn">Hook commands are validated against a restricted shell-safe grammar at configuration time. Commands containing `$(...)`, backticks, redirections (`<`, `>`), or chaining metacharacters (`;`, `&`, `|`) are rejected with a clear error at startup. Allowed: a single command with arguments, single/double-quoted strings, and `$VAR` / `${VAR}` variable references.</Callout>
+<Callout type="warn">Hook commands are validated against a restricted shell-safe grammar immediately before execution. Commands containing `$(...)`, backticks, redirections (`<`, `>`), or chaining metacharacters (`;`, `&`, `|`) are rejected. An invalid command fails at that point and is treated as a hook failure (which aborts the update by default when `dd.hook.pre.abort=true`). Allowed: a single command with arguments, single/double-quoted strings, and `$VAR` / `${VAR}` variable references.</Callout>
 
 <Callout type="info">Drydock-provided hook environment values are sanitized before execution: control characters and `` ` ``, `$`, `;`, `&`, `|`, `<`, `>`, `(`, `)` are replaced with `_`.</Callout>
 

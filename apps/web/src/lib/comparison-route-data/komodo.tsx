@@ -33,7 +33,7 @@ rotate|Update Safety Controls|Drydock is the only tool with automatic rollback o
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), and cosign image signature verification — built-in. Komodo has no integrated security scanning.
 eye|Dry-Run Preview|Preview exactly what an update will do before applying it, with pre-update image backups and configurable retention. Komodo applies updates immediately with no preview step.
 radio|23 Registry Providers|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more. Komodo supports fewer registries out of the box.
-bell|20 Notification Services|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more. Komodo includes built-in alerters for Slack, Discord, Ntfy, and Pushover; anything beyond those requires a self-hosted custom alerter integration.
+bell|20 Trigger Integrations|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more. Komodo includes built-in alerters for Slack, Discord, Ntfy, and Pushover; anything beyond those requires a self-hosted custom alerter integration.
 lock|Fully Open Source|Every Drydock feature is free and open source. Both Drydock (AGPL-3.0) and Komodo (GPL-3.0) use copyleft licenses.
 `,
   highlightIconMap: {
