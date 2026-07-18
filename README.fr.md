@@ -40,8 +40,8 @@
 - [🚀 Démarrage rapide](#quick-start)
 - [🆕 Mises à jour récentes](#recent-updates)
 - [📸 Captures d'écran et démo en direct](#screenshots)
--[🤔Pourquoi Drydock](#why-drydock) See More
--[✨ Caractéristiques](#features)
+- [🤔 Pourquoi Drydock](#why-drydock)
+- [✨ Caractéristiques](#features)
 - [🔌 Intégrations prises en charge](#supported-integrations)
 - [⚖️ Comparaison des fonctionnalités](#feature-comparison)
 - [🔄Migration](#migration)
@@ -154,7 +154,7 @@ docker run -d \
 > echo -n "yourpassword" | argon2 $(openssl rand -base64 32) -id -m 16 -t 3 -p 4 -l 64 -e
 > ```
 >
-> Ou avec Node.js 24+ (aucun package supplémentaire nécessaire) :
+> Ou avec Node.js 24.7+ (aucun package supplémentaire nécessaire) :
 >
 > ```bash
 > node -e 'const c=require("node:crypto");const s=c.randomBytes(32);const h=c.argon2Sync("argon2id",{message:process.argv[1],nonce:s,memory:65536,passes:3,parallelism:4,tagLength:64});console.log("argon2id$65536$3$4$"+s.toString("base64")+"$"+h.toString("base64"));' "yourpassword"
@@ -426,7 +426,7 @@ Merci aux utilisateurs qui ont aidé à tester les versions candidates v1.4.0 et
 
 Ces trois outils sont conçus pour superposer : sockguard filtre le socket, portwing l'expose à distance et drydock surveille et agit sur l'état du conteneur.
 
-Voir COMPATIBILITY.md](<https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md>) de portwing pour connaître la matrice de compatibilité complète des trois outils.
+Voir le [COMPATIBILITY.md de portwing](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md) pour connaître la matrice de compatibilité complète des trois outils.
 
 ---
 

@@ -154,7 +154,7 @@ docker run -d \
 > echo -n "yourpassword" | argon2 $(openssl rand -base64 32) -id -m 16 -t 3 -p 4 -l 64 -e
 > ```
 >
-> Oder mit Node.js 24+ (keine zusätzlichen Pakete erforderlich):
+> Oder mit Node.js 24.7+ (keine zusätzlichen Pakete erforderlich):
 >
 > ```bash
 > node -e 'const c=require("node:crypto");const s=c.randomBytes(32);const h=c.argon2Sync("argon2id",{message:process.argv[1],nonce:s,memory:65536,passes:3,parallelism:4,tagLength:64});console.log("argon2id$65536$3$4$"+s.toString("base64")+"$"+h.toString("base64"));' "yourpassword"
@@ -179,7 +179,7 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 - **Dashboard** – CSS-Rasterersatz ohne Abhängigkeit mit Maus-/Touch-Neuordnung, begrenzter Größenänderung, responsiven Layouts, Widget-Sichtbarkeit, Zurücksetzen und optionaler geräteübergreifender Präferenzsynchronisierung.
 - **Aktualisierungsrichtlinie** – Deklarative Watcher-/Label-/UI-Priorität, Audit-Trail überschreiben/zurücksetzen, Fälligkeits-Countdown/manuelles Überschreiben und Informationssichtbarkeit angehefteter Tags mit einer gestapelten aktuellen → neueren Tag-Ansicht.
 - **Leistung und Wiederherstellung** – Deduplizierung der Tag-Liste pro Umfrage, einfachere Aggregatprojektionen, virtualisierte große Protokollverläufe, unveränderlicher Live-Protokoll-Rollover, Authentifizierungs-Bootstrap-Timeout, vollständige Präferenzmigrationen und Selbstheilung veralteter Chunks.
-– **v1.6-Migrationen erzwungen** – WUD-Env-/Label-Aliase, veraltete Authentifizierungsformate, veraltete Watcher-Schalter, Vorlagenaliase, Kafka `clientId` und fehlerhafte öffentliche Hub/DHI-Konfigurationen, die nur auf Tokens basieren, werden nicht mehr ausgeführt. Die Trigger-Taxonomie-Aliase bleiben für eine letzte Warnungsversion auf Fehlerebene bestehen.
+- **v1.6-Migrationen erzwungen** – WUD-Env-/Label-Aliase, veraltete Authentifizierungsformate, veraltete Watcher-Schalter, Vorlagenaliase, Kafka `clientId` und fehlerhafte öffentliche Hub/DHI-Konfigurationen, die nur auf Tokens basieren, werden nicht mehr ausgeführt. Die Trigger-Taxonomie-Aliase bleiben für eine letzte Warnungsversion auf Fehlerebene bestehen.
 
 Vollständige Migrationsanleitung in [DEPRECATIONS.md](./DEPRECATIONS.md).
 

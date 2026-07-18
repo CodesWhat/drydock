@@ -154,7 +154,7 @@ docker run -d \
 > echo -n "yourpassword" | argon2 $(openssl rand -base64 32) -id -m 16 -t 3 -p 4 -l 64 -e
 > ```
 >
-> O con Node.js 24+ (no se necesitan paquetes adicionales):
+> O con Node.js 24.7+ (no se necesitan paquetes adicionales):
 >
 > ```bash
 > node -e 'const c=require("node:crypto");const s=c.randomBytes(32);const h=c.argon2Sync("argon2id",{message:process.argv[1],nonce:s,memory:65536,passes:3,parallelism:4,tagLength:64});console.log("argon2id$65536$3$4$"+s.toString("base64")+"$"+h.toString("base64"));' "yourpassword"
@@ -181,7 +181,7 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 - **Rendimiento y recuperación**: deduplicación de listas de etiquetas por encuesta, proyecciones agregadas más ligeras, historiales de registros grandes virtualizados, transferencia de registros en vivo inmutable, tiempo de espera de arranque de autenticación, migraciones de preferencias completas y autocuración de fragmentos obsoletos.
 - **Se aplicaron migraciones v1.6**: los alias de entorno/etiqueta WUD, los formatos de autenticación heredados, los conmutadores de vigilancia obsoletos, los alias de plantilla, Kafka `clientId` y las configuraciones públicas de Hub/DHI de solo token con formato incorrecto ya no se ejecutan. Los alias de taxonomía de activación permanecen hasta una publicación final de advertencia de nivel de error.
 
-Guía completa de migración en [DEPRECATION.md](./DEPRECATIONS.md).
+Guía completa de migración en [DEPRECATIONS.md](./DEPRECATIONS.md).
 
 </details>
 
@@ -426,7 +426,7 @@ Gracias a los usuarios que ayudaron a probar las versiones candidatas v1.4.0 y v
 
 Estas tres herramientas están diseñadas para capas: sockguard filtra el socket, portwing lo expone de forma remota y drydock monitorea y actúa sobre el estado del contenedor.
 
-Consulte COMPATIBILITY.md](<https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md>) de [portwing para obtener la matriz de compatibilidad completa entre las tres herramientas.
+Consulte el [COMPATIBILITY.md de portwing](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md) para obtener la matriz de compatibilidad completa entre las tres herramientas.
 
 ---
 
