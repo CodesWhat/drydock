@@ -561,6 +561,33 @@ describe('createDockerScannerBackend', () => {
     expect((outcome as Error).message).toBe('Scanner worker timed out after 10ms');
   });
 
+  test('reports the configured timeout even when the deadline is armed mid-flight', async () => {
+    const harness = createHarness();
+    harness.container.start.mockImplementationOnce(() => new Promise(() => undefined));
+    const now = vi.spyOn(Date, 'now').mockReturnValueOnce(1_000).mockReturnValueOnce(1_003);
+
+    try {
+      const outcome = await Promise.race([
+        harness.backend
+          .run({
+            image: PINNED_IMAGE,
+            args: ['scan'],
+            timeoutMs: 10,
+            maxOutputBytes: 1_024,
+          })
+          .catch((error) => error),
+        new Promise<Error>((resolve) => {
+          setTimeout(() => resolve(new Error('scanner run remained pending')), 100);
+        }),
+      ]);
+
+      expect(outcome).toBeInstanceOf(Error);
+      expect((outcome as Error).message).toBe('Scanner worker timed out after 10ms');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   test.each([
     ['successful cleanup', undefined],
     ['failed cleanup', new Error('remove failed')],
