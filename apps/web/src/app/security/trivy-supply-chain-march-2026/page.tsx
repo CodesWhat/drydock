@@ -45,7 +45,7 @@ export default function TrivyAdvisoryPage() {
     description:
       "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
     datePublished: "2026-03-22",
-    dateModified: "2026-03-22",
+    dateModified: "2026-07-18",
     image: `${BASE_URL}${SITE_CONFIG.ogImage}`,
     mainEntityOfPage: {
       "@type": "WebPage",
@@ -351,15 +351,17 @@ uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294    # v7.
               <p>
                 Drydock bundles Trivy and cosign in its Docker image for local vulnerability
                 scanning and image signature verification. Current Drydock images ship Trivy 0.72.0,
-                sourced from a digest-pinned official image. The only compromised release was
-                v0.69.4 &mdash; any other version is unaffected. You can verify your running
-                instance:
+                sourced from a digest-pinned official image, so a tampered upstream tag cannot
+                silently reach a Drydock build. The compromised releases were v0.69.4 (published
+                across GitHub, Docker Hub, GHCR, and ECR) and the Docker Hub-only v0.69.5 and
+                v0.69.6 images. You can check the version running inside your container:
               </p>
               <pre>
                 <code>{`# Check the Trivy version inside your Drydock container
 docker exec drydock trivy --version
 
-# The only compromised release is v0.69.4 — any other version is unaffected.`}</code>
+# Expected: 0.72.0 — the digest-pinned build Drydock ships. This is a local
+# version check only; it does not attest to Trivy builds obtained elsewhere.`}</code>
               </pre>
               <p>
                 If you use an external Trivy server via <code>DD_SECURITY_TRIVY_SERVER</code>,

@@ -1305,7 +1305,7 @@ The root cause of proxy-timeout reconnects is that Drydock cannot control idle t
 
 ### Reduce proxy-timeout reconnect churn
 
-Until the native proxy ships, you can reduce reconnect noise:
+To reduce reconnect noise:
 
 1. Increase your proxy idle timeout (for example, linuxserver socket-proxy `TIMEOUT=86400s`).
 2. Prefer direct socket mount when your environment allows it.
