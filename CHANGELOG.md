@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Update-status vocabulary overhaul across the containers UI** ([#498](https://github.com/CodesWhat/drydock/issues/498), [#556](https://github.com/CodesWhat/drydock/issues/556)). "Digest" reads as **"Digest update"**; the NEW/MATURE freshness badges are gone (the detection age lives in the update-kind badge's tooltip instead); an unrecognized update kind now renders a neutral "Unknown" badge instead of nothing; and the bouncer's "Blocked" label is now **"Security hold"**.
+- **Pinned is a tag property again, not an update status.** Pinned containers show a persistent pin glyph on the Tag cell whether or not an update exists, with the `dd.tag.family` remedy in its tooltip; up-to-date pinned rows read "Current" like everything else instead of a bare "Pinned" chip that only appeared when a newer family version existed.
+- **The maturity panel keeps exactly one clock.** The policy sentence names the clock the gate actually measures against ("Candidate published {date} — n more days until the minimum", with a detection-date fallback), the duplicate countdown collapsed into one "{countdown} · unlocks {date}" line, and the backend now exposes the resolved clock (`clockSource`/`clockStartAt`) on the maturity blocker so the UI reads the gate's own verdict instead of re-deriving it from the detection time.
+- **The column picker tells the truth about auto-hidden columns.** Columns hidden to fit the viewport stay checked with a muted "hidden to fit" note, and the "+N" toolbar badge's tooltip names them.
+
 ### Fixed
 
 - **Manual recheck no longer restarts the maturity countdown on display-only metadata drift** ([#565](https://github.com/CodesWhat/drydock/issues/565)). A per-container recheck bypasses the registry poll cache, so the suggested tag and image created date can wobble between scans even when the update candidate itself hasn't changed, falsely resetting the soak. The lifecycle clock now restarts only when the candidate's actual identity — tag or digest — changes; suggested tag and created date no longer factor into the restart decision.
