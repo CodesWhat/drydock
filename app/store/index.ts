@@ -43,6 +43,15 @@ type LokiDatabase = InstanceType<typeof Loki>;
 let db: LokiDatabase | undefined;
 let isMemoryMode = false;
 let storePathResolved: string | undefined;
+const STORE_DIRECTORY_MODE = 0o700;
+const STORE_FILE_MODE = 0o600;
+
+function enforceStorePermissions(storeDirectory: string, storePath: string): void {
+  fs.chmodSync(storeDirectory, STORE_DIRECTORY_MODE);
+  if (fs.existsSync(storePath)) {
+    fs.chmodSync(storePath, STORE_FILE_MODE);
+  }
+}
 
 function createCollections() {
   agentKeys.createCollections(db);
@@ -145,6 +154,12 @@ export async function init(options: { memory?: boolean } = {}) {
     throw new Error('DD_STORE_FILE must reference a file path, not a directory');
   }
 
+  if (!isMemoryMode) {
+    // Loki saves through temporary files during both explicit and background autosaves.
+    // A restrictive process umask keeps every replacement file owner-readable only.
+    process.umask(0o077);
+  }
+
   db = new Loki(storePath, {
     autosave: !isMemoryMode,
     autosaveInterval: 300000,
@@ -167,8 +182,9 @@ export async function init(options: { memory?: boolean } = {}) {
   log.info(`Load store from (${storePath})`);
   if (!fs.existsSync(storeDirectory)) {
     log.info(`Create folder ${storeDirectory}`);
-    fs.mkdirSync(storeDirectory);
+    fs.mkdirSync(storeDirectory, { mode: STORE_DIRECTORY_MODE });
   }
+  enforceStorePermissions(storeDirectory, storePath);
   return new Promise<void>((resolve, reject) => {
     db.loadDatabase({}, (err) => {
       void loadDb(err, resolve, reject).catch(reject);
@@ -194,7 +210,16 @@ export async function save() {
       if (err) {
         reject(err);
       } else {
-        resolve();
+        try {
+          if (!storePathResolved) {
+            throw new Error('Persistent store path was not initialized');
+          }
+          const storeDirectory = path.dirname(storePathResolved);
+          enforceStorePermissions(storeDirectory, storePathResolved);
+          resolve();
+        } catch (permissionError) {
+          reject(permissionError);
+        }
       }
     });
   });

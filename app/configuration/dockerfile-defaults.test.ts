@@ -24,4 +24,15 @@ describe('Dockerfile release defaults', () => {
     expect(dockerfile).toContain('tzdata=2026c-r0');
     expect(dockerfile).not.toContain('tzdata=2026b-r0');
   });
+
+  test('release image creates the persistent store with owner-only permissions', () => {
+    const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
+    const entrypoint = fs.readFileSync(
+      new URL('../../Docker.entrypoint.sh', import.meta.url),
+      'utf8',
+    );
+
+    expect(dockerfile).toContain('mkdir -m 0700 /store');
+    expect(entrypoint).toMatch(/^umask 077$/mu);
+  });
 });

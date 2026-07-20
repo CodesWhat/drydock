@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -eo pipefail
+umask 077
 
 require_insecure_root_ack() {
 	if [ "${DD_ALLOW_INSECURE_ROOT}" != "true" ]; then

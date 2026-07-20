@@ -35,7 +35,7 @@ RUN apk add --no-cache \
     tzdata=2026c-r0 \
     && apk add --no-cache cosign=3.0.6-r1 \
     && apk upgrade --no-cache zlib libcrypto3 libssl3 libexpat \
-    && mkdir /store && chown node:node /store
+    && mkdir -m 0700 /store && chown node:node /store
 
 # Build stage for healthcheck binary (~65KB static binary)
 FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS healthcheck-build

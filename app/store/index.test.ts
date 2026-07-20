@@ -33,7 +33,12 @@ const {
 
   function createFsMock(overrides = {}) {
     return {
-      default: { existsSync: vi.fn(), mkdirSync: vi.fn(), ...overrides },
+      default: {
+        existsSync: vi.fn(),
+        mkdirSync: vi.fn(),
+        chmodSync: vi.fn(),
+        ...overrides,
+      },
     };
   }
 
@@ -148,8 +153,14 @@ vi.mock('./update-operation', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
 describe('Store Module', () => {
+  const originalUmask = process.umask();
+
   beforeEach(async () => {
     vi.clearAllMocks();
+  });
+
+  afterAll(() => {
+    process.umask(originalUmask);
   });
 
   test('should initialize store successfully', async () => {
@@ -162,6 +173,9 @@ describe('Store Module', () => {
       autosave: true,
       autosaveInterval: 300000,
     });
+    expect(process.umask()).toBe(0o077);
+    expect(fs.chmodSync).toHaveBeenCalledWith('/test/store', 0o700);
+    expect(fs.chmodSync).toHaveBeenCalledWith('/test/store/test.json', 0o600);
 
     const app = await import('./app.js');
     const container = await import('./container.js');
@@ -187,7 +201,7 @@ describe('Store Module', () => {
 
     await store.init();
 
-    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/store');
+    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/store', { mode: 0o700 });
   });
 
   test('should return configuration', async () => {
@@ -329,6 +343,8 @@ describe('Store Module', () => {
     const Loki = (await import('lokijs')).default;
     const dbInstance = Loki.mock.results[0].value;
     expect(dbInstance.saveDatabase).toHaveBeenCalledTimes(1);
+    const mockedFs = (await import('node:fs')).default;
+    expect(mockedFs.chmodSync).toHaveBeenLastCalledWith('/test/store/test.json', 0o600);
   });
 
   test('should no-op save when store runs in memory mode', async () => {
