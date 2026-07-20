@@ -192,6 +192,37 @@ function sortConditions(left: UpdateBlocker, right: UpdateBlocker): number {
   return leftSeverity - rightSeverity;
 }
 
+/**
+ * The maturity-not-reached blocker's plain message no longer states which clock it's
+ * measuring against — that's now named explicitly here from the backend-resolved
+ * clockSource/clockStartAt (computeUpdateEligibility() in
+ * app/model/update-eligibility.ts, resolveMaturityClock() in
+ * app/model/maturity-policy.ts), so the UI shows the same clock the server enforced
+ * instead of re-deriving one from updateDetectedAt alone (#display-honesty item 4).
+ * Falls back to the plain backend message when the clock details aren't present
+ * (e.g. older cached payloads).
+ */
+function maturitySentence(blocker: UpdateBlocker, t: Translate): string {
+  const details = blocker.details ?? {};
+  const clockStartAt = details.clockStartAt;
+  const minAgeDays = details.minAgeDays;
+  const remainingMs = details.remainingMs;
+  if (
+    typeof clockStartAt !== 'string' ||
+    typeof minAgeDays !== 'number' ||
+    typeof remainingMs !== 'number'
+  ) {
+    return blocker.message;
+  }
+  const date = new Date(clockStartAt).toLocaleDateString();
+  const count = Math.max(1, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
+  const key =
+    details.clockSource === 'publishedAt'
+      ? 'containerComponents.updateStatus.maturityClockPublished'
+      : 'containerComponents.updateStatus.maturityClockDetected';
+  return t(key, { date, count, minDays: minAgeDays });
+}
+
 function toCondition(
   blocker: UpdateBlocker,
   container: UpdateStatusContainer,
@@ -205,7 +236,8 @@ function toCondition(
       blocker.reason === 'active-operation' ? 'info' : severity === 'hard' ? 'danger' : 'warning',
     icon: CONDITION_ICONS[blocker.reason],
     heading: conditionHeading(blocker.reason, t),
-    body: blocker.message,
+    body:
+      blocker.reason === 'maturity-not-reached' ? maturitySentence(blocker, t) : blocker.message,
     liftableAt: blocker.liftableAt,
     action: conditionAction(blocker, container, t),
   };
@@ -249,7 +281,9 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
     state = 'pinned';
     tone = 'info';
     icon = 'info';
-    summary = t('containerComponents.updateStatus.summary.pinned');
+    summary = t('containerComponents.groupedViews.pinnedLabel', {
+      tag: container.updateInsight.tag,
+    });
   } else if (!hasUpdate) {
     state = 'up-to-date';
     tone = 'success';

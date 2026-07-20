@@ -128,10 +128,12 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
               {{ condition.body }}
             </div>
             <div v-if="condition.liftableAt" class="text-2xs mt-1 dd-text-muted">
-              <template v-if="formatLiftCountdown(condition.liftableAt, nowMs)">
-                {{ formatLiftCountdown(condition.liftableAt, nowMs) }} ·
-              </template>
-              {{ $t('containerComponents.updateStatus.liftsAt', { date: new Date(condition.liftableAt).toLocaleString() }) }}
+              {{
+                $t('containerComponents.updateStatus.liftCountdown', {
+                  countdown: formatLiftCountdown(condition.liftableAt, nowMs) ?? '',
+                  date: new Date(condition.liftableAt).toLocaleString(),
+                })
+              }}
             </div>
             <a
               v-if="condition.action?.kind === 'external'"

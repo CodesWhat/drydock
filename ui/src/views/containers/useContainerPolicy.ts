@@ -149,6 +149,26 @@ function hasSuppressedUpdateCandidate(metaRecord: Record<string, unknown>): bool
   return isSuppressedUpdateKind(updateKind?.kind);
 }
 
+// Mirrors container-mapper.ts's findBackendMaturityBlocked(): the server resolves the
+// maturity clock (publishedAt vs updateDetectedAt, see app/model/maturity-policy.ts
+// resolveMaturityClock()) once in computeUpdateEligibility(); re-deriving it here from
+// updateDetectedAt alone drifted from that truth (#display-honesty item 4). Prefer the
+// backend verdict and fall back to the local computation only when no eligibility
+// payload is present on the meta record at all.
+function findBackendMaturityBlocked(metaRecord: Record<string, unknown>): boolean | undefined {
+  const eligibility = asRecord(metaRecord.updateEligibility);
+  const blockers = eligibility?.blockers;
+  if (!Array.isArray(blockers)) {
+    return undefined;
+  }
+  return blockers.some(
+    (blocker) =>
+      !!blocker &&
+      typeof blocker === 'object' &&
+      (blocker as { reason?: unknown }).reason === 'maturity-not-reached',
+  );
+}
+
 function buildContainerListPolicyStateFromPolicy(
   metaRecord: Record<string, unknown>,
   policy: Record<string, unknown>,
@@ -163,11 +183,14 @@ function buildContainerListPolicyStateFromPolicy(
   const rawSnoozeUntil = typeof policy.snoozeUntil === 'string' ? policy.snoozeUntil : undefined;
   const snoozeUntilMs = rawSnoozeUntil ? new Date(rawSnoozeUntil).getTime() : Number.NaN;
   const snoozed = Number.isFinite(snoozeUntilMs) && snoozeUntilMs > Date.now();
+  const backendMaturityBlocked = findBackendMaturityBlocked(metaRecord);
   const maturityBlocked =
-    maturityMode === 'mature' &&
-    hasSuppressedUpdateCandidate(metaRecord) &&
-    (!Number.isFinite(updateDetectedAtMs) ||
-      Date.now() - updateDetectedAtMs < maturityMinAgeDaysToMilliseconds(maturityMinAgeDays));
+    backendMaturityBlocked !== undefined
+      ? backendMaturityBlocked
+      : maturityMode === 'mature' &&
+        hasSuppressedUpdateCandidate(metaRecord) &&
+        (!Number.isFinite(updateDetectedAtMs) ||
+          Date.now() - updateDetectedAtMs < maturityMinAgeDaysToMilliseconds(maturityMinAgeDays));
 
   if (!snoozed && skipCount === 0 && !maturityMode) {
     return EMPTY_CONTAINER_POLICY_STATE;
