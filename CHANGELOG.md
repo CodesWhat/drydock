@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Manual recheck no longer restarts the maturity countdown on display-only metadata drift** ([#565](https://github.com/CodesWhat/drydock/issues/565)). A per-container recheck bypasses the registry poll cache, so the suggested tag and image created date can wobble between scans even when the update candidate itself hasn't changed, falsely resetting the soak. The lifecycle clock now restarts only when the candidate's actual identity — tag or digest — changes; suggested tag and created date no longer factor into the restart decision.
+
 ### Security
 
 - **Anonymous access now fails closed on upgrades, not just fresh installs.** An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — refuses to start instead of logging a warning and serving an open dashboard. If you run an intentionally open instance, set `DD_ANONYMOUS_AUTH_CONFIRM=true`; otherwise configure `DD_AUTH_BASIC_<name>_USER`/`_HASH` before upgrading.

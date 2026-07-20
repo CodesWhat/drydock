@@ -1207,6 +1207,172 @@ test('updateContainer should reset firstSeenAt when candidate update changes mid
   }
 });
 
+test('updateContainer should preserve updateDetectedAt when a recheck only changes display metadata (suggestedTag/created) (#565)', async () => {
+  // A manual per-container recheck bypasses the registry poll cache, so
+  // suggestedTag and created can wobble between scans even when the actual
+  // candidate (tag + digest) hasn't changed. That must not restart the
+  // maturity soak.
+  const existingDetectedAt = '2026-02-20T09:15:00.000Z';
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+        digest: { watch: true, value: 'sha256:aaa' },
+      },
+      result: {
+        tag: '2.0.0',
+        suggestedTag: '2.0.0-alpine',
+        digest: 'sha256:bbb',
+        created: '2024-01-01T00:00:00.000Z',
+      },
+      updateDetectedAt: existingDetectedAt,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+      digest: { watch: true, value: 'sha256:aaa' },
+    },
+    // Same tag and digest as the stored record, only the display metadata drifted.
+    result: {
+      tag: '2.0.0',
+      suggestedTag: '2.0.0-bullseye',
+      digest: 'sha256:bbb',
+      created: '2024-06-01T00:00:00.000Z',
+    },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.updateDetectedAt).toBe(existingDetectedAt);
+});
+
+test('updateContainer should reset updateDetectedAt when the candidate tag genuinely changes (#565)', async () => {
+  const existingDetectedAt = '2026-02-20T09:15:00.000Z';
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+        digest: { watch: true, value: 'sha256:aaa' },
+      },
+      result: {
+        tag: '2.0.0',
+        digest: 'sha256:bbb',
+      },
+      updateDetectedAt: existingDetectedAt,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+      digest: { watch: true, value: 'sha256:aaa' },
+    },
+    // Digest unchanged, but the candidate tag itself moved.
+    result: {
+      tag: '2.1.0',
+      digest: 'sha256:bbb',
+    },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.updateDetectedAt).toBeDefined();
+  expect(updated.updateDetectedAt).not.toBe(existingDetectedAt);
+});
+
+test('updateContainer should reset updateDetectedAt when the candidate digest genuinely changes (#565)', async () => {
+  const existingDetectedAt = '2026-02-20T09:15:00.000Z';
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+        digest: { watch: true, value: 'sha256:aaa' },
+      },
+      result: {
+        tag: '2.0.0',
+        digest: 'sha256:bbb',
+      },
+      updateDetectedAt: existingDetectedAt,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+      digest: { watch: true, value: 'sha256:aaa' },
+    },
+    // Tag unchanged, but the candidate digest itself moved.
+    result: {
+      tag: '2.0.0',
+      digest: 'sha256:ccc',
+    },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  expect(updated.updateDetectedAt).toBeDefined();
+  expect(updated.updateDetectedAt).not.toBe(existingDetectedAt);
+});
+
 test('updateContainer should stamp updateDetectedAt when containerCurrent had no raw update', async () => {
   // Covers the path where a container transitions from no-update to having one.
   const existingFixture = createContainerFixture();
