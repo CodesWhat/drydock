@@ -1,4 +1,5 @@
 import { getVersion } from '../../configuration/index.js';
+import { SESSION_COOKIE_NAME } from '../session-cookie.js';
 import { openApiPaths } from './paths/index.js';
 import { openApiSchemas } from './schemas.js';
 
@@ -53,7 +54,7 @@ export const openApiDocument = {
       sessionAuth: {
         type: 'apiKey',
         in: 'cookie',
-        name: 'connect.sid',
+        name: SESSION_COOKIE_NAME,
         description:
           'Session cookie authentication. For unsafe methods, requests must also satisfy same-origin CSRF validation (Origin/Referer/Sec-Fetch-Site checks).',
       },

@@ -56,7 +56,7 @@ describe('CSRF middleware', () => {
       method: 'GET',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         // no origin/referer — would be rejected if GET were treated as unsafe
       },
@@ -73,7 +73,7 @@ describe('CSRF middleware', () => {
   test('should skip CSRF validation for HEAD method', () => {
     const req = createReq({
       method: 'HEAD',
-      headers: { cookie: 'connect.sid=s%3Atest' },
+      headers: { cookie: 'drydock.sid=s%3Atest' },
     });
     const res = createRes();
     const next = vi.fn();
@@ -87,7 +87,7 @@ describe('CSRF middleware', () => {
   test('should skip CSRF validation for OPTIONS method', () => {
     const req = createReq({
       method: 'OPTIONS',
-      headers: { cookie: 'connect.sid=s%3Atest' },
+      headers: { cookie: 'drydock.sid=s%3Atest' },
     });
     const res = createRes();
     const next = vi.fn();
@@ -101,7 +101,7 @@ describe('CSRF middleware', () => {
   test('should skip CSRF validation for TRACE method', () => {
     const req = createReq({
       method: 'TRACE',
-      headers: { cookie: 'connect.sid=s%3Atest' },
+      headers: { cookie: 'drydock.sid=s%3Atest' },
     });
     const res = createRes();
     const next = vi.fn();
@@ -117,7 +117,7 @@ describe('CSRF middleware', () => {
       method: 'DELETE',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
       },
@@ -136,7 +136,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
       },
@@ -155,7 +155,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         'sec-fetch-site': 'cross-site',
@@ -176,7 +176,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         'sec-fetch-site': 'same-site',
@@ -196,7 +196,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         'sec-fetch-site': 'same-origin',
@@ -216,7 +216,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         'sec-fetch-site': 'CROSS-SITE',
@@ -238,7 +238,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         'sec-fetch-site': '  cross-site  ',
@@ -262,7 +262,7 @@ describe('CSRF middleware', () => {
       protocol: 'https', // what Express resolves from X-Forwarded-Proto when trust proxy is on
       trustProxy: true,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
       },
@@ -282,7 +282,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https:', // unlikely but parseProtocol handles it
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
       },
@@ -304,7 +304,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'HTTPS',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
       },
@@ -324,7 +324,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'http:',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'http://drydock.example.com',
       },
@@ -345,7 +345,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'ftp',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'ftp://drydock.example.com',
       },
@@ -368,7 +368,7 @@ describe('CSRF middleware', () => {
       protocol: 'https', // Express-resolved from X-Forwarded-Proto
       trustProxy: true,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock:3000',
         origin: 'https://drydock.example.com',
         'x-forwarded-host': 'drydock.example.com',
@@ -390,7 +390,7 @@ describe('CSRF middleware', () => {
       protocol: 'https',
       trustProxy: true,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         'x-forwarded-host': ' , , ',
@@ -412,7 +412,7 @@ describe('CSRF middleware', () => {
       protocol: 'https',
       trustProxy: true,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'internal-host',
         origin: 'https://drydock.example.com',
         'x-forwarded-host': 'drydock.example.com, other-proxy.example.com',
@@ -435,7 +435,7 @@ describe('CSRF middleware', () => {
       protocol: 'https',
       trustProxy: true,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'internal-host',
         origin: 'https://drydock.example.com',
         'x-forwarded-host': ', drydock.example.com',
@@ -460,7 +460,7 @@ describe('CSRF middleware', () => {
       protocol: 'https',
       trustProxy: false,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         // forged header — should be ignored
@@ -487,7 +487,7 @@ describe('CSRF middleware', () => {
       protocol: 'https',
       trustProxy: false,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://attacker.example.com',
         // forged header
@@ -514,7 +514,7 @@ describe('CSRF middleware', () => {
       protocol: 'http',
       trustProxy: false,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         'x-forwarded-proto': 'https',
@@ -541,7 +541,7 @@ describe('CSRF middleware', () => {
       protocol: 'http',
       trustProxy: false,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
       },
@@ -561,7 +561,7 @@ describe('CSRF middleware', () => {
       protocol: 'http',
       trustProxy: false,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         'x-forwarded-proto': 'http',
@@ -584,7 +584,7 @@ describe('CSRF middleware', () => {
       protocol: 'https', // Express-resolved
       trustProxy: true,
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'internal:8080',
         origin: 'https://drydock.example.com:8443',
         'x-forwarded-host': 'drydock.example.com:8443',
@@ -606,7 +606,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com:9000',
         origin: 'https://drydock.example.com:9000',
       },
@@ -626,7 +626,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com:9000',
         origin: 'https://drydock.example.com',
       },
@@ -648,7 +648,7 @@ describe('CSRF middleware', () => {
       method: 'PATCH',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         referer: 'https://drydock.example.com/settings',
       },
@@ -667,7 +667,7 @@ describe('CSRF middleware', () => {
       method: 'DELETE',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://attacker.example.com',
       },
@@ -687,7 +687,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
       },
     });
@@ -706,7 +706,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         origin: 'https://drydock.example.com',
       },
     });
@@ -725,7 +725,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: '   ',
         origin: 'https://drydock.example.com',
       },
@@ -745,7 +745,7 @@ describe('CSRF middleware', () => {
       method: 'PUT',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'not-a-valid-origin',
       },
@@ -765,7 +765,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: '',
       },
@@ -785,7 +785,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: '   ',
       },
@@ -805,7 +805,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'ftp',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'ftp://drydock.example.com',
       },
@@ -865,7 +865,7 @@ describe('CSRF middleware', () => {
       method: null,
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
       },
@@ -884,7 +884,7 @@ describe('CSRF middleware', () => {
       method: '',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
       },
@@ -904,7 +904,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'ftp',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
       },
@@ -925,7 +925,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'https',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         host: 'drydock.example.com',
         // no origin, no referer
       },
@@ -950,7 +950,7 @@ describe('CSRF middleware', () => {
       app: { get: vi.fn(() => false) },
       get: vi.fn((name: string) => {
         const headers: Record<string, string> = {
-          cookie: 'connect.sid=s%3Atest',
+          cookie: 'drydock.sid=s%3Atest',
           host: 'drydock.example.com',
           origin: 'https://drydock.example.com',
         };
@@ -975,7 +975,7 @@ describe('CSRF middleware', () => {
       method: 'POST',
       protocol: 'ftp',
       headers: {
-        cookie: 'connect.sid=s%3Atest',
+        cookie: 'drydock.sid=s%3Atest',
         // no host, no origin, no referer → both expectedOrigin and requestOrigin are undefined
       },
     });

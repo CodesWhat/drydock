@@ -40,6 +40,7 @@ import {
   isIdentityAwareRateLimitKeyingEnabled,
   isRequestAuthenticated,
 } from './rate-limit-key.js';
+import { SESSION_COOKIE_NAME } from './session-cookie.js';
 
 const LokiStore = ConnectLoki(session);
 const router = express.Router();
@@ -369,6 +370,7 @@ export function init(app: Application): void {
 
   // Init express session
   sessionMiddleware = session({
+    name: SESSION_COOKIE_NAME,
     store: new LokiStore({
       path: `${store.getConfiguration().path}/${store.getConfiguration().file}`,
       // Keep store retention >= longest auth cookie lifespan (remember-me).
