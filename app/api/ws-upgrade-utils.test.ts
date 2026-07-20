@@ -77,6 +77,28 @@ describe('ws-upgrade-utils', () => {
       expect(isOriginAllowed(request)).toBe(true);
     });
 
+    test('rejects an http Origin for a TLS WebSocket on the same host', () => {
+      const request = {
+        headers: { origin: 'http://drydock.example.com', host: 'drydock.example.com' },
+        socket: { encrypted: true },
+      } as any;
+      expect(isOriginAllowed(request)).toBe(false);
+    });
+
+    test('uses X-Forwarded-Proto only when trust proxy is enabled', () => {
+      const request = {
+        headers: {
+          origin: 'https://drydock.example.com',
+          host: 'drydock.example.com',
+          'x-forwarded-proto': 'https',
+        },
+        socket: { encrypted: false },
+      } as any;
+
+      expect(isOriginAllowed(request, { trustproxy: false })).toBe(false);
+      expect(isOriginAllowed(request, { trustproxy: 1 })).toBe(true);
+    });
+
     test('rejects when Origin host does not match Host header', () => {
       const request = { headers: { origin: 'https://evil.com', host: 'localhost:3000' } } as any;
       expect(isOriginAllowed(request)).toBe(false);
