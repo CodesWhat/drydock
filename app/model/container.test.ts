@@ -520,6 +520,55 @@ test('testable_resultChangedFunction should compare created timestamps and handl
   ).toBe(true);
 });
 
+test('hasCandidateIdentityChanged should compare only tag and digest, ignoring display metadata', () => {
+  expect(container.hasCandidateIdentityChanged(undefined, undefined)).toBe(false);
+  expect(
+    container.hasCandidateIdentityChanged(undefined, {
+      tag: '1.0.0',
+      digest: 'sha256:current',
+    }),
+  ).toBe(true);
+  expect(
+    container.hasCandidateIdentityChanged(
+      {
+        tag: '1.0.0',
+        digest: 'sha256:current',
+      },
+      undefined,
+    ),
+  ).toBe(true);
+
+  const currentResult = {
+    tag: '1.0.0',
+    suggestedTag: '1.0.1',
+    digest: 'sha256:current',
+    created: '2024-01-01T00:00:00.000Z',
+  };
+
+  expect(container.hasCandidateIdentityChanged(currentResult, { ...currentResult })).toBe(false);
+  expect(
+    container.hasCandidateIdentityChanged(currentResult, {
+      ...currentResult,
+      tag: '2.0.0',
+    }),
+  ).toBe(true);
+  expect(
+    container.hasCandidateIdentityChanged(currentResult, {
+      ...currentResult,
+      digest: 'sha256:other',
+    }),
+  ).toBe(true);
+  // suggestedTag and created are display-only metadata and must not count as
+  // a candidate identity change.
+  expect(
+    container.hasCandidateIdentityChanged(currentResult, {
+      ...currentResult,
+      suggestedTag: '1.0.2',
+      created: '2024-02-01T00:00:00.000Z',
+    }),
+  ).toBe(false);
+});
+
 test('model should be validated when compliant', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',
