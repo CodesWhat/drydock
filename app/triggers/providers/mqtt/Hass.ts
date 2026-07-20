@@ -1,6 +1,6 @@
 import type { MqttClient } from 'mqtt';
 import { recordAuditEvent } from '../../../api/audit-events.js';
-import { providers as iconProviders } from '../../../api/icons/providers.js';
+import { providers as iconProviders, normalizeSlug } from '../../../api/icons/providers.js';
 import { getVersion } from '../../../configuration/index.js';
 import {
   registerContainerAdded,
@@ -160,15 +160,6 @@ function sanitizeIcon(icon) {
     .replace(/^si-/i, 'si:');
 }
 
-function normalizeIconSlug(slug: string, extension: string): string {
-  const normalizedSlug = slug.trim().toLowerCase();
-  const suffix = `.${extension}`;
-  if (normalizedSlug.endsWith(suffix)) {
-    return normalizedSlug.slice(0, -suffix.length);
-  }
-  return normalizedSlug;
-}
-
 function resolveEntityPicture(icon?: string): string {
   const sanitizedIcon = sanitizeIcon(icon);
   if (!sanitizedIcon) {
@@ -192,7 +183,7 @@ function resolveEntityPicture(icon?: string): string {
   };
   // Provider is guaranteed to be sh|hl|si by the regex above
   const cdn = cdnMap[provider as keyof typeof cdnMap];
-  const slug = normalizeIconSlug(rawSlug, cdn.extension);
+  const slug = normalizeSlug(rawSlug.trim(), cdn.extension);
   return cdn.url(slug);
 }
 

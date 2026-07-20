@@ -43,13 +43,18 @@ type LokiDatabase = InstanceType<typeof Loki>;
 let db: LokiDatabase | undefined;
 let isMemoryMode = false;
 let storePathResolved: string | undefined;
+let storeDirectoryResolved: string | undefined;
 const STORE_DIRECTORY_MODE = 0o700;
 const STORE_FILE_MODE = 0o600;
 
 function enforceStorePermissions(storeDirectory: string, storePath: string): void {
   fs.chmodSync(storeDirectory, STORE_DIRECTORY_MODE);
-  if (fs.existsSync(storePath)) {
+  try {
     fs.chmodSync(storePath, STORE_FILE_MODE);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
   }
 }
 
@@ -150,6 +155,7 @@ export async function init(options: { memory?: boolean } = {}) {
     label: 'DD_STORE_FILE',
   });
   storePathResolved = storePath;
+  storeDirectoryResolved = storeDirectory;
   if (storePath === storeDirectory) {
     throw new Error('DD_STORE_FILE must reference a file path, not a directory');
   }
@@ -211,10 +217,10 @@ export async function save() {
         reject(err);
       } else {
         try {
-          // A persistent db and its resolved path are initialized together in init().
+          // A persistent db and its resolved path/directory are initialized together in init().
           const persistentStorePath = storePathResolved as string;
-          const storeDirectory = path.dirname(persistentStorePath);
-          enforceStorePermissions(storeDirectory, persistentStorePath);
+          const persistentStoreDirectory = storeDirectoryResolved as string;
+          enforceStorePermissions(persistentStoreDirectory, persistentStorePath);
           resolve();
         } catch (permissionError) {
           reject(permissionError);
