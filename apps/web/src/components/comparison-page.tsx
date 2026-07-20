@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { AlertTriangle, Check, Clock, Minus, X } from "lucide-react";
 import { CtaButtons } from "@/components/cta-buttons";
 import { DockerRunSnippet } from "@/components/docker-run-snippet";
+import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -60,10 +61,7 @@ export function ComparisonPage({
 }: Props) {
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={jsonLd} />
       <MarketingShell>
         {/* Hero */}
         <section className="px-4 pt-16 pb-16">

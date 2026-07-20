@@ -3,6 +3,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { headers } from "next/headers";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 import "./globals.css";
 
@@ -71,11 +72,13 @@ export const viewport: Viewport = {
 const REVEAL_BOOTSTRAP =
   "(function(){var d=document,de=d.documentElement;de.classList.add('js');var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;function all(){var e=d.querySelectorAll('.reveal');for(var i=0;i<e.length;i++)e[i].classList.add('visible');}function arm(){if(reduce||!('IntersectionObserver' in window)){all();return;}var io=new IntersectionObserver(function(en){for(var i=0;i<en.length;i++){if(en[i].isIntersecting){en[i].target.classList.add('visible');io.unobserve(en[i].target);}}},{threshold:0.12,rootMargin:'0px 0px -40px 0px'});var e=d.querySelectorAll('.reveal');for(var i=0;i<e.length;i++)io.observe(e[i]);}if(d.readyState==='loading'){d.addEventListener('DOMContentLoaded',arm);}else{arm();}})();";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -86,8 +89,8 @@ export default function RootLayout({
             JS is blocked (e.g. SRI/CSP), adds `js` to <html> before sections
             paint, and runs a single IntersectionObserver. If JS never runs, the
             `.reveal` CSS defaults to visible. See globals.css. */}
-        <script dangerouslySetInnerHTML={{ __html: REVEAL_BOOTSTRAP }} />
-        <RootProvider>{children}</RootProvider>
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: REVEAL_BOOTSTRAP }} />
+        <RootProvider theme={{ nonce }}>{children}</RootProvider>
         <Analytics />
         <SpeedInsights />
       </body>
