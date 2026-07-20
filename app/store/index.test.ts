@@ -380,6 +380,28 @@ describe('Store Module', () => {
     await expect(storeWithSaveError.save()).rejects.toThrow('Database save failed');
   });
 
+  test('should reject when database permissions cannot be repaired after save', async () => {
+    vi.resetModules();
+    const chmodSync = vi.fn((target: string) => {
+      if (target === '/test/store' && chmodSync.mock.calls.length > 2) {
+        throw new Error('Permission repair failed');
+      }
+    });
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+        chmodSync,
+      },
+    });
+
+    const storeWithPermissionError = await import('./index.js');
+    await storeWithPermissionError.init();
+
+    await expect(storeWithPermissionError.save()).rejects.toThrow('Permission repair failed');
+  });
+
   test('should throw when store configuration is invalid', async () => {
     vi.resetModules();
 

@@ -211,11 +211,10 @@ export async function save() {
         reject(err);
       } else {
         try {
-          if (!storePathResolved) {
-            throw new Error('Persistent store path was not initialized');
-          }
-          const storeDirectory = path.dirname(storePathResolved);
-          enforceStorePermissions(storeDirectory, storePathResolved);
+          // A persistent db and its resolved path are initialized together in init().
+          const persistentStorePath = storePathResolved as string;
+          const storeDirectory = path.dirname(persistentStorePath);
+          enforceStorePermissions(storeDirectory, persistentStorePath);
           resolve();
         } catch (permissionError) {
           reject(permissionError);

@@ -861,4 +861,104 @@ describe('HTTP Trigger SSRF guard', () => {
     ).rejects.toThrow(/metadata.*address/i);
     expect(lookupCount).toBe(2);
   });
+
+  test('returns every validated address when the HTTP client requests all DNS records', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://multi-address.example/webhook',
+    });
+    await http.trigger({ name: 'test' });
+
+    const records = [
+      { address: '203.0.113.10', family: 4 },
+      { address: '2001:db8::10', family: 6 },
+    ];
+    dnsMockControl.lookupImpl = async () => records;
+    const requestOptions = axios.mock.calls[0][0];
+    const result = await new Promise((resolve, reject) => {
+      requestOptions.lookup('multi-address.example', { all: true }, (error, addresses) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(addresses);
+      });
+    });
+
+    expect(result).toEqual(records);
+  });
+
+  test('returns the first validated address and family for a single-address lookup', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://single-address.example/webhook',
+    });
+    await http.trigger({ name: 'test' });
+
+    dnsMockControl.lookupImpl = async () => [{ address: '2001:db8::20', family: 6 }];
+    const requestOptions = axios.mock.calls[0][0];
+    const result = await new Promise((resolve, reject) => {
+      requestOptions.lookup('single-address.example', { family: 6 }, (error, address, family) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve({ address, family });
+      });
+    });
+
+    expect(result).toEqual({ address: '2001:db8::20', family: 6 });
+  });
+
+  test('rejects a connection-time DNS lookup that returns no addresses', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://empty-dns.example/webhook',
+    });
+    await http.trigger({ name: 'test' });
+
+    dnsMockControl.lookupImpl = async () => [];
+    const requestOptions = axios.mock.calls[0][0];
+    await expect(
+      new Promise((resolve, reject) => {
+        requestOptions.lookup('empty-dns.example', {}, (error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve(undefined);
+        });
+      }),
+    ).rejects.toThrow(/returned no addresses/);
+  });
+
+  test('normalizes connection-time DNS rejection reasons to Error objects', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://lookup-error.example/webhook',
+    });
+    await http.trigger({ name: 'test' });
+
+    const requestOptions = axios.mock.calls[0][0];
+    for (const reason of [new Error('resolver failed'), 'resolver failed as text']) {
+      dnsMockControl.lookupImpl = async () => {
+        throw reason;
+      };
+      await expect(
+        new Promise((resolve, reject) => {
+          requestOptions.lookup('lookup-error.example', {}, (error) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve(undefined);
+          });
+        }),
+      ).rejects.toBeInstanceOf(Error);
+    }
+  });
 });
