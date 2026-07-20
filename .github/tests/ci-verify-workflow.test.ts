@@ -24,6 +24,11 @@ interface LefthookDefinition {
 const workflowPath = fileURLToPath(new URL('../workflows/ci-verify.yml', import.meta.url));
 const lefthookPath = fileURLToPath(new URL('../../lefthook.yml', import.meta.url));
 const processorPath = fileURLToPath(new URL('../../test/load-test.processor.cjs', import.meta.url));
+const secretScanScriptPath = fileURLToPath(
+  new URL('../../scripts/scan-secrets.sh', import.meta.url),
+);
+const gitleaksConfigPath = fileURLToPath(new URL('../../.gitleaks.toml', import.meta.url));
+const gitleaksIgnorePath = fileURLToPath(new URL('../../.gitleaksignore', import.meta.url));
 const emojiPrefix = /^\p{Extended_Pictographic}/u;
 const workflowTestsCommand = 'npm run test:workflows';
 const loadWorkflow = loadWorkflowFrom.bind(undefined, workflowPath);
@@ -76,6 +81,53 @@ test('workflow tests are wired outside the app coverage suite', () => {
     run: workflowTestsCommand,
     priority: 7,
   });
+});
+
+test('secret scanning gates full history and the tracked working tree', () => {
+  const workflow = loadWorkflow();
+  const job = workflow.jobs?.secrets;
+
+  expect(job).toMatchObject({
+    name: '🔑 Security: Secrets',
+    needs: ['zizmor'],
+    'runs-on': 'ubuntu-latest',
+    'timeout-minutes': 10,
+  });
+  expect(getWorkflowStep('secrets', 'Checkout')).toMatchObject({
+    with: {
+      'fetch-depth': 0,
+      'persist-credentials': false,
+    },
+  });
+  expect(getWorkflowStep('secrets', 'Install Gitleaks')).toMatchObject({
+    env: {
+      GITLEAKS_VERSION: '8.30.1',
+      GITLEAKS_LINUX_X64_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb',
+    },
+  });
+  expect(getWorkflowStep('secrets', 'Scan secrets')).toMatchObject({
+    run: 'scripts/scan-secrets.sh',
+  });
+
+  const scanScript = readFileSync(secretScanScriptPath, 'utf8');
+  expect(scanScript).toContain('gitleaks git');
+  expect(scanScript).toContain('gitleaks dir');
+  expect(scanScript).toContain('git -C "${repo_root}" ls-files -z');
+  expect(scanScript).toContain('--redact');
+
+  const gitleaksConfig = readFileSync(gitleaksConfigPath, 'utf8');
+  expect(gitleaksConfig).toContain('useDefault = true');
+  expect(gitleaksConfig).not.toContain('paths =');
+
+  const baselineEntries = readFileSync(gitleaksIgnorePath, 'utf8').trim().split('\n');
+  expect(baselineEntries.length).toBeGreaterThan(400);
+  expect(
+    baselineEntries.every((entry) =>
+      /^(?:[0-9a-f]{40}:)?[^:]+:(?:generic-api-key|private-key|curl-auth-header|telegram-bot-api-token):\d+$/u.test(
+        entry,
+      ),
+    ),
+  ).toBe(true);
 });
 
 test('ci-verify can dispatch the complete release-candidate matrix manually', () => {

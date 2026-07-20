@@ -57,7 +57,11 @@ describe('OpenAPI document', () => {
   });
 
   test('should define session, webhook, registry webhook, and metrics security schemes', () => {
-    expect(openApiDocument.components.securitySchemes.sessionAuth).toBeDefined();
+    expect(openApiDocument.components.securitySchemes.sessionAuth).toMatchObject({
+      type: 'apiKey',
+      in: 'cookie',
+      name: 'drydock.sid',
+    });
     expect(openApiDocument.components.securitySchemes.webhookBearerAuth).toBeDefined();
     expect(openApiDocument.components.securitySchemes.registryWebhookSignature).toMatchObject({
       type: 'apiKey',

@@ -638,9 +638,8 @@ async function registerAuthentications() {
   }
 
   // If all configured auth providers failed, attempt anonymous fallback.
-  // The Anonymous provider itself enforces fail-closed on fresh installs
-  // without DD_ANONYMOUS_AUTH_CONFIRM=true — the security boundary is
-  // inside Anonymous, not here.
+  // The Anonymous provider itself requires DD_ANONYMOUS_AUTH_CONFIRM=true
+  // on every installation, so the security boundary stays inside Anonymous.
   if (Object.keys(state.authentication).length === 0) {
     log.error(
       'All configured authentication providers failed to register — attempting anonymous fallback',

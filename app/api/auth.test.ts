@@ -1088,6 +1088,7 @@ describe('Auth Router', () => {
       auth.init(app);
 
       const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.name).toBe('drydock.sid');
       expect(sessionConfig.cookie).toEqual(
         expect.objectContaining({
           httpOnly: true,
@@ -3610,7 +3611,7 @@ describe('Auth Router', () => {
       const req = {
         method: 'POST',
         get: vi.fn((header: string) => {
-          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'cookie') return 'drydock.sid=abc';
           if (header === 'sec-fetch-site') return 'cross-site';
           return undefined;
         }),
@@ -3631,7 +3632,7 @@ describe('Auth Router', () => {
       const req = {
         method: 'POST',
         get: vi.fn((header: string) => {
-          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'cookie') return 'drydock.sid=abc';
           if (header === 'sec-fetch-site') return undefined;
           if (header === 'origin') return 'https://attacker.example.com';
           if (header === 'x-forwarded-proto') return undefined;
@@ -3657,7 +3658,7 @@ describe('Auth Router', () => {
       const req = {
         method: 'POST',
         get: vi.fn((header: string) => {
-          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'cookie') return 'drydock.sid=abc';
           if (header === 'sec-fetch-site') return undefined;
           if (header === 'origin') return 'https://drydock.example.com';
           if (header === 'x-forwarded-proto') return undefined;
@@ -3682,7 +3683,7 @@ describe('Auth Router', () => {
       const req = {
         method: 'POST',
         get: vi.fn((header: string) => {
-          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'cookie') return 'drydock.sid=abc';
           if (header === 'sec-fetch-site') return 'same-origin';
           if (header === 'origin') return 'https://drydock.example.com';
           if (header === 'x-forwarded-proto') return undefined;
@@ -3707,7 +3708,7 @@ describe('Auth Router', () => {
       const req = {
         method: 'POST',
         get: vi.fn((header: string) => {
-          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'cookie') return 'drydock.sid=abc';
           if (header === 'sec-fetch-site') return 'cross-site';
           return undefined;
         }),
@@ -3728,7 +3729,7 @@ describe('Auth Router', () => {
       const req = {
         method: 'POST',
         get: vi.fn((header: string) => {
-          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'cookie') return 'drydock.sid=abc';
           if (header === 'sec-fetch-site') return undefined;
           if (header === 'origin') return 'http://drydock.local';
           if (header === 'x-forwarded-proto') return undefined;
@@ -3753,7 +3754,7 @@ describe('Auth Router', () => {
       const req = {
         method: 'GET',
         get: vi.fn((header: string) => {
-          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'cookie') return 'drydock.sid=abc';
           if (header === 'sec-fetch-site') return 'cross-site';
           return undefined;
         }),

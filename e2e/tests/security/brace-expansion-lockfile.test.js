@@ -3,6 +3,8 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const test = require('node:test');
 
+const MINIMUM_SAFE_BRACE_EXPANSION_VERSION = '5.0.5';
+
 function compareSemver(a, b) {
   const aParts = a.split('.').map(Number);
   const bParts = b.split('.').map(Number);
@@ -22,8 +24,11 @@ function compareSemver(a, b) {
 test('package manifest explicitly pins brace-expansion to the patched version', () => {
   const packageJsonPath = join(process.cwd(), 'package.json');
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+  const pinnedVersion = packageJson.overrides?.['brace-expansion'];
 
-  assert.equal(packageJson.overrides?.['brace-expansion'], '5.0.5');
+  assert.equal(typeof pinnedVersion, 'string');
+  assert.match(pinnedVersion, /^\d+\.\d+\.\d+$/u);
+  assert.ok(compareSemver(pinnedVersion, MINIMUM_SAFE_BRACE_EXPANSION_VERSION) >= 0);
 });
 
 test('package lockfile does not resolve vulnerable brace-expansion versions', () => {
@@ -33,7 +38,7 @@ test('package lockfile does not resolve vulnerable brace-expansion versions', ()
     .filter(
       ([path, value]) => path.includes('brace-expansion') && typeof value.version === 'string',
     )
-    .filter(([, value]) => compareSemver(value.version, '5.0.5') < 0);
+    .filter(([, value]) => compareSemver(value.version, MINIMUM_SAFE_BRACE_EXPANSION_VERSION) < 0);
 
   assert.deepEqual(vulnerableEntries, []);
 });

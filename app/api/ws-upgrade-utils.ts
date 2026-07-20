@@ -52,17 +52,24 @@ function getFirstForwardedValue(value: unknown): string | undefined {
   return firstValue || undefined;
 }
 
+function getSocketOriginProtocol(request: IncomingMessage): 'http:' | 'https:' | undefined {
+  const socket = request.socket as (Socket & { encrypted?: boolean }) | undefined;
+  if (!socket) {
+    return undefined;
+  }
+  return socket.encrypted === true ? 'https:' : 'http:';
+}
+
 /**
- * Validates the Origin header against the effective Host to prevent WebSocket CSRF.
+ * Validates the Origin header against the effective origin to prevent WebSocket CSRF.
  * Browsers always send an Origin header on WebSocket upgrade requests, so a
  * browser request with a mismatched Origin indicates a cross-site connection
  * attempt. Non-browser clients (CLI tools, agents) typically omit Origin
  * entirely, which is allowed.
  *
- * When serverConfiguration has trust proxy enabled, the effective host is taken
- * from the first value of X-Forwarded-Host (if present), falling back to the raw
- * Host header.  When trust proxy is disabled the X-Forwarded-Host header is
- * ignored entirely so a direct client cannot forge it to bypass the check.
+ * When serverConfiguration has trust proxy enabled, the effective host and
+ * protocol can come from the first X-Forwarded-Host / X-Forwarded-Proto values.
+ * Otherwise forwarded headers are ignored and the socket transport is used.
  */
 export function isOriginAllowed(
   request: IncomingMessage,
@@ -82,14 +89,35 @@ export function isOriginAllowed(
     return false;
   }
 
-  let originHost: string;
+  const forwardedProtocol = trustProxy
+    ? getFirstForwardedValue(request.headers['x-forwarded-proto'])
+    : undefined;
+  let effectiveProtocol: 'http:' | 'https:' | undefined;
+  if (forwardedProtocol !== undefined) {
+    const normalizedProtocol = `${forwardedProtocol.toLowerCase()}:`;
+    if (normalizedProtocol !== 'http:' && normalizedProtocol !== 'https:') {
+      return false;
+    }
+    effectiveProtocol = normalizedProtocol;
+  } else {
+    effectiveProtocol = getSocketOriginProtocol(request);
+  }
+
+  let parsedOrigin: URL;
   try {
-    originHost = new URL(origin).host;
+    parsedOrigin = new URL(origin);
   } catch {
     return false;
   }
 
-  return originHost === effectiveHost;
+  if (parsedOrigin.protocol !== 'http:' && parsedOrigin.protocol !== 'https:') {
+    return false;
+  }
+
+  return (
+    parsedOrigin.host === effectiveHost &&
+    (effectiveProtocol === undefined || parsedOrigin.protocol === effectiveProtocol)
+  );
 }
 
 export function writeUpgradeError(socket: Socket, statusCode: number, message: string): void {
