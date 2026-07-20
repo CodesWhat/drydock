@@ -9,7 +9,7 @@ Since v1.4.0, drydock **requires authentication on fresh installs**. If no auth 
 
 You can enable 1 or multiple authentication strategies using `DD_AUTH_*` env vars.
 
-<Callout type="warn">Authentication protects all API routes and UI views unless anonymous access is enabled. Fresh installs and upgrades alike must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true` — without it, an instance with no auth configured fails closed: the container starts, but every API call and UI view returns `401`.</Callout>
+<Callout type="warn">Authentication protects all API routes and UI views unless anonymous access is enabled. Fresh installs and upgrades alike must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true` — without it, an instance with no auth configured fails closed: the container starts, but every API call returns `401`, so the dashboard cannot get past login.</Callout>
 <Callout type="info">For OIDC setups, session-cookie policy is controlled by `DD_SERVER_COOKIE_SAMESITE` in [server configuration](/docs/configuration/server). Default `lax` works for most IdP callback flows.</Callout>
 
 ## Login lockout controls
@@ -60,7 +60,7 @@ Drydock detects an upgrade by the presence of an existing store file (`/store/dd
 
 ### Upgrading
 
-<Callout type="warn">Upgrades fail closed exactly like fresh installs — there is no more warn-and-continue grace period. If an upgrading instance has no authentication configured (or anonymous auth is enabled but not explicitly confirmed), drydock fails closed — the container runs, but every request is rejected with `401` and `/health` reports `503` — instead of logging a warning and serving an open dashboard.</Callout>
+<Callout type="warn">Upgrades fail closed exactly like fresh installs — there is no more warn-and-continue grace period. If an upgrading instance has no authentication configured (or anonymous auth is enabled but not explicitly confirmed), drydock fails closed — the container runs, but every API request is rejected with `401` and `/health` reports `503` — instead of logging a warning and serving an open dashboard.</Callout>
 
 To restore access, either:
 
