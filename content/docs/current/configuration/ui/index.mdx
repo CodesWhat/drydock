@@ -120,6 +120,8 @@ Toggle between modes using the view mode buttons in the toolbar where they are a
 
 Containers, Agents, Audit, Security, Servers, and Watchers each expose a column show/hide picker in the toolbar, letting you hide low-priority columns from the table. Hidden columns are persisted per view and have no effect in card mode.
 
+On Containers, a column you still have checked "on" but that responsive sizing folded away to fit the viewport stays checked in the picker with a muted "{column} — hidden to fit" annotation, and the toolbar's "+N" hidden-columns badge tooltip names the auto-hidden columns — the picker never silently claims a column is showing when it isn't.
+
 ### Card Sorting
 
 Containers, Agents, and Security cards include a sort-field and ascending/descending control in the toolbar when in card mode, so cards can be ordered the same way table rows can.

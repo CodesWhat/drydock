@@ -223,6 +223,20 @@ A deployment that terminated TLS at a proxy but never set `DD_SERVER_TRUSTPROXY`
 
 **Migration:** Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`), and make sure the proxy forwards `X-Forwarded-Proto` (and `X-Forwarded-Host`). See [CSRF validation failed (403) behind a reverse proxy](https://getdrydock.com/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy).
 
+### Implicit reverse-proxy header trust for WebSocket origin checks
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.6.0-rc.3 |
+| **Removed in** | v1.6.0-rc.3 (immediate — security fix, no grace period) |
+| **Affects** | TLS-terminating reverse-proxy deployments (Traefik, Nginx, NGINX Proxy Manager, Caddy, HAProxy, Synology DSM, …) without `DD_SERVER_TRUSTPROXY` using the log-stream (`/api/v1/log/stream`) or container log-stream (`/api/v1/containers/{id}/logs/stream`) WebSocket endpoints |
+
+Before rc.3, `isOriginAllowed()` (`app/api/ws-upgrade-utils.ts`) validated a WebSocket upgrade's `Origin` header by comparing host only — the same gap the CSRF check above had before rc.30. rc.3 extends the check to also validate scheme, honoring `X-Forwarded-Proto` / `X-Forwarded-Host` only when Express `trust proxy` is enabled; otherwise the socket's own transport (encrypted or not) decides the expected scheme. Because the forgeable behavior was the vulnerability, it could not be kept alive behind a deprecation window.
+
+A deployment that terminates TLS at a proxy but never set `DD_SERVER_TRUSTPROXY` will now have WebSocket upgrades to these endpoints rejected with `403`, the same way REST CSRF checks broke in rc.30.
+
+**Migration:** Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`), and make sure the proxy forwards `X-Forwarded-Proto` (and `X-Forwarded-Host`). See [CSRF validation failed (403) behind a reverse proxy](https://getdrydock.com/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy).
+
 ### Command trigger process-environment inheritance
 
 | | |
@@ -248,3 +262,27 @@ Since rc.35 the child environment is a fixed allowlist (`PATH`, `HOME`, `SHELL`,
 Before rc.35, the HTTP trigger sent requests to any syntactically valid URL, including cloud instance-metadata services (`169.254.169.254` and friends) — an SSRF primitive for anyone able to influence trigger configuration. Requests resolving to link-local/metadata ranges are now rejected before sending. Private-network (RFC-1918) and localhost targets are unaffected — they remain the normal self-hosted case.
 
 **Migration:** The rare deployment that genuinely needs a link-local target sets `DD_NOTIFICATION_HTTP_{name}_ALLOWMETADATA=true` on that trigger. See the [http trigger docs](https://getdrydock.com/docs/configuration/triggers/http).
+
+### Anonymous-auth grandfather path for upgrades
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.6.0-rc.3 |
+| **Removed in** | v1.6.0-rc.3 (immediate — security fix, no grace period) |
+| **Affects** | Upgrading instances (an existing `/store/dd.json`) with no authentication configured, or with anonymous auth enabled but not explicitly confirmed |
+
+Before rc.3, an upgrading instance with no auth strategy configured was let through with anonymous access and a startup warning — the same grandfather path drydock used before v1.4.0 enforced authentication on fresh installs. rc.3 removes it: `app/authentications/providers/anonymous/Anonymous.ts` now throws at startup for an upgrade exactly as it already did for a fresh install, refusing to serve rather than warning and continuing. Because the warn-and-serve behavior was itself the exposure — an open dashboard reachable without credentials — it could not be kept alive behind a deprecation window.
+
+**Migration:** Set `DD_AUTH_BASIC_<name>_USER`/`_HASH` (or configure OIDC) before upgrading, or set `DD_ANONYMOUS_AUTH_CONFIRM=true` to explicitly keep the instance anonymous. See [Authentication](https://getdrydock.com/docs/configuration/authentications).
+
+### Session cookie renamed `connect.sid` → `drydock.sid`
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.6.0-rc.3 |
+| **Removed in** | v1.6.0-rc.3 (immediate — security fix, no grace period) |
+| **Affects** | Every authenticated session, Basic and OIDC alike |
+
+Before rc.3, drydock served sessions under Express's default cookie name, `connect.sid` — the same name countless other Express apps use, making a drydock session fingerprintable and a potential collision risk with another Express app on the same host/path. rc.3 renames the cookie to `drydock.sid`. Because a shared, guessable session-cookie name was itself the exposure, it could not be kept alive behind a deprecation window.
+
+**Migration:** None required. Existing `connect.sid` cookies are simply no longer recognized, so every user is signed out once on upgrade and needs to log back in. No data is lost.
