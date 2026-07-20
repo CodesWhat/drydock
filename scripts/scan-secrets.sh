@@ -25,9 +25,9 @@ trap 'rm -rf "${tracked_tree}"' EXIT
 
 # Scan only first-party tracked content. This includes staged/working-tree edits
 # while excluding generated builds, dependencies, and unrelated local worktrees.
-git -C "${repo_root}" ls-files -z \
-	| tar -C "${repo_root}" --null -T - -cf - \
-	| tar -xf - -C "${tracked_tree}"
+git -C "${repo_root}" ls-files -z |
+	tar -C "${repo_root}" --null -T - -cf - |
+	tar -xf - -C "${tracked_tree}"
 
 echo "Scanning tracked working tree for secrets"
 (
