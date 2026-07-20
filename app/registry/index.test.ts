@@ -721,11 +721,11 @@ test('registerAuthentications should preserve unknown-provider error messages', 
   );
 });
 
-test('registerAuthentications should register anonymous auth on upgrade without confirmation', async () => {
+test('registerAuthentications should fail closed on upgrade without anonymous confirmation', async () => {
   mockIsUpgrade.mockReturnValue(true);
   await registry.testable_registerAuthentications();
 
-  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+  expect(Object.keys(registry.getState().authentication)).toEqual([]);
 });
 
 test('registerAuthentications should log an error when DD_AUTH env vars exist without provider config', async () => {
@@ -821,7 +821,7 @@ test('registerAuthentications should log error when all configured providers fai
   );
 });
 
-test('registerAuthentications should fallback to anonymous when all configured providers fail on upgrade', async () => {
+test('registerAuthentications should fail closed when all providers fail on an unconfirmed upgrade', async () => {
   mockIsUpgrade.mockReturnValue(true);
   const spyLog = vi.spyOn(registry.testable_log, 'error');
 
@@ -834,9 +834,12 @@ test('registerAuthentications should fallback to anonymous when all configured p
   };
   await registry.testable_registerAuthentications();
 
-  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+  expect(Object.keys(registry.getState().authentication)).toEqual([]);
   expect(spyLog).toHaveBeenCalledWith(
     expect.stringContaining('All configured authentication providers failed to register'),
+  );
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining('Anonymous authentication fallback also failed'),
   );
 });
 
@@ -847,7 +850,7 @@ test('registerAuthentications should log startup health guidance when DD_AUTH va
   authentications = {};
   await registry.testable_registerAuthentications();
 
-  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+  expect(Object.keys(registry.getState().authentication)).toEqual([]);
   expect(spyLog).toHaveBeenCalledWith(
     expect.stringContaining(
       'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully.',
@@ -869,7 +872,7 @@ test('registerAuthentications should log startup health guidance when DD_AUTH va
   };
   await registry.testable_registerAuthentications();
 
-  expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+  expect(Object.keys(registry.getState().authentication)).toEqual([]);
   expect(spyLog).toHaveBeenCalledWith(
     expect.stringContaining(
       'Detected DD_AUTH_* environment variables, but no configured authentication providers were registered successfully.',
