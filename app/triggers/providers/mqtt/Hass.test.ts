@@ -290,15 +290,17 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
 test.each([
   {
     displayIcon: 'sh:nextcloud',
-    expectedPicture: 'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+    expectedPicture:
+      'https://cdn.jsdelivr.net/gh/selfhst/icons@47eb6b11d006d7708fad53f4893048c0d515117a/png/nextcloud.png',
   },
   {
     displayIcon: 'hl:nextcloud',
-    expectedPicture: 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/nextcloud.png',
+    expectedPicture:
+      'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@46b860c70e866212311aef2f98da3775c17f5068/png/nextcloud.png',
   },
   {
     displayIcon: 'si:nextcloud',
-    expectedPicture: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/nextcloud.svg',
+    expectedPicture: 'https://cdn.jsdelivr.net/npm/simple-icons@16.21.0/icons/nextcloud.svg',
   },
   {
     displayIcon: 'sh:   ',
@@ -342,7 +344,7 @@ test('addContainerSensor should strip file extension from icon slug', async () =
   const discoveryCall = mqttClientMock.publish.mock.calls[0];
   const discoveryPayload = JSON.parse(discoveryCall[1]);
   expect(discoveryPayload.entity_picture).toBe(
-    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+    'https://cdn.jsdelivr.net/gh/selfhst/icons@47eb6b11d006d7708fad53f4893048c0d515117a/png/nextcloud.png',
   );
 });
 
@@ -359,7 +361,7 @@ test('addContainerSensor should ignore empty dd.display.picture', async () => {
   const discoveryCall = mqttClientMock.publish.mock.calls[0];
   const discoveryPayload = JSON.parse(discoveryCall[1]);
   expect(discoveryPayload.entity_picture).toBe(
-    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+    'https://cdn.jsdelivr.net/gh/selfhst/icons@47eb6b11d006d7708fad53f4893048c0d515117a/png/nextcloud.png',
   );
 });
 
@@ -376,7 +378,7 @@ test('addContainerSensor should ignore non-URL dd.display.picture', async () => 
   const discoveryCall = mqttClientMock.publish.mock.calls[0];
   const discoveryPayload = JSON.parse(discoveryCall[1]);
   expect(discoveryPayload.entity_picture).toBe(
-    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+    'https://cdn.jsdelivr.net/gh/selfhst/icons@47eb6b11d006d7708fad53f4893048c0d515117a/png/nextcloud.png',
   );
 });
 
@@ -408,7 +410,7 @@ test('addContainerSensor should ignore removed wud.display.picture', async () =>
   const discoveryCall = mqttClientMock.publish.mock.calls[0];
   const discoveryPayload = JSON.parse(discoveryCall[1]);
   expect(discoveryPayload.entity_picture).toBe(
-    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+    'https://cdn.jsdelivr.net/gh/selfhst/icons@47eb6b11d006d7708fad53f4893048c0d515117a/png/nextcloud.png',
   );
 });
 
@@ -426,7 +428,7 @@ test('addContainerSensor should not fall through to wud.display.picture for an e
   const discoveryCall = mqttClientMock.publish.mock.calls[0];
   const discoveryPayload = JSON.parse(discoveryCall[1]);
   expect(discoveryPayload.entity_picture).toBe(
-    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+    'https://cdn.jsdelivr.net/gh/selfhst/icons@47eb6b11d006d7708fad53f4893048c0d515117a/png/nextcloud.png',
   );
 });
 

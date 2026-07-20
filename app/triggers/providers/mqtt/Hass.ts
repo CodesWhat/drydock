@@ -1,5 +1,6 @@
 import type { MqttClient } from 'mqtt';
 import { recordAuditEvent } from '../../../api/audit-events.js';
+import { providers as iconProviders } from '../../../api/icons/providers.js';
 import { getVersion } from '../../../configuration/index.js';
 import {
   registerContainerAdded,
@@ -184,15 +185,15 @@ function resolveEntityPicture(icon?: string): string {
 
   const provider = iconMatch[1].toLowerCase();
   const rawSlug = iconMatch[2];
-  const cdnMap: Record<string, { ext: string; base: string }> = {
-    sh: { ext: 'png', base: 'https://cdn.jsdelivr.net/gh/selfhst/icons/png' },
-    hl: { ext: 'png', base: 'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png' },
-    si: { ext: 'svg', base: 'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons' },
+  const cdnMap = {
+    sh: iconProviders.selfhst,
+    hl: iconProviders.homarr,
+    si: iconProviders.simple,
   };
   // Provider is guaranteed to be sh|hl|si by the regex above
-  const cdn = cdnMap[provider];
-  const slug = normalizeIconSlug(rawSlug, cdn.ext);
-  return `${cdn.base}/${slug}.${cdn.ext}`;
+  const cdn = cdnMap[provider as keyof typeof cdnMap];
+  const slug = normalizeIconSlug(rawSlug, cdn.extension);
+  return cdn.url(slug);
 }
 
 function resolveEntityPictureOverride(container: {
