@@ -198,7 +198,6 @@
       "emptyState": "لا توجد حاويات تطابق عوامل التصفية",
       "currentLabel": "الحالي",
       "latestLabel": "الأحدث",
-      "blockedByBouncer": "محظور بواسطة Bouncer",
       "registryErrorRateLimited": "تجاوز حد الطلبات",
       "registryErrorAuth": "فشل المصادقة",
       "registryErrorNotFound": "غير موجود",
@@ -259,7 +258,6 @@
       "allBouncer": "جميع Bouncer",
       "safe": "آمنة",
       "unsafe": "غير آمنة",
-      "blocked": "محظورة",
       "allRegistries": "جميع السجلات",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "رئيسي",
       "minor": "ثانوي",
       "patch": "تصحيح",
-      "digest": "ملخص",
       "hidePinned": "إخفاء المثبّتة",
       "hidePinnedTooltip": "إخفاء الحاويات المثبّتة على إصدارات محددة",
       "clearAll": "مسح الكل",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "عرض المشروع"
     },
-    "registryLink": { "viewRegistry": "عرض السجل" },
+    "registryLink": {
+      "viewRegistry": "عرض السجل"
+    },
     "releaseNotesLink": {
       "releaseNotes": "ملاحظات الإصدار",
       "viewFullNotes": "عرض الملاحظات الكاملة",
@@ -351,9 +350,6 @@
       "noTrigger": "لا يوجد مشغّل",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "يرفع القيد:"
-    },
-    "maturityBadge": {
-      "new": "جديد"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -478,15 +474,6 @@
         "failedDetail": "Rollback failed"
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
-    },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
     },
     "preview": {
       "toasts": {

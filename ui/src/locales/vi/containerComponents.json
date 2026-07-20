@@ -198,7 +198,6 @@
       "emptyState": "Không có container nào khớp với bộ lọc của bạn",
       "currentLabel": "Hiện tại",
       "latestLabel": "Mới nhất",
-      "blockedByBouncer": "Bị chặn bởi Bouncer",
       "registryErrorRateLimited": "Bị giới hạn tốc độ",
       "registryErrorAuth": "Xác thực thất bại",
       "registryErrorNotFound": "Không tìm thấy",
@@ -259,7 +258,6 @@
       "allBouncer": "Tất cả Bouncer",
       "safe": "An toàn",
       "unsafe": "Không an toàn",
-      "blocked": "Bị chặn",
       "allRegistries": "Tất cả Registry",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "Major",
       "minor": "Minor",
       "patch": "Patch",
-      "digest": "Digest",
       "hidePinned": "Ẩn đã ghim",
       "hidePinnedTooltip": "Ẩn container được ghim ở phiên bản cụ thể",
       "clearAll": "Xóa tất cả",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "Xem dự án"
     },
-    "registryLink": { "viewRegistry": "Xem registry" },
+    "registryLink": {
+      "viewRegistry": "Xem registry"
+    },
     "releaseNotesLink": {
       "releaseNotes": "Ghi chú phát hành",
       "viewFullNotes": "Xem toàn bộ ghi chú",
@@ -351,9 +350,6 @@
       "noTrigger": "Không có trigger",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Lifts:"
-    },
-    "maturityBadge": {
-      "new": "MỚI"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -478,15 +474,6 @@
         "failedDetail": "Rollback failed"
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
-    },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
     },
     "preview": {
       "toasts": {

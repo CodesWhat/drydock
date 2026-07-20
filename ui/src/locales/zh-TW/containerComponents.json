@@ -198,7 +198,6 @@
       "emptyState": "沒有容器匹配您的篩選條件",
       "currentLabel": "目前",
       "latestLabel": "最新",
-      "blockedByBouncer": "被 Bouncer 阻止",
       "registryErrorRateLimited": "速率限制",
       "registryErrorAuth": "認證失敗",
       "registryErrorNotFound": "未找到",
@@ -259,7 +258,6 @@
       "allBouncer": "所有 Bouncer",
       "safe": "安全",
       "unsafe": "不安全",
-      "blocked": "已阻止",
       "allRegistries": "所有倉庫",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "主版本",
       "minor": "次版本",
       "patch": "修補程式",
-      "digest": "摘要",
       "hidePinned": "隱藏已固定",
       "hidePinnedTooltip": "隱藏已固定到特定版本的容器",
       "clearAll": "全部清除",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "檢視專案"
     },
-    "registryLink": { "viewRegistry": "查看映像檔倉庫" },
+    "registryLink": {
+      "viewRegistry": "查看映像檔倉庫"
+    },
     "releaseNotesLink": {
       "releaseNotes": "發行說明",
       "viewFullNotes": "檢視完整說明",
@@ -351,9 +350,6 @@
       "noTrigger": "無觸發器",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "解除條件："
-    },
-    "maturityBadge": {
-      "new": "新"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -478,15 +474,6 @@
         "failedDetail": "Rollback failed"
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
-    },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
     },
     "preview": {
       "toasts": {

@@ -198,7 +198,6 @@
       "emptyState": "Nenhum contêiner corresponde aos filtros",
       "currentLabel": "Atual",
       "latestLabel": "Mais recente",
-      "blockedByBouncer": "Bloqueado pelo Bouncer",
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
@@ -259,7 +258,6 @@
       "allBouncer": "Todos os Bouncer",
       "safe": "Seguro",
       "unsafe": "Inseguro",
-      "blocked": "Bloqueado",
       "allRegistries": "Todos os registries",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "Major",
       "minor": "Minor",
       "patch": "Patch",
-      "digest": "Digest",
       "hidePinned": "Ocultar fixados",
       "hidePinnedTooltip": "Ocultar contêineres fixados em versões específicas",
       "clearAll": "Limpar tudo",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "Ver projeto"
     },
-    "registryLink": { "viewRegistry": "Ver registro" },
+    "registryLink": {
+      "viewRegistry": "Ver registro"
+    },
     "releaseNotesLink": {
       "releaseNotes": "Notas da versão",
       "viewFullNotes": "Ver notas completas",
@@ -351,9 +350,6 @@
       "noTrigger": "Sem trigger",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Libera:"
-    },
-    "maturityBadge": {
-      "new": "NOVA"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -478,15 +474,6 @@
         "failedDetail": "Rollback failed"
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
-    },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
     },
     "preview": {
       "toasts": {

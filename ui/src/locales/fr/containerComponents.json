@@ -198,7 +198,6 @@
       "emptyState": "Aucun conteneur ne correspond à vos filtres",
       "currentLabel": "Actuel",
       "latestLabel": "Dernier",
-      "blockedByBouncer": "Bloqué par Bouncer",
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
@@ -259,7 +258,6 @@
       "allBouncer": "Tous les Bouncer",
       "safe": "Sûr",
       "unsafe": "Non sûr",
-      "blocked": "Bloqué",
       "allRegistries": "Toutes les registries",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "Major",
       "minor": "Minor",
       "patch": "Patch",
-      "digest": "Digest",
       "hidePinned": "Masquer les épinglés",
       "hidePinnedTooltip": "Masquer les conteneurs épinglés à des versions spécifiques",
       "clearAll": "Tout effacer",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "Voir le projet"
     },
-    "registryLink": { "viewRegistry": "Voir le registre" },
+    "registryLink": {
+      "viewRegistry": "Voir le registre"
+    },
     "releaseNotesLink": {
       "releaseNotes": "Notes de version",
       "viewFullNotes": "Voir les notes complètes",
@@ -351,9 +350,6 @@
       "noTrigger": "Aucun trigger",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Lève :"
-    },
-    "maturityBadge": {
-      "new": "NOUVEAU"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -478,15 +474,6 @@
         "failedDetail": "Rollback failed"
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
-    },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
     },
     "preview": {
       "toasts": {
