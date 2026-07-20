@@ -3,7 +3,7 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const test = require('node:test');
 
-const MINIMUM_SAFE_BRACE_EXPANSION_VERSION = '5.0.5';
+const MINIMUM_SAFE_BRACE_EXPANSION_VERSION = '5.0.7';
 
 function compareSemver(a, b) {
   const aParts = a.split('.').map(Number);
