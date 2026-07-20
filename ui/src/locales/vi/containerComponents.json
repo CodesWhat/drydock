@@ -353,10 +353,7 @@
       "liftsLabel": "Lifts:"
     },
     "maturityBadge": {
-      "new": "MỚI",
-      "mature": "CHÍN",
-      "newTooltip": "Cập nhật mới",
-      "matureTooltip": "Cập nhật đã chín"
+      "new": "MỚI"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -552,9 +549,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "Đã ghim — có phiên bản mới hơn để tham khảo."
-      }
+      "summary": {}
     }
   }
 }

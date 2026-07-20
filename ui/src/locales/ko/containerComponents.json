@@ -353,10 +353,7 @@
       "liftsLabel": "해제 조건:"
     },
     "maturityBadge": {
-      "new": "신규",
-      "mature": "기존",
-      "newTooltip": "새 업데이트",
-      "matureTooltip": "기존 업데이트"
+      "new": "신규"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -552,9 +549,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "고정됨 — 참고용으로 더 최신 버전을 사용할 수 있습니다."
-      }
+      "summary": {}
     }
   }
 }

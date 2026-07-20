@@ -353,10 +353,7 @@
       "liftsLabel": "Se libera el:"
     },
     "maturityBadge": {
-      "new": "NUEVA",
-      "mature": "MADURA",
-      "newTooltip": "Nueva actualización",
-      "matureTooltip": "Actualización madura"
+      "new": "NUEVA"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -552,9 +549,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "Fijada — hay una versión más reciente disponible a título informativo."
-      }
+      "summary": {}
     }
   }
 }

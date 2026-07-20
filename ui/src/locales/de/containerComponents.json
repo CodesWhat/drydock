@@ -353,10 +353,7 @@
       "liftsLabel": "Hebt auf:"
     },
     "maturityBadge": {
-      "new": "NEU",
-      "mature": "REIF",
-      "newTooltip": "Neues Update",
-      "matureTooltip": "Reifes Update"
+      "new": "NEU"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -552,9 +549,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "Angeheftet — eine neuere Version ist zur Information verfügbar."
-      }
+      "summary": {}
     }
   }
 }

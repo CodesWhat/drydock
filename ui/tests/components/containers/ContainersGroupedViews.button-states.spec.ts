@@ -104,7 +104,6 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     registryName: overrides.registryName ?? '',
     registryUrl: overrides.registryUrl ?? '',
     updateKind: overrides.updateKind ?? null,
-    updateMaturity: overrides.updateMaturity ?? null,
     updateMaturityTooltip: overrides.updateMaturityTooltip,
     noUpdateReason: overrides.noUpdateReason,
     bouncer: overrides.bouncer ?? 'safe',

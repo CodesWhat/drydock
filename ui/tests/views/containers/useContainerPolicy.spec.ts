@@ -38,7 +38,6 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,
-    updateMaturity: null,
     bouncer: 'safe',
     server: 'Local',
     details: { ports: [], volumes: [], env: [], labels: [] },
@@ -214,6 +213,93 @@ describe('useContainerPolicy', () => {
     expect(
       harness.composable.containerPolicyTooltip({ id: 'container-2', name: 'tagged' }, 'maturity'),
     ).toBe('Mature-only policy blocks updates younger than 7 days');
+
+    harness.wrapper.unmount();
+  });
+
+  it('prefers a backend maturity-not-reached verdict over an unblocked legacy computation (#display-honesty)', () => {
+    // maturityMode 'all' can never legacy-block (the local formula only fires for
+    // 'mature'), so a blocked result here can only come from the backend verdict.
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        web: {
+          updateAvailable: true,
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
+          updateKind: { kind: 'digest' },
+          updatePolicy: { maturityMode: 'all' },
+          updateEligibility: {
+            blockers: [{ reason: 'maturity-not-reached' }],
+          },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('web');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: true,
+        maturityMode: 'all',
+      }),
+    );
+
+    harness.wrapper.unmount();
+  });
+
+  it('prefers a backend non-blocked verdict over a blocked legacy computation, ignoring malformed blocker entries (#display-honesty)', () => {
+    // Legacy computation alone (mature mode + suppressed recent tag update) would
+    // report blocked=true here; the backend eligibility payload says otherwise and
+    // must win. The blockers array also carries a falsy entry and a non-object entry
+    // to exercise every guard in findBackendMaturityBlocked()'s .some() predicate.
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        tagged: {
+          updateAvailable: false,
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
+          updateKind: { kind: 'tag' },
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          updateEligibility: {
+            blockers: [null, 'not-an-object', { reason: 'skip-tag' }],
+          },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('tagged');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: false,
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      }),
+    );
+
+    harness.wrapper.unmount();
+  });
+
+  it('falls back to the legacy computation when updateEligibility.blockers is present but not an array (#display-honesty)', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        tagged: {
+          updateAvailable: false,
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
+          updateKind: { kind: 'digest' },
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          updateEligibility: { blockers: 'not-an-array' },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('tagged');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: true,
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      }),
+    );
 
     harness.wrapper.unmount();
   });

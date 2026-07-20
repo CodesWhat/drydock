@@ -18,7 +18,6 @@ function makeContainer(
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,
-    updateMaturity: null,
     bouncer: 'safe',
     server: 'Local',
     details: { ports: [], volumes: [], env: [], labels: [] },
@@ -184,6 +183,15 @@ describe('buildDashboardContainerMetrics', () => {
 
     expect(metrics.updatesAvailable).toBe(3);
     expect(metrics.freshUpdates).toBe(1);
+  });
+
+  it('does not count a malformed updateDetectedAt as a fresh update', () => {
+    const metrics = buildDashboardContainerMetrics([
+      makeContainer({ id: 'c1', updateKind: 'minor', updateDetectedAt: 'not-a-date' }),
+    ]);
+
+    expect(metrics.updatesAvailable).toBe(1);
+    expect(metrics.freshUpdates).toBe(0);
   });
 
   it('uses updateContainers option for update counts without affecting base container metrics', () => {

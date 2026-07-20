@@ -166,6 +166,23 @@ describe('display utilities', () => {
     it('returns transparent for null', () => {
       expect(updateKindColor(null)).toEqual({ bg: 'transparent', text: 'transparent' });
     });
+
+    it('returns a visible neutral badge for an unrecognized-but-present kind (#display-honesty)', () => {
+      // A malformed/future backend kind should never render as silently invisible —
+      // only null/no-kind gets the transparent treatment.
+      expect(updateKindColor('unknown-kind')).toEqual({
+        bg: 'var(--dd-neutral-muted)',
+        text: 'var(--dd-neutral)',
+      });
+    });
+
+    it('distinguishes the neutral fallback from the null/transparent branch', () => {
+      expect(updateKindColor('')).toEqual({
+        bg: 'var(--dd-neutral-muted)',
+        text: 'var(--dd-neutral)',
+      });
+      expect(updateKindColor(null)).not.toEqual(updateKindColor('bogus'));
+    });
   });
 
   describe('maturityColor', () => {

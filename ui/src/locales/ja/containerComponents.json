@@ -353,10 +353,7 @@
       "liftsLabel": "解除条件："
     },
     "maturityBadge": {
-      "new": "新規",
-      "mature": "成熟",
-      "newTooltip": "新しい更新",
-      "matureTooltip": "成熟した更新"
+      "new": "新規"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -552,9 +549,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "固定済み — 参考情報として新しいバージョンがあります。"
-      }
+      "summary": {}
     }
   }
 }

@@ -31,7 +31,6 @@ function createSelectedContainer(): Container {
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,
-    updateMaturity: null,
     bouncer: 'safe',
     server: 'local',
     details: {

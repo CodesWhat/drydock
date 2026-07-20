@@ -121,7 +121,6 @@ function makeContainer(overrides: Partial<Container> & { _pending?: true } = {})
     registryName: overrides.registryName ?? '',
     registryUrl: overrides.registryUrl ?? '',
     updateKind: overrides.updateKind ?? null,
-    updateMaturity: overrides.updateMaturity ?? null,
     updateMaturityTooltip: overrides.updateMaturityTooltip,
     noUpdateReason: overrides.noUpdateReason,
     bouncer: overrides.bouncer ?? 'safe',
@@ -601,7 +600,7 @@ describe('ContainersGroupedViews', () => {
       currentTag: '1.0.0',
       newTag: '1.1.0',
       updateKind: 'minor',
-      updateMaturity: 'fresh',
+      updateMaturityTooltip: 'Detected 2 hours ago',
     });
     const noUpdate = makeContainer({
       id: 'c-no-update',
@@ -622,10 +621,10 @@ describe('ContainersGroupedViews', () => {
     const availableCard = cardByName(wrapper, 'available');
     expect(availableCard.text()).toContain('1.0.0');
     expect(availableCard.text()).toContain('1.1.0');
-    expect(availableCard.get('[data-test="container-card-update-state"]').text()).toContain(
-      'Minor',
-    );
-    expect(availableCard.text()).toContain('NEW');
+    const availableState = availableCard.get('[data-test="container-card-update-state"]');
+    expect(availableState.text()).toContain('Minor');
+    // Freshness is now a tooltip on the update-kind badge, not a separate NEW/MATURE chip.
+    expect(availableState.attributes('title')).toBe('Detected 2 hours ago');
 
     const noUpdateCard = cardByName(wrapper, 'no-update');
     expect(noUpdateCard.get('[data-test="no-update-reason-badge"]').attributes('aria-label')).toBe(
@@ -751,7 +750,6 @@ describe('ContainersGroupedViews', () => {
       currentTag: 'latest',
       newTag: '1.2.0',
       updateKind: 'minor',
-      updateMaturity: 'fresh',
       registry: 'custom',
       registryName: 'Private Registry',
       releaseLink: 'https://example.test/releases/1.2.0',
@@ -841,7 +839,6 @@ describe('ContainersGroupedViews', () => {
       name: 'alpha',
       newTag: '2.0.0',
       updateKind: 'major',
-      updateMaturity: 'fresh',
       bouncer: 'blocked',
       status: 'running',
       registryError: '401 unauthorized',
@@ -852,7 +849,6 @@ describe('ContainersGroupedViews', () => {
       name: 'beta',
       newTag: '1.2.0',
       updateKind: 'minor',
-      updateMaturity: 'settled',
       bouncer: 'safe',
       status: 'running',
       noUpdateReason: undefined,
@@ -1095,7 +1091,6 @@ describe('ContainersGroupedViews', () => {
       currentTag: '1.0.0',
       newTag: '1.1.0',
       updateKind: 'minor',
-      updateMaturity: 'fresh',
       status: 'running',
       server: 'local-main',
       registry: 'dockerhub',
@@ -1179,7 +1174,7 @@ describe('ContainersGroupedViews', () => {
     expect(updateState.text()).not.toContain('v1.3.0');
   });
 
-  it('renders the informational update-insight badge for a pinned container (#498)', async () => {
+  it('renders the insight kind as the plain update-state pill for a pinned container (#498)', async () => {
     const pinned = makeContainer({
       id: 'c-insight',
       name: 'alpha',
@@ -1212,15 +1207,21 @@ describe('ContainersGroupedViews', () => {
 
     const row = rowByName(wrapper, 'alpha');
     const updateState = row.get('[data-test="container-update-state"]');
-    expect(updateState.text()).toContain('Pinned');
+    // No more dedicated pinned vocabulary or a separate insight-kind badge — the
+    // main pill carries the kind, its tooltip carries the insight message (#498).
+    expect(updateState.text()).toContain('Minor');
+    expect(updateState.text()).not.toContain('Pinned');
     expect(updateState.find('[data-test="update-insight-badge"]').exists()).toBe(false);
-    const kindBadge = updateState.get('[data-test="update-insight-kind-badge"]');
-    expect(kindBadge.text()).toBe('Minor');
+    expect(updateState.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
+    const pill = updateState.get('.font-semibold');
+    expect(pill.attributes('title')).toBe(
+      "Newer version available: v1.46.1. This tag is pinned — drydock won't update it automatically.",
+    );
     expect(updateState.text()).not.toContain('v1.46.1');
     expect(row.text()).toContain('v1.46.1');
   });
 
-  it('renders the informational update-insight badge in card mode (#498)', async () => {
+  it('renders the insight kind as the plain update-state badge in card mode (#498)', async () => {
     const pinned = makeContainer({
       id: 'c-insight-card',
       name: 'alpha',
@@ -1237,11 +1238,15 @@ describe('ContainersGroupedViews', () => {
     const card = cardByName(wrapper, 'alpha');
 
     expect(card.find('[data-test="update-insight-badge"]').exists()).toBe(false);
-    const cardBadge = card.get('[data-test="update-insight-kind-badge"]');
-    expect(cardBadge.text()).toBe('Minor');
+    expect(card.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
     expect(card.text()).toContain('v1.13.3');
     expect(card.text()).toContain('v1.46.1');
-    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Pinned');
+    const stateBadge = card.get('[data-test="container-card-update-state"]');
+    expect(stateBadge.text()).toContain('Minor');
+    expect(stateBadge.text()).not.toContain('Pinned');
+    expect(stateBadge.attributes('title')).toBe(
+      "Newer version available: v1.46.1. This tag is pinned — drydock won't update it automatically.",
+    );
   });
 
   it('keeps the stacked pinned-tag insight visible beside an actionable digest update (#498)', async () => {
@@ -1279,15 +1284,17 @@ describe('ContainersGroupedViews', () => {
     const row = rowByName(tableWrapper, 'alpha');
     expect(row.text()).toContain('v2.7.5-openvino');
     expect(row.text()).toContain('v3.0.2-openvino');
-    expect(row.get('[data-test="container-update-state"]').text()).toContain('Digest');
-    expect(row.get('[data-test="update-insight-kind-badge"]').text()).toBe('Major');
+    // An actionable updateKind takes priority in the pill; the insight jump stays
+    // visible only in the version cell, with no separate insight-kind badge (#498).
+    expect(row.get('[data-test="container-update-state"]').text()).toContain('Digest update');
+    expect(row.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
 
     const { wrapper: cardWrapper } = await mountCardsWithContainers([digestAndInsight], 800);
     const card = cardByName(cardWrapper, 'alpha');
     expect(card.text()).toContain('v2.7.5-openvino');
     expect(card.text()).toContain('v3.0.2-openvino');
-    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Digest');
-    expect(card.get('[data-test="update-insight-kind-badge"]').text()).toBe('Major');
+    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Digest update');
+    expect(card.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
   });
 
   it('keeps the actionable no-update reason alongside pinned insight in card mode (#498)', async () => {
@@ -1309,14 +1316,16 @@ describe('ContainersGroupedViews', () => {
     const { wrapper } = await mountCardsWithContainers([pinnedDigestOff], 800);
     const card = cardByName(wrapper, 'alpha');
 
-    expect(card.get('[data-test="update-insight-kind-badge"]').text()).toBe('Minor');
+    expect(card.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
+    const stateBadge = card.get('[data-test="container-card-update-state"]');
+    expect(stateBadge.text()).toContain('Minor');
     expect(card.text()).toContain('v1.46.1');
     const reasonText = card.get('[data-test="no-update-reason-badge"]').attributes('aria-label');
     expect(reasonText).toContain('no actionable update detection is running');
     expect(reasonText).not.toContain('so no update detection is running');
   });
 
-  it('renders the no-update-reason and update-insight badges together without contradictory copy when digest watching is off (#498)', async () => {
+  it('renders the no-update-reason badge and insight kind together without contradictory copy when digest watching is off (#498)', async () => {
     const remedy =
       'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
     const pinnedDigestOff = makeContainer({
@@ -1352,19 +1361,20 @@ describe('ContainersGroupedViews', () => {
 
     const row = rowByName(wrapper, 'alpha');
 
-    const kindBadge = row.get('[data-test="update-insight-kind-badge"]');
-    expect(kindBadge.text()).toBe('Minor');
+    const updateState = row.get('[data-test="container-update-state"]');
+    expect(updateState.text()).toContain('Minor');
+    expect(updateState.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
     expect(row.text()).toContain('v1.46.1');
 
     const reasonBadge = row.get('[data-test="no-update-reason-badge"]');
     const reasonText = reasonBadge.attributes('aria-label');
-    // Only ACTIONABLE update detection is off — the insight badge above is
+    // Only ACTIONABLE update detection is off — the insight kind is
     // still real, so the reason copy must not claim no detection at all runs.
     expect(reasonText).toContain('no actionable update detection is running');
     expect(reasonText).not.toContain('so no update detection is running');
   });
 
-  it('reserves Pinned for insight and labels version-skip policy as Skipped (#498)', () => {
+  it('labels version-skip policy as Skipped and shows the insight kind for a pinned tag (#498)', () => {
     const skipped = makeContainer({
       id: 'c-skip-label',
       name: 'gamma',
@@ -1398,14 +1408,99 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     const skippedState = rowByName(wrapper, 'gamma').get('[data-test="container-update-state"]');
     expect(skippedState.text()).toContain('Skipped');
-    expect(skippedState.text()).not.toContain('Pinned');
+    expect(skippedState.text()).not.toContain('Patch');
 
     const pinnedState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
-    expect(pinnedState.text()).toContain('Pinned');
+    expect(pinnedState.text()).toContain('Patch');
+    expect(pinnedState.text()).not.toContain('Pinned');
     const pinnedLabel = pinnedState.find('.font-semibold');
-    expect(pinnedLabel.attributes('style')).toContain('var(--dd-info)');
+    // updateKindColor is mocked to a fixed value in this suite (see makeContext) —
+    // distinct from the literal 'var(--dd-warning)'/'var(--dd-success)' used by the
+    // skipped/current branches, so this still proves the insight branch took the
+    // updateKindColor() path rather than the removed updateInsightColor() one.
+    // jsdom normalizes the mocked '#052' hex style value to its rgb() equivalent.
+    expect(pinnedLabel.attributes('style')).toContain('rgb(0, 85, 34)');
     expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-warning)');
     expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-success)');
+  });
+
+  it('renders the pin glyph for a pinned tag and omits it for an unpinned one in table mode (#display-honesty)', () => {
+    const pinned = makeContainer({ id: 'c-pinned', name: 'alpha', tagPinned: true });
+    const unpinned = makeContainer({ id: 'c-unpinned', name: 'beta', tagPinned: false });
+
+    const { context, refs } = makeContext();
+    const containers = [pinned, unpinned];
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const pinnedRow = rowByName(wrapper, 'alpha');
+    const glyph = pinnedRow.get('[data-test="container-tag-pinned-glyph"]');
+    expect(glyph.attributes('aria-label')).toBe('Pinned tag');
+    expect(glyph.attributes('title')).toBe(
+      "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or relax dd.tag.include to allow it.",
+    );
+
+    const unpinnedRow = rowByName(wrapper, 'beta');
+    expect(unpinnedRow.find('[data-test="container-tag-pinned-glyph"]').exists()).toBe(false);
+  });
+
+  it('renders the pin glyph for a pinned tag and omits it for an unpinned one in card mode (#display-honesty)', async () => {
+    const pinned = makeContainer({ id: 'c-pinned-card', name: 'alpha', tagPinned: true });
+    const unpinned = makeContainer({ id: 'c-unpinned-card', name: 'beta', tagPinned: false });
+
+    const { wrapper } = await mountCardsWithContainers([pinned, unpinned], 800);
+
+    const pinnedCard = cardByName(wrapper, 'alpha');
+    const glyph = pinnedCard.get('[data-test="container-tag-pinned-glyph"]');
+    expect(glyph.attributes('aria-label')).toBe('Pinned tag');
+
+    const unpinnedCard = cardByName(wrapper, 'beta');
+    expect(unpinnedCard.find('[data-test="container-tag-pinned-glyph"]').exists()).toBe(false);
+  });
+
+  it('falls back to the neutral Unknown label for an unrecognized updateKind instead of rendering nothing (#display-honesty)', () => {
+    const malformed = makeContainer({
+      id: 'c-unknown-kind',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'bogus-kind' as unknown as Container['updateKind'],
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [malformed];
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const row = rowByName(wrapper, 'alpha');
+    const updateState = row.get('[data-test="container-update-state"]');
+    expect(updateState.text()).toContain('Unknown');
+    expect(updateState.text()).not.toContain('bogus-kind');
   });
 
   it('covers dropdown menu actions across blocked/updateable states', async () => {
@@ -1855,7 +1950,6 @@ describe('ContainersGroupedViews', () => {
       name: 'alpha',
       newTag: '2.0.0',
       updateKind: 'major',
-      updateMaturity: 'fresh',
       bouncer: 'blocked',
       status: 'running',
       server: 'local-main',
@@ -1865,7 +1959,6 @@ describe('ContainersGroupedViews', () => {
       name: 'beta',
       newTag: '1.2.0',
       updateKind: 'minor',
-      updateMaturity: 'settled',
       bouncer: 'unsafe',
       status: 'stopped',
       server: 'remote-east',
@@ -1875,7 +1968,6 @@ describe('ContainersGroupedViews', () => {
       name: 'gamma',
       newTag: '1.0.1',
       updateKind: 'patch',
-      updateMaturity: 'fresh',
       bouncer: 'safe',
       status: 'running',
       server: 'remote-west',
@@ -1885,7 +1977,6 @@ describe('ContainersGroupedViews', () => {
       name: 'delta',
       newTag: 'sha256:abc',
       updateKind: 'digest',
-      updateMaturity: 'settled',
       bouncer: 'safe',
       status: 'stopped',
       server: 'local-backup',
@@ -1911,8 +2002,9 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     expect(wrapper.text()).toContain('alpha');
     expect(wrapper.text()).toContain('delta');
-    expect(wrapper.text()).toContain('NEW');
-    expect(wrapper.text()).toContain('MATURE');
+    // Bouncer-blocked pill and the digest label variant (#display-honesty).
+    expect(wrapper.text()).toContain('Security hold');
+    expect(wrapper.text()).toContain('Digest update');
   });
 
   it('covers in-progress branches for icon and button-style table actions', async () => {

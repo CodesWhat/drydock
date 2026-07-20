@@ -71,8 +71,10 @@ describe('UpdateStatusPanel', () => {
     expect(wrapper.get('[data-test="update-status-panel"]').attributes('data-state')).toBe(
       'pinned',
     );
+    // Reuses groupedViews.pinnedLabel (same vocabulary as the table/card pill) instead of
+    // a dedicated updateStatus.summary.pinned key (#display-honesty).
     expect(wrapper.get('[data-test="update-status-summary"]').text()).toBe(
-      'Pinned — a newer version is available for information.',
+      "Pinned — v3.0.2-openvino is available but drydock won't apply it automatically.",
     );
     expect(wrapper.find('[data-test="update-status-manual-cta"]').exists()).toBe(false);
   });
@@ -158,6 +160,42 @@ describe('UpdateStatusPanel', () => {
       'danger',
     );
     expect(wrapper.get('[data-reason="snoozed"]').attributes('data-tone')).toBe('warning');
+  });
+
+  it('renders one collapsed lift-countdown line for a liftable condition (#display-honesty)', () => {
+    const wrapper = mount(UpdateStatusPanel, {
+      props: {
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-07-12T00:00:00.000Z',
+            blockers: [
+              {
+                reason: 'maturity-not-reached',
+                severity: 'soft',
+                message: 'Maturity policy requires updates to be at least 7 days old.',
+                actionable: true,
+                liftableAt: '2026-07-18T12:00:00.000Z',
+                details: { minAgeDays: 7 },
+              },
+            ],
+          },
+        },
+        mode: 'manual',
+      },
+      global: { stubs: { AppIcon: { template: '<span />' } } },
+    });
+
+    const condition = wrapper.get('[data-reason="maturity-not-reached"]');
+    // The old two-line rendering (countdown span + a separate "Lifts at {date}" line)
+    // collapsed into one liftCountdown line: "{countdown} · unlocks {date}".
+    const countdownLine = condition.find('.dd-text-muted');
+    expect(countdownLine.exists()).toBe(true);
+    expect(countdownLine.text()).toContain('unlocks');
+    expect(countdownLine.text()).toMatch(/^.+ · unlocks .+$/);
   });
 
   it('shows the effective dry-run trigger and labels the update action as preview-only', () => {

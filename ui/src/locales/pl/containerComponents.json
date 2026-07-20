@@ -353,10 +353,7 @@
       "liftsLabel": "Windy:"
     },
     "maturityBadge": {
-      "new": "NOWOŚĆ",
-      "mature": "DOJRZAŁE",
-      "newTooltip": "Nowa aktualizacja",
-      "matureTooltip": "Dojrzała aktualizacja"
+      "new": "NOWOŚĆ"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -552,9 +549,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "Przypięty — nowsza wersja jest dostępna informacyjnie."
-      }
+      "summary": {}
     }
   }
 }

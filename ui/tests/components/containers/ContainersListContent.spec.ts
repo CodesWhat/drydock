@@ -19,7 +19,7 @@ import type { ViewMode } from '@/preferences/schema';
 import { mountWithPlugins } from '../../helpers/mount';
 
 const DataTableColumnPickerStub = defineComponent({
-  props: ['columns', 'hiddenKeys'],
+  props: ['columns', 'hiddenKeys', 'autoHiddenKeys'],
   emits: ['toggle', 'reset'],
   template: `
     <div data-test="data-table-column-picker">
@@ -123,6 +123,7 @@ function makeTemplateContext(
     toggleColumn: vi.fn(),
     visibleColumns: ref(new Set(['name', 'status', 'icon'])),
     hiddenColumnKeys: computed(() => []),
+    autoHiddenColumns: computed(() => []),
     resetColumns: vi.fn(),
     tt: (label: string) => ({ value: label, showDelay: 0 }),
     groupByStack: ref(false) as any,
@@ -318,6 +319,29 @@ describe('ContainersListContent', () => {
 
     const picker = wrapper.findComponent(DataTableColumnPickerStub);
     expect(picker.props('hiddenKeys')).toEqual(['status']);
+  });
+
+  it('threads only picker-eligible auto-hidden columns to the picker (#display-honesty)', () => {
+    const context = makeTemplateContext({
+      // "icon" has no labelKey (not picker-eligible) — it should be dropped even though
+      // it's in the auto-hidden set; "status" is picker-eligible and should survive.
+      autoHiddenColumns: computed(() => [
+        { key: 'status', label: 'Status', px: 'px-3', required: false },
+        { key: 'icon', label: '', px: 'px-0', required: true },
+      ]),
+    });
+    wrapper = mountWithContext(context);
+
+    const picker = wrapper.findComponent(DataTableColumnPickerStub);
+    expect(picker.props('autoHiddenKeys')).toEqual(['status']);
+  });
+
+  it('passes an empty auto-hidden set to the picker when nothing is auto-hidden', () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+
+    const picker = wrapper.findComponent(DataTableColumnPickerStub);
+    expect(picker.props('autoHiddenKeys')).toEqual([]);
   });
 
   it('emits toggleColumn via the picker toggle event', async () => {

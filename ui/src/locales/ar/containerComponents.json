@@ -353,10 +353,7 @@
       "liftsLabel": "يرفع القيد:"
     },
     "maturityBadge": {
-      "new": "جديد",
-      "mature": "ناضج",
-      "newTooltip": "تحديث جديد",
-      "matureTooltip": "تحديث ناضج"
+      "new": "جديد"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -552,9 +549,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "مثبّت — يتوفر إصدار أحدث للعلم فقط."
-      }
+      "summary": {}
     }
   }
 }
