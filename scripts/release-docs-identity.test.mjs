@@ -338,7 +338,14 @@ test('current and archived docs describe destructive and recovery behavior accur
         authentications,
         /Authentication protects all API routes and UI views unless anonymous access is enabled\. Fresh installs and upgrades alike must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true`/u,
       );
-      assert.match(authentications, /refuses to start/u);
+      // Fail-closed means 401-everything from a running container, not a refused start:
+      // Anonymous's registration throw is caught by the registry fallback and the API
+      // serves with zero passport strategies (app/registry/index.ts, app/api/auth.ts).
+      assert.match(
+        authentications,
+        /Upgrade, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` \| Fails closed — all API calls return `401`/u,
+      );
+      assert.doesNotMatch(authentications, /refuses to start/u);
       assert.doesNotMatch(authentications, /retain anonymous access with a startup warning/u);
     } else {
       // The 1.5.x archive documents the grandfather path that line actually shipped with.
