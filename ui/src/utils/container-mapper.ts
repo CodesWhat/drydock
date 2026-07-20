@@ -39,6 +39,7 @@ import {
   normalizeMaturityMode,
   resolveMaturityMinAgeDays,
 } from './maturity-policy';
+import { findBackendMaturityBlocked } from './update-eligibility';
 import { formatUpdateAge } from './update-maturity';
 
 interface ApiContainerImage {
@@ -510,27 +511,6 @@ function isSkippedByDigestPolicy(
     remoteValue !== undefined &&
     Array.isArray(updatePolicy.skipDigests) &&
     updatePolicy.skipDigests.includes(remoteValue)
-  );
-}
-
-/**
- * Look up the backend-computed maturity-not-reached blocker on the raw eligibility payload,
- * when present. `computeUpdateEligibility` already resolves the trusted-publishedAt-vs-
- * updateDetectedAt clock (see app/model/update-eligibility.ts); re-deriving the same verdict
- * here from updateDetectedAt alone ignores that trust and can drift from the backend's own
- * answer. Returns undefined (not false) when eligibility wasn't computed for this payload, so
- * callers can fall back to the legacy detectedAt-only heuristic instead of assuming "not blocked".
- */
-function findBackendMaturityBlocked(apiContainer: ApiContainerInput): boolean | undefined {
-  const blockers = apiContainer.updateEligibility?.blockers;
-  if (!Array.isArray(blockers)) {
-    return undefined;
-  }
-  return blockers.some(
-    (blocker) =>
-      !!blocker &&
-      typeof blocker === 'object' &&
-      (blocker as { reason?: unknown }).reason === 'maturity-not-reached',
   );
 }
 

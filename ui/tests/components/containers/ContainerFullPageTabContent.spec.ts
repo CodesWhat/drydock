@@ -1021,6 +1021,20 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.getComponent({ name: 'ContainerLinkActions' }).props('toTag')).toBe('v2.0.0');
   });
 
+  it('falls back to the neutral Unknown label for an unrecognized updateKind instead of rendering nothing (#display-honesty)', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      newTag: '2.0.0',
+      updateKind: 'bogus-kind' as unknown as string,
+    });
+
+    const wrapper = mountComponent();
+    const text = wrapper.text();
+
+    expect(text).toContain('Unknown');
+    expect(text).not.toContain('bogus-kind');
+  });
+
   it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {
     activeDetailTab.value = 'overview';
     selectedContainer.value = makeContainer({

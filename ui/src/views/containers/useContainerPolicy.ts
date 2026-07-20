@@ -13,6 +13,7 @@ import {
   parseMaturityMinAgeDays,
   resolveMaturityMinAgeDays,
 } from '../../utils/maturity-policy';
+import { findBackendMaturityBlocked } from '../../utils/update-eligibility';
 
 type ContainerListPolicyState = {
   snoozed: boolean;
@@ -147,26 +148,6 @@ function hasSuppressedUpdateCandidate(metaRecord: Record<string, unknown>): bool
   }
   const updateKind = asRecord(metaRecord.updateKind);
   return isSuppressedUpdateKind(updateKind?.kind);
-}
-
-// Mirrors container-mapper.ts's findBackendMaturityBlocked(): the server resolves the
-// maturity clock (publishedAt vs updateDetectedAt, see app/model/maturity-policy.ts
-// resolveMaturityClock()) once in computeUpdateEligibility(); re-deriving it here from
-// updateDetectedAt alone drifted from that truth (#display-honesty item 4). Prefer the
-// backend verdict and fall back to the local computation only when no eligibility
-// payload is present on the meta record at all.
-function findBackendMaturityBlocked(metaRecord: Record<string, unknown>): boolean | undefined {
-  const eligibility = asRecord(metaRecord.updateEligibility);
-  const blockers = eligibility?.blockers;
-  if (!Array.isArray(blockers)) {
-    return undefined;
-  }
-  return blockers.some(
-    (blocker) =>
-      !!blocker &&
-      typeof blocker === 'object' &&
-      (blocker as { reason?: unknown }).reason === 'maturity-not-reached',
-  );
 }
 
 function buildContainerListPolicyStateFromPolicy(

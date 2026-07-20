@@ -89,6 +89,40 @@ export function getPrimarySoftBlocker(
   return getSoftBlockers(eligibility)[0];
 }
 
+/**
+ * Look up the backend-computed maturity-not-reached blocker on the raw eligibility payload,
+ * when present. `computeUpdateEligibility` already resolves the trusted-publishedAt-vs-
+ * updateDetectedAt clock (see app/model/update-eligibility.ts); re-deriving the same verdict
+ * here from updateDetectedAt alone ignores that trust and can drift from the backend's own
+ * answer. Returns undefined (not false) when eligibility wasn't computed for this payload, so
+ * callers can fall back to the legacy detectedAt-only heuristic instead of assuming "not blocked".
+ *
+ * Shared by container-mapper.ts's `isMaturityBlocked` (list/detail mapping) and
+ * useContainerPolicy.ts's list-view policy state — both resolve the maturity clock (publishedAt
+ * vs updateDetectedAt, see app/model/maturity-policy.ts resolveMaturityClock()) once in
+ * computeUpdateEligibility(); re-deriving it locally drifted from that truth (#display-honesty
+ * item 4). Prefer the backend verdict and fall back to the local computation only when no
+ * eligibility payload is present on the record at all.
+ */
+export function findBackendMaturityBlocked(
+  container: { updateEligibility?: unknown } | Record<string, unknown>,
+): boolean | undefined {
+  const eligibility = (container as { updateEligibility?: unknown }).updateEligibility;
+  if (!eligibility || typeof eligibility !== 'object') {
+    return undefined;
+  }
+  const blockers = (eligibility as { blockers?: unknown }).blockers;
+  if (!Array.isArray(blockers)) {
+    return undefined;
+  }
+  return blockers.some(
+    (blocker) =>
+      !!blocker &&
+      typeof blocker === 'object' &&
+      (blocker as { reason?: unknown }).reason === 'maturity-not-reached',
+  );
+}
+
 export type UpdateButtonState = 'none' | 'ready' | 'soft' | 'hard';
 
 /**

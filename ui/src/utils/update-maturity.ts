@@ -3,6 +3,23 @@ import type { TranslateFn } from '../types/i18n';
 import { MS_PER_DAY } from './maturity-policy';
 
 /**
+ * Resolve a single duration unit ("N day(s)"/"hour(s)"/"minute(s)") for the given count,
+ * localizing via `t` when provided and falling back to plain English text otherwise.
+ */
+function formatDurationUnit(
+  count: number,
+  singularKey: string,
+  pluralKey: string,
+  fallbackUnit: string,
+  t?: TranslateFn,
+): string {
+  if (t) {
+    return count === 1 ? t(singularKey) : t(pluralKey, { count });
+  }
+  return `${count} ${fallbackUnit}${count === 1 ? '' : 's'}`;
+}
+
+/**
  * Format the age of an available update as a "Detected {duration} ago" tooltip string.
  * Returns undefined when no update or no detection timestamp exists. This replaces the old
  * fresh/settled badge classification (#display-honesty) — the freshness fact is now surfaced
@@ -30,23 +47,29 @@ export function formatUpdateAge(
 
   let duration: string | undefined;
   if (days > 0) {
-    duration = t
-      ? days === 1
-        ? t('containerComponents.updateAge.availableDaysSingular')
-        : t('containerComponents.updateAge.availableDaysPlural', { count: days })
-      : `${days} day${days === 1 ? '' : 's'}`;
+    duration = formatDurationUnit(
+      days,
+      'containerComponents.updateAge.availableDaysSingular',
+      'containerComponents.updateAge.availableDaysPlural',
+      'day',
+      t,
+    );
   } else if (hours > 0) {
-    duration = t
-      ? hours === 1
-        ? t('containerComponents.updateAge.availableHoursSingular')
-        : t('containerComponents.updateAge.availableHoursPlural', { count: hours })
-      : `${hours} hour${hours === 1 ? '' : 's'}`;
+    duration = formatDurationUnit(
+      hours,
+      'containerComponents.updateAge.availableHoursSingular',
+      'containerComponents.updateAge.availableHoursPlural',
+      'hour',
+      t,
+    );
   } else if (minutes > 0) {
-    duration = t
-      ? minutes === 1
-        ? t('containerComponents.updateAge.availableMinutesSingular')
-        : t('containerComponents.updateAge.availableMinutesPlural', { count: minutes })
-      : `${minutes} minute${minutes === 1 ? '' : 's'}`;
+    duration = formatDurationUnit(
+      minutes,
+      'containerComponents.updateAge.availableMinutesSingular',
+      'containerComponents.updateAge.availableMinutesPlural',
+      'minute',
+      t,
+    );
   }
 
   if (!duration) {

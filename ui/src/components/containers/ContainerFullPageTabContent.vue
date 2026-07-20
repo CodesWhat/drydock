@@ -16,6 +16,7 @@ import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
 import type { Container, UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker, hasRawUpdateCandidate } from '../../utils/update-eligibility';
+import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update-kind-labels';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
@@ -201,17 +202,8 @@ function isManagedUpdateTrigger(trigger: { type: string }) {
   return trigger.type === 'docker' || trigger.type === 'dockercompose';
 }
 
-const updateKindLabels = computed(
-  (): Record<NonNullable<Container['updateKind']>, string> => ({
-    major: t('containerComponents.listContent.major'),
-    minor: t('containerComponents.listContent.minor'),
-    patch: t('containerComponents.listContent.patch'),
-    digest: t('containerComponents.listContent.digest'),
-  }),
-);
-
 function getUpdateKindLabel(kind: Container['updateKind']) {
-  return kind ? updateKindLabels.value[kind] : '';
+  return resolveUpdateKindLabel(kind, t);
 }
 </script>
 

@@ -253,6 +253,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     registryColorBg: () => 'var(--dd-bg-inset)',
     registryColorText: () => 'var(--dd-text)',
     registryLabel: () => 'Docker Hub',
+    updateKindColor: () => ({ bg: 'var(--dd-bg-inset)', text: 'var(--dd-text)' }),
   }),
 }));
 
@@ -1059,6 +1060,21 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.get('[data-test="container-side-insight-tag"]').text()).toBe('v2.0.0');
     expect(wrapper.get('[data-test="container-side-insight-kind-badge"]').text()).toBe('Minor');
     expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+  });
+
+  it('falls back to the neutral Unknown label for an unrecognized updateKind instead of rendering nothing (#display-honesty)', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = {
+      ...createSelectedContainer(),
+      newTag: '2.0.0',
+      updateKind: 'bogus-kind' as unknown as Container['updateKind'],
+    };
+
+    const wrapper = mountComponent();
+    const text = wrapper.text();
+
+    expect(text).toContain('Unknown');
+    expect(text).not.toContain('bogus-kind');
   });
 
   it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {

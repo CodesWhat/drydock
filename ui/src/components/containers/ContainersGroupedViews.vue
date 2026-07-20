@@ -22,6 +22,7 @@ import {
   updateButtonState,
   type UpdateButtonState,
 } from '../../utils/update-eligibility';
+import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update-kind-labels';
 import type { Container } from '../../types/container';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
@@ -369,27 +370,8 @@ function getContainerStatusColor(container: { id?: unknown; name?: unknown; stat
   return getContainerStatusIconStyle(container).color;
 }
 
-const UPDATE_KIND_LABEL_KEYS: Record<'major' | 'minor' | 'patch' | 'digest', string> = {
-  major: 'containerComponents.listContent.major',
-  minor: 'containerComponents.listContent.minor',
-  patch: 'containerComponents.listContent.patch',
-  digest: 'containerComponents.listContent.digest',
-};
-
-// Container['updateKind'] is a 4-member union by TS type, but raw API payloads
-// aren't type-checked at runtime — a malformed/future kind falls through to a
-// visible neutral "Unknown" badge instead of silently rendering an invisible
-// one (display-honesty item 6; see updateKindColor()'s matching fallback).
-function hasUnresolvedUpdateKind(kind: Container['updateKind']): boolean {
-  return !!kind && !(kind in UPDATE_KIND_LABEL_KEYS);
-}
-
 function getUpdateKindLabel(kind: Container['updateKind']): string {
-  if (!kind) return '';
-  if (hasUnresolvedUpdateKind(kind)) {
-    return t('containerComponents.groupedViews.unknownKindLabel');
-  }
-  return t(UPDATE_KIND_LABEL_KEYS[kind as keyof typeof UPDATE_KIND_LABEL_KEYS]);
+  return resolveUpdateKindLabel(kind, t);
 }
 
 function updateInsightTooltip(insight: Container['updateInsight']): string {

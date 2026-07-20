@@ -2,6 +2,7 @@ import type { UpdateBlocker, UpdateEligibility } from '@/types/container';
 import { mapApiContainer } from '@/utils/container-mapper';
 import {
   BLOCKER_SEVERITY,
+  findBackendMaturityBlocked,
   getHardBlockers,
   getPrimaryHardBlocker,
   getPrimarySoftBlocker,
@@ -362,6 +363,60 @@ describe('hasRawUpdateCandidate', () => {
         }),
       }),
     ).toBe(false);
+  });
+});
+
+describe('findBackendMaturityBlocked', () => {
+  it('returns undefined when updateEligibility is absent', () => {
+    expect(findBackendMaturityBlocked({})).toBeUndefined();
+  });
+
+  it('returns undefined when updateEligibility is not an object', () => {
+    expect(findBackendMaturityBlocked({ updateEligibility: 'nope' })).toBeUndefined();
+    expect(findBackendMaturityBlocked({ updateEligibility: null })).toBeUndefined();
+  });
+
+  it('returns undefined when blockers is not an array', () => {
+    expect(findBackendMaturityBlocked({ updateEligibility: { blockers: 'nope' } })).toBeUndefined();
+  });
+
+  it('returns true when a blocker has reason maturity-not-reached', () => {
+    expect(
+      findBackendMaturityBlocked({
+        updateEligibility: makeEligibility({
+          blockers: [makeBlocker({ reason: 'maturity-not-reached' })],
+        }),
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false when blockers exist but none match maturity-not-reached', () => {
+    expect(
+      findBackendMaturityBlocked({
+        updateEligibility: makeEligibility({ blockers: [makeBlocker({ reason: 'snoozed' })] }),
+      }),
+    ).toBe(false);
+  });
+
+  it('ignores malformed blocker entries (null / non-object) while checking the rest', () => {
+    expect(
+      findBackendMaturityBlocked({
+        updateEligibility: {
+          eligible: false,
+          evaluatedAt: '2026-07-20T00:00:00.000Z',
+          blockers: [null, 'not-an-object', { reason: 'maturity-not-reached' }],
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('accepts a typed container shape with an updateEligibility field', () => {
+    const container: { updateEligibility?: UpdateEligibility } = {
+      updateEligibility: makeEligibility({
+        blockers: [makeBlocker({ reason: 'maturity-not-reached' })],
+      }),
+    };
+    expect(findBackendMaturityBlocked(container)).toBe(true);
   });
 });
 
