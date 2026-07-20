@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import AppButton from '../AppButton.vue';
-import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
@@ -129,7 +128,8 @@ const {
           <span style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
           <CopyableTag :tag="selectedContainer.newTag!" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
           <span class="badge text-3xs"
-                :style="{ backgroundColor: updateKindColor(selectedContainer.updateKind).bg, color: updateKindColor(selectedContainer.updateKind).text }">
+                :style="{ backgroundColor: updateKindColor(selectedContainer.updateKind).bg, color: updateKindColor(selectedContainer.updateKind).text }"
+                v-tooltip.top="selectedContainer.updateMaturityTooltip">
             {{ selectedContainer.updateKind }}
           </span>
         </div>
@@ -143,8 +143,7 @@ const {
           :reason="selectedContainer.noUpdateReason"
           variant="inline"
         />
-        <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag" class="flex items-center gap-1.5 flex-wrap">
-          <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
+        <div v-if="selectedContainer.updateKind || selectedContainer.suggestedTag" class="flex items-center gap-1.5 flex-wrap">
           <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
         </div>
         <ContainerLinkActions

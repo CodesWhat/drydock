@@ -1,37 +1,12 @@
-/** Update maturity classification based on how long an update has been available. */
+/** Freshness-fact formatting for available updates — a tooltip string, not a badge state. */
 import type { TranslateFn } from '../types/i18n';
-import { daysToMs, MS_PER_DAY } from './maturity-policy';
-
-type UpdateMaturity = 'fresh' | 'settled' | null;
-
-const DEFAULT_MATURITY_THRESHOLD_MS = daysToMs(7);
+import { MS_PER_DAY } from './maturity-policy';
 
 /**
- * Classify an available update as "fresh" (recently detected) or "settled" (available for a while).
- * Returns null when no update is available or no detection timestamp exists.
- */
-export function getUpdateMaturity(
-  updateDetectedAt: string | undefined,
-  hasUpdate: boolean,
-  nowMs: number = Date.now(),
-  thresholdMs: number = DEFAULT_MATURITY_THRESHOLD_MS,
-): UpdateMaturity {
-  if (!hasUpdate || !updateDetectedAt) {
-    return null;
-  }
-
-  const detectedMs = Date.parse(updateDetectedAt);
-  if (Number.isNaN(detectedMs)) {
-    return null;
-  }
-
-  const ageMs = nowMs - detectedMs;
-  return ageMs < thresholdMs ? 'fresh' : 'settled';
-}
-
-/**
- * Format the age of an available update as a human-readable string.
- * Returns undefined when no update or no detection timestamp.
+ * Format the age of an available update as a "Detected {duration} ago" tooltip string.
+ * Returns undefined when no update or no detection timestamp exists. This replaces the old
+ * fresh/settled badge classification (#display-honesty) — the freshness fact is now surfaced
+ * as a tooltip on the update-type badge instead of its own NEW/MATURE chrome.
  */
 export function formatUpdateAge(
   updateDetectedAt: string | undefined,
@@ -53,26 +28,29 @@ export function formatUpdateAge(
   const hours = Math.floor(ageMs / 3_600_000);
   const days = Math.floor(ageMs / MS_PER_DAY);
 
+  let duration: string | undefined;
   if (days > 0) {
-    return t
+    duration = t
       ? days === 1
         ? t('containerComponents.updateAge.availableDaysSingular')
         : t('containerComponents.updateAge.availableDaysPlural', { count: days })
-      : `Available for ${days} day${days === 1 ? '' : 's'}`;
-  }
-  if (hours > 0) {
-    return t
+      : `${days} day${days === 1 ? '' : 's'}`;
+  } else if (hours > 0) {
+    duration = t
       ? hours === 1
         ? t('containerComponents.updateAge.availableHoursSingular')
         : t('containerComponents.updateAge.availableHoursPlural', { count: hours })
-      : `Available for ${hours} hour${hours === 1 ? '' : 's'}`;
-  }
-  if (minutes > 0) {
-    return t
+      : `${hours} hour${hours === 1 ? '' : 's'}`;
+  } else if (minutes > 0) {
+    duration = t
       ? minutes === 1
         ? t('containerComponents.updateAge.availableMinutesSingular')
         : t('containerComponents.updateAge.availableMinutesPlural', { count: minutes })
-      : `Available for ${minutes} minute${minutes === 1 ? '' : 's'}`;
+      : `${minutes} minute${minutes === 1 ? '' : 's'}`;
   }
-  return t ? t('containerComponents.updateAge.justNow') : 'Available just now';
+
+  if (!duration) {
+    return t ? t('containerComponents.updateAge.justNow') : 'Detected just now';
+  }
+  return t ? t('containerComponents.maturityBadge.new', { duration }) : `Detected ${duration} ago`;
 }

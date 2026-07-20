@@ -142,7 +142,6 @@ export interface Container {
   lastUpdateFailureReason?: string;
   /** UI-only transient: epoch ms when lastUpdateFailureReason was set. */
   lastUpdateFailureAt?: number;
-  updateMaturity: 'fresh' | 'settled' | null;
   updateMaturityTooltip?: string;
   updatePolicyState?: 'snoozed' | 'skipped' | 'maturity-blocked';
   suppressedUpdateTag?: string;

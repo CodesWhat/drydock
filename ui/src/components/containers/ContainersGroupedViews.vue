@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
@@ -370,36 +369,32 @@ function getContainerStatusColor(container: { id?: unknown; name?: unknown; stat
   return getContainerStatusIconStyle(container).color;
 }
 
+const UPDATE_KIND_LABEL_KEYS: Record<'major' | 'minor' | 'patch' | 'digest', string> = {
+  major: 'containerComponents.listContent.major',
+  minor: 'containerComponents.listContent.minor',
+  patch: 'containerComponents.listContent.patch',
+  digest: 'containerComponents.listContent.digest',
+};
+
+// Container['updateKind'] is a 4-member union by TS type, but raw API payloads
+// aren't type-checked at runtime — a malformed/future kind falls through to a
+// visible neutral "Unknown" badge instead of silently rendering an invisible
+// one (display-honesty item 6; see updateKindColor()'s matching fallback).
+function hasUnresolvedUpdateKind(kind: Container['updateKind']): boolean {
+  return !!kind && !(kind in UPDATE_KIND_LABEL_KEYS);
+}
+
 function getUpdateKindLabel(kind: Container['updateKind']): string {
   if (!kind) return '';
-  const keyMap: Record<NonNullable<Container['updateKind']>, string> = {
-    major: 'containerComponents.listContent.major',
-    minor: 'containerComponents.listContent.minor',
-    patch: 'containerComponents.listContent.patch',
-    digest: 'containerComponents.listContent.digest',
-  };
-  return t(keyMap[kind]);
-}
-
-function getUpdateMaturityLabel(maturity: Container['updateMaturity']) {
-  if (maturity === 'fresh') {
-    return t('containerComponents.maturityBadge.new');
+  if (hasUnresolvedUpdateKind(kind)) {
+    return t('containerComponents.groupedViews.unknownKindLabel');
   }
-  if (maturity === 'settled') {
-    return t('containerComponents.maturityBadge.mature');
-  }
-  return '';
+  return t(UPDATE_KIND_LABEL_KEYS[kind as keyof typeof UPDATE_KIND_LABEL_KEYS]);
 }
-
-const UPDATE_INSIGHT_TOOLTIP_KEY_BY_KIND: Record<'major' | 'minor' | 'patch', string> = {
-  major: 'containerComponents.updateInsight.tooltipMajor',
-  minor: 'containerComponents.updateInsight.tooltipMinor',
-  patch: 'containerComponents.updateInsight.tooltipPatch',
-};
 
 function updateInsightTooltip(insight: Container['updateInsight']): string {
   if (!insight) return '';
-  return t(UPDATE_INSIGHT_TOOLTIP_KEY_BY_KIND[insight.kind], { tag: insight.tag });
+  return t('containerComponents.updateInsight.tooltip', { tag: insight.tag });
 }
 
 function getContainerUpdateStateLabel(
@@ -412,7 +407,7 @@ function getContainerUpdateStateLabel(
     return t('containerComponents.groupedViews.skippedLabel');
   }
   if (container.updateInsight) {
-    return t('containerComponents.groupedViews.pinnedLabel');
+    return getUpdateKindLabel(container.updateInsight.kind);
   }
   return t('containerComponents.groupedViews.currentLabel');
 }
@@ -427,15 +422,19 @@ function getContainerUpdateStateColor(
     return 'var(--dd-warning)';
   }
   if (container.updateInsight) {
-    return updateInsightColor().text;
+    return updateKindColor(container.updateInsight.kind).text;
   }
   return 'var(--dd-success)';
 }
 
 function getContainerUpdateStateTooltip(
-  container: Pick<Container, 'updateKind' | 'updateInsight'> & { name?: string },
+  container: Pick<Container, 'updateKind' | 'updateInsight' | 'updateMaturityTooltip'> & {
+    name?: string;
+  },
 ) {
-  if (container.updateKind) return getUpdateKindLabel(container.updateKind);
+  if (container.updateKind) {
+    return container.updateMaturityTooltip || getUpdateKindLabel(container.updateKind);
+  }
   if (getContainerListPolicyState(container).skipped) {
     return containerPolicyTooltip(container, 'skipped');
   }
@@ -627,6 +626,16 @@ onScopeDispose(() => {
         </template>
         <!-- Version comparison -->
         <template #cell-version="{ row: c }">
+          <div class="relative">
+          <AppIcon
+            v-if="c.tagPinned"
+            name="pin"
+            :size="9"
+            class="absolute -top-1 -left-1 dd-text-muted shrink-0"
+            data-test="container-tag-pinned-glyph"
+            :aria-label="t('containerComponents.groupedViews.ariaPinnedTag')"
+            v-tooltip.top="tt(t('containerComponents.groupedViews.pinnedTagTooltip'))"
+          />
           <div v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
             <div class="container-version-flow">
               <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentDigest">{{ formatShortDigest(c.currentDigest) }}</span>
@@ -726,6 +735,7 @@ onScopeDispose(() => {
               </div>
             </template>
           </div>
+          </div>
         </template>
         <!-- Software version (OCI org.opencontainers.image.version or dd.inspect.tag.path value; falls back to image tag) -->
         <template #cell-softwareVersion="{ row: c }">
@@ -757,25 +767,9 @@ onScopeDispose(() => {
               v-tooltip.top="tt(blockedUpdateTooltip(c))"
             >
               <AppIcon name="lock" :size="11" />
-              {{ t('containerComponents.groupedViews.blockedTooltip') }}
-            </span>
-            <span
-              v-else-if="c.updateMaturity"
-              class="text-2xs dd-text-muted"
-              v-tooltip.top="tt(c.updateMaturityTooltip || getUpdateMaturityLabel(c.updateMaturity))"
-            >
-              {{ getUpdateMaturityLabel(c.updateMaturity) }}
+              {{ t('containerComponents.groupedViews.blockedByBouncer') }}
             </span>
             <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-            <AppBadge
-              v-if="c.updateInsight"
-              size="xs"
-              :custom="updateInsightColor()"
-              v-tooltip.top="tt(updateInsightTooltip(c.updateInsight))"
-              data-test="update-insight-kind-badge"
-            >
-              {{ getUpdateKindLabel(c.updateInsight.kind) }}
-            </AppBadge>
           </div>
         </template>
         <!-- Status -->
@@ -1033,6 +1027,7 @@ onScopeDispose(() => {
                 data-test="container-card-update-state"
                 class="inline-flex items-center gap-1.5 shrink-0 text-2xs-plus font-semibold"
                 :style="{ color: getContainerUpdateStateColor(c) }"
+                v-tooltip.top="tt(getContainerUpdateStateTooltip(c))"
               >
                 <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
                 {{ getContainerUpdateStateLabel(c) }}
@@ -1076,6 +1071,15 @@ onScopeDispose(() => {
                "Current" tag with a tooltip on the state badge; that regressed twice (#356, #370). -->
           <div class="px-4 py-3 min-w-0">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
+              <AppIcon
+                v-if="c.tagPinned"
+                name="pin"
+                :size="10"
+                class="dd-text-muted shrink-0"
+                data-test="container-tag-pinned-glyph"
+                :aria-label="t('containerComponents.groupedViews.ariaPinnedTag')"
+                v-tooltip.top="tt(t('containerComponents.groupedViews.pinnedTagTooltip'))"
+              />
               <template v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest">
                 <CopyableTag :tag="c.currentDigest" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
                   {{ formatShortDigest(c.currentDigest) }}
@@ -1085,7 +1089,6 @@ onScopeDispose(() => {
                       :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
                   {{ formatShortDigest(c.newDigest) }}
                 </CopyableTag>
-                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <!-- #356 / #370 regression guard — mirrors the table's #cell-version guard branch
                    exactly: TAG ONLY, digest delta in the CopyableTag's :idle-tooltip. -->
@@ -1115,7 +1118,6 @@ onScopeDispose(() => {
                   :idle-tooltip="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
                   @click.stop
                 >{{ c.currentTag }}</CopyableTag>
-                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <template v-else-if="c.newTag">
                 <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -1126,7 +1128,6 @@ onScopeDispose(() => {
                       :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
                   {{ c.newTag }}
                 </CopyableTag>
-                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <template v-else-if="c.updateInsight">
                 <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -1157,17 +1158,8 @@ onScopeDispose(() => {
             </div>
             <!-- Resource links live in the footer's shared icon group. Keeping release notes in
                  popover mode prevents the intermediate-release tree from inflating card height. -->
-            <div v-if="c.suggestedTag || c.updateInsight" class="flex items-center gap-2 flex-wrap mt-2">
+            <div v-if="c.suggestedTag" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-              <AppBadge
-                v-if="c.updateInsight"
-                size="xs"
-                :custom="updateInsightColor()"
-                v-tooltip.top="tt(updateInsightTooltip(c.updateInsight))"
-                data-test="update-insight-kind-badge"
-              >
-                {{ getUpdateKindLabel(c.updateInsight.kind) }}
-              </AppBadge>
             </div>
           </div>
 
