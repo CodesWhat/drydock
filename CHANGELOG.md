@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Anonymous access now fails closed on upgrades, not just fresh installs.** An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — refuses to start instead of logging a warning and serving an open dashboard. If you run an intentionally open instance, set `DD_ANONYMOUS_AUTH_CONFIRM=true`; otherwise configure `DD_AUTH_BASIC_<name>_USER`/`_HASH` before upgrading.
+
+- **HTTP notification trigger hardened against SSRF.** Hostnames are re-resolved on every request through a guarded DNS lookup that blocks cloud metadata and link-local targets (override with `allowmetadata=true`), and redirects can no longer escape into blocked address space via cross-host or DNS-rebinding hops.
+
+- **WebSocket upgrades validate the complete origin.** Origin checks now compare full scheme/host/port origins — honoring `X-Forwarded-Proto`/`X-Forwarded-Host` only when trust proxy is enabled — instead of host-substring matching, closing WebSocket CSRF gaps behind reverse proxies.
+
+- **Session cookie renamed to `drydock.sid`.** Replaces Express's default `connect.sid`, so drydock sessions no longer collide with (or are fingerprintable as) other Express apps behind the same host. Everyone is signed out once on upgrade.
+
+- **Persistent store files are owner-only.** `/store` is created `0700`, `dd.json` is kept `0600`, and the container entrypoint and store process set a `077` umask so LokiJS autosave replacement files never widen permissions.
+
+- **Icon CDN sources are pinned to exact upstream revisions** (dashboard-icons, selfh.st icons, simple-icons) instead of floating tags, so an upstream push can't silently change what the dashboard serves.
+
 ## [1.6.0-rc.2] — 2026-07-18
 
 ### Added
