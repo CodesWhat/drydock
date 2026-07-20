@@ -29,6 +29,8 @@ The `http` trigger lets you send container update notifications via HTTP.
 
 <Callout type="info">**Metadata endpoint guard:** Before sending each request, the trigger resolves the target hostname and rejects any address in the cloud metadata / link-local ranges: `169.254.0.0/16` (IPv4, including the AWS IMDSv1 endpoint `169.254.169.254`), `fe80::/10` (IPv6 link-local), and `fd00:ec2::254` (AWS IMDSv2 IPv6). RFC-1918 private ranges (`10.x`, `172.16–31.x`, `192.168.x`) are **not** blocked — self-hosted webhook targets on your local network work normally. Set `ALLOWMETADATA=true` on a specific trigger if you have a legitimate need to reach a link-local address.</Callout>
 
+<Callout type="warn">**Redirects are never followed.** Independently of `ALLOWMETADATA`, every request is sent with redirect-following disabled — a webhook target that responds with a 3xx (a canonical-URL redirect, an `http://`→`https://` bounce, etc.) fails outright instead of being followed. This closes a redirect-based path around the metadata guard, but it means the endpoint you configure must answer with a final `2xx` directly.</Callout>
+
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 
 ### Examples

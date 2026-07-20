@@ -332,14 +332,32 @@ test('current and archived docs describe destructive and recovery behavior accur
       /\*\*Delete\*\*[\s\S]{0,180}?Remove the container from Drydock tracking/u,
     );
     assert.match(actions, /does not delete the runtime container/u);
-    assert.match(
-      authentications,
-      /Authentication protects all API routes and UI views unless anonymous access is enabled\. Fresh installs must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true`/u,
-    );
-    assert.match(
-      authentications,
-      /legacy upgrades without configured authentication retain anonymous access with a startup warning/u,
-    );
+    if (root === 'content/docs/current') {
+      // v1.6 removed the warn-and-serve grandfather path: upgrades fail closed like fresh installs.
+      assert.match(
+        authentications,
+        /Authentication protects all API routes and UI views unless anonymous access is enabled\. Fresh installs and upgrades alike must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true`/u,
+      );
+      // Fail-closed means 401-everything from a running container, not a refused start:
+      // Anonymous's registration throw is caught by the registry fallback and the API
+      // serves with zero passport strategies (app/registry/index.ts, app/api/auth.ts).
+      assert.match(
+        authentications,
+        /Upgrade, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` \| Fails closed — all API calls return `401`/u,
+      );
+      assert.doesNotMatch(authentications, /refuses to start/u);
+      assert.doesNotMatch(authentications, /retain anonymous access with a startup warning/u);
+    } else {
+      // The 1.5.x archive documents the grandfather path that line actually shipped with.
+      assert.match(
+        authentications,
+        /Authentication protects all API routes and UI views unless anonymous access is enabled\. Fresh installs must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true`/u,
+      );
+      assert.match(
+        authentications,
+        /legacy upgrades without configured authentication retain anonymous access with a startup warning/u,
+      );
+    }
     assert.match(security, /sbom\?format=\{format\}/u);
     assert.doesNotMatch(security, /sbom\?format=\\\{format\\\}/u);
     assert.doesNotMatch(selfUpdate, /zero downtime/iu);

@@ -175,6 +175,7 @@ docker run \
 - **CSRF validation failures** (403 errors on POST/PUT/DELETE requests) — drydock sees `http://` internally while the browser sends `Origin: https://...`
 - **Incorrect security headers** — HSTS and secure cookie flags may not be applied
 - **Wrong client IPs in logs and rate limiting** — drydock sees the proxy's IP instead of the real client
+- **WebSocket connection failures** — log streaming and container log streaming upgrades are rejected because drydock can't confirm the browser's Origin scheme matches
 
 Set `DD_SERVER_TRUSTPROXY=1` to trust one proxy hop. Use a higher number if you have chained proxies (e.g. CDN → load balancer → app proxy = `3`).
 
