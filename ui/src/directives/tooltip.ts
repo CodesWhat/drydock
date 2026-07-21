@@ -226,7 +226,10 @@ export const tooltip: ObjectDirective<HTMLElement, BindingValue> = {
     state.text = text;
     state.delay = delay;
     const currentTitle = el.getAttribute('title');
-    if (currentTitle != null) {
+    // A title equal to our last-synced fallback is one syncTitle wrote, not a
+    // component-owned title — adopting it would freeze the native title at the
+    // first rendered tooltip text while the binding value keeps changing.
+    if (currentTitle != null && currentTitle !== state.fallbackTitle) {
       state.originalTitle = currentTitle;
       state.fallbackTitle = currentTitle;
     } else if (state.hadTitle) {
