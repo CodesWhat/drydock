@@ -158,11 +158,11 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
     await expect(condition).toContainText(
       'The candidate must remain unchanged until the stabilization period ends.',
     );
-    await expect(condition).toContainText(/6m\s*·\s*Lifts at /);
+    await expect(condition).toContainText(/6m\s*·\s*unlocks /);
     await expect(panel.locator('[data-test="update-status-manual-cta"]')).toBeEnabled();
 
     await page.clock.fastForward(60_000);
-    await expect(condition).toContainText(/5m\s*·\s*Lifts at /);
+    await expect(condition).toContainText(/5m\s*·\s*unlocks /);
   });
 
   test('#498 renders pinned current-to-newer tags as information in table and cards', async ({
@@ -173,6 +173,7 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
       container.displayName = 'Immich ML (Pinned)';
       container.tagFamily = 'strict';
       container.tagPinned = true;
+      container.tagPinGated = true;
       container.tagPinInfo = true;
       container.updateAvailable = false;
       container.updateKind = {
@@ -215,14 +216,15 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
     await expect(tableFlow).toContainText('v3.0.2-openvino');
     const tableText = (await tableFlow.innerText()).replace(/\s+/g, ' ');
     expect(tableText.indexOf('v2.7.5-openvino')).toBeLessThan(tableText.indexOf('v3.0.2-openvino'));
+    await expect(row.locator('[data-test="container-tag-pinned-glyph"]')).toBeVisible();
     await expect(row.getByRole('button', { name: /^Update$/ })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Cards view' }).click();
     const card = page.locator('[data-test="dd-card"]').filter({ hasText: 'Immich ML (Pinned)' });
     await expect(card).toBeVisible();
     await expect(card).toContainText(/v2\.7\.5-openvino\s*→\s*v3\.0\.2-openvino/);
-    await expect(card.locator('[data-test="container-card-update-state"]')).toHaveText('Pinned');
-    await expect(card.locator('[data-test="update-insight-kind-badge"]')).toHaveText('Major');
+    await expect(card.locator('[data-test="container-card-update-state"]')).toHaveText('Current');
+    await expect(card.locator('[data-test="container-tag-pinned-glyph"]')).toBeVisible();
     await expect(card.getByRole('button', { name: /^Update$/ })).toHaveCount(0);
   });
 });
