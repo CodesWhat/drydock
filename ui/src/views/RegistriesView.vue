@@ -144,9 +144,14 @@ watch(
 const filteredRegistries = computed(() => {
   if (!searchQuery.value) return registriesData.value;
   const q = searchQuery.value.toLowerCase();
-  return registriesData.value.filter(
-    (item) => item.name.toLowerCase().includes(q) || item.type.toLowerCase().includes(q),
-  );
+  // Also match the dotted `type.name` instance ID — container detail deep-links
+  // use `/registries?q=<type>.<name>` (e.g. "hub.public"), which matches neither
+  // the bare name nor the bare type (#556 item 3).
+  return registriesData.value.filter((item) => {
+    const name = item.name.toLowerCase();
+    const type = item.type.toLowerCase();
+    return name.includes(q) || type.includes(q) || `${type}.${name}`.includes(q);
+  });
 });
 
 const tableColumns = computed(() => [

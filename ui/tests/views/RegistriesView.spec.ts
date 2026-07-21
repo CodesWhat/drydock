@@ -170,6 +170,29 @@ describe('RegistriesView', () => {
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('1');
   });
 
+  it('dotted type.name query matches the registry instance id from container-detail deep links (#556)', async () => {
+    // Container-detail links to /registries?q=<type>.<name> (e.g. "gcr.public").
+    // That dotted id matches neither the bare name ("public") nor the bare type
+    // ("gcr") alone — only the combined `${type}.${name}` check does.
+    mockRoute.query = { q: 'gcr.public' };
+    mockGetAllRegistries.mockResolvedValue([
+      makeRegistry({ id: 'registry-1', name: 'Docker Hub', type: 'hub' }),
+      makeRegistry({ id: 'registry-2', name: 'public', type: 'gcr' }),
+    ]);
+
+    const wrapper = await mountRegistriesView();
+
+    expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe(
+      'gcr.public',
+    );
+    expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('1');
+    // The table cell renders the registry's type badge (unknown types fall back to
+    // their upper-cased type string) — confirms the surviving row is the gcr/public
+    // one, not the hub/Docker Hub one.
+    expect(wrapper.text()).toContain('GCR');
+    expect(wrapper.text()).not.toContain('Hub');
+  });
+
   it('API failure shows "Failed to load registries"', async () => {
     mockGetAllRegistries.mockRejectedValue(new Error('boom'));
 
