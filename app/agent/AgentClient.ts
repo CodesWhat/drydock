@@ -889,6 +889,9 @@ export class AgentClient {
 
       sseProcessing = sseProcessing
         .then(async () => {
+          if (this.stopped || this.activeSseStream !== stream) {
+            return;
+          }
           buffer += decodedChunk;
           buffer = await this.processSseBuffer(buffer);
         })

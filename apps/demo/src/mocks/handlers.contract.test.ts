@@ -20,6 +20,42 @@ async function readJson(response: Response) {
 }
 
 describe('demo mock contracts', () => {
+  test('rejects malformed and non-object JSON request bodies', async () => {
+    const requests = [
+      ['PATCH', 'http://localhost/api/v1/settings'],
+      ['PATCH', 'http://localhost/api/v1/notifications/update-available'],
+      ['POST', 'http://localhost/api/v1/notifications/update-available/preview'],
+    ] as const;
+
+    for (const [method, url] of requests) {
+      for (const body of ['null', '[]', '{']) {
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        });
+
+        expect(response.status, `${method} ${url} should reject ${body}`).toBe(400);
+      }
+    }
+  });
+
+  test('notification updates cannot overwrite identity or add arbitrary fields', async () => {
+    const updated = await readJson(
+      await fetch('http://localhost/api/v1/notifications/update-available', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'rewritten-id',
+          arbitrary: 'injected',
+        }),
+      }),
+    );
+
+    expect(updated).toMatchObject({ id: 'update-available' });
+    expect(updated).not.toHaveProperty('arbitrary');
+  });
+
   test('settings expose updateMode and persist PATCH updates', async () => {
     const initial = await readJson(await fetch('http://localhost/api/v1/settings'));
     expect(initial).toEqual({ internetlessMode: false, updateMode: 'manual' });

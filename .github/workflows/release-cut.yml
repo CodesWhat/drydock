@@ -49,6 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120  # Multi-arch build, signing, attestations, release upload, and CI-success polling budget
     environment: release-publish
+    env:
+      DOCKERHUB_REPO: docker.io/codeswhat/drydock
+      QUAY_REPO: quay.io/codeswhat/drydock
     permissions:
       contents: write      # git push tag, gh release create
       packages: write      # ghcr push
@@ -358,8 +361,8 @@ jobs:
         with:
           images: |
             ghcr.io/${{ steps.target.outputs.repo_lower }}
-            docker.io/codeswhat/drydock
-            quay.io/codeswhat/drydock
+            ${{ env.DOCKERHUB_REPO }}
+            ${{ env.QUAY_REPO }}
           flavor: |
             latest=false
           tags: |
@@ -376,8 +379,8 @@ jobs:
         with:
           images: |
             ghcr.io/${{ steps.target.outputs.repo_lower }}
-            docker.io/codeswhat/drydock
-            quay.io/codeswhat/drydock
+            ${{ env.DOCKERHUB_REPO }}
+            ${{ env.QUAY_REPO }}
           flavor: |
             latest=false
           tags: |
@@ -393,8 +396,8 @@ jobs:
           set -euo pipefail
           candidate_refs=(
             "ghcr.io/${GHCR_REPO}:${CANDIDATE_TAG#v}"
-            "docker.io/codeswhat/drydock:${CANDIDATE_TAG#v}"
-            "quay.io/codeswhat/drydock:${CANDIDATE_TAG#v}"
+            "${DOCKERHUB_REPO}:${CANDIDATE_TAG#v}"
+            "${QUAY_REPO}:${CANDIDATE_TAG#v}"
           )
 
           for candidate_ref in "${candidate_refs[@]}"; do
@@ -447,8 +450,8 @@ jobs:
 
             source_candidates=(
               "ghcr.io/${GHCR_REPO}@${BUILD_DIGEST}"
-              "docker.io/codeswhat/drydock@${BUILD_DIGEST}"
-              "quay.io/codeswhat/drydock@${BUILD_DIGEST}"
+              "${DOCKERHUB_REPO}@${BUILD_DIGEST}"
+              "${QUAY_REPO}@${BUILD_DIGEST}"
             )
 
             source_ref=""
@@ -502,8 +505,8 @@ jobs:
               printf '%s\n' "${STAGING_TAGS}"
             else
               echo "ghcr.io/${GHCR_REPO}:${CANDIDATE_TAG#v}"
-              echo "docker.io/codeswhat/drydock:${CANDIDATE_TAG#v}"
-              echo "quay.io/codeswhat/drydock:${CANDIDATE_TAG#v}"
+              echo "${DOCKERHUB_REPO}:${CANDIDATE_TAG#v}"
+              echo "${QUAY_REPO}:${CANDIDATE_TAG#v}"
             fi
             echo 'DRYDOCK_IMAGE_REFS'
           } >> "$GITHUB_OUTPUT"

@@ -20,6 +20,7 @@ interface ContainerFixture {
   };
   result?: Record<string, unknown>;
   tagFamily?: string;
+  tagPinGated?: boolean;
   tagPinned?: boolean;
   tagPinInfo?: boolean;
   updateAvailable?: boolean;

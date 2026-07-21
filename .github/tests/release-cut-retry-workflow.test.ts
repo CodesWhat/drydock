@@ -120,8 +120,8 @@ test('release-cut delegates image tags and labels to docker metadata-action', ()
   });
   expect(blockLines(metadataStep?.with?.images)).toStrictEqual([
     'ghcr.io/${{ steps.target.outputs.repo_lower }}',
-    'docker.io/codeswhat/drydock',
-    'quay.io/codeswhat/drydock',
+    '${{ env.DOCKERHUB_REPO }}',
+    '${{ env.QUAY_REPO }}',
   ]);
   expect(metadataStep?.with?.flavor?.trim()).toBe('latest=false');
   expect(blockLines(metadataStep?.with?.tags)).toStrictEqual([
@@ -142,6 +142,38 @@ test('release-cut delegates image tags and labels to docker metadata-action', ()
     .filter((step) => step.run && /(^|\n)\s*(IMAGE_TAGS|image_tags|tags)=/.test(step.run))
     .map((step) => step.name);
   expect(shellTagComputations).toStrictEqual([]);
+});
+
+test('release-cut defines external registry repositories once at job scope', () => {
+  const workflow = loadWorkflow(workflowPath);
+  const releaseJob = workflow.jobs?.release;
+
+  expect(releaseJob?.env).toMatchObject({
+    DOCKERHUB_REPO: 'docker.io/codeswhat/drydock',
+    QUAY_REPO: 'quay.io/codeswhat/drydock',
+  });
+  expect(blockLines(getStep('Docker metadata')?.with?.images)).toContain(
+    '${{ env.DOCKERHUB_REPO }}',
+  );
+  expect(blockLines(getStep('Docker metadata')?.with?.images)).toContain('${{ env.QUAY_REPO }}');
+  expect(getStep('Validate GA candidate digest in every registry')?.run).toContain(
+    '${DOCKERHUB_REPO}:${CANDIDATE_TAG#v}',
+  );
+  expect(getStep('Validate GA candidate digest in every registry')?.run).toContain(
+    '${QUAY_REPO}:${CANDIDATE_TAG#v}',
+  );
+  expect(getStep('Retry manifest publish on transient registry failure')?.with?.command).toContain(
+    '${DOCKERHUB_REPO}@${BUILD_DIGEST}',
+  );
+  expect(getStep('Retry manifest publish on transient registry failure')?.with?.command).toContain(
+    '${QUAY_REPO}@${BUILD_DIGEST}',
+  );
+  expect(getStep('Resolve image source references')?.run).toContain(
+    '${DOCKERHUB_REPO}:${CANDIDATE_TAG#v}',
+  );
+  expect(getStep('Resolve image source references')?.run).toContain(
+    '${QUAY_REPO}:${CANDIDATE_TAG#v}',
+  );
 });
 
 test('release-cut requires an exact, seven-day-old RC candidate for GA promotion', () => {
@@ -174,8 +206,8 @@ test('release-cut validates the promoted digest in every registry', () => {
 
   expect(validationStep?.if).toContain("steps.tag.outputs.is_prerelease == 'false'");
   expect(validationStep?.run).toContain('ghcr.io/${GHCR_REPO}:${CANDIDATE_TAG#v}');
-  expect(validationStep?.run).toContain('docker.io/codeswhat/drydock:${CANDIDATE_TAG#v}');
-  expect(validationStep?.run).toContain('quay.io/codeswhat/drydock:${CANDIDATE_TAG#v}');
+  expect(validationStep?.run).toContain('${DOCKERHUB_REPO}:${CANDIDATE_TAG#v}');
+  expect(validationStep?.run).toContain('${QUAY_REPO}:${CANDIDATE_TAG#v}');
   expect(validationStep?.run).toContain('raw_manifest');
   expect(validationStep?.run).toContain('computed_digest');
   expect(validationStep?.run).toContain('CANDIDATE_DIGEST');

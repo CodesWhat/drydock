@@ -6,6 +6,8 @@ const RC_VERSION = '1.6.0-rc.3';
 const RC_DATE = '2026-07-21';
 const RC_DISPLAY_DATE = 'July 21, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
+const BROAD_401_CLAIM =
+  /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
 
 function read(path) {
   return readFileSync(path, 'utf8');
@@ -347,8 +349,7 @@ test('current and archived docs describe destructive and recovery behavior accur
         /The SPA shell may still load, but it cannot read protected application data/u,
       );
       assert.doesNotMatch(authentications, /refuses to start/u);
-      assert.doesNotMatch(authentications, /all API calls return `401`/u);
-      assert.doesNotMatch(authentications, /every API (call|request)/u);
+      assert.doesNotMatch(authentications, BROAD_401_CLAIM);
       assert.doesNotMatch(authentications, /retain anonymous access with a startup warning/u);
     } else {
       // The 1.5.x archive documents the grandfather path that line actually shipped with.
@@ -393,11 +394,7 @@ test('v1.6 fail-closed upgrade docs preserve public auth routes and health seman
       /auth(?:entication)? discovery\/status (?:routes )?remain(?:s)? public/u,
     );
     assert.match(document, /`\/health` (?:reports|returns) `503`/u);
-    assert.doesNotMatch(
-      document,
-      /every API (?:call|request)(?: is rejected with| returns)? `401`/u,
-    );
-    assert.doesNotMatch(document, /all API calls return `401`/u);
+    assert.doesNotMatch(document, BROAD_401_CLAIM);
   }
 
   assert.match(
@@ -414,7 +411,7 @@ test('security policy distinguishes stable and prerelease support', () => {
   assert.match(security, /Latest stable release/u);
   assert.match(security, /Latest release candidate on the active train/u);
   assert.match(security, /Older release candidates are not patched/u);
-  assert.doesNotMatch(security, /\| latest\s+\|/u);
+  assert.doesNotMatch(security, /\|\s*latest\s*\|/iu);
 });
 
 test('current and archived release examples use consistent tags, filenames, dates, and anchors', () => {

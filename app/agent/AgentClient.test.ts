@@ -1593,6 +1593,22 @@ describe('AgentClient', () => {
       expect(handleSpy).not.toHaveBeenCalled();
     });
 
+    test('should discard SSE data queued immediately before stop', async () => {
+      const stream = new EventEmitter();
+      Object.assign(stream, { destroy: vi.fn() });
+      axios.mockResolvedValueOnce({ data: stream });
+      const handleSpy = vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      stream.emit('data', Buffer.from('data: {"type":"dd:ack","data":{"version":"queued"}}\n\n'));
+      client.stop();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(handleSpy).not.toHaveBeenCalled();
+    });
+
     test('should clear an armed stableConnectionTimer', async () => {
       const stream = new EventEmitter();
       axios.mockResolvedValue({ data: stream });
