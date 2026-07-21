@@ -157,8 +157,6 @@
     "banners": {
       "legacyConfigTitleSingular": "偵測到 {total} 個舊配置別名",
       "legacyConfigTitlePlural": "偵測到 {total} 個舊配置別名",
-      "legacyApiPathTitleSingular": "{total} request to the removed API path detected",
-      "legacyApiPathTitlePlural": "{total} requests to the removed API path detected",
       "dontShowAgain": "不再顯示",
       "curlHealthcheckTitle": "偵測到自訂 curl 健康檢查覆蓋",
       "envKeysLabel": "環境變數金鑰 ({count}): {keys}",
