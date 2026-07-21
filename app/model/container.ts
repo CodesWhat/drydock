@@ -6,6 +6,7 @@ import type {
   ContainerSecurityScan,
   ContainerSignatureVerification,
 } from '../security/scan.js';
+import { isPinGateGoverned } from '../tag/family.js';
 import * as tag from '../tag/index.js';
 import { isTagPinned } from '../tag/precision.js';
 import type {
@@ -206,6 +207,7 @@ export interface Container {
   /** @deprecated compat mirror. */
   triggerExclude?: string;
   tagPinned?: boolean;
+  tagPinGated?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
   updatePolicyDeclarative?: ContainerUpdatePolicyDeclarative;
   updatePolicyOverrides?: ContainerUpdatePolicy;
@@ -345,6 +347,7 @@ const schema = joi.object({
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
   tagPinned: joi.boolean(),
+  tagPinGated: joi.boolean(),
   updatePolicy: joi.object({
     skipTags: joi.array().items(joi.string()),
     skipDigests: joi.array().items(joi.string()),
@@ -801,6 +804,11 @@ function addTagPinnedProperty(container: Container) {
   // Tag values don't mutate in production once validate() runs, so the cached value stays
   // accurate; `validate()` recomputes it on any re-entry into the model.
   container.tagPinned = isTagPinned(container.image.tag.value, container.transformTags);
+  // Pin-GATE verdict, distinct from shape-based tagPinned: true only when the
+  // tag-candidates pin gate governs this container (specific precision, no
+  // include filter, non-loose family) — i.e. drydock will not climb this tag.
+  // Drives the UI pin glyph; tagPinned keeps feeding the shape-based filters.
+  container.tagPinGated = isPinGateGoverned(container);
 }
 
 /**
