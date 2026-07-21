@@ -1414,6 +1414,27 @@ test('startDigestCachePollCycle should clear previous tag-list cache entries', a
   expect(superGetTagsSpy).toHaveBeenCalledTimes(2);
 });
 
+test('ending an older poll cycle should not disable a newer overlapping cycle', async () => {
+  const superGetTagsSpy = vi
+    .spyOn(Registry.prototype, 'getTags')
+    .mockResolvedValue(['2.0.0', '1.0.0']);
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    registry: { url: 'docker.io' },
+  };
+
+  const olderCycle = baseRegistry.startDigestCachePollCycle();
+  const newerCycle = baseRegistry.startDigestCachePollCycle();
+  baseRegistry.endDigestCachePollCycle(olderCycle);
+
+  await baseRegistry.getTags(image);
+  await baseRegistry.getTags(image);
+
+  expect(superGetTagsSpy).toHaveBeenCalledTimes(1);
+  baseRegistry.endDigestCachePollCycle(newerCycle);
+});
+
 test('stale tag lookups cannot overwrite a newer poll cycle cache', async () => {
   let resolveStale: (tags: string[]) => void = () => {};
   let resolveFresh: (tags: string[]) => void = () => {};

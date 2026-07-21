@@ -1267,6 +1267,54 @@ test('updateContainer should preserve updateDetectedAt when a recheck only chang
   expect(updated.updateDetectedAt).toBe(existingDetectedAt);
 });
 
+test('updateContainer should reset updateDetectedAt when a created-only candidate changes', () => {
+  vi.useFakeTimers();
+  try {
+    const frozenNow = new Date('2026-06-03T12:00:00.000Z');
+    vi.setSystemTime(frozenNow);
+    const existingDetectedAt = '2026-06-01T12:00:00.000Z';
+    const existingFixture = createContainerFixture();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        result: {
+          tag: 'version',
+          created: '2026-06-01T00:00:00.000Z',
+        },
+        updateDetectedAt: existingDetectedAt,
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({
+        find: () => ({
+          remove: () => ({}),
+        }),
+      }),
+    };
+    const nextFixture = createContainerFixture();
+    const containerToSave = {
+      ...nextFixture,
+      result: {
+        tag: 'version',
+        created: '2026-06-02T00:00:00.000Z',
+      },
+      updateDetectedAt: existingDetectedAt,
+    };
+
+    container.createCollections({
+      getCollection: () => collection,
+      addCollection: () => null,
+    });
+    const updated = container.updateContainer(containerToSave);
+
+    expect(updated.updateDetectedAt).toBe(frozenNow.toISOString());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('updateContainer should reset updateDetectedAt when the candidate tag genuinely changes (#565)', async () => {
   const existingDetectedAt = '2026-02-20T09:15:00.000Z';
   const existingFixture = createContainerFixture();

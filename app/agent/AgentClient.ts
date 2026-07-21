@@ -30,6 +30,7 @@ import {
   type Container,
   type ContainerReport,
   clearDetectedUpdateState,
+  deriveContainerIdentityKey,
 } from '../model/container.js';
 import {
   type ActiveContainerUpdateOperationStatus,
@@ -220,6 +221,7 @@ export class AgentClient {
   private reconnectTimer: NodeJS.Timeout | null;
   private reconnectAttempts: number;
   private stableConnectionTimer: NodeJS.Timeout | null;
+  private activeSseStream: (NodeJS.EventEmitter & { destroy?: () => void }) | undefined;
   private stopped: boolean;
   private hasConnectedOnce: boolean;
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
@@ -252,6 +254,7 @@ export class AgentClient {
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
     this.stableConnectionTimer = null;
+    this.activeSseStream = undefined;
     this.stopped = false;
     this.hasConnectedOnce = false;
     this.pendingFreshStateAfterRemoteUpdate = new Set();
@@ -436,8 +439,20 @@ export class AgentClient {
     // removal. Flagging it lets the store retain the user's updatePolicy for the incoming doc
     // (and, as before, lets Hass keep the state topic alive across the swap). A name that is
     // genuinely gone stays unflagged so its HA discovery topics are still cleaned up.
-    const newContainerNames = new Set(
+    const newContainerIdentityKeys = new Set(
       newContainers
+        .map((container) =>
+          deriveContainerIdentityKey({
+            ...container,
+            agent: this.name,
+            watcher: container.watcher || watcher,
+          }),
+        )
+        .filter((key): key is string => key !== undefined),
+    );
+    const newUnscopedContainerNames = new Set(
+      newContainers
+        .filter((container) => !container.watcher && !watcher)
         .map((container) => container.name)
         .filter((name): name is string => typeof name === 'string' && name !== ''),
     );
@@ -445,7 +460,11 @@ export class AgentClient {
     containersToRemove.forEach((c) => {
       this.log.info(`Pruning container ${c.name} (removed on Agent)`);
       this.pendingFreshStateAfterRemoteUpdate.delete(c.id);
-      if (typeof c.name === 'string' && newContainerNames.has(c.name)) {
+      const identityKey = deriveContainerIdentityKey(c);
+      const replacementExpected = identityKey
+        ? newContainerIdentityKeys.has(identityKey)
+        : typeof c.name === 'string' && newUnscopedContainerNames.has(c.name);
+      if (replacementExpected) {
         storeContainer.deleteContainer(c.id, { replacementExpected: true });
         return;
       }
@@ -761,6 +780,9 @@ export class AgentClient {
 
   stop() {
     this.stopped = true;
+    const activeSseStream = this.activeSseStream;
+    this.activeSseStream = undefined;
+    activeSseStream?.destroy?.();
     this.clearStableConnectionTimer();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -857,6 +879,9 @@ export class AgentClient {
     let sseProcessing = Promise.resolve();
 
     stream.on('data', (chunk: Buffer) => {
+      if (this.stopped || this.activeSseStream !== stream) {
+        return;
+      }
       const decodedChunk = decoder.write(chunk);
       if (!decodedChunk) {
         return;
@@ -872,10 +897,18 @@ export class AgentClient {
         });
     });
     stream.on('error', (e: Error) => {
+      if (this.activeSseStream !== stream) {
+        return;
+      }
+      this.activeSseStream = undefined;
       this.log.error(`SSE Connection failed: ${e.message}`);
       this.scheduleReconnect();
     });
     stream.on('end', () => {
+      if (this.activeSseStream !== stream) {
+        return;
+      }
+      this.activeSseStream = undefined;
       this.log.warn('SSE stream ended. Reconnecting...');
       this.scheduleReconnect();
     });
@@ -907,6 +940,7 @@ export class AgentClient {
           this.stableConnectionTimer = null;
           this.reconnectAttempts = 0;
         }, SSE_STABLE_CONNECTION_MS);
+        this.activeSseStream = response.data;
         this.attachStreamHandlers(response.data);
       })
       .catch((error: unknown) => {
