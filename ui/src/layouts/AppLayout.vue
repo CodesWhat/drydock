@@ -707,9 +707,12 @@ const legacyConfigBannerTitle = computed(() => {
     ? t('appShell.banners.legacyConfigTitlePlural', { total })
     : t('appShell.banners.legacyConfigTitleSingular', { total });
 });
-const legacyApiPathBannerTitle = computed(() =>
-  t('appShell.banners.legacyApiPathTitle', { total: legacyInputSummary.value?.api?.total ?? 0 }),
-);
+const legacyApiPathBannerTitle = computed(() => {
+  const total = legacyInputSummary.value?.api?.total ?? 0;
+  return total !== 1
+    ? t('appShell.banners.legacyApiPathTitlePlural', { total })
+    : t('appShell.banners.legacyApiPathTitleSingular', { total });
+});
 const hasVisibleAnnouncementBanners = computed(
   () =>
     showLegacyConfigDeprecationBanner.value ||

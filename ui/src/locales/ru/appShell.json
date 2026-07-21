@@ -157,7 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "Обнаружен {total} устаревший псевдоним конфигурации",
       "legacyConfigTitlePlural": "Обнаружено {total} устаревших псевдонимов конфигурации",
-      "legacyApiPathTitle": "{total} requests to the removed API path detected",
+      "legacyApiPathTitleSingular": "{total} request to the removed API path detected",
+      "legacyApiPathTitlePlural": "{total} requests to the removed API path detected",
       "dontShowAgain": "Больше не показывать",
       "curlHealthcheckTitle": "Обнаружено переопределение healthcheck через curl",
       "envKeysLabel": "Переменные окружения ({count}): {keys}",
