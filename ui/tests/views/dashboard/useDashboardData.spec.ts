@@ -83,7 +83,6 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,
-    updateMaturity: null,
     bouncer: 'safe',
     server: 'Local',
     details: { ports: [], volumes: [], env: [], labels: [] },

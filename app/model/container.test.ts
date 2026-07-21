@@ -520,6 +520,55 @@ test('testable_resultChangedFunction should compare created timestamps and handl
   ).toBe(true);
 });
 
+test('hasCandidateIdentityChanged should compare only tag and digest, ignoring display metadata', () => {
+  expect(container.hasCandidateIdentityChanged(undefined, undefined)).toBe(false);
+  expect(
+    container.hasCandidateIdentityChanged(undefined, {
+      tag: '1.0.0',
+      digest: 'sha256:current',
+    }),
+  ).toBe(true);
+  expect(
+    container.hasCandidateIdentityChanged(
+      {
+        tag: '1.0.0',
+        digest: 'sha256:current',
+      },
+      undefined,
+    ),
+  ).toBe(true);
+
+  const currentResult = {
+    tag: '1.0.0',
+    suggestedTag: '1.0.1',
+    digest: 'sha256:current',
+    created: '2024-01-01T00:00:00.000Z',
+  };
+
+  expect(container.hasCandidateIdentityChanged(currentResult, { ...currentResult })).toBe(false);
+  expect(
+    container.hasCandidateIdentityChanged(currentResult, {
+      ...currentResult,
+      tag: '2.0.0',
+    }),
+  ).toBe(true);
+  expect(
+    container.hasCandidateIdentityChanged(currentResult, {
+      ...currentResult,
+      digest: 'sha256:other',
+    }),
+  ).toBe(true);
+  // suggestedTag and created are display-only metadata and must not count as
+  // a candidate identity change.
+  expect(
+    container.hasCandidateIdentityChanged(currentResult, {
+      ...currentResult,
+      suggestedTag: '1.0.2',
+      created: '2024-02-01T00:00:00.000Z',
+    }),
+  ).toBe(false);
+});
+
 test('model should be validated when compliant', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',
@@ -582,6 +631,7 @@ test('model should be validated when compliant', async () => {
 
     linkTemplate: 'https://release-${major}.${minor}.${patch}.acme.com',
     link: 'https://release-1.0.0.acme.com',
+    tagPinGated: false,
     tagPinned: true,
     updateAvailable: true,
     updateKind: {
@@ -859,6 +909,147 @@ test('model should not flag rolling aliases as tagPinned', () => {
   });
 
   expect(containerValidated.tagPinned).toBe(false);
+});
+
+test('model should flag tagPinGated=true for a specific-precision tag with no include filter and no tagFamily override', () => {
+  const containerValidated = container.validate({
+    id: 'container-tag-pin-gated',
+    name: 'test-tag-pin-gated',
+    watcher: 'test',
+    image: {
+      id: 'image-tag-pin-gated',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.2.3',
+        semver: true,
+        tagPrecision: 'specific',
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(containerValidated.tagPinGated).toBe(true);
+});
+
+test('model should flag tagPinGated=false when includeTags is set', () => {
+  const containerValidated = container.validate({
+    id: 'container-tag-pin-gated-include',
+    name: 'test-tag-pin-gated-include',
+    watcher: 'test',
+    includeTags: '^1\\..*$',
+    image: {
+      id: 'image-tag-pin-gated-include',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.2.3',
+        semver: true,
+        tagPrecision: 'specific',
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(containerValidated.tagPinGated).toBe(false);
+});
+
+test('model should flag tagPinGated=false when tagFamily is loose', () => {
+  const containerValidated = container.validate({
+    id: 'container-tag-pin-gated-loose',
+    name: 'test-tag-pin-gated-loose',
+    watcher: 'test',
+    tagFamily: 'loose',
+    image: {
+      id: 'image-tag-pin-gated-loose',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.2.3',
+        semver: true,
+        tagPrecision: 'specific',
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(containerValidated.tagPinGated).toBe(false);
+});
+
+test('model should flag tagPinGated=false when tagPrecision is floating', () => {
+  const containerValidated = container.validate({
+    id: 'container-tag-pin-gated-floating',
+    name: 'test-tag-pin-gated-floating',
+    watcher: 'test',
+    image: {
+      id: 'image-tag-pin-gated-floating',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: 'latest',
+        semver: false,
+        tagPrecision: 'floating',
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(containerValidated.tagPinGated).toBe(false);
+});
+
+test('model should flag tagPinGated=false when tagPrecision is absent', () => {
+  const containerValidated = container.validate({
+    id: 'container-tag-pin-gated-absent-precision',
+    name: 'test-tag-pin-gated-absent-precision',
+    watcher: 'test',
+    image: {
+      id: 'image-tag-pin-gated-absent-precision',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: '1.2.3',
+        semver: true,
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+  });
+
+  expect(containerValidated.tagPinGated).toBe(false);
 });
 
 test('model should reject invalid image.tag.tagPrecision values', () => {
@@ -1937,6 +2128,7 @@ test('flatten should be flatten the nested properties with underscores when call
     display_icon: 'mdi:docker',
     result_link: 'https://release-2.0.0.acme.com',
     result_tag: '2.0.0',
+    tag_pin_gated: false,
     tag_pinned: true,
     update_available: true,
     update_kind_kind: 'tag',

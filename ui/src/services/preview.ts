@@ -11,7 +11,7 @@ export interface ContainerPreviewPayload extends Record<string, unknown> {
 }
 
 export interface PreviewErrorAction {
-  label: string;
+  code: 'open-registry-settings' | 'open-trigger-settings';
   href: '/registries' | '/triggers';
 }
 
@@ -245,13 +245,19 @@ export function normalizePreviewPayload(payload: unknown): ContainerPreviewPaylo
 
 function normalizePreviewErrorAction(value: unknown): PreviewErrorAction | undefined {
   const action = asRecord(value);
+  if (action?.href !== '/registries' && action?.href !== '/triggers') {
+    return undefined;
+  }
+  const expectedCode =
+    action.href === '/registries' ? 'open-registry-settings' : 'open-trigger-settings';
   if (
-    typeof action?.label !== 'string' ||
-    (action.href !== '/registries' && action.href !== '/triggers')
+    (action.code === undefined &&
+      (typeof action.label !== 'string' || action.label.trim().length === 0)) ||
+    (action.code !== undefined && action.code !== expectedCode)
   ) {
     return undefined;
   }
-  return { label: action.label, href: action.href };
+  return { code: expectedCode, href: action.href };
 }
 
 async function buildPreviewRequestError(response: Response): Promise<PreviewRequestError> {

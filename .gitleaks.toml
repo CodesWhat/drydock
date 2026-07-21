@@ -1,0 +1,4 @@
+title = "Drydock Gitleaks configuration"
+
+[extend]
+useDefault = true

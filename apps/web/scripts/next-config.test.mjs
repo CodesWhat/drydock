@@ -12,8 +12,8 @@ import { escapeRegExp, versions } from "./docs-versions.mjs";
 // receives and every script gets blocked. Nothing hydrates: homepage reveal
 // sections stay invisible and the docs nav goes dead. Open upstream bug:
 // vercel/next.js#91633. Removed in #236, re-added by mistake in v1.5.1-rc.1
-// (#454). Only safe to re-enable once #91633 ships a fix. The CSP in
-// vercel.json is the real script hardening.
+// (#454). Only safe to re-enable once #91633 ships a fix. The request-scoped
+// nonce CSP in src/proxy.ts is the script hardening.
 test("next config does not enable experimental SRI (it blocks hydration)", () => {
   assert.equal(nextConfig.experimental?.sri, undefined);
 });

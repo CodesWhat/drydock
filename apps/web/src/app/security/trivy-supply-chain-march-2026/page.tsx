@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
 import { BASE_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
@@ -83,10 +84,7 @@ export default function TrivyAdvisoryPage() {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      <JsonLd data={jsonLd} />
       <MarketingShell>
         <article className="mx-auto max-w-4xl px-6 py-16">
           <div className="rounded-xl border border-neutral-200 bg-white/70 p-8 shadow-sm backdrop-blur-sm sm:p-12 dark:border-neutral-800 dark:bg-neutral-950/70">

@@ -55,3 +55,31 @@ describe('scanner runtime OpenAPI schemas', () => {
     });
   });
 });
+
+describe('container update-eligibility OpenAPI schemas', () => {
+  test('documents the eligibility verdict, blockers, and maturity clock details', () => {
+    expect(openApiSchemas.ContainerResource.properties).toMatchObject({
+      tagPinGated: { type: 'boolean' },
+      updateEligibility: { $ref: '#/components/schemas/UpdateEligibility' },
+    });
+    expect(openApiSchemas.UpdateEligibility).toMatchObject({
+      type: 'object',
+      required: ['eligible', 'blockers', 'evaluatedAt'],
+      properties: {
+        eligible: { type: 'boolean' },
+        blockers: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/UpdateBlocker' },
+        },
+        evaluatedAt: { type: 'string', format: 'date-time' },
+      },
+    });
+    expect(openApiSchemas.UpdateBlocker.properties.details).toMatchObject({
+      properties: {
+        clockSource: { type: 'string', enum: ['publishedAt', 'detectedAt'] },
+        clockStartAt: { type: 'string', format: 'date-time' },
+        remainingMs: { type: 'number', minimum: 0 },
+      },
+    });
+  });
+});

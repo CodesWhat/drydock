@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.6.0-rc.2';
-const RC_DATE = '2026-07-18';
-const RC_DISPLAY_DATE = 'July 18, 2026';
+const RC_VERSION = '1.6.0-rc.3';
+const RC_DATE = '2026-07-21';
+const RC_DISPLAY_DATE = 'July 21, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
+const BROAD_401_CLAIM =
+  /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
 
 function read(path) {
   return readFileSync(path, 'utf8');
@@ -21,16 +23,16 @@ test('public release surfaces identify the v1.6 release candidate', () => {
   const quickstart = read('content/docs/current/quickstart/index.mdx');
   const changelog = read('CHANGELOG.md');
 
-  assert.match(readme, /version-1\.6\.0--rc\.2-blue/u);
-  assert.match(readme, /v1\.6\.0-rc\.2 highlights/u);
+  assert.match(readme, /version-1\.6\.0--rc\.3-blue/u);
+  assert.match(readme, /v1\.6\.0-rc\.3 highlights/u);
   assert.match(siteConfig, new RegExp(`version: "${RC_VERSION.replaceAll('.', '\\.')}"`, 'u'));
   assert.ok(updates.includes(`## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`));
-  assert.match(appApi, /"version":"1\.6\.0-rc\.2"/u);
-  assert.match(agentApi, /"version": "1\.6\.0-rc\.2"/u);
-  assert.match(portwingApi, /"version": "1\.6\.0-rc\.2"/u);
-  assert.match(portwingApi, /"drydockVersion": "1\.6\.0-rc\.2"/u);
-  assert.match(quickstart, /\| `1\.6\.0-rc\.2` \| Immutable release candidate/u);
-  assert.doesNotMatch(quickstart, /\| `1\.6\.0-rc\.(?!2\b)\d+` \| Immutable release candidate/u);
+  assert.match(appApi, /"version":"1\.6\.0-rc\.3"/u);
+  assert.match(agentApi, /"version": "1\.6\.0-rc\.3"/u);
+  assert.match(portwingApi, /"version": "1\.6\.0-rc\.3"/u);
+  assert.match(portwingApi, /"drydockVersion": "1\.6\.0-rc\.3"/u);
+  assert.match(quickstart, /\| `1\.6\.0-rc\.3` \| Immutable release candidate/u);
+  assert.doesNotMatch(quickstart, /\| `1\.6\.0-rc\.(?!3\b)\d+` \| Immutable release candidate/u);
   assert.ok(changelog.includes(`## [${RC_VERSION}] — ${RC_DATE}`));
   assert.ok(
     changelog.includes(
@@ -39,7 +41,7 @@ test('public release surfaces identify the v1.6 release candidate', () => {
   );
   assert.ok(
     changelog.includes(
-      `[${RC_VERSION}]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...v${RC_VERSION}`,
+      `[${RC_VERSION}]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...v${RC_VERSION}`,
     ),
   );
 });
@@ -53,7 +55,7 @@ test('v1.5.2 is archived and public release routing advances to v1.6', () => {
 
   assert.match(readme, /<summary><strong>v1\.5\.2 highlights<\/strong><\/summary>/u);
   assert.match(siteContent, /version: "v1\.5\.2",[\s\S]{0,500}?status: "released"/u);
-  assert.match(siteContent, /version: "v1\.6\.0-rc\.2",[\s\S]{0,500}?status: "next"/u);
+  assert.match(siteContent, /version: "v1\.6\.0-rc\.3",[\s\S]{0,500}?status: "next"/u);
   assert.match(
     docsVersions,
     /\{ slug: "v1\.6", source: "current", title: "v1\.6" \},\s+\{ slug: "v1\.5", source: "v1\.5", title: "v1\.5" \}/u,
@@ -332,14 +334,34 @@ test('current and archived docs describe destructive and recovery behavior accur
       /\*\*Delete\*\*[\s\S]{0,180}?Remove the container from Drydock tracking/u,
     );
     assert.match(actions, /does not delete the runtime container/u);
-    assert.match(
-      authentications,
-      /Authentication protects all API routes and UI views unless anonymous access is enabled\. Fresh installs must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true`/u,
-    );
-    assert.match(
-      authentications,
-      /legacy upgrades without configured authentication retain anonymous access with a startup warning/u,
-    );
+    if (root === 'content/docs/current') {
+      // v1.6 removed the warn-and-serve grandfather path: upgrades fail closed like fresh installs.
+      assert.match(
+        authentications,
+        /Authentication protects protected API routes and UI data unless anonymous access is enabled\. Fresh installs and upgrades alike must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true`/u,
+      );
+      assert.match(
+        authentications,
+        /Upgrade, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` \| Starts fail-closed — protected API requests return `401`; auth discovery\/status stays public; `\/health` returns `503`/u,
+      );
+      assert.match(
+        authentications,
+        /The SPA shell may still load, but it cannot read protected application data/u,
+      );
+      assert.doesNotMatch(authentications, /refuses to start/u);
+      assert.doesNotMatch(authentications, BROAD_401_CLAIM);
+      assert.doesNotMatch(authentications, /retain anonymous access with a startup warning/u);
+    } else {
+      // The 1.5.x archive documents the grandfather path that line actually shipped with.
+      assert.match(
+        authentications,
+        /Authentication protects all API routes and UI views unless anonymous access is enabled\. Fresh installs must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true`/u,
+      );
+      assert.match(
+        authentications,
+        /legacy upgrades without configured authentication retain anonymous access with a startup warning/u,
+      );
+    }
     assert.match(security, /sbom\?format=\{format\}/u);
     assert.doesNotMatch(security, /sbom\?format=\\\{format\\\}/u);
     assert.doesNotMatch(selfUpdate, /zero downtime/iu);
@@ -358,6 +380,38 @@ test('current and archived docs describe destructive and recovery behavior accur
     assert.match(deprecations, /Detection methods and warning behavior vary by feature/u);
     assert.doesNotMatch(deprecations, /emit warnings at startup or in the UI/u);
   }
+});
+
+test('v1.6 fail-closed upgrade docs preserve public auth routes and health semantics', () => {
+  const readme = read('README.md');
+  const changelog = read('CHANGELOG.md');
+  const deprecations = read('DEPRECATIONS.md');
+
+  for (const document of [readme, changelog, deprecations]) {
+    assert.match(document, /protected API requests? (?:are rejected with|return) `401`/u);
+    assert.match(
+      document,
+      /auth(?:entication)? discovery\/status (?:routes )?remain(?:s)? public/u,
+    );
+    assert.match(document, /`\/health` (?:reports|returns) `503`/u);
+    assert.doesNotMatch(document, BROAD_401_CLAIM);
+  }
+
+  assert.match(
+    readme,
+    /The SPA shell may still load, but it cannot read protected application data/u,
+  );
+  assert.match(deprecations, /the process continues running/u);
+  assert.doesNotMatch(deprecations, /refusing to serve/u);
+});
+
+test('security policy distinguishes stable and prerelease support', () => {
+  const security = read('SECURITY.md');
+
+  assert.match(security, /Latest stable release/u);
+  assert.match(security, /Latest release candidate on the active train/u);
+  assert.match(security, /Older release candidates are not patched/u);
+  assert.doesNotMatch(security, /\|\s*latest\s*\|/iu);
 });
 
 test('current and archived release examples use consistent tags, filenames, dates, and anchors', () => {

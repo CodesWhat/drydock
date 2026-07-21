@@ -43,6 +43,20 @@ type LokiDatabase = InstanceType<typeof Loki>;
 let db: LokiDatabase | undefined;
 let isMemoryMode = false;
 let storePathResolved: string | undefined;
+let storeDirectoryResolved: string | undefined;
+const STORE_DIRECTORY_MODE = 0o700;
+const STORE_FILE_MODE = 0o600;
+
+function enforceStorePermissions(storeDirectory: string, storePath: string): void {
+  fs.chmodSync(storeDirectory, STORE_DIRECTORY_MODE);
+  try {
+    fs.chmodSync(storePath, STORE_FILE_MODE);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+  }
+}
 
 function createCollections() {
   agentKeys.createCollections(db);
@@ -141,8 +155,15 @@ export async function init(options: { memory?: boolean } = {}) {
     label: 'DD_STORE_FILE',
   });
   storePathResolved = storePath;
+  storeDirectoryResolved = storeDirectory;
   if (storePath === storeDirectory) {
     throw new Error('DD_STORE_FILE must reference a file path, not a directory');
+  }
+
+  if (!isMemoryMode) {
+    // Loki saves through temporary files during both explicit and background autosaves.
+    // A restrictive process umask keeps every replacement file owner-readable only.
+    process.umask(0o077);
   }
 
   db = new Loki(storePath, {
@@ -167,8 +188,9 @@ export async function init(options: { memory?: boolean } = {}) {
   log.info(`Load store from (${storePath})`);
   if (!fs.existsSync(storeDirectory)) {
     log.info(`Create folder ${storeDirectory}`);
-    fs.mkdirSync(storeDirectory);
+    fs.mkdirSync(storeDirectory, { mode: STORE_DIRECTORY_MODE });
   }
+  enforceStorePermissions(storeDirectory, storePath);
   return new Promise<void>((resolve, reject) => {
     db.loadDatabase({}, (err) => {
       void loadDb(err, resolve, reject).catch(reject);
@@ -194,7 +216,15 @@ export async function save() {
       if (err) {
         reject(err);
       } else {
-        resolve();
+        try {
+          // A persistent db and its resolved path/directory are initialized together in init().
+          const persistentStorePath = storePathResolved as string;
+          const persistentStoreDirectory = storeDirectoryResolved as string;
+          enforceStorePermissions(persistentStoreDirectory, persistentStorePath);
+          resolve();
+        } catch (permissionError) {
+          reject(permissionError);
+        }
       }
     });
   });

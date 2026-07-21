@@ -1,5 +1,27 @@
 import type { Container } from '../types/container';
-import { getUpdateMaturity } from './update-maturity';
+import { daysToMs } from './maturity-policy';
+
+/**
+ * "Fresh" here is a dashboard KPI threshold (recently-detected updates), independent of the
+ * removed NEW/MATURE badge UI (#display-honesty) — the freshness fact still needs a number
+ * for the dashboard summary even though it no longer has its own chrome in the table/card.
+ */
+const DASHBOARD_FRESH_THRESHOLD_MS = daysToMs(7);
+
+function isFreshUpdate(
+  updateDetectedAt: string | undefined,
+  nowMs: number = Date.now(),
+  thresholdMs: number = DASHBOARD_FRESH_THRESHOLD_MS,
+): boolean {
+  if (!updateDetectedAt) {
+    return false;
+  }
+  const detectedMs = Date.parse(updateDetectedAt);
+  if (Number.isNaN(detectedMs)) {
+    return false;
+  }
+  return nowMs - detectedMs < thresholdMs;
+}
 
 export interface ImageSecurityAggregate {
   key: string;
@@ -121,7 +143,7 @@ export function buildDashboardContainerMetrics(
   for (const container of updateContainers) {
     if (container.updateKind) {
       updatesAvailable += 1;
-      if (getUpdateMaturity(container.updateDetectedAt, true) === 'fresh') {
+      if (isFreshUpdate(container.updateDetectedAt)) {
         freshUpdates += 1;
       }
     }

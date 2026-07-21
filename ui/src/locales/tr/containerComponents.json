@@ -198,7 +198,6 @@
       "emptyState": "Filtrelerinizle eşleşen kapsayıcı yok",
       "currentLabel": "Mevcut",
       "latestLabel": "En son",
-      "blockedByBouncer": "Bouncer tarafından engellendi",
       "registryErrorRateLimited": "İstek sınırı aşıldı",
       "registryErrorAuth": "Kimlik doğrulama başarısız",
       "registryErrorNotFound": "Bulunamadı",
@@ -259,7 +258,6 @@
       "allBouncer": "Tüm Bouncer",
       "safe": "Güvenli",
       "unsafe": "Güvenli değil",
-      "blocked": "Engellendi",
       "allRegistries": "Tüm Kayıtlar",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "Binbaşı",
       "minor": "Küçük",
       "patch": "Yama",
-      "digest": "Özet",
       "hidePinned": "Sabitlenenleri Gizle",
       "hidePinnedTooltip": "Belirli sürümlere sabitlenmiş kapsayıcıları gizle",
       "clearAll": "Tümünü temizle",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "Projeyi görüntüle"
     },
-    "registryLink": { "viewRegistry": "Kayıt defterini görüntüle" },
+    "registryLink": {
+      "viewRegistry": "Kayıt defterini görüntüle"
+    },
     "releaseNotesLink": {
       "releaseNotes": "Sürüm notları",
       "viewFullNotes": "Notların tamamını görüntüle",
@@ -351,12 +350,6 @@
       "noTrigger": "Tetikleyici yok",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Asansörler:"
-    },
-    "maturityBadge": {
-      "new": "YENİ",
-      "mature": "OLGUN",
-      "newTooltip": "Yeni güncelleme",
-      "matureTooltip": "Olgun güncelleme"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -482,15 +475,6 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
-    },
     "preview": {
       "toasts": {
         "failedTitle": "Preview failed",
@@ -552,9 +536,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "Sabitlendi — bilgilendirme amacıyla daha yeni bir sürüm mevcut."
-      }
+      "summary": {}
     }
   }
 }

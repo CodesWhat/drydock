@@ -10,6 +10,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.3] — 2026-07-21
+
+### Changed
+
+- **Update-status vocabulary overhaul across the containers UI** ([#498](https://github.com/CodesWhat/drydock/issues/498), [#556](https://github.com/CodesWhat/drydock/issues/556)). "Digest" reads as **"Digest update"**; the NEW/MATURE freshness badges are gone (the detection age lives in the update-kind badge's tooltip instead); an unrecognized update kind now renders a neutral "Unknown" badge instead of nothing; and the bouncer's "Blocked" label is now **"Security hold"**.
+- **Pinned is a tag property again, not an update status.** Pinned containers show a persistent pin glyph on the Tag cell whether or not an update exists, with the `dd.tag.family` remedy in its tooltip; up-to-date pinned rows read "Current" like everything else instead of a bare "Pinned" chip that only appeared when a newer family version existed. The container-detail Update Status panel follows the same rule: an insight-only container reads up to date there too, with the held-back newer tag relegated to an informational detail row.
+- **The maturity panel keeps exactly one clock.** The policy sentence names the clock the gate actually measures against ("Candidate published {date} — n more days until the minimum", with a detection-date fallback), the duplicate countdown collapsed into one "{countdown} · unlocks {date}" line, and the backend now exposes the resolved clock (`clockSource`/`clockStartAt`) on the maturity blocker so the UI reads the gate's own verdict instead of re-deriving it from the detection time.
+- **The column picker tells the truth about auto-hidden columns.** Columns hidden to fit the viewport stay checked with a muted "hidden to fit" note, and the "+N" toolbar badge's tooltip names them.
+
+### Fixed
+
+- **The pin glyph marks only tags the pin gate actually governs.** The glyph is driven by a new backend `tagPinGated` verdict — a specific-version tag with no `dd.tag.include` filter under a non-loose `dd.tag.family` policy — instead of bare tag shape, which had put a "won't climb to newer versions" pin (clipped to near-invisibility) on every exact-version container, including ones with actionable updates. It now renders inline beside the pinned tag at a legible size.
+
+- **Container-detail registry links land on the registry they name** ([#556](https://github.com/CodesWhat/drydock/issues/556)). The `/registries?q=<type>.<name>` deep-links emitted by container detail matched neither the bare registry name nor the bare type, so they always rendered an empty filtered list; the registries filter now also matches the dotted instance ID.
+
+- **Removed-API-path banner grammar and tooltip freshness.** The banner title pluralizes correctly ("1 request" vs "n requests"), and tooltip-bound native `title` attributes now follow reactive value changes (previously the column picker's "+N" badge kept naming whichever columns were hidden when the page first rendered).
+
+- **Manual recheck no longer restarts the maturity countdown on display-only metadata drift** ([#565](https://github.com/CodesWhat/drydock/issues/565)). A per-container recheck bypasses the registry poll cache, so the suggested tag and image created date can wobble between scans even when the update candidate itself hasn't changed, falsely resetting the soak. The lifecycle clock now restarts only when the candidate's actual identity — tag or digest — changes; suggested tag and created date no longer factor into the restart decision.
+
+### Security
+
+- **Anonymous access now fails closed on upgrades, not just fresh installs.** An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — starts and fails closed: protected API requests are rejected with `401`, auth discovery/status remains public, `/health` reports `503`, and the SPA shell may load without access to protected application data. This replaces the previous warning plus open dashboard. If you run an intentionally open instance, set `DD_ANONYMOUS_AUTH_CONFIRM=true`; otherwise configure `DD_AUTH_BASIC_<name>_USER`/`_HASH` before upgrading.
+
+- **HTTP notification trigger hardened against SSRF.** Hostnames are re-resolved on every request through a guarded DNS lookup that blocks cloud metadata and link-local targets (override with `allowmetadata=true`), and redirects can no longer escape into blocked address space via cross-host or DNS-rebinding hops.
+
+- **WebSocket upgrades validate the complete origin.** Origin checks now compare full scheme/host/port origins — honoring `X-Forwarded-Proto`/`X-Forwarded-Host` only when trust proxy is enabled — instead of host-substring matching, closing WebSocket CSRF gaps behind reverse proxies.
+
+- **Session cookie renamed to `drydock.sid`.** Replaces Express's default `connect.sid`, so drydock sessions no longer collide with (or are fingerprintable as) other Express apps behind the same host. Everyone is signed out once on upgrade.
+
+- **Persistent store files are owner-only.** `/store` is created `0700`, `dd.json` is kept `0600`, and the container entrypoint and store process set a `077` umask so LokiJS autosave replacement files never widen permissions.
+
+- **Icon CDN sources are pinned to exact upstream revisions** (dashboard-icons, selfh.st icons, simple-icons) instead of floating tags, so an upstream push can't silently change what the dashboard serves.
+
 ## [1.6.0-rc.2] — 2026-07-18
 
 ### Added
@@ -2159,7 +2192,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...HEAD
+[1.6.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...v1.6.0-rc.3
 [1.6.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...v1.6.0-rc.2
 [1.6.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.5.2...v1.6.0-rc.1
 [1.5.2]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.5...v1.5.2

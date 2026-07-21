@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
@@ -12,6 +11,7 @@ import {
 } from '../../utils/container-update';
 import type { Container, UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker, hasRawUpdateCandidate } from '../../utils/update-eligibility';
+import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update-kind-labels';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -71,17 +71,8 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
   return getUpdateHardBlocker(container) !== undefined;
 }
 
-const updateKindLabels = computed(
-  (): Record<NonNullable<Container['updateKind']>, string> => ({
-    major: t('containerComponents.listContent.major'),
-    minor: t('containerComponents.listContent.minor'),
-    patch: t('containerComponents.listContent.patch'),
-    digest: t('containerComponents.listContent.digest'),
-  }),
-);
-
 function getUpdateKindLabel(kind: Container['updateKind']) {
-  return kind ? updateKindLabels.value[kind] : '';
+  return resolveUpdateKindLabel(kind, t);
 }
 
 function getStatusLabel(container: {

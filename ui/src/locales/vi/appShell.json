@@ -157,7 +157,6 @@
     "banners": {
       "legacyConfigTitleSingular": "Phát hiện {total} bí danh cấu hình cũ",
       "legacyConfigTitlePlural": "Phát hiện {total} bí danh cấu hình cũ",
-      "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "Không hiển thị lại",
       "curlHealthcheckTitle": "Phát hiện ghi đè healthcheck curl tùy chỉnh",
       "envKeysLabel": "Env keys ({count}): {keys}",

@@ -1,5 +1,4 @@
 import { Strategy as AnonymousStrategy } from 'passport-anonymous';
-import log from '../../../log/index.js';
 import { isUpgrade } from '../../../store/app.js';
 import Authentication from '../Authentication.js';
 
@@ -18,10 +17,9 @@ class Anonymous extends Authentication {
       return;
     }
     if (isUpgrade()) {
-      log.warn(
-        'No authentication configured — the dashboard is accessible without login. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure it, or set DD_ANONYMOUS_AUTH_CONFIRM=true to silence this warning.',
+      throw new Error(
+        'No authentication configured during an upgrade. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure the dashboard, or set DD_ANONYMOUS_AUTH_CONFIRM=true to explicitly allow anonymous access.',
       );
-      return;
     }
     throw new Error(
       'No authentication configured and this is a fresh install. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure the dashboard, or set DD_ANONYMOUS_AUTH_CONFIRM=true to allow anonymous access.',
@@ -36,10 +34,9 @@ class Anonymous extends Authentication {
       return new AnonymousStrategy();
     }
     if (isUpgrade()) {
-      log.warn(
-        'Anonymous authentication is enabled without explicit confirmation; consider configuring authentication',
+      throw new Error(
+        'Anonymous authentication cannot be enabled during an upgrade without DD_ANONYMOUS_AUTH_CONFIRM=true',
       );
-      return new AnonymousStrategy();
     }
     throw new Error(
       'Anonymous authentication cannot be enabled on a fresh install without DD_ANONYMOUS_AUTH_CONFIRM=true',

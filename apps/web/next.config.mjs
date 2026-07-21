@@ -26,7 +26,7 @@ const nextConfig = {
   // Nothing hydrates: homepage reveal sections stay invisible, docs nav goes
   // dead. Open upstream bug: vercel/next.js#91633. Removed in #236, re-added by
   // mistake in v1.5.1-rc.1 (#454). Only safe to re-enable once #91633 ships a
-  // fix. The CSP in vercel.json is the real script hardening here.
+  // fix. The request-scoped nonce CSP in src/proxy.ts is the script hardening.
   images: {
     remotePatterns: [
       {

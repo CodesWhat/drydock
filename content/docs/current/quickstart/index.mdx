@@ -108,7 +108,7 @@ Release tags use the same channel names in every registry:
 
 | Tag | Behavior |
 | --- | --- |
-| `1.6.0-rc.2` | Immutable release candidate; best for reproducible testing |
+| `1.6.0-rc.3` | Immutable release candidate; best for reproducible testing |
 | `1.6-rc` | Rolling release-candidate channel; moves to the newest `1.6.0-rc.N` |
 | `1.6` | Rolling stable minor channel; published only for GA releases |
 | `1` | Rolling stable major channel; published only for GA releases |
@@ -118,7 +118,7 @@ Use the exact RC tag when reporting a regression. Use `1.6-rc` only when you int
 
 <Callout type="warn">Authentication is **required by default** on fresh installs. The examples above use Basic auth with username `admin` and password `password`. See the [auth docs](/docs/configuration/authentications) for OIDC, anonymous access, and other options.</Callout>
 
-<Callout type="warn">**Behind a reverse proxy?** If a TLS-terminating reverse proxy (Nginx Proxy Manager, Traefik, Caddy, Synology DSM, etc.) sits in front of Drydock, set `DD_SERVER_TRUSTPROXY=1` (the number of proxy hops) — otherwise every manual action in the UI fails with `403 CSRF validation failed`. See [the FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for details.</Callout>
+<Callout type="warn">**Behind a reverse proxy?** If a TLS-terminating reverse proxy (Nginx Proxy Manager, Traefik, Caddy, Synology DSM, etc.) sits in front of Drydock, set `DD_SERVER_TRUSTPROXY=1` (the number of proxy hops) — otherwise every manual action in the UI fails with `403 CSRF validation failed`, and WebSocket log streaming (the dashboard log viewer, container logs) fails to connect too. See [the FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for details.</Callout>
 
 ## Migrating from WUD
 

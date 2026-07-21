@@ -105,7 +105,7 @@ Example frame payload:
 ### Authentication and limits
 
 - Requires an authenticated session (cookie-based auth).
-- WebSocket upgrade origin checks must pass.
+- WebSocket upgrade origin checks must pass — the `Origin` header's host and scheme must match the server; behind a TLS-terminating reverse proxy this requires `DD_SERVER_TRUSTPROXY` (see [Server configuration](/docs/configuration/server#reverse-proxy-trust-proxy)).
 - Connection attempts are rate-limited (1,000 upgrades per 15-minute window per identity/IP key).
 
 ## Get agent log entries

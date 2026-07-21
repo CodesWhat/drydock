@@ -1265,8 +1265,14 @@ const availableContentWidth = computed(() =>
   measuredContentWidth.value > 0 ? measuredContentWidth.value : fallbackContentWidth.value,
 );
 
-const { allColumns, visibleColumns, hiddenColumnKeys, toggleColumn, resetColumns } =
-  useColumnVisibility(availableContentWidth);
+const {
+  allColumns,
+  visibleColumns,
+  hiddenColumnKeys,
+  autoHiddenColumns,
+  toggleColumn,
+  resetColumns,
+} = useColumnVisibility(availableContentWidth);
 
 const tableColumns = computed(() =>
   allColumns.map((column) => ({
@@ -1450,6 +1456,7 @@ provide(containersViewTemplateContextKey, {
   toggleColumn,
   visibleColumns,
   hiddenColumnKeys,
+  autoHiddenColumns,
   resetColumns,
   tt,
   groupByStack,

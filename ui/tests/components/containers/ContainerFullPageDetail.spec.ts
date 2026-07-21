@@ -114,6 +114,17 @@ describe('ContainerFullPageDetail', () => {
     expect(wrapper.text()).toContain('nginx');
   });
 
+  it('falls back to the neutral Unknown label for an unrecognized updateKind instead of rendering nothing (#display-honesty)', () => {
+    selectedContainer.value.newTag = '2.0.0';
+    selectedContainer.value.updateKind = 'bogus-kind';
+
+    const wrapper = factory();
+    const text = wrapper.text();
+
+    expect(text).toContain('Unknown');
+    expect(text).not.toContain('bogus-kind');
+  });
+
   it('hides header update and force-update controls in notify mode', () => {
     updateMode.value = 'notify';
     (selectedContainer as any).value = {

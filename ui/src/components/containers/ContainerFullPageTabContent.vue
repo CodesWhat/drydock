@@ -6,7 +6,6 @@ import AppButton from '../AppButton.vue';
 import AppIconButton from '../AppIconButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
-import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import UpdateStatusPanel from './UpdateStatusPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
@@ -17,6 +16,7 @@ import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
 import type { Container, UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker, hasRawUpdateCandidate } from '../../utils/update-eligibility';
+import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update-kind-labels';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
@@ -202,17 +202,8 @@ function isManagedUpdateTrigger(trigger: { type: string }) {
   return trigger.type === 'docker' || trigger.type === 'dockercompose';
 }
 
-const updateKindLabels = computed(
-  (): Record<NonNullable<Container['updateKind']>, string> => ({
-    major: t('containerComponents.listContent.major'),
-    minor: t('containerComponents.listContent.minor'),
-    patch: t('containerComponents.listContent.patch'),
-    digest: t('containerComponents.listContent.digest'),
-  }),
-);
-
 function getUpdateKindLabel(kind: Container['updateKind']) {
-  return kind ? updateKindLabels.value[kind] : '';
+  return resolveUpdateKindLabel(kind, t);
 }
 </script>
 
@@ -318,7 +309,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                    :style="{ backgroundColor: 'var(--dd-success-muted)' }">
                 <span style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
                 <CopyableTag :tag="selectedContainer.newDigest" class="font-bold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
-                <AppBadge size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
+                <AppBadge size="xs" :custom="updateKindColor(selectedContainer.updateKind)" v-tooltip.top="selectedContainer.updateMaturityTooltip">
                   {{ getUpdateKindLabel(selectedContainer.updateKind) }}
                 </AppBadge>
               </div>
@@ -326,7 +317,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                    :style="{ backgroundColor: 'var(--dd-success-muted)' }">
                 <span style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
                 <CopyableTag :tag="selectedContainer.newTag!" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
-                <AppBadge size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
+                <AppBadge size="xs" :custom="updateKindColor(selectedContainer.updateKind)" v-tooltip.top="selectedContainer.updateMaturityTooltip">
                   {{ getUpdateKindLabel(selectedContainer.updateKind) }}
                 </AppBadge>
               </div>
@@ -369,8 +360,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 :reason="selectedContainer.noUpdateReason"
                 variant="inline"
               />
-              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="flex items-center gap-1.5 flex-wrap">
-                <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
+              <div v-if="selectedContainer.updateKind || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="flex items-center gap-1.5 flex-wrap">
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
                 <FloatingTagBadge
                   :tag-precision="selectedContainer.tagPrecision"

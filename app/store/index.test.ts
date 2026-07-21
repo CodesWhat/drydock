@@ -33,7 +33,12 @@ const {
 
   function createFsMock(overrides = {}) {
     return {
-      default: { existsSync: vi.fn(), mkdirSync: vi.fn(), ...overrides },
+      default: {
+        existsSync: vi.fn(),
+        mkdirSync: vi.fn(),
+        chmodSync: vi.fn(),
+        ...overrides,
+      },
     };
   }
 
@@ -148,8 +153,14 @@ vi.mock('./update-operation', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
 describe('Store Module', () => {
+  const originalUmask = process.umask();
+
   beforeEach(async () => {
     vi.clearAllMocks();
+  });
+
+  afterAll(() => {
+    process.umask(originalUmask);
   });
 
   test('should initialize store successfully', async () => {
@@ -162,6 +173,9 @@ describe('Store Module', () => {
       autosave: true,
       autosaveInterval: 300000,
     });
+    expect(process.umask()).toBe(0o077);
+    expect(fs.chmodSync).toHaveBeenCalledWith('/test/store', 0o700);
+    expect(fs.chmodSync).toHaveBeenCalledWith('/test/store/test.json', 0o600);
 
     const app = await import('./app.js');
     const container = await import('./container.js');
@@ -187,7 +201,7 @@ describe('Store Module', () => {
 
     await store.init();
 
-    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/store');
+    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/store', { mode: 0o700 });
   });
 
   test('should return configuration', async () => {
@@ -329,6 +343,34 @@ describe('Store Module', () => {
     const Loki = (await import('lokijs')).default;
     const dbInstance = Loki.mock.results[0].value;
     expect(dbInstance.saveDatabase).toHaveBeenCalledTimes(1);
+    const mockedFs = (await import('node:fs')).default;
+    expect(mockedFs.chmodSync).toHaveBeenLastCalledWith('/test/store/test.json', 0o600);
+  });
+
+  test('should enforce directory permissions on the configured store root when DD_STORE_FILE is a subpath', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      config: { path: '/test/store', file: 'nested/sub/test.json' },
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+      },
+    });
+
+    const storeWithNestedFile = await import('./index.js');
+    await storeWithNestedFile.init();
+
+    const mockedFs = (await import('node:fs')).default;
+    mockedFs.chmodSync.mockClear();
+
+    await storeWithNestedFile.save();
+
+    // Perms must land on the configured store root ('/test/store'), not the
+    // subdirectory implied by DD_STORE_FILE's nested path.
+    expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store', 0o700);
+    expect(mockedFs.chmodSync).not.toHaveBeenCalledWith('/test/store/nested/sub', 0o700);
+    expect(mockedFs.chmodSync).toHaveBeenCalledWith('/test/store/nested/sub/test.json', 0o600);
   });
 
   test('should no-op save when store runs in memory mode', async () => {
@@ -362,6 +404,76 @@ describe('Store Module', () => {
     await storeWithSaveError.init();
 
     await expect(storeWithSaveError.save()).rejects.toThrow('Database save failed');
+  });
+
+  test('should reject when database permissions cannot be repaired after save', async () => {
+    vi.resetModules();
+    const chmodSync = vi.fn((target: string) => {
+      if (target === '/test/store' && chmodSync.mock.calls.length > 2) {
+        throw new Error('Permission repair failed');
+      }
+    });
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+        chmodSync,
+      },
+    });
+
+    const storeWithPermissionError = await import('./index.js');
+    await storeWithPermissionError.init();
+
+    await expect(storeWithPermissionError.save()).rejects.toThrow('Permission repair failed');
+  });
+
+  test('should swallow ENOENT when the store file does not exist yet during permission enforcement', async () => {
+    vi.resetModules();
+    const enoentError = Object.assign(new Error('no such file or directory'), {
+      code: 'ENOENT',
+    });
+    const chmodSync = vi.fn((target: string) => {
+      if (target === '/test/store/test.json') {
+        throw enoentError;
+      }
+    });
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+        chmodSync,
+      },
+    });
+
+    const storeWithMissingFile = await import('./index.js');
+    await expect(storeWithMissingFile.init()).resolves.toBeUndefined();
+    expect(chmodSync).toHaveBeenCalledWith('/test/store', 0o700);
+    expect(chmodSync).toHaveBeenCalledWith('/test/store/test.json', 0o600);
+  });
+
+  test('should rethrow non-ENOENT errors from store file permission enforcement', async () => {
+    vi.resetModules();
+    const permissionError = Object.assign(new Error('operation not permitted'), {
+      code: 'EPERM',
+    });
+    const chmodSync = vi.fn((target: string) => {
+      if (target === '/test/store/test.json') {
+        throw permissionError;
+      }
+    });
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+        chmodSync,
+      },
+    });
+
+    const storeWithBadFilePermissions = await import('./index.js');
+    await expect(storeWithBadFilePermissions.init()).rejects.toThrow('operation not permitted');
   });
 
   test('should throw when store configuration is invalid', async () => {

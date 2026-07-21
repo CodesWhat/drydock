@@ -4,7 +4,9 @@
       "toggleTooltip": "Toggle columns",
       "heading": "Columns",
       "reset": "Reset",
-      "hiddenBadgeTooltip": "{count} columns hidden"
+      "hiddenBadgeTooltip": "{count} columns hidden",
+      "autoHiddenAnnotation": "{column} — hidden to fit",
+      "autoHiddenBadgeTooltip": "{columns} hidden to fit your screen."
     },
     "confirmDialog": {
       "cancel": "Cancel",

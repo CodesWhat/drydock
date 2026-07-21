@@ -53,6 +53,24 @@ describe('deriveUpdateStatus', () => {
     expect(status.conditions).toEqual([]);
   });
 
+  it('treats a missing updateEligibility the same as an empty blockers list', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: undefined,
+        },
+      }),
+    );
+
+    expect(status.state).toBe('ready');
+    expect(status.summary).toBe('Update available — ready to apply manually.');
+    expect(status.manualUpdateDisabled).toBe(false);
+    expect(status.conditions).toEqual([]);
+  });
+
   it('describes automatic dispatch when auto mode is eligible', () => {
     const status = deriveUpdateStatus(input({ mode: 'auto' }));
 
@@ -312,9 +330,12 @@ describe('deriveUpdateStatus', () => {
     expect(status.state).toBe('up-to-date');
     expect(status.summary).toBe('Up to date.');
     expect(status.conditions).toEqual([]);
+    // No updateInsight on this container, so the insightNote ternary's second `&&`
+    // operand is falsy even though the container is already up to date.
+    expect(status.insightNote).toBeUndefined();
   });
 
-  it('describes a pinned-tag insight without turning it into an actionable update (#498)', () => {
+  it('describes a pinned-tag insight as up-to-date with an informational note, not a dedicated pinned state (#498)', () => {
     const status = deriveUpdateStatus(
       input({
         container: {
@@ -330,12 +351,37 @@ describe('deriveUpdateStatus', () => {
       }),
     );
 
-    expect(status.state).toBe('pinned');
-    expect(status.summary).toBe('Pinned — a newer version is available for information.');
-    expect(status.tone).toBe('info');
+    // Pinned-ness is not an update state (#498 display honesty): an insight-only
+    // container reads up-to-date like the containers table, and the held-back tag
+    // surfaces only as an informational insightNote detail instead of its own state.
+    expect(status.state).toBe('up-to-date');
+    expect(status.summary).toBe('Up to date.');
+    expect(status.tone).toBe('success');
     expect(status.hasUpdate).toBe(false);
     expect(status.manualUpdateDisabled).toBe(true);
     expect(status.conditions).toEqual([]);
+    expect(status.insightNote).toBe(
+      "Newer version available: v3.0.2-openvino. This tag is pinned — drydock won't update it automatically.",
+    );
+  });
+
+  it('omits the insight note once an update is actually actionable, even if updateInsight is still set', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateInsight: { tag: 'v3.0.2-openvino', kind: 'major' },
+          updateEligibility: eligibility(),
+        },
+      }),
+    );
+
+    // hasUpdate true short-circuits the insightNote `&&` before updateInsight is
+    // even considered — an actionable update takes precedence over the insight.
+    expect(status.hasUpdate).toBe(true);
+    expect(status.insightNote).toBeUndefined();
   });
 
   it('detects digest-only updates', () => {
@@ -390,6 +436,115 @@ describe('deriveUpdateStatus', () => {
     expect(condition.icon).toBeTruthy();
     expect(condition.tone).toBe(tone);
     expect(condition.action?.kind).toBe(actionKind);
+  });
+
+  it('composes the maturity condition body from a trusted-publishedAt clock (#display-honesty)', () => {
+    const clockStartAt = '2026-07-18T00:00:00.000Z';
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: eligibility([
+            blocker({
+              reason: 'maturity-not-reached',
+              severity: 'soft',
+              message: 'Maturity policy requires updates to be at least 7 days old.',
+              details: {
+                minAgeDays: 7,
+                clockSource: 'publishedAt',
+                clockStartAt,
+                remainingMs: 3 * 24 * 60 * 60 * 1000,
+              },
+            }),
+          ]),
+        },
+      }),
+    );
+
+    const condition = status.conditions[0];
+    const expectedDate = new Date(clockStartAt).toLocaleDateString();
+    expect(condition.body).toBe(
+      `Candidate published ${expectedDate} — 3 more days until the 7-day minimum`,
+    );
+  });
+
+  it('composes the maturity condition body from an updateDetectedAt clock, singular day remaining (#display-honesty)', () => {
+    const clockStartAt = '2026-07-19T00:00:00.000Z';
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: eligibility([
+            blocker({
+              reason: 'maturity-not-reached',
+              severity: 'soft',
+              message: 'Maturity policy requires updates to be at least 7 days old.',
+              details: {
+                minAgeDays: 7,
+                clockSource: 'detectedAt',
+                clockStartAt,
+                remainingMs: 12 * 60 * 60 * 1000,
+              },
+            }),
+          ]),
+        },
+      }),
+    );
+
+    const condition = status.conditions[0];
+    const expectedDate = new Date(clockStartAt).toLocaleDateString();
+    expect(condition.body).toBe(
+      `Candidate detected ${expectedDate} — 1 more day until the 7-day minimum`,
+    );
+  });
+
+  it('falls back to the plain blocker message when maturity clock details are absent (#display-honesty)', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: eligibility([
+            blocker({
+              reason: 'maturity-not-reached',
+              severity: 'soft',
+              message: 'Maturity policy requires updates to be at least 7 days old.',
+              details: { minAgeDays: 7 },
+            }),
+          ]),
+        },
+      }),
+    );
+
+    const condition = status.conditions[0];
+    expect(condition.body).toBe('Maturity policy requires updates to be at least 7 days old.');
+  });
+
+  it('falls back to the plain blocker message when details is entirely absent, not just missing fields (#display-honesty)', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: eligibility([
+            blocker({
+              reason: 'maturity-not-reached',
+              severity: 'soft',
+              message: 'Maturity policy requires updates to be at least 7 days old.',
+            }),
+          ]),
+        },
+      }),
+    );
+
+    const condition = status.conditions[0];
+    expect(condition.body).toBe('Maturity policy requires updates to be at least 7 days old.');
   });
 
   it('formats a live lift countdown without dropping the exact date', () => {

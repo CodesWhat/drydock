@@ -5,7 +5,6 @@ import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
-import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import UpdateStatusPanel from './UpdateStatusPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
@@ -16,6 +15,7 @@ import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
 import type { Container, UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker, hasRawUpdateCandidate } from '../../utils/update-eligibility';
+import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update-kind-labels';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
@@ -190,17 +190,8 @@ function isManagedUpdateTrigger(trigger: { type: string }) {
   return trigger.type === 'docker' || trigger.type === 'dockercompose';
 }
 
-const updateKindLabels = computed(
-  (): Record<NonNullable<Container['updateKind']>, string> => ({
-    major: t('containerComponents.listContent.major'),
-    minor: t('containerComponents.listContent.minor'),
-    patch: t('containerComponents.listContent.patch'),
-    digest: t('containerComponents.listContent.digest'),
-  }),
-);
-
 function getUpdateKindLabel(kind: Container['updateKind']) {
-  return kind ? updateKindLabels.value[kind] : '';
+  return resolveUpdateKindLabel(kind, t);
 }
 </script>
 
@@ -311,8 +302,13 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-danger);" />
                 <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-danger);">{{ selectedContainer.registryError }}</span>
               </div>
-              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || selectedContainer.updateInsight || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="mt-2 flex items-center gap-1.5 flex-wrap">
-                <AppBadge v-if="selectedContainer.updateKind" size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
+              <div v-if="selectedContainer.updateKind || selectedContainer.suggestedTag || selectedContainer.updateInsight || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="mt-2 flex items-center gap-1.5 flex-wrap">
+                <AppBadge
+                  v-if="selectedContainer.updateKind"
+                  size="xs"
+                  :custom="updateKindColor(selectedContainer.updateKind)"
+                  v-tooltip.top="selectedContainer.updateMaturityTooltip"
+                >
                   {{ getUpdateKindLabel(selectedContainer.updateKind) }}
                 </AppBadge>
                 <AppBadge
@@ -323,7 +319,6 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 >
                   {{ getUpdateKindLabel(selectedContainer.updateInsight.kind) }}
                 </AppBadge>
-                <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
                 <FloatingTagBadge
                   :tag-precision="selectedContainer.tagPrecision"

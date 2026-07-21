@@ -47,6 +47,47 @@ export function maturityMinAgeDaysToMilliseconds(days: number): number {
   return daysToMs(days);
 }
 
+export type MaturityClockSource = 'publishedAt' | 'detectedAt';
+
+export interface MaturityClock {
+  startMs: number | undefined;
+  source: MaturityClockSource | undefined;
+}
+
+/**
+ * Resolve the single clock the maturity policy measures against, and which
+ * clock it picked. Trusted registry `publishedAt` wins unless detection
+ * happened even earlier (mirrors the historical `Math.min` tie-break exactly
+ * — see getMaturityStartMs()). The UI previously re-derived "is this
+ * maturity-blocked?" independently in container-mapper.ts and
+ * useContainerPolicy.ts using only updateDetectedAt, drifting from this
+ * server-side truth; both now consume the resolved clock via
+ * updateEligibility blocker details instead (#display-honesty item 4).
+ */
+export function resolveMaturityClock(
+  container: {
+    updateDetectedAt?: string;
+    result?: { publishedAt?: string; publishedAtTrusted?: boolean };
+  },
+  nowMs: number = Date.now(),
+): MaturityClock {
+  const detectedMs = Date.parse(container.updateDetectedAt || '');
+  const detectedFinite = Number.isFinite(detectedMs) ? detectedMs : undefined;
+  if (container.result?.publishedAtTrusted === true) {
+    const publishedMs = Date.parse(container.result.publishedAt || '');
+    if (Number.isFinite(publishedMs) && publishedMs <= nowMs) {
+      if (detectedFinite !== undefined && detectedFinite < publishedMs) {
+        return { startMs: detectedFinite, source: 'detectedAt' };
+      }
+      return { startMs: publishedMs, source: 'publishedAt' };
+    }
+  }
+  return {
+    startMs: detectedFinite,
+    source: detectedFinite !== undefined ? 'detectedAt' : undefined,
+  };
+}
+
 export function getMaturityStartMs(
   container: {
     updateDetectedAt?: string;
@@ -54,13 +95,5 @@ export function getMaturityStartMs(
   },
   nowMs: number = Date.now(),
 ): number | undefined {
-  const detectedMs = Date.parse(container.updateDetectedAt || '');
-  const detectedFinite = Number.isFinite(detectedMs) ? detectedMs : undefined;
-  if (container.result?.publishedAtTrusted === true) {
-    const publishedMs = Date.parse(container.result.publishedAt || '');
-    if (Number.isFinite(publishedMs) && publishedMs <= nowMs) {
-      return detectedFinite !== undefined ? Math.min(publishedMs, detectedFinite) : publishedMs;
-    }
-  }
-  return detectedFinite;
+  return resolveMaturityClock(container, nowMs).startMs;
 }

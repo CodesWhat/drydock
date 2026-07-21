@@ -304,7 +304,7 @@ describe('Icons Router', () => {
     );
 
     expect(mockAxiosGet).toHaveBeenCalledWith(
-      'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/docker.svg',
+      'https://cdn.jsdelivr.net/npm/simple-icons@16.21.0/icons/docker.svg',
       {
         responseType: 'arraybuffer',
         timeout: 10000,
@@ -345,7 +345,7 @@ describe('Icons Router', () => {
     );
 
     expect(mockAxiosGet).toHaveBeenCalledWith(
-      'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/docker.png',
+      'https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons@46b860c70e866212311aef2f98da3775c17f5068/png/docker.png',
       {
         responseType: 'arraybuffer',
         timeout: 10000,
@@ -408,7 +408,7 @@ describe('Icons Router', () => {
 
     expect(mockUnlink).toHaveBeenCalledWith('/store/icons/simple/docker.svg');
     expect(mockAxiosGet).toHaveBeenCalledWith(
-      'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/docker.svg',
+      'https://cdn.jsdelivr.net/npm/simple-icons@16.21.0/icons/docker.svg',
       {
         responseType: 'arraybuffer',
         timeout: 10000,

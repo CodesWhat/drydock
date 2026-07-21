@@ -1,5 +1,5 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
-import axios, { type AxiosRequestConfig } from 'axios';
+import axios, { type AddressFamily, type AxiosRequestConfig, type LookupAddress } from 'axios';
 import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import {
   failClosedAuth,
@@ -15,6 +15,16 @@ interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
     port: number;
   };
 }
+
+type MetadataSafeLookup = (
+  hostname: string,
+  options: object,
+  callback: (
+    error: Error | null,
+    address: LookupAddress | LookupAddress[],
+    family?: AddressFamily,
+  ) => void,
+) => void;
 
 /**
  * Check whether an IP address falls in a cloud metadata / link-local range
@@ -125,6 +135,60 @@ async function guardAgainstMetadataAddress(url: string, allowmetadata: boolean):
       );
     }
   }
+}
+
+function createMetadataSafeLookup(allowmetadata: boolean): MetadataSafeLookup | undefined {
+  if (allowmetadata) {
+    return undefined;
+  }
+
+  return (hostname, options, callback) => {
+    const requestedFamily = (options as { family?: unknown }).family;
+    const family = requestedFamily === 4 || requestedFamily === 6 ? requestedFamily : undefined;
+
+    void dnsLookup(hostname, { all: true, ...(family === undefined ? {} : { family }) }).then(
+      (records) => {
+        const blockedRecord = records.find((record) => isMetadataAddress(record.address));
+        if (blockedRecord) {
+          callback(
+            new Error(
+              `HTTP trigger blocked: "${hostname}" resolves to metadata/link-local address "${blockedRecord.address}". Set allowmetadata=true to override.`,
+            ),
+            '',
+          );
+          return;
+        }
+
+        const firstRecord = records[0];
+        if (!firstRecord) {
+          callback(
+            new Error(`HTTP trigger DNS lookup returned no addresses for "${hostname}"`),
+            '',
+          );
+          return;
+        }
+
+        if ((options as { all?: unknown }).all === true) {
+          callback(
+            null,
+            records.map((record) => ({
+              address: record.address,
+              family: record.family as Exclude<AddressFamily, undefined>,
+            })),
+          );
+          return;
+        }
+        callback(
+          null,
+          firstRecord.address,
+          firstRecord.family as Exclude<AddressFamily, undefined>,
+        );
+      },
+      (error: unknown) => {
+        callback(error instanceof Error ? error : new Error(String(error)), '');
+      },
+    );
+  };
 }
 
 const SUPPORTED_PROXY_PROTOCOLS = new Set(['http:', 'https:']);
@@ -251,7 +315,16 @@ class Http extends Trigger<HttpConfiguration> {
       method: this.configuration.method,
       url: this.configuration.url,
       timeout: getOutboundHttpTimeoutMs(),
+      // Redirects must be explicit in trigger configuration so every destination
+      // is validated instead of allowing a safe URL to bounce into metadata.
+      maxRedirects: 0,
     };
+    const safeLookup = createMetadataSafeLookup(this.configuration.allowmetadata ?? false);
+    if (safeLookup) {
+      // The validated DNS result is returned directly to the socket, closing the
+      // gap between the preflight resolution and the address actually contacted.
+      options.lookup = safeLookup;
+    }
     if (this.configuration.method === 'POST') {
       options.data = body;
     } else if (this.configuration.method === 'GET') {

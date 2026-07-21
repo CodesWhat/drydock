@@ -103,29 +103,34 @@ describe('Anonymous Authentication', () => {
       mockIsUpgrade.mockReturnValue(true);
     });
 
-    test('should not throw during initAuthentication without confirmation', () => {
-      expect(() => anonymous.initAuthentication()).not.toThrow();
-    });
-
-    test('should log warning during initAuthentication without confirmation', () => {
-      anonymous.initAuthentication();
-      expect(log.warn).toHaveBeenCalledWith(
-        expect.stringContaining('No authentication configured'),
+    test('should fail closed during initAuthentication without confirmation', () => {
+      expect(() => anonymous.initAuthentication()).toThrow(
+        'No authentication configured during an upgrade',
       );
     });
 
-    test('should return anonymous strategy without confirmation', () => {
-      const strategy = anonymous.getStrategy();
-      expect(strategy).toBeDefined();
-      expect(strategy.name).toBe('anonymous');
+    test('should require the explicit confirmation variable during an upgrade', () => {
+      expect(() => anonymous.initAuthentication()).toThrow(/DD_ANONYMOUS_AUTH_CONFIRM=true/);
     });
 
-    test('should log warning from getStrategy without confirmation', () => {
-      anonymous.getStrategy();
-      expect(log.warn).toHaveBeenCalledWith(
-        expect.stringContaining(
-          'Anonymous authentication is enabled without explicit confirmation',
-        ),
+    test('should fail closed from getStrategy without confirmation', () => {
+      expect(() => anonymous.getStrategy()).toThrow(
+        'Anonymous authentication cannot be enabled during an upgrade',
+      );
+    });
+
+    test('should not downgrade the missing confirmation to a warning', () => {
+      expect(() => anonymous.getStrategy()).toThrow();
+      expect(log.warn).not.toHaveBeenCalled();
+    });
+
+    test('should support the confirmation alias during an upgrade', () => {
+      process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
+      expect(() => anonymous.initAuthentication()).not.toThrow();
+      expect(anonymous.getStrategy()).toEqual(
+        expect.objectContaining({
+          name: 'anonymous',
+        }),
       );
     });
 

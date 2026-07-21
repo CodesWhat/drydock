@@ -193,6 +193,7 @@ class BaseRegistry<
     this.tagListCacheInFlight.clear();
     this.digestCacheHits = 0;
     this.digestCacheMisses = 0;
+    return this.digestCachePollCycleGeneration;
   }
 
   override async getTags(
@@ -235,9 +236,20 @@ class BaseRegistry<
     }
   }
 
-  public endDigestCachePollCycle() {
+  public endDigestCachePollCycle(expectedGeneration?: number) {
     const totalRequests = this.digestCacheHits + this.digestCacheMisses;
     const hitRate = totalRequests === 0 ? 0 : (this.digestCacheHits / totalRequests) * 100;
+    const stats = {
+      hits: this.digestCacheHits,
+      misses: this.digestCacheMisses,
+      hitRate,
+    };
+    if (
+      expectedGeneration !== undefined &&
+      expectedGeneration !== this.digestCachePollCycleGeneration
+    ) {
+      return stats;
+    }
     if (this.log && typeof this.log.debug === 'function') {
       this.log.debug(
         `${this.getId()} digest cache hit rate ${hitRate.toFixed(2)}% (${this.digestCacheHits} hits, ${this.digestCacheMisses} misses)`,
@@ -249,11 +261,7 @@ class BaseRegistry<
     this.digestManifestCacheInFlight.clear();
     this.tagListCache.clear();
     this.tagListCacheInFlight.clear();
-    return {
-      hits: this.digestCacheHits,
-      misses: this.digestCacheMisses,
-      hitRate,
-    };
+    return stats;
   }
 
   /**

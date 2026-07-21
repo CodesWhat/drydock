@@ -70,7 +70,7 @@ describe('icons/fetch', () => {
     });
 
     expect(mockAxiosGet).toHaveBeenCalledWith(
-      'https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/docker.svg',
+      'https://cdn.jsdelivr.net/npm/simple-icons@16.21.0/icons/docker.svg',
       {
         responseType: 'arraybuffer',
         timeout: 10000,

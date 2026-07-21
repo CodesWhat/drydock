@@ -6,6 +6,7 @@ import { FAQ } from "@/components/faq";
 import { Features } from "@/components/features";
 import { GetStarted } from "@/components/get-started";
 import { Hero } from "@/components/hero";
+import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Roadmap } from "@/components/roadmap";
 import { StarHistory } from "@/components/star-history";
@@ -76,18 +77,9 @@ export default function Home() {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareAppJsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqPageJsonLd) }}
-      />
+      <JsonLd data={softwareAppJsonLd} />
+      <JsonLd data={websiteJsonLd} />
+      <JsonLd data={faqPageJsonLd} />
       <MarketingShell>
         <Hero />
         <div className="reveal" suppressHydrationWarning>

@@ -4,6 +4,7 @@ import type { StaticImageData } from "next/image";
 import NextImage from "next/image";
 import { notFound } from "next/navigation";
 import type React from "react";
+import { JsonLd } from "@/components/json-ld";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 import { getDocsPage, source } from "@/lib/source";
 
@@ -56,10 +57,7 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
 
   return (
     <DocsPage toc={data.toc} full={data.full}>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
-      />
+      <JsonLd data={breadcrumbJsonLd} />
       <DocsTitle>{data.title}</DocsTitle>
       <DocsDescription>{data.description}</DocsDescription>
       <DocsBody>

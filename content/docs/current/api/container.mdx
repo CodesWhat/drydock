@@ -73,7 +73,14 @@ The gate clock starts from the **earliest point** at which the update is known t
 
 The gate clock survives container recreation. A Portainer stack redeploy or `docker compose down && up` gives the container a new Docker ID, but Drydock carries the maturity clock forward via the container's stable identity as long as the same update is still pending. If a different pending tag or digest appears while the previous candidate is still soaking, the clock resets for the new candidate.
 
-When the gate blocks an update the blocker reason is `maturity-not-reached`. The dialog shows days remaining and a `liftableAt` timestamp computed from whichever start timestamp applies.
+When the gate blocks an update the blocker reason is `maturity-not-reached`. The dialog shows days remaining and a `liftableAt` timestamp computed from whichever start timestamp applies. The blocker's `details` object also names the clock that produced that countdown:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `details.clockSource` | string | `publishedAt` when the trusted registry publish date won, `detectedAt` when the gate fell back to `updateDetectedAt` |
+| `details.clockStartAt` | string (ISO 8601) | The start timestamp the countdown is measured from |
+
+The UI's Update Status panel renders these two fields (alongside `details.minAgeDays` and `details.remainingMs`) as a single clock-sourced sentence — e.g. "Candidate published Jul 12 — 3 more days until the 7-day minimum" — instead of re-deriving its own countdown.
 
 #### `publishedAt` source by registry
 
@@ -564,7 +571,7 @@ Each WebSocket message is a JSON object:
 
 ### Authentication
 
-WebSocket upgrade requests require a valid session cookie. Unauthenticated requests receive HTTP 401 during the upgrade handshake.
+WebSocket upgrade requests require a valid session cookie. Unauthenticated requests receive HTTP 401 during the upgrade handshake. WebSocket upgrade origin checks must also pass — the `Origin` header's host and scheme must match the server; behind a TLS-terminating reverse proxy this requires `DD_SERVER_TRUSTPROXY` (see [Server configuration](/docs/configuration/server#reverse-proxy-trust-proxy)).
 
 ### Rate limiting
 

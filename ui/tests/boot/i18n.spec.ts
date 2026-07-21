@@ -331,18 +331,34 @@ describe('buildMessages', () => {
     }
   });
 
-  it('localizes the pinned update-status summary in every supported locale', () => {
+  it('sources the insight-only update-status note from updateInsight.tooltip, not a retired pinnedLabel key', () => {
+    // #display-honesty: the dedicated 'pinned' state is retired — deriveUpdateStatus()
+    // now reuses containerComponents.updateInsight.tooltip (the same tooltip the
+    // table/card insight badge shows) for its insightNote, so there's one insight
+    // vocabulary, not two. groupedViews.pinnedLabel no longer exists in any catalog.
     const messages = buildMessages();
-    const path = 'containerComponents.updateStatus.summary.pinned';
-    const englishSummary = getMessagePath(messages.en, path);
+    const notePath = 'containerComponents.updateInsight.tooltip';
+    const retiredPath = 'containerComponents.groupedViews.pinnedLabel';
+    const englishNote = getMessagePath(messages.en, notePath);
 
-    for (const locale of SUPPORTED_LOCALES) {
-      const localizedSummary = getMessagePath(messages[locale], path);
-      expect(localizedSummary, `${locale} missing ${path}`).toBeTypeOf('string');
-      expect(localizedSummary, `${locale} ${path} should not be empty`).not.toBe('');
-      if (locale !== 'en') {
-        expect(localizedSummary, `${locale} should localize ${path}`).not.toBe(englishSummary);
-      }
+    expect(englishNote, `en missing ${notePath}`).toBeTypeOf('string');
+    expect(englishNote, `en ${notePath} should not be empty`).not.toBe('');
+    expect(englishNote, `en ${notePath} should carry the {tag} interpolation`).toContain('{tag}');
+    expect(
+      getMessagePath(messages.en, retiredPath),
+      `en should not have ${retiredPath}`,
+    ).toBeUndefined();
+
+    for (const locale of SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en')) {
+      const localizedNote = getMessagePath(messages[locale], notePath);
+      // updateInsight.tooltip is a reused pre-existing key still working through
+      // Crowdin sync for non-English locales — only assert real translation when the
+      // key is actually present, so this guard doesn't block on sync lag unrelated to
+      // the display-honesty batch, while still catching a verbatim English copy where
+      // the key IS present.
+      if (localizedNote === undefined) continue;
+      expect(localizedNote, `${locale} ${notePath} should not be empty`).not.toBe('');
+      expect(localizedNote, `${locale} should localize ${notePath}`).not.toBe(englishNote);
     }
   });
 });

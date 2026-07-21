@@ -198,7 +198,6 @@
       "emptyState": "Жоден контейнер не відповідає вашим фільтрам",
       "currentLabel": "Поточний",
       "latestLabel": "Останній",
-      "blockedByBouncer": "Заблоковано Bouncer",
       "registryErrorRateLimited": "Обмеження запитів",
       "registryErrorAuth": "Помилка автентифікації",
       "registryErrorNotFound": "Не знайдено",
@@ -259,7 +258,6 @@
       "allBouncer": "Всі Bouncer",
       "safe": "Безпечно",
       "unsafe": "Небезпечно",
-      "blocked": "Заблоковано",
       "allRegistries": "Всі реєстри",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "Мажорне",
       "minor": "Мінорне",
       "patch": "Патч",
-      "digest": "Дайджест",
       "hidePinned": "Приховати закріплені",
       "hidePinnedTooltip": "Приховати контейнери, закріплені на конкретних версіях",
       "clearAll": "Очистити все",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "Переглянути проект"
     },
-    "registryLink": { "viewRegistry": "Відкрити реєстр" },
+    "registryLink": {
+      "viewRegistry": "Відкрити реєстр"
+    },
     "releaseNotesLink": {
       "releaseNotes": "Примітки до випуску",
       "viewFullNotes": "Переглянути повні примітки",
@@ -351,12 +350,6 @@
       "noTrigger": "Немає тригера",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Знімає обмеження:"
-    },
-    "maturityBadge": {
-      "new": "НОВЕ",
-      "mature": "ЗРІЛЕ",
-      "newTooltip": "Нове оновлення",
-      "matureTooltip": "Зріле оновлення"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -482,15 +475,6 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
-    },
     "preview": {
       "toasts": {
         "failedTitle": "Preview failed",
@@ -552,9 +536,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "Закріплено — для інформації доступна новіша версія."
-      }
+      "summary": {}
     }
   }
 }

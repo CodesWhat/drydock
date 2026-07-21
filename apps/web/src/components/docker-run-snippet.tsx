@@ -31,8 +31,13 @@ export function DockerRunSnippet({
             {"  "}--name drydock \{"\n"}
             {"  "}-v /var/run/docker.sock:/var/run/docker.sock \{"\n"}
             {"  "}-p 3000:3000 \{"\n"}
+            {"  "}-e DD_ANONYMOUS_AUTH_CONFIRM=true \{"\n"}
             {"  "}
             {SITE_CONFIG.dockerImage}
+            {"  "}
+            <span className="text-neutral-600">
+              # open dashboard — add real auth before exposing this
+            </span>
           </code>
         </pre>
       </CardContent>

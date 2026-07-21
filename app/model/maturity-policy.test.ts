@@ -9,6 +9,7 @@ import {
   maturityMinAgeDaysToMilliseconds,
   normalizeMaturityMode,
   parseMaturityMinAgeDays,
+  resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from './maturity-policy.js';
 
@@ -183,5 +184,125 @@ describe('getMaturityStartMs', () => {
     expect(
       getMaturityStartMs({ result: { publishedAt: pastPublishedAt, publishedAtTrusted: true } }),
     ).toBe(Date.parse(pastPublishedAt));
+  });
+});
+
+describe('resolveMaturityClock', () => {
+  const NOW = new Date('2026-04-23T12:00:00.000Z').getTime();
+
+  test('returns startMs=undefined and source=undefined when nothing resolves', () => {
+    expect(resolveMaturityClock({})).toEqual({ startMs: undefined, source: undefined });
+    expect(resolveMaturityClock({ result: {} })).toEqual({
+      startMs: undefined,
+      source: undefined,
+    });
+  });
+
+  test('trusted publishedAt wins over a later detectedAt', () => {
+    const publishedAt = new Date(NOW - daysToMs(10)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock(
+        { updateDetectedAt: detectedAt, result: { publishedAt, publishedAtTrusted: true } },
+        NOW,
+      ),
+    ).toEqual({ startMs: Date.parse(publishedAt), source: 'publishedAt' });
+  });
+
+  test('detectedAt wins the tie-break when it is earlier than trusted publishedAt', () => {
+    const publishedAt = new Date(NOW - daysToMs(3)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock(
+        { updateDetectedAt: detectedAt, result: { publishedAt, publishedAtTrusted: true } },
+        NOW,
+      ),
+    ).toEqual({ startMs: Date.parse(detectedAt), source: 'detectedAt' });
+  });
+
+  test('untrusted publishedAt is ignored in favor of detectedAt', () => {
+    const publishedAt = new Date(NOW - daysToMs(10)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock(
+        { updateDetectedAt: detectedAt, result: { publishedAt, publishedAtTrusted: false } },
+        NOW,
+      ),
+    ).toEqual({ startMs: Date.parse(detectedAt), source: 'detectedAt' });
+    expect(
+      resolveMaturityClock({ updateDetectedAt: detectedAt, result: { publishedAt } }, NOW),
+    ).toEqual({ startMs: Date.parse(detectedAt), source: 'detectedAt' });
+  });
+
+  test('future publishedAt is rejected even when trusted, falling back to detectedAt', () => {
+    const futurePublishedAt = new Date(NOW + daysToMs(1)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock(
+        {
+          updateDetectedAt: detectedAt,
+          result: { publishedAt: futurePublishedAt, publishedAtTrusted: true },
+        },
+        NOW,
+      ),
+    ).toEqual({ startMs: Date.parse(detectedAt), source: 'detectedAt' });
+  });
+
+  test('future publishedAt with no detectedAt resolves to nothing', () => {
+    const futurePublishedAt = new Date(NOW + daysToMs(1)).toISOString();
+    expect(
+      resolveMaturityClock(
+        { result: { publishedAt: futurePublishedAt, publishedAtTrusted: true } },
+        NOW,
+      ),
+    ).toEqual({ startMs: undefined, source: undefined });
+  });
+
+  test('trusted publishedAt alone resolves when detectedAt is missing', () => {
+    const publishedAt = new Date(NOW - daysToMs(10)).toISOString();
+    expect(
+      resolveMaturityClock({ result: { publishedAt, publishedAtTrusted: true } }, NOW),
+    ).toEqual({ startMs: Date.parse(publishedAt), source: 'publishedAt' });
+  });
+
+  test('defaults nowMs to Date.now() when omitted', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+      expect(resolveMaturityClock({ updateDetectedAt: detectedAt })).toEqual({
+        startMs: Date.parse(detectedAt),
+        source: 'detectedAt',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('getMaturityStartMs is a thin wrapper returning resolveMaturityClock().startMs', () => {
+    const scenarios: Array<{
+      updateDetectedAt?: string;
+      result?: { publishedAt?: string; publishedAtTrusted?: boolean };
+    }> = [
+      {},
+      { updateDetectedAt: new Date(NOW - daysToMs(5)).toISOString() },
+      {
+        updateDetectedAt: new Date(NOW - daysToMs(5)).toISOString(),
+        result: {
+          publishedAt: new Date(NOW - daysToMs(10)).toISOString(),
+          publishedAtTrusted: true,
+        },
+      },
+      {
+        updateDetectedAt: new Date(NOW - daysToMs(5)).toISOString(),
+        result: {
+          publishedAt: new Date(NOW - daysToMs(3)).toISOString(),
+          publishedAtTrusted: true,
+        },
+      },
+    ];
+    for (const scenario of scenarios) {
+      expect(getMaturityStartMs(scenario, NOW)).toBe(resolveMaturityClock(scenario, NOW).startMs);
+    }
   });
 });

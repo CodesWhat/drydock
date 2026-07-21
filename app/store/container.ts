@@ -19,6 +19,7 @@ import {
 } from '../event/index.js';
 import {
   deriveContainerIdentityKey,
+  hasCandidateIdentityChanged,
   hasRawUpdate,
   isRollbackContainerName,
 } from '../model/container.js';
@@ -834,11 +835,14 @@ function getUpdateLifecycleTimestamp(containerCurrent, containerNext, timestampF
   // instead of inheriting the previous candidate's elapsed time. This must run
   // before the timestamp-preserve below: in the local watch path containerNext
   // carries the prior updateDetectedAt, which would otherwise short-circuit here.
+  // Compares candidate identity (tag/digest) only — display metadata like
+  // suggestedTag/created can wobble between scans (a recheck bypasses the
+  // registry poll cache) without the candidate itself changing, and must not
+  // falsely restart the maturity soak.
   if (
     containerCurrent &&
     hasRawUpdate(containerCurrent) &&
-    typeof containerCurrent.resultChanged === 'function' &&
-    containerCurrent.resultChanged(containerNext)
+    hasCandidateIdentityChanged(containerCurrent.result, containerNext.result)
   ) {
     return new Date().toISOString();
   }

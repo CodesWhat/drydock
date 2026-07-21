@@ -7,6 +7,14 @@ import AppIconButton from './AppIconButton.vue';
 const props = defineProps<{
   columns: PickerColumn[];
   hiddenKeys: Set<string> | string[];
+  /**
+   * Columns the user has checked "visible" but that width-driven responsive sizing is
+   * currently hiding from the table anyway (see useColumnVisibility's autoHiddenColumns).
+   * Optional and defaults to none, so the other 5 DataTableColumnPicker consumers
+   * (Agents/Security/Audit/Watchers/Servers) that don't pass it get identical behavior
+   * to before — this is additive, not a breaking prop (#display-honesty item 5).
+   */
+  autoHiddenKeys?: Set<string> | string[];
 }>();
 
 const emit = defineEmits<{
@@ -20,12 +28,41 @@ const hiddenKeySet = computed(() =>
   props.hiddenKeys instanceof Set ? props.hiddenKeys : new Set(props.hiddenKeys),
 );
 
-const hiddenCount = computed(
-  () => props.columns.filter((column) => hiddenKeySet.value.has(column.key)).length,
+const autoHiddenKeySet = computed(() => {
+  const raw = props.autoHiddenKeys;
+  if (!raw) return new Set<string>();
+  return raw instanceof Set ? raw : new Set(raw);
+});
+
+// Checked (not user-hidden) but currently rendered nowhere because responsive sizing
+// dropped them for width — the picker previously stayed silent about these, showing a
+// column as "on" with no hint it isn't actually in the table (#display-honesty item 5).
+const checkedButAutoHiddenColumns = computed(() =>
+  props.columns.filter(
+    (column) => !hiddenKeySet.value.has(column.key) && autoHiddenKeySet.value.has(column.key),
+  ),
 );
+
+const hiddenCount = computed(
+  () =>
+    props.columns.filter((column) => hiddenKeySet.value.has(column.key)).length +
+    checkedButAutoHiddenColumns.value.length,
+);
+
+const badgeTooltip = computed(() => {
+  if (checkedButAutoHiddenColumns.value.length > 0) {
+    const names = checkedButAutoHiddenColumns.value.map((column) => column.label).join(', ');
+    return t('sharedComponents.columnPicker.autoHiddenBadgeTooltip', { columns: names });
+  }
+  return t('sharedComponents.columnPicker.hiddenBadgeTooltip', { count: hiddenCount.value });
+});
 
 function isVisible(key: string): boolean {
   return !hiddenKeySet.value.has(key);
+}
+
+function isCheckedButAutoHidden(key: string): boolean {
+  return !hiddenKeySet.value.has(key) && autoHiddenKeySet.value.has(key);
 }
 
 function handleToggle(column: PickerColumn): void {
@@ -109,12 +146,11 @@ onUnmounted(() => {
       size="sm"
       variant="secondary"
       :class="showPicker ? 'dd-text dd-bg-elevated' : ''"
-      :tooltip="t('sharedComponents.columnPicker.toggleTooltip')"
+      :tooltip="hiddenCount > 0 ? badgeTooltip : t('sharedComponents.columnPicker.toggleTooltip')"
       @click.stop="togglePicker($event)" />
     <span
       v-if="hiddenCount > 0"
-      class="absolute -top-1 -end-1 pointer-events-none text-3xs font-bold px-1 dd-rounded dd-text-muted dd-bg-elevated leading-tight"
-      v-tooltip="t('sharedComponents.columnPicker.hiddenBadgeTooltip', { count: hiddenCount })">
+      class="absolute -top-1 -end-1 pointer-events-none text-3xs font-bold px-1 dd-rounded dd-text-muted dd-bg-elevated leading-tight">
       +{{ hiddenCount }}
     </span>
 
@@ -147,7 +183,10 @@ onUnmounted(() => {
             :name="isVisible(column.key) ? 'check' : 'square'"
             :size="13"
             :style="isVisible(column.key) ? { color: 'var(--dd-primary)' } : {}" />
-          {{ column.label }}
+          <span v-if="isCheckedButAutoHidden(column.key)" class="dd-text-muted" data-test="column-picker-auto-hidden-annotation">
+            {{ t('sharedComponents.columnPicker.autoHiddenAnnotation', { column: column.label }) }}
+          </span>
+          <span v-else>{{ column.label }}</span>
         </AppButton>
         <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
         <AppButton

@@ -1558,6 +1558,57 @@ describe('AgentClient', () => {
       expect((client as any).reconnectTimer).toBeNull();
     });
 
+    test('should not reconnect when an established SSE stream errors after stop', async () => {
+      const stream = new EventEmitter();
+      axios.mockRejectedValue(new Error('unexpected reconnect'));
+      axios.mockResolvedValueOnce({ data: stream });
+      const reconnectSpy = vi.spyOn(client, 'scheduleReconnect');
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      client.stop();
+      stream.emit('error', new Error('late connection error'));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(reconnectSpy).not.toHaveBeenCalled();
+      expect(axios).toHaveBeenCalledTimes(1);
+      expect((client as any).reconnectTimer).toBeNull();
+    });
+
+    test('should destroy an established SSE stream and ignore later data after stop', async () => {
+      const stream = new EventEmitter();
+      const destroy = vi.fn();
+      Object.assign(stream, { destroy });
+      axios.mockResolvedValueOnce({ data: stream });
+      const handleSpy = vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      client.stop();
+      stream.emit('data', Buffer.from('data: {"type":"dd:ack","data":{"version":"late"}}\n\n'));
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(destroy).toHaveBeenCalledOnce();
+      expect(handleSpy).not.toHaveBeenCalled();
+    });
+
+    test('should discard SSE data queued immediately before stop', async () => {
+      const stream = new EventEmitter();
+      Object.assign(stream, { destroy: vi.fn() });
+      axios.mockResolvedValueOnce({ data: stream });
+      const handleSpy = vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      stream.emit('data', Buffer.from('data: {"type":"dd:ack","data":{"version":"queued"}}\n\n'));
+      client.stop();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(handleSpy).not.toHaveBeenCalled();
+    });
+
     test('should clear an armed stableConnectionTimer', async () => {
       const stream = new EventEmitter();
       axios.mockResolvedValue({ data: stream });
@@ -6654,6 +6705,30 @@ describe('AgentClient', () => {
       ]);
       (client as any).pruneOldContainers([{ id: 'new-id', name: 'nginx' }]);
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id', {
+        replacementExpected: true,
+      });
+    });
+
+    test('does not flag replacementExpected for the same name under a different watcher', () => {
+      storeContainer.getContainers.mockReturnValue([
+        {
+          id: 'old-id',
+          name: 'nginx',
+          watcher: 'watcher-a',
+          agent: 'test-agent',
+        },
+      ]);
+
+      (client as any).pruneOldContainers([
+        {
+          id: 'new-id',
+          name: 'nginx',
+          watcher: 'watcher-b',
+        },
+      ]);
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id');
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('old-id', {
         replacementExpected: true,
       });
     });

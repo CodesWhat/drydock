@@ -198,7 +198,6 @@
       "emptyState": "フィルターに一致するコンテナがありません",
       "currentLabel": "現在",
       "latestLabel": "最新",
-      "blockedByBouncer": "Bouncer によりブロック済み",
       "registryErrorRateLimited": "レート制限中",
       "registryErrorAuth": "認証失敗",
       "registryErrorNotFound": "見つかりません",
@@ -259,7 +258,6 @@
       "allBouncer": "全 Bouncer",
       "safe": "安全",
       "unsafe": "危険",
-      "blocked": "ブロック済み",
       "allRegistries": "全レジストリ",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "メジャー",
       "minor": "マイナー",
       "patch": "パッチ",
-      "digest": "ダイジェスト",
       "hidePinned": "固定済みを非表示",
       "hidePinnedTooltip": "特定バージョンに固定されたコンテナを非表示にする",
       "clearAll": "すべてクリア",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "プロジェクトを表示"
     },
-    "registryLink": { "viewRegistry": "レジストリを表示" },
+    "registryLink": {
+      "viewRegistry": "レジストリを表示"
+    },
     "releaseNotesLink": {
       "releaseNotes": "リリースノート",
       "viewFullNotes": "全文を表示",
@@ -351,12 +350,6 @@
       "noTrigger": "トリガーなし",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "解除条件："
-    },
-    "maturityBadge": {
-      "new": "新規",
-      "mature": "成熟",
-      "newTooltip": "新しい更新",
-      "matureTooltip": "成熟した更新"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -482,15 +475,6 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
-    },
     "preview": {
       "toasts": {
         "failedTitle": "Preview failed",
@@ -552,9 +536,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "固定済み — 参考情報として新しいバージョンがあります。"
-      }
+      "summary": {}
     }
   }
 }

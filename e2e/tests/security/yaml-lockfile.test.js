@@ -28,7 +28,11 @@ test('package manifest explicitly pins yaml to the patched version', () => {
 test('package lockfile does not resolve vulnerable yaml versions', () => {
   const lockfile = JSON.parse(readFileSync(join(process.cwd(), 'package-lock.json'), 'utf8'));
   const vulnerableEntries = Object.entries(lockfile.packages ?? {})
-    .filter(([path, value]) => path === 'node_modules/yaml' && typeof value.version === 'string')
+    .filter(
+      ([path, value]) =>
+        (path === 'node_modules/yaml' || path.endsWith('/node_modules/yaml')) &&
+        typeof value.version === 'string',
+    )
     .filter(([, value]) => compareSemver(value.version, '2.8.3') < 0);
 
   assert.deepEqual(vulnerableEntries, []);

@@ -445,6 +445,45 @@ describe('tooltip directive', () => {
     beforeUnmount?.(el);
   });
 
+  it('refreshes the native title on a reactive binding update instead of freezing at the first synced value', () => {
+    const el = createAnchor();
+    mounted?.(el, binding('first'));
+    expect(el.getAttribute('title')).toBe('first');
+
+    // Before the fix, a title equal to the last-synced fallback was treated as
+    // component-owned and adopted verbatim, freezing the native title at
+    // 'first' forever even as the reactive binding kept changing.
+    updated?.(el, binding('second'));
+
+    expect(el.getAttribute('title')).toBe('second');
+
+    beforeUnmount?.(el);
+  });
+
+  it('adopts a differing title the component sets on its own mid-flight as the new fallback', () => {
+    const el = createAnchor();
+    mounted?.(el, binding('tooltip text'));
+    expect(el.getAttribute('title')).toBe('tooltip text');
+
+    // Simulate the host component writing its own title directly to the DOM,
+    // bypassing the directive (e.g. a sibling :title binding on the same element).
+    el.setAttribute('title', 'Component-owned title');
+
+    updated?.(el, binding('tooltip text'));
+
+    // The differing title was adopted as the new originalTitle/fallbackTitle,
+    // not overwritten by the directive's own last-synced value.
+    expect(el.getAttribute('title')).toBe('Component-owned title');
+
+    // It survives a show/hide cycle as the restored fallback.
+    el.dispatchEvent(new Event('mouseenter'));
+    expect(el.getAttribute('title')).toBeNull();
+    el.dispatchEvent(new Event('mouseleave'));
+    expect(el.getAttribute('title')).toBe('Component-owned title');
+
+    beforeUnmount?.(el);
+  });
+
   it('bypasses the show delay when re-showing after a content change with the pointer still present', () => {
     const el = createAnchor();
     mounted?.(el, binding({ value: 'Copy', showDelay: 200 }));

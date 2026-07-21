@@ -19,6 +19,7 @@ import {
   prunePendingActionsState,
   useContainerActions,
 } from '@/views/containers/useContainerActions';
+import { useContainerPreview } from '@/views/containers/useContainerPreview';
 
 const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
@@ -124,7 +125,6 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,
-    updateMaturity: null,
     bouncer: 'safe',
     server: 'Local',
     details: { ports: [], volumes: [], env: [], labels: [] },
@@ -214,6 +214,33 @@ async function mountActionsHarness(
     throw new Error('Actions harness did not initialize');
   }
 
+  return state;
+}
+
+async function mountPreviewHarness(initialContainerId?: string) {
+  let state:
+    | {
+        selectedContainerId: Ref<string | undefined>;
+        composable: ReturnType<typeof useContainerPreview>;
+      }
+    | undefined;
+
+  const Harness = defineComponent({
+    setup() {
+      const selectedContainerId = ref<string | undefined>(initialContainerId);
+      const composable = useContainerPreview({ selectedContainerId });
+      state = { selectedContainerId, composable };
+      return () => h('div');
+    },
+  });
+
+  const wrapper = mount(Harness);
+  mountedWrappers.push(wrapper);
+  await flushPromises();
+
+  if (!state) {
+    throw new Error('Preview harness did not initialize');
+  }
   return state;
 }
 
@@ -2250,7 +2277,7 @@ describe('useContainerActions', () => {
     mocks.previewContainer.mockRejectedValueOnce(
       Object.assign(new Error('Authentication failed for ghcr.io: 401 Unauthorized'), {
         code: 'registry-auth-failed',
-        action: { label: 'Open registry settings', href: '/registries' },
+        action: { code: 'open-registry-settings', href: '/registries' },
       }),
     );
     await composable.runContainerPreview();
@@ -2260,6 +2287,7 @@ describe('useContainerActions', () => {
       'Authentication failed for ghcr.io: 401 Unauthorized',
     );
     expect(composable.previewErrorAction.value).toEqual({
+      code: 'open-registry-settings',
       label: 'Open registry settings',
       href: '/registries',
     });
@@ -2272,6 +2300,8 @@ describe('useContainerActions', () => {
       null,
       'invalid',
       { href: '/registries' },
+      { code: 'open-registry-settings' },
+      { code: 'open-registry-settings', href: '/triggers' },
       { label: 42, href: '/registries' },
       { label: 'Open settings' },
       { label: 'Unsafe', href: 'https://attacker.example' },
@@ -2282,6 +2312,117 @@ describe('useContainerActions', () => {
       await composable.runContainerPreview();
       expect(composable.previewErrorAction.value).toBeNull();
     }
+
+    mocks.previewContainer.mockRejectedValueOnce(
+      Object.assign(new Error('Trigger configuration is incomplete'), {
+        action: { code: 'open-trigger-settings', href: '/triggers' },
+      }),
+    );
+    await composable.runContainerPreview();
+    expect(composable.previewErrorAction.value).toEqual({
+      code: 'open-trigger-settings',
+      label: 'Open trigger settings',
+      href: '/triggers',
+    });
+  });
+
+  it('deduplicates the same preview while allowing a newer container request', async () => {
+    let resolveWebPreview: (value: { currentImage: string }) => void = () => {};
+    mocks.previewContainer
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveWebPreview = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ currentImage: 'api:2.0' });
+    const { composable, selectedContainerId } = await mountPreviewHarness('container-1');
+
+    const webPreview = composable.runContainerPreview();
+    const duplicatePreview = composable.runContainerPreview();
+    expect(mocks.previewContainer).toHaveBeenCalledTimes(1);
+
+    selectedContainerId.value = 'container-2';
+    const apiPreview = composable.runContainerPreview();
+    await apiPreview;
+    resolveWebPreview({ currentImage: 'web:1.0' });
+    await Promise.all([webPreview, duplicatePreview]);
+
+    expect(mocks.previewContainer).toHaveBeenNthCalledWith(2, 'container-2');
+    expect(composable.detailPreview.value).toEqual({ currentImage: 'api:2.0' });
+    expect(composable.previewLoading.value).toBe(false);
+  });
+
+  it('ignores a preview failure after the request is invalidated', async () => {
+    let rejectWebPreview: (error: Error) => void = () => {};
+    mocks.previewContainer.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectWebPreview = reject;
+        }),
+    );
+    const { composable } = await mountPreviewHarness('container-1');
+
+    const webPreview = composable.runContainerPreview();
+    composable.resetPreview();
+    rejectWebPreview(new Error('late preview failure'));
+    await webPreview;
+
+    expect(composable.previewError.value).toBeNull();
+    expect(composable.previewErrorAction.value).toBeNull();
+    expect(mocks.toastError).not.toHaveBeenCalled();
+    expect(composable.previewLoading.value).toBe(false);
+  });
+
+  it('ignores a preview when selection changes without starting another request', async () => {
+    let resolveWebPreview: (value: { currentImage: string }) => void = () => {};
+    mocks.previewContainer.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveWebPreview = resolve;
+        }),
+    );
+    const { composable, selectedContainerId } = await mountPreviewHarness('container-1');
+
+    const webPreview = composable.runContainerPreview();
+    selectedContainerId.value = 'container-2';
+    resolveWebPreview({ currentImage: 'web:1.0' });
+    await webPreview;
+
+    expect(composable.detailPreview.value).toBeNull();
+    expect(composable.previewLoading.value).toBe(true);
+  });
+
+  it('keeps a slow preview response from replacing the newly selected container preview', async () => {
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const api = makeContainer({ id: 'container-2', name: 'api' });
+    let resolveWebPreview: (value: { currentImage: string }) => void = () => {};
+    mocks.previewContainer
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveWebPreview = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ currentImage: 'api:2.0' });
+    const { composable, selectedContainer, selectedContainerId } = await mountActionsHarness({
+      selectedContainer: web,
+      selectedContainerId: web.id,
+    });
+
+    const webPreview = composable.runContainerPreview();
+    selectedContainer.value = api;
+    selectedContainerId.value = api.id;
+    await nextTick();
+    const apiPreview = composable.runContainerPreview();
+    await apiPreview;
+    resolveWebPreview({ currentImage: 'web:1.0' });
+    await webPreview;
+
+    expect(mocks.previewContainer).toHaveBeenNthCalledWith(1, web.id);
+    expect(mocks.previewContainer).toHaveBeenNthCalledWith(2, api.id);
+    expect(composable.detailPreview.value).toEqual({ currentImage: 'api:2.0' });
+    expect(composable.previewLoading.value).toBe(false);
   });
 
   it('covers rollback guard and failure/latest-backup branches', async () => {

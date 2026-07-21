@@ -6,6 +6,7 @@ import type {
   ContainerSecurityScan,
   ContainerSignatureVerification,
 } from '../security/scan.js';
+import { isPinGateGoverned } from '../tag/family.js';
 import * as tag from '../tag/index.js';
 import { isTagPinned } from '../tag/precision.js';
 import type {
@@ -206,6 +207,7 @@ export interface Container {
   /** @deprecated compat mirror. */
   triggerExclude?: string;
   tagPinned?: boolean;
+  tagPinGated?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
   updatePolicyDeclarative?: ContainerUpdatePolicyDeclarative;
   updatePolicyOverrides?: ContainerUpdatePolicy;
@@ -345,6 +347,7 @@ const schema = joi.object({
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
   tagPinned: joi.boolean(),
+  tagPinGated: joi.boolean(),
   updatePolicy: joi.object({
     skipTags: joi.array().items(joi.string()),
     skipDigests: joi.array().items(joi.string()),
@@ -801,6 +804,11 @@ function addTagPinnedProperty(container: Container) {
   // Tag values don't mutate in production once validate() runs, so the cached value stays
   // accurate; `validate()` recomputes it on any re-entry into the model.
   container.tagPinned = isTagPinned(container.image.tag.value, container.transformTags);
+  // Pin-GATE verdict, distinct from shape-based tagPinned: true only when the
+  // tag-candidates pin gate governs this container (specific precision, no
+  // include filter, non-loose family) — i.e. drydock will not climb this tag.
+  // Drives the UI pin glyph; tagPinned keeps feeding the shape-based filters.
+  container.tagPinGated = isPinGateGoverned(container);
 }
 
 /**
@@ -897,6 +905,32 @@ function hasResultChanged(
     currentResult?.tag !== otherResult?.tag ||
     currentResult?.suggestedTag !== otherResult?.suggestedTag ||
     currentResult?.digest !== otherResult?.digest ||
+    currentResult?.created !== otherResult?.created
+  );
+}
+
+/**
+ * Check whether the update candidate's identity changed, i.e. the tag or
+ * digest a recheck would actually promote. Unlike hasResultChanged, this
+ * ignores display-only metadata (suggestedTag and, when a digest is present,
+ * created) that can wobble between scans without the candidate itself
+ * changing. For legacy manifests without a digest, created is the only
+ * available immutable candidate discriminator and must participate in the
+ * identity.
+ * @param currentResult
+ * @param otherResult
+ * @returns {boolean}
+ */
+export function hasCandidateIdentityChanged(
+  currentResult: Container['result'],
+  otherResult: Container['result'],
+): boolean {
+  if (currentResult?.tag !== otherResult?.tag || currentResult?.digest !== otherResult?.digest) {
+    return true;
+  }
+  return (
+    currentResult?.digest === undefined &&
+    otherResult?.digest === undefined &&
     currentResult?.created !== otherResult?.created
   );
 }
