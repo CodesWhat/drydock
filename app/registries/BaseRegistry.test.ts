@@ -3567,8 +3567,8 @@ test('authenticateBearerFromAuthUrl should not use cache when now equals expires
   const { default: axios } = await import('axios');
   vi.useFakeTimers();
   axios
-    .mockResolvedValueOnce({ data: { token: 'tok-boundary-1' } })
-    .mockResolvedValueOnce({ data: { token: 'tok-boundary-2' } });
+    .mockResolvedValueOnce({ data: { token: 'first' } })
+    .mockResolvedValueOnce({ data: { token: 'second' } });
   const t0 = new Date('2026-03-05T10:00:00.000Z').getTime();
 
   try {
@@ -3578,7 +3578,7 @@ test('authenticateBearerFromAuthUrl should not use cache when now equals expires
       'https://auth.example.com/token',
       'credX',
     );
-    expect(r1.headers.Authorization).toBe('Bearer tok-boundary-1');
+    expect(r1.headers.Authorization).toBe('Bearer first');
 
     // Exactly at expiresAt: `now < expiresAt` is false → should NOT use cache
     vi.setSystemTime(t0 + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS);
@@ -3589,7 +3589,7 @@ test('authenticateBearerFromAuthUrl should not use cache when now equals expires
     );
 
     expect(axios).toHaveBeenCalledTimes(2);
-    expect(r2.headers.Authorization).toBe('Bearer tok-boundary-2');
+    expect(r2.headers.Authorization).toBe('Bearer second');
   } finally {
     vi.useRealTimers();
   }
