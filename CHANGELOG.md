@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Anonymous access now fails closed on upgrades, not just fresh installs.** An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — fails closed: the container runs, but every API request is rejected with `401` and `/health` reports `503`, instead of logging a warning and serving an open dashboard. If you run an intentionally open instance, set `DD_ANONYMOUS_AUTH_CONFIRM=true`; otherwise configure `DD_AUTH_BASIC_<name>_USER`/`_HASH` before upgrading.
+- **Anonymous access now fails closed on upgrades, not just fresh installs.** An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — starts and fails closed: protected API requests are rejected with `401`, auth discovery/status remains public, `/health` reports `503`, and the SPA shell may load without access to protected application data. This replaces the previous warning plus open dashboard. If you run an intentionally open instance, set `DD_ANONYMOUS_AUTH_CONFIRM=true`; otherwise configure `DD_AUTH_BASIC_<name>_USER`/`_HASH` before upgrading.
 
 - **HTTP notification trigger hardened against SSRF.** Hostnames are re-resolved on every request through a guarded DNS lookup that blocks cloud metadata and link-local targets (override with `allowmetadata=true`), and redirects can no longer escape into blocked address space via cross-host or DNS-rebinding hops.
 
