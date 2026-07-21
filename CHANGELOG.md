@@ -19,11 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The pin glyph marks only tags the pin gate actually governs.** The glyph is driven by a new backend `tagPinGated` verdict — a specific-version tag with no `dd.tag.include` filter under a non-loose `dd.tag.family` policy — instead of bare tag shape, which had put a "won't climb to newer versions" pin (clipped to near-invisibility) on every exact-version container, including ones with actionable updates. It now renders inline beside the pinned tag at a legible size.
+
+- **Container-detail registry links land on the registry they name** ([#556](https://github.com/CodesWhat/drydock/issues/556)). The `/registries?q=<type>.<name>` deep-links emitted by container detail matched neither the bare registry name nor the bare type, so they always rendered an empty filtered list; the registries filter now also matches the dotted instance ID.
+
+- **Removed-API-path banner grammar and tooltip freshness.** The banner title pluralizes correctly ("1 request" vs "n requests"), and tooltip-bound native `title` attributes now follow reactive value changes (previously the column picker's "+N" badge kept naming whichever columns were hidden when the page first rendered).
+
 - **Manual recheck no longer restarts the maturity countdown on display-only metadata drift** ([#565](https://github.com/CodesWhat/drydock/issues/565)). A per-container recheck bypasses the registry poll cache, so the suggested tag and image created date can wobble between scans even when the update candidate itself hasn't changed, falsely resetting the soak. The lifecycle clock now restarts only when the candidate's actual identity — tag or digest — changes; suggested tag and created date no longer factor into the restart decision.
 
 ### Security
 
-- **Anonymous access now fails closed on upgrades, not just fresh installs.** An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — refuses to start instead of logging a warning and serving an open dashboard. If you run an intentionally open instance, set `DD_ANONYMOUS_AUTH_CONFIRM=true`; otherwise configure `DD_AUTH_BASIC_<name>_USER`/`_HASH` before upgrading.
+- **Anonymous access now fails closed on upgrades, not just fresh installs.** An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — fails closed: the container runs, but every API request is rejected with `401` and `/health` reports `503`, instead of logging a warning and serving an open dashboard. If you run an intentionally open instance, set `DD_ANONYMOUS_AUTH_CONFIRM=true`; otherwise configure `DD_AUTH_BASIC_<name>_USER`/`_HASH` before upgrading.
 
 - **HTTP notification trigger hardened against SSRF.** Hostnames are re-resolved on every request through a guarded DNS lookup that blocks cloud metadata and link-local targets (override with `allowmetadata=true`), and redirects can no longer escape into blocked address space via cross-host or DNS-rebinding hops.
 
