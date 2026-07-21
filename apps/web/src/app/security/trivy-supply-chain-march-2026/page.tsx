@@ -46,7 +46,7 @@ export default function TrivyAdvisoryPage() {
     description:
       "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
     datePublished: "2026-03-22",
-    dateModified: "2026-03-22",
+    dateModified: "2026-07-18",
     image: `${BASE_URL}${SITE_CONFIG.ogImage}`,
     mainEntityOfPage: {
       "@type": "WebPage",
@@ -257,15 +257,18 @@ git push -f origin refs/tags/0.24.0`}</code>
               <h3>2. Bundled Trivy binary is a safe version</h3>
               <p>
                 Drydock&apos;s Docker image includes Trivy and cosign binaries for local
-                vulnerability scanning and image signature verification. The Trivy binary is
-                installed from Alpine&apos;s package repository and pinned at{" "}
-                <strong>v0.69.3-r1</strong> in the Dockerfile, which predates the compromised
-                v0.69.4 release. Aqua Security has confirmed that v0.69.3 is safe and protected by
-                GitHub&apos;s immutable releases feature.
+                vulnerability scanning and image signature verification. The Trivy binary is copied
+                from a dedicated, digest-pinned <code>trivy-bin</code> build stage in the Dockerfile
+                &mdash; not installed from Alpine&apos;s package repository. Image digests, unlike
+                tags, cannot be silently repointed, so this stage is immune to the tag-repointing
+                mechanism this advisory describes. The bundled version is currently{" "}
+                <strong>Trivy 0.72.0</strong>, well past the compromised v0.69.4 release.
               </p>
               <pre>
-                <code>{`# From Drydock's Dockerfile — Trivy pinned to safe version
-apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy=0.69.3-r1`}</code>
+                <code>{`# From Drydock's Dockerfile — Trivy copied from a digest-pinned build stage
+FROM aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f AS trivy-bin
+...
+COPY --from=trivy-bin /usr/local/bin/trivy /usr/local/bin/trivy`}</code>
               </pre>
               <p>
                 <strong>Correction (March 22):</strong> Our initial audit stated the Dockerfile
@@ -287,6 +290,16 @@ apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testi
                   Qlty
                 </a>
                 , which also has v0.69.3 cached locally.
+              </p>
+              <p>
+                <strong>Correction (July 18):</strong> The Alpine-package pin described in the March
+                22 correction above has since been replaced. As of <code>3b28e8dc</code> (July 13,
+                2026), Drydock no longer installs Trivy via <code>apk</code> from Alpine&apos;s
+                edge/testing repository at all. The Dockerfile now copies the Trivy binary from a
+                dedicated <code>trivy-bin</code> stage pinned to the official Aqua Security image by
+                immutable digest &mdash; the same defense already used for GitHub Actions pinning in
+                section 3 below. This removes the Alpine-edge dependency entirely; the bundled
+                version is currently Trivy 0.72.0.
               </p>
 
               <h3>3. All GitHub Actions pinned by commit SHA</h3>
@@ -335,15 +348,18 @@ uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294    # v7.
               <h2>Verifying your Drydock installation</h2>
               <p>
                 Drydock bundles Trivy and cosign in its Docker image for local vulnerability
-                scanning and image signature verification. All official Drydock releases pin Trivy
-                at v0.69.3-r1, which is confirmed safe. You can verify your running instance:
+                scanning and image signature verification. Current Drydock images ship Trivy 0.72.0,
+                sourced from a digest-pinned official image, so a tampered upstream tag cannot
+                silently reach a Drydock build. The compromised releases were v0.69.4 (published
+                across GitHub, Docker Hub, GHCR, and ECR) and the Docker Hub-only v0.69.5 and
+                v0.69.6 images. You can check the version running inside your container:
               </p>
               <pre>
                 <code>{`# Check the Trivy version inside your Drydock container
 docker exec drydock trivy --version
 
-# Safe versions: v0.69.2 or v0.69.3
-# Compromised version: v0.69.4`}</code>
+# Expected: 0.72.0 — the digest-pinned build Drydock ships. This is a local
+# version check only; it does not attest to Trivy builds obtained elsewhere.`}</code>
               </pre>
               <p>
                 If you use an external Trivy server via <code>DD_SECURITY_TRIVY_SERVER</code>,

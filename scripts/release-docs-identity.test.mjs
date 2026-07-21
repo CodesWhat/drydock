@@ -82,8 +82,8 @@ test('v1.5.2 is archived and public release routing advances to v1.6', () => {
   }
 });
 
-test('README retains the published 145K+ pull count', () => {
-  assert.match(read('README.md'), /GHCR-145K%2B_pulls/u);
+test('README retains the published 150K+ pull count', () => {
+  assert.match(read('README.md'), /GHCR-150K%2B_pulls/u);
 });
 
 test('current and archived docs prevent unsafe copy-paste configuration', () => {

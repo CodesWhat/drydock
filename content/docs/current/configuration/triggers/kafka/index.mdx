@@ -28,7 +28,7 @@ The `kafka` trigger lets you publish container update notifications to a Kafka t
 
 ## Examples
 
-### Post a message to a&nbsp;[Cloud Karafka](https://www.cloudkarafka.com/) broker
+### Post a message to a managed Kafka broker over SASL/SSL
 
 <Tabs items={["Docker Compose", "Docker"]}>
 <Tab value="Docker Compose">
@@ -39,7 +39,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-        - DD_NOTIFICATION_KAFKA_KARAKFA_BROKERS=ark-01.srvs.cloudkafka.com:9094,ark-02.srvs.cloudkafka.com:9094,ark-03.srvs.cloudkafka.com:9094
+        - DD_NOTIFICATION_KAFKA_KARAKFA_BROKERS=kafka-1.example.com:9094,kafka-2.example.com:9094,kafka-3.example.com:9094
         - DD_NOTIFICATION_KAFKA_KARAKFA_SSL="true"
         - DD_NOTIFICATION_KAFKA_KARAKFA_TOPIC=my-user-id-drydock-image
         - DD_NOTIFICATION_KAFKA_KARAKFA_AUTHENTICATION_USER=my-user-id
@@ -51,7 +51,7 @@ services:
 <Tab value="Docker">
 ```bash
 docker run \
-    -e DD_NOTIFICATION_KAFKA_KARAKFA_BROKERS="ark-01.srvs.cloudkafka.com:9094,ark-02.srvs.cloudkafka.com:9094,ark-03.srvs.cloudkafka.com:9094" \
+    -e DD_NOTIFICATION_KAFKA_KARAKFA_BROKERS="kafka-1.example.com:9094,kafka-2.example.com:9094,kafka-3.example.com:9094" \
     -e DD_NOTIFICATION_KAFKA_KARAKFA_SSL="true" \
     -e DD_NOTIFICATION_KAFKA_KARAKFA_TOPIC="my-user-id-drydock-image" \
     -e DD_NOTIFICATION_KAFKA_KARAKFA_AUTHENTICATION_USER="my-user-id" \
