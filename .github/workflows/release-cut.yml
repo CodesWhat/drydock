@@ -1,10 +1,12 @@
 name: "🏷️ Release: Cut"
 run-name: "🏷️ Release: Cut — manual by ${{ github.actor }}"
 
-# Tag-last release pipeline. Everything that can fail (CI check, Docker build,
-# multi-registry push, cosign signing, SLSA attestation, artifact sign) runs
-# BEFORE the git tag is pushed. The tag is a receipt that the release
-# succeeded end-to-end — if you see the tag, the image exists.
+# Recoverable release pipeline. Build output is first published under
+# run-scoped staging tags, signed, attested, and attached to a draft release.
+# User-facing image tags, the git tag, and the GitHub release are finalized in
+# that order by idempotent steps. A retry can safely finish a partial cut.
+# GA releases never rebuild: they promote an exact seven-day-old RC digest and
+# tag the exact RC source commit.
 #
 # BEFORE DISPATCHING (local pre-cut step — cannot run in CI):
 #   npm run release:precheck <tag>     # e.g. npm run release:precheck v1.6.0
@@ -20,6 +22,14 @@ on:
       release_tag:
         description: "Release tag to cut, e.g. v1.5.0-rc.17 or v1.5.0. Tag base must match package.json version and the tag must not already exist."
         required: true
+        type: string
+      candidate_tag:
+        description: "GA only: exact prerelease tag to promote, e.g. v1.6.0-rc.3. Must be at least seven full days old."
+        required: false
+        type: string
+      candidate_digest:
+        description: "GA only: exact sha256 digest published by candidate_tag in GHCR, Docker Hub, and Quay."
+        required: false
         type: string
 
 permissions: {}
@@ -84,32 +94,6 @@ jobs:
           echo "Target SHA: ${sha}"
           echo "Repository (lowercase): ${repo_lower}"
 
-      - name: Wait for successful branch CI on target SHA
-        uses: ./.github/actions/wait-for-successful-branch-ci
-        with:
-          github-token: ${{ github.token }}
-          workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
-          target-sha: ${{ steps.target.outputs.sha }}
-          # 90-min budget at 5-min cadence. CI Verify runs 20-30m typically;
-          # pathological CodeQL/mutation overlap can push to ~60m. Polling
-          # more often than every 5m is wasteful because CI jobs only change
-          # state on completion, not mid-flight.
-          max-attempts: '18'
-          sleep-seconds: '300'
-
-      - name: Wait for successful E2E Playwright on target SHA
-        uses: ./.github/actions/wait-for-successful-branch-ci
-        with:
-          github-token: ${{ github.token }}
-          workflow-file: ${{ env.E2E_PLAYWRIGHT_WORKFLOW_FILE }}
-          target-sha: ${{ steps.target.outputs.sha }}
-          # Playwright moved to its own workflow so its failures don't
-          # poison ci-verify's Check Suite for Scorecard. Releases still
-          # gate on it — runs ~10-15m typically, share the same 90-min
-          # budget shape.
-          max-attempts: '18'
-          sleep-seconds: '300'
-
       - name: Resolve release tag from input
         id: next
         env:
@@ -119,11 +103,6 @@ jobs:
 
           if ! [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::Invalid release_tag '${RELEASE_TAG}'. Expected vX.Y.Z or vX.Y.Z-prerelease (e.g. v1.5.0 or v1.5.0-rc.17)."
-            exit 1
-          fi
-
-          if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
-            echo "::error::Tag already exists: ${RELEASE_TAG}. Pick the next unused tag and re-dispatch."
             exit 1
           fi
 
@@ -153,6 +132,100 @@ jobs:
             value="${kv#*=}"
             echo "${key}=${value}" >> "$GITHUB_OUTPUT"
           done <<< "${output}"
+
+      - name: Resolve release source and validate GA candidate
+        id: source
+        env:
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          GH_TOKEN: ${{ github.token }}
+          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          source_sha="${TARGET_SHA}"
+          image_digest=""
+
+          if [ "${IS_PRERELEASE}" = "true" ]; then
+            if [ -n "${CANDIDATE_TAG}" ] || [ -n "${CANDIDATE_DIGEST}" ]; then
+              echo "::error::candidate_tag and candidate_digest are GA-only inputs. Leave both empty for ${RELEASE_TAG}."
+              exit 1
+            fi
+          else
+            if ! [[ "${CANDIDATE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+              echo "::error::GA releases require candidate_tag in exact vX.Y.Z-rc.N form."
+              exit 1
+            fi
+            if ! [[ "${CANDIDATE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::GA releases require candidate_digest in exact sha256:<64 lowercase hex> form."
+              exit 1
+            fi
+            if [ "${CANDIDATE_TAG%-rc.*}" != "${RELEASE_TAG}" ]; then
+              echo "::error::Candidate ${CANDIDATE_TAG} does not belong to GA release ${RELEASE_TAG}."
+              exit 1
+            fi
+            if ! git rev-parse -q --verify "refs/tags/${CANDIDATE_TAG}^{commit}" >/dev/null; then
+              echo "::error::Candidate tag ${CANDIDATE_TAG} does not exist in the fetched repository."
+              exit 1
+            fi
+
+            release_json="$(gh release view "${CANDIDATE_TAG}" --repo "${GITHUB_REPOSITORY}" --json isPrerelease,publishedAt,tagName)"
+            if [ "$(jq -r '.isPrerelease' <<< "${release_json}")" != "true" ]; then
+              echo "::error::Candidate ${CANDIDATE_TAG} is not a published prerelease."
+              exit 1
+            fi
+            published_at="$(jq -er '.publishedAt' <<< "${release_json}")"
+            published_epoch="$(date -u -d "${published_at}" +%s)"
+            age_seconds="$(( $(date -u +%s) - published_epoch ))"
+            if [ "${age_seconds}" -lt 604800 ]; then
+              echo "::error::Candidate ${CANDIDATE_TAG} is only ${age_seconds}s old; GA promotion requires seven full days (604800s)."
+              exit 1
+            fi
+
+            source_sha="$(git rev-parse "${CANDIDATE_TAG}^{commit}")"
+            image_digest="${CANDIDATE_DIGEST}"
+          fi
+
+          if existing_sha="$(git rev-parse -q --verify "refs/tags/${RELEASE_TAG}^{commit}" 2>/dev/null)"; then
+            if [ "${existing_sha}" != "${source_sha}" ]; then
+              echo "::error::Existing ${RELEASE_TAG} tag points to ${existing_sha}, expected ${source_sha}."
+              exit 1
+            fi
+            echo "Existing release tag matches the requested source; continuing recoverable finalization."
+          fi
+
+          {
+            echo "source_sha=${source_sha}"
+            echo "image_digest=${image_digest}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact release source
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git checkout --detach "${SOURCE_SHA}"
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
+
+      - name: Wait for successful branch CI on release source SHA
+        uses: ./.github/actions/wait-for-successful-branch-ci
+        with:
+          github-token: ${{ github.token }}
+          workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
+          target-sha: ${{ steps.source.outputs.source_sha }}
+          max-attempts: '18'
+          sleep-seconds: '300'
+
+      - name: Wait for successful E2E Playwright on release source SHA
+        uses: ./.github/actions/wait-for-successful-branch-ci
+        with:
+          github-token: ${{ github.token }}
+          workflow-file: ${{ env.E2E_PLAYWRIGHT_WORKFLOW_FILE }}
+          target-sha: ${{ steps.source.outputs.source_sha }}
+          max-attempts: '18'
+          sleep-seconds: '300'
 
       - name: Assert tag version matches package versions
         env:
@@ -296,15 +369,55 @@ jobs:
             type=semver,pattern={{major}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
             type=raw,value=latest,enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
 
-      - name: Build and push
+      - name: Docker staging metadata
+        id: staging_meta
+        if: steps.tag.outputs.is_prerelease == 'true'
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9  # v6.1.0
+        with:
+          images: |
+            ghcr.io/${{ steps.target.outputs.repo_lower }}
+            docker.io/codeswhat/drydock
+            quay.io/codeswhat/drydock
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=release-staging-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Validate GA candidate digest in every registry
+        if: steps.tag.outputs.is_prerelease == 'false'
+        env:
+          CANDIDATE_DIGEST: ${{ steps.source.outputs.image_digest }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
+        run: |
+          set -euo pipefail
+          candidate_refs=(
+            "ghcr.io/${GHCR_REPO}:${CANDIDATE_TAG#v}"
+            "docker.io/codeswhat/drydock:${CANDIDATE_TAG#v}"
+            "quay.io/codeswhat/drydock:${CANDIDATE_TAG#v}"
+          )
+
+          for candidate_ref in "${candidate_refs[@]}"; do
+            raw_manifest="$(mktemp)"
+            docker buildx imagetools inspect --raw "${candidate_ref}" > "${raw_manifest}"
+            computed_digest="sha256:$(sha256sum "${raw_manifest}" | cut -d ' ' -f 1)"
+            rm -f "${raw_manifest}"
+            if [ "${computed_digest}" != "${CANDIDATE_DIGEST}" ]; then
+              echo "::error::${candidate_ref} resolves to ${computed_digest}, expected exact candidate ${CANDIDATE_DIGEST}."
+              exit 1
+            fi
+          done
+
+      - name: Build and push staging image
         id: build
+        if: steps.tag.outputs.is_prerelease == 'true'
         continue-on-error: true  # allow manifest retry path on transient push failures
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: .
           push: true
           platforms: ${{ env.DOCKER_PLATFORMS }}
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.staging_meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: DD_VERSION=${{ steps.next.outputs.next_version }}
           sbom: true
@@ -314,10 +427,10 @@ jobs:
 
       - name: Retry manifest publish on transient registry failure
         id: manifest-retry
-        if: steps.build.outcome == 'failure'
+        if: steps.tag.outputs.is_prerelease == 'true' && steps.build.outcome == 'failure'
         env:
           BUILD_DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.meta.outputs.tags }}
+          TAGS: ${{ steps.staging_meta.outputs.tags }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
@@ -361,21 +474,48 @@ jobs:
 
       - name: Resolve image digest
         id: digest
-        if: steps.build.outcome == 'success' || steps.manifest-retry.outcome == 'success'
         env:
+          CANDIDATE_DIGEST: ${{ steps.source.outputs.image_digest }}
           RETRY_DIGEST: ${{ steps.manifest-retry.outputs.digest }}
           BUILD_DIGEST: ${{ steps.build.outputs.digest }}
-        run: echo "value=${RETRY_DIGEST:-$BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          digest="${CANDIDATE_DIGEST:-${RETRY_DIGEST:-${BUILD_DIGEST:-}}}"
+          if ! [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Release source did not produce a valid image digest."
+            exit 1
+          fi
+          echo "value=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image source references
+        id: image_refs
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
+          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+          STAGING_TAGS: ${{ steps.staging_meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          {
+            echo 'tags<<DRYDOCK_IMAGE_REFS'
+            if [ "${IS_PRERELEASE}" = "true" ]; then
+              printf '%s\n' "${STAGING_TAGS}"
+            else
+              echo "ghcr.io/${GHCR_REPO}:${CANDIDATE_TAG#v}"
+              echo "docker.io/codeswhat/drydock:${CANDIDATE_TAG#v}"
+              echo "quay.io/codeswhat/drydock:${CANDIDATE_TAG#v}"
+            fi
+            echo 'DRYDOCK_IMAGE_REFS'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Install cosign
-        if: steps.build.outcome == 'success' || steps.manifest-retry.outcome == 'success'
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
 
       - name: Sign container images
-        if: steps.digest.outputs.value
+        if: steps.tag.outputs.is_prerelease == 'true'
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
-          TAGS: ${{ steps.meta.outputs.tags }}
+          TAGS: ${{ steps.image_refs.outputs.tags }}
         run: |
           set -euo pipefail
           images=()
@@ -385,10 +525,9 @@ jobs:
           cosign sign --yes "${images[@]}"
 
       - name: Verify container image signatures
-        if: steps.digest.outputs.value
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
-          TAGS: ${{ steps.meta.outputs.tags }}
+          TAGS: ${{ steps.image_refs.outputs.tags }}
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
           timeout_minutes: 10
@@ -423,7 +562,7 @@ jobs:
 
       - name: Attest container build provenance
         id: attest_container_image
-        if: steps.digest.outputs.value
+        if: steps.tag.outputs.is_prerelease == 'true'
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
         with:
           subject-name: ghcr.io/${{ steps.target.outputs.repo_lower }}
@@ -431,23 +570,21 @@ jobs:
           push-to-registry: true
 
       - name: Verify container build provenance attestation
-        if: steps.digest.outputs.value
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
           GH_TOKEN: ${{ github.token }}
-          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         run: |
           set -euo pipefail
           gh attestation verify "oci://ghcr.io/${GHCR_REPO}@${DIGEST}" \
             --repo "${GITHUB_REPOSITORY}" \
             --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml" \
             --source-ref refs/heads/main \
-            --source-digest "${TARGET_SHA}" \
+            --source-digest "${SOURCE_SHA}" \
             --bundle-from-oci >/dev/null
 
       - name: Generate container SBOM
-        if: steps.digest.outputs.value
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
@@ -473,7 +610,7 @@ jobs:
 
       - name: Attest container SBOM
         id: attest_container_sbom
-        if: steps.digest.outputs.value
+        if: steps.tag.outputs.is_prerelease == 'true'
         uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4.1.0
         with:
           subject-name: ghcr.io/${{ steps.target.outputs.repo_lower }}
@@ -483,31 +620,30 @@ jobs:
           push-to-registry: true
 
       - name: Verify container SBOM attestation
-        if: steps.digest.outputs.value
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
           GH_TOKEN: ${{ github.token }}
-          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         run: |
           set -euo pipefail
           gh attestation verify "oci://ghcr.io/${GHCR_REPO}@${DIGEST}" \
             --repo "${GITHUB_REPOSITORY}" \
             --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml" \
             --source-ref refs/heads/main \
-            --source-digest "${TARGET_SHA}" \
+            --source-digest "${SOURCE_SHA}" \
             --predicate-type https://spdx.dev/Document/v2.3 \
             --bundle-from-oci >/dev/null
 
       - name: Build release artifact
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
-          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         run: |
           set -euo pipefail
           mkdir -p dist
           artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
-          git archive --format=tar.gz --prefix="drydock-${RELEASE_TAG}/" --output="${artifact}" "${TARGET_SHA}"
+          git archive --format=tar.gz --prefix="drydock-${RELEASE_TAG}/" --output="${artifact}" "${SOURCE_SHA}"
           sha256sum "${artifact}" > "${artifact}.sha256"
 
       - name: Sign release artifact
@@ -644,32 +780,13 @@ jobs:
 
           echo "path=${notes_path}" >> "$GITHUB_OUTPUT"
 
-      # ────────────────────────────────────────────────────────────────────
-      # POINT OF NO RETURN
-      # Everything above this line can fail without leaking a tag or release
-      # to users. The tag push below is the public commitment that this
-      # release exists; it runs ONLY after image push, signing, attestation,
-      # and artifact generation have all succeeded.
-      # ────────────────────────────────────────────────────────────────────
-
-      - name: Push release tag
-        env:
-          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
-          TARGET_SHA: ${{ steps.target.outputs.sha }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git tag -a "${RELEASE_TAG}" "${TARGET_SHA}" -m "release: ${RELEASE_TAG}"
-          git push origin "${RELEASE_TAG}"
-
-      - name: Create GitHub Release and upload signed assets
+      - name: Prepare draft GitHub Release and upload signed assets
         env:
           GH_TOKEN: ${{ github.token }}
           IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           RELEASE_NOTES_PATH: ${{ steps.release_notes.outputs.path }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
           timeout_minutes: 5
@@ -682,10 +799,25 @@ jobs:
               prerelease_args=(--prerelease)
             fi
 
-            if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-              gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" "${prerelease_args[@]}"
+            if gh release view "${RELEASE_TAG}" --json isDraft >/tmp/drydock-release.json 2>/dev/null; then
+              if [ "$(jq -r '.isDraft' /tmp/drydock-release.json)" != "true" ]; then
+                echo "::error::Release ${RELEASE_TAG} is already public; refusing to alter it."
+                exit 1
+              fi
+            else
+              gh release create "${RELEASE_TAG}" \
+                --draft \
+                --target "${SOURCE_SHA}" \
+                --title "${RELEASE_TAG}" \
+                --notes-file "${RELEASE_NOTES_PATH}" \
+                "${prerelease_args[@]}"
             fi
-            gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" "${prerelease_args[@]}"
+
+            gh release edit "${RELEASE_TAG}" \
+              --draft \
+              --title "${RELEASE_TAG}" \
+              --notes-file "${RELEASE_NOTES_PATH}" \
+              "${prerelease_args[@]}"
             gh release upload "${RELEASE_TAG}" \
               "dist/drydock-${RELEASE_TAG}.tar.gz" \
               "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
@@ -696,9 +828,94 @@ jobs:
               "dist/drydock-${RELEASE_TAG}.image.spdx.json" \
               --clobber
 
+      # ────────────────────────────────────────────────────────────────────
+      # PUBLIC FINALIZATION
+      # All expensive and failure-prone preparation is complete. The remaining
+      # operations are ordered and idempotent: publish exact-digest image tags,
+      # push/verify the git tag, then publish the prepared draft release. If a
+      # service fails between steps, re-dispatching resumes from verified state.
+      # ────────────────────────────────────────────────────────────────────
+
+      - name: Publish release image tags
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          SOURCE_REFS: ${{ steps.image_refs.outputs.tags }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
+            while IFS= read -r tag; do
+              [ -z "${tag}" ] && continue
+              target_repository="${tag%:*}"
+              source_ref=""
+              while IFS= read -r candidate; do
+                [ -z "${candidate}" ] && continue
+                if [ "${candidate%:*}" = "${target_repository}" ] && \
+                  docker buildx imagetools inspect "${candidate}@${DIGEST}" >/dev/null 2>&1; then
+                  source_ref="${candidate%@*}@${DIGEST}"
+                  break
+                fi
+              done <<< "${SOURCE_REFS}"
+              if [ -z "${source_ref}" ]; then
+                echo "::error::${target_repository} does not expose exact source digest ${DIGEST}."
+                exit 1
+              fi
+
+              docker buildx imagetools create --tag "${tag}" "${source_ref}" >/dev/null
+              raw_manifest="$(mktemp)"
+              docker buildx imagetools inspect --raw "${tag}" > "${raw_manifest}"
+              published_digest="sha256:$(sha256sum "${raw_manifest}" | cut -d ' ' -f 1)"
+              rm -f "${raw_manifest}"
+              if [ "${published_digest}" != "${DIGEST}" ]; then
+                echo "::error::Published ${tag} resolved to ${published_digest}, expected ${DIGEST}."
+                exit 1
+              fi
+            done <<< "${TAGS}"
+
+      - name: Push release tag
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if remote_sha="$(git ls-remote --exit-code origin "refs/tags/${RELEASE_TAG}^{}" | awk '{print $1}')"; then
+            if [ "${remote_sha}" != "${SOURCE_SHA}" ]; then
+              echo "::error::Remote tag ${RELEASE_TAG} points to ${remote_sha}, expected ${SOURCE_SHA}."
+              exit 1
+            fi
+            echo "Remote tag already points to the exact release source."
+          else
+            git tag -a -f "${RELEASE_TAG}" "${SOURCE_SHA}" -m "release: ${RELEASE_TAG}"
+            git push origin "refs/tags/${RELEASE_TAG}"
+          fi
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
+            gh release edit "${RELEASE_TAG}" --draft=false
+            if [ "$(gh release view "${RELEASE_TAG}" --json isDraft --jq '.isDraft')" != "false" ]; then
+              echo "::error::Release ${RELEASE_TAG} is still a draft after publish."
+              exit 1
+            fi
+
       - name: Release summary
         env:
-          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
           RELEASE_LEVEL: ${{ steps.next.outputs.release_level }}
           NEXT_VERSION: ${{ steps.next.outputs.next_version }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
@@ -706,7 +923,7 @@ jobs:
         run: |
           {
             echo "### Release Summary"
-            echo "- Target SHA: \`${TARGET_SHA}\`"
+            echo "- Release source SHA: \`${SOURCE_SHA}\`"
             echo "- Bump level: \`${RELEASE_LEVEL}\`"
             echo "- Version: \`${NEXT_VERSION}\`"
             echo "- Tag: \`${RELEASE_TAG}\`"
