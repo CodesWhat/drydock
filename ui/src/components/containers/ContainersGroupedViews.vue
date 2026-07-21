@@ -608,7 +608,7 @@ onScopeDispose(() => {
           <div>
           <div v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
             <div class="container-version-flow">
-              <span class="inline-flex items-center gap-1 min-w-0">
+              <span class="container-version-current inline-flex items-center gap-1 min-w-0">
                 <AppIcon
                   v-if="c.tagPinGated"
                   name="pin"
@@ -633,7 +633,7 @@ onScopeDispose(() => {
           <div v-else-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
             <div class="container-version-flow">
               <template v-if="c.updateInsight">
-                <span class="inline-flex items-center gap-1 min-w-0">
+                <span class="container-version-current inline-flex items-center gap-1 min-w-0">
                   <AppIcon
                     v-if="c.tagPinGated"
                     name="pin"
@@ -660,7 +660,7 @@ onScopeDispose(() => {
                 >{{ c.updateInsight.tag }}</CopyableTag>
                 <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" />
               </template>
-              <span v-else class="inline-flex items-center gap-1 min-w-0">
+              <span v-else class="container-version-current inline-flex items-center gap-1 min-w-0">
                 <AppIcon
                   v-if="c.tagPinGated"
                   name="pin"
@@ -682,7 +682,7 @@ onScopeDispose(() => {
           </div>
           <div v-else-if="c.newTag" class="container-version-query">
             <div class="container-version-flow">
-              <span class="inline-flex items-center gap-1 min-w-0">
+              <span class="container-version-current inline-flex items-center gap-1 min-w-0">
                 <AppIcon
                   v-if="c.tagPinGated"
                   name="pin"
@@ -700,7 +700,7 @@ onScopeDispose(() => {
           </div>
           <div v-else-if="c.updateInsight" class="container-version-query">
             <div class="container-version-flow">
-              <span class="inline-flex items-center gap-1 min-w-0">
+              <span class="container-version-current inline-flex items-center gap-1 min-w-0">
                 <AppIcon
                   v-if="c.tagPinGated"
                   name="pin"
@@ -1437,7 +1437,10 @@ onScopeDispose(() => {
   white-space: nowrap;
 }
 
-.container-version-flow .container-version-tag:first-child {
+/* The current tag keeps a tighter budget than the target tag so the arrow and
+   target stay visible; class-scoped because the pin glyph can precede the tag
+   inside the wrapper, so :first-child no longer identifies it. */
+.container-version-current .container-version-tag {
   max-width: min(6.25rem, 44cqw);
 }
 
@@ -1453,7 +1456,7 @@ onScopeDispose(() => {
   }
 
   .container-version-tag,
-  .container-version-flow .container-version-tag:first-child {
+  .container-version-current .container-version-tag {
     max-width: 100%;
   }
 }
