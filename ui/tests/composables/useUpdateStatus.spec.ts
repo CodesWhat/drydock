@@ -330,9 +330,12 @@ describe('deriveUpdateStatus', () => {
     expect(status.state).toBe('up-to-date');
     expect(status.summary).toBe('Up to date.');
     expect(status.conditions).toEqual([]);
+    // No updateInsight on this container, so the insightNote ternary's second `&&`
+    // operand is falsy even though the container is already up to date.
+    expect(status.insightNote).toBeUndefined();
   });
 
-  it('describes a pinned-tag insight without turning it into an actionable update (#498)', () => {
+  it('describes a pinned-tag insight as up-to-date with an informational note, not a dedicated pinned state (#498)', () => {
     const status = deriveUpdateStatus(
       input({
         container: {
@@ -348,16 +351,37 @@ describe('deriveUpdateStatus', () => {
       }),
     );
 
-    expect(status.state).toBe('pinned');
-    // The pinned summary now reuses groupedViews.pinnedLabel (same vocabulary as the
-    // table/card update-state pill) instead of a dedicated updateStatus.summary.pinned key.
-    expect(status.summary).toBe(
-      "Pinned — v3.0.2-openvino is available but drydock won't apply it automatically.",
-    );
-    expect(status.tone).toBe('info');
+    // Pinned-ness is not an update state (#498 display honesty): an insight-only
+    // container reads up-to-date like the containers table, and the held-back tag
+    // surfaces only as an informational insightNote detail instead of its own state.
+    expect(status.state).toBe('up-to-date');
+    expect(status.summary).toBe('Up to date.');
+    expect(status.tone).toBe('success');
     expect(status.hasUpdate).toBe(false);
     expect(status.manualUpdateDisabled).toBe(true);
     expect(status.conditions).toEqual([]);
+    expect(status.insightNote).toBe(
+      "Newer version available: v3.0.2-openvino. This tag is pinned — drydock won't update it automatically.",
+    );
+  });
+
+  it('omits the insight note once an update is actually actionable, even if updateInsight is still set', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateInsight: { tag: 'v3.0.2-openvino', kind: 'major' },
+          updateEligibility: eligibility(),
+        },
+      }),
+    );
+
+    // hasUpdate true short-circuits the insightNote `&&` before updateInsight is
+    // even considered — an actionable update takes precedence over the insight.
+    expect(status.hasUpdate).toBe(true);
+    expect(status.insightNote).toBeUndefined();
   });
 
   it('detects digest-only updates', () => {

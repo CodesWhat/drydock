@@ -78,7 +78,7 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
     </div>
 
     <details
-      v-if="status.conditions.length > 0 || dryRunTriggerId"
+      v-if="status.conditions.length > 0 || dryRunTriggerId || status.insightNote"
       class="px-3 pb-3"
       :open="!status.detailsCollapsed"
     >
@@ -86,6 +86,22 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
         {{ $t('containerComponents.updateStatus.showDetails') }}
       </summary>
       <div class="mt-2 space-y-2" role="list">
+        <div
+          v-if="status.insightNote"
+          class="flex items-start gap-2 px-2.5 py-2 dd-rounded dd-bg-card"
+          role="listitem"
+          data-reason="update-insight"
+          data-tone="info"
+          :style="{
+            backgroundColor: 'var(--dd-info-muted)',
+            color: 'var(--dd-info)',
+          }"
+        >
+          <AppIcon name="pin" :size="12" class="shrink-0 mt-0.5" />
+          <div class="flex-1 min-w-0 text-2xs-plus whitespace-normal break-words">
+            {{ status.insightNote }}
+          </div>
+        </div>
         <div
           v-if="dryRunTriggerId"
           class="flex items-start gap-2 px-2.5 py-2 dd-rounded dd-bg-card"

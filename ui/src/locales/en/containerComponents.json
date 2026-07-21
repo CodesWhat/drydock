@@ -194,7 +194,6 @@
       "deleteAction": "Delete",
       "pinnedTooltip": "Pinned",
       "skippedLabel": "Skipped",
-      "pinnedLabel": "Pinned — {tag} is available but drydock won't apply it automatically.",
       "upToDateTooltip": "Up to date",
       "blockedTooltip": "Blocked",
       "actionsDisabled": "Actions disabled",
@@ -333,7 +332,9 @@
     "projectLink": {
       "viewProject": "View project"
     },
-    "registryLink": { "viewRegistry": "View registry" },
+    "registryLink": {
+      "viewRegistry": "View registry"
+    },
     "releaseNotesLink": {
       "releaseNotes": "Release notes",
       "viewFullNotes": "View full notes",

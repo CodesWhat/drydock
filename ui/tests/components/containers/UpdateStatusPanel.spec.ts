@@ -51,9 +51,12 @@ describe('UpdateStatusPanel', () => {
     );
     await wrapper.get('[data-test="update-status-manual-cta"]').trigger('click');
     expect(wrapper.emitted('update')).toHaveLength(1);
+    // No conditions, no dryRunTriggerId, no insightNote — the details block's
+    // three-way v-if should stay entirely closed.
+    expect(wrapper.find('details').exists()).toBe(false);
   });
 
-  it('renders an informational pinned state without an update CTA (#498)', () => {
+  it('renders a pinned-tag insight as an up-to-date state with an informational detail row (#498)', () => {
     const wrapper = mount(UpdateStatusPanel, {
       props: {
         container: {
@@ -68,13 +71,16 @@ describe('UpdateStatusPanel', () => {
       global: { stubs: { AppIcon: { template: '<span />' } } },
     });
 
+    // Pinned-ness is not an update state (#498 display honesty): the panel reads
+    // up-to-date, and the held-back tag surfaces only via the insight detail row.
     expect(wrapper.get('[data-test="update-status-panel"]').attributes('data-state')).toBe(
-      'pinned',
+      'up-to-date',
     );
-    // Reuses groupedViews.pinnedLabel (same vocabulary as the table/card pill) instead of
-    // a dedicated updateStatus.summary.pinned key (#display-honesty).
-    expect(wrapper.get('[data-test="update-status-summary"]').text()).toBe(
-      "Pinned — v3.0.2-openvino is available but drydock won't apply it automatically.",
+    expect(wrapper.get('[data-test="update-status-summary"]').text()).toBe('Up to date.');
+    const insightRow = wrapper.get('[data-reason="update-insight"]');
+    expect(insightRow.attributes('data-tone')).toBe('info');
+    expect(insightRow.text()).toBe(
+      "Newer version available: v3.0.2-openvino. This tag is pinned — drydock won't update it automatically.",
     );
     expect(wrapper.find('[data-test="update-status-manual-cta"]').exists()).toBe(false);
   });

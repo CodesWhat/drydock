@@ -43,7 +43,6 @@ export interface UpdateStatusCondition {
 
 export type UpdateStatusState =
   | 'up-to-date'
-  | 'pinned'
   | 'ready'
   | 'soft-blocked'
   | 'hard-blocked'
@@ -59,6 +58,7 @@ export interface UpdateStatusViewModel {
   detailsCollapsed: boolean;
   hasUpdate: boolean;
   manualUpdateDisabled: boolean;
+  insightNote?: string;
 }
 
 export interface UpdateStatusInput {
@@ -277,14 +277,7 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
   let icon: string;
   let summary: string;
 
-  if (!hasUpdate && container.updateInsight) {
-    state = 'pinned';
-    tone = 'info';
-    icon = 'info';
-    summary = t('containerComponents.groupedViews.pinnedLabel', {
-      tag: container.updateInsight.tag,
-    });
-  } else if (!hasUpdate) {
+  if (!hasUpdate) {
     state = 'up-to-date';
     tone = 'success';
     icon = 'up-to-date';
@@ -322,6 +315,14 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
         : t('containerComponents.updateStatus.summary.manualReady');
   }
 
+  // Pinned-ness is not an update state (#498 display honesty): an insight-only
+  // container reads up-to-date like the containers table, and the held-back tag
+  // surfaces as an informational detail row instead.
+  const insightNote =
+    !hasUpdate && container.updateInsight
+      ? t('containerComponents.updateInsight.tooltip', { tag: container.updateInsight.tag })
+      : undefined;
+
   return {
     state,
     tone,
@@ -331,6 +332,7 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
     detailsCollapsed: mode === 'notify',
     hasUpdate,
     manualUpdateDisabled: !hasUpdate || mode === 'notify' || hardBlocked || activeOperation,
+    insightNote,
   };
 }
 

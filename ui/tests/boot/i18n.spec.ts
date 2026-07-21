@@ -331,28 +331,34 @@ describe('buildMessages', () => {
     }
   });
 
-  it('sources the pinned update-status summary from groupedViews.pinnedLabel', () => {
-    // #display-honesty: the dedicated updateStatus.summary.pinned key was retired —
-    // deriveUpdateStatus() now reuses groupedViews.pinnedLabel (the same label the
-    // table/card update-state pill shows) so there's one pinned vocabulary, not two.
+  it('sources the insight-only update-status note from updateInsight.tooltip, not a retired pinnedLabel key', () => {
+    // #display-honesty: the dedicated 'pinned' state is retired — deriveUpdateStatus()
+    // now reuses containerComponents.updateInsight.tooltip (the same tooltip the
+    // table/card insight badge shows) for its insightNote, so there's one insight
+    // vocabulary, not two. groupedViews.pinnedLabel no longer exists in any catalog.
     const messages = buildMessages();
-    const path = 'containerComponents.groupedViews.pinnedLabel';
-    const englishSummary = getMessagePath(messages.en, path);
+    const notePath = 'containerComponents.updateInsight.tooltip';
+    const retiredPath = 'containerComponents.groupedViews.pinnedLabel';
+    const englishNote = getMessagePath(messages.en, notePath);
 
-    expect(englishSummary, `en missing ${path}`).toBeTypeOf('string');
-    expect(englishSummary, `en ${path} should not be empty`).not.toBe('');
-    expect(englishSummary, `en ${path} should carry the {tag} interpolation`).toContain('{tag}');
+    expect(englishNote, `en missing ${notePath}`).toBeTypeOf('string');
+    expect(englishNote, `en ${notePath} should not be empty`).not.toBe('');
+    expect(englishNote, `en ${notePath} should carry the {tag} interpolation`).toContain('{tag}');
+    expect(
+      getMessagePath(messages.en, retiredPath),
+      `en should not have ${retiredPath}`,
+    ).toBeUndefined();
 
     for (const locale of SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en')) {
-      const localizedSummary = getMessagePath(messages[locale], path);
-      // groupedViews.pinnedLabel is a reused pre-existing key still working through
-      // Crowdin sync for non-English locales (same lag as its groupedViews.skippedLabel
-      // neighbor) — only assert real translation when the key is actually present, so
-      // this guard doesn't block on sync lag unrelated to the display-honesty batch,
-      // while still catching a verbatim English copy where the key IS present.
-      if (localizedSummary === undefined) continue;
-      expect(localizedSummary, `${locale} ${path} should not be empty`).not.toBe('');
-      expect(localizedSummary, `${locale} should localize ${path}`).not.toBe(englishSummary);
+      const localizedNote = getMessagePath(messages[locale], notePath);
+      // updateInsight.tooltip is a reused pre-existing key still working through
+      // Crowdin sync for non-English locales — only assert real translation when the
+      // key is actually present, so this guard doesn't block on sync lag unrelated to
+      // the display-honesty batch, while still catching a verbatim English copy where
+      // the key IS present.
+      if (localizedNote === undefined) continue;
+      expect(localizedNote, `${locale} ${notePath} should not be empty`).not.toBe('');
+      expect(localizedNote, `${locale} should localize ${notePath}`).not.toBe(englishNote);
     }
   });
 });
