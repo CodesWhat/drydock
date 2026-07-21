@@ -198,7 +198,6 @@
       "emptyState": "Er zijn geen containers die overeenkomen met uw filters",
       "currentLabel": "Huidig",
       "latestLabel": "Nieuwste",
-      "blockedByBouncer": "Geblokkeerd door Bouncer",
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
@@ -259,7 +258,6 @@
       "allBouncer": "Alle Bouncer",
       "safe": "Veilig",
       "unsafe": "Onveilig",
-      "blocked": "Geblokkeerd",
       "allRegistries": "Alle registers",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "Majoor",
       "minor": "Klein",
       "patch": "Patch",
-      "digest": "Verteren",
       "hidePinned": "Verberg vastgezet",
       "hidePinnedTooltip": "Verberg containers die zijn vastgemaakt aan specifieke versies",
       "clearAll": "Alles wissen",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "Bekijk project"
     },
-    "registryLink": { "viewRegistry": "Register bekijken" },
+    "registryLink": {
+      "viewRegistry": "Register bekijken"
+    },
     "releaseNotesLink": {
       "releaseNotes": "Release-opmerkingen",
       "viewFullNotes": "Bekijk de volledige notities",
@@ -351,12 +350,6 @@
       "noTrigger": "Geen trigger",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Liften:"
-    },
-    "maturityBadge": {
-      "new": "NIEUW",
-      "mature": "RIJP",
-      "newTooltip": "Nieuwe update",
-      "matureTooltip": "Volwassen update"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -482,15 +475,6 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
-    },
     "preview": {
       "toasts": {
         "failedTitle": "Preview failed",
@@ -552,9 +536,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "Vastgezet — ter informatie is een nieuwere versie beschikbaar."
-      }
+      "summary": {}
     }
   }
 }

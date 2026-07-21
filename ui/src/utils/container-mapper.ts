@@ -39,7 +39,8 @@ import {
   normalizeMaturityMode,
   resolveMaturityMinAgeDays,
 } from './maturity-policy';
-import { formatUpdateAge, getUpdateMaturity } from './update-maturity';
+import { findBackendMaturityBlocked } from './update-eligibility';
+import { formatUpdateAge } from './update-maturity';
 
 interface ApiContainerImage {
   name?: unknown;
@@ -175,6 +176,7 @@ export interface ApiContainerInput {
   triggerInclude?: unknown;
   triggerExclude?: unknown;
   tagPinned?: unknown;
+  tagPinGated?: unknown;
   sourceRepo?: unknown;
   currentReleaseNotes?: ApiContainerReleaseNotes | null;
   error?: { message?: unknown } | null;
@@ -521,6 +523,11 @@ function isMaturityBlocked(
     return false;
   }
 
+  const backendVerdict = findBackendMaturityBlocked(apiContainer);
+  if (backendVerdict !== undefined) {
+    return backendVerdict;
+  }
+
   const minAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
   const updateDetectedAt = deriveUpdateDetectedAt(apiContainer);
   const detectedAtMs = Date.parse(updateDetectedAt || '');
@@ -861,6 +868,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     imageTagSemver: asOptionalBoolean(apiContainer.image?.tag?.semver),
     tagPrecision: apiContainer.image?.tag?.tagPrecision as 'specific' | 'floating' | undefined,
     tagPinned: asOptionalBoolean(apiContainer.tagPinned),
+    tagPinGated: asOptionalBoolean(apiContainer.tagPinGated),
     suggestedTag: asNonEmptyString(apiContainer.result?.suggestedTag),
     sourceRepo: asNonEmptyString(apiContainer.sourceRepo),
     releaseNotes: deriveReleaseNotes(apiContainer),
@@ -868,7 +876,6 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     releaseLink: deriveReleaseLink(apiContainer),
     updateDetectedAt: detectedAt,
     updateOperation: deriveUpdateOperation(apiContainer),
-    updateMaturity: getUpdateMaturity(detectedAt, !!apiContainer.updateAvailable),
     updateMaturityTooltip: formatUpdateAge(
       detectedAt,
       !!apiContainer.updateAvailable,

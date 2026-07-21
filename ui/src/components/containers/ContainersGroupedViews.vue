@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
@@ -23,6 +22,7 @@ import {
   updateButtonState,
   type UpdateButtonState,
 } from '../../utils/update-eligibility';
+import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update-kind-labels';
 import type { Container } from '../../types/container';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
@@ -371,35 +371,12 @@ function getContainerStatusColor(container: { id?: unknown; name?: unknown; stat
 }
 
 function getUpdateKindLabel(kind: Container['updateKind']): string {
-  if (!kind) return '';
-  const keyMap: Record<NonNullable<Container['updateKind']>, string> = {
-    major: 'containerComponents.listContent.major',
-    minor: 'containerComponents.listContent.minor',
-    patch: 'containerComponents.listContent.patch',
-    digest: 'containerComponents.listContent.digest',
-  };
-  return t(keyMap[kind]);
+  return resolveUpdateKindLabel(kind, t);
 }
-
-function getUpdateMaturityLabel(maturity: Container['updateMaturity']) {
-  if (maturity === 'fresh') {
-    return t('containerComponents.maturityBadge.new');
-  }
-  if (maturity === 'settled') {
-    return t('containerComponents.maturityBadge.mature');
-  }
-  return '';
-}
-
-const UPDATE_INSIGHT_TOOLTIP_KEY_BY_KIND: Record<'major' | 'minor' | 'patch', string> = {
-  major: 'containerComponents.updateInsight.tooltipMajor',
-  minor: 'containerComponents.updateInsight.tooltipMinor',
-  patch: 'containerComponents.updateInsight.tooltipPatch',
-};
 
 function updateInsightTooltip(insight: Container['updateInsight']): string {
   if (!insight) return '';
-  return t(UPDATE_INSIGHT_TOOLTIP_KEY_BY_KIND[insight.kind], { tag: insight.tag });
+  return t('containerComponents.updateInsight.tooltip', { tag: insight.tag });
 }
 
 function getContainerUpdateStateLabel(
@@ -411,9 +388,9 @@ function getContainerUpdateStateLabel(
   if (getContainerListPolicyState(container).skipped) {
     return t('containerComponents.groupedViews.skippedLabel');
   }
-  if (container.updateInsight) {
-    return t('containerComponents.groupedViews.pinnedLabel');
-  }
+  // Insight-only rows (pinned tag with a newer out-of-family candidate) read "Current":
+  // the candidate is informational, surfaced by the tag-cell pin glyph + insight tooltip,
+  // never as an actionable-looking update state (#498 pinned-chip inconsistency).
   return t('containerComponents.groupedViews.currentLabel');
 }
 
@@ -426,16 +403,17 @@ function getContainerUpdateStateColor(
   if (getContainerListPolicyState(container).skipped) {
     return 'var(--dd-warning)';
   }
-  if (container.updateInsight) {
-    return updateInsightColor().text;
-  }
   return 'var(--dd-success)';
 }
 
 function getContainerUpdateStateTooltip(
-  container: Pick<Container, 'updateKind' | 'updateInsight'> & { name?: string },
+  container: Pick<Container, 'updateKind' | 'updateInsight' | 'updateMaturityTooltip'> & {
+    name?: string;
+  },
 ) {
-  if (container.updateKind) return getUpdateKindLabel(container.updateKind);
+  if (container.updateKind) {
+    return container.updateMaturityTooltip || getUpdateKindLabel(container.updateKind);
+  }
   if (getContainerListPolicyState(container).skipped) {
     return containerPolicyTooltip(container, 'skipped');
   }
@@ -627,9 +605,21 @@ onScopeDispose(() => {
         </template>
         <!-- Version comparison -->
         <template #cell-version="{ row: c }">
+          <div>
           <div v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
             <div class="container-version-flow">
-              <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentDigest">{{ formatShortDigest(c.currentDigest) }}</span>
+              <span class="container-version-current inline-flex items-center gap-1 min-w-0">
+                <AppIcon
+                  v-if="c.tagPinGated"
+                  name="pin"
+                  :size="12"
+                  class="dd-text-muted shrink-0"
+                  data-test="container-tag-pinned-glyph"
+                  :aria-label="t('containerComponents.groupedViews.ariaPinnedTag')"
+                  v-tooltip.top="tt(t('containerComponents.groupedViews.pinnedTagTooltip'))"
+                />
+                <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentDigest">{{ formatShortDigest(c.currentDigest) }}</span>
+              </span>
               <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
               <CopyableTag :tag="c.newDigest" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" @click.stop>{{ formatShortDigest(c.newDigest) }}</CopyableTag>
             </div>
@@ -643,12 +633,23 @@ onScopeDispose(() => {
           <div v-else-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
             <div class="container-version-flow">
               <template v-if="c.updateInsight">
-                <CopyableTag
-                  :tag="c.currentTag"
-                  class="container-version-tag text-2xs-plus dd-text-secondary"
-                  :idle-tooltip="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
-                  @click.stop
-                >{{ c.currentTag }}</CopyableTag>
+                <span class="container-version-current inline-flex items-center gap-1 min-w-0">
+                  <AppIcon
+                    v-if="c.tagPinGated"
+                    name="pin"
+                    :size="12"
+                    class="dd-text-muted shrink-0"
+                    data-test="container-tag-pinned-glyph"
+                    :aria-label="t('containerComponents.groupedViews.ariaPinnedTag')"
+                    v-tooltip.top="tt(t('containerComponents.groupedViews.pinnedTagTooltip'))"
+                  />
+                  <CopyableTag
+                    :tag="c.currentTag"
+                    class="container-version-tag text-2xs-plus dd-text-secondary"
+                    :idle-tooltip="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
+                    @click.stop
+                  >{{ c.currentTag }}</CopyableTag>
+                </span>
                 <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
                 <CopyableTag
                   :tag="c.updateInsight.tag"
@@ -659,26 +660,58 @@ onScopeDispose(() => {
                 >{{ c.updateInsight.tag }}</CopyableTag>
                 <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" />
               </template>
-              <CopyableTag
-                v-else
-                :tag="c.currentTag"
-                class="container-version-tag container-version-tag-target text-2xs-plus font-semibold"
-                style="color: var(--dd-primary);"
-                :idle-tooltip="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
-                @click.stop
-              >{{ c.currentTag }}</CopyableTag>
+              <span v-else class="container-version-current inline-flex items-center gap-1 min-w-0">
+                <AppIcon
+                  v-if="c.tagPinGated"
+                  name="pin"
+                  :size="12"
+                  class="dd-text-muted shrink-0"
+                  data-test="container-tag-pinned-glyph"
+                  :aria-label="t('containerComponents.groupedViews.ariaPinnedTag')"
+                  v-tooltip.top="tt(t('containerComponents.groupedViews.pinnedTagTooltip'))"
+                />
+                <CopyableTag
+                  :tag="c.currentTag"
+                  class="container-version-tag container-version-tag-target text-2xs-plus font-semibold"
+                  style="color: var(--dd-primary);"
+                  :idle-tooltip="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
+                  @click.stop
+                >{{ c.currentTag }}</CopyableTag>
+              </span>
             </div>
           </div>
           <div v-else-if="c.newTag" class="container-version-query">
             <div class="container-version-flow">
-              <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              <span class="container-version-current inline-flex items-center gap-1 min-w-0">
+                <AppIcon
+                  v-if="c.tagPinGated"
+                  name="pin"
+                  :size="12"
+                  class="dd-text-muted shrink-0"
+                  data-test="container-tag-pinned-glyph"
+                  :aria-label="t('containerComponents.groupedViews.ariaPinnedTag')"
+                  v-tooltip.top="tt(t('containerComponents.groupedViews.pinnedTagTooltip'))"
+                />
+                <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              </span>
               <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
               <CopyableTag :tag="c.newTag" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
             </div>
           </div>
           <div v-else-if="c.updateInsight" class="container-version-query">
             <div class="container-version-flow">
-              <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              <span class="container-version-current inline-flex items-center gap-1 min-w-0">
+                <AppIcon
+                  v-if="c.tagPinGated"
+                  name="pin"
+                  :size="12"
+                  class="dd-text-muted shrink-0"
+                  data-test="container-tag-pinned-glyph"
+                  :aria-label="t('containerComponents.groupedViews.ariaPinnedTag')"
+                  v-tooltip.top="tt(t('containerComponents.groupedViews.pinnedTagTooltip'))"
+                />
+                <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              </span>
               <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
               <CopyableTag
                 :tag="c.updateInsight.tag"
@@ -697,6 +730,15 @@ onScopeDispose(() => {
             </div>
             <template v-else>
               <div class="inline-flex items-center justify-center gap-1">
+                <AppIcon
+                  v-if="c.tagPinGated"
+                  name="pin"
+                  :size="12"
+                  class="dd-text-muted shrink-0"
+                  data-test="container-tag-pinned-glyph"
+                  :aria-label="t('containerComponents.groupedViews.ariaPinnedTag')"
+                  v-tooltip.top="tt(t('containerComponents.groupedViews.pinnedTagTooltip'))"
+                />
                 <span class="text-2xs-plus dd-text-secondary truncate max-w-[140px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
                 <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" />
               </div>
@@ -725,6 +767,7 @@ onScopeDispose(() => {
                 </span>
               </div>
             </template>
+          </div>
           </div>
         </template>
         <!-- Software version (OCI org.opencontainers.image.version or dd.inspect.tag.path value; falls back to image tag) -->
@@ -757,25 +800,9 @@ onScopeDispose(() => {
               v-tooltip.top="tt(blockedUpdateTooltip(c))"
             >
               <AppIcon name="lock" :size="11" />
-              {{ t('containerComponents.groupedViews.blockedTooltip') }}
-            </span>
-            <span
-              v-else-if="c.updateMaturity"
-              class="text-2xs dd-text-muted"
-              v-tooltip.top="tt(c.updateMaturityTooltip || getUpdateMaturityLabel(c.updateMaturity))"
-            >
-              {{ getUpdateMaturityLabel(c.updateMaturity) }}
+              {{ t('containerComponents.groupedViews.blockedByBouncer') }}
             </span>
             <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-            <AppBadge
-              v-if="c.updateInsight"
-              size="xs"
-              :custom="updateInsightColor()"
-              v-tooltip.top="tt(updateInsightTooltip(c.updateInsight))"
-              data-test="update-insight-kind-badge"
-            >
-              {{ getUpdateKindLabel(c.updateInsight.kind) }}
-            </AppBadge>
           </div>
         </template>
         <!-- Status -->
@@ -1033,6 +1060,7 @@ onScopeDispose(() => {
                 data-test="container-card-update-state"
                 class="inline-flex items-center gap-1.5 shrink-0 text-2xs-plus font-semibold"
                 :style="{ color: getContainerUpdateStateColor(c) }"
+                v-tooltip.top="tt(getContainerUpdateStateTooltip(c))"
               >
                 <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
                 {{ getContainerUpdateStateLabel(c) }}
@@ -1076,6 +1104,15 @@ onScopeDispose(() => {
                "Current" tag with a tooltip on the state badge; that regressed twice (#356, #370). -->
           <div class="px-4 py-3 min-w-0">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
+              <AppIcon
+                v-if="c.tagPinGated"
+                name="pin"
+                :size="12"
+                class="dd-text-muted shrink-0"
+                data-test="container-tag-pinned-glyph"
+                :aria-label="t('containerComponents.groupedViews.ariaPinnedTag')"
+                v-tooltip.top="tt(t('containerComponents.groupedViews.pinnedTagTooltip'))"
+              />
               <template v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest">
                 <CopyableTag :tag="c.currentDigest" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
                   {{ formatShortDigest(c.currentDigest) }}
@@ -1085,7 +1122,6 @@ onScopeDispose(() => {
                       :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
                   {{ formatShortDigest(c.newDigest) }}
                 </CopyableTag>
-                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <!-- #356 / #370 regression guard — mirrors the table's #cell-version guard branch
                    exactly: TAG ONLY, digest delta in the CopyableTag's :idle-tooltip. -->
@@ -1115,7 +1151,6 @@ onScopeDispose(() => {
                   :idle-tooltip="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
                   @click.stop
                 >{{ c.currentTag }}</CopyableTag>
-                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <template v-else-if="c.newTag">
                 <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -1126,7 +1161,6 @@ onScopeDispose(() => {
                       :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
                   {{ c.newTag }}
                 </CopyableTag>
-                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <template v-else-if="c.updateInsight">
                 <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -1157,17 +1191,8 @@ onScopeDispose(() => {
             </div>
             <!-- Resource links live in the footer's shared icon group. Keeping release notes in
                  popover mode prevents the intermediate-release tree from inflating card height. -->
-            <div v-if="c.suggestedTag || c.updateInsight" class="flex items-center gap-2 flex-wrap mt-2">
+            <div v-if="c.suggestedTag" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-              <AppBadge
-                v-if="c.updateInsight"
-                size="xs"
-                :custom="updateInsightColor()"
-                v-tooltip.top="tt(updateInsightTooltip(c.updateInsight))"
-                data-test="update-insight-kind-badge"
-              >
-                {{ getUpdateKindLabel(c.updateInsight.kind) }}
-              </AppBadge>
             </div>
           </div>
 
@@ -1412,7 +1437,10 @@ onScopeDispose(() => {
   white-space: nowrap;
 }
 
-.container-version-flow .container-version-tag:first-child {
+/* The current tag keeps a tighter budget than the target tag so the arrow and
+   target stay visible; class-scoped because the pin glyph can precede the tag
+   inside the wrapper, so :first-child no longer identifies it. */
+.container-version-current .container-version-tag {
   max-width: min(6.25rem, 44cqw);
 }
 
@@ -1428,7 +1456,7 @@ onScopeDispose(() => {
   }
 
   .container-version-tag,
-  .container-version-flow .container-version-tag:first-child {
+  .container-version-current .container-version-tag {
     max-width: 100%;
   }
 }

@@ -1,6 +1,7 @@
 import { RE2JS } from 're2js';
 
 import type { Container } from '../../../model/container.js';
+import { isPinGateGoverned, type TagFamilyPolicy } from '../../../tag/family.js';
 import {
   diff as diffSemver,
   isGreater as isGreaterSemver,
@@ -110,8 +111,6 @@ function hasLeadingZero(value: string): boolean {
 }
 
 export const getNumericTagShape = getSharedNumericTagShape;
-
-type TagFamilyPolicy = 'strict' | 'loose';
 
 interface SemverCandidateFilterStats {
   input: number;
@@ -755,11 +754,9 @@ export function getTagCandidates(
 
   // A 'specific' (fully-pinned) tag is digest-only by default.
   // Opt out with dd.tag.include filter OR dd.tag.family=loose.
-  if (
-    container.image.tag.tagPrecision === 'specific' &&
-    !container.includeTags &&
-    tagFamilyPolicy !== 'loose'
-  ) {
+  // Shares its entry condition with the model's `tagPinGated` field via
+  // isPinGateGoverned() so the UI pin glyph and this gate cannot drift.
+  if (isPinGateGoverned(container)) {
     const digestWatchEnabled = Boolean(container.image.digest?.watch);
     const insight = computeInsight ? computePinGateInsight(container, filteredTags) : undefined;
     const noUpdateReason = digestWatchEnabled

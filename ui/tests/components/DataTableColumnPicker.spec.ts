@@ -18,7 +18,11 @@ describe('DataTableColumnPicker', () => {
   let wrapper: VueWrapper | null = null;
 
   function factory(
-    props: Partial<{ columns: PickerColumn[]; hiddenKeys: Set<string> | string[] }> = {},
+    props: Partial<{
+      columns: PickerColumn[];
+      hiddenKeys: Set<string> | string[];
+      autoHiddenKeys: Set<string> | string[];
+    }> = {},
   ) {
     wrapper = mountWithPlugins(DataTableColumnPicker, {
       props: { columns, hiddenKeys: [], ...props },
@@ -209,6 +213,61 @@ describe('DataTableColumnPicker', () => {
       const w = factory({ hiddenKeys: ['status', 'stale-key'] });
       expect(w.text()).toContain('+1');
       expect(w.text()).not.toContain('+2');
+    });
+  });
+
+  describe('auto-hidden columns (#display-honesty item 5)', () => {
+    it('omits the annotation and uses the generic badge tooltip when autoHiddenKeys is not passed', async () => {
+      const w = factory({ hiddenKeys: ['status'] });
+      await openPicker(w);
+      expect(
+        panel()!.querySelector('[data-test="column-picker-auto-hidden-annotation"]'),
+      ).toBeNull();
+      const badge = w.find('.absolute');
+      expect(badge.attributes('title')).toBe('1 columns hidden');
+    });
+
+    it('annotates a checked column that responsive sizing is currently auto-hiding', async () => {
+      const w = factory({ autoHiddenKeys: ['containers'] });
+      await openPicker(w);
+      const annotation = panel()!.querySelector(
+        '[data-test="column-picker-auto-hidden-annotation"]',
+      );
+      expect(annotation).not.toBeNull();
+      expect(annotation?.textContent).toContain('Containers');
+      expect(annotation?.textContent).toContain('hidden to fit');
+    });
+
+    it('does not annotate a column the user has explicitly unchecked, even if also auto-hidden', async () => {
+      const w = factory({ hiddenKeys: ['status'], autoHiddenKeys: ['status'] });
+      await openPicker(w);
+      expect(
+        panel()!.querySelector('[data-test="column-picker-auto-hidden-annotation"]'),
+      ).toBeNull();
+    });
+
+    it('counts a checked-but-auto-hidden column in the badge', () => {
+      const w = factory({ autoHiddenKeys: ['containers'] });
+      expect(w.text()).toContain('+1');
+    });
+
+    it('accepts autoHiddenKeys as a Set, not just an array', () => {
+      const w = factory({ autoHiddenKeys: new Set(['containers']) });
+      expect(w.text()).toContain('+1');
+    });
+
+    it('names every checked-but-auto-hidden column in the badge tooltip instead of the generic count', () => {
+      const w = factory({ autoHiddenKeys: ['status', 'containers'] });
+      const badge = w.find('.absolute');
+      expect(badge.attributes('title')).toBe('Status, Containers hidden to fit your screen.');
+    });
+
+    it('does not double count a column that is both user-hidden and auto-hidden, and keeps the generic tooltip', () => {
+      const w = factory({ hiddenKeys: ['status'], autoHiddenKeys: ['status'] });
+      expect(w.text()).toContain('+1');
+      expect(w.text()).not.toContain('+2');
+      const badge = w.find('.absolute');
+      expect(badge.attributes('title')).toBe('1 columns hidden');
     });
   });
 });

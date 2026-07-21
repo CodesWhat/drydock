@@ -39,7 +39,12 @@ type ContainerFiltersContext = Pick<
 
 type ColumnVisibilityContext = Pick<
   ReturnType<typeof useColumnVisibility>,
-  'allColumns' | 'toggleColumn' | 'visibleColumns' | 'hiddenColumnKeys' | 'resetColumns'
+  | 'allColumns'
+  | 'toggleColumn'
+  | 'visibleColumns'
+  | 'hiddenColumnKeys'
+  | 'autoHiddenColumns'
+  | 'resetColumns'
 >;
 
 type DetailPanelContext = Pick<

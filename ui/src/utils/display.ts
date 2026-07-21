@@ -89,7 +89,10 @@ export function updateKindColor(kind: string | null) {
   if (kind === 'minor') return { bg: 'var(--dd-warning-muted)', text: 'var(--dd-warning)' };
   if (kind === 'patch') return { bg: 'var(--dd-primary-muted)', text: 'var(--dd-primary)' };
   if (kind === 'digest') return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
-  return { bg: 'transparent', text: 'transparent' };
+  if (kind == null) return { bg: 'transparent', text: 'transparent' };
+  // Unrecognized-but-present kind (malformed/future backend data): a visible
+  // neutral badge beats a silently invisible one (#display-honesty item 6).
+  return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
 }
 
 export function maturityColor(maturity: string | null) {

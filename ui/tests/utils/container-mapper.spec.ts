@@ -872,6 +872,67 @@ describe('container-mapper', () => {
       expect((c as any).suppressedUpdateTag).toBeUndefined();
     });
 
+    it('prefers a backend maturity-not-reached verdict over a met legacy threshold (#display-honesty)', () => {
+      // Legacy computation alone (old detection date, threshold met) would NOT mark this
+      // maturity-blocked; a backend eligibility payload saying otherwise must win.
+      const oldDate = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          result: { tag: '1.26' },
+          updateDetectedAt: oldDate,
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+          },
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-07-20T00:00:00.000Z',
+            blockers: [{ reason: 'maturity-not-reached', message: 'Not mature yet.' }],
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+      expect((c as any).suppressedUpdateTag).toBe('1.26');
+    });
+
+    it('prefers a backend non-blocked verdict over a fresh legacy detection, ignoring malformed blocker entries (#display-honesty)', () => {
+      // Legacy computation alone (fresh detection, no updateDetectedAt override) would
+      // mark this maturity-blocked; the backend payload says otherwise and must win. The
+      // blockers array also carries a falsy entry and a non-object entry to exercise every
+      // guard in findBackendMaturityBlocked()'s .some() predicate.
+      const freshDate = new Date(Date.now() - daysToMs(2)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: 'minor',
+            remoteValue: '1.26',
+          },
+          result: { tag: '1.26' },
+          updateDetectedAt: freshDate,
+          updatePolicy: {
+            maturityMode: 'mature',
+          },
+          updateEligibility: {
+            eligible: true,
+            evaluatedAt: '2026-07-20T00:00:00.000Z',
+            blockers: [null, 'not-an-object', { reason: 'skip-tag' }] as any,
+          },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
     it('falls back to result.digest for suppressed digest updates when remote digest is missing', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -989,7 +1050,7 @@ describe('container-mapper', () => {
       expect(c.imageCreated).toBeUndefined();
     });
 
-    it('sets updateMaturity to fresh when update is recent', () => {
+    it('sets updateMaturityTooltip for a recently detected update', () => {
       const recentDate = new Date(Date.now() - 2 * 86_400_000).toISOString();
       const c = mapApiContainer(
         makeApiContainer({
@@ -999,11 +1060,10 @@ describe('container-mapper', () => {
           updateDetectedAt: recentDate,
         }),
       );
-      expect(c.updateMaturity).toBe('fresh');
-      expect(c.updateMaturityTooltip).toMatch(/^Available for 2 days?$/);
+      expect(c.updateMaturityTooltip).toMatch(/^Detected 2 days? ago$/);
     });
 
-    it('sets updateMaturity to settled when update is old', () => {
+    it('sets updateMaturityTooltip for an update detected a while ago', () => {
       const oldDate = new Date(Date.now() - 14 * 86_400_000).toISOString();
       const c = mapApiContainer(
         makeApiContainer({
@@ -1013,13 +1073,11 @@ describe('container-mapper', () => {
           updateDetectedAt: oldDate,
         }),
       );
-      expect(c.updateMaturity).toBe('settled');
-      expect(c.updateMaturityTooltip).toMatch(/^Available for 14 days$/);
+      expect(c.updateMaturityTooltip).toMatch(/^Detected 14 days ago$/);
     });
 
-    it('sets updateMaturity to null when no update available', () => {
+    it('leaves updateMaturityTooltip undefined when no update available', () => {
       const c = mapApiContainer(makeApiContainer());
-      expect(c.updateMaturity).toBeNull();
       expect(c.updateMaturityTooltip).toBeUndefined();
     });
 
@@ -1101,6 +1159,34 @@ describe('container-mapper', () => {
         }),
       );
       expect(c.tagPinned).toBe(true);
+    });
+
+    it('maps tagPinGated when present in API response', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          tagPinGated: true,
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: '1.2.3', tagPrecision: 'specific' },
+          },
+        }),
+      );
+      expect(c.tagPinGated).toBe(true);
+    });
+
+    it('leaves tagPinGated undefined when absent from the API response', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.tagPinGated).toBeUndefined();
+    });
+
+    it('leaves tagPinGated undefined when the API response value is not a boolean', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          tagPinGated: 'true' as unknown as boolean,
+        }),
+      );
+      expect(c.tagPinGated).toBeUndefined();
     });
 
     it('maps tagPrecision as specific when set', () => {
@@ -1299,8 +1385,10 @@ describe('container-mapper', () => {
       expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.availableDaysPlural', {
         count: 2,
       });
+      // formatUpdateAge composes the day-count translation into the "Detected {duration}
+      // ago" template — both calls go through the same mocked t().
       expect(c.updateMaturityTooltip).toBe(
-        't:containerComponents.updateAge.availableDaysPlural:{"count":2}',
+        't:containerComponents.maturityBadge.new:{"duration":"t:containerComponents.updateAge.availableDaysPlural:{\\"count\\":2}"}',
       );
     });
 
@@ -1320,9 +1408,7 @@ describe('container-mapper', () => {
         mockT,
       );
       expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.availableHoursSingular');
-      expect(mapped[0]?.updateMaturityTooltip).toBe(
-        't:containerComponents.updateAge.availableHoursSingular',
-      );
+      expect(mapped[0]?.updateMaturityTooltip).toBe('t:containerComponents.maturityBadge.new');
     });
   });
 

@@ -198,7 +198,6 @@
       "emptyState": "Żadne kontenery nie pasują do wybranych filtrów",
       "currentLabel": "Aktualny",
       "latestLabel": "Najnowsze",
-      "blockedByBouncer": "Zablokowany przez Bouncera",
       "registryErrorRateLimited": "Limit zapytań przekroczony",
       "registryErrorAuth": "Błąd uwierzytelniania",
       "registryErrorNotFound": "Nie znaleziono",
@@ -259,7 +258,6 @@
       "allBouncer": "Cały Bouncer",
       "safe": "Bezpieczny",
       "unsafe": "Niebezpieczne",
-      "blocked": "Zablokowano",
       "allRegistries": "Wszystkie rejestry",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "Majorze",
       "minor": "Drobne",
       "patch": "Łatka",
-      "digest": "Podsumowanie",
       "hidePinned": "Ukryj przypięte",
       "hidePinnedTooltip": "Ukryj kontenery przypięte do określonych wersji",
       "clearAll": "Wyczyść wszystko",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "Zobacz projekt"
     },
-    "registryLink": { "viewRegistry": "Wyświetl rejestr" },
+    "registryLink": {
+      "viewRegistry": "Wyświetl rejestr"
+    },
     "releaseNotesLink": {
       "releaseNotes": "Informacje o wydaniu",
       "viewFullNotes": "Zobacz pełne notatki",
@@ -351,12 +350,6 @@
       "noTrigger": "Brak spustu",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Windy:"
-    },
-    "maturityBadge": {
-      "new": "NOWOŚĆ",
-      "mature": "DOJRZAŁE",
-      "newTooltip": "Nowa aktualizacja",
-      "matureTooltip": "Dojrzała aktualizacja"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -482,15 +475,6 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
-    },
     "preview": {
       "toasts": {
         "failedTitle": "Preview failed",
@@ -552,9 +536,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "Przypięty — nowsza wersja jest dostępna informacyjnie."
-      }
+      "summary": {}
     }
   }
 }

@@ -194,7 +194,6 @@
       "deleteAction": "Delete",
       "pinnedTooltip": "Pinned",
       "skippedLabel": "Skipped",
-      "pinnedLabel": "Pinned",
       "upToDateTooltip": "Up to date",
       "blockedTooltip": "Blocked",
       "actionsDisabled": "Actions disabled",
@@ -204,10 +203,13 @@
       "ariaSnoozedUpdates": "Snoozed updates",
       "ariaSkippedUpdates": "Skipped updates",
       "ariaMaturityBlocked": "Maturity-blocked updates",
+      "ariaPinnedTag": "Pinned tag",
+      "pinnedTagTooltip": "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or add a dd.tag.include filter to allow it.",
+      "unknownKindLabel": "Unknown",
       "emptyState": "No containers match your filters",
       "currentLabel": "Current",
       "latestLabel": "Latest",
-      "blockedByBouncer": "Blocked by Bouncer",
+      "blockedByBouncer": "Security hold",
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
@@ -268,7 +270,7 @@
       "allBouncer": "All Bouncer",
       "safe": "Safe",
       "unsafe": "Unsafe",
-      "blocked": "Blocked",
+      "blocked": "Security hold",
       "allRegistries": "All Registries",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -280,7 +282,7 @@
       "major": "Major",
       "minor": "Minor",
       "patch": "Patch",
-      "digest": "Digest",
+      "digest": "Digest update",
       "hidePinned": "Hide Pinned",
       "hidePinnedTooltip": "Hide containers pinned to specific versions",
       "clearAll": "Clear all",
@@ -330,7 +332,9 @@
     "projectLink": {
       "viewProject": "View project"
     },
-    "registryLink": { "viewRegistry": "View registry" },
+    "registryLink": {
+      "viewRegistry": "View registry"
+    },
     "releaseNotesLink": {
       "releaseNotes": "Release notes",
       "viewFullNotes": "View full notes",
@@ -347,9 +351,7 @@
     },
     "updateInsight": {
       "badgeText": "Newer available",
-      "tooltipMajor": "Newer major version: {tag}. This tag is pinned — drydock won't update it automatically.",
-      "tooltipMinor": "Newer minor version: {tag}. This tag is pinned — drydock won't update it automatically.",
-      "tooltipPatch": "Newer patch version: {tag}. This tag is pinned — drydock won't update it automatically."
+      "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
     },
     "eligibilityBadges": {
       "securityBlocked": "Security blocked",
@@ -371,13 +373,14 @@
     "updateStatus": {
       "title": "Update status",
       "showDetails": "Show conditions",
-      "liftsAt": "Lifts at {date}",
+      "liftCountdown": "{countdown} · unlocks {date}",
+      "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
+      "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
       "updateButton": "Update now",
       "blockedButton": "Update blocked",
       "notificationsOnlyButton": "Notifications only",
       "summary": {
         "upToDate": "Up to date.",
-        "pinned": "Pinned — a newer version is available for information.",
         "inProgress": "Update in progress.",
         "hardBlocked": "Update blocked — fix required.",
         "notify": "Notifications only — Drydock won't apply updates.",
@@ -419,10 +422,7 @@
       }
     },
     "maturityBadge": {
-      "new": "NEW",
-      "mature": "MATURE",
-      "newTooltip": "New update",
-      "matureTooltip": "Mature update"
+      "new": "Detected {duration} ago"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -551,13 +551,13 @@
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
     "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
+      "availableDaysSingular": "1 day",
+      "availableDaysPlural": "{count} days",
+      "availableHoursSingular": "1 hour",
+      "availableHoursPlural": "{count} hours",
+      "availableMinutesSingular": "1 minute",
+      "availableMinutesPlural": "{count} minutes",
+      "justNow": "Detected just now"
     },
     "preview": {
       "toasts": {

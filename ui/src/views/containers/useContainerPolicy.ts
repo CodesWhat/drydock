@@ -13,6 +13,7 @@ import {
   parseMaturityMinAgeDays,
   resolveMaturityMinAgeDays,
 } from '../../utils/maturity-policy';
+import { findBackendMaturityBlocked } from '../../utils/update-eligibility';
 
 type ContainerListPolicyState = {
   snoozed: boolean;
@@ -163,11 +164,14 @@ function buildContainerListPolicyStateFromPolicy(
   const rawSnoozeUntil = typeof policy.snoozeUntil === 'string' ? policy.snoozeUntil : undefined;
   const snoozeUntilMs = rawSnoozeUntil ? new Date(rawSnoozeUntil).getTime() : Number.NaN;
   const snoozed = Number.isFinite(snoozeUntilMs) && snoozeUntilMs > Date.now();
+  const backendMaturityBlocked = findBackendMaturityBlocked(metaRecord);
   const maturityBlocked =
-    maturityMode === 'mature' &&
-    hasSuppressedUpdateCandidate(metaRecord) &&
-    (!Number.isFinite(updateDetectedAtMs) ||
-      Date.now() - updateDetectedAtMs < maturityMinAgeDaysToMilliseconds(maturityMinAgeDays));
+    backendMaturityBlocked !== undefined
+      ? backendMaturityBlocked
+      : maturityMode === 'mature' &&
+        hasSuppressedUpdateCandidate(metaRecord) &&
+        (!Number.isFinite(updateDetectedAtMs) ||
+          Date.now() - updateDetectedAtMs < maturityMinAgeDaysToMilliseconds(maturityMinAgeDays));
 
   if (!snoozed && skipCount === 0 && !maturityMode) {
     return EMPTY_CONTAINER_POLICY_STATE;

@@ -198,7 +198,6 @@
       "emptyState": "没有容器匹配您的筛选条件",
       "currentLabel": "当前",
       "latestLabel": "最新",
-      "blockedByBouncer": "被 Bouncer 阻止",
       "registryErrorRateLimited": "速率限制",
       "registryErrorAuth": "验证失败",
       "registryErrorNotFound": "未找到",
@@ -259,7 +258,6 @@
       "allBouncer": "所有 Bouncer",
       "safe": "安全",
       "unsafe": "不安全",
-      "blocked": "已阻止",
       "allRegistries": "所有仓库",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -270,7 +268,6 @@
       "major": "主版本",
       "minor": "次版本",
       "patch": "补丁",
-      "digest": "摘要",
       "hidePinned": "隐藏已固定",
       "hidePinnedTooltip": "隐藏已固定到特定版本的容器",
       "clearAll": "全部清除",
@@ -320,7 +317,9 @@
     "projectLink": {
       "viewProject": "查看项目"
     },
-    "registryLink": { "viewRegistry": "查看镜像仓库" },
+    "registryLink": {
+      "viewRegistry": "查看镜像仓库"
+    },
     "releaseNotesLink": {
       "releaseNotes": "发布说明",
       "viewFullNotes": "查看完整说明",
@@ -351,12 +350,6 @@
       "noTrigger": "无触发器",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "解除条件："
-    },
-    "maturityBadge": {
-      "new": "新",
-      "mature": "成熟",
-      "newTooltip": "新更新",
-      "matureTooltip": "成熟更新"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -482,15 +475,6 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
-    },
     "preview": {
       "toasts": {
         "failedTitle": "Preview failed",
@@ -552,9 +536,7 @@
       "invalidRegex": "Invalid regular expression"
     },
     "updateStatus": {
-      "summary": {
-        "pinned": "已固定 — 有更新版本可供参考。"
-      }
+      "summary": {}
     }
   }
 }

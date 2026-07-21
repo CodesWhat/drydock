@@ -809,8 +809,10 @@ describe('computeUpdateEligibility', () => {
       expect(result.blockers.find((b) => b.reason === 'maturity-not-reached')).toBeUndefined();
     });
 
-    test('message uses singular "day" when exactly 1 day remains', () => {
-      // Exercises: remainingDays !== 1 ? 's' : '' — the false branch (1 day remaining)
+    test('message no longer states a remaining-days clause (#display-honesty)', () => {
+      // The UI now composes its own countdown from details.remainingMs/clockStartAt
+      // (see useUpdateStatus.ts maturitySentence()) — the "(N day(s) remaining)" clause
+      // was dropped from the backend message itself.
       // Detected 6 days ago, min age 7 days → exactly 1 day remaining
       const updateDetectedAt = new Date(FIXED_NOW - 6 * 24 * 60 * 60 * 1000).toISOString();
       const container = makeContainerWithTagUpdate({
@@ -819,8 +821,62 @@ describe('computeUpdateEligibility', () => {
       });
       const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
       const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
-      expect(blocker?.message).toContain('(1 day remaining)');
-      expect(blocker?.message).not.toContain('1 days');
+      expect(blocker?.message).toBe('Maturity policy requires updates to be at least 7 days old.');
+      expect(blocker?.message).not.toContain('remaining');
+    });
+
+    test('details carry clockSource=detectedAt and clockStartAt when only updateDetectedAt resolves', () => {
+      const updateDetectedAt = new Date(FIXED_NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt,
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
+      expect(blocker?.details?.clockSource).toBe('detectedAt');
+      expect(blocker?.details?.clockStartAt).toBe(new Date(updateDetectedAt).toISOString());
+    });
+
+    test('details carry clockSource=publishedAt and clockStartAt when trusted publishedAt wins', () => {
+      // publishedAt = 3 days ago (trusted, older than detectedAt=2 days) → publishedAt wins
+      const updateDetectedAt = new Date(FIXED_NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const publishedAt = new Date(FIXED_NOW - 3 * 24 * 60 * 60 * 1000).toISOString();
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt,
+        result: { tag: '1.1.0', publishedAt, publishedAtTrusted: true },
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
+      expect(blocker?.details?.clockSource).toBe('publishedAt');
+      expect(blocker?.details?.clockStartAt).toBe(new Date(publishedAt).toISOString());
+    });
+
+    test('details carry clockSource=detectedAt when detection happened even earlier than trusted publishedAt (tie-break)', () => {
+      // detectedAt is 5 days ago, publishedAt (trusted) is 3 days ago → detectedAt is the
+      // earlier of the two and wins (mirrors the historical Math.min tie-break exactly).
+      const updateDetectedAt = new Date(FIXED_NOW - 5 * 24 * 60 * 60 * 1000).toISOString();
+      const publishedAt = new Date(FIXED_NOW - 3 * 24 * 60 * 60 * 1000).toISOString();
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt,
+        result: { tag: '1.1.0', publishedAt, publishedAtTrusted: true },
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
+      expect(blocker?.details?.clockSource).toBe('detectedAt');
+      expect(blocker?.details?.clockStartAt).toBe(new Date(updateDetectedAt).toISOString());
+    });
+
+    test('details omit clockSource and clockStartAt when no clock resolves', () => {
+      const container = makeContainerWithTagUpdate({
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
+      expect(blocker).toBeDefined();
+      expect(blocker?.details).not.toHaveProperty('clockSource');
+      expect(blocker?.details).not.toHaveProperty('clockStartAt');
     });
 
     test('uses default minAgeDays (7) when maturityMinAgeDays not set', () => {

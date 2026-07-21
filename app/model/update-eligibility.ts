@@ -4,8 +4,8 @@ import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
 import type { Container } from './container.js';
 import { isRollbackContainer } from './container.js';
 import {
-  getMaturityStartMs,
   maturityMinAgeDaysToMilliseconds,
+  resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from './maturity-policy.js';
 
@@ -367,7 +367,8 @@ export function computeUpdateEligibility(
 
   // 5. maturity-not-reached
   if (container.updatePolicy?.maturityMode === 'mature') {
-    const maturityStartMs = getMaturityStartMs(container, now);
+    const maturityClock = resolveMaturityClock(container, now);
+    const maturityStartMs = maturityClock.startMs;
     const maturityMinAgeDays = resolveMaturityMinAgeDays(container.updatePolicy.maturityMinAgeDays);
     const maturityMinAgeMs = maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
 
@@ -379,7 +380,6 @@ export function computeUpdateEligibility(
         maturityStartMs !== undefined
           ? Math.max(0, maturityMinAgeMs - (now - maturityStartMs))
           : maturityMinAgeMs;
-      const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
       const liftableAt =
         maturityStartMs !== undefined
           ? new Date(maturityStartMs + maturityMinAgeMs).toISOString()
@@ -388,7 +388,7 @@ export function computeUpdateEligibility(
       blockers.push(
         makeBlocker({
           reason: 'maturity-not-reached',
-          message: `Maturity policy requires updates to be at least ${maturityMinAgeDays} days old${policySource ? ` (from ${policySource})` : ''} (${remainingDays} day${remainingDays !== 1 ? 's' : ''} remaining).`,
+          message: `Maturity policy requires updates to be at least ${maturityMinAgeDays} days old${policySource ? ` (from ${policySource})` : ''}.`,
           actionable: true,
           actionHint: "Change maturity mode to 'all' or wait for the gate to clear.",
           ...(liftableAt ? { liftableAt } : {}),
@@ -396,6 +396,14 @@ export function computeUpdateEligibility(
             minAgeDays: maturityMinAgeDays,
             ...(policySource ? { policySource } : {}),
             remainingMs,
+            // Additive #display-honesty item 4 rider: the UI previously re-derived
+            // "maturity-blocked" and the clock it measured against independently
+            // (container-mapper.ts, useContainerPolicy.ts), drifting from this
+            // server-side resolution. Both now read the resolved clock here instead.
+            ...(maturityClock.source ? { clockSource: maturityClock.source } : {}),
+            ...(maturityStartMs !== undefined
+              ? { clockStartAt: new Date(maturityStartMs).toISOString() }
+              : {}),
           },
         }),
       );

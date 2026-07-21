@@ -38,6 +38,7 @@ const {
   allColumns,
   toggleColumn,
   visibleColumns,
+  autoHiddenColumns,
   resetColumns,
   tt,
   groupByStack,
@@ -75,11 +76,21 @@ const pickerColumns = computed<PickerColumn[]>(() =>
     })),
 );
 
-// Picker-hidden only (user choices) — deliberately excludes the width-driven auto-hidden
-// set, which is a separate, self-explanatory mechanism the picker doesn't need to reflect.
+// Picker-hidden (checkbox state): user choices only, NOT the width-driven auto-hidden set —
+// a column the user still wants stays checked even when responsive sizing can't fit it right
+// now. See pickerAutoHiddenColumnKeys below for how that auto-hidden case is surfaced instead
+// of silently dropped (#display-honesty item 5).
 const pickerHiddenColumnKeys = computed(() =>
   pickerColumns.value.filter((column) => !visibleColumns.value.has(column.key)).map((c) => c.key),
 );
+
+// Width-driven auto-hidden set, restricted to picker-eligible columns — passed to
+// DataTableColumnPicker so it can annotate checked-but-not-actually-rendered rows and fold
+// them into the "+N hidden" badge instead of staying silent about them.
+const pickerAutoHiddenColumnKeys = computed(() => {
+  const autoHidden = new Set(autoHiddenColumns.value.map((column) => column.key));
+  return pickerColumns.value.filter((column) => autoHidden.has(column.key)).map((c) => c.key);
+});
 
 const activeFilterChips = computed(() => {
   const chips: string[] = [];
@@ -235,6 +246,7 @@ const activeFilterChips = computed(() => {
           v-if="containerViewMode === 'table'"
           :columns="pickerColumns"
           :hidden-keys="pickerHiddenColumnKeys"
+          :auto-hidden-keys="pickerAutoHiddenColumnKeys"
           @toggle="toggleColumn"
           @reset="resetColumns" />
       </template>
