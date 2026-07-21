@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.3] — 2026-07-21
+
 ### Changed
 
 - **Update-status vocabulary overhaul across the containers UI** ([#498](https://github.com/CodesWhat/drydock/issues/498), [#556](https://github.com/CodesWhat/drydock/issues/556)). "Digest" reads as **"Digest update"**; the NEW/MATURE freshness badges are gone (the detection age lives in the update-kind badge's tooltip instead); an unrecognized update kind now renders a neutral "Unknown" badge instead of nothing; and the bouncer's "Blocked" label is now **"Security hold"**.
@@ -2190,7 +2192,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...HEAD
+[1.6.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...v1.6.0-rc.3
 [1.6.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...v1.6.0-rc.2
 [1.6.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.5.2...v1.6.0-rc.1
 [1.5.2]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.5...v1.5.2

@@ -3,6 +3,15 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
+## v1.6.0-rc.3 Highlights — July 21, 2026
+
+- **Honest update states across the UI** — digest-only changes read "Digest update" instead of a version label, an unrecognized update kind shows a neutral "Unknown" badge, the security bouncer's block state reads "Security hold", and the NEW/MATURE freshness badges are gone in favor of one maturity clock panel that names the clock the gate actually measures against.
+- **Pinned is a tag property, not an update status** — pinned containers carry a persistent pin glyph beside the tag (driven by the real pin-gate verdict, with the `dd.tag.family` remedy in its tooltip), and insight-only pinned rows read "Current" everywhere, including the container-detail Update Status panel.
+- **Security hardening batch** — anonymous access fails closed on upgrades (`401` API responses, `/health` `503`) unless explicitly confirmed, the HTTP notification trigger blocks SSRF against metadata/link-local targets including via redirects, WebSocket upgrades validate the complete origin, the session cookie is namespaced to `drydock.sid`, store files are owner-only, and icon CDN sources are pinned to exact revisions.
+  Docs: [Authentication](/docs/configuration/authentications), [HTTP trigger](/docs/configuration/triggers/http).
+- **Maturity countdown stability** — a manual recheck no longer restarts the maturity soak when only display metadata wobbled; the clock resets only when the update candidate's tag or digest actually changes.
+- **Container-list fit and follow-through fixes** — the column picker labels columns auto-hidden to fit (and its "+N" badge tooltip stays fresh), registry deep-links from container detail land on the registry they name, and the removed-API-path banner pluralizes correctly.
+
 ## v1.6.0-rc.2 Highlights — July 18, 2026
 
 - **Watch errors no longer erase update state** — a container whose registry check fails keeps its last successful comparison alongside the recorded error instead of appearing never-compared, errored containers reuse the same fast refresh path as healthy ones, and repair rebuilds preserve the registry-reconciled digest that keys security scan grouping.
