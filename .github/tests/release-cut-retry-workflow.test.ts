@@ -152,6 +152,9 @@ test('release-cut defines external registry repositories once at job scope', () 
     DOCKERHUB_REPO: 'docker.io/codeswhat/drydock',
     QUAY_REPO: 'quay.io/codeswhat/drydock',
   });
+  const releaseStepText = JSON.stringify(loadReleaseSteps());
+  expect(releaseStepText).not.toContain('docker.io/codeswhat/drydock');
+  expect(releaseStepText).not.toContain('quay.io/codeswhat/drydock');
   expect(blockLines(getStep('Docker metadata')?.with?.images)).toContain(
     '${{ env.DOCKERHUB_REPO }}',
   );

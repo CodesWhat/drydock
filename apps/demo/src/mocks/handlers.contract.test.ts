@@ -54,6 +54,14 @@ describe('demo mock contracts', () => {
 
     expect(updated).toMatchObject({ id: 'update-available' });
     expect(updated).not.toHaveProperty('arbitrary');
+
+    const persisted = await readJson(await fetch('http://localhost/api/v1/notifications'));
+    const persistedRule = persisted.data.find(
+      (rule: { id: string }) => rule.id === 'update-available',
+    );
+    expect(persistedRule).toMatchObject({ id: 'update-available' });
+    expect(persistedRule).not.toHaveProperty('arbitrary');
+    expect(persisted.data.some((rule: { id: string }) => rule.id === 'rewritten-id')).toBe(false);
   });
 
   test('settings expose updateMode and persist PATCH updates', async () => {
