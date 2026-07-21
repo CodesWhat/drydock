@@ -37,7 +37,7 @@
   },
   "overrides": {
     "brace-expansion": "5.0.7",
-    "fast-xml-parser": "5.7.3",
+    "fast-xml-parser": "5.10.1",
     "joi": "18.2.1",
     "minimatch": "10.2.4",
     "picomatch": "4.0.4",
