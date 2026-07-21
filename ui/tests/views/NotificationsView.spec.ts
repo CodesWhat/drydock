@@ -331,6 +331,68 @@ describe('NotificationsView', () => {
     });
   });
 
+  it('invalidates an in-flight template preview when the selected trigger changes', async () => {
+    let resolveSlackPreview: (value: {
+      simpleTitle: string;
+      simpleBody: string;
+      batchTitle: string;
+    }) => void = () => {};
+    mockPreviewNotificationTemplates
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSlackPreview = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        simpleTitle: 'Docker preview',
+        simpleBody: 'Docker body',
+        batchTitle: 'Docker batch',
+      });
+    mockGetAllNotificationRules.mockResolvedValue([
+      makeRule({
+        id: 'security-alert',
+        triggers: ['trigger:slack-alerts', 'trigger:discord-alerts'],
+      }),
+    ]);
+    mockGetAllTriggers.mockResolvedValue([
+      { id: 'trigger:slack-alerts', name: 'Slack Alerts', type: 'slack' },
+      { id: 'trigger:discord-alerts', name: 'Discord Alerts', type: 'discord' },
+    ]);
+    const wrapper = await mountNotificationsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('button[aria-label="Preview notification template"]').trigger('click');
+    const triggerSelect = wrapper.get('select[aria-label="Template trigger"]');
+    expect((triggerSelect.element as HTMLSelectElement).value).toBe('trigger:discord-alerts');
+    await triggerSelect.setValue('trigger:slack-alerts');
+    await nextTick();
+    expect((triggerSelect.element as HTMLSelectElement).value).toBe('trigger:slack-alerts');
+    const previewButton = wrapper.get('button[aria-label="Preview notification template"]');
+    expect(previewButton.attributes('disabled')).toBeUndefined();
+    await previewButton.trigger('click');
+    await flushPromises();
+    resolveSlackPreview({
+      simpleTitle: 'Stale Slack preview',
+      simpleBody: 'Stale Slack body',
+      batchTitle: 'Stale Slack batch',
+    });
+    await flushPromises();
+
+    expect(mockPreviewNotificationTemplates).toHaveBeenNthCalledWith(
+      2,
+      'security-alert',
+      'trigger:slack-alerts',
+      {},
+    );
+    expect(wrapper.text()).toContain('Docker preview');
+    expect(wrapper.text()).not.toContain('Stale Slack preview');
+    const liveRegion = wrapper.get('[aria-live="polite"]');
+    expect(liveRegion.attributes('role')).toBe('status');
+    expect(liveRegion.text()).toContain('Docker preview');
+  });
+
   it('clears a rendered template preview when resetting the trigger template', async () => {
     const wrapper = await mountNotificationsView();
     await wrapper.find('.row-click-first').trigger('click');

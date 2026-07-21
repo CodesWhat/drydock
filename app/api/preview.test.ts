@@ -76,7 +76,7 @@ describe('Preview Router', () => {
         code: 'no-trigger-configured',
         message: 'No action trigger configured for this container',
         action: {
-          label: 'Open trigger settings',
+          code: 'open-trigger-settings',
           href: '/triggers',
         },
       });
@@ -139,7 +139,7 @@ describe('Preview Router', () => {
         message: 'Authentication failed for ghcr.io: 401 Unauthorized',
         details: { reason: 'request failed: 401 Unauthorized', registry: 'ghcr.io' },
         action: {
-          label: 'Open registry settings',
+          code: 'open-registry-settings',
           href: '/registries',
         },
       });
@@ -173,7 +173,7 @@ describe('Preview Router', () => {
           registry: 'ghcr.io',
         },
         action: {
-          label: 'Open registry settings',
+          code: 'open-registry-settings',
           href: '/registries',
         },
       });
@@ -207,7 +207,7 @@ describe('Preview Router', () => {
           registry: 'registry.example',
         },
         action: {
-          label: 'Open registry settings',
+          code: 'open-registry-settings',
           href: '/registries',
         },
       });

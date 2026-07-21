@@ -13,6 +13,8 @@ interface UseContainerPreviewInput {
   selectedContainerId: Readonly<Ref<string | undefined>>;
 }
 
+type PreviewErrorActionPresentation = PreviewErrorAction & { label: string };
+
 function buildDetailComposePreview(
   preview: ContainerPreviewPayload | null,
 ): ContainerComposePreview | null {
@@ -63,22 +65,27 @@ function buildDetailComposePreview(
 }
 
 async function runContainerPreviewState(args: {
-  containerId: string | undefined;
+  containerId: string;
   previewLoading: Ref<boolean>;
   previewError: Ref<string | null>;
-  previewErrorAction: Ref<PreviewErrorAction | null>;
+  previewErrorAction: Ref<PreviewErrorActionPresentation | null>;
   detailPreview: Ref<ContainerPreviewPayload | null>;
   t: (key: string) => string;
+  isCurrentRequest: () => boolean;
 }) {
-  if (!args.containerId || args.previewLoading.value) {
-    return;
-  }
   args.previewLoading.value = true;
   args.previewError.value = null;
   args.previewErrorAction.value = null;
   try {
-    args.detailPreview.value = await previewContainer(args.containerId);
+    const preview = await previewContainer(args.containerId);
+    if (!args.isCurrentRequest()) {
+      return;
+    }
+    args.detailPreview.value = preview;
   } catch (e: unknown) {
+    if (!args.isCurrentRequest()) {
+      return;
+    }
     args.detailPreview.value = null;
     const msg = errorMessage(e, args.t('containerComponents.preview.toasts.failedDetail'));
     args.previewError.value = msg;
@@ -87,18 +94,28 @@ async function runContainerPreviewState(args: {
       if (
         action &&
         typeof action === 'object' &&
-        'label' in action &&
-        typeof action.label === 'string' &&
+        'code' in action &&
         'href' in action &&
-        (action.href === '/registries' || action.href === '/triggers')
+        ((action.code === 'open-registry-settings' && action.href === '/registries') ||
+          (action.code === 'open-trigger-settings' && action.href === '/triggers'))
       ) {
-        args.previewErrorAction.value = { label: action.label, href: action.href };
+        const labelKey =
+          action.code === 'open-registry-settings'
+            ? 'containerComponents.preview.actions.openRegistrySettings'
+            : 'containerComponents.preview.actions.openTriggerSettings';
+        args.previewErrorAction.value = {
+          code: action.code,
+          label: args.t(labelKey),
+          href: action.href,
+        };
       }
     }
     const toast = useToast();
     toast.error(args.t('containerComponents.preview.toasts.failedTitle'), msg);
   } finally {
-    args.previewLoading.value = false;
+    if (args.isCurrentRequest()) {
+      args.previewLoading.value = false;
+    }
   }
 }
 
@@ -110,23 +127,44 @@ export function useContainerPreview(input: UseContainerPreviewInput) {
   );
   const previewLoading = ref(false);
   const previewError = ref<string | null>(null);
-  const previewErrorAction = ref<PreviewErrorAction | null>(null);
+  const previewErrorAction = ref<PreviewErrorActionPresentation | null>(null);
+  let previewRequestGeneration = 0;
+  let previewRequestContainerId: string | undefined;
 
   function resetPreview() {
+    previewRequestGeneration += 1;
+    previewRequestContainerId = undefined;
+    previewLoading.value = false;
     detailPreview.value = null;
     previewError.value = null;
     previewErrorAction.value = null;
   }
 
   async function runContainerPreview() {
+    const containerId = input.selectedContainerId.value;
+    if (
+      !containerId ||
+      (previewLoading.value &&
+        (previewRequestContainerId === undefined || previewRequestContainerId === containerId))
+    ) {
+      return;
+    }
+    const requestGeneration = ++previewRequestGeneration;
+    previewRequestContainerId = containerId;
     await runContainerPreviewState({
-      containerId: input.selectedContainerId.value,
+      containerId,
       previewLoading,
       previewError,
       previewErrorAction,
       detailPreview,
       t,
+      isCurrentRequest: () =>
+        requestGeneration === previewRequestGeneration &&
+        input.selectedContainerId.value === containerId,
     });
+    if (requestGeneration === previewRequestGeneration) {
+      previewRequestContainerId = undefined;
+    }
   }
 
   return {

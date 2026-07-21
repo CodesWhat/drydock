@@ -560,6 +560,10 @@
       "justNow": "Detected just now"
     },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Open registry settings",
+        "openTriggerSettings": "Open trigger settings"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
