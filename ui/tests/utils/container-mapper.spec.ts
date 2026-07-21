@@ -1161,6 +1161,34 @@ describe('container-mapper', () => {
       expect(c.tagPinned).toBe(true);
     });
 
+    it('maps tagPinGated when present in API response', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          tagPinGated: true,
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: '1.2.3', tagPrecision: 'specific' },
+          },
+        }),
+      );
+      expect(c.tagPinGated).toBe(true);
+    });
+
+    it('leaves tagPinGated undefined when absent from the API response', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.tagPinGated).toBeUndefined();
+    });
+
+    it('leaves tagPinGated undefined when the API response value is not a boolean', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          tagPinGated: 'true' as unknown as boolean,
+        }),
+      );
+      expect(c.tagPinGated).toBeUndefined();
+    });
+
     it('maps tagPrecision as specific when set', () => {
       const c = mapApiContainer(
         makeApiContainer({

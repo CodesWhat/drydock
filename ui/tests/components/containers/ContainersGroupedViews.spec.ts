@@ -1174,7 +1174,7 @@ describe('ContainersGroupedViews', () => {
     expect(updateState.text()).not.toContain('v1.3.0');
   });
 
-  it('renders the insight kind as the plain update-state pill for a pinned container (#498)', async () => {
+  it("reads Current for an insight-only pinned container's update state (#498)", async () => {
     const pinned = makeContainer({
       id: 'c-insight',
       name: 'alpha',
@@ -1207,9 +1207,11 @@ describe('ContainersGroupedViews', () => {
 
     const row = rowByName(wrapper, 'alpha');
     const updateState = row.get('[data-test="container-update-state"]');
-    // No more dedicated pinned vocabulary or a separate insight-kind badge — the
-    // main pill carries the kind, its tooltip carries the insight message (#498).
-    expect(updateState.text()).toContain('Minor');
+    // Insight-only rows are informational, not actionable — the pill reads the plain
+    // Current label (in success color); the insight kind/message only surfaces via
+    // the tooltip and the version cell (#498).
+    expect(updateState.text()).toContain('Current');
+    expect(updateState.text()).not.toContain('Minor');
     expect(updateState.text()).not.toContain('Pinned');
     expect(updateState.find('[data-test="update-insight-badge"]').exists()).toBe(false);
     expect(updateState.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
@@ -1217,11 +1219,12 @@ describe('ContainersGroupedViews', () => {
     expect(pill.attributes('title')).toBe(
       "Newer version available: v1.46.1. This tag is pinned — drydock won't update it automatically.",
     );
+    expect(pill.attributes('style')).toContain('var(--dd-success)');
     expect(updateState.text()).not.toContain('v1.46.1');
     expect(row.text()).toContain('v1.46.1');
   });
 
-  it('renders the insight kind as the plain update-state badge in card mode (#498)', async () => {
+  it("reads Current for an insight-only pinned container's update-state badge in card mode (#498)", async () => {
     const pinned = makeContainer({
       id: 'c-insight-card',
       name: 'alpha',
@@ -1242,11 +1245,13 @@ describe('ContainersGroupedViews', () => {
     expect(card.text()).toContain('v1.13.3');
     expect(card.text()).toContain('v1.46.1');
     const stateBadge = card.get('[data-test="container-card-update-state"]');
-    expect(stateBadge.text()).toContain('Minor');
+    expect(stateBadge.text()).toContain('Current');
+    expect(stateBadge.text()).not.toContain('Minor');
     expect(stateBadge.text()).not.toContain('Pinned');
     expect(stateBadge.attributes('title')).toBe(
       "Newer version available: v1.46.1. This tag is pinned — drydock won't update it automatically.",
     );
+    expect(stateBadge.attributes('style')).toContain('var(--dd-success)');
   });
 
   it('keeps the stacked pinned-tag insight visible beside an actionable digest update (#498)', async () => {
@@ -1297,7 +1302,7 @@ describe('ContainersGroupedViews', () => {
     expect(card.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
   });
 
-  it('keeps the actionable no-update reason alongside pinned insight in card mode (#498)', async () => {
+  it('keeps the actionable no-update reason alongside the Current insight state in card mode (#498)', async () => {
     const remedy =
       'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
     const pinnedDigestOff = makeContainer({
@@ -1318,14 +1323,16 @@ describe('ContainersGroupedViews', () => {
 
     expect(card.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
     const stateBadge = card.get('[data-test="container-card-update-state"]');
-    expect(stateBadge.text()).toContain('Minor');
+    expect(stateBadge.text()).toContain('Current');
+    expect(stateBadge.text()).not.toContain('Minor');
+    expect(stateBadge.attributes('style')).toContain('var(--dd-success)');
     expect(card.text()).toContain('v1.46.1');
     const reasonText = card.get('[data-test="no-update-reason-badge"]').attributes('aria-label');
     expect(reasonText).toContain('no actionable update detection is running');
     expect(reasonText).not.toContain('so no update detection is running');
   });
 
-  it('renders the no-update-reason badge and insight kind together without contradictory copy when digest watching is off (#498)', async () => {
+  it('renders the no-update-reason badge alongside the Current insight state without contradictory copy when digest watching is off (#498)', async () => {
     const remedy =
       'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
     const pinnedDigestOff = makeContainer({
@@ -1362,7 +1369,10 @@ describe('ContainersGroupedViews', () => {
     const row = rowByName(wrapper, 'alpha');
 
     const updateState = row.get('[data-test="container-update-state"]');
-    expect(updateState.text()).toContain('Minor');
+    expect(updateState.text()).toContain('Current');
+    expect(updateState.text()).not.toContain('Minor');
+    const pill = updateState.get('.font-semibold');
+    expect(pill.attributes('style')).toContain('var(--dd-success)');
     expect(updateState.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
     expect(row.text()).toContain('v1.46.1');
 
@@ -1411,22 +1421,19 @@ describe('ContainersGroupedViews', () => {
     expect(skippedState.text()).not.toContain('Patch');
 
     const pinnedState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
-    expect(pinnedState.text()).toContain('Patch');
+    // Insight-only rows (no updateKind, not skipped) now read the plain Current
+    // label in success color — the insight kind no longer surfaces in the pill
+    // itself, only via its tooltip (#498).
+    expect(pinnedState.text()).toContain('Current');
+    expect(pinnedState.text()).not.toContain('Patch');
     expect(pinnedState.text()).not.toContain('Pinned');
     const pinnedLabel = pinnedState.find('.font-semibold');
-    // updateKindColor is mocked to a fixed value in this suite (see makeContext) —
-    // distinct from the literal 'var(--dd-warning)'/'var(--dd-success)' used by the
-    // skipped/current branches, so this still proves the insight branch took the
-    // updateKindColor() path rather than the removed updateInsightColor() one.
-    // jsdom normalizes the mocked '#052' hex style value to its rgb() equivalent.
-    expect(pinnedLabel.attributes('style')).toContain('rgb(0, 85, 34)');
-    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-warning)');
-    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-success)');
+    expect(pinnedLabel.attributes('style')).toContain('var(--dd-success)');
   });
 
   it('renders the pin glyph for a pinned tag and omits it for an unpinned one in table mode (#display-honesty)', () => {
-    const pinned = makeContainer({ id: 'c-pinned', name: 'alpha', tagPinned: true });
-    const unpinned = makeContainer({ id: 'c-unpinned', name: 'beta', tagPinned: false });
+    const pinned = makeContainer({ id: 'c-pinned', name: 'alpha', tagPinGated: true });
+    const unpinned = makeContainer({ id: 'c-unpinned', name: 'beta', tagPinGated: false });
 
     const { context, refs } = makeContext();
     const containers = [pinned, unpinned];
@@ -1450,7 +1457,7 @@ describe('ContainersGroupedViews', () => {
     const glyph = pinnedRow.get('[data-test="container-tag-pinned-glyph"]');
     expect(glyph.attributes('aria-label')).toBe('Pinned tag');
     expect(glyph.attributes('title')).toBe(
-      "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or relax dd.tag.include to allow it.",
+      "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or add a dd.tag.include filter to allow it.",
     );
 
     const unpinnedRow = rowByName(wrapper, 'beta');
@@ -1458,8 +1465,8 @@ describe('ContainersGroupedViews', () => {
   });
 
   it('renders the pin glyph for a pinned tag and omits it for an unpinned one in card mode (#display-honesty)', async () => {
-    const pinned = makeContainer({ id: 'c-pinned-card', name: 'alpha', tagPinned: true });
-    const unpinned = makeContainer({ id: 'c-unpinned-card', name: 'beta', tagPinned: false });
+    const pinned = makeContainer({ id: 'c-pinned-card', name: 'alpha', tagPinGated: true });
+    const unpinned = makeContainer({ id: 'c-unpinned-card', name: 'beta', tagPinGated: false });
 
     const { wrapper } = await mountCardsWithContainers([pinned, unpinned], 800);
 

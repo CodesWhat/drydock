@@ -176,6 +176,7 @@ export interface ApiContainerInput {
   triggerInclude?: unknown;
   triggerExclude?: unknown;
   tagPinned?: unknown;
+  tagPinGated?: unknown;
   sourceRepo?: unknown;
   currentReleaseNotes?: ApiContainerReleaseNotes | null;
   error?: { message?: unknown } | null;
@@ -867,6 +868,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     imageTagSemver: asOptionalBoolean(apiContainer.image?.tag?.semver),
     tagPrecision: apiContainer.image?.tag?.tagPrecision as 'specific' | 'floating' | undefined,
     tagPinned: asOptionalBoolean(apiContainer.tagPinned),
+    tagPinGated: asOptionalBoolean(apiContainer.tagPinGated),
     suggestedTag: asNonEmptyString(apiContainer.result?.suggestedTag),
     sourceRepo: asNonEmptyString(apiContainer.sourceRepo),
     releaseNotes: deriveReleaseNotes(apiContainer),

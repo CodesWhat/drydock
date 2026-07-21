@@ -205,7 +205,7 @@
       "ariaSkippedUpdates": "Skipped updates",
       "ariaMaturityBlocked": "Maturity-blocked updates",
       "ariaPinnedTag": "Pinned tag",
-      "pinnedTagTooltip": "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or relax dd.tag.include to allow it.",
+      "pinnedTagTooltip": "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or add a dd.tag.include filter to allow it.",
       "unknownKindLabel": "Unknown",
       "emptyState": "No containers match your filters",
       "currentLabel": "Current",

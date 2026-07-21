@@ -114,6 +114,12 @@ export interface Container {
   tagPrecision?: 'specific' | 'floating';
   tagPinned?: boolean;
   /**
+   * Backend pin-gate verdict (specific tag, no include filter, non-loose
+   * family): drydock will not climb this tag. Drives the pin glyph; distinct
+   * from shape-based `tagPinned`, which feeds the hide-pinned filter.
+   */
+  tagPinGated?: boolean;
+  /**
    * True when the container is referenced by digest (`image@sha256:…`) rather
    * than a tag — i.e. `image.tag.value` is a `sha256:…` literal. UI uses this
    * to decide whether the digest pair is the only meaningful identifier
