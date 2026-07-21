@@ -13,8 +13,10 @@ export type PreviewErrorCode =
   | 'registry-network-error'
   | 'registry-not-found';
 
+export type PreviewErrorActionCode = 'open-registry-settings' | 'open-trigger-settings';
+
 export interface PreviewErrorAction {
-  label: string;
+  code: PreviewErrorActionCode;
   href: '/registries' | '/triggers';
 }
 
@@ -45,12 +47,12 @@ const NETWORK_ERROR_CODES = new Set([
 ]);
 
 const REGISTRY_ACTION: PreviewErrorAction = {
-  label: 'Open registry settings',
+  code: 'open-registry-settings',
   href: '/registries',
 };
 
 export const TRIGGER_ACTION: PreviewErrorAction = {
-  label: 'Open trigger settings',
+  code: 'open-trigger-settings',
   href: '/triggers',
 };
 

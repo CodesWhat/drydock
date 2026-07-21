@@ -1086,7 +1086,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     let containers: Container[] = [];
     let containerEnumerationFailed = false;
     const enumerationDiagnostics: { enrichmentErrors: number } = { enrichmentErrors: 0 };
-    startDigestCachePollCycleForRegistries();
+    const digestCachePollCycle = startDigestCachePollCycleForRegistries();
 
     // Dispatch event to notify start watching
     event.emitWatcherStart(this);
@@ -1159,7 +1159,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }
       return containerReports;
     } finally {
-      endDigestCachePollCycleForRegistries();
+      endDigestCachePollCycleForRegistries(digestCachePollCycle);
       // Dispatch event to notify stop watching
       event.emitWatcherStop(this);
       this.lastRunAt = new Date().toISOString();

@@ -39,10 +39,13 @@ export const openApiSchemas = {
       action: {
         type: 'object',
         properties: {
-          label: { type: 'string' },
+          code: {
+            type: 'string',
+            enum: ['open-registry-settings', 'open-trigger-settings'],
+          },
           href: { type: 'string', enum: ['/registries', '/triggers'] },
         },
-        required: ['label', 'href'],
+        required: ['code', 'href'],
         additionalProperties: false,
       },
     },
@@ -583,6 +586,63 @@ export const openApiSchemas = {
     },
     additionalProperties: false,
   },
+  UpdateBlocker: {
+    type: 'object',
+    properties: {
+      reason: {
+        type: 'string',
+        enum: [
+          'no-update-available',
+          'rollback-container',
+          'active-operation',
+          'security-scan-blocked',
+          'last-update-rolled-back',
+          'snoozed',
+          'skip-tag',
+          'skip-digest',
+          'maturity-not-reached',
+          'threshold-not-reached',
+          'trigger-excluded',
+          'trigger-not-included',
+          'agent-mismatch',
+          'no-update-trigger-configured',
+          'self-update-unavailable',
+          'maintenance-window-closed',
+        ],
+      },
+      severity: { type: 'string', enum: ['hard', 'soft'] },
+      message: { type: 'string' },
+      actionable: { type: 'boolean' },
+      actionHint: { type: 'string' },
+      liftableAt: { type: 'string', format: 'date-time' },
+      details: {
+        type: 'object',
+        properties: {
+          clockSource: { type: 'string', enum: ['publishedAt', 'detectedAt'] },
+          clockStartAt: { type: 'string', format: 'date-time' },
+          minAgeDays: { type: 'integer', minimum: 1 },
+          remainingMs: { type: 'number', minimum: 0 },
+          policySource: { type: 'string' },
+        },
+        additionalProperties: true,
+      },
+    },
+    required: ['reason', 'severity', 'message', 'actionable'],
+    additionalProperties: false,
+  },
+  UpdateEligibility: {
+    type: 'object',
+    properties: {
+      eligible: { type: 'boolean' },
+      blockers: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/UpdateBlocker' },
+      },
+      evaluatedAt: { type: 'string', format: 'date-time' },
+    },
+    required: ['eligible', 'blockers', 'evaluatedAt'],
+    additionalProperties: false,
+  },
   ContainerResource: {
     type: 'object',
     properties: {
@@ -593,6 +653,8 @@ export const openApiSchemas = {
       agent: { type: 'string' },
       identityKey: { type: 'string' },
       updateAvailable: { type: 'boolean' },
+      tagPinGated: { type: 'boolean' },
+      updateEligibility: { $ref: '#/components/schemas/UpdateEligibility' },
       image: { ...genericObjectSchema },
       updatePolicy: { $ref: '#/components/schemas/ContainerUpdatePolicy' },
       updatePolicyDeclarative: {

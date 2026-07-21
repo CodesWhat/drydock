@@ -912,9 +912,11 @@ function hasResultChanged(
 /**
  * Check whether the update candidate's identity changed, i.e. the tag or
  * digest a recheck would actually promote. Unlike hasResultChanged, this
- * ignores display-only metadata (suggestedTag, created) that can wobble
- * between scans without the candidate itself changing, so callers that gate
- * the maturity clock restart on this don't falsely reset it.
+ * ignores display-only metadata (suggestedTag and, when a digest is present,
+ * created) that can wobble between scans without the candidate itself
+ * changing. For legacy manifests without a digest, created is the only
+ * available immutable candidate discriminator and must participate in the
+ * identity.
  * @param currentResult
  * @param otherResult
  * @returns {boolean}
@@ -923,7 +925,14 @@ export function hasCandidateIdentityChanged(
   currentResult: Container['result'],
   otherResult: Container['result'],
 ): boolean {
-  return currentResult?.tag !== otherResult?.tag || currentResult?.digest !== otherResult?.digest;
+  if (currentResult?.tag !== otherResult?.tag || currentResult?.digest !== otherResult?.digest) {
+    return true;
+  }
+  return (
+    currentResult?.digest === undefined &&
+    otherResult?.digest === undefined &&
+    currentResult?.created !== otherResult?.created
+  );
 }
 
 function resultChangedFunction(this: Container, otherContainer: Container | undefined) {

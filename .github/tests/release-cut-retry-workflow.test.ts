@@ -20,7 +20,9 @@ const transientRetryStepNames = [
   'Retry manifest publish on transient registry failure',
   'Verify container image signatures',
   'Sign release artifact',
-  'Create GitHub Release and upload signed assets',
+  'Prepare draft GitHub Release and upload signed assets',
+  'Publish release image tags',
+  'Publish GitHub Release',
 ];
 
 function loadReleaseSteps(): WorkflowStep[] {
@@ -118,8 +120,8 @@ test('release-cut delegates image tags and labels to docker metadata-action', ()
   });
   expect(blockLines(metadataStep?.with?.images)).toStrictEqual([
     'ghcr.io/${{ steps.target.outputs.repo_lower }}',
-    'docker.io/codeswhat/drydock',
-    'quay.io/codeswhat/drydock',
+    '${{ env.DOCKERHUB_REPO }}',
+    '${{ env.QUAY_REPO }}',
   ]);
   expect(metadataStep?.with?.flavor?.trim()).toBe('latest=false');
   expect(blockLines(metadataStep?.with?.tags)).toStrictEqual([
@@ -130,8 +132,8 @@ test('release-cut delegates image tags and labels to docker metadata-action', ()
     "type=raw,value=latest,enable=${{ steps.tag.outputs.is_prerelease == 'false' }}",
   ]);
 
-  expect(getStep('Build and push')?.with).toMatchObject({
-    tags: '${{ steps.meta.outputs.tags }}',
+  expect(getStep('Build and push staging image')?.with).toMatchObject({
+    tags: '${{ steps.staging_meta.outputs.tags }}',
     labels: '${{ steps.meta.outputs.labels }}',
   });
   expect(getStep('Compute image tags')).toBeUndefined();
@@ -140,6 +142,123 @@ test('release-cut delegates image tags and labels to docker metadata-action', ()
     .filter((step) => step.run && /(^|\n)\s*(IMAGE_TAGS|image_tags|tags)=/.test(step.run))
     .map((step) => step.name);
   expect(shellTagComputations).toStrictEqual([]);
+});
+
+test('release-cut defines external registry repositories once at job scope', () => {
+  const workflow = loadWorkflow(workflowPath);
+  const releaseJob = workflow.jobs?.release;
+
+  expect(releaseJob?.env).toMatchObject({
+    DOCKERHUB_REPO: 'docker.io/codeswhat/drydock',
+    QUAY_REPO: 'quay.io/codeswhat/drydock',
+  });
+  const releaseStepText = JSON.stringify(loadReleaseSteps());
+  expect(releaseStepText).not.toContain('docker.io/codeswhat/drydock');
+  expect(releaseStepText).not.toContain('quay.io/codeswhat/drydock');
+  expect(blockLines(getStep('Docker metadata')?.with?.images)).toContain(
+    '${{ env.DOCKERHUB_REPO }}',
+  );
+  expect(blockLines(getStep('Docker metadata')?.with?.images)).toContain('${{ env.QUAY_REPO }}');
+  expect(getStep('Validate GA candidate digest in every registry')?.run).toContain(
+    '${DOCKERHUB_REPO}:${CANDIDATE_TAG#v}',
+  );
+  expect(getStep('Validate GA candidate digest in every registry')?.run).toContain(
+    '${QUAY_REPO}:${CANDIDATE_TAG#v}',
+  );
+  expect(getStep('Retry manifest publish on transient registry failure')?.with?.command).toContain(
+    '${DOCKERHUB_REPO}@${BUILD_DIGEST}',
+  );
+  expect(getStep('Retry manifest publish on transient registry failure')?.with?.command).toContain(
+    '${QUAY_REPO}@${BUILD_DIGEST}',
+  );
+  expect(getStep('Resolve image source references')?.run).toContain(
+    '${DOCKERHUB_REPO}:${CANDIDATE_TAG#v}',
+  );
+  expect(getStep('Resolve image source references')?.run).toContain(
+    '${QUAY_REPO}:${CANDIDATE_TAG#v}',
+  );
+});
+
+test('release-cut requires an exact, seven-day-old RC candidate for GA promotion', () => {
+  const workflow = loadWorkflow(workflowPath);
+  const inputs = workflow.on?.workflow_dispatch?.inputs;
+  const sourceStep = getStep('Resolve release source and validate GA candidate');
+
+  expect(inputs).toMatchObject({
+    candidate_tag: {
+      required: false,
+      type: 'string',
+    },
+    candidate_digest: {
+      required: false,
+      type: 'string',
+    },
+  });
+  expect(sourceStep?.id).toBe('source');
+  expect(sourceStep?.run).toContain('publishedAt');
+  expect(sourceStep?.run).toContain('isPrerelease');
+  expect(sourceStep?.run).toContain('604800');
+  expect(sourceStep?.run).toContain('^{commit}');
+  expect(sourceStep?.run).toContain('^sha256:[0-9a-f]{64}$');
+  expect(sourceStep?.run).toContain('source_sha=');
+  expect(sourceStep?.run).toContain('image_digest=');
+});
+
+test('release-cut validates the promoted digest in every registry', () => {
+  const validationStep = getStep('Validate GA candidate digest in every registry');
+
+  expect(validationStep?.if).toContain("steps.tag.outputs.is_prerelease == 'false'");
+  expect(validationStep?.run).toContain('ghcr.io/${GHCR_REPO}:${CANDIDATE_TAG#v}');
+  expect(validationStep?.run).toContain('${DOCKERHUB_REPO}:${CANDIDATE_TAG#v}');
+  expect(validationStep?.run).toContain('${QUAY_REPO}:${CANDIDATE_TAG#v}');
+  expect(validationStep?.run).toContain('raw_manifest');
+  expect(validationStep?.run).toContain('computed_digest');
+  expect(validationStep?.run).toContain('CANDIDATE_DIGEST');
+});
+
+test('release-cut builds prereleases under staging tags and promotes final tags by digest', () => {
+  const stagingMetadata = getStep('Docker staging metadata');
+  const buildStep = getStep('Build and push staging image');
+  const publishStep = getStep('Publish release image tags');
+
+  expect(stagingMetadata).toMatchObject({
+    id: 'staging_meta',
+    uses: metadataAction,
+  });
+  expect(stagingMetadata?.with?.tags).toContain(
+    'release-staging-${{ github.run_id }}-${{ github.run_attempt }}',
+  );
+  expect(buildStep?.if).toContain("steps.tag.outputs.is_prerelease == 'true'");
+  expect(buildStep?.with?.tags).toBe('${{ steps.staging_meta.outputs.tags }}');
+  expect(publishStep?.env).toMatchObject({
+    DIGEST: '${{ steps.digest.outputs.value }}',
+    TAGS: '${{ steps.meta.outputs.tags }}',
+  });
+  expect(publishStep?.with?.command).toContain('docker buildx imagetools create');
+  expect(publishStep?.with?.command).toContain('${source_ref}');
+  expect(publishStep?.with?.command).toContain('${DIGEST}');
+});
+
+test('release-cut prepares a draft before its recoverable public finalization sequence', () => {
+  const steps = loadReleaseSteps();
+  const indexOf = (name: string) => steps.findIndex((step) => step.name === name);
+  const draftStep = getStep('Prepare draft GitHub Release and upload signed assets');
+  const tagStep = getStep('Push release tag');
+  const publishStep = getStep('Publish GitHub Release');
+
+  expect(draftStep?.with?.command).toContain('--draft');
+  expect(draftStep?.with?.command).toContain('--target "${SOURCE_SHA}"');
+  expect(tagStep?.env).toMatchObject({
+    SOURCE_SHA: '${{ steps.source.outputs.source_sha }}',
+  });
+  expect(tagStep?.run).toContain('"${SOURCE_SHA}"');
+  expect(publishStep?.with?.command).toContain('gh release edit "${RELEASE_TAG}" --draft=false');
+
+  expect(indexOf('Prepare draft GitHub Release and upload signed assets')).toBeLessThan(
+    indexOf('Publish release image tags'),
+  );
+  expect(indexOf('Publish release image tags')).toBeLessThan(indexOf('Push release tag'));
+  expect(indexOf('Push release tag')).toBeLessThan(indexOf('Publish GitHub Release'));
 });
 
 test('release-cut generates the container SBOM with a pinned Trivy image', () => {

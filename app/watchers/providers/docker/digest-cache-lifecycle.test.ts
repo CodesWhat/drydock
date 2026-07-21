@@ -52,6 +52,31 @@ describe('digest-cache-lifecycle', () => {
   });
 
   describe('endDigestCachePollCycleForRegistries', () => {
+    test('passes each registry the handle returned when its cycle started', () => {
+      const startA = vi.fn().mockReturnValue(11);
+      const startB = vi.fn().mockReturnValue(22);
+      const endA = vi.fn();
+      const endB = vi.fn();
+      mockGetState.mockReturnValue({
+        registry: {
+          a: {
+            startDigestCachePollCycle: startA,
+            endDigestCachePollCycle: endA,
+          },
+          b: {
+            startDigestCachePollCycle: startB,
+            endDigestCachePollCycle: endB,
+          },
+        },
+      } as never);
+
+      const cycle = startDigestCachePollCycleForRegistries();
+      endDigestCachePollCycleForRegistries(cycle);
+
+      expect(endA).toHaveBeenCalledWith(11);
+      expect(endB).toHaveBeenCalledWith(22);
+    });
+
     test('calls endDigestCachePollCycle on each registry that supports it', () => {
       const endA = vi.fn();
       const endB = vi.fn();

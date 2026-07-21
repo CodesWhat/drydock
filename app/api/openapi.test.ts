@@ -306,7 +306,11 @@ describe('OpenAPI document', () => {
           ]),
         },
         action: {
+          required: ['code', 'href'],
           properties: {
+            code: {
+              enum: ['open-registry-settings', 'open-trigger-settings'],
+            },
             href: { enum: ['/registries', '/triggers'] },
           },
         },

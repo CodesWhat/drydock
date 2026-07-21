@@ -223,8 +223,7 @@ describe('DataTableColumnPicker', () => {
       expect(
         panel()!.querySelector('[data-test="column-picker-auto-hidden-annotation"]'),
       ).toBeNull();
-      const badge = w.find('.absolute');
-      expect(badge.attributes('title')).toBe('1 columns hidden');
+      expect(w.get('button').attributes('title')).toBe('1 columns hidden');
     });
 
     it('annotates a checked column that responsive sizing is currently auto-hiding', async () => {
@@ -258,16 +257,30 @@ describe('DataTableColumnPicker', () => {
 
     it('names every checked-but-auto-hidden column in the badge tooltip instead of the generic count', () => {
       const w = factory({ autoHiddenKeys: ['status', 'containers'] });
-      const badge = w.find('.absolute');
-      expect(badge.attributes('title')).toBe('Status, Containers hidden to fit your screen.');
+      expect(w.get('button').attributes('title')).toBe(
+        'Status, Containers hidden to fit your screen.',
+      );
+    });
+
+    it('exposes the auto-hidden column names from the focusable picker trigger', async () => {
+      const w = factory({ autoHiddenKeys: ['status', 'containers'] });
+      const trigger = w.get('button');
+
+      await trigger.trigger('focus');
+      await nextTick();
+
+      expect(trigger.attributes('aria-label')).toBe(
+        'Status, Containers hidden to fit your screen.',
+      );
+      const tooltip = document.body.querySelector('.dd-tooltip-visible');
+      expect(tooltip?.textContent).toBe('Status, Containers hidden to fit your screen.');
     });
 
     it('does not double count a column that is both user-hidden and auto-hidden, and keeps the generic tooltip', () => {
       const w = factory({ hiddenKeys: ['status'], autoHiddenKeys: ['status'] });
       expect(w.text()).toContain('+1');
       expect(w.text()).not.toContain('+2');
-      const badge = w.find('.absolute');
-      expect(badge.attributes('title')).toBe('1 columns hidden');
+      expect(w.get('button').attributes('title')).toBe('1 columns hidden');
     });
   });
 });

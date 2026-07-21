@@ -146,12 +146,11 @@ onUnmounted(() => {
       size="sm"
       variant="secondary"
       :class="showPicker ? 'dd-text dd-bg-elevated' : ''"
-      :tooltip="t('sharedComponents.columnPicker.toggleTooltip')"
+      :tooltip="hiddenCount > 0 ? badgeTooltip : t('sharedComponents.columnPicker.toggleTooltip')"
       @click.stop="togglePicker($event)" />
     <span
       v-if="hiddenCount > 0"
-      class="absolute -top-1 -end-1 pointer-events-none text-3xs font-bold px-1 dd-rounded dd-text-muted dd-bg-elevated leading-tight"
-      v-tooltip="badgeTooltip">
+      class="absolute -top-1 -end-1 pointer-events-none text-3xs font-bold px-1 dd-rounded dd-text-muted dd-bg-elevated leading-tight">
       +{{ hiddenCount }}
     </span>
 

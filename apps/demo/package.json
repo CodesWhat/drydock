@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "vitest run src/mocks/handlers.contract.test.ts --config vite.config.ts --maxWorkers=1 --fileParallelism=false && npm run test:security",
     "test:security": "node --test tests/security/*.test.js"
   },
   "dependencies": {
@@ -33,7 +34,8 @@
     "@types/node": "25.9.4",
     "@vitejs/plugin-vue": "6.0.7",
     "typescript": "5.9.3",
-    "vite": "7.3.6"
+    "vite": "7.3.6",
+    "vitest": "4.1.9"
   },
   "overrides": {
     "postcss": "8.5.16",

@@ -17,7 +17,7 @@ function container(options: { registry?: unknown; imageName?: unknown } = {}): C
 
 describe('preview errors', () => {
   test('exports the safe trigger-settings action', () => {
-    expect(TRIGGER_ACTION).toEqual({ label: 'Open trigger settings', href: '/triggers' });
+    expect(TRIGGER_ACTION).toEqual({ code: 'open-trigger-settings', href: '/triggers' });
   });
 
   test.each([
@@ -34,7 +34,7 @@ describe('preview errors', () => {
         code: 'registry-auth-failed',
         message: `Authentication failed for ghcr.io: ${status} ${label}`,
         details: { reason: 'denied', registry: 'ghcr.io' },
-        action: { label: 'Open registry settings', href: '/registries' },
+        action: { code: 'open-registry-settings', href: '/registries' },
       },
     });
   });

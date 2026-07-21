@@ -31,7 +31,7 @@ describe('preview service', () => {
           code: 'registry-auth-failed',
           message: 'Authentication failed for ghcr.io: 401 Unauthorized',
           details: { registry: 'ghcr.io' },
-          action: { label: 'Open registry settings', href: '/registries' },
+          action: { code: 'open-registry-settings', href: '/registries' },
         }),
     });
 
@@ -43,7 +43,49 @@ describe('preview service', () => {
       message: 'Authentication failed for ghcr.io: 401 Unauthorized',
       status: 401,
       details: { registry: 'ghcr.io' },
-      action: { label: 'Open registry settings', href: '/registries' },
+      action: { code: 'open-registry-settings', href: '/registries' },
+    });
+  });
+
+  it('normalizes the legacy label-only action from an older server to a stable action code', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () =>
+        Promise.resolve({
+          code: 'registry-auth-failed',
+          message: 'Authentication failed',
+          action: { label: 'Open registry settings', href: '/registries' },
+        }),
+    });
+
+    const failure = await previewContainer('bad-id').catch((error) => error);
+
+    expect(failure.action).toEqual({
+      code: 'open-registry-settings',
+      href: '/registries',
+    });
+  });
+
+  it('normalizes a legacy trigger action to the trigger-settings code', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      json: () =>
+        Promise.resolve({
+          code: 'trigger-config-invalid',
+          message: 'Trigger configuration is incomplete',
+          action: { label: 'Open trigger settings', href: '/triggers' },
+        }),
+    });
+
+    const failure = await previewContainer('bad-id').catch((error) => error);
+
+    expect(failure.action).toEqual({
+      code: 'open-trigger-settings',
+      href: '/triggers',
     });
   });
 

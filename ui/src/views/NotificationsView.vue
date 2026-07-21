@@ -74,6 +74,16 @@ const detailTemplateTriggerId = ref('');
 const templatePreview = ref<NotificationTemplatePreview | null>(null);
 const templatePreviewError = ref('');
 const templatePreviewLoading = ref(false);
+let templatePreviewGeneration = 0;
+
+function invalidateTemplatePreview() {
+  templatePreviewGeneration += 1;
+  templatePreview.value = null;
+  templatePreviewError.value = '';
+  templatePreviewLoading.value = false;
+}
+
+watch(detailTemplateTriggerId, invalidateTemplatePreview);
 
 function triggerTypeBadge(type: string) {
   if (type === 'slack')
@@ -298,8 +308,7 @@ function syncDetailDraftFromRule() {
       triggersSorted.value[0]?.id ??
       '';
   }
-  templatePreview.value = null;
-  templatePreviewError.value = '';
+  invalidateTemplatePreview();
 }
 
 function openDetail(rule: NotificationRule) {
@@ -398,32 +407,44 @@ function setTemplateField(field: keyof NotificationTemplateOverride, value: stri
   else template[field] = value;
   if (Object.keys(template).length === 0) delete detailTemplates.value[triggerId];
   else detailTemplates.value[triggerId] = template;
-  templatePreview.value = null;
-  templatePreviewError.value = '';
+  invalidateTemplatePreview();
 }
 
 function resetTemplate() {
   const triggerId = detailTemplateTriggerId.value;
   if (!triggerId) return;
   delete detailTemplates.value[triggerId];
-  templatePreview.value = null;
-  templatePreviewError.value = '';
+  invalidateTemplatePreview();
 }
 
 async function previewSelectedTemplate() {
   if (!selectedRule.value || !detailTemplateTriggerId.value || templatePreviewLoading.value) return;
+  const ruleId = selectedRule.value.id;
+  const triggerId = detailTemplateTriggerId.value;
+  const requestGeneration = ++templatePreviewGeneration;
   templatePreviewLoading.value = true;
   templatePreviewError.value = '';
   try {
-    templatePreview.value = await previewNotificationTemplates(
-      selectedRule.value.id,
-      detailTemplateTriggerId.value,
-      currentTemplate(),
-    );
+    const preview = await previewNotificationTemplates(ruleId, triggerId, currentTemplate());
+    if (
+      requestGeneration === templatePreviewGeneration &&
+      selectedRule.value?.id === ruleId &&
+      detailTemplateTriggerId.value === triggerId
+    ) {
+      templatePreview.value = preview;
+    }
   } catch (e: unknown) {
-    templatePreviewError.value = errorMessage(e, t('notificationsView.detail.previewError'));
+    if (
+      requestGeneration === templatePreviewGeneration &&
+      selectedRule.value?.id === ruleId &&
+      detailTemplateTriggerId.value === triggerId
+    ) {
+      templatePreviewError.value = errorMessage(e, t('notificationsView.detail.previewError'));
+    }
   } finally {
-    templatePreviewLoading.value = false;
+    if (requestGeneration === templatePreviewGeneration) {
+      templatePreviewLoading.value = false;
+    }
   }
 }
 
@@ -803,11 +824,13 @@ onMounted(async () => {
                   {{ t('notificationsView.detail.resetTemplate') }}
                 </AppButton>
               </div>
-              <div v-if="templatePreviewError" class="text-2xs dd-text-danger">{{ templatePreviewError }}</div>
-              <div v-if="templatePreview" class="space-y-1 p-2.5 dd-rounded text-2xs dd-bg-elevated">
-                <div><strong>{{ t('notificationsView.detail.simpleTitle') }}:</strong> {{ templatePreview.simpleTitle }}</div>
-                <div class="whitespace-pre-wrap"><strong>{{ t('notificationsView.detail.simpleBody') }}:</strong> {{ templatePreview.simpleBody }}</div>
-                <div><strong>{{ t('notificationsView.detail.batchTitle') }}:</strong> {{ templatePreview.batchTitle }}</div>
+              <div role="status" aria-live="polite" aria-atomic="true">
+                <div v-if="templatePreviewError" class="text-2xs dd-text-danger">{{ templatePreviewError }}</div>
+                <div v-if="templatePreview" class="space-y-1 p-2.5 dd-rounded text-2xs dd-bg-elevated">
+                  <div><strong>{{ t('notificationsView.detail.simpleTitle') }}:</strong> {{ templatePreview.simpleTitle }}</div>
+                  <div class="whitespace-pre-wrap"><strong>{{ t('notificationsView.detail.simpleBody') }}:</strong> {{ templatePreview.simpleBody }}</div>
+                  <div><strong>{{ t('notificationsView.detail.batchTitle') }}:</strong> {{ templatePreview.batchTitle }}</div>
+                </div>
               </div>
             </div>
 

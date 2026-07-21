@@ -83,6 +83,22 @@ test('workflow tests are wired outside the app coverage suite', () => {
   });
 });
 
+test('demo mock contracts and production build are first-class CI gates', () => {
+  expect(getTestJobStep('Install demo dependencies')).toMatchObject({
+    with: {
+      command: 'cd apps/demo && npm ci --ignore-scripts',
+    },
+  });
+  expect(getTestJobStep('Run demo contract and security tests')).toMatchObject({
+    run: 'npm test',
+    'working-directory': 'apps/demo',
+  });
+  expect(getWorkflowStep('build', 'Build demo')).toMatchObject({
+    run: 'npm run build',
+    'working-directory': 'apps/demo',
+  });
+});
+
 test('secret scanning gates full history and the tracked working tree', () => {
   const workflow = loadWorkflow();
   const job = workflow.jobs?.secrets;

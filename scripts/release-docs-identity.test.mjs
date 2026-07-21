@@ -6,6 +6,8 @@ const RC_VERSION = '1.6.0-rc.3';
 const RC_DATE = '2026-07-21';
 const RC_DISPLAY_DATE = 'July 21, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
+const BROAD_401_CLAIM =
+  /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
 
 function read(path) {
   return readFileSync(path, 'utf8');
@@ -336,16 +338,18 @@ test('current and archived docs describe destructive and recovery behavior accur
       // v1.6 removed the warn-and-serve grandfather path: upgrades fail closed like fresh installs.
       assert.match(
         authentications,
-        /Authentication protects all API routes and UI views unless anonymous access is enabled\. Fresh installs and upgrades alike must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true`/u,
+        /Authentication protects protected API routes and UI data unless anonymous access is enabled\. Fresh installs and upgrades alike must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true`/u,
       );
-      // Fail-closed means 401-everything from a running container, not a refused start:
-      // Anonymous's registration throw is caught by the registry fallback and the API
-      // serves with zero passport strategies (app/registry/index.ts, app/api/auth.ts).
       assert.match(
         authentications,
-        /Upgrade, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` \| Fails closed — all API calls return `401`/u,
+        /Upgrade, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` \| Starts fail-closed — protected API requests return `401`; auth discovery\/status stays public; `\/health` returns `503`/u,
+      );
+      assert.match(
+        authentications,
+        /The SPA shell may still load, but it cannot read protected application data/u,
       );
       assert.doesNotMatch(authentications, /refuses to start/u);
+      assert.doesNotMatch(authentications, BROAD_401_CLAIM);
       assert.doesNotMatch(authentications, /retain anonymous access with a startup warning/u);
     } else {
       // The 1.5.x archive documents the grandfather path that line actually shipped with.
@@ -376,6 +380,38 @@ test('current and archived docs describe destructive and recovery behavior accur
     assert.match(deprecations, /Detection methods and warning behavior vary by feature/u);
     assert.doesNotMatch(deprecations, /emit warnings at startup or in the UI/u);
   }
+});
+
+test('v1.6 fail-closed upgrade docs preserve public auth routes and health semantics', () => {
+  const readme = read('README.md');
+  const changelog = read('CHANGELOG.md');
+  const deprecations = read('DEPRECATIONS.md');
+
+  for (const document of [readme, changelog, deprecations]) {
+    assert.match(document, /protected API requests? (?:are rejected with|return) `401`/u);
+    assert.match(
+      document,
+      /auth(?:entication)? discovery\/status (?:routes )?remain(?:s)? public/u,
+    );
+    assert.match(document, /`\/health` (?:reports|returns) `503`/u);
+    assert.doesNotMatch(document, BROAD_401_CLAIM);
+  }
+
+  assert.match(
+    readme,
+    /The SPA shell may still load, but it cannot read protected application data/u,
+  );
+  assert.match(deprecations, /the process continues running/u);
+  assert.doesNotMatch(deprecations, /refusing to serve/u);
+});
+
+test('security policy distinguishes stable and prerelease support', () => {
+  const security = read('SECURITY.md');
+
+  assert.match(security, /Latest stable release/u);
+  assert.match(security, /Latest release candidate on the active train/u);
+  assert.match(security, /Older release candidates are not patched/u);
+  assert.doesNotMatch(security, /\|\s*latest\s*\|/iu);
 });
 
 test('current and archived release examples use consistent tags, filenames, dates, and anchors', () => {
