@@ -49,12 +49,20 @@ test('sharp is pinned to a patched release in the website', () => {
   const lockfile = readJson('apps/web/package-lock.json');
 
   assert.equal(manifest.overrides?.sharp, '0.35.3');
-  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.0') >= 0);
+  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.3') >= 0);
 });
 
 test('the rc.3 changelog records the security dependency refresh', () => {
   const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
-  const rc3 = changelog.split('## [1.6.0-rc.2]')[0];
+  const rc3Header = '## [1.6.0-rc.3]';
+  const rc2Header = '## [1.6.0-rc.2]';
+  const rc3Start = changelog.indexOf(rc3Header);
+  const rc2Start = changelog.indexOf(rc2Header, rc3Start + rc3Header.length);
+
+  assert.notEqual(rc3Start, -1, 'missing rc.3 changelog header');
+  assert.notEqual(rc2Start, -1, 'missing rc.2 changelog boundary');
+
+  const rc3 = changelog.slice(rc3Start, rc2Start);
 
   assert.match(rc3, /CVE-2026-16221/);
   assert.match(rc3, /GHSA-8r6m-32jq-jx6q/);
