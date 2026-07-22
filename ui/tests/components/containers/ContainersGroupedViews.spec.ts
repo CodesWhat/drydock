@@ -2560,6 +2560,7 @@ describe('ContainersGroupedViews', () => {
     expect(
       cardByName(wrapper, 'grafana-card')
         .find('[data-test="container-card-resource-actions"]')
+        .find('[data-test="container-quick-links"]')
         .exists(),
     ).toBe(true);
     expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
@@ -2573,7 +2574,6 @@ describe('ContainersGroupedViews', () => {
     });
     const { context, refs } = makeContext();
     context.hiddenColumnKeys.value = ['links'];
-    refs.containerCardReflowForced.value = true;
     refs.filteredContainers.value = [container];
     refs.displayContainers.value = [container];
     refs.renderGroups.value = [
@@ -2589,9 +2589,16 @@ describe('ContainersGroupedViews', () => {
     refs.openActionsMenu.value = container.id;
     mocked.context = context;
 
-    const wrapper = mountSubject();
+    const wrapper = mountSubjectWithRealDataTable(500);
     await nextTick();
 
+    expect(refs.containerCardReflowForced.value).toBe(true);
+    expect(
+      cardByName(wrapper, 'grafana-forced-card')
+        .find('[data-test="container-card-resource-actions"]')
+        .find('[data-test="container-quick-links"]')
+        .exists(),
+    ).toBe(true);
     expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
   });
 
