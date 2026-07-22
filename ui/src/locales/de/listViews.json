@@ -22,6 +22,10 @@
       "status": "Status",
       "details": "Details"
     },
+    "card": {
+      "time": "Zeit",
+      "version": "Version"
+    },
     "detail": {
       "timestamp": "Zeitstempel",
       "event": "Ereignis",
@@ -50,8 +54,11 @@
       "closed": "Geschlossen",
       "update-available": "Update verfügbar",
       "update-applied": "Update angewendet",
+      "update-applied-dryrun": "Update Previewed (Dry Run)",
       "update-failed": "Update fehlgeschlagen",
       "auto-update-blocked": "Automatisches Update blockiert",
+      "update-policy-override-set": "Update Policy Override Set",
+      "update-policy-override-cleared": "Update Policy Override Cleared",
       "auto-rollback": "Automatischer Rollback",
       "rollback": "Rollback",
       "preview": "Vorschau",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "Agent verbunden",
         "description": "Wenn ein Remote-Agent nach einem Verbindungsverlust wieder verbunden wird"
+      },
+      "container-unhealthy": {
+        "name": "Container Unhealthy",
+        "description": "When a container's Docker health check enters the unhealthy state"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "Trigger-Seite",
       "helpTextImplicitAll": "Leer lassen, um dieses Ereignis an alle Benachrichtigungstrigger zu senden. Jede Trigger-Auswahl macht diese Regel zu einer Allow-List.",
       "helpTextExplicit": "Nur ausgewählte Trigger erhalten dieses Ereignis. Leer lassen, um dieses Ereignis für alle Trigger zu unterdrücken.",
+      "bellLabel": "Notification bell",
+      "bellAriaLabel": "Notification bell",
+      "bellThresholdAriaLabel": "Bell severity threshold",
+      "bellHelp": "Choose whether this event appears in the in-app bell and the minimum update level to include.",
+      "thresholdAll": "All updates",
+      "thresholdMajor": "Major updates only",
+      "thresholdMinor": "Minor and major",
+      "thresholdPatch": "Patch, minor, and major",
+      "templatesLabel": "Message templates",
+      "templatesHelp": "Overrides apply only to the selected trigger. Empty fields keep its configured defaults. Variables use safe paths such as container.name and containers.length.",
+      "templateTriggerAriaLabel": "Template trigger",
+      "simpleTitle": "Simple title",
+      "simpleTitleAriaLabel": "Simple notification title",
+      "simpleBody": "Simple body",
+      "simpleBodyAriaLabel": "Simple notification body",
+      "batchTitle": "Batch title",
+      "batchTitleAriaLabel": "Batch notification title",
+      "preview": "Preview",
+      "previewAriaLabel": "Preview notification template",
+      "previewing": "Previewing...",
+      "previewError": "Failed to preview notification template",
+      "resetTemplate": "Reset template",
       "saving": "Speichert...",
       "saveChanges": "Änderungen speichern",
       "reset": "Zurücksetzen",
@@ -158,7 +191,8 @@
       "critical": "Kritisch",
       "high": "Hoch",
       "medium": "Mittel",
-      "low": "Niedrig"
+      "low": "Niedrig",
+      "clean": "Clean"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "Abbrechen"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "Pull {provider}",
+      "warmAsset": "Warm {provider}",
+      "assetOperationFailed": "Scanner asset operation failed",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "Typ",
       "status": "Status",
       "url": "URL"
+    },
+    "card": {
+      "auth": "Auth",
+      "status": "Status"
     },
     "badge": {
       "private": "Privat",
@@ -278,6 +320,12 @@
       "containers": "Container",
       "lastSeen": "Zuletzt gesehen"
     },
+    "card": {
+      "containers": "Container",
+      "running": "Laufend",
+      "images": "Images",
+      "lastSeen": "Zuletzt gesehen"
+    },
     "detail": {
       "containers": "Container",
       "running": "laufend",
@@ -302,6 +350,10 @@
     "status": {
       "active": "Aktiv",
       "inactive": "Inaktiv"
+    },
+    "dryRun": {
+      "badge": "Dry-run mode",
+      "tooltip": "Updates are previewed only — containers will not be replaced. Set DRYRUN=false to apply."
     },
     "test": {
       "testing": "Test läuft...",
@@ -335,6 +387,12 @@
       "schedule": "Zeitplan",
       "nextRun": "Nächster Lauf",
       "lastRun": "Letzter Lauf"
+    },
+    "card": {
+      "containers": "Container",
+      "nextRun": "Nächster Lauf",
+      "lastRun": "Letzter Lauf",
+      "containersWatched": "{count} Container beobachtet"
     },
     "status": {
       "watching": "Wacht",

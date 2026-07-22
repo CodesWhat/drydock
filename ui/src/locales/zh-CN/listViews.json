@@ -22,6 +22,10 @@
       "status": "状态",
       "details": "详情"
     },
+    "card": {
+      "time": "时间",
+      "version": "版本"
+    },
     "detail": {
       "timestamp": "时间戳",
       "event": "事件",
@@ -50,8 +54,11 @@
       "closed": "已关闭",
       "update-available": "可用更新",
       "update-applied": "更新已应用",
+      "update-applied-dryrun": "Update Previewed (Dry Run)",
       "update-failed": "更新失败",
       "auto-update-blocked": "自动更新被阻止",
+      "update-policy-override-set": "Update Policy Override Set",
+      "update-policy-override-cleared": "Update Policy Override Cleared",
       "auto-rollback": "自动回滚",
       "rollback": "回滚",
       "preview": "预览",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "代理已重连",
         "description": "当远程代理断连后重新连接时"
+      },
+      "container-unhealthy": {
+        "name": "Container Unhealthy",
+        "description": "When a container's Docker health check enters the unhealthy state"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "触发器页面",
       "helpTextImplicitAll": "留空将此事件发送到所有通知触发器。选择任何触发器会将此规则转为允许列表。",
       "helpTextExplicit": "只有选定的触发器会接收此事件。留空会抑制此事件对所有触发器的通知。",
+      "bellLabel": "Notification bell",
+      "bellAriaLabel": "Notification bell",
+      "bellThresholdAriaLabel": "Bell severity threshold",
+      "bellHelp": "Choose whether this event appears in the in-app bell and the minimum update level to include.",
+      "thresholdAll": "All updates",
+      "thresholdMajor": "Major updates only",
+      "thresholdMinor": "Minor and major",
+      "thresholdPatch": "Patch, minor, and major",
+      "templatesLabel": "Message templates",
+      "templatesHelp": "Overrides apply only to the selected trigger. Empty fields keep its configured defaults. Variables use safe paths such as container.name and containers.length.",
+      "templateTriggerAriaLabel": "Template trigger",
+      "simpleTitle": "Simple title",
+      "simpleTitleAriaLabel": "Simple notification title",
+      "simpleBody": "Simple body",
+      "simpleBodyAriaLabel": "Simple notification body",
+      "batchTitle": "Batch title",
+      "batchTitleAriaLabel": "Batch notification title",
+      "preview": "Preview",
+      "previewAriaLabel": "Preview notification template",
+      "previewing": "Previewing...",
+      "previewError": "Failed to preview notification template",
+      "resetTemplate": "Reset template",
       "saving": "保存中...",
       "saveChanges": "保存更改",
       "reset": "重置",
@@ -158,7 +191,8 @@
       "critical": "严重",
       "high": "高危",
       "medium": "中危",
-      "low": "低危"
+      "low": "低危",
+      "clean": "Clean"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "取消"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "Pull {provider}",
+      "warmAsset": "Warm {provider}",
+      "assetOperationFailed": "Scanner asset operation failed",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "类型",
       "status": "状态",
       "url": "URL"
+    },
+    "card": {
+      "auth": "认证",
+      "status": "状态"
     },
     "badge": {
       "private": "私有",
@@ -278,6 +320,12 @@
       "containers": "容器",
       "lastSeen": "最后活跃"
     },
+    "card": {
+      "containers": "容器",
+      "running": "运行中",
+      "images": "镜像",
+      "lastSeen": "最后活跃"
+    },
     "detail": {
       "containers": "容器",
       "running": "运行中",
@@ -302,6 +350,10 @@
     "status": {
       "active": "活跃",
       "inactive": "不活跃"
+    },
+    "dryRun": {
+      "badge": "Dry-run mode",
+      "tooltip": "Updates are previewed only — containers will not be replaced. Set DRYRUN=false to apply."
     },
     "test": {
       "testing": "测试中...",
@@ -335,6 +387,12 @@
       "schedule": "计划",
       "nextRun": "下次运行",
       "lastRun": "上次运行"
+    },
+    "card": {
+      "containers": "容器",
+      "nextRun": "下次运行",
+      "lastRun": "上次运行",
+      "containersWatched": "监视 {count} 个容器"
     },
     "status": {
       "watching": "监视中",

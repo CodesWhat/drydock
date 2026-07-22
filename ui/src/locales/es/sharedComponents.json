@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Alternar columnas",
+      "heading": "Columnas",
+      "reset": "Restablecer",
+      "hiddenBadgeTooltip": "{count} columnas ocultas",
+      "autoHiddenAnnotation": "{column} — hidden to fit",
+      "autoHiddenBadgeTooltip": "{columns} hidden to fit your screen."
+    },
     "confirmDialog": {
       "cancel": "Cancelar",
       "confirm": "Confirmar"
@@ -7,7 +15,7 @@
     "copyableTag": {
       "copied": "¡Copiado!",
       "clickToCopy": "Clic para copiar",
-      "failed": "Copy failed"
+      "failed": "Hubo un fallo al copiar"
     },
     "dataFilterBar": {
       "filters": "Filtros",
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "Acciones",
-      "resizeColumn": "Redimensionar columna"
+      "resizeColumn": "Redimensionar columna",
+      "sortBy": "Ordenar por",
+      "sortDirectionAscending": "Dirección de orden: ascendente",
+      "sortDirectionDescending": "Dirección de orden: descendente"
     },
     "detailPanel": {
       "openFullPage": "Abrir vista de página completa",
@@ -59,7 +70,7 @@
     },
     "serverFeatures": {
       "loadFailed": "Failed to load server feature configuration",
-      "actionsDisabledReason": "Container actions disabled by server configuration"
+      "actionsDisabledReason": "Acciones de contenedores desactivadas por la configuración del servidor"
     }
   }
 }

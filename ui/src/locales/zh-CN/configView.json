@@ -6,6 +6,24 @@
       "profile": "个人资料"
     },
     "general": {
+      "updateMode": {
+        "title": "Global update mode",
+        "description": "Choose whether Drydock only reports updates, waits for a manual action, or dispatches eligible updates automatically.",
+        "options": {
+          "notify": {
+            "label": "Notify",
+            "description": "Detect and notify only; never apply updates."
+          },
+          "manual": {
+            "label": "Manual",
+            "description": "Apply updates only when you request them."
+          },
+          "auto": {
+            "label": "Auto",
+            "description": "Dispatch eligible updates automatically."
+          }
+        }
+      },
       "application": {
         "title": "应用程序",
         "loadingServerInfo": "正在加载服务器信息"
@@ -72,6 +90,7 @@
         "no": "否"
       },
       "errors": {
+        "updateMode": "Failed to update global update mode",
         "loadServerInfo": "无法加载服务器信息",
         "loadProfileData": "无法加载个人资料数据",
         "updateNetworkSettings": "无法更新网络设置",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Sync",
+        "label": "Sync Across Devices",
+        "description": "Keep your appearance and layout preferences in sync across every device you sign in from"
+      },
       "language": {
         "title": "语言"
       },
@@ -118,6 +142,9 @@
           "soft": "柔和",
           "round": "圆润"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Failed to update sync settings"
       }
     },
     "profile": {

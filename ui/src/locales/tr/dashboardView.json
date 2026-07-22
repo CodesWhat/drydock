@@ -3,6 +3,7 @@
     "loading": "Kontrol paneli yükleniyor...",
     "loadFailed": "Kontrol paneli yüklenemedi",
     "dragToReorder": "Yeniden sıralamak için sürükleyin",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "Tümünü görüntüle →",
     "editToggle": {
       "showWidgetPanel": "Widget panelini göster",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "Ana",
       "minor": "Alt",
-      "patch": "Yama"
+      "patch": "Yama",
+      "digest": "Özet"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

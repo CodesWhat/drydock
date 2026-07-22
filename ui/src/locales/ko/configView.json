@@ -6,6 +6,24 @@
       "profile": "프로필"
     },
     "general": {
+      "updateMode": {
+        "title": "Global update mode",
+        "description": "Choose whether Drydock only reports updates, waits for a manual action, or dispatches eligible updates automatically.",
+        "options": {
+          "notify": {
+            "label": "Notify",
+            "description": "Detect and notify only; never apply updates."
+          },
+          "manual": {
+            "label": "Manual",
+            "description": "Apply updates only when you request them."
+          },
+          "auto": {
+            "label": "Auto",
+            "description": "Dispatch eligible updates automatically."
+          }
+        }
+      },
       "application": {
         "title": "애플리케이션",
         "loadingServerInfo": "서버 정보 불러오는 중"
@@ -72,6 +90,7 @@
         "no": "아니요"
       },
       "errors": {
+        "updateMode": "Failed to update global update mode",
         "loadServerInfo": "서버 정보를 불러오지 못했습니다",
         "loadProfileData": "프로필 데이터를 불러오지 못했습니다",
         "updateNetworkSettings": "네트워크 설정을 업데이트하지 못했습니다",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Sync",
+        "label": "Sync Across Devices",
+        "description": "Keep your appearance and layout preferences in sync across every device you sign in from"
+      },
       "language": {
         "title": "언어"
       },
@@ -118,6 +142,9 @@
           "soft": "부드럽게",
           "round": "둥글게"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Failed to update sync settings"
       }
     },
     "profile": {

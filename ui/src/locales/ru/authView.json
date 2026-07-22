@@ -17,8 +17,8 @@
       "status": "Статус"
     },
     "badge": {
-      "basic": "Basic",
-      "oidc": "OIDC"
+      "basic": "Базовая",
+      "oidc": "OpenID Connect (OIDC)"
     }
   }
 }

@@ -157,6 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "تم اكتشاف {total} اسم مستعار قديم للإعداد",
       "legacyConfigTitlePlural": "تم اكتشاف {total} اسم مستعار قديم للإعداد",
+      "legacyApiPathTitleSingular": "{total} request to the removed API path detected",
+      "legacyApiPathTitlePlural": "{total} requests to the removed API path detected",
       "dontShowAgain": "لا تُظهر مجدداً",
       "curlHealthcheckTitle": "تم اكتشاف تجاوز مخصص لفحص صحة curl",
       "envKeysLabel": "مفاتيح البيئة ({count}): {keys}",

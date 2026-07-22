@@ -3,6 +3,7 @@
     "loading": "대시보드 불러오는 중...",
     "loadFailed": "대시보드를 불러오지 못했습니다",
     "dragToReorder": "드래그하여 순서 변경",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "모두 보기 →",
     "editToggle": {
       "showWidgetPanel": "위젯 패널 표시",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "메이저",
       "minor": "마이너",
-      "patch": "패치"
+      "patch": "패치",
+      "digest": "다이제스트"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

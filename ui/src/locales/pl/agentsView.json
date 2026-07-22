@@ -58,7 +58,7 @@
         "entries": "{count} wpisy",
         "statusLive": "Na żywo",
         "statusOffline": "Nieaktywny",
-        "loadError": "Failed to load agent logs"
+        "loadError": "Nie udało się załadować dzienników agentów"
       },
       "fields": {
         "cpus": "Procesory",

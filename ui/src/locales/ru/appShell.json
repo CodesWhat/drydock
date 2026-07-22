@@ -47,15 +47,15 @@
       "switchTo": "Переключить на тему {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Светлая",
+        "system": "Системная",
+        "dark": "Тёмная"
       }
     },
     "layout": {
       "nav": {
         "dashboard": "Панель управления",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "Панель управления",
         "containers": "Контейнеры",
         "security": "Безопасность",
         "audit": "Аудит",
@@ -87,7 +87,7 @@
         "userMenu": "Меню пользователя",
         "profile": "Профиль",
         "signOut": "Выйти",
-        "userFallback": "User"
+        "userFallback": "Пользователь"
       },
       "about": {
         "title": "Drydock",
@@ -107,38 +107,38 @@
         "prefixScopeHint": "Активен префикс области; используйте ",
         "typeHint": "Тип",
         "slashComma": ",",
-        "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "atOrConnector": ", или",
+        "hashSemicolon": "; испол.",
         "useTab": " для смены области",
         "moveHint": "переместить",
         "openHint": "открыть",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
-        "agentSubtitle": "Agent · {status} · {host}",
-        "triggerSubtitle": "Trigger · {type}",
-        "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "recentGroup": "Недавние",
+        "unknownHost": "неизвестный узел",
+        "containerSubtitle": "Контейнер · {image} · {status} · {host}",
+        "agentSubtitle": "Агент · {status} · {host}",
+        "triggerSubtitle": "Триггер · {type}",
+        "watcherSubtitle": "Наблюдатель · {type}",
+        "registrySubtitle": "Реестр· {type}",
+        "authSubtitle": "Аутентификация · {type}",
+        "notificationSubtitle": "Правило уведомления · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Везде",
+          "pages": "Страницы",
+          "containers": "Контейнеры",
+          "runtime": "Среды выполнения",
+          "config": "Конфигурации"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Навигация",
+          "containers": "Контейнеры",
+          "runtime": "Среды выполнения",
+          "configuration": "Конфигурации"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
-          "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "appearanceTitle": "Внешний вид",
+          "appearanceSubtitle": "Настройка · Внешний вид",
+          "profileTitle": "Настройки профиля",
+          "profileSubtitle": "Настройка · Профиль"
         }
       },
       "connection": {
@@ -157,16 +157,18 @@
     "banners": {
       "legacyConfigTitleSingular": "Обнаружен {total} устаревший псевдоним конфигурации",
       "legacyConfigTitlePlural": "Обнаружено {total} устаревших псевдонимов конфигурации",
+      "legacyApiPathTitleSingular": "{total} request to the removed API path detected",
+      "legacyApiPathTitlePlural": "{total} requests to the removed API path detected",
       "dontShowAgain": "Больше не показывать",
       "curlHealthcheckTitle": "Обнаружено переопределение healthcheck через curl",
       "envKeysLabel": "Переменные окружения ({count}): {keys}",
       "labelKeysLabel": "Метки ({count}): {keys}",
       "apiPathsLabel": "Пути API ({count}): {keys}",
       "healthcheckCommandLabel": "Команда healthcheck: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
-      "hiddenMore": "(+{count} more)"
+      "legacyConfigBody": "Входы триггеров старого формата по-прежнему активны для обеспечения совместимости с версией 1.6. Перед переходом на версию 1.7 переименуйте переменные {triggerEnv} в {actionEnv} или {notificationEnv} и замените метки {triggerLabel} на {actionLabel} или {notificationLabel}.",
+      "legacyApiBody": "Клиенты данного экземпляра недавно обращались к удалённому пути без версии {oldPrefix} и получают ошибки с кодом {statusCode}. Перенесите их на префикс {v1Prefix}. Для интеграций эпохи WUD, таких как wud-card или виджет whatsupdocker на главной странице, вместо переноса можно установить флаг {compatFlag}.",
+      "curlHealthcheckBody": "В вашем контейнере Drydock используется настраиваемый переопределитель проверки работоспособности на основе curl. curl по-прежнему доступен в версиях v1.5.x и v1.6.x в целях обратной совместимости; версия v1.6.0 является последней версией с предупреждением, а в версии v1.7.0 curl будет удален из образа. Рекомендуется использовать встроенную проверку работоспособности образа или обновить переопределитель, указав {bin}.",
+      "hiddenMore": "(+{count} далее)"
     }
   }
 }

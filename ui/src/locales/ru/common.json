@@ -9,26 +9,26 @@
     "close": "Закрыть",
     "retry": "Повторить",
     "unknown": "неизвестно",
-    "yes": "yes",
-    "no": "no",
+    "yes": "да",
+    "no": "нет",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "rateLimitHit": "Превышение лимита запросов к реестру",
+      "accessDenied": "Доступ в реестр запрещен",
+      "imageNotFound": "Изображение не найдено",
+      "authFailed": "Ошибка аутентификации реестра",
+      "unreachable": "Реестр недоступен",
+      "cancelled": "Отменено",
+      "securityBlocked": "Заблокирован проверкой безопасности",
+      "signatureFailed": "Ошибка проверки подписи"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Пользовательский"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "только что"
     },
     "imageAge": {
-      "now": "now"
+      "now": "сейчас"
     }
   }
 }

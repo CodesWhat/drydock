@@ -22,6 +22,10 @@
       "status": "상태",
       "details": "상세 정보"
     },
+    "card": {
+      "time": "시간",
+      "version": "버전"
+    },
     "detail": {
       "timestamp": "타임스탬프",
       "event": "이벤트",
@@ -50,8 +54,11 @@
       "closed": "닫힘",
       "update-available": "업데이트 가능",
       "update-applied": "업데이트 적용됨",
+      "update-applied-dryrun": "Update Previewed (Dry Run)",
       "update-failed": "업데이트 실패",
       "auto-update-blocked": "자동 업데이트 차단됨",
+      "update-policy-override-set": "Update Policy Override Set",
+      "update-policy-override-cleared": "Update Policy Override Cleared",
       "auto-rollback": "자동 롤백",
       "rollback": "롤백",
       "preview": "미리 보기",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "에이전트 재연결됨",
         "description": "원격 에이전트가 연결 해제 후 재연결되었을 때"
+      },
+      "container-unhealthy": {
+        "name": "Container Unhealthy",
+        "description": "When a container's Docker health check enters the unhealthy state"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "트리거 페이지",
       "helpTextImplicitAll": "비워두면 이 이벤트를 모든 알림 트리거로 전송합니다. 트리거를 선택하면 이 규칙이 허용 목록으로 전환됩니다.",
       "helpTextExplicit": "선택된 트리거만 이 이벤트를 수신합니다. 비워두면 모든 트리거에서 이 이벤트가 억제됩니다.",
+      "bellLabel": "Notification bell",
+      "bellAriaLabel": "Notification bell",
+      "bellThresholdAriaLabel": "Bell severity threshold",
+      "bellHelp": "Choose whether this event appears in the in-app bell and the minimum update level to include.",
+      "thresholdAll": "All updates",
+      "thresholdMajor": "Major updates only",
+      "thresholdMinor": "Minor and major",
+      "thresholdPatch": "Patch, minor, and major",
+      "templatesLabel": "Message templates",
+      "templatesHelp": "Overrides apply only to the selected trigger. Empty fields keep its configured defaults. Variables use safe paths such as container.name and containers.length.",
+      "templateTriggerAriaLabel": "Template trigger",
+      "simpleTitle": "Simple title",
+      "simpleTitleAriaLabel": "Simple notification title",
+      "simpleBody": "Simple body",
+      "simpleBodyAriaLabel": "Simple notification body",
+      "batchTitle": "Batch title",
+      "batchTitleAriaLabel": "Batch notification title",
+      "preview": "Preview",
+      "previewAriaLabel": "Preview notification template",
+      "previewing": "Previewing...",
+      "previewError": "Failed to preview notification template",
+      "resetTemplate": "Reset template",
       "saving": "저장 중...",
       "saveChanges": "변경 사항 저장",
       "reset": "초기화",
@@ -158,7 +191,8 @@
       "critical": "치명적",
       "high": "높음",
       "medium": "중간",
-      "low": "낮음"
+      "low": "낮음",
+      "clean": "Clean"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "취소"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "Pull {provider}",
+      "warmAsset": "Warm {provider}",
+      "assetOperationFailed": "Scanner asset operation failed",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "유형",
       "status": "상태",
       "url": "URL"
+    },
+    "card": {
+      "auth": "인증",
+      "status": "상태"
     },
     "badge": {
       "private": "비공개",
@@ -278,6 +320,12 @@
       "containers": "컨테이너",
       "lastSeen": "마지막 접속"
     },
+    "card": {
+      "containers": "컨테이너",
+      "running": "실행 중",
+      "images": "이미지",
+      "lastSeen": "마지막 접속"
+    },
     "detail": {
       "containers": "컨테이너",
       "running": "실행 중",
@@ -302,6 +350,10 @@
     "status": {
       "active": "활성",
       "inactive": "비활성"
+    },
+    "dryRun": {
+      "badge": "Dry-run mode",
+      "tooltip": "Updates are previewed only — containers will not be replaced. Set DRYRUN=false to apply."
     },
     "test": {
       "testing": "테스트 중...",
@@ -335,6 +387,12 @@
       "schedule": "스케줄",
       "nextRun": "다음 실행",
       "lastRun": "마지막 실행"
+    },
+    "card": {
+      "containers": "컨테이너",
+      "nextRun": "다음 실행",
+      "lastRun": "마지막 실행",
+      "containersWatched": "{count}개 컨테이너 감시 중"
     },
     "status": {
       "watching": "감시 중",

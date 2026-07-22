@@ -3,6 +3,7 @@
     "loading": "Đang tải bảng điều khiển...",
     "loadFailed": "Không thể tải bảng điều khiển",
     "dragToReorder": "Kéo để sắp xếp lại",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "Xem tất cả →",
     "editToggle": {
       "showWidgetPanel": "Hiển thị bảng widget",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "Major",
       "minor": "Minor",
-      "patch": "Patch"
+      "patch": "Patch",
+      "digest": "Image update"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

@@ -6,6 +6,24 @@
       "profile": "Profil"
     },
     "general": {
+      "updateMode": {
+        "title": "Global update mode",
+        "description": "Choose whether Drydock only reports updates, waits for a manual action, or dispatches eligible updates automatically.",
+        "options": {
+          "notify": {
+            "label": "Notify",
+            "description": "Detect and notify only; never apply updates."
+          },
+          "manual": {
+            "label": "Manual",
+            "description": "Apply updates only when you request them."
+          },
+          "auto": {
+            "label": "Auto",
+            "description": "Dispatch eligible updates automatically."
+          }
+        }
+      },
       "application": {
         "title": "Aplikacja",
         "loadingServerInfo": "Ładowanie informacji o serwerze"
@@ -72,6 +90,7 @@
         "no": "Nie"
       },
       "errors": {
+        "updateMode": "Failed to update global update mode",
         "loadServerInfo": "Nie udało się załadować informacji o serwerze",
         "loadProfileData": "Nie udało się załadować danych profilu",
         "updateNetworkSettings": "Nie udało się zaktualizować ustawień sieciowych",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Sync",
+        "label": "Sync Across Devices",
+        "description": "Keep your appearance and layout preferences in sync across every device you sign in from"
+      },
       "language": {
         "title": "Język"
       },
@@ -118,6 +142,9 @@
           "soft": "Miękki",
           "round": "Okrągły"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Failed to update sync settings"
       }
     },
     "profile": {

@@ -7,6 +7,9 @@
       "previewUpdate": "Xem trước cập nhật",
       "forceUpdate": "Cập nhật bắt buộc",
       "updateNow": "Cập nhật ngay",
+      "previewOnly": "Preview only",
+      "dryRunUpdateTooltip": "This trigger is in dry-run mode — clicking will pull the new image but not replace the container.",
+      "dryRunCondition": "Action trigger {trigger} is in dry-run mode — updates are previewed only and containers are not replaced.",
       "scanNow": "Quét ngay",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "Đặt lại",
       "clearSkips": "Xóa danh sách bỏ qua",
       "clearPolicy": "Xóa chính sách",
+      "overridden": "Overridden",
+      "revert": "Revert",
+      "revertAll": "Revert to Declarative",
       "snoozedUntil": "Hoãn đến:",
       "maturityMode": "Chế độ độ chín:",
       "matureOnlyMinimum": "Chỉ chín ({days} ngày tối thiểu)",
       "allowAllUpdates": "Cho phép tất cả cập nhật",
       "skippedTags": "Tag đã bỏ qua:",
       "skippedDigests": "Digest đã bỏ qua:",
+      "noSkippedEntries": "No skipped entries",
       "noActivePolicy": "Không có chính sách cập nhật đang hoạt động.",
       "removeSkip": "Xóa bỏ qua",
       "previewSection": "Xem trước",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "Cập nhật bắt buộc",
       "updateAction": "Cập nhật",
       "skipUpdateAction": "Bỏ qua cập nhật này",
+      "setGroupAction": "Set group",
       "rollbackAction": "Khôi phục",
       "deleteAction": "Xóa",
       "pinnedTooltip": "Đã ghim",
+      "skippedLabel": "Skipped",
       "upToDateTooltip": "Đã cập nhật",
+      "imageUpdateTooltip": "The tag {tag} now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.",
       "blockedTooltip": "Bị chặn",
       "actionsDisabled": "Thao tác bị vô hiệu",
       "openActionsMenu": "Mở menu thao tác",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "Cập nhật bị hoãn",
       "ariaSkippedUpdates": "Cập nhật bị bỏ qua",
       "ariaMaturityBlocked": "Cập nhật bị chặn do độ chín",
+      "ariaPinnedTag": "Pinned tag",
+      "pinnedTagTooltip": "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or add a dd.tag.include filter to allow it.",
+      "unknownKindLabel": "Unknown",
       "emptyState": "Không có container nào khớp với bộ lọc của bạn",
       "currentLabel": "Hiện tại",
       "latestLabel": "Mới nhất",
+      "blockedByBouncer": "Bị chặn bởi Bouncer",
       "registryErrorRateLimited": "Bị giới hạn tốc độ",
       "registryErrorAuth": "Xác thực thất bại",
       "registryErrorNotFound": "Không tìm thấy",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "Cập nhật tất cả trong nhóm",
       "updateSingular": "cập nhật",
       "updatePlural": "cập nhật"
+    },
+    "groupDialog": {
+      "title": "Set container group",
+      "description": "Choose how {name} is grouped in this browser. This overrides its server, Compose, or Swarm group until you clear it.",
+      "groupLabel": "Group name",
+      "groupPlaceholder": "e.g. Media services",
+      "helpText": "Existing groups are suggested as you type.",
+      "clear": "Use detected group",
+      "save": "Save group"
     },
     "sideDetail": {
       "stopTooltip": "Dừng",
@@ -258,6 +281,7 @@
       "allBouncer": "Tất cả Bouncer",
       "safe": "An toàn",
       "unsafe": "Không an toàn",
+      "blocked": "Bị chặn",
       "allRegistries": "Tất cả Registry",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "Tất cả máy chủ",
       "allContainers": "Tất cả container",
       "hasUpdate": "Có cập nhật",
+      "versionUpdate": "Version Update",
       "major": "Major",
       "minor": "Minor",
       "patch": "Patch",
+      "digest": "Image update",
       "hidePinned": "Ẩn đã ghim",
       "hidePinnedTooltip": "Ẩn container được ghim ở phiên bản cụ thể",
       "clearAll": "Xóa tất cả",
@@ -334,6 +360,10 @@
       "tooltip": "Tag semver ổn định tốt nhất hiện có — cân nhắc ghim lại",
       "tooltipWithTag": "Gợi ý: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Bị chặn do bảo mật",
       "rolledBack": "Đã khôi phục",
@@ -350,6 +380,61 @@
       "noTrigger": "Không có trigger",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Lifts:"
+    },
+    "updateStatus": {
+      "title": "Update status",
+      "showDetails": "Show conditions",
+      "liftCountdown": "{countdown} · unlocks {date}",
+      "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
+      "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
+      "updateButton": "Update now",
+      "blockedButton": "Update blocked",
+      "notificationsOnlyButton": "Notifications only",
+      "summary": {
+        "upToDate": "Up to date.",
+        "insight": "Newer version available — this tag is pinned.",
+        "inProgress": "Update in progress.",
+        "hardBlocked": "Update blocked — fix required.",
+        "notify": "Notifications only — Drydock won't apply updates.",
+        "autoFiltered": "Update available — auto-dispatch is filtered (manual works).",
+        "manualFiltered": "Update available — a policy condition will require confirmation.",
+        "autoReady": "Update available — eligible for automatic dispatch.",
+        "manualReady": "Update available — ready to apply manually."
+      },
+      "conditions": {
+        "no-update-available": "No update available",
+        "rollback-container": "Rollback container",
+        "active-operation": "Update already running",
+        "security-scan-blocked": "Security policy blocked",
+        "last-update-rolled-back": "Previous update rolled back",
+        "snoozed": "Update snoozed",
+        "skip-tag": "Tag skipped",
+        "skip-digest": "Digest skipped",
+        "maturity-not-reached": "Maturity policy waiting",
+        "threshold-not-reached": "Trigger threshold not reached",
+        "trigger-excluded": "Trigger excluded by labels",
+        "trigger-not-included": "Trigger filtered by labels",
+        "agent-mismatch": "Trigger agent mismatch",
+        "no-update-trigger-configured": "No update trigger configured",
+        "self-update-unavailable": "Self-update unavailable",
+        "maintenance-window-closed": "Maintenance window closed",
+        "dry-run-trigger": "Dry-run trigger configuration"
+      },
+      "actions": {
+        "editPolicy": "Edit update policy",
+        "configureLabels": "Configure trigger labels",
+        "viewOperation": "View update operation",
+        "reviewSecurity": "Review scan results",
+        "viewRollback": "View rollback context",
+        "configureAgent": "Configure trigger agent",
+        "configureTriggers": "Configure update triggers",
+        "configureThreshold": "Configure trigger threshold",
+        "configureSelfUpdate": "Configure self-update",
+        "configureMaintenance": "Configure maintenance window"
+      }
+    },
+    "maturityBadge": {
+      "new": "MỚI"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "Reverted {field} to declarative policy",
+        "revertAll": "Reverted all overrides to declarative policy",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 day",
+      "availableDaysPlural": "{count} days",
+      "availableHoursSingular": "1 hour",
+      "availableHoursPlural": "{count} hours",
+      "availableMinutesSingular": "1 minute",
+      "availableMinutesPlural": "{count} minutes",
+      "justNow": "Detected just now"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Open registry settings",
+        "openTriggerSettings": "Open trigger settings"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

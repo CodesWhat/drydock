@@ -157,6 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "Виявлено {total} застарілий псевдонім конфігурації",
       "legacyConfigTitlePlural": "Виявлено {total} застарілих псевдонімів конфігурації",
+      "legacyApiPathTitleSingular": "{total} request to the removed API path detected",
+      "legacyApiPathTitlePlural": "{total} requests to the removed API path detected",
       "dontShowAgain": "Більше не показувати",
       "curlHealthcheckTitle": "Виявлено користувацький healthcheck на основі curl",
       "envKeysLabel": "Env-ключі ({count}): {keys}",

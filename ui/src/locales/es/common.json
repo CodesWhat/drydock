@@ -12,17 +12,17 @@
     "yes": "sí",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
+      "rateLimitHit": "Límite de llamadas al registro alcanzado",
+      "accessDenied": "Acceso al registro denegado",
       "imageNotFound": "Imagen no encontrada",
-      "authFailed": "Registry authentication failed",
-      "unreachable": "Registry unreachable",
+      "authFailed": "Autenticación de registro fallida",
+      "unreachable": "Registro inaccesible",
       "cancelled": "Cancelado",
       "securityBlocked": "Actualización bloqueada por escaneo de seguridad",
-      "signatureFailed": "Signature verification failed"
+      "signatureFailed": "Error en la verificación de la firma"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Personalizado"
     },
     "timeAgo": {
       "justNow": "ahora mismo"

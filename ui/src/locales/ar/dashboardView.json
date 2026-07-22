@@ -3,6 +3,7 @@
     "loading": "جارٍ تحميل لوحة التحكم...",
     "loadFailed": "فشل تحميل لوحة التحكم",
     "dragToReorder": "اسحب لإعادة الترتيب",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "عرض الكل →",
     "editToggle": {
       "showWidgetPanel": "إظهار لوحة الأدوات",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "رئيسي",
       "minor": "ثانوي",
-      "patch": "تصحيح"
+      "patch": "تصحيح",
+      "digest": "ملخص"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

@@ -7,6 +7,9 @@
       "previewUpdate": "預覽更新",
       "forceUpdate": "強制更新",
       "updateNow": "立即更新",
+      "previewOnly": "Preview only",
+      "dryRunUpdateTooltip": "This trigger is in dry-run mode — clicking will pull the new image but not replace the container.",
+      "dryRunCondition": "Action trigger {trigger} is in dry-run mode — updates are previewed only and containers are not replaced.",
       "scanNow": "立即掃描",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "重設",
       "clearSkips": "清除跳過",
       "clearPolicy": "清除策略",
+      "overridden": "Overridden",
+      "revert": "Revert",
+      "revertAll": "Revert to Declarative",
       "snoozedUntil": "推遲至：",
       "maturityMode": "成熟度模式：",
       "matureOnlyMinimum": "僅成熟（{days} 天最低）",
       "allowAllUpdates": "允許所有更新",
       "skippedTags": "跳過的標籤：",
       "skippedDigests": "跳過的摘要：",
+      "noSkippedEntries": "No skipped entries",
       "noActivePolicy": "無活動更新策略。",
       "removeSkip": "移除跳過",
       "previewSection": "預覽",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "強制更新",
       "updateAction": "更新",
       "skipUpdateAction": "跳過此次更新",
+      "setGroupAction": "Set group",
       "rollbackAction": "回滾",
       "deleteAction": "刪除",
       "pinnedTooltip": "已固定",
+      "skippedLabel": "Skipped",
       "upToDateTooltip": "已是最新",
+      "imageUpdateTooltip": "The tag {tag} now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.",
       "blockedTooltip": "已阻止",
       "actionsDisabled": "操作已停用",
       "openActionsMenu": "開啟操作選單",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "已推遲的更新",
       "ariaSkippedUpdates": "已跳過的更新",
       "ariaMaturityBlocked": "成熟度阻止的更新",
+      "ariaPinnedTag": "Pinned tag",
+      "pinnedTagTooltip": "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or add a dd.tag.include filter to allow it.",
+      "unknownKindLabel": "Unknown",
       "emptyState": "沒有容器匹配您的篩選條件",
       "currentLabel": "目前",
       "latestLabel": "最新",
+      "blockedByBouncer": "被 Bouncer 阻止",
       "registryErrorRateLimited": "速率限制",
       "registryErrorAuth": "認證失敗",
       "registryErrorNotFound": "未找到",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "更新組內全部",
       "updateSingular": "更新",
       "updatePlural": "更新"
+    },
+    "groupDialog": {
+      "title": "Set container group",
+      "description": "Choose how {name} is grouped in this browser. This overrides its server, Compose, or Swarm group until you clear it.",
+      "groupLabel": "Group name",
+      "groupPlaceholder": "e.g. Media services",
+      "helpText": "Existing groups are suggested as you type.",
+      "clear": "Use detected group",
+      "save": "Save group"
     },
     "sideDetail": {
       "stopTooltip": "停止",
@@ -258,6 +281,7 @@
       "allBouncer": "所有 Bouncer",
       "safe": "安全",
       "unsafe": "不安全",
+      "blocked": "已阻止",
       "allRegistries": "所有倉庫",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "所有主機",
       "allContainers": "所有容器",
       "hasUpdate": "有可用更新",
+      "versionUpdate": "Version Update",
       "major": "主版本",
       "minor": "次版本",
       "patch": "修補程式",
+      "digest": "摘要",
       "hidePinned": "隱藏已固定",
       "hidePinnedTooltip": "隱藏已固定到特定版本的容器",
       "clearAll": "全部清除",
@@ -334,6 +360,10 @@
       "tooltip": "可用的最佳穩定 semver 標籤 — 建議固定使用",
       "tooltipWithTag": "建議：{tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
+    },
     "eligibilityBadges": {
       "securityBlocked": "安全阻止",
       "rolledBack": "已回滾",
@@ -350,6 +380,61 @@
       "noTrigger": "無觸發器",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "解除條件："
+    },
+    "updateStatus": {
+      "title": "Update status",
+      "showDetails": "Show conditions",
+      "liftCountdown": "{countdown} · unlocks {date}",
+      "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
+      "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
+      "updateButton": "Update now",
+      "blockedButton": "Update blocked",
+      "notificationsOnlyButton": "Notifications only",
+      "summary": {
+        "upToDate": "Up to date.",
+        "insight": "Newer version available — this tag is pinned.",
+        "inProgress": "Update in progress.",
+        "hardBlocked": "Update blocked — fix required.",
+        "notify": "Notifications only — Drydock won't apply updates.",
+        "autoFiltered": "Update available — auto-dispatch is filtered (manual works).",
+        "manualFiltered": "Update available — a policy condition will require confirmation.",
+        "autoReady": "Update available — eligible for automatic dispatch.",
+        "manualReady": "Update available — ready to apply manually."
+      },
+      "conditions": {
+        "no-update-available": "No update available",
+        "rollback-container": "Rollback container",
+        "active-operation": "Update already running",
+        "security-scan-blocked": "Security policy blocked",
+        "last-update-rolled-back": "Previous update rolled back",
+        "snoozed": "Update snoozed",
+        "skip-tag": "Tag skipped",
+        "skip-digest": "Digest skipped",
+        "maturity-not-reached": "Maturity policy waiting",
+        "threshold-not-reached": "Trigger threshold not reached",
+        "trigger-excluded": "Trigger excluded by labels",
+        "trigger-not-included": "Trigger filtered by labels",
+        "agent-mismatch": "Trigger agent mismatch",
+        "no-update-trigger-configured": "No update trigger configured",
+        "self-update-unavailable": "Self-update unavailable",
+        "maintenance-window-closed": "Maintenance window closed",
+        "dry-run-trigger": "Dry-run trigger configuration"
+      },
+      "actions": {
+        "editPolicy": "Edit update policy",
+        "configureLabels": "Configure trigger labels",
+        "viewOperation": "View update operation",
+        "reviewSecurity": "Review scan results",
+        "viewRollback": "View rollback context",
+        "configureAgent": "Configure trigger agent",
+        "configureTriggers": "Configure update triggers",
+        "configureThreshold": "Configure trigger threshold",
+        "configureSelfUpdate": "Configure self-update",
+        "configureMaintenance": "Configure maintenance window"
+      }
+    },
+    "maturityBadge": {
+      "new": "新"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "Reverted {field} to declarative policy",
+        "revertAll": "Reverted all overrides to declarative policy",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 day",
+      "availableDaysPlural": "{count} days",
+      "availableHoursSingular": "1 hour",
+      "availableHoursPlural": "{count} hours",
+      "availableMinutesSingular": "1 minute",
+      "availableMinutesPlural": "{count} minutes",
+      "justNow": "Detected just now"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Open registry settings",
+        "openTriggerSettings": "Open trigger settings"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

@@ -3,6 +3,7 @@
     "loading": "Ładowanie panelu...",
     "loadFailed": "Nie udało się załadować panelu",
     "dragToReorder": "Przeciągnij, aby zmienić kolejność",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "Zobacz wszystkie →",
     "editToggle": {
       "showWidgetPanel": "Pokaż panel widżetów",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "Główna",
       "minor": "Pomniejsza",
-      "patch": "Łatka"
+      "patch": "Łatka",
+      "digest": "Image update"
     },
     "maintenanceWindow": {
       "openNow": "Open now",
