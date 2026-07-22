@@ -22,7 +22,7 @@ Feature: Drydock UI Exposure
     Examples:
       | view                 | path                               | text              |
       | Dashboard            | /                                  | Updates Available |
-      | Containers           | /containers                        | Version           |
+      | Containers           | /containers                        | Host              |
       | Container logs       | /containers/missing-container/logs | Container Logs    |
       | Security             | /security                          | Scan Now          |
       | Hosts                | /servers                           | Host              |
