@@ -714,7 +714,7 @@ describe('ContainersGroupedViews', () => {
     );
   });
 
-  it('opens the manual group editor from the row and card More menu', async () => {
+  it('opens the manual group editor from the card More menu', async () => {
     const container = makeContainer({ id: 'c-groupable', name: 'groupable' });
     const { wrapper, spies } = await mountCardsWithContainers([container], 800);
     const card = cardByName(wrapper, 'groupable');
