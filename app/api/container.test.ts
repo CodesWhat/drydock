@@ -2683,14 +2683,20 @@ describe('Container Router', () => {
     });
 
     test('should proceed when container is found in getContainers list', async () => {
+      const refreshedContainer = { id: 'c1', watcher: 'local', health: 'unhealthy' };
       const mockWatcher = {
-        getContainers: vi.fn().mockResolvedValue([{ id: 'c1' }]),
-        watchContainer: vi.fn().mockResolvedValue({ container: { id: 'c1' } }),
+        getContainers: vi.fn().mockResolvedValue([refreshedContainer]),
+        watchContainer: vi.fn().mockResolvedValue({ container: refreshedContainer }),
       };
-      storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
+      const storedContainer = { id: 'c1', watcher: 'local', health: 'healthy' };
+      storeContainer.getContainer.mockReturnValue(storedContainer);
       registry.getState.mockReturnValue({ watcher: { 'docker.local': mockWatcher }, trigger: {} });
       const res = await callWatchContainer();
       expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockWatcher.watchContainer).toHaveBeenCalledWith(refreshedContainer, {
+        emitBatchEvent: true,
+      });
+      expect(res.json).toHaveBeenCalledWith(refreshedContainer);
     });
   });
 

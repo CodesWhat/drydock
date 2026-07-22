@@ -34,6 +34,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_SERVER_COOKIE_SAMESITE` | ⚪ | Session cookie SameSite policy for auth flows (`none` requires HTTPS) | `strict`, `lax`, `none` | `lax` |
 | `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS` | ⚪ | Maximum concurrent authenticated sessions per user (oldest sessions are revoked first at login when limit is reached) | integer (`>=1`) | `5` |
 | `DD_SERVER_RATELIMIT_IDENTITYKEYING` | ⚪ | Key authenticated-route rate limits by session/username instead of IP (prevents collisions for multiple users behind shared proxies) | `true`, `false` | `false` |
+| `DD_SERVER_RATELIMIT_MAX` | ⚪ | Maximum requests accepted by the outer API limiter in each 15-minute window | integer (`>0`) | `1000` |
 | `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique client identities held in the auth lockout state. Older entries are pruned when the cap is reached. | integer (`>0`) | `5000` |
 | `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | ⚪ | Interval for pruning expired auth lockout entries from memory and the persisted lockout sidecar file | integer (`>0`) | `60000` |
 | `DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS` | ⚪ | Suppress repeated `update-available` audit rows for the same agent, watcher, container, and version transition. A no-update report or a changed target starts a new transition immediately. Set to `0` to disable deduplication. | integer (`>=0`, milliseconds) | `3600000` (1 hour) |
@@ -42,6 +43,8 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
 
 For log output configuration (`DD_LOG_LEVEL`, `DD_LOG_FORMAT`), see [Logs configuration](/docs/configuration/logs).
+
+<Callout type="warn">`DD_SERVER_RATELIMIT_MAX` applies per rate-limit key. Raising it weakens the outer API's abuse protection; keep the 1,000-request default in production unless measured legitimate traffic requires more capacity. Endpoint-specific authentication, webhook, icon, action, SSE, and WebSocket limits are separate and remain enforced.</Callout>
 
 ## CORS Security Guidance
 

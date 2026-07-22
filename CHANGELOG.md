@@ -18,10 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Same-tag rebuilds read “Image update” instead of “Digest update.”** The update tooltip now explains that the visible tag has not changed but points to a different image build, and that redeploying pulls the new image. The dashboard uses the same vocabulary; literal image hashes are still correctly labeled digests.
 - **The Containers table distinguishes Tag, Software Version, and Update more clearly.** The secondary metadata column is now named **Software Version**, explains its source in a header tooltip, and folds before **Host** at constrained laptop widths so host identity stays visible.
+- **The release-gated E2E lanes now fail with attributable evidence instead of blanket retries.** Cucumber reuses the build-gated QA image, waits for the exact active fixture manifest, restores scenario-mutated state, publishes structured reports and diagnostics, and leaves browser rendering to Playwright. Playwright keeps first-failure media without retrying the whole test, gives its short-lived QA process explicit API and icon-proxy traffic budgets, waits for Docker's own healthcheck to acknowledge its health-transition fixture before scanning it, and fails setup if bounded runner-daemon pulls and image transfers cannot seed its required remote Docker fixtures. `DD_SERVER_RATELIMIT_MAX` can override the outer API's default 1,000-request/15-minute budget per rate-limit key; deployed defaults remain unchanged.
 
 ### Fixed
 
 - **Pinned containers with a visible newer version no longer say “Current.”** A non-actionable `updateInsight` now renders as an informational Major/Minor/Patch state in table, card, and Update Status views while remaining ineligible for automatic or manual update actions.
+- **A targeted container recheck no longer overwrites fresh Docker health.** `POST /api/v1/containers/:id/watch` now scans and returns the live container object refreshed by the watcher instead of the stale store snapshot captured before refresh, preserving health-only transitions and their notification events.
 
 ## [1.6.0-rc.3] — 2026-07-21
 

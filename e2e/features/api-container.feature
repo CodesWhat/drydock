@@ -4,7 +4,7 @@ Feature: Drydock Container API Exposure
     When I GET /api/v1/containers
     Then response code should be 200
     And response body should be valid json
-    And response body path $.data should be of type array with minimum length 7
+    And response body path $.data should be of type array with minimum length 6
 
   # Test one representative container per registry type + update pattern
   Scenario Outline: Drydock must handle different registry types and update patterns

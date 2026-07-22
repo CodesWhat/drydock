@@ -7,7 +7,9 @@ export default defineConfig({
   testDir: './playwright',
   fullyParallel: false,
   forbidOnly: isCI,
-  retries: isCI ? 1 : 0,
+  // Preserve the first failure and its trace. Whole-test retries amplified
+  // shared-state and request-budget failures without recovering them.
+  retries: 0,
   workers: 1,
   timeout: 60_000,
   reporter: isCI ? [['html', { outputFolder: 'playwright-report', open: 'never' }]] : [['list']],

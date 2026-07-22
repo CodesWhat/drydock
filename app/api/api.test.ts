@@ -475,6 +475,28 @@ describe('API Router', () => {
     );
   });
 
+  test('should retain the secure default outer API request budget', () => {
+    expect(mockRateLimit.mock.calls[0]?.[0]).toMatchObject({
+      max: 1000,
+      windowMs: 15 * 60 * 1000,
+    });
+  });
+
+  test('should use the configured outer API rate-limit maximum', async () => {
+    const configuration = await import('../configuration/index.js');
+    configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX = '10000';
+    try {
+      api.init();
+      expect(mockRateLimit).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          max: 10000,
+        }),
+      );
+    } finally {
+      delete configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX;
+    }
+  });
+
   test('should exempt only valid icon reads from the outer API rate limiter', async () => {
     const limiterOptions = mockRateLimit.mock.calls[0]?.[0];
     expect(limiterOptions).toBeDefined();

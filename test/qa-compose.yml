@@ -30,6 +30,11 @@ services:
       - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
       - DD_SERVER_WEBHOOK_ENABLED=true
       - DD_SERVER_WEBHOOK_TOKEN=test-token-12345
+      # The complete Playwright release gate intentionally exercises dozens
+      # of authenticated flows and icon loads against one short-lived QA process.
+      # Give that synthetic suite its own budgets without changing production defaults.
+      - DD_SERVER_RATELIMIT_MAX=10000
+      - DD_ICON_PROXY_RATE_LIMIT_MAX=1000
       - DD_SESSION_SECRET=qa-test-session-secret
       - DD_PUBLIC_URL=http://localhost:${DD_PLAYWRIGHT_PORT:-3333}
       # --- OIDC (Dex) ---
@@ -94,6 +99,8 @@ services:
     depends_on:
       docker-remote:
         condition: service_healthy
+      remote-bootstrap:
+        condition: service_completed_successfully
       health-transition:
         condition: service_healthy
       mosquitto:
@@ -115,12 +122,34 @@ services:
     command:
       - |
         mkdir -p /state /www/cgi-bin
-        printf '%s\n' '#!/bin/sh' 'rm -f /state/unhealthy' 'printf "Content-Type: text/plain\r\n\r\nhealthy\n"' > /www/cgi-bin/healthy
-        printf '%s\n' '#!/bin/sh' 'touch /state/unhealthy' 'printf "Content-Type: text/plain\r\n\r\nunhealthy\n"' > /www/cgi-bin/unhealthy
+        printf '%s\n' \
+          '#!/bin/sh' \
+          'rm -f /state/unhealthy /state/observed-unhealthy' \
+          'printf "Content-Type: text/plain\r\n\r\nhealthy\n"' \
+          > /www/cgi-bin/healthy
+        printf '%s\n' \
+          '#!/bin/sh' \
+          'touch /state/unhealthy' \
+          'attempt=0' \
+          'while [ ! -f /state/observed-unhealthy ]; do' \
+          '  attempt=$$((attempt + 1))' \
+          '  if [ "$$attempt" -ge 10 ]; then' \
+          '    printf "Status: 503 Service Unavailable\r\nContent-Type: text/plain\r\n\r\nhealthcheck did not observe unhealthy state\n"' \
+          '    exit 0' \
+          '  fi' \
+          '  sleep 1' \
+          'done' \
+          'sleep 1' \
+          'printf "Content-Type: text/plain\r\n\r\nunhealthy\n"' \
+          > /www/cgi-bin/unhealthy
         chmod +x /www/cgi-bin/healthy /www/cgi-bin/unhealthy
         exec httpd -f -p 8080 -h /www
     healthcheck:
-      test: ["CMD-SHELL", "test ! -f /state/unhealthy"]
+      test:
+        [
+          "CMD-SHELL",
+          "if [ -f /state/unhealthy ]; then touch /state/observed-unhealthy; exit 1; fi; rm -f /state/observed-unhealthy; exit 0",
+        ]
       interval: 1s
       timeout: 1s
       retries: 1
@@ -199,13 +228,45 @@ services:
         condition: service_healthy
     environment:
       - DOCKER_HOST=tcp://docker-remote:2375
+    volumes:
+      - /var/run/docker.sock:/var/run/docker-host.sock
     entrypoint: ["sh", "-c"]
     command:
       - |
-        docker pull mirror.gcr.io/library/nginx:1.24.0
-        docker run -d --name remote-nginx --label dd.watch=true --label "dd.display.name=Remote Nginx" --label dd.group=remote mirror.gcr.io/library/nginx:1.24.0
-        docker pull mirror.gcr.io/library/redis:7.0.0
-        docker run -d --name remote-redis --label dd.watch=true --label "dd.display.name=Remote Redis" --label dd.group=remote mirror.gcr.io/library/redis:7.0.0
+        set -eu
+
+        host_docker=unix:///var/run/docker-host.sock
+
+        pull_with_retry() {
+          image="$1"
+          attempt=1
+          until docker --host "$$host_docker" pull "$$image"; do
+            if [ "$$attempt" -ge 3 ]; then
+              echo "Failed to pull $$image after $$attempt attempts" >&2
+              return 1
+            fi
+            echo "Retrying pull for $$image after attempt $$attempt" >&2
+            sleep $$((attempt * 5))
+            attempt=$$((attempt + 1))
+          done
+        }
+
+        seed_image() {
+          image="$1"
+          pull_with_retry "$$image"
+          archive=$$(mktemp)
+          docker --host "$$host_docker" save --output "$$archive" "$$image"
+          docker load --input "$$archive"
+          rm -f "$$archive"
+        }
+
+        nginx_image=mirror.gcr.io/library/nginx:1.24.0
+        seed_image "$$nginx_image"
+        docker run -d --name remote-nginx --label dd.watch=true --label "dd.display.name=Remote Nginx" --label dd.group=remote "$$nginx_image"
+
+        redis_image=mirror.gcr.io/library/redis:7.0.0
+        seed_image "$$redis_image"
+        docker run -d --name remote-redis --label dd.watch=true --label "dd.display.name=Remote Redis" --label dd.group=remote "$$redis_image"
 
   # ── Containers with updates available ──────────────────
 
