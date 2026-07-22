@@ -2480,6 +2480,128 @@ describe('ContainersGroupedViews', () => {
     expect(spies.selectContainer).toHaveBeenCalledTimes(rowSelectionsBeforeLinkClicks);
   });
 
+  it('keeps resource shortcuts in the row More menu when the Resources column is hidden (#498)', async () => {
+    const container = makeContainer({
+      id: 'c-hidden-resources',
+      name: 'grafana',
+      sourceRepo: 'github.com/grafana/grafana',
+      releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
+      registry: 'custom',
+      registryName: 'registry.example.com',
+      registryUrl: 'https://registry.example.com/v2',
+    });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    context.hiddenColumnKeys.value = ['links'];
+    refs.openActionsMenu.value = container.id;
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const resources = wrapper.get('[data-test="actions-menu-resource-actions"]');
+    expect(resources.text()).toContain('Resources');
+    expectContainerQuickLinks(
+      resources.get('[data-test="container-quick-links"]'),
+      'registry.example.com',
+    );
+  });
+
+  it('does not duplicate resource shortcuts in More while the Resources column is visible', async () => {
+    const container = makeContainer({
+      id: 'c-visible-resources',
+      name: 'grafana',
+      sourceRepo: 'github.com/grafana/grafana',
+    });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    refs.openActionsMenu.value = container.id;
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
+  });
+
+  it('does not duplicate hidden table Resources in the card More menu', async () => {
+    const container = makeContainer({
+      id: 'c-card-hidden-resources',
+      name: 'grafana-card',
+      sourceRepo: 'github.com/grafana/grafana',
+    });
+    const { wrapper, context, refs } = await mountCardsWithContainers([container], 800);
+    context.hiddenColumnKeys.value = ['links'];
+    refs.openActionsMenu.value = container.id;
+    await nextTick();
+
+    expect(
+      cardByName(wrapper, 'grafana-card')
+        .find('[data-test="container-card-resource-actions"]')
+        .find('[data-test="container-quick-links"]')
+        .exists(),
+    ).toBe(true);
+    expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
+  });
+
+  it('does not duplicate hidden table Resources during forced card reflow', async () => {
+    const container = makeContainer({
+      id: 'c-forced-card-resources',
+      name: 'grafana-forced-card',
+      sourceRepo: 'github.com/grafana/grafana',
+    });
+    const { context, refs } = makeContext();
+    context.hiddenColumnKeys.value = ['links'];
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    refs.openActionsMenu.value = container.id;
+    mocked.context = context;
+
+    const wrapper = mountSubjectWithRealDataTable(500);
+    await nextTick();
+
+    expect(refs.containerCardReflowForced.value).toBe(true);
+    expect(
+      cardByName(wrapper, 'grafana-forced-card')
+        .find('[data-test="container-card-resource-actions"]')
+        .find('[data-test="container-quick-links"]')
+        .exists(),
+    ).toBe(true);
+    expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
+  });
+
   it('renders each table quick link independently when the other link data is absent (#295)', async () => {
     const sourceOnly = makeContainer({
       id: 'c-source-only',

@@ -14,12 +14,15 @@ interface ContainersPayload {
 }
 
 interface ContainerFixture {
+  currentReleaseNotes?: Record<string, unknown>;
   displayName?: string;
   image: {
     digest?: Record<string, unknown>;
+    registry?: Record<string, unknown>;
     tag: Record<string, unknown>;
   };
   result?: Record<string, unknown>;
+  sourceRepo?: string;
   tagFamily?: string;
   tagPinGated?: boolean;
   tagPinned?: boolean;
@@ -30,6 +33,7 @@ interface ContainerFixture {
 }
 
 const TARGET_CONTAINER = 'Nginx (Hooked)';
+const RESOURCE_TARGET_CONTAINER = 'A Resources Column Fixture';
 
 async function interceptSettings(page: Page, initialMode: UpdateMode): Promise<() => UpdateMode> {
   let updateMode = initialMode;
@@ -88,6 +92,24 @@ async function interceptContainer(
     const container = payload.data.find((candidate) => candidate.displayName === displayName);
     expect(container, `QA fixture ${displayName} must exist`).toBeTruthy();
     mutate(container!);
+    await route.fulfill({ response, json: payload });
+  });
+}
+
+async function interceptFirstContainer(
+  page: Page,
+  mutate: (container: ContainerFixture) => void,
+): Promise<void> {
+  await page.route('**/api/v1/containers', async (route: Route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+
+    const response = await route.fetch();
+    const payload = (await response.json()) as ContainersPayload;
+    expect(payload.data[0], 'QA fixture must contain at least one container').toBeTruthy();
+    mutate(payload.data[0]);
     await route.fulfill({ response, json: payload });
   });
 }
@@ -333,5 +355,64 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
     await expect(
       firstContainerRow.locator('[data-test="container-software-version-col"]'),
     ).toHaveCount(0);
+  });
+
+  test('#498 lets Resources be hidden without losing its row shortcuts', async ({ page }) => {
+    await page.setViewportSize({ width: 1197, height: 900 });
+    await interceptFirstContainer(page, (container) => {
+      container.displayName = RESOURCE_TARGET_CONTAINER;
+      container.sourceRepo = 'github.com/CodesWhat/drydock';
+      container.image.registry = { name: 'hub', url: 'https://registry-1.docker.io' };
+      container.currentReleaseNotes = {
+        title: 'Drydock v1.6.0-rc.4',
+        body: 'Deterministic Resources-column regression fixture.',
+        url: 'https://github.com/CodesWhat/drydock/releases/tag/v1.6.0-rc.4',
+        publishedAt: '2026-07-21T12:00:00.000Z',
+        provider: 'github',
+      };
+    });
+
+    await page.goto('/containers');
+    await dismissAnnouncementBanners(page);
+
+    const table = page.locator('[data-test="containers-grouped-views"] table');
+    await expect(table.locator('th[data-col-key="links"]')).toContainText('Resources');
+    await page.locator('[data-test="data-table-column-picker"] > button').click();
+    await page.getByRole('button', { name: 'Resources', exact: true }).click();
+    await expect(table.locator('th[data-col-key="links"]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    const row = table.getByRole('row', {
+      name: new RegExp(escapeRegExp(RESOURCE_TARGET_CONTAINER), 'i'),
+    });
+    await row.getByRole('button', { name: 'More', exact: true }).click();
+    const resources = page.locator('[data-test="actions-menu-resource-actions"]');
+    await expect(resources).toContainText('Resources');
+    const shortcuts = resources.locator(
+      '[data-test="project-link"], [data-test="release-notes-link"], [data-test="current-release-notes-link"], [data-test="registry-link"]',
+    );
+    await expect(shortcuts).toHaveCount(3);
+    const shortcutIds = await shortcuts.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute('data-test')),
+    );
+    expect(shortcutIds[0]).toBe('project-link');
+    expect(shortcutIds[1]).toMatch(/^(?:current-)?release-notes-link$/);
+    expect(shortcutIds[2]).toBe('registry-link');
+
+    await page.reload();
+    await expect(table.locator('th[data-col-key="links"]')).toHaveCount(0);
+    await expect(table.locator('th[data-col-key="server"]')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cards view' }).click();
+    const card = page.locator('[data-test="dd-card"]').filter({
+      hasText: RESOURCE_TARGET_CONTAINER,
+    });
+    await expect(
+      card.locator(
+        '[data-test="container-card-resource-actions"] [data-test="container-quick-links"]',
+      ),
+    ).toBeVisible();
+    await card.getByRole('button', { name: 'More', exact: true }).click();
+    await expect(page.locator('[data-test="actions-menu-resource-actions"]')).toHaveCount(0);
   });
 });

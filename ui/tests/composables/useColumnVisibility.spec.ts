@@ -77,11 +77,11 @@ describe('useColumnVisibility', () => {
     }
   });
 
-  it('should mark identity and resource columns as required', async () => {
+  it('keeps only row identity columns required so Resources can be hidden (#498)', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns } = useColumnVisibility();
     const required = allColumns.filter((c) => c.required).map((c) => c.key);
-    expect(required).toEqual(['icon', 'name', 'links']);
+    expect(required).toEqual(['icon', 'name']);
   });
 
   it('should toggle a non-required column off', async () => {
@@ -110,8 +110,22 @@ describe('useColumnVisibility', () => {
     expect(visibleColumns.value.has('icon')).toBe(true);
     toggleColumn('name');
     expect(visibleColumns.value.has('name')).toBe(true);
-    toggleColumn('links');
+  });
+
+  it('allows Resources to be hidden and persists that preference (#498)', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { hiddenColumnKeys, visibleColumns, toggleColumn } = useColumnVisibility();
+
     expect(visibleColumns.value.has('links')).toBe(true);
+    toggleColumn('links');
+    expect(visibleColumns.value.has('links')).toBe(false);
+    expect(hiddenColumnKeys.value).toContain('links');
+
+    await nextTick();
+    const { flushPreferences } = await import('@/preferences/store');
+    flushPreferences();
+    const stored = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}').containers.columns;
+    expect(stored).not.toContain('links');
   });
 
   it('should ignore unknown column keys', async () => {
@@ -152,9 +166,10 @@ describe('useColumnVisibility', () => {
     setTestPreferences({ containers: { columns: ['icon', 'name', 'status'] } });
     const { useColumnVisibility } = await loadColumnVisibility();
     const { visibleColumns } = useColumnVisibility();
-    expect(visibleColumns.value.size).toBe(4);
+    expect(visibleColumns.value.size).toBe(3);
     expect(visibleColumns.value.has('version')).toBe(false);
     expect(visibleColumns.value.has('status')).toBe(true);
+    expect(visibleColumns.value.has('links')).toBe(false);
   });
 
   it('should fall back to defaults when preferences contain invalid data', async () => {
@@ -281,7 +296,7 @@ describe('useColumnVisibility', () => {
     it('drops registry first as width tightens using column min sizes', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       // Keep Host visible at laptop widths; the secondary software-version column
-      // yields before it when the required Resources column needs room (#498).
+      // yields before it while the default-visible Resources column uses its fixed footprint (#498).
       const width = ref(1029);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
       expect(hiddenColumnKeys.value).toContain('registry');
@@ -331,7 +346,7 @@ describe('useColumnVisibility', () => {
       ]);
     });
 
-    it('never drops icon, name, version, or links even at width=0', async () => {
+    it('does not auto-hide identity, tag, or default-visible Resources at width=0', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const width = ref(0);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
@@ -343,7 +358,7 @@ describe('useColumnVisibility', () => {
       expect(autoHiddenColumns.value).toHaveLength(0);
     });
 
-    it('never drops icon, name, version, or links even at very narrow positive width', async () => {
+    it('does not auto-hide identity, tag, or default-visible Resources at very narrow widths', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const width = ref(1);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
@@ -382,7 +397,7 @@ describe('useColumnVisibility', () => {
 
     it('autoHiddenColumns lists exactly the dropped columns when some are auto-hidden', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
-      // At 1029 the required Resources column pushes three optional columns out.
+      // At 1029 the default-visible fixed Resources column pushes three responsive columns out.
       const width = ref(1029);
       const { autoHiddenColumns } = useColumnVisibility(width);
       expect(autoHiddenColumns.value).toHaveLength(3);
@@ -403,7 +418,7 @@ describe('useColumnVisibility', () => {
       width.value = 1029;
       await nextTick();
       expect(hiddenColumnKeys.value).toContain('registry');
-      // At 1029, the required Resources column remains while optional columns reflow.
+      // At 1029, default-visible Resources remains while responsive columns reflow.
       expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
         'registry',
         'softwareVersion',
@@ -427,7 +442,7 @@ describe('useColumnVisibility', () => {
       base.value = 1029;
       await nextTick();
       expect(hiddenColumnKeys.value).toContain('registry');
-      // At 1029, the required Resources column remains while optional columns reflow.
+      // At 1029, default-visible Resources remains while responsive columns reflow.
       expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
         'registry',
         'softwareVersion',
@@ -446,9 +461,9 @@ describe('useColumnVisibility', () => {
       expect(hiddenColumnKeys.value).not.toContain('name');
       expect(hiddenColumnKeys.value).not.toContain('version');
       expect(hiddenColumnKeys.value).toContain('kind');
-      expect(hiddenColumnKeys.value).toContain('status');
-      expect(hiddenColumnKeys.value).not.toContain('links');
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['kind', 'status']);
+      expect(hiddenColumnKeys.value).not.toContain('status');
+      expect(hiddenColumnKeys.value).toContain('links');
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['kind']);
     });
   });
 
@@ -516,6 +531,7 @@ describe('useColumnVisibility', () => {
             'status',
             'server',
             'registry',
+            'links',
             'uptime',
           ],
         },
