@@ -101,8 +101,7 @@
     "updateKind": {
       "major": "Główna",
       "minor": "Pomniejsza",
-      "patch": "Łatka",
-      "digest": "Digest"
+      "patch": "Łatka"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

@@ -184,7 +184,10 @@ describe('preference sync engine', () => {
     for (const enabled of [true, false]) {
       preferences.sync.enabled = enabled;
       await sync.pushInitialSync('alice');
-      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(11, preferences);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+      );
     }
     expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
   });

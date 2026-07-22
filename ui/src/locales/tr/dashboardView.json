@@ -101,8 +101,7 @@
     "updateKind": {
       "major": "Ana",
       "minor": "Alt",
-      "patch": "Yama",
-      "digest": "Özet"
+      "patch": "Yama"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

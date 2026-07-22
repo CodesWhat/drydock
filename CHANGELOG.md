@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Container groups can be edited directly in the browser** ([#498](https://github.com/CodesWhat/drydock/issues/498)). A container's More menu can set, change, or clear a local group override; clearing it falls back to the durable `dd.group` / Compose project / Swarm namespace group. Overrides are regular UI preferences, so they remain browser-local unless cross-device preference sync is enabled.
+
+### Changed
+
+- **Same-tag rebuilds read “Image update” instead of “Digest update.”** The update tooltip now explains that the visible tag has not changed but points to a different image build, and that redeploying pulls the new image. The dashboard uses the same vocabulary; literal image hashes are still correctly labeled digests.
+- **The Containers table distinguishes Tag, Software Version, and Update more clearly.** The secondary metadata column is now named **Software Version**, explains its source in a header tooltip, and folds before **Host** at constrained laptop widths so host identity stays visible.
+
+### Fixed
+
+- **Pinned containers with a visible newer version no longer say “Current.”** A non-actionable `updateInsight` now renders as an informational Major/Minor/Patch state in table, card, and Update Status views while remaining ineligible for automatic or manual update actions.
+
 ## [1.6.0-rc.3] — 2026-07-21
 
 ### Changed

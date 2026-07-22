@@ -32,6 +32,8 @@ export interface PreferencesSchema {
     viewMode: ViewMode;
     tableActions: 'icons' | 'buttons';
     groupByStack: boolean;
+    /** UI-managed container identity key → group name overrides. */
+    manualGroups: Record<string, string>;
     sort: { key: string; asc: boolean };
     filters: {
       status: string;
@@ -67,7 +69,7 @@ export interface PreferencesSchema {
   sync: { enabled: boolean };
 }
 
-export const CURRENT_SCHEMA_VERSION = 11;
+export const CURRENT_SCHEMA_VERSION = 12;
 
 /**
  * Table-mode column keys for the five views that share the `DataTableColumnPicker`
@@ -121,6 +123,7 @@ export const DEFAULTS: PreferencesSchema = {
     viewMode: 'table',
     tableActions: 'icons',
     groupByStack: false,
+    manualGroups: {},
     sort: { key: 'name', asc: true },
     filters: {
       status: 'all',

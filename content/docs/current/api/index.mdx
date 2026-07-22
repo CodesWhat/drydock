@@ -488,12 +488,12 @@ Replaces the full stored preferences blob — this is a full replace, not a part
 ```bash
 curl -X PATCH http://drydock:3000/api/v1/preferences \
   -H 'Content-Type: application/json' \
-  -d '{"apiVersion": 1, "schemaVersion": 11, "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}}}'
+  -d '{"apiVersion": 1, "schemaVersion": 12, "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}}}'
 
 {
   "apiVersion": 1,
   "username": "alice",
-  "schemaVersion": 11,
+  "schemaVersion": 12,
   "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}},
   "updatedAt": "2026-07-11T12:00:00.000Z"
 }
@@ -511,7 +511,7 @@ Returns 200 with the preferences envelope, 400 if the body is malformed, 401 if 
 
 ## Container groups
 
-Returns containers grouped by stack or group label. Group priority: `dd.group` > `com.docker.compose.project` > `com.docker.stack.namespace` > ungrouped.
+Returns server-derived container groups. Group priority: `dd.group` > `com.docker.compose.project` > `com.docker.stack.namespace` > ungrouped. Browser-side manual group overrides are UI preferences: they do not mutate Docker labels and are not reflected in this response.
 
 ```bash
 curl http://drydock:3000/api/v1/containers/groups

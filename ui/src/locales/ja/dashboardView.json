@@ -101,8 +101,7 @@
     "updateKind": {
       "major": "メジャー",
       "minor": "マイナー",
-      "patch": "パッチ",
-      "digest": "ダイジェスト"
+      "patch": "パッチ"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

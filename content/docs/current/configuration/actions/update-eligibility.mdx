@@ -51,10 +51,10 @@ If a container is eligible but an automatic update does not run, check that the 
 | `self-update-unavailable` | **Self-update unavailable** | Hard | The container is Drydock itself and an update is available, but self-update can run neither over a bind-mounted Docker socket nor a TCP Docker host. | Bind-mount `/var/run/docker.sock` into the Drydock container, or point the watcher at a TCP Docker host. See [Self-Update](/docs/configuration/self-update). |
 | `rollback-container` | **Rollback** | Hard | Container was created during a previous update as a rollback artifact and isn't itself updateable. | Not actionable — remove the rollback container manually if no longer needed. |
 | `active-operation` | **In progress** | Hard | An update is queued or already running for this container. | Wait for completion. |
-| `no-update-available` | **Up to date** | Hard/internal | No newer image was detected. Internal short-circuit; shown as the panel's summary rather than as an actionable condition. | N/A |
+| `no-update-available` | **No actionable update** | Hard/internal | No actionable image update was detected. A pinned container may still have an informational newer-version insight; the insight does not bypass this internal short-circuit. | N/A |
 | `maintenance-window-closed` | **Maintenance window closed** | Soft | Automatic-update dispatch evaluated the container while its watcher's maintenance window was closed. Drydock defers automatic updates outside the window regardless of whether the update was found by cron, manual watch, webhook, or post-update fast resync. Container-list and SSE responses enrich this live watcher state for both local and agent-owned containers. Manual UI/API updates pass no maintenance-window state and are not gated by this blocker. | Wait for the next maintenance window or adjust `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` / `_TZ`. |
 
-<Callout type="info">The Update Status panel keeps `no-update-available` as the top-level **Up to date** state and avoids duplicating `active-operation` when an in-progress operation badge already communicates the same state elsewhere.</Callout>
+<Callout type="info">The Update Status panel shows **Up to date** only when neither an actionable update nor an informational `updateInsight` exists. An insight-only pinned container instead shows an informational newer-version state with no update action. The panel also avoids duplicating `active-operation` when an in-progress operation badge already communicates the same state elsewhere.</Callout>
 
 ## Common scenarios
 

@@ -16,6 +16,7 @@ interface ContainersPayload {
 interface ContainerFixture {
   displayName?: string;
   image: {
+    digest?: Record<string, unknown>;
     tag: Record<string, unknown>;
   };
   result?: Record<string, unknown>;
@@ -169,6 +170,10 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
   test('#498 renders pinned current-to-newer tags as information in table and cards', async ({
     page,
   }) => {
+    // The default 1280px project viewport intentionally folds the Update
+    // column after Host was promoted in #498. Use a wide table viewport for
+    // assertions that specifically exercise the Update cell.
+    await page.setViewportSize({ width: 1600, height: 900 });
     await interceptSettings(page, 'manual');
     await interceptContainer(page, 'Traefik Proxy', (container) => {
       container.displayName = 'Immich ML (Pinned)';
@@ -217,15 +222,116 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
     await expect(tableFlow).toContainText('v3.0.2-openvino');
     const tableText = (await tableFlow.innerText()).replace(/\s+/g, ' ');
     expect(tableText.indexOf('v2.7.5-openvino')).toBeLessThan(tableText.indexOf('v3.0.2-openvino'));
+    const tableState = row.locator('[data-test="container-update-state"]');
+    await expect(tableState).toHaveText('Major');
+    await expect(tableState).not.toContainText('Current');
+    await tableState.locator(':scope > span').first().hover();
+    await expect(page.getByRole('tooltip')).toHaveText(
+      "Newer version available: v3.0.2-openvino. This tag is pinned — drydock won't update it automatically.",
+    );
     await expect(row.locator('[data-test="container-tag-pinned-glyph"]')).toBeVisible();
     await expect(row.getByRole('button', { name: /^Update$/ })).toHaveCount(0);
+
+    await row.click();
+    const detail = page.locator('[data-test="container-side-detail"]');
+    const statusPanel = detail.locator('[data-test="update-status-panel"]');
+    await expect(statusPanel).toHaveAttribute('data-state', 'insight');
+    await expect(statusPanel.locator('[data-test="update-status-summary"]')).toHaveText(
+      'Newer version available — this tag is pinned.',
+    );
+    await expect(statusPanel.locator('[data-test="update-status-manual-cta"]')).toHaveCount(0);
+    await detail.getByRole('button', { name: 'Close details panel' }).click();
+    await expect(detail).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Cards view' }).click();
     const card = page.locator('[data-test="dd-card"]').filter({ hasText: 'Immich ML (Pinned)' });
     await expect(card).toBeVisible();
     await expect(card).toContainText(/v2\.7\.5-openvino\s*→\s*v3\.0\.2-openvino/);
-    await expect(card.locator('[data-test="container-card-update-state"]')).toHaveText('Current');
+    const cardState = card.locator('[data-test="container-card-update-state"]');
+    await expect(cardState).toHaveText('Major');
+    await expect(cardState).not.toContainText('Current');
+    await cardState.hover();
+    await expect(page.getByRole('tooltip')).toHaveText(
+      "Newer version available: v3.0.2-openvino. This tag is pinned — drydock won't update it automatically.",
+    );
     await expect(card.locator('[data-test="container-tag-pinned-glyph"]')).toBeVisible();
     await expect(card.getByRole('button', { name: /^Update$/ })).toHaveCount(0);
+  });
+
+  test('#498 explains same-tag digest changes as image updates in table and cards', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await interceptContainer(page, 'Traefik Proxy', (container) => {
+      container.displayName = 'OwnTone (Rebuilt)';
+      container.image.tag = {
+        ...container.image.tag,
+        value: '28.5.1',
+        semver: true,
+        tagPrecision: 'specific',
+      };
+      container.image.digest = { watch: true };
+      container.updateAvailable = true;
+      container.updateKind = {
+        kind: 'digest',
+        localValue: `sha256:${'a'.repeat(64)}`,
+        remoteValue: `sha256:${'b'.repeat(64)}`,
+        semverDiff: 'none',
+      };
+      container.result = { tag: '28.5.1', digest: `sha256:${'b'.repeat(64)}` };
+      container.updateEligibility = {
+        eligible: true,
+        evaluatedAt: '2026-07-13T16:00:00.000Z',
+        blockers: [],
+      };
+    });
+
+    await page.goto('/containers');
+    await dismissAnnouncementBanners(page);
+    const row = page.getByRole('row', { name: /OwnTone \(Rebuilt\)/i });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    const tableState = row.locator('[data-test="container-update-state"]');
+    await expect(tableState).toHaveText('Image update');
+    await expect(tableState).not.toContainText('Digest update');
+    await tableState.locator(':scope > span').first().hover();
+    await expect(page.getByRole('tooltip')).toHaveText(
+      'The tag 28.5.1 now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.',
+    );
+
+    await page.getByRole('button', { name: 'Cards view' }).click();
+    const card = page.locator('[data-test="dd-card"]').filter({ hasText: 'OwnTone (Rebuilt)' });
+    await expect(card).toBeVisible();
+    const cardState = card.locator('[data-test="container-card-update-state"]');
+    await expect(cardState).toHaveText('Image update');
+    await expect(cardState).not.toContainText('Digest update');
+    await cardState.hover();
+    await expect(page.getByRole('tooltip')).toHaveText(
+      'The tag 28.5.1 now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.',
+    );
+  });
+
+  test('#498 keeps Host visible ahead of secondary Software Version metadata at laptop width', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1197, height: 900 });
+    await page.goto('/containers');
+    await dismissAnnouncementBanners(page);
+
+    const table = page.locator('[data-test="containers-grouped-views"] table');
+    await expect(table).toBeVisible({ timeout: 30_000 });
+    await expect(table.locator('th[data-col-key="server"]')).toContainText('Host');
+    await expect(table.locator('th[data-col-key="server"]')).toBeVisible();
+    await expect(table.locator('th[data-col-key="softwareVersion"]')).toHaveCount(0);
+
+    const firstContainerRow = table
+      .getByRole('row')
+      .filter({
+        has: page.locator('[data-test="container-server-text"]'),
+      })
+      .first();
+    await expect(firstContainerRow.locator('[data-test="container-server-text"]')).toBeVisible();
+    await expect(
+      firstContainerRow.locator('[data-test="container-software-version-col"]'),
+    ).toHaveCount(0);
   });
 });

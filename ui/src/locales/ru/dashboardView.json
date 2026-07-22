@@ -101,8 +101,7 @@
     "updateKind": {
       "major": "Мажорное",
       "minor": "Минорное",
-      "patch": "Патч",
-      "digest": "Дайджест"
+      "patch": "Патч"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

@@ -56,6 +56,7 @@ const {
   tableActionStyle,
   openActionsMenu,
   toggleActionsMenu,
+  openContainerGroupDialog,
   cancelUpdate,
   confirmUpdate,
   confirmStop,
@@ -388,9 +389,9 @@ function getContainerUpdateStateLabel(
   if (getContainerListPolicyState(container).skipped) {
     return t('containerComponents.groupedViews.skippedLabel');
   }
-  // Insight-only rows (pinned tag with a newer out-of-family candidate) read "Current":
-  // the candidate is informational, surfaced by the tag-cell pin glyph + insight tooltip,
-  // never as an actionable-looking update state (#498 pinned-chip inconsistency).
+  if (container.updateInsight) {
+    return getUpdateKindLabel(container.updateInsight.kind);
+  }
   return t('containerComponents.groupedViews.currentLabel');
 }
 
@@ -403,15 +404,26 @@ function getContainerUpdateStateColor(
   if (getContainerListPolicyState(container).skipped) {
     return 'var(--dd-warning)';
   }
+  if (container.updateInsight) {
+    return updateInsightColor().text;
+  }
   return 'var(--dd-success)';
 }
 
 function getContainerUpdateStateTooltip(
-  container: Pick<Container, 'updateKind' | 'updateInsight' | 'updateMaturityTooltip'> & {
+  container: Pick<
+    Container,
+    'currentTag' | 'updateKind' | 'updateInsight' | 'updateMaturityTooltip'
+  > & {
     name?: string;
   },
 ) {
   if (container.updateKind) {
+    if (container.updateKind === 'digest') {
+      return t('containerComponents.groupedViews.imageUpdateTooltip', {
+        tag: container.currentTag,
+      });
+    }
     return container.updateMaturityTooltip || getUpdateKindLabel(container.updateKind);
   }
   if (getContainerListPolicyState(container).skipped) {
@@ -1389,6 +1401,11 @@ onScopeDispose(() => {
             </AppButton>
           </template>
           <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
+                  @click="openContainerGroupDialog(openActionsContainer); closeActionsMenu()">
+            <AppIcon name="stack" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
+            {{ t('containerComponents.groupedViews.setGroupAction') }}
+          </AppButton>
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
                   @click="selectContainer(openActionsContainer!); activeDetailTab = 'actions'; closeActionsMenu()">
             <AppIcon name="recent-updates" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
