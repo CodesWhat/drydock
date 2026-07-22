@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Release dependency security refresh.** Updated `fast-uri` to 3.1.4 for CVE-2026-16221, `fast-xml-parser` to 5.10.1 for GHSA-8r6m-32jq-jx6q, and the website's transitive `sharp` dependency to 0.35.3 for GHSA-f88m-g3jw-g9cj.
+
 - **Anonymous access now fails closed on upgrades, not just fresh installs.** An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — starts and fails closed: protected API requests are rejected with `401`, auth discovery/status remains public, `/health` reports `503`, and the SPA shell may load without access to protected application data. This replaces the previous warning plus open dashboard. If you run an intentionally open instance, set `DD_ANONYMOUS_AUTH_CONFIRM=true`; otherwise configure `DD_AUTH_BASIC_<name>_USER`/`_HASH` before upgrading.
 
 - **HTTP notification trigger hardened against SSRF.** Hostnames are re-resolved on every request through a guarded DNS lookup that blocks cloud metadata and link-local targets (override with `allowmetadata=true`), and redirects can no longer escape into blocked address space via cross-host or DNS-rebinding hops.
