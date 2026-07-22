@@ -2546,6 +2546,55 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
   });
 
+  it('does not duplicate hidden table Resources in the card More menu', async () => {
+    const container = makeContainer({
+      id: 'c-card-hidden-resources',
+      name: 'grafana-card',
+      sourceRepo: 'github.com/grafana/grafana',
+    });
+    const { wrapper, context, refs } = await mountCardsWithContainers([container], 800);
+    context.hiddenColumnKeys.value = ['links'];
+    refs.openActionsMenu.value = container.id;
+    await nextTick();
+
+    expect(
+      cardByName(wrapper, 'grafana-card')
+        .find('[data-test="container-card-resource-actions"]')
+        .exists(),
+    ).toBe(true);
+    expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
+  });
+
+  it('does not duplicate hidden table Resources during forced card reflow', async () => {
+    const container = makeContainer({
+      id: 'c-forced-card-resources',
+      name: 'grafana-forced-card',
+      sourceRepo: 'github.com/grafana/grafana',
+    });
+    const { context, refs } = makeContext();
+    context.hiddenColumnKeys.value = ['links'];
+    refs.containerCardReflowForced.value = true;
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    refs.openActionsMenu.value = container.id;
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
+  });
+
   it('renders each table quick link independently when the other link data is absent (#295)', async () => {
     const sourceOnly = makeContainer({
       id: 'c-source-only',

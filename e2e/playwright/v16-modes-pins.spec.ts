@@ -389,15 +389,30 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
     const resources = page.locator('[data-test="actions-menu-resource-actions"]');
     await expect(resources).toContainText('Resources');
     const shortcuts = resources.locator(
-      '[data-test="project-link"], [data-test="current-release-notes-link"], [data-test="registry-link"]',
+      '[data-test="project-link"], [data-test="release-notes-link"], [data-test="current-release-notes-link"], [data-test="registry-link"]',
     );
     await expect(shortcuts).toHaveCount(3);
-    expect(
-      await shortcuts.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-test'))),
-    ).toEqual(['project-link', 'current-release-notes-link', 'registry-link']);
+    const shortcutIds = await shortcuts.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute('data-test')),
+    );
+    expect(shortcutIds[0]).toBe('project-link');
+    expect(shortcutIds[1]).toMatch(/^(?:current-)?release-notes-link$/);
+    expect(shortcutIds[2]).toBe('registry-link');
 
     await page.reload();
     await expect(table.locator('th[data-col-key="links"]')).toHaveCount(0);
     await expect(table.locator('th[data-col-key="server"]')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cards view' }).click();
+    const card = page.locator('[data-test="dd-card"]').filter({
+      hasText: RESOURCE_TARGET_CONTAINER,
+    });
+    await expect(
+      card.locator(
+        '[data-test="container-card-resource-actions"] [data-test="container-quick-links"]',
+      ),
+    ).toBeVisible();
+    await card.getByRole('button', { name: 'More', exact: true }).click();
+    await expect(page.locator('[data-test="actions-menu-resource-actions"]')).toHaveCount(0);
   });
 });

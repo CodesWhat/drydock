@@ -94,7 +94,12 @@ const openActionsContainer = computed(() =>
     ? (displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null)
     : null,
 );
-const resourcesHidden = computed(() => hiddenColumnKeys.value.includes('links'));
+const resourcesHidden = computed(
+  () =>
+    containerViewMode.value === 'table' &&
+    !containerCardReflowForced.value &&
+    hiddenColumnKeys.value.includes('links'),
+);
 const openActionsContainerHasResources = computed(() => {
   const container = openActionsContainer.value;
   if (!container) return false;
