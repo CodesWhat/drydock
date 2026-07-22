@@ -56,7 +56,7 @@ describe('UpdateStatusPanel', () => {
     expect(wrapper.find('details').exists()).toBe(false);
   });
 
-  it('renders a pinned-tag insight as an up-to-date state with an informational detail row (#498)', () => {
+  it('renders a pinned-tag insight as newer-but-non-actionable with an informational detail row (#498)', () => {
     const wrapper = mount(UpdateStatusPanel, {
       props: {
         container: {
@@ -71,12 +71,12 @@ describe('UpdateStatusPanel', () => {
       global: { stubs: { AppIcon: { template: '<span />' } } },
     });
 
-    // Pinned-ness is not an update state (#498 display honesty): the panel reads
-    // up-to-date, and the held-back tag surfaces only via the insight detail row.
     expect(wrapper.get('[data-test="update-status-panel"]').attributes('data-state')).toBe(
-      'up-to-date',
+      'insight',
     );
-    expect(wrapper.get('[data-test="update-status-summary"]').text()).toBe('Up to date.');
+    expect(wrapper.get('[data-test="update-status-summary"]').text()).toBe(
+      'Newer version available — this tag is pinned.',
+    );
     const insightRow = wrapper.get('[data-reason="update-insight"]');
     expect(insightRow.attributes('data-tone')).toBe('info');
     expect(insightRow.text()).toBe(

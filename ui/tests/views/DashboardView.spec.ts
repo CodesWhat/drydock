@@ -1297,7 +1297,7 @@ describe('DashboardView', () => {
       expect(wrapper.text()).toContain('Major');
       expect(wrapper.text()).toContain('Minor');
       expect(wrapper.text()).toContain('Patch');
-      expect(wrapper.text()).toContain('Digest');
+      expect(wrapper.text()).toContain('Image update');
     });
 
     it('does not re-filter update kinds on unrelated renders', async () => {
@@ -1342,7 +1342,7 @@ describe('DashboardView', () => {
       expect(updateWidget.text()).toContain('Major');
       expect(updateWidget.text()).toContain('Minor');
       expect(updateWidget.text()).toContain('Patch');
-      expect(updateWidget.text()).toContain('Digest');
+      expect(updateWidget.text()).toContain('Image update');
     });
   });
 

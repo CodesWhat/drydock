@@ -335,7 +335,7 @@ describe('deriveUpdateStatus', () => {
     expect(status.insightNote).toBeUndefined();
   });
 
-  it('describes a pinned-tag insight as up-to-date with an informational note, not a dedicated pinned state (#498)', () => {
+  it('describes a pinned-tag insight as newer-but-non-actionable (#498)', () => {
     const status = deriveUpdateStatus(
       input({
         container: {
@@ -351,12 +351,9 @@ describe('deriveUpdateStatus', () => {
       }),
     );
 
-    // Pinned-ness is not an update state (#498 display honesty): an insight-only
-    // container reads up-to-date like the containers table, and the held-back tag
-    // surfaces only as an informational insightNote detail instead of its own state.
-    expect(status.state).toBe('up-to-date');
-    expect(status.summary).toBe('Up to date.');
-    expect(status.tone).toBe('success');
+    expect(status.state).toBe('insight');
+    expect(status.summary).toBe('Newer version available — this tag is pinned.');
+    expect(status.tone).toBe('info');
     expect(status.hasUpdate).toBe(false);
     expect(status.manualUpdateDisabled).toBe(true);
     expect(status.conditions).toEqual([]);

@@ -138,6 +138,7 @@ export interface ContainersViewTemplateContext
   tableActionStyle: WritableComputedRef<PreferencesSchema['containers']['tableActions']>;
   openActionsMenu: Ref<string | null>;
   toggleActionsMenu: (name: string, event: MouseEvent) => void;
+  openContainerGroupDialog: (container: Container) => void;
   closeActionsMenu: () => void;
   displayContainers: ComputedRef<ContainersViewDisplayContainer[]>;
   actionsMenuStyle: Ref<Record<string, string>>;

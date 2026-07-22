@@ -34,9 +34,10 @@
     "columns": {
       "container": "Container",
       "tag": "Tag",
-      "version": "Version",
+      "version": "Software Version",
+      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
       "update": "Update",
-      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
+      "updateTooltip": "Type of update available: major, minor, patch, or same-tag image update.",
       "status": "Status",
       "host": "Host",
       "registry": "Registry",

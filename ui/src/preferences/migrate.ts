@@ -27,6 +27,13 @@ import {
 /** Deep-merge source into a clone of defaults, preserving only keys that exist in defaults. */
 export function mergeDefaults(source: Record<string, unknown>): PreferencesSchema {
   const merged = deepMerge(structuredClone(DEFAULTS), source) as PreferencesSchema;
+  if (isRecord(source.containers) && isRecord(source.containers.manualGroups)) {
+    // `deepMerge` intentionally only walks keys present in defaults. Dynamic
+    // identity-keyed maps therefore need an explicit clone, like columnWidths.
+    merged.containers.manualGroups = structuredClone(
+      source.containers.manualGroups as Record<string, string>,
+    );
+  }
   if (isRecord(source.tables) && isRecord(source.tables.columnWidths)) {
     merged.tables.columnWidths = structuredClone(
       source.tables.columnWidths as Record<string, Record<string, number>>,
@@ -200,6 +207,22 @@ function sanitizeContainers(data: Record<string, unknown>): void {
   if (containers && typeof containers === 'object') {
     const c = containers as Record<string, unknown>;
     deleteIfInvalid(c, 'tableActions', TABLE_ACTIONS);
+
+    if ('manualGroups' in c) {
+      if (!isRecord(c.manualGroups)) {
+        delete c.manualGroups;
+      } else {
+        c.manualGroups = Object.fromEntries(
+          Object.entries(c.manualGroups).flatMap(([identityKey, groupName]) => {
+            const normalizedIdentityKey = identityKey.trim();
+            const normalizedGroupName = typeof groupName === 'string' ? groupName.trim() : '';
+            return normalizedIdentityKey && normalizedGroupName
+              ? [[normalizedIdentityKey, normalizedGroupName]]
+              : [];
+          }),
+        );
+      }
+    }
 
     if ('columns' in c) {
       if (!isStringArray(c.columns)) {
@@ -730,6 +753,20 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
       sync: {
         enabled: DEFAULTS.sync.enabled,
         ...(isRecord(data.sync) ? data.sync : {}),
+      },
+    };
+  }
+
+  if (data.schemaVersion === 11) {
+    data = {
+      ...data,
+      schemaVersion: 12,
+      containers: {
+        ...(isRecord(data.containers) ? data.containers : {}),
+        manualGroups:
+          isRecord(data.containers) && isRecord(data.containers.manualGroups)
+            ? data.containers.manualGroups
+            : {},
       },
     };
   }

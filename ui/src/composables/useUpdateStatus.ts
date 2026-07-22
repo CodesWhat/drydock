@@ -43,6 +43,7 @@ export interface UpdateStatusCondition {
 
 export type UpdateStatusState =
   | 'up-to-date'
+  | 'insight'
   | 'ready'
   | 'soft-blocked'
   | 'hard-blocked'
@@ -277,7 +278,12 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
   let icon: string;
   let summary: string;
 
-  if (!hasUpdate) {
+  if (!hasUpdate && container.updateInsight) {
+    state = 'insight';
+    tone = 'info';
+    icon = 'pin';
+    summary = t('containerComponents.updateStatus.summary.insight');
+  } else if (!hasUpdate) {
     state = 'up-to-date';
     tone = 'success';
     icon = 'up-to-date';
@@ -315,9 +321,6 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
         : t('containerComponents.updateStatus.summary.manualReady');
   }
 
-  // Pinned-ness is not an update state (#498 display honesty): an insight-only
-  // container reads up-to-date like the containers table, and the held-back tag
-  // surfaces as an informational detail row instead.
   const insightNote =
     !hasUpdate && container.updateInsight
       ? t('containerComponents.updateInsight.tooltip', { tag: container.updateInsight.tag })

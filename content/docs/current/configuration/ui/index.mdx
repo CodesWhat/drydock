@@ -120,7 +120,13 @@ Toggle between modes using the view mode buttons in the toolbar where they are a
 
 Containers, Agents, Audit, Security, Servers, and Watchers each expose a column show/hide picker in the toolbar, letting you hide low-priority columns from the table. Hidden columns are persisted per view and have no effect in card mode.
 
-On Containers, a column you still have checked "on" but that responsive sizing folded away to fit the viewport stays checked in the picker with a muted "{column} — hidden to fit" annotation, and the toolbar's "+N" hidden-columns badge tooltip names the auto-hidden columns — the picker never silently claims a column is showing when it isn't.
+On Containers, a column you still have checked "on" but that responsive sizing folded away to fit the viewport stays checked in the picker with a muted "{column} — hidden to fit" annotation, and the toolbar's "+N" hidden-columns badge tooltip names the auto-hidden columns — the picker never silently claims a column is showing when it isn't. At constrained laptop widths the secondary **Software Version** metadata column folds before **Host**, keeping the selected host identity visible while the Tag column still shows current and newer tags.
+
+### Container grouping
+
+Turn on stack grouping in the Containers toolbar to organize rows by group. Docker-derived group priority is `dd.group` → Compose project → Swarm namespace → ungrouped.
+
+To change the presentation without redeploying a container, open its **More** menu and choose **Set group**. Enter an existing or new group name, or clear the override to return to the Docker-derived group. Browser overrides take precedence only in this UI; they do not write Docker labels or change the container-groups API response. They are stored with the rest of the UI preferences and sync to other signed-in devices when **Sync across devices** is enabled.
 
 ### Card Sorting
 
@@ -171,7 +177,7 @@ Translation strings are managed via [Crowdin](https://crowdin.com/project/drydoc
 
 ## Sync across devices
 
-Preferences are local to the browser by default. Signed-in users can turn on **Sync across devices**, a toggle at the top of **Config > Appearance**, to also store the full preference set (theme, icon library, font, font size, border radius, dashboard layout, data table column choices, view mode, language, and this toggle's own state) server-side, keyed to the signed-in account.
+Preferences are local to the browser by default. Signed-in users can turn on **Sync across devices**, a toggle at the top of **Config > Appearance**, to also store the full preference set (theme, icon library, font, font size, border radius, dashboard layout, data table column choices, container group overrides, view mode, language, and this toggle's own state) server-side, keyed to the signed-in account.
 
 - **Off by default.** Nothing changes until the toggle is turned on.
 - **Live propagation.** Once enabled, changes push to the server and are pushed out to every other signed-in device or open tab in real time, so a change made on one device shows up on others without a manual refresh.

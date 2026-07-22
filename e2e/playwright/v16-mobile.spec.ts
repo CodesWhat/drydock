@@ -133,6 +133,10 @@ test.describe('v1.6 mobile release promises', () => {
     page,
   }) => {
     await openMobileContainers(page);
+    expect(page.viewportSize()).toEqual({ width: 390, height: 844 });
+    expect(await page.evaluate(() => window.devicePixelRatio)).toBeGreaterThan(1);
+    expect(await page.evaluate(() => navigator.maxTouchPoints)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
     await expectNoHorizontalOverflow(page);
 
     await expectTouchTarget(page.getByRole('button', { name: 'Toggle filters' }));

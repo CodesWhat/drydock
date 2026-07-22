@@ -3,6 +3,7 @@ import { computed, onMounted, onScopeDispose, onUnmounted, provide, ref, watch }
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import ContainerFullPageDetail from '../components/containers/ContainerFullPageDetail.vue';
+import ContainerGroupDialog from '../components/containers/ContainerGroupDialog.vue';
 import ContainerSideDetail from '../components/containers/ContainerSideDetail.vue';
 import ContainersListContent from '../components/containers/ContainersListContent.vue';
 import { containersViewTemplateContextKey } from '../components/containers/containersViewTemplateContext';
@@ -1034,6 +1035,84 @@ const sortedContainers = computed(() => {
 const groupMembershipMap = ref<Record<string, string>>({});
 const groupAssignedSizeMap = ref<Record<string, number>>({});
 const collapsedGroups = ref(new Set<string>());
+const containerGroupDialog = ref<Container | null>(null);
+
+function getContainerManualGroup(container: Container): string | undefined {
+  const identityKey = getContainerActionIdentityKey(container);
+  return identityKey ? preferences.containers.manualGroups[identityKey] : undefined;
+}
+
+function getDetectedContainerGroup(container: Container): string | undefined {
+  return groupMembershipMap.value[container.id] ?? groupMembershipMap.value[container.name];
+}
+
+function getEffectiveContainerGroup(container: Container): string | undefined {
+  return getContainerManualGroup(container) ?? getDetectedContainerGroup(container);
+}
+
+function setContainerManualGroup(container: Container, groupName: string) {
+  const identityKey = getContainerActionIdentityKey(container);
+  const normalizedGroupName = groupName.trim();
+  if (!identityKey || !normalizedGroupName) {
+    return;
+  }
+  preferences.containers.manualGroups = {
+    ...preferences.containers.manualGroups,
+    [identityKey]: normalizedGroupName,
+  };
+}
+
+function clearContainerManualGroup(container: Container) {
+  const identityKey = getContainerActionIdentityKey(container);
+  if (!identityKey || !(identityKey in preferences.containers.manualGroups)) {
+    return;
+  }
+  const next = { ...preferences.containers.manualGroups };
+  delete next[identityKey];
+  preferences.containers.manualGroups = next;
+}
+
+const containerGroupDialogInitialGroup = computed(() =>
+  containerGroupDialog.value ? (getEffectiveContainerGroup(containerGroupDialog.value) ?? '') : '',
+);
+const containerGroupDialogHasManualOverride = computed(() =>
+  containerGroupDialog.value
+    ? getContainerManualGroup(containerGroupDialog.value) !== undefined
+    : false,
+);
+const containerGroupSuggestions = computed(() =>
+  [
+    ...new Set([
+      ...Object.values(groupMembershipMap.value),
+      ...Object.values(preferences.containers.manualGroups),
+    ]),
+  ].sort((left, right) => left.localeCompare(right)),
+);
+
+function openContainerGroupDialog(container: Container) {
+  containerGroupDialog.value = container;
+}
+
+function closeContainerGroupDialog() {
+  containerGroupDialog.value = null;
+}
+
+function saveContainerGroupDialog(groupName: string) {
+  if (!containerGroupDialog.value) {
+    return;
+  }
+  setContainerManualGroup(containerGroupDialog.value, groupName);
+  groupByStack.value = true;
+  closeContainerGroupDialog();
+}
+
+function clearContainerGroupDialog() {
+  if (!containerGroupDialog.value) {
+    return;
+  }
+  clearContainerManualGroup(containerGroupDialog.value);
+  closeContainerGroupDialog();
+}
 
 watch(
   () => groupByStack.value,
@@ -1165,7 +1244,8 @@ const groupedContainers = computed<RenderGroup[]>(() => {
   const map = groupMembershipMap.value;
   const buckets: Record<string, typeof displayContainers.value> = {};
   for (const container of sortedContainers.value) {
-    const groupName = map[container.id] ?? map[container.name] ?? null;
+    const groupName =
+      getContainerManualGroup(container) ?? map[container.id] ?? map[container.name] ?? null;
     const key = groupName ?? '__ungrouped__';
     if (!buckets[key]) {
       buckets[key] = [];
@@ -1182,7 +1262,8 @@ const groupedContainers = computed<RenderGroup[]>(() => {
     if (
       key !== '__ungrouped__' &&
       buckets[key].length === 1 &&
-      groupAssignedSizeMap.value[key] === 1
+      groupAssignedSizeMap.value[key] === 1 &&
+      !buckets[key].some((container) => getContainerManualGroup(container) === key)
     ) {
       if (!buckets.__ungrouped__) {
         buckets.__ungrouped__ = [];
@@ -1486,6 +1567,7 @@ provide(containersViewTemplateContextKey, {
   tableActionStyle,
   openActionsMenu,
   toggleActionsMenu,
+  openContainerGroupDialog,
   updateContainer,
   confirmUpdate,
   confirmStop,
@@ -1619,4 +1701,12 @@ provide(containersViewTemplateContextKey, {
     </template>
   </DataViewLayout>
   <ContainerFullPageDetail v-if="containerFullPage && selectedContainer" />
+  <ContainerGroupDialog
+    :container="containerGroupDialog"
+    :initial-group="containerGroupDialogInitialGroup"
+    :has-manual-override="containerGroupDialogHasManualOverride"
+    :suggestions="containerGroupSuggestions"
+    @close="closeContainerGroupDialog"
+    @save="saveContainerGroupDialog"
+    @clear="clearContainerGroupDialog" />
 </template>

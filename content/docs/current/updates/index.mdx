@@ -3,6 +3,12 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
+## Next release candidate — Unreleased
+
+- **Pinned freshness is honest at a glance** — an informational newer-version insight now reads Major, Minor, or Patch instead of contradicting the visible newer tag with “Current.” It remains non-actionable and cannot fire update actions or notifications.
+- **Same-tag rebuilds are explained** — “Image update” replaces “Digest update,” with tooltip copy explaining that the tag now points to a different image build and a redeploy pulls it.
+- **The Containers layout keeps context** — **Software Version** is explicitly named and folds before **Host** at constrained laptop widths. Users can also set, change, or clear a presentation-only group from a container's More menu; clearing an override restores Docker-derived grouping.
+
 ## v1.6.0-rc.3 Highlights — July 21, 2026
 
 - **Honest update states across the UI** — digest-only changes read "Digest update" instead of a version label, an unrecognized update kind shows a neutral "Unknown" badge, the security bouncer's block state reads "Security hold", and the NEW/MATURE freshness badges are gone in favor of one maturity clock panel that names the clock the gate actually measures against.

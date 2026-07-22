@@ -55,7 +55,7 @@ describe('update-kind-labels', () => {
       expect(getUpdateKindLabel('major')).toBe('Major');
       expect(getUpdateKindLabel('minor')).toBe('Minor');
       expect(getUpdateKindLabel('patch')).toBe('Patch');
-      expect(getUpdateKindLabel('digest')).toBe('Digest');
+      expect(getUpdateKindLabel('digest')).toBe('Image update');
     });
 
     it('localizes an unresolved kind to the neutral unknown label via t', () => {
