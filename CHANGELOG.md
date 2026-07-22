@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.4] — 2026-07-22
+
 ### Added
 
 - **Container groups can be edited directly in the browser** ([#498](https://github.com/CodesWhat/drydock/issues/498)). A container's More menu can set, change, or clear a local group override; clearing it falls back to the durable `dd.group` / Compose project / Swarm namespace group. Overrides are regular UI preferences, so they remain browser-local unless cross-device preference sync is enabled.
@@ -2209,7 +2211,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.4...HEAD
+[1.6.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...v1.6.0-rc.4
 [1.6.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...v1.6.0-rc.3
 [1.6.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...v1.6.0-rc.2
 [1.6.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.5.2...v1.6.0-rc.1
