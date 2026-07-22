@@ -558,7 +558,10 @@ function migrateContainersPreference(): Record<string, unknown> | undefined {
 
   const columns = readJSON('dd-table-cols-v1', isStringArray);
   if (columns) {
-    containers.columns = columns;
+    // Legacy column preferences predate the Resources column, so show the
+    // shipped default once on migration. Current-schema users can hide it and
+    // that explicit choice is preserved by sanitizeContainers.
+    containers.columns = columns.includes('links') ? columns : [...columns, 'links'];
   }
 
   return Object.keys(containers).length > 0 ? containers : undefined;

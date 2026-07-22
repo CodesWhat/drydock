@@ -903,6 +903,14 @@ describe('preferences migration', () => {
         expect(result.containers.columns).toEqual(['icon', ...columns, 'links']);
       });
 
+      it('should preserve a legacy Resources column without duplicating it', () => {
+        const columns = ['name', 'links', 'status'];
+        localStorage.setItem('dd-table-cols-v1', JSON.stringify(columns));
+        const result = migrateFromLegacyKeys();
+        expect(result.containers.columns).toEqual(['icon', 'name', 'status', 'links']);
+        expect(result.containers.columns.filter((column) => column === 'links')).toHaveLength(1);
+      });
+
       it('should drop stale columns that no longer exist in the table', () => {
         localStorage.setItem(
           'dd-table-cols-v1',
