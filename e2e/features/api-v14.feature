@@ -11,6 +11,7 @@ Feature: Drydock v1.4 API exposure
   # trigger and actually act on the container instead of returning the
   # legacy "No docker trigger found" 404. The scenario now exercises the
   # full stop → start → restart round-trip and expects success responses.
+  @restores_container_state
   Scenario: Drydock must allow container lifecycle actions
     Given I GET /api/v1/containers
     And I store the index of container named hub_nginx_120 as containerIndex in scenario scope
@@ -28,6 +29,7 @@ Feature: Drydock v1.4 API exposure
     And response body should be valid json
     And response body path $.message should be Container restarted successfully
 
+  @restores_settings_state
   Scenario: Drydock must persist settings through API
     When I GET /api/v1/settings
     Then response code should be 200
@@ -48,6 +50,7 @@ Feature: Drydock v1.4 API exposure
     And response body should be valid json
     And response body path $.internetlessMode should be false
 
+  @restores_notification_state
   Scenario: Drydock must allow notification rule updates
     When I GET /api/v1/notifications
     Then response code should be 200

@@ -59,10 +59,12 @@ export function init(): express.Router {
   const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
     isIdentityAwareRateLimitKeyingEnabled(serverConfiguration),
   );
+  const apiRateLimitMaximum =
+    (serverConfiguration.ratelimit as { max?: number } | undefined)?.max ?? 1000;
 
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 1000,
+    max: apiRateLimitMaximum,
     // Icon reads have their own stricter limiter in icons.ts. Do not charge
     // those immutable assets against this outer API budget as well; Playwright
     // routing and cache-disabled clients otherwise exhaust it while the

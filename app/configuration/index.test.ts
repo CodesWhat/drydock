@@ -19,6 +19,7 @@ const TEST_DIRECTORY = getTestDirectory();
 
 afterEach(() => {
   configuration.setDetectedServerName(undefined);
+  delete configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX;
 });
 
 test('getVersion should return dd version', async () => {
@@ -596,6 +597,26 @@ test('getServerConfiguration should allow enabling identity-aware rate-limit key
     identitykeying: true,
   });
   delete configuration.ddEnvVars.DD_SERVER_RATELIMIT_IDENTITYKEYING;
+});
+
+test('getServerConfiguration should allow overriding the outer API rate-limit maximum', () => {
+  configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX = '10000';
+  const config = configuration.getServerConfiguration();
+  expect(config.ratelimit).toStrictEqual({
+    max: 10000,
+  });
+});
+
+test.each([
+  '0',
+  '1.5',
+])('getServerConfiguration should reject invalid outer API rate-limit maximum %s', (value) => {
+  configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX = value;
+  try {
+    expect(() => configuration.getServerConfiguration()).toThrow('ratelimit.max');
+  } finally {
+    delete configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX;
+  }
 });
 
 test('getPrometheusConfiguration should result in enabled by default', async () => {

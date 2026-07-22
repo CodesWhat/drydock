@@ -223,17 +223,25 @@ export function createWatchContainerHandler(context: CrudHandlerContext) {
     }
 
     try {
+      let containerToWatch = container;
       if (typeof watcher.getContainers === 'function') {
         const containers = await watcher.getContainers();
-        const containerFound = containers.some(
+        const containerFound = containers.find(
           (containerInList) => containerInList.id === container.id,
         );
         if (!containerFound) {
           sendErrorResponse(res, 404, 'Container not found');
           return;
         }
+        // getContainers refreshes live Docker state (including health). Use
+        // that refreshed object instead of the store snapshot captured before
+        // the refresh, otherwise this endpoint can immediately write stale
+        // health back over a health-only transition.
+        containerToWatch = containerFound;
       }
-      const containerReport = await watcher.watchContainer(container, { emitBatchEvent: true });
+      const containerReport = await watcher.watchContainer(containerToWatch, {
+        emitBatchEvent: true,
+      });
       res.status(200).json(context.redactContainerRuntimeEnv(containerReport.container));
     } catch {
       sendErrorResponse(res, 500, `Error when watching container ${id}`);

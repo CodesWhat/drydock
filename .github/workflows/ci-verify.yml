@@ -1059,14 +1059,16 @@ jobs:
     name: "🥒 E2E: Cucumber"
     if: github.event_name == 'workflow_dispatch' || (github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Covers the bounded npm/setup retry budgets, readiness waits, scenario
+    # execution, and post-failure evidence collection without racing job expiry.
+    timeout-minutes: 40
     needs: [build, changes]
     permissions:
+      actions: read
       contents: read
     env:
-      # Use the same immutable browser runtime as the dedicated Playwright
-      # workflow. This avoids stale cache restores and runtime CDN downloads.
-      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48
+      # Browser coverage belongs to the separately release-gated Playwright
+      # workflow. Do not download Chromium for Cucumber's API/stream contracts.
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
 
     steps:
@@ -1086,41 +1088,40 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
-      - name: Verify Playwright image matches package
-        shell: bash
-        run: |
-          set -euo pipefail
+      - name: Download QA image
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: qa-image-${{ github.run_id }}
+          path: artifacts/qa
 
-          package_version="$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")"
-          if [[ ! "$PLAYWRIGHT_IMAGE" =~ :v([0-9]+\.[0-9]+\.[0-9]+)-noble(@sha256:[0-9a-f]{64})?$ ]]; then
-            echo "::error title=Invalid Playwright image tag::Expected $PLAYWRIGHT_IMAGE to use :v<major>.<minor>.<patch>-noble optionally pinned with @sha256:<digest>."
-            exit 1
-          fi
+      - name: Load QA image
+        run: docker load < artifacts/qa/drydock-dev-image.tar.gz
 
-          image_version="${BASH_REMATCH[1]}"
-          if [[ "$package_version" != "$image_version" ]]; then
-            echo "::error title=Playwright version mismatch::PLAYWRIGHT_IMAGE uses $image_version, but e2e/package.json pins @playwright/test to $package_version."
-            exit 1
-          fi
-
-      - name: Pull Playwright container
+      - name: Install e2e dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 3
           max_attempts: 3
-          retry_wait_seconds: 30
-          command: docker pull "$PLAYWRIGHT_IMAGE"
+          retry_wait_seconds: 15
+          command: cd e2e && npm ci --no-audit --no-fund
+
+      - name: Run Cucumber support tests
+        run: npm run test:support
+        working-directory: e2e
 
       - name: Setup test containers
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 10
-          max_attempts: 3
+          timeout_minutes: 6
+          max_attempts: 2
           retry_wait_seconds: 10
           command: ./scripts/setup-test-containers.sh
 
       - name: Start drydock
         id: drydock
+        env:
+          DD_E2E_IMAGE: drydock:dev
+          DD_E2E_SKIP_BUILD: 'true'
         run: ./scripts/start-drydock.sh
 
       - name: Run Cucumber e2e tests
@@ -1129,30 +1130,56 @@ jobs:
         # @requires_gitlab scenarios here to match, otherwise they fail looking
         # for a missing container. The token-gated local path that runs them
         # lives in scripts/run-e2e-tests.sh.
-        # The pinned image supplies the browser revision expected by
-        # @playwright/test. Host networking keeps localhost API/browser access
-        # identical to the former host-side invocation.
         env:
           DD_PORT: ${{ steps.drydock.outputs.dd_port }}
+        working-directory: e2e
         run: |
-          docker run --rm \
-            --init \
-            --network host \
-            --ipc=host \
-            --user 1001:1001 \
-            -e CI=true \
-            -e HOME=/tmp \
-            -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-            -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD \
-            -e DD_PORT \
-            -v "${{ github.workspace }}:/work" \
-            -w /work/e2e \
-            "$PLAYWRIGHT_IMAGE" \
-            sh -c 'npm ci --no-audit --no-fund && npm run cucumber -- --tags "not @requires_gitlab" --retry 1'
+          mkdir -p reports
+          npm run cucumber -- --tags "not @requires_gitlab" --format progress --format json:reports/cucumber.json --format junit:reports/cucumber.xml --format html:reports/cucumber.html
 
-      - name: Show drydock logs on failure
-        if: failure()
-        run: docker logs drydock
+      - name: Collect Cucumber diagnostics
+        if: failure() || cancelled()
+        env:
+          DD_PASSWORD: doe
+          DD_PORT: ${{ steps.drydock.outputs.dd_port }}
+          DD_USERNAME: john
+        run: |
+          set +e
+          diagnostics=artifacts/cucumber
+          mkdir -p "$diagnostics/fixtures"
+
+          docker ps -a --no-trunc > "$diagnostics/docker-ps.txt" 2>&1
+          docker logs --timestamps drydock > "$diagnostics/drydock.log" 2>&1
+          curl --silent --show-error \
+            --max-time 10 \
+            --output "$diagnostics/health.json" \
+            --write-out '%{http_code}\n' \
+            "http://localhost:${DD_PORT}/health" > "$diagnostics/health-status.txt" 2>&1
+          curl --silent --show-error \
+            --max-time 10 \
+            --user "${DD_USERNAME}:${DD_PASSWORD}" \
+            "http://localhost:${DD_PORT}/api/v1/containers" \
+            > "$diagnostics/containers.json" 2> "$diagnostics/containers-curl-error.txt"
+
+          while IFS= read -r container_id; do
+            [ -n "$container_id" ] || continue
+            container_name="$(docker inspect --format '{{.Name}}' "$container_id" | sed 's#^/##' | tr -c 'A-Za-z0-9_.-' '_')"
+            docker inspect --format '{{json .State}}' "$container_id" \
+              > "$diagnostics/fixtures/${container_name}.state.json" 2>&1
+            docker logs --timestamps --tail 200 "$container_id" \
+              > "$diagnostics/fixtures/${container_name}.log" 2>&1
+          done < <(docker ps -aq --filter label=dd.watch=true)
+
+      - name: Upload Cucumber diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: cucumber-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            e2e/reports
+            artifacts/cucumber
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Cleanup
         if: always()

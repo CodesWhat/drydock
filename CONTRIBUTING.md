@@ -96,7 +96,7 @@ ui/                         # Frontend (Vue 3, Tailwind CSS 4, Vite)
 └── src/utils/              # Helpers and mappers
 
 content/docs/               # Documentation (MDX, versioned)
-e2e/                        # End-to-end tests (Cucumber + Playwright)
+e2e/                        # Cucumber API/stream contracts + Playwright browser tests
 ```
 
 **Component registry pattern:** Components are loaded dynamically from environment variables:
@@ -216,7 +216,7 @@ By contributing, you agree that your contributions will be licensed under the [G
 
 The `pre-commit` hook runs a scoped `vitest --changed` on staged workspaces for fast feedback. Full 100% coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`.
 
-E2E Cucumber and Playwright browser tests are intentionally not part of the local pre-push hook; they run in CI on the same commit.
+E2E Cucumber API/stream contracts and the dedicated Playwright browser tests are intentionally not part of the local pre-push hook; they run in CI on the same commit. Browser navigation and rendering assertions belong in Playwright, not Cucumber.
 
 ### Coverage policy
 

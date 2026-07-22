@@ -43,7 +43,7 @@ const {
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush, replace: mockRouterReplace }),
-  useRoute: () => ({ path: '/', query: {}, params: {} }),
+  useRoute: () => ({ path: '/', name: 'dashboard', query: {}, params: {} }),
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
@@ -201,6 +201,14 @@ describe('AppLayout', () => {
       expect(main.exists()).toBe(true);
       expect(main.classes()).toContain('sm:pl-6');
       expect(main.classes()).toContain('sm:pr-[9px]');
+    });
+
+    it('exposes the matched route name on the main content landmark', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      expect(wrapper.find('main').attributes('data-route-name')).toBe('dashboard');
     });
 
     it('does not use symmetric horizontal padding on main', async () => {

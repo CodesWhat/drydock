@@ -51,6 +51,27 @@ async function waitForHealthFixture(page: Page, expectedHealth: string): Promise
   return fixture as ApiContainer;
 }
 
+async function refreshHealthFixture(
+  page: Page,
+  fixtureId: string,
+  expectedHealth: string,
+): Promise<ApiContainer> {
+  const response = await page
+    .context()
+    .request.post(`/api/v1/containers/${encodeURIComponent(fixtureId)}/watch`, {
+      headers: { Origin: APP_ORIGIN },
+      timeout: 45_000,
+    });
+  expect(response.ok()).toBeTruthy();
+  const fixture = (await response.json()) as ApiContainer;
+  expect(
+    fixture.health,
+    `Expected targeted refresh of ${HEALTH_FIXTURE_NAME} to report ${expectedHealth}`,
+  ).toBe(expectedHealth);
+
+  return fixture;
+}
+
 async function startHealthEventProbe(page: Page): Promise<void> {
   await page.evaluate(async () => {
     const probeWindow = window as typeof window & {
@@ -144,7 +165,7 @@ test.describe('v1.6 discussion promises', () => {
 
       const resetResponse = await request.get(`${HEALTH_FIXTURE_URL}/cgi-bin/healthy`);
       expect(resetResponse.ok()).toBeTruthy();
-      await waitForHealthFixture(page, 'healthy');
+      const healthyFixture = await waitForHealthFixture(page, 'healthy');
 
       await page.goto('/');
       await dismissAnnouncementBanners(page);
@@ -155,7 +176,7 @@ test.describe('v1.6 discussion promises', () => {
 
       const unhealthyResponse = await request.get(`${HEALTH_FIXTURE_URL}/cgi-bin/unhealthy`);
       expect(unhealthyResponse.ok()).toBeTruthy();
-      await waitForHealthFixture(page, 'unhealthy');
+      await refreshHealthFixture(page, healthyFixture.id, 'unhealthy');
 
       await expect
         .poll(
