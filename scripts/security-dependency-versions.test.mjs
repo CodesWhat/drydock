@@ -52,6 +52,32 @@ test('sharp is pinned to a patched release in the website', () => {
   assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.3') >= 0);
 });
 
+test('Next.js is pinned past the 16.2.9 security advisory batch', () => {
+  const manifest = readJson('apps/web/package.json');
+  const lockfile = readJson('apps/web/package-lock.json');
+
+  assert.equal(manifest.dependencies?.next, '16.2.11');
+  assert.ok(compareSemver(resolvedVersion(lockfile, 'next'), '16.2.11') >= 0);
+});
+
+test('the rc.5 changelog records the Next.js security refresh', () => {
+  const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
+  const rc5Header = '## [1.6.0-rc.5]';
+  const rc4Header = '## [1.6.0-rc.4]';
+  const rc5Start = changelog.indexOf(rc5Header);
+  const rc4Start = changelog.indexOf(rc4Header, rc5Start + rc5Header.length);
+
+  assert.notEqual(rc5Start, -1, 'missing rc.5 changelog header');
+  assert.notEqual(rc4Start, -1, 'missing rc.4 changelog boundary');
+
+  const rc5 = changelog.slice(rc5Start, rc4Start);
+
+  assert.match(rc5, /Next\.js 16\.2\.11/);
+  assert.match(rc5, /GHSA-6gpp-xcg3-4w24/);
+  assert.match(rc5, /GHSA-m99w-x7hq-7vfj/);
+  assert.match(rc5, /GHSA-89xv-2m56-2m9x/);
+});
+
 test('the rc.3 changelog records the security dependency refresh', () => {
   const changelog = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
   const rc3Header = '## [1.6.0-rc.3]';

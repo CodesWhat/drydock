@@ -281,7 +281,7 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.6.0-rc.4",
+    version: "v1.6.0-rc.5",
     title: "Notifications, Policy & Release Intel",
     emoji: "\u{1F4E8}",
     status: "next",
