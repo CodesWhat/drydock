@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **The documentation website now runs Next.js 16.2.11 and React 19.2.8.** The Next.js patch closes nine upstream advisories disclosed against 16.2.9, including proxy bypass, Server Actions denial of service and SSRF, rewrite SSRF, response-cache confusion, image-optimization denial of service, and Server Function endpoint disclosure (GHSA-6gpp-xcg3-4w24, GHSA-m99w-x7hq-7vfj, GHSA-89xv-2m56-2m9x, GHSA-p9j2-gv94-2wf4, GHSA-68g3-v927-f742, GHSA-4633-3j49-mh5q, GHSA-4c39-4ccg-62r3, GHSA-q8wf-6r8g-63ch, GHSA-955p-x3mx-jcvp).
+- **The documentation website's `postcss` build dependency is upgraded to 8.5.22**, closing CVE-2026-45623 (GHSA-6g55-p6wh-862q), an arbitrary-file-read via an attacker-controlled `sourceMappingURL` (fixed upstream in 8.5.12).
 
 ## [1.6.0-rc.4] — 2026-07-22
 
