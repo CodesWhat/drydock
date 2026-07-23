@@ -1956,13 +1956,17 @@ describe('DataTable', () => {
       });
 
       it('converts rem card minimum widths when detecting a single-column grid', async () => {
-        const w = await mountAtWidth(500, { preferCards: true, cardMinWidth: '30rem' });
+        // 30rem → 480px keeps a 700px viewport single-column (auto rows); the 320px
+        // fallback would fit two columns here (1fr rows), so this width distinguishes a
+        // real rem conversion from the invalid-value fallback.
+        const w = await mountAtWidth(700, { preferCards: true, cardMinWidth: '30rem' });
 
         expect(w.get('ul[role="list"]').attributes('style')).toContain('grid-auto-rows: auto');
       });
 
       it('converts em card minimum widths when detecting a single-column grid', async () => {
-        const w = await mountAtWidth(500, { preferCards: true, cardMinWidth: '30em' });
+        // 30em → 480px, same distinguishing rationale as the rem case above.
+        const w = await mountAtWidth(700, { preferCards: true, cardMinWidth: '30em' });
 
         expect(w.get('ul[role="list"]').attributes('style')).toContain('grid-auto-rows: auto');
       });
