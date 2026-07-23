@@ -15,7 +15,7 @@ export const SITE_CONFIG = {
   /** Brand name shown in the header, footer, and metadata. */
   name: "Drydock",
   /** Current release version shown in the hero badge. */
-  version: "1.6.0-rc.4",
+  version: "1.6.0-rc.5",
   /** Short product tagline used in page titles and OG metadata. */
   tagline: "Container Update Monitoring",
   /** Default meta / OpenGraph / Twitter description. */

@@ -10,9 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.5] — 2026-07-22
+
 ### Changed
 
 - **The Containers table's Resources column is now optional** ([#498](https://github.com/CodesWhat/drydock/issues/498)). It remains visible by default, but the column picker can hide it and preserves that choice. Source, release-note, and registry shortcuts move into each row's **More** menu while hidden and remain available in card and detail views.
+
+### Security
+
+- **The documentation website now runs Next.js 16.2.11 and React 19.2.8.** The Next.js patch closes nine upstream advisories disclosed against 16.2.9, including proxy bypass, Server Actions denial of service and SSRF, rewrite SSRF, response-cache confusion, image-optimization denial of service, and Server Function endpoint disclosure (GHSA-6gpp-xcg3-4w24, GHSA-m99w-x7hq-7vfj, GHSA-89xv-2m56-2m9x, GHSA-p9j2-gv94-2wf4, GHSA-68g3-v927-f742, GHSA-4633-3j49-mh5q, GHSA-4c39-4ccg-62r3, GHSA-q8wf-6r8g-63ch, GHSA-955p-x3mx-jcvp).
 
 ## [1.6.0-rc.4] — 2026-07-22
 
@@ -2215,7 +2221,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.4...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.5...HEAD
+[1.6.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.4...v1.6.0-rc.5
 [1.6.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...v1.6.0-rc.4
 [1.6.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...v1.6.0-rc.3
 [1.6.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...v1.6.0-rc.2
