@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **The Containers table's Resources column is now optional** ([#498](https://github.com/CodesWhat/drydock/issues/498)). It remains visible by default, but the column picker can hide it and preserves that choice. Source, release-note, and registry shortcuts move into each row's **More** menu while hidden and remain available in card and detail views.
+- **The Playwright release gate now waits for watcher-complete QA fixtures.** Browser scenarios start only after the authenticated setup sees the full local and remote fixture set from the startup scans, while later cron and Docker-event scans are parked in the browser-only compose stack. This prevents grouping, update-status, and targeted-refresh assertions from racing partially enriched container state without adding whole-suite retries or changing production watcher defaults.
 
 ### Security
 

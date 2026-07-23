@@ -59,6 +59,10 @@ The health-transition test also waited for an asynchronous Docker event to refre
 
 The targeted scan also exposed a product bug in the endpoint: it refreshed live Docker containers, then scanned the stale store object captured before the refresh and could overwrite the new health. The endpoint now scans the refreshed object, retaining the real watcher and SSE behavior under test without depending on event-delivery timing.
 
+Exact-main verification for rc.5 then exposed a separate suite-startup race in [Playwright run 29967817350](https://github.com/CodesWhat/drydock/actions/runs/29967817350). The first attempt reached the health-transition scenario while a full watcher scan still held the shared QA process; the rerun passed that scenario but started browser assertions before the first 27-container local scan had completed, so group and update-result fixtures were only partially populated. The QA `/health` endpoint had correctly reported that Express was serving requests, but it did not promise that watcher enrichment was complete. Two-minute cron polling and Docker-event refreshes could also start another full scan during the suite.
+
+Playwright's authenticated setup now waits for one exact 29-container snapshot with representative local and remote groups, registry results, and update availability before any browser scenario runs. It does not trigger another scan alongside the built-in startup scan. The browser-only compose fixture parks later cron runs and disables event-driven refreshes, leaving production watcher defaults unchanged while keeping the accepted snapshot stable. A cold-stack validation produced one local and one remote startup scan, and the complete 34-scenario browser suite then passed with no retries (33 passed, one intentional skip).
+
 ## Residual risk and follow-up threshold
 
 The remaining nondeterministic boundary is live public-registry behavior. It produced two direct readiness failures plus the npm and GitLab transport failures in the 30-attempt history. Exact readiness and richer artifacts make those failures actionable, but do not make Docker Hub, Quay, npm, or other providers deterministic.
