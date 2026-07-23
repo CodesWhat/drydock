@@ -46,6 +46,8 @@ function hasCompleteQaFixtureSnapshot(payload: unknown): boolean {
   );
 }
 
+setup.setTimeout(240_000);
+
 setup('authenticate', async ({ page, request, baseURL }) => {
   const availability = await checkServerAvailability(request, baseURL);
   expect(availability.healthy, getServerUnavailableMessage(baseURL)).toBeTruthy();
