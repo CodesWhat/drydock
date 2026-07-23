@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The Containers table's Resources column is now optional** ([#498](https://github.com/CodesWhat/drydock/issues/498)). It remains visible by default, but the column picker can hide it and preserves that choice. Source, release-note, and registry shortcuts move into each row's **More** menu while hidden and remain available in card and detail views.
 
+### Fixed
+
+- **The Dashboard and Containers views no longer overflow horizontally on narrow phone screens** ([#498](https://github.com/CodesWhat/drydock/issues/498)). Crossing into a single-column breakpoint now re-syncs the dashboard widget layout so widgets stop spilling past the viewport, single-column card lists no longer leave an empty band below reflowed cards, and long stack names in the Containers group header truncate instead of pushing the update button off-screen.
+
 ### Security
 
 - **The documentation website now runs Next.js 16.2.11 and React 19.2.8.** The Next.js patch closes nine upstream advisories disclosed against 16.2.9, including proxy bypass, Server Actions denial of service and SSRF, rewrite SSRF, response-cache confusion, image-optimization denial of service, and Server Function endpoint disclosure (GHSA-6gpp-xcg3-4w24, GHSA-m99w-x7hq-7vfj, GHSA-89xv-2m56-2m9x, GHSA-p9j2-gv94-2wf4, GHSA-68g3-v927-f742, GHSA-4633-3j49-mh5q, GHSA-4c39-4ccg-62r3, GHSA-q8wf-6r8g-63ch, GHSA-955p-x3mx-jcvp).
