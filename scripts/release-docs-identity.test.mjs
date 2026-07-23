@@ -3,8 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const RC_VERSION = '1.6.0-rc.5';
-const RC_DATE = '2026-07-22';
-const RC_DISPLAY_DATE = 'July 22, 2026';
+const RC_DATE = '2026-07-23';
+const RC_DISPLAY_DATE = 'July 23, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
