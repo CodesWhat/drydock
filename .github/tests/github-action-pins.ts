@@ -1,5 +1,5 @@
 export const expectedActionPins = new Map([
-  ['actions/cache', 'actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5'],
+  ['actions/cache', 'actions/cache@caa296126883cff596d87d8935842f9db880ef25  # v5.1.0'],
   ['actions/checkout', 'actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3'],
   [
     'actions/dependency-review-action',
