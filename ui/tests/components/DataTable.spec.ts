@@ -1971,6 +1971,45 @@ describe('DataTable', () => {
         expect(w.get('ul[role="list"]').attributes('style')).toContain('grid-auto-rows: auto');
       });
 
+      it('resolves rem card minimum widths against the live computed root font size', async () => {
+        // Pins rootFontSizePx() reading getComputedStyle(documentElement) rather than
+        // assuming a fixed 16px root: at a 20px root, 20rem → 400px keeps a 700px
+        // viewport single-column (auto rows); the old fixed-16px math (20rem → 320px)
+        // would fit two columns here (1fr rows), so this width tells the two apart.
+        const originalGetComputedStyle = window.getComputedStyle;
+        const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, ...rest) => {
+          if (el === document.documentElement) {
+            return { fontSize: '20px' } as CSSStyleDeclaration;
+          }
+          return originalGetComputedStyle(el, ...rest);
+        });
+
+        const w = await mountAtWidth(700, { preferCards: true, cardMinWidth: '20rem' });
+
+        expect(w.get('ul[role="list"]').attributes('style')).toContain('grid-auto-rows: auto');
+
+        spy.mockRestore();
+      });
+
+      it('falls back to a 16px root font size when the computed value is unparseable', async () => {
+        // Pins the rootFontSizePx() fallback branch: an unparseable computed font size
+        // (Number.parseFloat('') is NaN) falls back to 16px, so 30rem → 480px keeps a
+        // 700px viewport single-column (auto rows).
+        const originalGetComputedStyle = window.getComputedStyle;
+        const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el, ...rest) => {
+          if (el === document.documentElement) {
+            return { fontSize: '' } as CSSStyleDeclaration;
+          }
+          return originalGetComputedStyle(el, ...rest);
+        });
+
+        const w = await mountAtWidth(700, { preferCards: true, cardMinWidth: '30rem' });
+
+        expect(w.get('ul[role="list"]').attributes('style')).toContain('grid-auto-rows: auto');
+
+        spy.mockRestore();
+      });
+
       it('falls back to a 320px card minimum width for invalid values', async () => {
         const w = await mountAtWidth(400, { cardMinWidth: 'not-a-size' });
 

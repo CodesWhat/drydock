@@ -471,13 +471,21 @@ watch(cardReflowForced, (value) => emit('update:cardReflowForced', value), { imm
 // matters here (see cardGridAutoRows), so an off-by-one near an exact boundary is
 // harmless. Falls back to a single column while unmeasured (viewportWidth 0).
 const CARD_GRID_GAP_PX = 12;
+// The app scales the document root via `--dd-font-size` (0.8–1.3 presets), so `rem`/`em`
+// can't assume a 16px root. Resolve them against the live computed root font size, the
+// same value the browser uses for the template's `minmax()` units, so the heuristic
+// agrees with the rendered layout at every font-size preset.
+function rootFontSizePx(): number {
+  const parsed = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
+}
 function parseCardMinWidthPx(value: string): number {
   const match = value.trim().match(/^([0-9]+(?:\.[0-9]+)?)(px|rem|em)?$/);
   const amount = match ? Number.parseFloat(match[1]) : Number.NaN;
   if (!Number.isFinite(amount) || amount <= 0) {
     return 320;
   }
-  return match?.[2] === 'rem' || match?.[2] === 'em' ? amount * 16 : amount;
+  return match?.[2] === 'rem' || match?.[2] === 'em' ? amount * rootFontSizePx() : amount;
 }
 const cardColumnCount = computed(() => {
   const minWidth = parseCardMinWidthPx(props.cardMinWidth);
