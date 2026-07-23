@@ -1947,6 +1947,38 @@ describe('DataTable', () => {
         expect(w.findAll('[data-test="dd-card"]')[0].classes()).toContain('h-full');
       });
 
+      it('uses content-height rows for a single-column card grid', async () => {
+        const w = await mountAtWidth(400, { cardMinWidth: '320px' });
+        const list = w.get('ul[role="list"]');
+
+        expect(list.attributes('style')).toContain('grid-auto-rows: auto');
+        expect(w.findAll('[data-test="dd-card"]')[0].classes()).toContain('h-full');
+      });
+
+      it('converts rem card minimum widths when detecting a single-column grid', async () => {
+        const w = await mountAtWidth(500, { preferCards: true, cardMinWidth: '30rem' });
+
+        expect(w.get('ul[role="list"]').attributes('style')).toContain('grid-auto-rows: auto');
+      });
+
+      it('converts em card minimum widths when detecting a single-column grid', async () => {
+        const w = await mountAtWidth(500, { preferCards: true, cardMinWidth: '30em' });
+
+        expect(w.get('ul[role="list"]').attributes('style')).toContain('grid-auto-rows: auto');
+      });
+
+      it('falls back to a 320px card minimum width for invalid values', async () => {
+        const w = await mountAtWidth(400, { cardMinWidth: 'not-a-size' });
+
+        expect(w.get('ul[role="list"]').attributes('style')).toContain('grid-auto-rows: auto');
+      });
+
+      it('falls back to a 320px card minimum width for zero values', async () => {
+        const w = await mountAtWidth(400, { cardMinWidth: '0px' });
+
+        expect(w.get('ul[role="list"]').attributes('style')).toContain('grid-auto-rows: auto');
+      });
+
       it('uses a vertical flex list and natural card height while virtualized', async () => {
         const manyRows = Array.from({ length: 20 }, (_, i) => ({
           id: `${i + 1}`,
