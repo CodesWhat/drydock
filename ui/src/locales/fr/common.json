@@ -9,26 +9,26 @@
     "close": "Fermer",
     "retry": "Réessayer",
     "unknown": "inconnu",
-    "yes": "yes",
-    "no": "no",
+    "yes": "oui",
+    "no": "non",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "rateLimitHit": "Limite de taux de registre atteinte",
+      "accessDenied": "Accès au registre refusé",
+      "imageNotFound": "Image introuvable",
+      "authFailed": "Authentification du registre échouée",
+      "unreachable": "Registre injoignable",
+      "cancelled": "Annulé",
+      "securityBlocked": "Bloqué par le scan de sécurité",
+      "signatureFailed": "Vérification de signature échouée"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Personnalisé"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "à l'instant"
     },
     "imageAge": {
-      "now": "now"
+      "now": "maintenant"
     }
   }
 }

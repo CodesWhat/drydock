@@ -64,7 +64,8 @@
       "preview": "Попередній перегляд",
       "agent-disconnect": "Відключення агента",
       "notification-delivery-failed": "Помилка доставки сповіщення",
-      "security-alert": "Попередження безпеки"
+      "security-alert": "Попередження безпеки",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "Контейнер",
@@ -107,6 +108,10 @@
       "container-unhealthy": {
         "name": "Контейнер несправний",
         "description": "Коли перевірка стану Docker контейнера переходить у стан \"unhealthy\""
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {
