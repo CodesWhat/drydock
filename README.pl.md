@@ -1,5 +1,7 @@
 <div align="center">
 
+<p><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <strong>Polski</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.pt-BR.md">Português (Brasil)</a></p>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/whale-logo-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/whale-logo.png" />
@@ -9,8 +11,6 @@
 <h1>drydock</h1>
 
 **Obserwator aktualizacji obrazów kontenerów — 23 rejestry, 20 dostawców powiadomień i działań.**
-
-<p><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <strong>Polski</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.pt-BR.md">Português (Brasil)</a></p>
 
 </div>
 
