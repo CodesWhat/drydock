@@ -4558,7 +4558,7 @@ describe('handleMaturityGateClearedEvent', () => {
 
   test('regression: matured container fires exactly one notification across maturity-cleared and the next update-available scan', async () => {
     await trigger.register('trigger', 'test', 'pushover', configurationValid);
-    trigger.init();
+    await trigger.init();
     const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
 
     await trigger.handleMaturityGateClearedEvent({

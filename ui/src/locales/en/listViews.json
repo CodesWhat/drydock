@@ -64,7 +64,8 @@
       "preview": "Preview",
       "agent-disconnect": "Agent Disconnect",
       "notification-delivery-failed": "Notification Delivery Failed",
-      "security-alert": "Security Alert"
+      "security-alert": "Security Alert",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "Container",

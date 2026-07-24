@@ -727,6 +727,36 @@ describe('audit-subscriptions dedupe windows', () => {
     expect(mockInsertAudit.mock.calls[0][0]).not.toHaveProperty('containerIdentityKey');
   });
 
+  test('records distinct maturity gate cleared audits within the dedupe window when pendingSince differs', async () => {
+    const { maturityGateClearedHandler } = setupAuditSubscriptions();
+
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({ pendingSince: '2025-12-30T00:00:00.000Z' }),
+    );
+    vi.advanceTimersByTime(1);
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({ pendingSince: '2025-12-31T00:00:00.000Z' }),
+    );
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    expect(mockInc).toHaveBeenCalledTimes(2);
+  });
+
+  test('deduplicates maturity gate cleared audits with an identical pendingSince within the window', async () => {
+    const { maturityGateClearedHandler } = setupAuditSubscriptions();
+
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({ pendingSince: '2025-12-30T00:00:00.000Z' }),
+    );
+    vi.advanceTimersByTime(5 * 60 * 1000 - 1);
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({ pendingSince: '2025-12-30T00:00:00.000Z' }),
+    );
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledTimes(1);
+  });
+
   test('deduplicates agent disconnects that repeat before 60 seconds', async () => {
     const { agentDisconnectedHandler } = setupAuditSubscriptions();
     const payload: AgentDisconnectedEventPayload = {

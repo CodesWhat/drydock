@@ -360,7 +360,8 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
 
   registrars.registerMaturityGateCleared(async (payload) => {
     const containerIdentityKey = getContainerIdentityKey(payload.container);
-    const dedupeKey = containerIdentityKey ?? payload.container.name;
+    const containerKey = containerIdentityKey ?? payload.container.name;
+    const dedupeKey = `${containerKey}|${payload.pendingSince ?? payload.clearedAt}`;
     if (
       isDuplicateAuditEvent(
         maturityGateClearedAuditSeenAt,

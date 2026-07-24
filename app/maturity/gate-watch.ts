@@ -1,9 +1,13 @@
 import { redactContainerRuntimeEnv } from '../api/container/shared.js';
 import { emitMaturityGateCleared } from '../event/index.js';
+import log from '../log/index.js';
 import type { Container } from '../model/container.js';
 import { hasRawUpdate } from '../model/container.js';
 import { resolveMaturityClock, resolveMaturityMinAgeDays } from '../model/maturity-policy.js';
 import { clearMaturityGatePendingSince } from '../store/container.js';
+import { getErrorMessage } from '../util/error.js';
+
+const logGateWatch = log.child({ component: 'maturity.gate-watch' });
 
 function hasMaturityGatePendingSince(container: Container): boolean {
   return (
@@ -43,12 +47,19 @@ export async function maybeEmitMaturityGateCleared(container: Container): Promis
   if (!clearMaturityGatePendingSince(container.id)) {
     return false;
   }
-  await emitMaturityGateCleared({
-    container: redactContainerRuntimeEnv({ ...container }),
-    clearedAt: new Date().toISOString(),
-    pendingSince,
-    minAgeDays,
-    ...(clock.source ? { clockSource: clock.source } : {}),
-  });
+  try {
+    await emitMaturityGateCleared({
+      container: redactContainerRuntimeEnv({ ...container }),
+      clearedAt: new Date().toISOString(),
+      pendingSince,
+      minAgeDays,
+      ...(clock.source ? { clockSource: clock.source } : {}),
+    });
+  } catch (error: unknown) {
+    logGateWatch.warn(
+      `Failed to emit maturity-cleared event for container ${container.id} (${getErrorMessage(error)})`,
+    );
+    return false;
+  }
   return true;
 }

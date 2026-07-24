@@ -1,10 +1,13 @@
 import type { Container } from '../model/container.js';
 import { maybeEmitMaturityGateCleared } from './gate-watch.js';
 
-const { mockClearMaturityGatePendingSince, mockEmitMaturityGateCleared } = vi.hoisted(() => ({
-  mockClearMaturityGatePendingSince: vi.fn(),
-  mockEmitMaturityGateCleared: vi.fn().mockResolvedValue(undefined),
-}));
+const { mockClearMaturityGatePendingSince, mockEmitMaturityGateCleared, mockLogWarn } = vi.hoisted(
+  () => ({
+    mockClearMaturityGatePendingSince: vi.fn(),
+    mockEmitMaturityGateCleared: vi.fn().mockResolvedValue(undefined),
+    mockLogWarn: vi.fn(),
+  }),
+);
 
 vi.mock('../store/container.js', () => ({
   clearMaturityGatePendingSince: mockClearMaturityGatePendingSince,
@@ -12,6 +15,14 @@ vi.mock('../store/container.js', () => ({
 
 vi.mock('../event/index.js', () => ({
   emitMaturityGateCleared: mockEmitMaturityGateCleared,
+}));
+
+vi.mock('../log/index.js', () => ({
+  default: {
+    child: () => ({
+      warn: mockLogWarn,
+    }),
+  },
 }));
 
 beforeEach(() => {
@@ -133,6 +144,24 @@ test('returns false and does not emit when a concurrent caller already cleared t
   expect(mockClearMaturityGatePendingSince).toHaveBeenCalledTimes(1);
   expect(mockClearMaturityGatePendingSince).toHaveBeenCalledWith('container-1');
   expect(mockEmitMaturityGateCleared).not.toHaveBeenCalled();
+});
+
+test('returns false and logs a warning when emitMaturityGateCleared throws', async () => {
+  mockClearMaturityGatePendingSince.mockReturnValue(true);
+  mockEmitMaturityGateCleared.mockRejectedValueOnce(new Error('handler exploded'));
+  const container = makeContainer({
+    updateAvailable: true,
+    updateDetectedAt: '2026-05-31T09:15:00.000Z',
+    updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 3 },
+  });
+
+  const result = await maybeEmitMaturityGateCleared(container);
+
+  expect(result).toBe(false);
+  expect(mockClearMaturityGatePendingSince).toHaveBeenCalledTimes(1);
+  expect(mockEmitMaturityGateCleared).toHaveBeenCalledTimes(1);
+  expect(mockLogWarn).toHaveBeenCalledTimes(1);
+  expect(mockLogWarn.mock.calls[0][0]).toContain('handler exploded');
 });
 
 test('defaults minAgeDays to 7 and omits clockSource when the clock does not resolve', async () => {
