@@ -96,7 +96,15 @@ jobs:
           # always fail. Identical trees is the real invariant.
           minor="$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^v?([0-9]+)\.([0-9]+)\..*/\1.\2/')"
           dev_branch="dev/v${minor}"
-          if ! git ls-remote --exit-code --heads origin "${dev_branch}" >/dev/null 2>&1; then
+          # Separate "branch is absent" from "we could not ask". --exit-code collapses
+          # both into a non-zero status, so a network blip or auth failure would take the
+          # skip path and let a drifted main be tagged. Empty output on a successful query
+          # is the only thing that means the branch is genuinely gone.
+          if ! refs="$(git ls-remote --heads origin "refs/heads/${dev_branch}")"; then
+            echo "::error::Could not query origin for ${dev_branch}. Refusing to skip the drift check on an unanswered question."
+            exit 1
+          fi
+          if [ -z "${refs}" ]; then
             echo "No ${dev_branch} on origin (retired after GA, or not yet created) — nothing to compare."
             exit 0
           fi

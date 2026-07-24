@@ -42,19 +42,45 @@ test('the drift guard compares trees, not commit ancestry', () => {
 
 test('the drift guard is skipped once the dev branch is retired after GA', () => {
   const run = syncStep()?.run ?? '';
-  expect(run).toContain('git ls-remote --exit-code --heads origin "${dev_branch}"');
+  expect(run).toContain('refs="$(git ls-remote --heads origin "refs/heads/${dev_branch}")"');
   // Absent dev branch is a clean no-op, not a failed cut.
+  expect(run).toContain('if [ -z "${refs}" ]; then');
   expect(run).toContain('exit 0');
+});
+
+test('an unanswerable remote query fails the cut instead of skipping the guard', () => {
+  // --exit-code collapses "no such branch" and "could not reach origin" into the same
+  // non-zero status, so a network blip would silently take the retired-branch path and
+  // let a drifted main be tagged. Only empty output on a *successful* query may skip.
+  const run = syncStep()?.run ?? '';
+  expect(run).not.toContain('git ls-remote --exit-code');
+  expect(run).toContain('::error::Could not query origin for ${dev_branch}');
+
+  const queryIndex = run.indexOf('if ! refs="$(git ls-remote');
+  const skipIndex = run.indexOf('if [ -z "${refs}" ]; then');
+  expect(queryIndex).toBeGreaterThanOrEqual(0);
+  expect(skipIndex).toBeGreaterThan(queryIndex);
 });
 
 test('the drift guard runs before any tagging or publishing work', () => {
   const names = releaseSteps().map((step) => step.name);
-  const guardIndex = names.indexOf(SYNC_STEP_NAME);
-  const checkoutIndex = names.indexOf('Checkout');
-  const resolveIndex = names.indexOf('Resolve target SHA and lowercase repository');
+  const indexOfStep = (name: string) => {
+    const index = names.indexOf(name);
+    // A missing step would make the ordering assertions below pass vacuously against -1.
+    expect(index, `release-cut has no step named "${name}"`).toBeGreaterThanOrEqual(0);
+    return index;
+  };
 
-  expect(guardIndex).toBeGreaterThan(checkoutIndex);
-  expect(guardIndex).toBeLessThan(resolveIndex);
+  const guardIndex = indexOfStep(SYNC_STEP_NAME);
+
+  expect(guardIndex).toBeGreaterThan(indexOfStep('Checkout'));
+  expect(guardIndex).toBeLessThan(indexOfStep('Resolve target SHA and lowercase repository'));
+  // The steps that actually publish or sign something, so the guard can't be reordered
+  // past the point where a drifted cut has already left the runner.
+  expect(guardIndex).toBeLessThan(indexOfStep('Log in to GHCR'));
+  expect(guardIndex).toBeLessThan(indexOfStep('Build and push staging image'));
+  expect(guardIndex).toBeLessThan(indexOfStep('Sign container images'));
+  expect(guardIndex).toBeLessThan(indexOfStep('Verify release artifact signature'));
 });
 
 test('ci-verify gates pull requests into the integration branch, not just main', () => {
