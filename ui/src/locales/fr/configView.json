@@ -6,6 +6,24 @@
       "profile": "Profil"
     },
     "general": {
+      "updateMode": {
+        "title": "Mode de mise à jour global",
+        "description": "Choisissez si Drydock se contente de signaler les mises à jour, attend une action manuelle, ou distribue automatiquement les mises à jour éligibles.",
+        "options": {
+          "notify": {
+            "label": "Notifier",
+            "description": "Détecter et notifier seulement ; aucune mise à jour n'est appliquée."
+          },
+          "manual": {
+            "label": "Manuel",
+            "description": "Appliquer les mises à jour uniquement sur demande."
+          },
+          "auto": {
+            "label": "Auto",
+            "description": "Distribuer automatiquement les mises à jour éligibles."
+          }
+        }
+      },
       "application": {
         "title": "Application",
         "loadingServerInfo": "Chargement des informations serveur"
@@ -72,6 +90,7 @@
         "no": "Non"
       },
       "errors": {
+        "updateMode": "Échec de la mise à jour du mode de mise à jour global",
         "loadServerInfo": "Impossible de charger les informations serveur",
         "loadProfileData": "Impossible de charger les données du profil",
         "updateNetworkSettings": "Impossible de mettre à jour les paramètres réseau",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Synchronisation",
+        "label": "Synchroniser entre les appareils",
+        "description": "Gardez vos préférences d'apparence et de mise en page synchronisées sur tous les appareils depuis lesquels vous vous connectez"
+      },
       "language": {
         "title": "Langue"
       },
@@ -118,6 +142,9 @@
           "soft": "Doux",
           "round": "Rond"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Échec de la mise à jour des paramètres de synchronisation"
       }
     },
     "profile": {

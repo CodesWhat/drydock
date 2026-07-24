@@ -6,6 +6,24 @@
       "profile": "Profil"
     },
     "general": {
+      "updateMode": {
+        "title": "Genel güncelleme modu",
+        "description": "Drydock'un güncellemeleri yalnızca bildirmesini mi, manuel bir işlemi mi beklemesini, yoksa uygun güncellemeleri otomatik olarak uygulamasını mı istediğinizi seçin.",
+        "options": {
+          "notify": {
+            "label": "Bildir",
+            "description": "Yalnızca algıla ve bildir; güncellemeler asla uygulanmaz."
+          },
+          "manual": {
+            "label": "Manuel",
+            "description": "Güncellemeleri yalnızca siz istediğinizde uygula."
+          },
+          "auto": {
+            "label": "Otomatik",
+            "description": "Uygun güncellemeleri otomatik olarak uygula."
+          }
+        }
+      },
       "application": {
         "title": "Uygulama",
         "loadingServerInfo": "Sunucu bilgileri yükleniyor"
@@ -72,6 +90,7 @@
         "no": "Hayır"
       },
       "errors": {
+        "updateMode": "Genel güncelleme modu güncellenemedi",
         "loadServerInfo": "Sunucu bilgileri yüklenemedi",
         "loadProfileData": "Profil verileri yüklenemedi",
         "updateNetworkSettings": "Ağ ayarları güncellenemedi",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Senkronizasyon",
+        "label": "Cihazlar arasında senkronize et",
+        "description": "Görünüm ve düzen tercihlerinizi oturum açtığınız her cihazda senkronize tutun"
+      },
       "language": {
         "title": "Dil"
       },
@@ -118,6 +142,9 @@
           "soft": "Yumuşak",
           "round": "Yuvarlak"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Senkronizasyon ayarları güncellenemedi"
       }
     },
     "profile": {

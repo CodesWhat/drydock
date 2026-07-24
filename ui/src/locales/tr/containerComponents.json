@@ -7,6 +7,9 @@
       "previewUpdate": "Güncellemeyi Önizle",
       "forceUpdate": "Güncellemeyi zorla",
       "updateNow": "Şimdi güncelle",
+      "previewOnly": "Yalnızca önizleme",
+      "dryRunUpdateTooltip": "Bu tetikleyici deneme modunda (dry-run) — tıklamak yeni imajı çeker ancak container'ı değiştirmez.",
+      "dryRunCondition": "{trigger} eylem tetikleyicisi deneme modunda (dry-run) — güncellemeler yalnızca önizlenir, container'lar değiştirilmez.",
       "scanNow": "Şimdi tara",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "Sıfırla",
       "clearSkips": "Atlamaları Temizle",
       "clearPolicy": "Politikayı Temizle",
+      "overridden": "Geçersiz kılındı",
+      "revert": "Geri al",
+      "revertAll": "Bildirime dayalı politikaya döndür",
       "snoozedUntil": "Şu tarihe kadar ertelendi:",
       "maturityMode": "Olgunluk modu:",
       "matureOnlyMinimum": "Yalnızca olgun ({days}d minimum)",
       "allowAllUpdates": "Tüm güncellemelere izin ver",
       "skippedTags": "Atlanan etiketler:",
       "skippedDigests": "Atlanan özetler:",
+      "noSkippedEntries": "Atlanan girdi yok",
       "noActivePolicy": "Etkin güncelleme politikası yok.",
       "removeSkip": "Atlamayı kaldır",
       "previewSection": "Önizleme",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "Güncellemeyi zorla",
       "updateAction": "Güncelle",
       "skipUpdateAction": "Bu güncellemeyi atla",
+      "setGroupAction": "Grup belirle",
       "rollbackAction": "Geri al",
       "deleteAction": "Sil",
       "pinnedTooltip": "Sabitlendi",
+      "skippedLabel": "Atlandı",
       "upToDateTooltip": "güncel",
+      "imageUpdateTooltip": "{tag} etiketi artık farklı bir imaj derlemesine işaret ediyor. Yeni imajı çekmek için yeniden dağıtın; sürüm etiketinin kendisi değişmedi.",
       "blockedTooltip": "Engellendi",
       "actionsDisabled": "İşlemler devre dışı bırakıldı",
       "openActionsMenu": "İşlemler menüsünü aç",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "Ertelenen güncellemeler",
       "ariaSkippedUpdates": "Atlanan güncellemeler",
       "ariaMaturityBlocked": "Olgunluğu engellenen güncellemeler",
+      "ariaPinnedTag": "Sabitlenmiş etiket",
+      "pinnedTagTooltip": "Bu etiket tam bir sürüme sabitlendi — drydock otomatik olarak daha yeni sürümlere geçmeyecek. İzin vermek için dd.tag.family=loose ayarlayın veya bir dd.tag.include filtresi ekleyin.",
+      "unknownKindLabel": "Bilinmiyor",
       "emptyState": "Filtrelerinizle eşleşen kapsayıcı yok",
       "currentLabel": "Mevcut",
       "latestLabel": "En son",
+      "blockedByBouncer": "Bouncer tarafından engellendi",
       "registryErrorRateLimited": "İstek sınırı aşıldı",
       "registryErrorAuth": "Kimlik doğrulama başarısız",
       "registryErrorNotFound": "Bulunamadı",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "Gruptakilerin tümünü güncelle",
       "updateSingular": "güncelleme",
       "updatePlural": "güncellemeler"
+    },
+    "groupDialog": {
+      "title": "Container grubunu ayarla",
+      "description": "{name} öğesinin bu tarayıcıda nasıl gruplandığını seçin. Bu, siz temizleyene kadar sunucu, Compose veya Swarm grubunu geçersiz kılar.",
+      "groupLabel": "Grup adı",
+      "groupPlaceholder": "örn. Medya hizmetleri",
+      "helpText": "Yazarken mevcut gruplar önerilir.",
+      "clear": "Algılanan grubu kullan",
+      "save": "Grubu kaydet"
     },
     "sideDetail": {
       "stopTooltip": "Durdur",
@@ -258,6 +281,7 @@
       "allBouncer": "Tüm Bouncer",
       "safe": "Güvenli",
       "unsafe": "Güvenli değil",
+      "blocked": "Engellendi",
       "allRegistries": "Tüm Kayıtlar",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "Tüm Toplantı Sahipleri",
       "allContainers": "Tüm Konteynerler",
       "hasUpdate": "Güncelleme Var",
+      "versionUpdate": "Sürüm güncellemesi",
       "major": "Binbaşı",
       "minor": "Küçük",
       "patch": "Yama",
+      "digest": "İmaj güncellemesi",
       "hidePinned": "Sabitlenenleri Gizle",
       "hidePinnedTooltip": "Belirli sürümlere sabitlenmiş kapsayıcıları gizle",
       "clearAll": "Tümünü temizle",
@@ -334,6 +360,10 @@
       "tooltip": "Mevcut en iyi kararlı semver etiketi — sabitlemeyi düşünün",
       "tooltipWithTag": "Önerilen: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Daha yenisi mevcut",
+      "tooltip": "Daha yeni sürüm mevcut: {tag}. Bu Tag sabitlendi, drydock onu otomatik olarak güncellemez."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Güvenlik engellendi",
       "rolledBack": "Geri alındı",
@@ -350,6 +380,61 @@
       "noTrigger": "Tetikleyici yok",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Asansörler:"
+    },
+    "updateStatus": {
+      "title": "Güncelleme durumu",
+      "showDetails": "Koşulları göster",
+      "liftCountdown": "{countdown} · {date} tarihinde açılır",
+      "maturityClockPublished": "Aday {date} tarihinde yayımlandı — {minDays} günlük minimuma {count} gün kaldı",
+      "maturityClockDetected": "Aday {date} tarihinde algılandı — {minDays} günlük minimuma {count} gün kaldı",
+      "updateButton": "Şimdi güncelle",
+      "blockedButton": "Güncelleme engellendi",
+      "notificationsOnlyButton": "Yalnızca bildirimler",
+      "summary": {
+        "upToDate": "Güncel.",
+        "insight": "Daha yeni sürüm mevcut — bu etiket sabitlendi.",
+        "inProgress": "Güncelleme devam ediyor.",
+        "hardBlocked": "Güncelleme engellendi — düzeltme gerekiyor.",
+        "notify": "Yalnızca bildirimler — Drydock güncellemeleri uygulamayacak.",
+        "autoFiltered": "Güncelleme mevcut — otomatik gönderim filtrelendi (manuel çalışır).",
+        "manualFiltered": "Güncelleme mevcut — bir politika koşulu onay gerektirecek.",
+        "autoReady": "Güncelleme mevcut — otomatik gönderime uygun.",
+        "manualReady": "Güncelleme mevcut — manuel olarak uygulamaya hazır."
+      },
+      "conditions": {
+        "no-update-available": "Kullanılabilir güncelleme yok",
+        "rollback-container": "Geri alınan container",
+        "active-operation": "Güncelleme zaten çalışıyor",
+        "security-scan-blocked": "Güvenlik politikası tarafından engellendi",
+        "last-update-rolled-back": "Önceki güncelleme geri alındı",
+        "snoozed": "Güncelleme ertelendi",
+        "skip-tag": "Etiket atlandı",
+        "skip-digest": "Digest atlandı",
+        "maturity-not-reached": "Olgunluk politikası bekliyor",
+        "threshold-not-reached": "Tetikleyici eşiğine ulaşılmadı",
+        "trigger-excluded": "Etiketler nedeniyle tetikleyici hariç tutuldu",
+        "trigger-not-included": "Etiketler tarafından tetikleyici filtrelendi",
+        "agent-mismatch": "Tetikleyici aracı uyumsuzluğu",
+        "no-update-trigger-configured": "Yapılandırılmış güncelleme tetikleyicisi yok",
+        "self-update-unavailable": "Kendi kendini güncelleme kullanılamıyor",
+        "maintenance-window-closed": "Bakım penceresi kapalı",
+        "dry-run-trigger": "Tetikleyici yapılandırması deneme modunda (dry-run)"
+      },
+      "actions": {
+        "editPolicy": "Güncelleme politikasını düzenle",
+        "configureLabels": "Tetikleyici etiketlerini yapılandır",
+        "viewOperation": "Güncelleme işlemini görüntüle",
+        "reviewSecurity": "Tarama sonuçlarını incele",
+        "viewRollback": "Geri alma bağlamını görüntüle",
+        "configureAgent": "Tetikleyici aracısını yapılandır",
+        "configureTriggers": "Güncelleme tetikleyicilerini yapılandır",
+        "configureThreshold": "Tetikleyici eşiğini yapılandır",
+        "configureSelfUpdate": "Kendi kendini güncellemeyi yapılandır",
+        "configureMaintenance": "Bakım penceresini yapılandır"
+      }
+    },
+    "maturityBadge": {
+      "new": "YENİ"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "{field}, bildirime dayalı politikaya döndürüldü",
+        "revertAll": "Tüm geçersiz kılmalar bildirime dayalı politikaya döndürüldü",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 gün",
+      "availableDaysPlural": "{count} gün",
+      "availableHoursSingular": "1 saat",
+      "availableHoursPlural": "{count} saat",
+      "availableMinutesSingular": "1 dakika",
+      "availableMinutesPlural": "{count} dakika",
+      "justNow": "Az önce algılandı"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Registry ayarlarını aç",
+        "openTriggerSettings": "Tetikleyici ayarlarını aç"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

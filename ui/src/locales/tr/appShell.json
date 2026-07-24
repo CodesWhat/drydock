@@ -157,6 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "{total} eski yapılandırma takma adı algılandı",
       "legacyConfigTitlePlural": "{total} eski yapılandırma takma adı algılandı",
+      "legacyApiPathTitleSingular": "Kaldırılan API yoluna {total} istek algılandı",
+      "legacyApiPathTitlePlural": "Kaldırılan API yoluna {total} istek algılandı",
       "dontShowAgain": "Bir daha gösterme",
       "curlHealthcheckTitle": "Özel kıvrılma durumu denetimini geçersiz kılma algılandı",
       "envKeysLabel": "Zarf anahtarları ({count}): {keys}",

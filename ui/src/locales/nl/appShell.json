@@ -157,6 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "{total} verouderde triggerinvoer gedetecteerd",
       "legacyConfigTitlePlural": "{total} verouderde triggerinvoeren gedetecteerd",
+      "legacyApiPathTitleSingular": "{total} verzoek naar het verwijderde API-pad gedetecteerd",
+      "legacyApiPathTitlePlural": "{total} verzoeken naar het verwijderde API-pad gedetecteerd",
       "dontShowAgain": "Niet meer laten zien",
       "curlHealthcheckTitle": "Aangepaste overschrijving van krulstatus gedetecteerd",
       "envKeysLabel": "Env-sleutels ({count}): {keys}",

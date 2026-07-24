@@ -7,6 +7,9 @@
       "previewUpdate": "Предпросмотр обновления",
       "forceUpdate": "Принудительное обновление",
       "updateNow": "Обновить сейчас",
+      "previewOnly": "Только предпросмотр",
+      "dryRunUpdateTooltip": "Этот триггер в режиме dry-run — нажатие загрузит новый образ, но не заменит контейнер.",
+      "dryRunCondition": "Триггер действия {trigger} в режиме dry-run — обновления только предпросматриваются, контейнеры не заменяются.",
       "scanNow": "Сканировать сейчас",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "Сброс",
       "clearSkips": "Очистить пропуски",
       "clearPolicy": "Сбросить политику",
+      "overridden": "Переопределено",
+      "revert": "Отменить",
+      "revertAll": "Вернуть к декларативной политике",
       "snoozedUntil": "Отложено до:",
       "maturityMode": "Режим зрелости:",
       "matureOnlyMinimum": "Только зрелые (минимум {days} д.)",
       "allowAllUpdates": "Разрешить все обновления",
       "skippedTags": "Пропущенные теги:",
       "skippedDigests": "Пропущенные дайджесты:",
+      "noSkippedEntries": "Нет пропущенных записей",
       "noActivePolicy": "Активная политика обновлений не задана.",
       "removeSkip": "Убрать пропуск",
       "previewSection": "Предпросмотр",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "Принудительное обновление",
       "updateAction": "Обновить",
       "skipUpdateAction": "Пропустить обновление",
+      "setGroupAction": "Задать группу",
       "rollbackAction": "Откат",
       "deleteAction": "Удалить",
       "pinnedTooltip": "Закреплён",
+      "skippedLabel": "Пропущено",
       "upToDateTooltip": "Актуально",
+      "imageUpdateTooltip": "Тег {tag} теперь указывает на другую сборку образа. Разверните заново, чтобы загрузить новый образ; сам тег версии не изменился.",
       "blockedTooltip": "Заблокировано",
       "actionsDisabled": "Действия отключены",
       "openActionsMenu": "Открыть меню действий",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "Отложенные обновления",
       "ariaSkippedUpdates": "Пропущенные обновления",
       "ariaMaturityBlocked": "Обновления, заблокированные по зрелости",
+      "ariaPinnedTag": "Закреплённый тег",
+      "pinnedTagTooltip": "Этот тег закреплён на точной версии — drydock не будет автоматически переходить на более новые версии. Установите dd.tag.family=loose или добавьте фильтр dd.tag.include, чтобы разрешить это.",
+      "unknownKindLabel": "Неизвестно",
       "emptyState": "Нет контейнеров, соответствующих фильтрам",
       "currentLabel": "Текущий",
       "latestLabel": "Последний",
+      "blockedByBouncer": "Заблокировано Bouncer",
       "registryErrorRateLimited": "Превышен лимит запросов",
       "registryErrorAuth": "Ошибка аутентификации",
       "registryErrorNotFound": "Не найдено",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "Обновить все в группе",
       "updateSingular": "обновление",
       "updatePlural": "обновлений"
+    },
+    "groupDialog": {
+      "title": "Задать группу контейнера",
+      "description": "Выберите, как {name} группируется в этом браузере. Это переопределяет группу сервера, Compose или Swarm, пока вы это не очистите.",
+      "groupLabel": "Название группы",
+      "groupPlaceholder": "например, Медиасервисы",
+      "helpText": "При вводе предлагаются существующие группы.",
+      "clear": "Использовать обнаруженную группу",
+      "save": "Сохранить группу"
     },
     "sideDetail": {
       "stopTooltip": "Стоп",
@@ -258,6 +281,7 @@
       "allBouncer": "Все (Bouncer)",
       "safe": "Безопасный",
       "unsafe": "Небезопасный",
+      "blocked": "Заблокирован",
       "allRegistries": "Все реестры",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "Все хосты",
       "allContainers": "Все контейнеры",
       "hasUpdate": "Есть обновление",
+      "versionUpdate": "Обновление версии",
       "major": "Мажорное",
       "minor": "Минорное",
       "patch": "Патч",
+      "digest": "Обновление образа",
       "hidePinned": "Скрыть закреплённые",
       "hidePinnedTooltip": "Скрыть контейнеры, закреплённые на конкретных версиях",
       "clearAll": "Очистить всё",
@@ -334,6 +360,10 @@
       "tooltip": "Лучший стабильный semver-тег — рассмотрите закрепление",
       "tooltipWithTag": "Рекомендуемый: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Доступна новее",
+      "tooltip": "Доступна новая версия: {tag}. Этот Tag закреплён, drydock не обновит его автоматически."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Заблокировано безопасностью",
       "rolledBack": "Откат выполнен",
@@ -350,6 +380,61 @@
       "noTrigger": "Нет триггера",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Снимает:"
+    },
+    "updateStatus": {
+      "title": "Статус обновления",
+      "showDetails": "Показать условия",
+      "liftCountdown": "{countdown} · разблокируется {date}",
+      "maturityClockPublished": "Кандидат опубликован {date} — остался {count} день до минимума в {minDays} дн. | Кандидат опубликован {date} — осталось {count} дней до минимума в {minDays} дн.",
+      "maturityClockDetected": "Кандидат обнаружен {date} — остался {count} день до минимума в {minDays} дн. | Кандидат обнаружен {date} — осталось {count} дней до минимума в {minDays} дн.",
+      "updateButton": "Обновить сейчас",
+      "blockedButton": "Обновление заблокировано",
+      "notificationsOnlyButton": "Только уведомления",
+      "summary": {
+        "upToDate": "Актуально.",
+        "insight": "Доступна новая версия — этот тег закреплён.",
+        "inProgress": "Обновление выполняется.",
+        "hardBlocked": "Обновление заблокировано — требуется исправление.",
+        "notify": "Только уведомления — Drydock не будет применять обновления.",
+        "autoFiltered": "Доступно обновление — автоматическая доставка отфильтрована (ручная работает).",
+        "manualFiltered": "Доступно обновление — одно из условий политики потребует подтверждения.",
+        "autoReady": "Доступно обновление — подходит для автоматической доставки.",
+        "manualReady": "Доступно обновление — готово к ручному применению."
+      },
+      "conditions": {
+        "no-update-available": "Обновлений нет",
+        "rollback-container": "Контейнер отката",
+        "active-operation": "Обновление уже выполняется",
+        "security-scan-blocked": "Заблокировано политикой безопасности",
+        "last-update-rolled-back": "Предыдущее обновление откачено",
+        "snoozed": "Обновление отложено",
+        "skip-tag": "Тег пропущен",
+        "skip-digest": "Дайджест пропущен",
+        "maturity-not-reached": "Ожидание политики зрелости",
+        "threshold-not-reached": "Порог триггера не достигнут",
+        "trigger-excluded": "Триггер исключён по меткам",
+        "trigger-not-included": "Триггер отфильтрован по меткам",
+        "agent-mismatch": "Несоответствие агента триггера",
+        "no-update-trigger-configured": "Триггер обновления не настроен",
+        "self-update-unavailable": "Самообновление недоступно",
+        "maintenance-window-closed": "Окно обслуживания закрыто",
+        "dry-run-trigger": "Конфигурация триггера в режиме dry-run"
+      },
+      "actions": {
+        "editPolicy": "Изменить политику обновления",
+        "configureLabels": "Настроить метки триггера",
+        "viewOperation": "Просмотреть операцию обновления",
+        "reviewSecurity": "Просмотреть результаты сканирования",
+        "viewRollback": "Просмотреть контекст отката",
+        "configureAgent": "Настроить агента триггера",
+        "configureTriggers": "Настроить триггеры обновления",
+        "configureThreshold": "Настроить порог триггера",
+        "configureSelfUpdate": "Настроить самообновление",
+        "configureMaintenance": "Настроить окно обслуживания"
+      }
+    },
+    "maturityBadge": {
+      "new": "НОВЫЙ"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "{field} возвращён к декларативной политике",
+        "revertAll": "Все переопределения возвращены к декларативной политике",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 день",
+      "availableDaysPlural": "{count} дн.",
+      "availableHoursSingular": "1 час",
+      "availableHoursPlural": "{count} ч.",
+      "availableMinutesSingular": "1 минута",
+      "availableMinutesPlural": "{count} мин.",
+      "justNow": "Обнаружено только что"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Открыть настройки реестра",
+        "openTriggerSettings": "Открыть настройки триггера"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

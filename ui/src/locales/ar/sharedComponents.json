@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "إظهار/إخفاء الأعمدة",
+      "heading": "الأعمدة",
+      "reset": "إعادة ضبط",
+      "hiddenBadgeTooltip": "تم إخفاء {count} عمود",
+      "autoHiddenAnnotation": "{column} — مخفي لضيق المساحة",
+      "autoHiddenBadgeTooltip": "{columns} مخفية لتناسب شاشتك."
+    },
     "confirmDialog": {
       "cancel": "إلغاء",
       "confirm": "تأكيد"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "الإجراءات",
-      "resizeColumn": "تغيير حجم العمود"
+      "resizeColumn": "تغيير حجم العمود",
+      "sortBy": "الترتيب حسب",
+      "sortDirectionAscending": "اتجاه الترتيب: تصاعدي",
+      "sortDirectionDescending": "اتجاه الترتيب: تنازلي"
     },
     "detailPanel": {
       "openFullPage": "فتح عرض الصفحة الكاملة",

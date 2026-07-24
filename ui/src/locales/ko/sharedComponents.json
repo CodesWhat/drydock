@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "열 표시 전환",
+      "heading": "열",
+      "reset": "초기화",
+      "hiddenBadgeTooltip": "{count}개 열 숨김",
+      "autoHiddenAnnotation": "{column} — 화면에 맞춰 숨김",
+      "autoHiddenBadgeTooltip": "화면에 맞춰 {columns}을(를) 숨겼습니다."
+    },
     "confirmDialog": {
       "cancel": "취소",
       "confirm": "확인"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "작업",
-      "resizeColumn": "열 크기 조정"
+      "resizeColumn": "열 크기 조정",
+      "sortBy": "정렬 기준",
+      "sortDirectionAscending": "정렬 방향: 오름차순",
+      "sortDirectionDescending": "정렬 방향: 내림차순"
     },
     "detailPanel": {
       "openFullPage": "전체 페이지 보기 열기",

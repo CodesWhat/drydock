@@ -24,7 +24,7 @@
       "tabs": {
         "overview": "Resumen",
         "logs": "Registros",
-        "config": "Config"
+        "config": "Configuración"
       },
       "overview": {
         "resources": "Recursos",
@@ -35,8 +35,8 @@
         "containerStopped": "Detenidos",
         "viewContainers": "Ver contenedores",
         "automation": "Automatización",
-        "watchers": "Watchers",
-        "triggers": "Triggers",
+        "watchers": "Observadores - Watchers",
+        "triggers": "Activadores",
         "none": "Ninguno"
       },
       "logs": {

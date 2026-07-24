@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Перемкнути стовпці",
+      "heading": "Стовпці",
+      "reset": "Скинути",
+      "hiddenBadgeTooltip": "Приховано стовпців: {count}",
+      "autoHiddenAnnotation": "{column} — приховано, щоб вмістити",
+      "autoHiddenBadgeTooltip": "{columns} приховано, щоб влізти на екран."
+    },
     "confirmDialog": {
       "cancel": "Скасувати",
       "confirm": "Підтвердити"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "Дії",
-      "resizeColumn": "Змінити ширину стовпця"
+      "resizeColumn": "Змінити ширину стовпця",
+      "sortBy": "Сортувати за",
+      "sortDirectionAscending": "Напрямок сортування: за зростанням",
+      "sortDirectionDescending": "Напрямок сортування: за спаданням"
     },
     "detailPanel": {
       "openFullPage": "Відкрити на повній сторінці",

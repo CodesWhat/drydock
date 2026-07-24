@@ -7,6 +7,9 @@
       "previewUpdate": "معاينة التحديث",
       "forceUpdate": "فرض التحديث",
       "updateNow": "تحديث الآن",
+      "previewOnly": "معاينة فقط",
+      "dryRunUpdateTooltip": "هذا المشغّل في وضع المعاينة التجريبية (dry-run) — سيؤدي النقر إلى سحب الصورة الجديدة دون استبدال الحاوية.",
+      "dryRunCondition": "مشغّل الإجراء {trigger} في وضع المعاينة التجريبية (dry-run) — تُعرض التحديثات فقط ولا يتم استبدال الحاويات.",
       "scanNow": "فحص الآن",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "إعادة ضبط",
       "clearSkips": "مسح التخطيات",
       "clearPolicy": "مسح السياسة",
+      "overridden": "تم التجاوز",
+      "revert": "تراجع عن التجاوز",
+      "revertAll": "الرجوع إلى الإعدادات التصريحية",
       "snoozedUntil": "مؤجل حتى:",
       "maturityMode": "وضع النضج:",
       "matureOnlyMinimum": "الناضج فقط ({days} يوم كحد أدنى)",
       "allowAllUpdates": "السماح بجميع التحديثات",
       "skippedTags": "التسميات المتخطاة:",
       "skippedDigests": "الملخصات المتخطاة:",
+      "noSkippedEntries": "لا توجد إدخالات متخطاة",
       "noActivePolicy": "لا توجد سياسة تحديث نشطة.",
       "removeSkip": "إزالة التخطي",
       "previewSection": "معاينة",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "فرض التحديث",
       "updateAction": "تحديث",
       "skipUpdateAction": "تخطي هذا التحديث",
+      "setGroupAction": "تعيين المجموعة",
       "rollbackAction": "تراجع",
       "deleteAction": "حذف",
       "pinnedTooltip": "مثبّت",
+      "skippedLabel": "متخطى",
       "upToDateTooltip": "محدّث",
+      "imageUpdateTooltip": "أصبح الوسم {tag} يشير الآن إلى بنية صورة مختلفة. أعد النشر لسحب الصورة الجديدة؛ وسم الإصدار نفسه لم يتغيّر.",
       "blockedTooltip": "محظور",
       "actionsDisabled": "الإجراءات معطّلة",
       "openActionsMenu": "فتح قائمة الإجراءات",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "تحديثات مؤجلة",
       "ariaSkippedUpdates": "تحديثات متخطاة",
       "ariaMaturityBlocked": "تحديثات محظورة بسبب النضج",
+      "ariaPinnedTag": "وسم مثبّت",
+      "pinnedTagTooltip": "هذا الوسم مثبّت على إصدار محدد بدقة — لن يقوم drydock بالانتقال تلقائيًا إلى إصدارات أحدث. اضبط dd.tag.family=loose أو أضف مرشّح dd.tag.include للسماح بذلك.",
+      "unknownKindLabel": "غير معروف",
       "emptyState": "لا توجد حاويات تطابق عوامل التصفية",
       "currentLabel": "الحالي",
       "latestLabel": "الأحدث",
+      "blockedByBouncer": "محظور بواسطة Bouncer",
       "registryErrorRateLimited": "تجاوز حد الطلبات",
       "registryErrorAuth": "فشل المصادقة",
       "registryErrorNotFound": "غير موجود",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "تحديث جميع عناصر المجموعة",
       "updateSingular": "تحديث",
       "updatePlural": "تحديثات"
+    },
+    "groupDialog": {
+      "title": "تعيين مجموعة الحاوية",
+      "description": "اختر كيفية تجميع {name} في هذا المتصفح. يتجاوز هذا مجموعتها من الخادم أو Compose أو Swarm إلى أن تقوم بإلغائه.",
+      "groupLabel": "اسم المجموعة",
+      "groupPlaceholder": "مثال: خدمات الوسائط",
+      "helpText": "تُقترح المجموعات الحالية أثناء الكتابة.",
+      "clear": "استخدام المجموعة المكتشفة",
+      "save": "حفظ المجموعة"
     },
     "sideDetail": {
       "stopTooltip": "إيقاف",
@@ -258,6 +281,7 @@
       "allBouncer": "جميع Bouncer",
       "safe": "آمنة",
       "unsafe": "غير آمنة",
+      "blocked": "محظورة",
       "allRegistries": "جميع السجلات",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "جميع المضيفين",
       "allContainers": "جميع الحاويات",
       "hasUpdate": "يوجد تحديث",
+      "versionUpdate": "تحديث الإصدار",
       "major": "رئيسي",
       "minor": "ثانوي",
       "patch": "تصحيح",
+      "digest": "تحديث الصورة",
       "hidePinned": "إخفاء المثبّتة",
       "hidePinnedTooltip": "إخفاء الحاويات المثبّتة على إصدارات محددة",
       "clearAll": "مسح الكل",
@@ -334,6 +360,10 @@
       "tooltip": "أفضل تسمية semver مستقرة متاحة — يُنصح بالتثبيت",
       "tooltipWithTag": "مقترح: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "تتوفر نسخة أحدث",
+      "tooltip": "تتوفر نسخة أحدث: {tag}. هذا الـ Tag مثبّت، ولن يقوم drydock بتحديثه تلقائيًا."
+    },
     "eligibilityBadges": {
       "securityBlocked": "محظور أمنياً",
       "rolledBack": "تم التراجع",
@@ -350,6 +380,61 @@
       "noTrigger": "لا يوجد مشغّل",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "يرفع القيد:"
+    },
+    "updateStatus": {
+      "title": "حالة التحديث",
+      "showDetails": "إظهار الشروط",
+      "liftCountdown": "{countdown} · يُفتح في {date}",
+      "maturityClockPublished": "نُشر المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | نُشر المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
+      "maturityClockDetected": "اكتُشف المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | اكتُشف المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
+      "updateButton": "تحديث الآن",
+      "blockedButton": "التحديث محظور",
+      "notificationsOnlyButton": "إشعارات فقط",
+      "summary": {
+        "upToDate": "محدَّث.",
+        "insight": "تتوفر نسخة أحدث — هذا الوسم مثبّت.",
+        "inProgress": "التحديث قيد التنفيذ.",
+        "hardBlocked": "التحديث محظور — يلزم إصلاح.",
+        "notify": "إشعارات فقط — لن يقوم Drydock بتطبيق التحديثات.",
+        "autoFiltered": "تتوفر تحديث — الإطلاق التلقائي مُصفّى (اليدوي يعمل).",
+        "manualFiltered": "تتوفر تحديث — سيتطلب أحد شروط السياسة تأكيدًا.",
+        "autoReady": "تتوفر تحديث — مؤهل للإطلاق التلقائي.",
+        "manualReady": "تتوفر تحديث — جاهز للتطبيق يدويًا."
+      },
+      "conditions": {
+        "no-update-available": "لا يوجد تحديث متاح",
+        "rollback-container": "حاوية تراجع",
+        "active-operation": "التحديث قيد التشغيل بالفعل",
+        "security-scan-blocked": "محظور بسياسة الأمان",
+        "last-update-rolled-back": "تم التراجع عن التحديث السابق",
+        "snoozed": "التحديث مؤجل",
+        "skip-tag": "الوسم متخطى",
+        "skip-digest": "الملخص متخطى",
+        "maturity-not-reached": "سياسة النضج بانتظار",
+        "threshold-not-reached": "لم يصل إلى حد المشغّل",
+        "trigger-excluded": "المشغّل مستبعد بواسطة التسميات",
+        "trigger-not-included": "المشغّل مُصفَّى بواسطة التسميات",
+        "agent-mismatch": "عدم تطابق وكيل المشغّل",
+        "no-update-trigger-configured": "لم يُهيَّأ مشغّل تحديث",
+        "self-update-unavailable": "التحديث الذاتي غير متاح",
+        "maintenance-window-closed": "نافذة الصيانة مغلقة",
+        "dry-run-trigger": "تهيئة المشغّل بوضع المعاينة التجريبية"
+      },
+      "actions": {
+        "editPolicy": "تعديل سياسة التحديث",
+        "configureLabels": "تهيئة تسميات المشغّل",
+        "viewOperation": "عرض عملية التحديث",
+        "reviewSecurity": "مراجعة نتائج الفحص",
+        "viewRollback": "عرض سياق التراجع",
+        "configureAgent": "تهيئة وكيل المشغّل",
+        "configureTriggers": "تهيئة مشغّلات التحديث",
+        "configureThreshold": "تهيئة حد المشغّل",
+        "configureSelfUpdate": "تهيئة التحديث الذاتي",
+        "configureMaintenance": "تهيئة نافذة الصيانة"
+      }
+    },
+    "maturityBadge": {
+      "new": "جديد"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "تمت إعادة {field} إلى السياسة التصريحية",
+        "revertAll": "تمت إعادة كل التجاوزات إلى السياسة التصريحية",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "يوم واحد",
+      "availableDaysPlural": "{count} أيام",
+      "availableHoursSingular": "ساعة واحدة",
+      "availableHoursPlural": "{count} ساعات",
+      "availableMinutesSingular": "دقيقة واحدة",
+      "availableMinutesPlural": "{count} دقائق",
+      "justNow": "اكتُشف الآن"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "فتح إعدادات السجل",
+        "openTriggerSettings": "فتح إعدادات المشغّل"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

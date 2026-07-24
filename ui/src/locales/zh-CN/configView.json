@@ -6,6 +6,24 @@
       "profile": "个人资料"
     },
     "general": {
+      "updateMode": {
+        "title": "全局更新模式",
+        "description": "选择 Drydock 是仅报告更新、等待手动操作，还是自动分发符合条件的更新。",
+        "options": {
+          "notify": {
+            "label": "通知",
+            "description": "仅检测并通知；从不应用更新。"
+          },
+          "manual": {
+            "label": "手动",
+            "description": "仅在您请求时应用更新。"
+          },
+          "auto": {
+            "label": "自动",
+            "description": "自动分发符合条件的更新。"
+          }
+        }
+      },
       "application": {
         "title": "应用程序",
         "loadingServerInfo": "正在加载服务器信息"
@@ -72,6 +90,7 @@
         "no": "否"
       },
       "errors": {
+        "updateMode": "更新全局更新模式失败",
         "loadServerInfo": "无法加载服务器信息",
         "loadProfileData": "无法加载个人资料数据",
         "updateNetworkSettings": "无法更新网络设置",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "同步",
+        "label": "跨设备同步",
+        "description": "在您登录的每台设备上保持外观和布局偏好同步"
+      },
       "language": {
         "title": "语言"
       },
@@ -118,6 +142,9 @@
           "soft": "柔和",
           "round": "圆润"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "更新同步设置失败"
       }
     },
     "profile": {

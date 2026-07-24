@@ -35,6 +35,7 @@
       "container": "容器",
       "tag": "Tag",
       "version": "版本",
+      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
       "update": "更新",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "状态",

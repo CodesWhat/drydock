@@ -35,6 +35,7 @@
       "container": "컨테이너",
       "tag": "Tag",
       "version": "버전",
+      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
       "update": "업데이트",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "상태",
