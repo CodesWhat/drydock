@@ -116,6 +116,18 @@ jobs:
           fi
           echo "main is in sync with ${dev_branch} (identical trees)."
 
+          # Renovate names exactly one base branch (a pattern would expand to every
+          # matching dev/vX.Y and double every dependency PR), so it has to be rotated
+          # at each branch cut. This is the one moment the correct value is known, so
+          # a stale target fails here instead of quietly aiming the bot at a dead
+          # branch until someone "fixes" it by pointing the PRs back at main.
+          renovate_base="$(jq -r '.baseBranchPatterns // .baseBranches // [] | join(",")' renovate.json)"
+          if [ "${renovate_base}" != "${dev_branch}" ]; then
+            echo "::error::renovate.json targets '${renovate_base}' but this cut is for ${dev_branch}. Update baseBranchPatterns to [\"${dev_branch}\"] and re-dispatch."
+            exit 1
+          fi
+          echo "renovate.json targets ${dev_branch}."
+
       - name: Resolve target SHA and lowercase repository
         id: target
         run: |
