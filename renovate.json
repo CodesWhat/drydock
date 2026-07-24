@@ -1,6 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["local>CodesWhat/.github:renovate-config"],
+  "description": [
+    "Dependency PRs target the active integration branch, never the default branch.",
+    "main is only ever advanced by merging from dev/vX.Y right before a release cut, so a bot PR merged straight into main leaves work the integration branch never received — which is exactly how v1.6 drifted, and release-cut now refuses to tag a drifted main.",
+    "Exactly one branch, not a /^dev\\/v\\d+\\.\\d+$/ pattern: Renovate expands a pattern into every matching branch and opens a PR set against each one, so an old dev branch that outlives its GA would silently double every dependency PR.",
+    "Rotate this at each branch cut. It cannot go stale unnoticed — release-cut.yml checks it against the dev branch derived from the release tag and fails the cut if they disagree."
+  ],
+  "baseBranchPatterns": ["dev/v1.6"],
   "packageRules": [
     {
       "description": "Group all non-major npm updates per workspace",

@@ -1,5 +1,7 @@
 <div align="center">
 
+<p><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pl.md">Polski</a> · <strong>简体中文</strong> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.pt-BR.md">Português (Brasil)</a></p>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/whale-logo-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/whale-logo.png" />
@@ -9,8 +11,6 @@
 <h1>drydock</h1>
 
 **容器镜像更新观察程序 — 23 个注册表、20 个通知和操作提供程序。**
-
-<p><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pl.md">Polski</a> · <strong>简体中文</strong> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.pt-BR.md">Português (Brasil)</a></p>
 
 </div>
 

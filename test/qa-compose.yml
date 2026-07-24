@@ -19,8 +19,15 @@ services:
       - DD_ALLOW_INSECURE_ROOT=true
       - DD_LOG_FORMAT=text
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
-      - DD_WATCHER_LOCAL_CRON=*/2 * * * *
-      - DD_WATCHER_LOCAL_WATCHEVENTS=true
+      # Browser QA waits for the built-in startup scan after /health. Keep later
+      # scheduled scans out of the short-lived suite so they cannot race fixture
+      # assertions or targeted refreshes. February 29 is accepted by the watcher
+      # and parks the next scheduled scan well outside the normal QA window.
+      - DD_WATCHER_LOCAL_CRON=0 0 29 2 *
+      - DD_WATCHER_LOCAL_JITTER=0
+      # Event-driven refreshes are production behavior, but the browser suite
+      # needs a frozen fixture snapshot after the startup scan completes.
+      - DD_WATCHER_LOCAL_WATCHEVENTS=false
       # Docker action (manual only — auto=false prevents auto-updating test containers)
       - DD_ACTION_DOCKER_LOCAL_AUTO=false
       - DD_ACTION_DOCKER_LOCAL_PRUNE=true
@@ -94,8 +101,9 @@ services:
       - DD_WATCHER_REMOTE_HOST=docker-remote
       - DD_WATCHER_REMOTE_PORT=2375
       - DD_WATCHER_REMOTE_WATCHBYDEFAULT=true
-      - DD_WATCHER_REMOTE_CRON=*/2 * * * *
-      - DD_WATCHER_REMOTE_WATCHEVENTS=true
+      - DD_WATCHER_REMOTE_CRON=0 0 29 2 *
+      - DD_WATCHER_REMOTE_JITTER=0
+      - DD_WATCHER_REMOTE_WATCHEVENTS=false
     depends_on:
       docker-remote:
         condition: service_healthy
