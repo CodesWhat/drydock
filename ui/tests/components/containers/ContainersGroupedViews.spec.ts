@@ -207,6 +207,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       openActionsMenu.value = null;
     }),
     confirmDelete: vi.fn(),
+    openContainerGroupDialog: vi.fn(),
     clearFilters: vi.fn(),
   };
 
@@ -275,6 +276,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     skipUpdate: spies.skipUpdate,
     closeActionsMenu: spies.closeActionsMenu,
     confirmDelete: spies.confirmDelete,
+    openContainerGroupDialog: spies.openContainerGroupDialog,
     displayContainers,
     actionsMenuStyle,
     updateKindColor: () => ({ bg: '#0b5', text: '#052' }),
@@ -710,6 +712,26 @@ describe('ContainersGroupedViews', () => {
     expect(spies.recheckContainer).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'c-linked-card' }),
     );
+  });
+
+  it('opens the manual group editor from the card More menu', async () => {
+    const container = makeContainer({ id: 'c-groupable', name: 'groupable' });
+    const { wrapper, spies } = await mountCardsWithContainers([container], 800);
+    const card = cardByName(wrapper, 'groupable');
+
+    await cardIconButton(card, 'more').trigger('click');
+    await nextTick();
+
+    const setGroup = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === 'Set group');
+    expect(setGroup).toBeDefined();
+    await setGroup!.trigger('click');
+
+    expect(spies.openContainerGroupDialog).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-groupable' }),
+    );
+    expect(spies.closeActionsMenu).toHaveBeenCalled();
   });
 
   it('uses the same ordered 44px quick-link group in cards without selecting the card (#295)', async () => {
@@ -1174,7 +1196,7 @@ describe('ContainersGroupedViews', () => {
     expect(updateState.text()).not.toContain('v1.3.0');
   });
 
-  it("reads Current for an insight-only pinned container's update state (#498)", async () => {
+  it('shows the informational version kind for an insight-only pinned container (#498)', async () => {
     const pinned = makeContainer({
       id: 'c-insight',
       name: 'alpha',
@@ -1207,11 +1229,11 @@ describe('ContainersGroupedViews', () => {
 
     const row = rowByName(wrapper, 'alpha');
     const updateState = row.get('[data-test="container-update-state"]');
-    // Insight-only rows are informational, not actionable — the pill reads the plain
-    // Current label (in success color); the insight kind/message only surfaces via
-    // the tooltip and the version cell (#498).
-    expect(updateState.text()).toContain('Current');
-    expect(updateState.text()).not.toContain('Minor');
+    // Freshness and actionability are separate: the row must say that a newer
+    // minor version exists while the absence of an Update action keeps the pin
+    // non-actionable.
+    expect(updateState.text()).toContain('Minor');
+    expect(updateState.text()).not.toContain('Current');
     expect(updateState.text()).not.toContain('Pinned');
     expect(updateState.find('[data-test="update-insight-badge"]').exists()).toBe(false);
     expect(updateState.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
@@ -1219,12 +1241,12 @@ describe('ContainersGroupedViews', () => {
     expect(pill.attributes('title')).toBe(
       "Newer version available: v1.46.1. This tag is pinned — drydock won't update it automatically.",
     );
-    expect(pill.attributes('style')).toContain('var(--dd-success)');
+    expect(pill.attributes('style')).toContain('var(--dd-info)');
     expect(updateState.text()).not.toContain('v1.46.1');
     expect(row.text()).toContain('v1.46.1');
   });
 
-  it("reads Current for an insight-only pinned container's update-state badge in card mode (#498)", async () => {
+  it('shows the informational version kind for an insight-only pinned card (#498)', async () => {
     const pinned = makeContainer({
       id: 'c-insight-card',
       name: 'alpha',
@@ -1245,13 +1267,13 @@ describe('ContainersGroupedViews', () => {
     expect(card.text()).toContain('v1.13.3');
     expect(card.text()).toContain('v1.46.1');
     const stateBadge = card.get('[data-test="container-card-update-state"]');
-    expect(stateBadge.text()).toContain('Current');
-    expect(stateBadge.text()).not.toContain('Minor');
+    expect(stateBadge.text()).toContain('Minor');
+    expect(stateBadge.text()).not.toContain('Current');
     expect(stateBadge.text()).not.toContain('Pinned');
     expect(stateBadge.attributes('title')).toBe(
       "Newer version available: v1.46.1. This tag is pinned — drydock won't update it automatically.",
     );
-    expect(stateBadge.attributes('style')).toContain('var(--dd-success)');
+    expect(stateBadge.attributes('style')).toContain('var(--dd-info)');
   });
 
   it('keeps the stacked pinned-tag insight visible beside an actionable digest update (#498)', async () => {
@@ -1291,18 +1313,18 @@ describe('ContainersGroupedViews', () => {
     expect(row.text()).toContain('v3.0.2-openvino');
     // An actionable updateKind takes priority in the pill; the insight jump stays
     // visible only in the version cell, with no separate insight-kind badge (#498).
-    expect(row.get('[data-test="container-update-state"]').text()).toContain('Digest update');
+    expect(row.get('[data-test="container-update-state"]').text()).toContain('Image update');
     expect(row.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
 
     const { wrapper: cardWrapper } = await mountCardsWithContainers([digestAndInsight], 800);
     const card = cardByName(cardWrapper, 'alpha');
     expect(card.text()).toContain('v2.7.5-openvino');
     expect(card.text()).toContain('v3.0.2-openvino');
-    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Digest update');
+    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Image update');
     expect(card.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
   });
 
-  it('keeps the actionable no-update reason alongside the Current insight state in card mode (#498)', async () => {
+  it('keeps the actionable no-update reason alongside the informational insight state in card mode (#498)', async () => {
     const remedy =
       'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
     const pinnedDigestOff = makeContainer({
@@ -1323,16 +1345,16 @@ describe('ContainersGroupedViews', () => {
 
     expect(card.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
     const stateBadge = card.get('[data-test="container-card-update-state"]');
-    expect(stateBadge.text()).toContain('Current');
-    expect(stateBadge.text()).not.toContain('Minor');
-    expect(stateBadge.attributes('style')).toContain('var(--dd-success)');
+    expect(stateBadge.text()).toContain('Minor');
+    expect(stateBadge.text()).not.toContain('Current');
+    expect(stateBadge.attributes('style')).toContain('var(--dd-info)');
     expect(card.text()).toContain('v1.46.1');
     const reasonText = card.get('[data-test="no-update-reason-badge"]').attributes('aria-label');
     expect(reasonText).toContain('no actionable update detection is running');
     expect(reasonText).not.toContain('so no update detection is running');
   });
 
-  it('renders the no-update-reason badge alongside the Current insight state without contradictory copy when digest watching is off (#498)', async () => {
+  it('renders the no-update-reason badge alongside the informational insight state without contradictory copy when digest watching is off (#498)', async () => {
     const remedy =
       'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
     const pinnedDigestOff = makeContainer({
@@ -1369,10 +1391,10 @@ describe('ContainersGroupedViews', () => {
     const row = rowByName(wrapper, 'alpha');
 
     const updateState = row.get('[data-test="container-update-state"]');
-    expect(updateState.text()).toContain('Current');
-    expect(updateState.text()).not.toContain('Minor');
+    expect(updateState.text()).toContain('Minor');
+    expect(updateState.text()).not.toContain('Current');
     const pill = updateState.get('.font-semibold');
-    expect(pill.attributes('style')).toContain('var(--dd-success)');
+    expect(pill.attributes('style')).toContain('var(--dd-info)');
     expect(updateState.find('[data-test="update-insight-kind-badge"]').exists()).toBe(false);
     expect(row.text()).toContain('v1.46.1');
 
@@ -1384,7 +1406,7 @@ describe('ContainersGroupedViews', () => {
     expect(reasonText).not.toContain('so no update detection is running');
   });
 
-  it('labels version-skip policy as Skipped and shows the insight kind for a pinned tag (#498)', () => {
+  it('labels version-skip policy as Skipped and shows the informational kind for a pinned tag (#498)', () => {
     const skipped = makeContainer({
       id: 'c-skip-label',
       name: 'gamma',
@@ -1421,14 +1443,11 @@ describe('ContainersGroupedViews', () => {
     expect(skippedState.text()).not.toContain('Patch');
 
     const pinnedState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
-    // Insight-only rows (no updateKind, not skipped) now read the plain Current
-    // label in success color — the insight kind no longer surfaces in the pill
-    // itself, only via its tooltip (#498).
-    expect(pinnedState.text()).toContain('Current');
-    expect(pinnedState.text()).not.toContain('Patch');
+    expect(pinnedState.text()).toContain('Patch');
+    expect(pinnedState.text()).not.toContain('Current');
     expect(pinnedState.text()).not.toContain('Pinned');
     const pinnedLabel = pinnedState.find('.font-semibold');
-    expect(pinnedLabel.attributes('style')).toContain('var(--dd-success)');
+    expect(pinnedLabel.attributes('style')).toContain('var(--dd-info)');
   });
 
   it('renders the pin glyph for a pinned tag and omits it for an unpinned one in table mode (#display-honesty)', () => {
@@ -2009,9 +2028,13 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     expect(wrapper.text()).toContain('alpha');
     expect(wrapper.text()).toContain('delta');
-    // Bouncer-blocked pill and the digest label variant (#display-honesty).
+    // Bouncer-blocked pill and the plain-language same-tag image label.
     expect(wrapper.text()).toContain('Security hold');
-    expect(wrapper.text()).toContain('Digest update');
+    expect(wrapper.text()).toContain('Image update');
+    const digestState = rowByName(wrapper, 'delta').get('[data-test="container-update-state"]');
+    expect(digestState.get('.font-semibold').attributes('title')).toBe(
+      'The tag 1.0.0 now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.',
+    );
   });
 
   it('covers in-progress branches for icon and button-style table actions', async () => {
@@ -2455,6 +2478,128 @@ describe('ContainersGroupedViews', () => {
       await action.trigger('click');
     }
     expect(spies.selectContainer).toHaveBeenCalledTimes(rowSelectionsBeforeLinkClicks);
+  });
+
+  it('keeps resource shortcuts in the row More menu when the Resources column is hidden (#498)', async () => {
+    const container = makeContainer({
+      id: 'c-hidden-resources',
+      name: 'grafana',
+      sourceRepo: 'github.com/grafana/grafana',
+      releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
+      registry: 'custom',
+      registryName: 'registry.example.com',
+      registryUrl: 'https://registry.example.com/v2',
+    });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    context.hiddenColumnKeys.value = ['links'];
+    refs.openActionsMenu.value = container.id;
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const resources = wrapper.get('[data-test="actions-menu-resource-actions"]');
+    expect(resources.text()).toContain('Resources');
+    expectContainerQuickLinks(
+      resources.get('[data-test="container-quick-links"]'),
+      'registry.example.com',
+    );
+  });
+
+  it('does not duplicate resource shortcuts in More while the Resources column is visible', async () => {
+    const container = makeContainer({
+      id: 'c-visible-resources',
+      name: 'grafana',
+      sourceRepo: 'github.com/grafana/grafana',
+    });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    refs.openActionsMenu.value = container.id;
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
+  });
+
+  it('does not duplicate hidden table Resources in the card More menu', async () => {
+    const container = makeContainer({
+      id: 'c-card-hidden-resources',
+      name: 'grafana-card',
+      sourceRepo: 'github.com/grafana/grafana',
+    });
+    const { wrapper, context, refs } = await mountCardsWithContainers([container], 800);
+    context.hiddenColumnKeys.value = ['links'];
+    refs.openActionsMenu.value = container.id;
+    await nextTick();
+
+    expect(
+      cardByName(wrapper, 'grafana-card')
+        .find('[data-test="container-card-resource-actions"]')
+        .find('[data-test="container-quick-links"]')
+        .exists(),
+    ).toBe(true);
+    expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
+  });
+
+  it('does not duplicate hidden table Resources during forced card reflow', async () => {
+    const container = makeContainer({
+      id: 'c-forced-card-resources',
+      name: 'grafana-forced-card',
+      sourceRepo: 'github.com/grafana/grafana',
+    });
+    const { context, refs } = makeContext();
+    context.hiddenColumnKeys.value = ['links'];
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    refs.openActionsMenu.value = container.id;
+    mocked.context = context;
+
+    const wrapper = mountSubjectWithRealDataTable(500);
+    await nextTick();
+
+    expect(refs.containerCardReflowForced.value).toBe(true);
+    expect(
+      cardByName(wrapper, 'grafana-forced-card')
+        .find('[data-test="container-card-resource-actions"]')
+        .find('[data-test="container-quick-links"]')
+        .exists(),
+    ).toBe(true);
+    expect(wrapper.find('[data-test="actions-menu-resource-actions"]').exists()).toBe(false);
   });
 
   it('renders each table quick link independently when the other link data is absent (#295)', async () => {

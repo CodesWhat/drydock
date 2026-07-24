@@ -60,6 +60,20 @@ test('release-cut has no hand-rolled fixed retry loops', () => {
   expect(handRolledRetrySteps).toStrictEqual([]);
 });
 
+test('release-cut gates on Playwright for the exact release source SHA', () => {
+  const workflow = loadWorkflow(workflowPath);
+  const step = getStep('Wait for successful E2E Playwright on release source SHA');
+
+  expect(workflow.env?.E2E_PLAYWRIGHT_WORKFLOW_FILE).toBe('e2e-playwright.yml');
+  expect(step).toMatchObject({
+    uses: './.github/actions/wait-for-successful-branch-ci',
+    with: {
+      'workflow-file': '${{ env.E2E_PLAYWRIGHT_WORKFLOW_FILE }}',
+      'target-sha': '${{ steps.source.outputs.source_sha }}',
+    },
+  });
+});
+
 test('release-cut asserts package and lockfile versions for every workspace package', () => {
   const versionStep = getStep('Assert tag version matches package versions');
   const expectedVersionFiles = [

@@ -102,6 +102,29 @@ describe('ContainersGroupHeader', () => {
     expect(sticky.find('button').exists()).toBe(true);
   });
 
+  it('keeps a long group name from shrinking or wrapping the update controls (#498)', () => {
+    const longName = 'immich-machine-learning-openvino';
+    const wrapper = mountHeader({
+      group: {
+        key: 'stack-a',
+        name: longName,
+        containers: [],
+        containerCount: 3,
+        updatesAvailable: 3,
+        updatableCount: 3,
+      },
+    });
+    const groupName = wrapper.findAll('span').find((span) => span.text() === longName);
+    const badges = wrapper.findAllComponents({ name: 'AppBadge' });
+    const sticky = wrapper.get('[data-test="group-header-update-all-sticky"]');
+
+    expect(groupName?.classes()).toEqual(expect.arrayContaining(['truncate', 'min-w-0']));
+    expect(badges).toHaveLength(2);
+    expect(badges.every((badge) => badge.classes().includes('shrink-0'))).toBe(true);
+    expect(sticky.classes()).toContain('shrink-0');
+    expect(sticky.get('button').classes()).toContain('whitespace-nowrap');
+  });
+
   it('uses tighter spacing for the first group and looser spacing for later groups', async () => {
     const wrapper = mountHeader({ isFirst: true });
 

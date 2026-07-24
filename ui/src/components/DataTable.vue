@@ -465,6 +465,37 @@ const cardReflowForced = computed(
 );
 watch(cardReflowForced, (value) => emit('update:cardReflowForced', value), { immediate: true });
 
+// Approximate column count of the card grid, mirroring the CSS
+// `repeat(auto-fill, minmax(cardMinWidth, 1fr))` against the measured viewport with
+// the grid's `gap-3` (12px) gutter. Only the single-column vs multi-column distinction
+// matters here (see cardGridAutoRows), so an off-by-one near an exact boundary is
+// harmless. Falls back to a single column while unmeasured (viewportWidth 0).
+const CARD_GRID_GAP_PX = 12;
+// The app scales the document root via `--dd-font-size` (0.8–1.3 presets), so `rem`/`em`
+// can't assume a 16px root. Resolve them against the live computed root font size, the
+// same value the browser uses for the template's `minmax()` units, so the heuristic
+// agrees with the rendered layout at every font-size preset.
+function rootFontSizePx(): number {
+  const parsed = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
+}
+function parseCardMinWidthPx(value: string): number {
+  const match = value.trim().match(/^([0-9]+(?:\.[0-9]+)?)(px|rem|em)?$/);
+  const amount = match ? Number.parseFloat(match[1]) : Number.NaN;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return 320;
+  }
+  return match?.[2] === 'rem' || match?.[2] === 'em' ? amount * rootFontSizePx() : amount;
+}
+const cardColumnCount = computed(() => {
+  const minWidth = parseCardMinWidthPx(props.cardMinWidth);
+  // Math.max(1, …) also covers the pre-measurement viewportWidth === 0 case.
+  return Math.max(
+    1,
+    Math.floor((viewportWidth.value + CARD_GRID_GAP_PX) / (minWidth + CARD_GRID_GAP_PX)),
+  );
+});
+
 function resolvedColumn(colKey: string): ResolvedDataTableColumn | undefined {
   return allResolvedColumns.value.find((column) => column.key === colKey);
 }
@@ -880,6 +911,15 @@ function isFullWidthRow(row: Record<string, unknown>): boolean {
 // natural height and span every column instead of being stretched into a tall single cell.
 const hasFullWidthRows = computed(() => props.rows.some((row) => isFullWidthRow(row)));
 
+// `1fr` auto-rows equalise every card to the tallest for a tidy multi-column gallery.
+// In a SINGLE column that instead stretches every card to the tallest card in the whole
+// list, so short cards gain a large empty band (the interior `mt-auto` footer sinks to the
+// bottom) — the broken mobile layout reported in #498. Use content-height (`auto`) rows
+// whenever the grid is one column (or already carries full-width group-header rows).
+const cardGridAutoRows = computed(() =>
+  hasFullWidthRows.value || cardColumnCount.value <= 1 ? 'auto' : '1fr',
+);
+
 // Grouped table view floats each stack on the page background (the gaps between stacks ARE the
 // app bg), so the sort header needs its own fill to still read as a distinct bar — it uses the
 // raised `--dd-bg-elevated` (matching the group title bars). Ungrouped tables keep the recessed
@@ -1059,7 +1099,7 @@ function handleCardSortChange(event: Event): void {
         <ul role="list"
             class="gap-3 pb-3"
             :class="virtualScroll ? 'flex flex-col' : 'grid'"
-            :style="virtualScroll ? undefined : { gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}, 1fr))`, gridAutoRows: hasFullWidthRows ? 'auto' : '1fr' }">
+            :style="virtualScroll ? undefined : { gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}, 1fr))`, gridAutoRows: cardGridAutoRows }">
           <li
             v-if="topSpacerHeight > 0"
             aria-hidden="true"

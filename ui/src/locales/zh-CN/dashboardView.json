@@ -101,8 +101,7 @@
     "updateKind": {
       "major": "主要",
       "minor": "次要",
-      "patch": "补丁",
-      "digest": "摘要"
+      "patch": "补丁"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

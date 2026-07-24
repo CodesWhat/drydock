@@ -21,7 +21,7 @@ const UPDATE_KIND_FALLBACK_LABELS: Record<'major' | 'minor' | 'patch' | 'digest'
   major: 'Major',
   minor: 'Minor',
   patch: 'Patch',
-  digest: 'Digest',
+  digest: 'Image update',
 };
 
 /** True when `kind` is present but isn't one of the known update-kind keys above. */

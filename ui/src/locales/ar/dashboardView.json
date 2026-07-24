@@ -101,8 +101,7 @@
     "updateKind": {
       "major": "رئيسي",
       "minor": "ثانوي",
-      "patch": "تصحيح",
-      "digest": "ملخص"
+      "patch": "تصحيح"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

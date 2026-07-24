@@ -5,6 +5,7 @@ set -e
 export DOCKER_BUILDKIT=1
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+DRYDOCK_IMAGE=${DD_E2E_IMAGE:-drydock}
 
 echo "Starting drydock container for local e2e tests..."
 
@@ -28,7 +29,7 @@ build_drydock_image() {
 	max_attempts=2
 
 	for attempt in $(seq 1 "$max_attempts"); do
-		if docker build -t drydock --build-arg DD_VERSION=local "$SCRIPT_DIR/.."; then
+		if docker build -t "$DRYDOCK_IMAGE" --build-arg DD_VERSION=local "$SCRIPT_DIR/.."; then
 			return 0
 		fi
 
@@ -42,8 +43,16 @@ build_drydock_image() {
 	return 1
 }
 
-# Build drydock docker image
-build_drydock_image
+# CI consumes the exact image produced by the build job. Local runs keep the
+# convenient source-build default.
+if [ "${DD_E2E_SKIP_BUILD:-false}" = "true" ]; then
+	if ! docker image inspect "$DRYDOCK_IMAGE" >/dev/null 2>&1; then
+		echo "❌ prebuilt drydock image not found: $DRYDOCK_IMAGE"
+		exit 1
+	fi
+else
+	build_drydock_image
+fi
 
 # Build docker run args. Registries without real credentials are registered
 # with an empty-string config (anonymous mode) to avoid failed-auth-then-retry
@@ -67,7 +76,7 @@ DOCKER_ARGS+=(--env DD_REGISTRY_ECR_PRIVATE_REGION=eu-west-1)
 # GHCR — use real credentials or register anonymously
 if [ -n "${GITHUB_USERNAME:-}" ]; then
 	DOCKER_ARGS+=(--env DD_REGISTRY_GHCR_PRIVATE_USERNAME="$GITHUB_USERNAME")
-	DOCKER_ARGS+=(--env DD_REGISTRY_GHCR_PRIVATE_TOKEN="$GITHUB_TOKEN")
+	DOCKER_ARGS+=(--env DD_REGISTRY_GHCR_PRIVATE_TOKEN="${GITHUB_TOKEN:-}")
 else
 	DOCKER_ARGS+=(--env "DD_REGISTRY_GHCR_PRIVATE=")
 fi
@@ -80,7 +89,7 @@ DOCKER_ARGS+=(--env DD_REGISTRY_GITLAB_PRIVATE_TOKEN="${GITLAB_TOKEN:-dummy}")
 # LSCR — use real credentials or register anonymously
 if [ -n "${GITHUB_USERNAME:-}" ]; then
 	DOCKER_ARGS+=(--env DD_REGISTRY_LSCR_PRIVATE_USERNAME="$GITHUB_USERNAME")
-	DOCKER_ARGS+=(--env DD_REGISTRY_LSCR_PRIVATE_TOKEN="$GITHUB_TOKEN")
+	DOCKER_ARGS+=(--env DD_REGISTRY_LSCR_PRIVATE_TOKEN="${GITHUB_TOKEN:-}")
 else
 	DOCKER_ARGS+=(--env "DD_REGISTRY_LSCR_PRIVATE=")
 fi
@@ -99,13 +108,15 @@ fi
 
 # GCR — dummy credentials are fine (no matching test container)
 DOCKER_ARGS+=(--env DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL="${GCR_CLIENT_EMAIL:-gcr@drydock-test.iam.gserviceaccount.com}")
-DOCKER_ARGS+=(--env "DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=${GCR_PRIVATE_KEY:------BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDZ\n-----END PRIVATE KEY-----}")
+GCR_KEY_KIND='PRIVATE KEY'
+GCR_DUMMY_PRIVATE_KEY="-----BEGIN ${GCR_KEY_KIND}-----\nnot-a-real-key\n-----END ${GCR_KEY_KIND}-----"
+DOCKER_ARGS+=(--env "DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=${GCR_PRIVATE_KEY:-$GCR_DUMMY_PRIVATE_KEY}")
 
 DOCKER_ARGS+=(
 	--env DD_AUTH_BASIC_JOHN_USER="john"
 	--env DD_AUTH_BASIC_JOHN_HASH="argon2id\$65536\$3\$4\$ZHJ5ZG9jay1iYXNpYy1hdXRoLXNhbHQ=\$GumQTfvOsp+hTyVxLIQvvP2izj/+lCCVYTPnwm9+ZC0+x0OQomJgNgIYFI7e5iUZtblM2rlIIYIwxaAeegWMKQ=="
 	--env DD_SESSION_SECRET="drydock-e2e-ci-session-secret-do-not-use-in-prod-9c4a2f8b1d6e7a3f"
-	drydock
+	"$DRYDOCK_IMAGE"
 )
 
 docker "${DOCKER_ARGS[@]}"
@@ -126,7 +137,7 @@ echo "drydock started on http://localhost:${E2E_PORT}"
 # Wait for health endpoint to be reachable (max 60s)
 echo "Waiting for drydock to be ready..."
 for i in $(seq 1 30); do
-	if curl -s --connect-timeout 2 "http://localhost:${E2E_PORT}/health" >/dev/null 2>&1; then
+	if curl --silent --show-error --fail --connect-timeout 2 "http://localhost:${E2E_PORT}/health" >/dev/null 2>&1; then
 		echo "✅ drydock is healthy"
 		break
 	fi
@@ -138,46 +149,103 @@ for i in $(seq 1 30); do
 	sleep 2
 done
 
-# Wait until drydock has discovered enough containers with fully resolved
-# image data (max 90s).  Container count alone is not sufficient — image
-# name, registry URL, and tag fields are populated asynchronously after
-# discovery and the E2E assertions depend on them.
+# Wait until drydock has discovered every fixture in the active Cucumber
+# contract with fully resolved image data (max 150s). The checked-in manifest
+# is also verified against the active feature examples by start-drydock.test.mjs.
+# An aggregate count can be satisfied by unrelated containers left on a
+# developer host while a fixture required by the E2E suite is absent.
 AUTH_HEADER="Basic $(echo -n 'john:doe' | base64)"
-# 11 fixtures total in setup-test-containers.sh: ecr, ghcr, gitlab, 2x homeassistant,
-# 2x nginx, traefik, lscr, trueforge, quay. Adjusted below for credential-gated ones.
-DEFAULT_EXPECTED=11
-# ghcr_radarr and lscr_radarr only run when GITHUB_USERNAME is set
-if [ -z "${GITHUB_USERNAME:-}" ]; then
-	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 2))
+REQUIRED_FIXTURES_FILE=${DD_E2E_REQUIRED_FIXTURES_FILE:-"$SCRIPT_DIR/../e2e/config/cucumber-core-fixtures.txt"}
+if [ ! -s "$REQUIRED_FIXTURES_FILE" ]; then
+	echo "❌ required Cucumber fixture manifest is missing or empty: $REQUIRED_FIXTURES_FILE"
+	exit 1
 fi
-# gitlab_test only runs when GITLAB_TOKEN is set
-if [ -z "${GITLAB_TOKEN:-}" ]; then
-	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 1))
+REQUIRED_FIXTURES=()
+while IFS= read -r fixture || [ -n "$fixture" ]; do
+	case "$fixture" in
+	'' | \#*) continue ;;
+	esac
+	REQUIRED_FIXTURES+=("$fixture")
+done <"$REQUIRED_FIXTURES_FILE"
+if [ "${#REQUIRED_FIXTURES[@]}" -eq 0 ]; then
+	echo "❌ required Cucumber fixture manifest contains no required fixtures: $REQUIRED_FIXTURES_FILE"
+	exit 1
 fi
-EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-$DEFAULT_EXPECTED}
-# Strict by default: fixtures are kept alive deterministically (keep-alive entrypoints
-# in setup-test-containers.sh), so every expected container must resolve image data
-# before the suite runs. This matches the Cucumber api-container.feature ">= 7" gate.
-READY_TOLERANCE=${DD_READY_TOLERANCE:-0}
-EXPECTED_CONTAINERS=$((EXPECTED_CONTAINERS - READY_TOLERANCE))
-echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with image data (max 150s)..."
+
+# setup-test-containers.sh only starts this private-registry fixture when its
+# token is present, and run-e2e-tests.sh enables the matching tagged scenarios.
+if [ -n "${GITLAB_TOKEN:-}" ]; then
+	REQUIRED_FIXTURES+=(gitlab_test)
+fi
+
+EXPECTED_CONTAINERS=${#REQUIRED_FIXTURES[@]}
+echo "Waiting for drydock to resolve all ${EXPECTED_CONTAINERS} required fixtures (max 150s)..."
 for i in $(seq 1 75); do
-	# Count containers that have a populated image.name (not just discovered)
 	CONTAINERS_JSON=""
 	if CONTAINERS_JSON=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "http://localhost:${E2E_PORT}/api/v1/containers" 2>/dev/null); then
 		:
 	fi
-	READY=0
+	READINESS=""
 	if [ -n "${CONTAINERS_JSON}" ]; then
-		READY=$(jq '[.data[] | select((.image.name // "" | length > 0) and (.image.registry.name // "" | length > 0) and (.image.tag.value // "" | length > 0))] | length' <<<"${CONTAINERS_JSON}" 2>/dev/null || echo 0)
+		READINESS=$(jq -r '
+			(.data // []) as $containers
+			| $ARGS.positional[]
+			| . as $required
+			| ([$containers[] | select(.name == $required)] | first) as $fixture
+			| if $fixture == null then
+				[$required, "missing", "container not discovered"]
+			else
+				([
+					if (($fixture.image.name // "") | length) == 0 then "image.name" else empty end,
+					if (($fixture.image.registry.name // "") | length) == 0 then "image.registry.name" else empty end,
+					if (($fixture.image.registry.url // "") | length) == 0 then "image.registry.url" else empty end,
+					if (($fixture.image.tag.value // "") | length) == 0 then "image.tag.value" else empty end
+				]) as $missing_fields
+				| if ($missing_fields | length) == 0 then
+					[$required, "ready", "resolved"]
+				else
+					[$required, "unresolved", ($missing_fields | join(", "))]
+				end
+			end
+			| @tsv
+		' --args "${REQUIRED_FIXTURES[@]}" <<<"${CONTAINERS_JSON}" 2>/dev/null || true)
 	fi
-	READY=${READY:-0}
-	if [ "$READY" -ge "$EXPECTED_CONTAINERS" ]; then
-		echo "✅ drydock has ${READY} containers with resolved image data"
+
+	READY=0
+	MISSING_FIXTURES=("${REQUIRED_FIXTURES[@]}")
+	UNRESOLVED_FIXTURES=()
+	if [ -n "${READINESS}" ]; then
+		MISSING_FIXTURES=()
+		while IFS=$'\t' read -r fixture status detail; do
+			case "$status" in
+			ready) READY=$((READY + 1)) ;;
+			missing) MISSING_FIXTURES+=("$fixture") ;;
+			unresolved) UNRESOLVED_FIXTURES+=("$fixture ($detail)") ;;
+			esac
+		done <<<"${READINESS}"
+	fi
+	if [ "$READY" -eq "$EXPECTED_CONTAINERS" ]; then
+		echo "✅ drydock resolved all ${READY} required fixtures"
 		break
 	fi
 	if [ "$i" -eq 75 ]; then
-		echo "❌ drydock only has ${READY}/${EXPECTED_CONTAINERS} ready containers after 150s"
+		echo "❌ drydock only resolved ${READY}/${EXPECTED_CONTAINERS} required fixtures after 150s"
+		if [ "${#MISSING_FIXTURES[@]}" -gt 0 ]; then
+			printf '❌ missing required fixtures: %s\n' "$(
+				IFS=,
+				echo "${MISSING_FIXTURES[*]}"
+			)"
+		fi
+		if [ "${#UNRESOLVED_FIXTURES[@]}" -gt 0 ]; then
+			printf '❌ unresolved required fixtures: %s\n' "$(
+				IFS=';'
+				echo "${UNRESOLVED_FIXTURES[*]}"
+			)"
+		fi
+		if [ -n "${CONTAINERS_JSON}" ]; then
+			echo "Observed container readiness:"
+			jq -r '.data[]? | "- \(.name // "<unnamed>"): image.name=\(.image.name // "<missing>"), image.registry.name=\(.image.registry.name // "<missing>"), image.registry.url=\(.image.registry.url // "<missing>"), image.tag.value=\(.image.tag.value // "<missing>")"' <<<"${CONTAINERS_JSON}" 2>/dev/null || true
+		fi
 		docker logs drydock --tail 50
 		exit 1
 	fi

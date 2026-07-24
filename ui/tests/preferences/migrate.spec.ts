@@ -68,14 +68,76 @@ describe('preferences migration', () => {
       const result = mergeDefaults({ containers: { tableActions: 'buttons' } });
       expect(result.containers.tableActions).toBe('buttons');
       expect(result.containers.groupByStack).toBe(false);
+      expect(result.containers.manualGroups).toEqual({});
       expect(result.containers.sort).toEqual({ key: 'name', asc: true });
+    });
+
+    it('preserves dynamic manual container group overrides', () => {
+      const result = mergeDefaults({
+        containers: { manualGroups: { 'agent::watcher::nginx': 'edge-services' } },
+      });
+
+      expect(result.containers.manualGroups).toEqual({
+        'agent::watcher::nginx': 'edge-services',
+      });
     });
   });
 
   describe('migrate', () => {
+    it('adds manual container groups when migrating schema version 11', () => {
+      const result = migrate({ schemaVersion: 11, containers: { groupByStack: true } });
+
+      expect(result.schemaVersion).toBe(12);
+      expect(result.containers.manualGroups).toEqual({});
+      expect(result.containers.groupByStack).toBe(true);
+    });
+
+    it('preserves manual container groups already present in schema version 11 data', () => {
+      const result = migrate({
+        schemaVersion: 11,
+        containers: { manualGroups: { 'local::nginx': 'edge-services' } },
+      });
+
+      expect(result.schemaVersion).toBe(12);
+      expect(result.containers.manualGroups).toEqual({ 'local::nginx': 'edge-services' });
+    });
+
+    it('restores container defaults when schema version 11 has malformed container preferences', () => {
+      const result = migrate({ schemaVersion: 11, containers: 'invalid' });
+
+      expect(result.schemaVersion).toBe(12);
+      expect(result.containers.manualGroups).toEqual({});
+      expect(result.containers.groupByStack).toBe(false);
+    });
+
+    it('sanitizes persisted manual container group overrides', () => {
+      const result = migrate({
+        schemaVersion: 12,
+        containers: {
+          manualGroups: {
+            'agent::watcher::nginx': '  edge-services  ',
+            'agent::watcher::redis': '',
+            'agent::watcher::postgres': 42,
+            '   ': 'ignored',
+          },
+        },
+      });
+
+      expect(result.containers.manualGroups).toEqual({
+        'agent::watcher::nginx': 'edge-services',
+      });
+    });
+
+    it('drops malformed manual container group maps', () => {
+      expect(
+        migrate({ schemaVersion: 12, containers: { manualGroups: ['not', 'a', 'map'] } }).containers
+          .manualGroups,
+      ).toEqual({});
+    });
+
     it('adds disabled sync preferences when migrating schema version 10', () => {
       const result = migrate({ schemaVersion: 10, sync: undefined });
-      expect(result.schemaVersion).toBe(11);
+      expect(result.schemaVersion).toBe(12);
       expect(result.sync).toEqual({ enabled: false });
     });
 
@@ -86,16 +148,16 @@ describe('preferences migration', () => {
     });
 
     it('preserves an already-current sync preference', () => {
-      const result = migrate({ schemaVersion: 11, sync: { enabled: true } });
+      const result = migrate({ schemaVersion: 12, sync: { enabled: true } });
       expect(result.sync).toEqual({ enabled: true });
     });
 
     it('sanitizes malformed sync values on every load, including current schema data', () => {
-      expect(migrate({ schemaVersion: 11, sync: { enabled: 'false' } }).sync).toEqual({
+      expect(migrate({ schemaVersion: 12, sync: { enabled: 'false' } }).sync).toEqual({
         enabled: false,
       });
-      expect(migrate({ schemaVersion: 11, sync: 42 }).sync).toEqual({ enabled: false });
-      expect(migrate({ schemaVersion: 11, sync: { enabled: true } }).sync).toEqual({
+      expect(migrate({ schemaVersion: 12, sync: 42 }).sync).toEqual({ enabled: false });
+      expect(migrate({ schemaVersion: 12, sync: { enabled: true } }).sync).toEqual({
         enabled: true,
       });
     });
@@ -839,6 +901,14 @@ describe('preferences migration', () => {
         localStorage.setItem('dd-table-cols-v1', JSON.stringify(columns));
         const result = migrateFromLegacyKeys();
         expect(result.containers.columns).toEqual(['icon', ...columns, 'links']);
+      });
+
+      it('should preserve a legacy Resources column without duplicating it', () => {
+        const columns = ['name', 'links', 'status'];
+        localStorage.setItem('dd-table-cols-v1', JSON.stringify(columns));
+        const result = migrateFromLegacyKeys();
+        expect(result.containers.columns).toEqual(['icon', 'name', 'status', 'links']);
+        expect(result.containers.columns.filter((column) => column === 'links')).toHaveLength(1);
       });
 
       it('should drop stale columns that no longer exist in the table', () => {

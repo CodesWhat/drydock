@@ -1639,6 +1639,7 @@ onUnmounted(() => {
 
       <!-- MAIN CONTENT -->
       <main class="flex-1 min-h-0 overflow-clip flex flex-col pl-4 pr-2 py-4 sm:pl-6 sm:pr-[9px] sm:py-6"
+            :data-route-name="String(route.name ?? '')"
             :style="{ backgroundColor: 'var(--dd-bg)', borderTopLeftRadius: 'var(--dd-radius-lg)' }">
         <router-view />
       </main>

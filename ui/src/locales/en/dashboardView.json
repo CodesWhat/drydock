@@ -103,7 +103,7 @@
       "major": "Major",
       "minor": "Minor",
       "patch": "Patch",
-      "digest": "Digest"
+      "digest": "Image update"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

@@ -1,4 +1,4 @@
-import { flushPromises } from '@vue/test-utils';
+import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
@@ -2142,6 +2142,138 @@ describe('ContainersView', () => {
       expect(groups[0].containers).toHaveLength(2);
       expect(groups[1].key).toBe('web-stack');
       expect(groups[1].containers).toHaveLength(2);
+    });
+
+    it('lets a persistent manual group override server and Compose membership', async () => {
+      const nginx = makeContainer({
+        id: 'c-nginx',
+        identityKey: 'agent::watcher::nginx',
+        name: 'nginx',
+      });
+      const redis = makeContainer({
+        id: 'c-redis',
+        identityKey: 'agent::watcher::redis',
+        name: 'redis',
+      });
+      const wrapper = await mountContainersView([nginx, redis]);
+      const vm = wrapper.vm as any;
+      const { preferences } = await import('@/preferences/store');
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'compose-stack', redis: 'compose-stack' };
+      preferences.containers.manualGroups['agent::watcher::nginx'] = 'edge-services';
+      await flushPromises();
+
+      expect(vm.groupedContainers).toEqual([
+        expect.objectContaining({
+          key: 'compose-stack',
+          containers: [expect.objectContaining({ name: 'redis' })],
+        }),
+        expect.objectContaining({
+          key: 'edge-services',
+          containers: [expect.objectContaining({ name: 'nginx' })],
+        }),
+      ]);
+    });
+
+    it('clears a manual group override back to server and Compose membership', async () => {
+      const nginx = makeContainer({
+        id: 'c-nginx',
+        identityKey: 'agent::watcher::nginx',
+        name: 'nginx',
+      });
+      const wrapper = await mountContainersView([nginx]);
+      const vm = wrapper.vm as any;
+      const { preferences } = await import('@/preferences/store');
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'compose-stack' };
+      vm.setContainerManualGroup(nginx, 'edge-services');
+      expect(preferences.containers.manualGroups).toEqual({
+        'agent::watcher::nginx': 'edge-services',
+      });
+      expect(vm.groupedContainers[0].key).toBe('edge-services');
+
+      vm.clearContainerManualGroup(nginx);
+      await flushPromises();
+
+      expect(preferences.containers.manualGroups).toEqual({});
+      expect(vm.groupedContainers[0].key).toBe('compose-stack');
+    });
+
+    it('keeps an explicitly assigned one-container manual group visible', async () => {
+      const nginx = makeContainer({
+        id: 'c-nginx',
+        identityKey: 'agent::watcher::nginx',
+        name: 'nginx',
+      });
+      const wrapper = await mountContainersView([nginx]);
+      const vm = wrapper.vm as any;
+      const { preferences } = await import('@/preferences/store');
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'edge-services' };
+      vm.groupAssignedSizeMap = { 'edge-services': 1 };
+      preferences.containers.manualGroups['agent::watcher::nginx'] = 'edge-services';
+      await flushPromises();
+
+      expect(vm.groupedContainers).toHaveLength(1);
+      expect(vm.groupedContainers[0].key).toBe('edge-services');
+      expect(vm.groupedContainers[0].name).toBe('edge-services');
+    });
+
+    it('opens an accessible group editor and saves the override from the UI', async () => {
+      const nginx = makeContainer({
+        id: 'c-nginx',
+        identityKey: 'agent::watcher::nginx',
+        name: 'nginx',
+      });
+      const wrapper = await mountContainersView([nginx]);
+      const vm = wrapper.vm as any;
+      const { preferences } = await import('@/preferences/store');
+
+      vm.openContainerGroupDialog(nginx);
+      await flushPromises();
+
+      const dialogElement = document.body.querySelector('[role="dialog"]');
+      expect(dialogElement).not.toBeNull();
+      const dialog = new DOMWrapper(dialogElement!);
+      expect(dialog.attributes('aria-modal')).toBe('true');
+      expect(dialog.attributes('aria-labelledby')).toBe('container-group-dialog-title');
+      expect(dialog.get('label').attributes('for')).toBe('container-group-name');
+
+      await dialog.get('input').setValue('  edge-services  ');
+      await dialog.get('[data-test="save-container-group"]').trigger('click');
+      await flushPromises();
+
+      expect(preferences.containers.manualGroups).toEqual({
+        'agent::watcher::nginx': 'edge-services',
+      });
+      expect(vm.groupByStack).toBe(true);
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+    it('offers a clear action only for an existing manual override', async () => {
+      const nginx = makeContainer({
+        id: 'c-nginx',
+        identityKey: 'agent::watcher::nginx',
+        name: 'nginx',
+      });
+      const wrapper = await mountContainersView([nginx]);
+      const vm = wrapper.vm as any;
+      const { preferences } = await import('@/preferences/store');
+
+      preferences.containers.manualGroups['agent::watcher::nginx'] = 'edge-services';
+      vm.openContainerGroupDialog(nginx);
+      await flushPromises();
+
+      const clearButton = document.body.querySelector('[data-test="clear-container-group"]');
+      expect(clearButton).not.toBeNull();
+      await new DOMWrapper(clearButton!).trigger('click');
+      await flushPromises();
+
+      expect(preferences.containers.manualGroups).toEqual({});
+      expect(document.body.querySelector('[role="dialog"]')).toBeNull();
     });
 
     it('places ungrouped containers last', async () => {

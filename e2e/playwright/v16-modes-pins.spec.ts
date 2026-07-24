@@ -14,11 +14,15 @@ interface ContainersPayload {
 }
 
 interface ContainerFixture {
+  currentReleaseNotes?: Record<string, unknown>;
   displayName?: string;
   image: {
+    digest?: Record<string, unknown>;
+    registry?: Record<string, unknown>;
     tag: Record<string, unknown>;
   };
   result?: Record<string, unknown>;
+  sourceRepo?: string;
   tagFamily?: string;
   tagPinGated?: boolean;
   tagPinned?: boolean;
@@ -29,6 +33,7 @@ interface ContainerFixture {
 }
 
 const TARGET_CONTAINER = 'Nginx (Hooked)';
+const RESOURCE_TARGET_CONTAINER = 'A Resources Column Fixture';
 
 async function interceptSettings(page: Page, initialMode: UpdateMode): Promise<() => UpdateMode> {
   let updateMode = initialMode;
@@ -87,6 +92,24 @@ async function interceptContainer(
     const container = payload.data.find((candidate) => candidate.displayName === displayName);
     expect(container, `QA fixture ${displayName} must exist`).toBeTruthy();
     mutate(container!);
+    await route.fulfill({ response, json: payload });
+  });
+}
+
+async function interceptFirstContainer(
+  page: Page,
+  mutate: (container: ContainerFixture) => void,
+): Promise<void> {
+  await page.route('**/api/v1/containers', async (route: Route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+
+    const response = await route.fetch();
+    const payload = (await response.json()) as ContainersPayload;
+    expect(payload.data[0], 'QA fixture must contain at least one container').toBeTruthy();
+    mutate(payload.data[0]);
     await route.fulfill({ response, json: payload });
   });
 }
@@ -169,6 +192,10 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
   test('#498 renders pinned current-to-newer tags as information in table and cards', async ({
     page,
   }) => {
+    // The default 1280px project viewport intentionally folds the Update
+    // column after Host was promoted in #498. Use a wide table viewport for
+    // assertions that specifically exercise the Update cell.
+    await page.setViewportSize({ width: 1600, height: 900 });
     await interceptSettings(page, 'manual');
     await interceptContainer(page, 'Traefik Proxy', (container) => {
       container.displayName = 'Immich ML (Pinned)';
@@ -217,15 +244,175 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
     await expect(tableFlow).toContainText('v3.0.2-openvino');
     const tableText = (await tableFlow.innerText()).replace(/\s+/g, ' ');
     expect(tableText.indexOf('v2.7.5-openvino')).toBeLessThan(tableText.indexOf('v3.0.2-openvino'));
+    const tableState = row.locator('[data-test="container-update-state"]');
+    await expect(tableState).toHaveText('Major');
+    await expect(tableState).not.toContainText('Current');
+    await tableState.locator(':scope > span').first().hover();
+    await expect(page.getByRole('tooltip')).toHaveText(
+      "Newer version available: v3.0.2-openvino. This tag is pinned — drydock won't update it automatically.",
+    );
     await expect(row.locator('[data-test="container-tag-pinned-glyph"]')).toBeVisible();
     await expect(row.getByRole('button', { name: /^Update$/ })).toHaveCount(0);
+
+    await row.click();
+    const detail = page.locator('[data-test="container-side-detail"]');
+    const statusPanel = detail.locator('[data-test="update-status-panel"]');
+    await expect(statusPanel).toHaveAttribute('data-state', 'insight');
+    await expect(statusPanel.locator('[data-test="update-status-summary"]')).toHaveText(
+      'Newer version available — this tag is pinned.',
+    );
+    await expect(statusPanel.locator('[data-test="update-status-manual-cta"]')).toHaveCount(0);
+    await detail.getByRole('button', { name: 'Close details panel' }).click();
+    await expect(detail).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Cards view' }).click();
     const card = page.locator('[data-test="dd-card"]').filter({ hasText: 'Immich ML (Pinned)' });
     await expect(card).toBeVisible();
     await expect(card).toContainText(/v2\.7\.5-openvino\s*→\s*v3\.0\.2-openvino/);
-    await expect(card.locator('[data-test="container-card-update-state"]')).toHaveText('Current');
+    const cardState = card.locator('[data-test="container-card-update-state"]');
+    await expect(cardState).toHaveText('Major');
+    await expect(cardState).not.toContainText('Current');
+    await cardState.hover();
+    await expect(page.getByRole('tooltip')).toHaveText(
+      "Newer version available: v3.0.2-openvino. This tag is pinned — drydock won't update it automatically.",
+    );
     await expect(card.locator('[data-test="container-tag-pinned-glyph"]')).toBeVisible();
     await expect(card.getByRole('button', { name: /^Update$/ })).toHaveCount(0);
+  });
+
+  test('#498 explains same-tag digest changes as image updates in table and cards', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await interceptContainer(page, 'Traefik Proxy', (container) => {
+      container.displayName = 'OwnTone (Rebuilt)';
+      container.image.tag = {
+        ...container.image.tag,
+        value: '28.5.1',
+        semver: true,
+        tagPrecision: 'specific',
+      };
+      container.image.digest = { watch: true };
+      container.updateAvailable = true;
+      container.updateKind = {
+        kind: 'digest',
+        localValue: `sha256:${'a'.repeat(64)}`,
+        remoteValue: `sha256:${'b'.repeat(64)}`,
+        semverDiff: 'none',
+      };
+      container.result = { tag: '28.5.1', digest: `sha256:${'b'.repeat(64)}` };
+      container.updateEligibility = {
+        eligible: true,
+        evaluatedAt: '2026-07-13T16:00:00.000Z',
+        blockers: [],
+      };
+    });
+
+    await page.goto('/containers');
+    await dismissAnnouncementBanners(page);
+    const row = page.getByRole('row', { name: /OwnTone \(Rebuilt\)/i });
+    await expect(row).toBeVisible({ timeout: 30_000 });
+    const tableState = row.locator('[data-test="container-update-state"]');
+    await expect(tableState).toHaveText('Image update');
+    await expect(tableState).not.toContainText('Digest update');
+    await tableState.locator(':scope > span').first().hover();
+    await expect(page.getByRole('tooltip')).toHaveText(
+      'The tag 28.5.1 now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.',
+    );
+
+    await page.getByRole('button', { name: 'Cards view' }).click();
+    const card = page.locator('[data-test="dd-card"]').filter({ hasText: 'OwnTone (Rebuilt)' });
+    await expect(card).toBeVisible();
+    const cardState = card.locator('[data-test="container-card-update-state"]');
+    await expect(cardState).toHaveText('Image update');
+    await expect(cardState).not.toContainText('Digest update');
+    await cardState.hover();
+    await expect(page.getByRole('tooltip')).toHaveText(
+      'The tag 28.5.1 now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.',
+    );
+  });
+
+  test('#498 keeps Host visible ahead of secondary Software Version metadata at laptop width', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1197, height: 900 });
+    await page.goto('/containers');
+    await dismissAnnouncementBanners(page);
+
+    const table = page.locator('[data-test="containers-grouped-views"] table');
+    await expect(table).toBeVisible({ timeout: 30_000 });
+    await expect(table.locator('th[data-col-key="server"]')).toContainText('Host');
+    await expect(table.locator('th[data-col-key="server"]')).toBeVisible();
+    await expect(table.locator('th[data-col-key="softwareVersion"]')).toHaveCount(0);
+
+    const firstContainerRow = table
+      .getByRole('row')
+      .filter({
+        has: page.locator('[data-test="container-server-text"]'),
+      })
+      .first();
+    await expect(firstContainerRow.locator('[data-test="container-server-text"]')).toBeVisible();
+    await expect(
+      firstContainerRow.locator('[data-test="container-software-version-col"]'),
+    ).toHaveCount(0);
+  });
+
+  test('#498 lets Resources be hidden without losing its row shortcuts', async ({ page }) => {
+    await page.setViewportSize({ width: 1197, height: 900 });
+    await interceptFirstContainer(page, (container) => {
+      container.displayName = RESOURCE_TARGET_CONTAINER;
+      container.sourceRepo = 'github.com/CodesWhat/drydock';
+      container.image.registry = { name: 'hub', url: 'https://registry-1.docker.io' };
+      container.currentReleaseNotes = {
+        title: 'Drydock v1.6.0-rc.4',
+        body: 'Deterministic Resources-column regression fixture.',
+        url: 'https://github.com/CodesWhat/drydock/releases/tag/v1.6.0-rc.4',
+        publishedAt: '2026-07-21T12:00:00.000Z',
+        provider: 'github',
+      };
+    });
+
+    await page.goto('/containers');
+    await dismissAnnouncementBanners(page);
+
+    const table = page.locator('[data-test="containers-grouped-views"] table');
+    await expect(table.locator('th[data-col-key="links"]')).toContainText('Resources');
+    await page.locator('[data-test="data-table-column-picker"] > button').click();
+    await page.getByRole('button', { name: 'Resources', exact: true }).click();
+    await expect(table.locator('th[data-col-key="links"]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    const row = table.getByRole('row', {
+      name: new RegExp(escapeRegExp(RESOURCE_TARGET_CONTAINER), 'i'),
+    });
+    await row.getByRole('button', { name: 'More', exact: true }).click();
+    const resources = page.locator('[data-test="actions-menu-resource-actions"]');
+    await expect(resources).toContainText('Resources');
+    const shortcuts = resources.locator(
+      '[data-test="project-link"], [data-test="release-notes-link"], [data-test="current-release-notes-link"], [data-test="registry-link"]',
+    );
+    await expect(shortcuts).toHaveCount(3);
+    const shortcutIds = await shortcuts.evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute('data-test')),
+    );
+    expect(shortcutIds[0]).toBe('project-link');
+    expect(shortcutIds[1]).toMatch(/^(?:current-)?release-notes-link$/);
+    expect(shortcutIds[2]).toBe('registry-link');
+
+    await page.reload();
+    await expect(table.locator('th[data-col-key="links"]')).toHaveCount(0);
+    await expect(table.locator('th[data-col-key="server"]')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Cards view' }).click();
+    const card = page.locator('[data-test="dd-card"]').filter({
+      hasText: RESOURCE_TARGET_CONTAINER,
+    });
+    await expect(
+      card.locator(
+        '[data-test="container-card-resource-actions"] [data-test="container-quick-links"]',
+      ),
+    ).toBeVisible();
+    await card.getByRole('button', { name: 'More', exact: true }).click();
+    await expect(page.locator('[data-test="actions-menu-resource-actions"]')).toHaveCount(0);
   });
 });

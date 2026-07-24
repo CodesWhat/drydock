@@ -11,6 +11,7 @@
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
     "cucumber": "cucumber-js **/*.feature",
+    "test:support": "node --test tests/*.test.js tests/security/*.test.js",
     "test:security": "node --test tests/security/*.test.js",
     "test:playwright": "playwright test",
     "test:playwright:ui": "playwright test --headed",

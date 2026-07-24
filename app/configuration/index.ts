@@ -541,6 +541,7 @@ export function getServerConfiguration() {
     ratelimit: joi
       .object({
         identitykeying: joi.boolean(),
+        max: joi.number().integer().min(1),
       })
       .optional(),
     metrics: joi

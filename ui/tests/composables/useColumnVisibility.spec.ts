@@ -46,12 +46,13 @@ describe('useColumnVisibility', () => {
     expect(versionCol?.labelKey).toBe('containersView.columns.tag');
   });
 
-  it('softwareVersion column should be labelled Version', async () => {
+  it('labels the secondary field as Software Version so it is not confused with Tag (#498)', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns } = useColumnVisibility();
     const swVerCol = allColumns.find((c) => c.key === 'softwareVersion');
-    expect(swVerCol?.label).toBe('Version');
+    expect(swVerCol?.label).toBe('Software Version');
     expect(swVerCol?.labelKey).toBe('containersView.columns.version');
+    expect(swVerCol?.headerTooltipKey).toBe('containersView.columns.versionTooltip');
   });
 
   it('softwareVersion column should be visible by default', async () => {
@@ -67,20 +68,20 @@ describe('useColumnVisibility', () => {
     expect(kindCol?.headerTooltipKey).toBe('containersView.columns.updateTooltip');
   });
 
-  it('other columns do not have a headerTooltipKey', async () => {
+  it('columns without extra semantics do not have a headerTooltipKey', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns } = useColumnVisibility();
-    const nonKindCols = allColumns.filter((c) => c.key !== 'kind');
-    for (const col of nonKindCols) {
+    const plainColumns = allColumns.filter((c) => c.key !== 'kind' && c.key !== 'softwareVersion');
+    for (const col of plainColumns) {
       expect(col.headerTooltipKey).toBeUndefined();
     }
   });
 
-  it('should mark identity and resource columns as required', async () => {
+  it('keeps only row identity columns required so Resources can be hidden (#498)', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns } = useColumnVisibility();
     const required = allColumns.filter((c) => c.required).map((c) => c.key);
-    expect(required).toEqual(['icon', 'name', 'links']);
+    expect(required).toEqual(['icon', 'name']);
   });
 
   it('should toggle a non-required column off', async () => {
@@ -109,8 +110,22 @@ describe('useColumnVisibility', () => {
     expect(visibleColumns.value.has('icon')).toBe(true);
     toggleColumn('name');
     expect(visibleColumns.value.has('name')).toBe(true);
-    toggleColumn('links');
+  });
+
+  it('allows Resources to be hidden and persists that preference (#498)', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { hiddenColumnKeys, visibleColumns, toggleColumn } = useColumnVisibility();
+
     expect(visibleColumns.value.has('links')).toBe(true);
+    toggleColumn('links');
+    expect(visibleColumns.value.has('links')).toBe(false);
+    expect(hiddenColumnKeys.value).toContain('links');
+
+    await nextTick();
+    const { flushPreferences } = await import('@/preferences/store');
+    flushPreferences();
+    const stored = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}').containers.columns;
+    expect(stored).not.toContain('links');
   });
 
   it('should ignore unknown column keys', async () => {
@@ -151,9 +166,10 @@ describe('useColumnVisibility', () => {
     setTestPreferences({ containers: { columns: ['icon', 'name', 'status'] } });
     const { useColumnVisibility } = await loadColumnVisibility();
     const { visibleColumns } = useColumnVisibility();
-    expect(visibleColumns.value.size).toBe(4);
+    expect(visibleColumns.value.size).toBe(3);
     expect(visibleColumns.value.has('version')).toBe(false);
     expect(visibleColumns.value.has('status')).toBe(true);
+    expect(visibleColumns.value.has('links')).toBe(false);
   });
 
   it('should fall back to defaults when preferences contain invalid data', async () => {
@@ -224,19 +240,43 @@ describe('useColumnVisibility', () => {
   // cardPriority-driven card composition, so the annotations would be inert. See
   // ContainersGroupedViews.spec.ts for card-mode coverage instead.
   describe('auto-hide priority (unaffected by cardPriority removal)', () => {
-    it('does not change the existing auto-hide priority values', async () => {
+    it('keeps Host ahead of the redundant software Version column', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const { allColumns } = useColumnVisibility();
       const byKey = Object.fromEntries(allColumns.map((c) => [c.key, c.priority]));
       expect(byKey.kind).toBe(60);
       expect(byKey.status).toBe(50);
-      expect(byKey.server).toBe(70);
+      expect(byKey.server).toBe(5);
+      expect(byKey.softwareVersion).toBe(70);
       expect(byKey.registry).toBe(80);
       expect(byKey.uptime).toBe(90);
     });
   });
 
   describe('responsive auto-hide', () => {
+    it('auto-hides software Version instead of Host at a laptop-width content budget (#498)', async () => {
+      setTestPreferences({
+        containers: {
+          columns: [
+            'icon',
+            'name',
+            'version',
+            'softwareVersion',
+            'kind',
+            'status',
+            'server',
+            'links',
+          ],
+        },
+      });
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const width = ref(1136);
+      const { autoHiddenColumns } = useColumnVisibility(width);
+
+      expect(autoHiddenColumns.value.map((column) => column.key)).toEqual(['softwareVersion']);
+      expect(autoHiddenColumns.value.map((column) => column.key)).not.toContain('server');
+    });
+
     it('auto-hides nothing when availableWidth is undefined', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(undefined);
@@ -255,25 +295,29 @@ describe('useColumnVisibility', () => {
 
     it('drops registry first as width tightens using column min sizes', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
-      // The required 152px Resources column keeps its 44px targets visible, so registry,
-      // server, and kind are the first optional columns dropped at this width.
+      // Keep Host visible at laptop widths; the secondary software-version column
+      // yields before it while the default-visible Resources column uses its fixed footprint (#498).
       const width = ref(1029);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
       expect(hiddenColumnKeys.value).toContain('registry');
-      expect(hiddenColumnKeys.value).toContain('server');
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server', 'kind']);
+      expect(hiddenColumnKeys.value).not.toContain('server');
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
+        'registry',
+        'softwareVersion',
+        'kind',
+      ]);
     });
 
     it('drops in documented priority order as width tightens further', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
-      // softwareVersion (priority 5) is droppable but after registry/server/kind/status.
+      // Host stays ahead of the secondary software-version column at laptop widths.
       const width = ref(913);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
       expect(hiddenColumnKeys.value).toContain('registry');
-      expect(hiddenColumnKeys.value).toContain('server');
+      expect(hiddenColumnKeys.value).not.toContain('server');
       expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
         'registry',
-        'server',
+        'softwareVersion',
         'kind',
         'status',
       ]);
@@ -285,24 +329,24 @@ describe('useColumnVisibility', () => {
       expect(hiddenColumnKeys.value).toContain('kind');
       expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
         'registry',
-        'server',
+        'softwareVersion',
         'kind',
         'status',
-        'softwareVersion',
+        'server',
       ]);
 
       width.value = 685;
       await nextTick();
       expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
         'registry',
-        'server',
+        'softwareVersion',
         'kind',
         'status',
-        'softwareVersion',
+        'server',
       ]);
     });
 
-    it('never drops icon, name, version, or links even at width=0', async () => {
+    it('does not auto-hide identity, tag, or default-visible Resources at width=0', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const width = ref(0);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
@@ -314,7 +358,7 @@ describe('useColumnVisibility', () => {
       expect(autoHiddenColumns.value).toHaveLength(0);
     });
 
-    it('never drops icon, name, version, or links even at very narrow positive width', async () => {
+    it('does not auto-hide identity, tag, or default-visible Resources at very narrow widths', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const width = ref(1);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
@@ -325,10 +369,10 @@ describe('useColumnVisibility', () => {
       // All droppable columns dropped (softwareVersion priority 5 > 0, so it is droppable)
       expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
         'registry',
-        'server',
+        'softwareVersion',
         'kind',
         'status',
-        'softwareVersion',
+        'server',
       ]);
     });
 
@@ -353,12 +397,12 @@ describe('useColumnVisibility', () => {
 
     it('autoHiddenColumns lists exactly the dropped columns when some are auto-hidden', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
-      // At 1029 the required Resources column pushes three optional columns out.
+      // At 1029 the default-visible fixed Resources column pushes three responsive columns out.
       const width = ref(1029);
       const { autoHiddenColumns } = useColumnVisibility(width);
       expect(autoHiddenColumns.value).toHaveLength(3);
       expect(autoHiddenColumns.value[0].key).toBe('registry');
-      expect(autoHiddenColumns.value[1].key).toBe('server');
+      expect(autoHiddenColumns.value[1].key).toBe('softwareVersion');
       expect(autoHiddenColumns.value[2].key).toBe('kind');
     });
 
@@ -374,8 +418,12 @@ describe('useColumnVisibility', () => {
       width.value = 1029;
       await nextTick();
       expect(hiddenColumnKeys.value).toContain('registry');
-      // At 1029, the required Resources column remains while optional columns reflow.
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server', 'kind']);
+      // At 1029, default-visible Resources remains while responsive columns reflow.
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
+        'registry',
+        'softwareVersion',
+        'kind',
+      ]);
 
       width.value = 5000;
       await nextTick();
@@ -394,8 +442,12 @@ describe('useColumnVisibility', () => {
       base.value = 1029;
       await nextTick();
       expect(hiddenColumnKeys.value).toContain('registry');
-      // At 1029, the required Resources column remains while optional columns reflow.
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server', 'kind']);
+      // At 1029, default-visible Resources remains while responsive columns reflow.
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
+        'registry',
+        'softwareVersion',
+        'kind',
+      ]);
     });
 
     it('user-hidden plus narrow viewport: only preference-visible columns are candidates', async () => {
@@ -409,9 +461,9 @@ describe('useColumnVisibility', () => {
       expect(hiddenColumnKeys.value).not.toContain('name');
       expect(hiddenColumnKeys.value).not.toContain('version');
       expect(hiddenColumnKeys.value).toContain('kind');
-      expect(hiddenColumnKeys.value).toContain('status');
-      expect(hiddenColumnKeys.value).not.toContain('links');
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['kind', 'status']);
+      expect(hiddenColumnKeys.value).not.toContain('status');
+      expect(hiddenColumnKeys.value).toContain('links');
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['kind']);
     });
   });
 
@@ -428,10 +480,14 @@ describe('useColumnVisibility', () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const width = ref(1029);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server', 'kind']);
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
+        'registry',
+        'softwareVersion',
+        'kind',
+      ]);
       // hiddenColumnKeys is the union of responsive optional columns and opt-in uptime.
       expect(hiddenColumnKeys.value.sort()).toEqual(
-        ['kind', 'registry', 'server', 'uptime'].sort(),
+        ['kind', 'registry', 'softwareVersion', 'uptime'].sort(),
       );
     });
 
@@ -444,7 +500,7 @@ describe('useColumnVisibility', () => {
       const registryOccurrences = hiddenColumnKeys.value.filter((key) => key === 'registry');
       expect(registryOccurrences).toHaveLength(1);
       expect(hiddenColumnKeys.value.sort()).toEqual(
-        ['kind', 'registry', 'server', 'uptime'].sort(),
+        ['kind', 'registry', 'softwareVersion', 'uptime'].sort(),
       );
     });
 
@@ -475,6 +531,7 @@ describe('useColumnVisibility', () => {
             'status',
             'server',
             'registry',
+            'links',
             'uptime',
           ],
         },

@@ -60,13 +60,16 @@ const allColumns: ColumnDef[] = [
   },
   {
     key: 'softwareVersion',
-    label: 'Version',
+    label: 'Software Version',
     labelKey: 'containersView.columns.version',
+    headerTooltipKey: 'containersView.columns.versionTooltip',
     px: 'px-5',
     size: 220,
     minSize: 150,
     maxSize: 320,
-    priority: 5,
+    // At laptop widths the Tag column already carries current → newer. Prefer
+    // keeping Host visible and drop this secondary image metadata first (#498).
+    priority: 70,
     overflow: 'truncate',
     required: false,
   },
@@ -101,7 +104,7 @@ const allColumns: ColumnDef[] = [
     size: 152,
     minSize: 132,
     maxSize: 240,
-    priority: 70,
+    priority: 5,
     required: false,
   },
   {
@@ -124,7 +127,9 @@ const allColumns: ColumnDef[] = [
     minSize: 152,
     maxSize: 152,
     autoSize: 'fixed',
-    required: true,
+    // Visible by default, but user-hideable (#498). The same shortcuts remain
+    // available from the row's More menu, cards, and container detail views.
+    required: false,
   },
   {
     key: 'uptime',
@@ -142,7 +147,7 @@ const allColumns: ColumnDef[] = [
 // hand-authored `#card` template (ContainersGroupedViews.vue) instead of DataTable's generic
 // cardPriority-driven card composition, so those annotations would be inert and misleading.
 
-const visibleColumns = ref<Set<string>>(new Set([...preferences.containers.columns, 'links']));
+const visibleColumns = ref<Set<string>>(new Set(preferences.containers.columns));
 watch(
   visibleColumns,
   (v) => {

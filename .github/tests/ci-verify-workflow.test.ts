@@ -179,13 +179,18 @@ test('ci-verify can dispatch the complete release-candidate matrix manually', ()
   expect(workflow.jobs?.['load-test-behavior']?.needs).toStrictEqual(['build']);
 });
 
-test('ci-verify runs Cucumber in the pinned Playwright browser image', () => {
+test('ci-verify keeps Cucumber browser-free and retries only dependency installation', () => {
   const workflow = loadWorkflow();
-  const playwrightImage =
-    'mcr.microsoft.com/playwright:v1.61.1-noble@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48';
+  // Worst-case bounded retries plus readiness leave enough time for the
+  // suite and post-failure artifact handling.
+  expect(workflow.jobs?.e2e?.['timeout-minutes']).toBe(40);
+  expect(workflow.jobs?.e2e?.permissions).toStrictEqual({
+    actions: 'read',
+    contents: 'read',
+  });
 
-  // Keep host-side installs from downloading a browser. The Cucumber browser
-  // comes from the same immutable image used by the dedicated Playwright gate.
+  // Cucumber owns API/WebSocket contracts. Browser behavior is covered by the
+  // separately release-gated Playwright workflow.
   expect(workflow.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBeUndefined();
 
   for (const jobId of ['load-test-ci', 'load-test-behavior']) {
@@ -193,41 +198,81 @@ test('ci-verify runs Cucumber in the pinned Playwright browser image', () => {
     expect(getWorkflowStep(jobId, 'Install e2e dependencies')).toBeDefined();
   }
 
-  expect(workflow.jobs?.e2e?.env).toMatchObject({
-    PLAYWRIGHT_IMAGE: playwrightImage,
+  expect(workflow.jobs?.e2e?.env).toStrictEqual({
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
   });
   expect(getWorkflowStep('e2e', 'Cache Playwright browsers')).toBeUndefined();
-  expect(getWorkflowStep('e2e', 'Install e2e dependencies')).toBeUndefined();
-
-  const verifyImage = getWorkflowStep('e2e', 'Verify Playwright image matches package')?.run;
-  expect(verifyImage).toContain(
-    "require('./e2e/package.json').devDependencies['@playwright/test']",
-  );
-  expect(verifyImage).toContain('PLAYWRIGHT_IMAGE uses $image_version');
-
-  expect(getWorkflowStep('e2e', 'Pull Playwright container')).toMatchObject({
+  expect(getWorkflowStep('e2e', 'Verify Playwright image matches package')).toBeUndefined();
+  expect(getWorkflowStep('e2e', 'Pull Playwright container')).toBeUndefined();
+  expect(getWorkflowStep('e2e', 'Download QA image')).toMatchObject({
+    uses: expectedActionUse('actions/download-artifact'),
     with: {
-      command: 'docker pull "$PLAYWRIGHT_IMAGE"',
+      name: 'qa-image-${{ github.run_id }}',
+      path: 'artifacts/qa',
+    },
+  });
+  expect(getWorkflowStep('e2e', 'Load QA image')?.run).toBe(
+    'docker load < artifacts/qa/drydock-dev-image.tar.gz',
+  );
+
+  expect(getWorkflowStep('e2e', 'Start drydock')).toMatchObject({
+    env: {
+      DD_E2E_IMAGE: 'drydock:dev',
+      DD_E2E_SKIP_BUILD: 'true',
+    },
+  });
+
+  const install = getWorkflowStep('e2e', 'Install e2e dependencies');
+  expect(install).toMatchObject({
+    uses: expectedActionUse('nick-fields/retry'),
+    with: {
+      timeout_minutes: 3,
+      max_attempts: 3,
+    },
+  });
+  expect(install?.with?.command).toBe('cd e2e && npm ci --no-audit --no-fund');
+  expect(install?.with?.command).not.toContain('npm run cucumber');
+  expect(getWorkflowStep('e2e', 'Run Cucumber support tests')).toMatchObject({
+    run: 'npm run test:support',
+    'working-directory': 'e2e',
+  });
+  expect(getWorkflowStep('e2e', 'Setup test containers')).toMatchObject({
+    with: {
+      timeout_minutes: 6,
+      max_attempts: 2,
     },
   });
 
   const cucumber = getWorkflowStep('e2e', 'Run Cucumber e2e tests');
-  expect(cucumber?.['working-directory']).toBeUndefined();
-  expect(cucumber?.run).toContain('docker run --rm');
-  expect(cucumber?.run).toContain('--network host');
-  expect(cucumber?.run).toContain('--user 1001:1001');
-  expect(cucumber?.run).toContain('-e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright');
-  expect(cucumber?.run).toContain('-e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD');
-  expect(cucumber?.run).not.toContain('PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1');
+  expect(cucumber?.['working-directory']).toBe('e2e');
   expect(cucumber?.env?.DD_PORT).toBe('${{ steps.drydock.outputs.dd_port }}');
-  expect(cucumber?.run).toContain('-e DD_PORT');
-  expect(cucumber?.run).toContain('-v "${{ github.workspace }}:/work"');
-  expect(cucumber?.run).toContain('-w /work/e2e');
-  expect(cucumber?.run).toContain('"$PLAYWRIGHT_IMAGE"');
-  expect(cucumber?.run).toContain(
-    'npm ci --no-audit --no-fund && npm run cucumber -- --tags "not @requires_gitlab" --retry 1',
-  );
+  expect(cucumber?.run).toContain('npm run cucumber -- --tags "not @requires_gitlab"');
+  expect(cucumber?.run).not.toContain('docker run');
+  expect(cucumber?.run).not.toContain('npm ci');
+  expect(cucumber?.run).not.toContain('--retry');
+  expect(cucumber?.run).toContain('--format json:reports/cucumber.json');
+  expect(cucumber?.run).toContain('--format junit:reports/cucumber.xml');
+  expect(cucumber?.run).toContain('--format html:reports/cucumber.html');
+
+  const diagnostics = getWorkflowStep('e2e', 'Collect Cucumber diagnostics');
+  expect(diagnostics).toMatchObject({
+    if: 'failure() || cancelled()',
+    env: {
+      DD_PASSWORD: 'doe',
+      DD_USERNAME: 'john',
+    },
+  });
+  expect(diagnostics?.run).toContain('--user "${DD_USERNAME}:${DD_PASSWORD}"');
+  expect(diagnostics?.run?.match(/--max-time 10/g)).toHaveLength(2);
+  expect(diagnostics?.run).not.toContain('Authorization: Basic');
+  expect(getWorkflowStep('e2e', 'Upload Cucumber diagnostics')).toMatchObject({
+    if: 'always()',
+    uses: expectedActionUse('actions/upload-artifact'),
+    with: {
+      path: expect.stringContaining('e2e/reports'),
+      'if-no-files-found': 'warn',
+    },
+  });
 });
 
 test('DAST auth steps mask derived basic auth credentials', () => {

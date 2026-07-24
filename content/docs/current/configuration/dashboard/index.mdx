@@ -34,7 +34,7 @@ Larger panels that visualize trends and breakdowns.
 | **Security Overview** | Donut chart of clean / issues / not-scanned images, a 2×2 severity grid (critical / high / medium / low), and a list of the top 5 vulnerabilities. |
 | **Resource Usage** | Live CPU and memory utilization. Aggregate progress bars (green < 60%, amber 60–85%, red > 85%) plus ranked lists of the top 5 consumers by CPU and memory. |
 | **Host Status** | Agent and watcher connectivity. Shows each host's connection status (green = connected, red = disconnected), address, and running / total container count. |
-| **Update Breakdown** | Four-column grid showing major, minor, patch, and digest update counts with color-coded pills and proportional progress bars. |
+| **Update Breakdown** | Four-column grid showing major, minor, patch, and same-tag **image update** counts with color-coded pills and proportional progress bars. |
 
 All detail widgets use a `ResizeObserver` to detect their rendered height and progressively collapse content as the widget shrinks — headers hide below ~200 px, list items reduce from 5 to 3 to 1, and charts switch between full and compact layouts. This means a widget resized to a compact size still displays meaningful data instead of overflowing.
 

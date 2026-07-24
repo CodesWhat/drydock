@@ -10,6 +10,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.5] — 2026-07-23
+
+### Changed
+
+- **The Containers table's Resources column is now optional** ([#498](https://github.com/CodesWhat/drydock/issues/498)). It remains visible by default, but the column picker can hide it and preserves that choice. Source, release-note, and registry shortcuts move into each row's **More** menu while hidden and remain available in card and detail views.
+
+### Fixed
+
+- **The Dashboard and Containers views no longer overflow horizontally on narrow phone screens** ([#498](https://github.com/CodesWhat/drydock/issues/498)). Crossing into a single-column breakpoint now re-syncs the dashboard widget layout so widgets stop spilling past the viewport, single-column card lists no longer leave an empty band below reflowed cards, and long stack names in the Containers group header truncate instead of pushing the update button off-screen.
+
+### Security
+
+- **The documentation website now runs Next.js 16.2.11 and React 19.2.8.** The Next.js patch closes nine upstream advisories disclosed against 16.2.9, including proxy bypass, Server Actions denial of service and SSRF, rewrite SSRF, response-cache confusion, image-optimization denial of service, and Server Function endpoint disclosure (GHSA-6gpp-xcg3-4w24, GHSA-m99w-x7hq-7vfj, GHSA-89xv-2m56-2m9x, GHSA-p9j2-gv94-2wf4, GHSA-68g3-v927-f742, GHSA-4633-3j49-mh5q, GHSA-4c39-4ccg-62r3, GHSA-q8wf-6r8g-63ch, GHSA-955p-x3mx-jcvp).
+- **The documentation website's `postcss` build dependency is upgraded to 8.5.22**, closing CVE-2026-45623 (GHSA-6g55-p6wh-862q), an arbitrary-file-read via an attacker-controlled `sourceMappingURL` (fixed upstream in 8.5.12).
+
+## [1.6.0-rc.4] — 2026-07-22
+
+### Added
+
+- **Container groups can be edited directly in the browser** ([#498](https://github.com/CodesWhat/drydock/issues/498)). A container's More menu can set, change, or clear a local group override; clearing it falls back to the durable `dd.group` / Compose project / Swarm namespace group. Overrides are regular UI preferences, so they remain browser-local unless cross-device preference sync is enabled.
+
+### Changed
+
+- **Same-tag rebuilds read “Image update” instead of “Digest update.”** The update tooltip now explains that the visible tag has not changed but points to a different image build, and that redeploying pulls the new image. The dashboard uses the same vocabulary; literal image hashes are still correctly labeled digests.
+- **The Containers table distinguishes Tag, Software Version, and Update more clearly.** The secondary metadata column is now named **Software Version**, explains its source in a header tooltip, and folds before **Host** at constrained laptop widths so host identity stays visible.
+- **The release-gated E2E lanes now fail with attributable evidence instead of blanket retries.** Cucumber reuses the build-gated QA image, waits for the exact active fixture manifest, restores scenario-mutated state, publishes structured reports and diagnostics, and leaves browser rendering to Playwright. Playwright keeps first-failure media without retrying the whole test, gives its short-lived QA process explicit API and icon-proxy traffic budgets, waits for Docker's own healthcheck to acknowledge its health-transition fixture before scanning it, and fails setup if bounded runner-daemon pulls and image transfers cannot seed its required remote Docker fixtures. `DD_SERVER_RATELIMIT_MAX` can override the outer API's default 1,000-request/15-minute budget per rate-limit key; deployed defaults remain unchanged.
+
+### Fixed
+
+- **Pinned containers with a visible newer version no longer say “Current.”** A non-actionable `updateInsight` now renders as an informational Major/Minor/Patch state in table, card, and Update Status views while remaining ineligible for automatic or manual update actions.
+- **A targeted container recheck no longer overwrites fresh Docker health.** `POST /api/v1/containers/:id/watch` now scans and returns the live container object refreshed by the watcher instead of the stale store snapshot captured before refresh, preserving health-only transitions and their notification events.
+
 ## [1.6.0-rc.3] — 2026-07-21
 
 ### Changed
@@ -30,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Manual recheck no longer restarts the maturity countdown on display-only metadata drift** ([#565](https://github.com/CodesWhat/drydock/issues/565)). A per-container recheck bypasses the registry poll cache, so the suggested tag and image created date can wobble between scans even when the update candidate itself hasn't changed, falsely resetting the soak. The lifecycle clock now restarts only when the candidate's actual identity — tag or digest — changes; suggested tag and created date no longer factor into the restart decision.
 
 ### Security
+
+- **Release dependency security refresh.** Updated `fast-uri` to 3.1.4 for CVE-2026-16221, `fast-xml-parser` to 5.10.1 for GHSA-8r6m-32jq-jx6q, and the website's transitive `sharp` dependency to 0.35.3 for GHSA-f88m-g3jw-g9cj.
 
 - **Anonymous access now fails closed on upgrades, not just fresh installs.** An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — starts and fails closed: protected API requests are rejected with `401`, auth discovery/status remains public, `/health` reports `503`, and the SPA shell may load without access to protected application data. This replaces the previous warning plus open dashboard. If you run an intentionally open instance, set `DD_ANONYMOUS_AUTH_CONFIRM=true`; otherwise configure `DD_AUTH_BASIC_<name>_USER`/`_HASH` before upgrading.
 
@@ -2192,7 +2226,9 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.5...HEAD
+[1.6.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.4...v1.6.0-rc.5
+[1.6.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...v1.6.0-rc.4
 [1.6.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...v1.6.0-rc.3
 [1.6.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.1...v1.6.0-rc.2
 [1.6.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.5.2...v1.6.0-rc.1

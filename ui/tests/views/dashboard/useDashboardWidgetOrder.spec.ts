@@ -208,6 +208,24 @@ describe('useDashboardWidgetOrder', () => {
     expect(state.layout.value.every((item) => item.w === 1)).toBe(true);
   });
 
+  it('re-syncs the active layout when crossing between mobile and desktop breakpoints', async () => {
+    const { state } = await mountWidgetOrderComposable();
+
+    state.onBreakpointChanged('sm');
+    await nextTick();
+
+    expect(state.currentBreakpoint.value).toBe('sm');
+    expect(state.layout.value.every((item) => item.x === 0)).toBe(true);
+    expect(state.layout.value.every((item) => item.w === 1)).toBe(true);
+
+    state.onBreakpointChanged('lg');
+    await nextTick();
+
+    expect(state.currentBreakpoint.value).toBe('lg');
+    expect(state.layout.value.some((item) => item.w > 1)).toBe(true);
+    expect(state.layout.value.some((item) => item.x > 0)).toBe(true);
+  });
+
   it('hydrates legacy single-column gridLayout into the mobile responsive breakpoint', async () => {
     preferences.dashboard.gridLayout = DASHBOARD_WIDGET_IDS.map((id, index) => ({
       i: id,
