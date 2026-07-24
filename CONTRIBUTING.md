@@ -46,9 +46,12 @@ Drydock moves fast — open issues tend to get fixed quickly. The best way to fi
 
    `main` is the released branch. It's what tags are cut and signed from, and it only ever moves by merging the release branch into it right before a release. Everything else, bug fixes included, goes to `dev/vX.Y` first. A branch cut from `main` will be behind and its PR will target the wrong base.
 
+   There's one open at a time, and it moves with each release — find the current one rather than copying a version from these docs:
+
    ```bash
    git fetch origin
-   git checkout -b my-fix origin/dev/v1.6   # whatever dev/* branch is currently open
+   git branch -r --list 'origin/dev/v*'      # the active release branch
+   git checkout -b my-fix origin/dev/vX.Y    # use the one you just found
    ```
 
 ## Quick development loop

@@ -10,7 +10,12 @@ import { loadWorkflow, type WorkflowStep } from './workflow-test-utils';
 
 const crowdinPath = fileURLToPath(new URL('../workflows/i18n-crowdin.yml', import.meta.url));
 const playwrightPath = fileURLToPath(new URL('../workflows/e2e-playwright.yml', import.meta.url));
+const releaseCutPath = fileURLToPath(new URL('../workflows/release-cut.yml', import.meta.url));
 const renovatePath = fileURLToPath(new URL('../../renovate.json', import.meta.url));
+
+function releaseSteps(): WorkflowStep[] {
+  return loadWorkflow(releaseCutPath).jobs?.release?.steps ?? [];
+}
 
 interface BranchFilter {
   branches?: string[];
@@ -32,19 +37,34 @@ function crowdinStep(name: string): WorkflowStep {
   return step;
 }
 
-test('Renovate opens dependency PRs against the integration branch, not the default branch', () => {
-  const config = JSON.parse(readFileSync(renovatePath, 'utf8')) as { baseBranches?: string[] };
+test('Renovate opens dependency PRs against exactly one integration branch', () => {
+  const config = JSON.parse(readFileSync(renovatePath, 'utf8')) as {
+    baseBranchPatterns?: string[];
+    baseBranches?: string[];
+  };
 
-  // A pattern rather than a pinned version, so it follows dev/v1.6 -> dev/v1.7
-  // without an edit that would otherwise be forgotten at every minor.
-  expect(config.baseBranches).toStrictEqual(['/^dev\\/v\\d+\\.\\d+$/']);
+  // `baseBranches` is the pre-rename name; the config validator migrates it, and
+  // keeping both would leave two sources of truth for the cut-time check to read.
+  expect(config.baseBranches).toBeUndefined();
 
-  const pattern = new RegExp(config.baseBranches?.[0]?.slice(1, -1) ?? '(?!)');
-  expect(pattern.test('dev/v1.6')).toBe(true);
-  expect(pattern.test('dev/v1.10')).toBe(true);
-  expect(pattern.test('main')).toBe(false);
-  expect(pattern.test('dev/v1.6.1')).toBe(false);
-  expect(pattern.test('release/v1.6')).toBe(false);
+  // Exactly one branch, never a pattern. Renovate expands a pattern into every
+  // matching branch and opens a full PR set against each, so a dev branch that
+  // outlives its GA would silently double every dependency PR.
+  expect(config.baseBranchPatterns).toHaveLength(1);
+  const [base] = config.baseBranchPatterns ?? [];
+  expect(base).toMatch(/^dev\/v\d+\.\d+$/);
+  expect(base?.startsWith('/')).toBe(false);
+});
+
+test('release-cut fails when the Renovate target no longer matches the branch being cut', () => {
+  // The single branch above has to be rotated at each cut. This is what stops it
+  // going stale unnoticed and aiming the bot at a dead branch.
+  const run = releaseSteps().find((step) => step.name?.startsWith('Assert main is in sync'))?.run;
+
+  expect(run).toBeDefined();
+  expect(run).toContain('.baseBranchPatterns // .baseBranches // []');
+  expect(run).toContain('if [ "${renovate_base}" != "${dev_branch}" ]; then');
+  expect(run).toContain('::error::renovate.json targets');
 });
 
 test('Crowdin resolves its PR base at run time instead of hardcoding a branch', () => {
