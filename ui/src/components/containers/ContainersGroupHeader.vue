@@ -45,20 +45,21 @@ const emit = defineEmits<{
       class="dd-text-muted shrink-0"
     />
     <AppIcon name="stack" :size="12" class="dd-text-muted shrink-0" />
-    <span class="text-xs font-semibold dd-text">{{ group.name ?? t('containerComponents.groupHeader.ungrouped') }}</span>
+    <span class="text-xs font-semibold dd-text truncate min-w-0">{{ group.name ?? t('containerComponents.groupHeader.ungrouped') }}</span>
     <AppBadge
       size="xs"
+      class="shrink-0"
       :custom="{ bg: 'var(--dd-bg-elevated)', text: 'var(--dd-text-muted)' }"
     >
       {{ group.containerCount }}
     </AppBadge>
-    <AppBadge v-if="showUpdateControls && group.updatesAvailable > 0" tone="success" size="xs">
+    <AppBadge v-if="showUpdateControls && group.updatesAvailable > 0" tone="success" size="xs" class="shrink-0">
       {{ group.updatesAvailable }} {{ group.updatesAvailable === 1 ? t('containerComponents.groupHeader.updateSingular') : t('containerComponents.groupHeader.updatePlural') }}
     </AppBadge>
     <div
       v-if="showUpdateControls && (group.updatesAvailable > 0 || !containerActionsEnabled)"
       data-test="group-header-update-all-sticky"
-      class="ms-auto sticky end-0 z-10 flex items-center"
+      class="ms-auto shrink-0 sticky end-0 z-10 flex items-center"
     >
       <AppButton
         size="compact"
@@ -68,7 +69,7 @@ const emit = defineEmits<{
             : 'success'
         "
         weight="semibold"
-        class="inline-flex items-center justify-center"
+        class="inline-flex items-center justify-center whitespace-nowrap"
         :class="
           !containerActionsEnabled || inProgress
             ? 'cursor-not-allowed'

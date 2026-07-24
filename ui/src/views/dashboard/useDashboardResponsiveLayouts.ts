@@ -319,6 +319,11 @@ export function useDashboardResponsiveLayouts(options: {
       ...layoutsByBreakpoint.value,
       [breakpoint]: cloneLayout(normalized),
     };
+    // Re-sync the active layout to the new breakpoint's coordinates. Without
+    // this, crossing into a single-column breakpoint leaves every widget at its
+    // 12-column x/w, so the 1-column CSS grid fabricates auto-sized implicit
+    // columns and the whole dashboard overflows horizontally on phones (#498).
+    layout.value = cloneLayout(normalized);
   }
 
   return {
