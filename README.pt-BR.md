@@ -1,5 +1,7 @@
 <div align="center">
 
+<p><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pl.md">Polski</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <strong>Português (Brasil)</strong></p>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/whale-logo-dark.png" />
   <source media="(prefers-color-scheme: light)" srcset="docs/assets/whale-logo.png" />
@@ -9,8 +11,6 @@
 <h1>drydock</h1>
 
 **Observador de atualização de imagem de contêiner — 23 registros, 20 provedores de notificação e ação.**
-
-<p><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pl.md">Polski</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <strong>Português (Brasil)</strong></p>
 
 </div>
 
