@@ -10,21 +10,15 @@ const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
 // That is how .planning/ — gitignored, and described in CLAUDE.md as local-only — ended
 // up public on both main and dev/v1.6 carrying three stale roadmap files.
 test('no file ignored by the repository is tracked', () => {
-  // core.excludesFile=/dev/null drops the developer's personal ~/.gitignore so this
-  // asks one question: does the *repository* ignore a file it also commits? Without it
-  // the answer changes per machine — a global `*.pem`/`*.key` rule makes the committed
-  // test certificates look like violations locally while CI, which has no global
-  // excludes, sees nothing at all.
+  // --exclude-per-directory=.gitignore reads only the repository's committed .gitignore
+  // files (root plus nested), never the developer's global core.excludesFile and never
+  // the clone-local .git/info/exclude — the latter isn't even suppressed by pinning
+  // core.excludesFile, since it's a separate exclude source `--exclude-standard` also
+  // reads. That leaves one question, answered the same way on every machine and in CI:
+  // does the *repository* ignore a file it also commits?
   const tracked = execFileSync(
     'git',
-    [
-      '-c',
-      'core.excludesFile=/dev/null',
-      'ls-files',
-      '--cached',
-      '--ignored',
-      '--exclude-standard',
-    ],
+    ['ls-files', '--cached', '--ignored', '--exclude-per-directory=.gitignore'],
     { cwd: repositoryRoot, encoding: 'utf8' },
   )
     .split('\n')
