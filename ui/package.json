@@ -67,7 +67,7 @@
     "js-cookie": "3.0.8",
     "minimatch": "10.2.5",
     "picomatch": "4.0.5",
-    "postcss": "8.5.16",
+    "postcss": "8.5.22",
     "qs": "6.15.3",
     "yaml": "2.9.0",
     "@babel/core": "7.29.7",
