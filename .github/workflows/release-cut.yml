@@ -81,6 +81,33 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
+      - name: Assert main is in sync with the active dev branch
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          # main is never an independent commit target: it only advances by merging from
+          # dev/vX.Y before a cut. If a fix landed straight on main, main holds work the
+          # integration branch never got and the next dev merge silently reverts it. That
+          # is exactly how v1.6 drifted (rc.3-rc.5 fixes on main, dev 112 files behind).
+          #
+          # Compare TREES, not commit ancestry: this repo allows squash merges only, so
+          # every dev -> main sync mints a commit dev lacks and an ancestry check would
+          # always fail. Identical trees is the real invariant.
+          minor="$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^v?([0-9]+)\.([0-9]+)\..*/\1.\2/')"
+          dev_branch="dev/v${minor}"
+          if ! git ls-remote --exit-code --heads origin "${dev_branch}" >/dev/null 2>&1; then
+            echo "No ${dev_branch} on origin (retired after GA, or not yet created) — nothing to compare."
+            exit 0
+          fi
+          git fetch --quiet origin "${dev_branch}"
+          if ! git diff --quiet HEAD "origin/${dev_branch}"; then
+            echo "::error::main has drifted from ${dev_branch}. Cutting now would ship content ${dev_branch} never received, or miss content it has. Forward-port first, then re-dispatch."
+            git diff --stat HEAD "origin/${dev_branch}" | tail -25
+            exit 1
+          fi
+          echo "main is in sync with ${dev_branch} (identical trees)."
+
       - name: Resolve target SHA and lowercase repository
         id: target
         run: |

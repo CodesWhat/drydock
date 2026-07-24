@@ -21,7 +21,12 @@ on:
     branches:
       - main
   pull_request:
-    branches: [main]
+    # `dev/**` too: v1.6 work landed on dev/v1.6 via PRs that ran no backend or
+    # frontend CI at all, because this only ever fired for PRs targeting main.
+    # The integration branch is where features are supposed to land, so it needs
+    # the same gate main gets — otherwise dev is only as good as whatever the
+    # author happened to run locally.
+    branches: [main, 'dev/**']
   schedule:
     # Both schedules now run the full security sweep: CodeQL, Fuzz, DAST
     # (ZAP baseline + Nuclei), plus the lint/test/build chain DAST depends on.
