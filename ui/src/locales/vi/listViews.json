@@ -22,6 +22,10 @@
       "status": "Trạng thái",
       "details": "Chi tiết"
     },
+    "card": {
+      "time": "Thời gian",
+      "version": "Phiên bản"
+    },
     "detail": {
       "timestamp": "Dấu thời gian",
       "event": "Sự kiện",
@@ -50,8 +54,11 @@
       "closed": "Đã đóng",
       "update-available": "Có bản cập nhật",
       "update-applied": "Đã áp dụng cập nhật",
+      "update-applied-dryrun": "Update Previewed (Dry Run)",
       "update-failed": "Cập nhật thất bại",
       "auto-update-blocked": "Tự động cập nhật bị chặn",
+      "update-policy-override-set": "Update Policy Override Set",
+      "update-policy-override-cleared": "Update Policy Override Cleared",
       "auto-rollback": "Tự động khôi phục",
       "rollback": "Khôi phục",
       "preview": "Xem trước",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "Agent kết nối lại",
         "description": "Khi agent từ xa kết nối lại sau khi mất kết nối"
+      },
+      "container-unhealthy": {
+        "name": "Container Unhealthy",
+        "description": "When a container's Docker health check enters the unhealthy state"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "Trang Trigger",
       "helpTextImplicitAll": "Để trống để gửi sự kiện này đến tất cả trigger thông báo. Chọn bất kỳ trigger nào sẽ biến quy tắc này thành danh sách cho phép.",
       "helpTextExplicit": "Chỉ các trigger đã chọn mới nhận sự kiện này. Để trống để chặn sự kiện này với tất cả trigger.",
+      "bellLabel": "Notification bell",
+      "bellAriaLabel": "Notification bell",
+      "bellThresholdAriaLabel": "Bell severity threshold",
+      "bellHelp": "Choose whether this event appears in the in-app bell and the minimum update level to include.",
+      "thresholdAll": "All updates",
+      "thresholdMajor": "Major updates only",
+      "thresholdMinor": "Minor and major",
+      "thresholdPatch": "Patch, minor, and major",
+      "templatesLabel": "Message templates",
+      "templatesHelp": "Overrides apply only to the selected trigger. Empty fields keep its configured defaults. Variables use safe paths such as container.name and containers.length.",
+      "templateTriggerAriaLabel": "Template trigger",
+      "simpleTitle": "Simple title",
+      "simpleTitleAriaLabel": "Simple notification title",
+      "simpleBody": "Simple body",
+      "simpleBodyAriaLabel": "Simple notification body",
+      "batchTitle": "Batch title",
+      "batchTitleAriaLabel": "Batch notification title",
+      "preview": "Preview",
+      "previewAriaLabel": "Preview notification template",
+      "previewing": "Previewing...",
+      "previewError": "Failed to preview notification template",
+      "resetTemplate": "Reset template",
       "saving": "Đang lưu...",
       "saveChanges": "Lưu thay đổi",
       "reset": "Đặt lại",
@@ -158,7 +191,8 @@
       "critical": "Nghiêm trọng",
       "high": "Cao",
       "medium": "Trung bình",
-      "low": "Thấp"
+      "low": "Thấp",
+      "clean": "Clean"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "Hủy"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "Pull {provider}",
+      "warmAsset": "Warm {provider}",
+      "assetOperationFailed": "Scanner asset operation failed",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "Loại",
       "status": "Trạng thái",
       "url": "URL"
+    },
+    "card": {
+      "auth": "Xác thực",
+      "status": "Trạng thái"
     },
     "badge": {
       "private": "Riêng tư",
@@ -278,6 +320,12 @@
       "containers": "Container",
       "lastSeen": "Lần cuối thấy"
     },
+    "card": {
+      "containers": "Container",
+      "running": "Đang chạy",
+      "images": "Image",
+      "lastSeen": "Lần cuối thấy"
+    },
     "detail": {
       "containers": "Container",
       "running": "đang chạy",
@@ -302,6 +350,10 @@
     "status": {
       "active": "Đang hoạt động",
       "inactive": "Không hoạt động"
+    },
+    "dryRun": {
+      "badge": "Dry-run mode",
+      "tooltip": "Updates are previewed only — containers will not be replaced. Set DRYRUN=false to apply."
     },
     "test": {
       "testing": "Đang kiểm tra...",
@@ -335,6 +387,12 @@
       "schedule": "Lịch trình",
       "nextRun": "Lần chạy tiếp",
       "lastRun": "Lần chạy cuối"
+    },
+    "card": {
+      "containers": "Container",
+      "nextRun": "Lần chạy tiếp",
+      "lastRun": "Lần chạy cuối",
+      "containersWatched": "{count} container đang theo dõi"
     },
     "status": {
       "watching": "Đang theo dõi",

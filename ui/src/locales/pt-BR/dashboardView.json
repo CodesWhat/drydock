@@ -3,6 +3,7 @@
     "loading": "Carregando dashboard...",
     "loadFailed": "Falha ao carregar dashboard",
     "dragToReorder": "Arraste para reordenar",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "Ver tudo ->",
     "editToggle": {
       "showWidgetPanel": "Mostrar painel de widgets",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "Principal",
       "minor": "Menor",
-      "patch": "Patch"
+      "patch": "Patch",
+      "digest": "Image update"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

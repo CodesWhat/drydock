@@ -3,6 +3,7 @@
     "loading": "Завантаження панелі керування...",
     "loadFailed": "Не вдалося завантажити панель керування",
     "dragToReorder": "Перетягніть для зміни порядку",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "Переглянути всі →",
     "editToggle": {
       "showWidgetPanel": "Показати панель віджетів",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "Мажорне",
       "minor": "Мінорне",
-      "patch": "Патч"
+      "patch": "Патч",
+      "digest": "Дайджест"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

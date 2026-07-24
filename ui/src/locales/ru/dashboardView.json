@@ -3,6 +3,7 @@
     "loading": "Загрузка панели управления...",
     "loadFailed": "Не удалось загрузить панель управления",
     "dragToReorder": "Перетащите для изменения порядка",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "Смотреть все →",
     "editToggle": {
       "showWidgetPanel": "Показать панель виджетов",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "Мажорное",
       "minor": "Минорное",
-      "patch": "Патч"
+      "patch": "Патч",
+      "digest": "Дайджест"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

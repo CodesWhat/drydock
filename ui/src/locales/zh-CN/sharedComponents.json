@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Toggle columns",
+      "heading": "Columns",
+      "reset": "Reset",
+      "hiddenBadgeTooltip": "{count} columns hidden",
+      "autoHiddenAnnotation": "{column} — hidden to fit",
+      "autoHiddenBadgeTooltip": "{columns} hidden to fit your screen."
+    },
     "confirmDialog": {
       "cancel": "取消",
       "confirm": "确认"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "操作",
-      "resizeColumn": "调整列宽"
+      "resizeColumn": "调整列宽",
+      "sortBy": "Sort by",
+      "sortDirectionAscending": "Sort direction: ascending",
+      "sortDirectionDescending": "Sort direction: descending"
     },
     "detailPanel": {
       "openFullPage": "打开全页视图",

@@ -3,6 +3,7 @@
     "loading": "正在加载仪表盘...",
     "loadFailed": "无法加载仪表盘",
     "dragToReorder": "拖动以重新排序",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "查看全部 →",
     "editToggle": {
       "showWidgetPanel": "显示小部件面板",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "主要",
       "minor": "次要",
-      "patch": "补丁"
+      "patch": "补丁",
+      "digest": "摘要"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

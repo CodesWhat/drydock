@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Toggle columns",
+      "heading": "Columns",
+      "reset": "Reset",
+      "hiddenBadgeTooltip": "{count} columns hidden",
+      "autoHiddenAnnotation": "{column} — hidden to fit",
+      "autoHiddenBadgeTooltip": "{columns} hidden to fit your screen."
+    },
     "confirmDialog": {
       "cancel": "Hủy",
       "confirm": "Xác nhận"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "Thao tác",
-      "resizeColumn": "Thay đổi kích thước cột"
+      "resizeColumn": "Thay đổi kích thước cột",
+      "sortBy": "Sort by",
+      "sortDirectionAscending": "Sort direction: ascending",
+      "sortDirectionDescending": "Sort direction: descending"
     },
     "detailPanel": {
       "openFullPage": "Mở chế độ xem toàn trang",

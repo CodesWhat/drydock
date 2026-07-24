@@ -6,6 +6,24 @@
       "profile": "Hồ sơ"
     },
     "general": {
+      "updateMode": {
+        "title": "Global update mode",
+        "description": "Choose whether Drydock only reports updates, waits for a manual action, or dispatches eligible updates automatically.",
+        "options": {
+          "notify": {
+            "label": "Notify",
+            "description": "Detect and notify only; never apply updates."
+          },
+          "manual": {
+            "label": "Manual",
+            "description": "Apply updates only when you request them."
+          },
+          "auto": {
+            "label": "Auto",
+            "description": "Dispatch eligible updates automatically."
+          }
+        }
+      },
       "application": {
         "title": "Ứng dụng",
         "loadingServerInfo": "Đang tải thông tin máy chủ"
@@ -72,6 +90,7 @@
         "no": "Không"
       },
       "errors": {
+        "updateMode": "Failed to update global update mode",
         "loadServerInfo": "Không thể tải thông tin máy chủ",
         "loadProfileData": "Không thể tải dữ liệu hồ sơ",
         "updateNetworkSettings": "Không thể cập nhật cài đặt mạng",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Sync",
+        "label": "Sync Across Devices",
+        "description": "Keep your appearance and layout preferences in sync across every device you sign in from"
+      },
       "language": {
         "title": "Ngôn ngữ"
       },
@@ -118,6 +142,9 @@
           "soft": "Mềm mại",
           "round": "Tròn"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Failed to update sync settings"
       }
     },
     "profile": {

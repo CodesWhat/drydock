@@ -7,6 +7,9 @@
       "previewUpdate": "Güncellemeyi Önizle",
       "forceUpdate": "Güncellemeyi zorla",
       "updateNow": "Şimdi güncelle",
+      "previewOnly": "Preview only",
+      "dryRunUpdateTooltip": "This trigger is in dry-run mode — clicking will pull the new image but not replace the container.",
+      "dryRunCondition": "Action trigger {trigger} is in dry-run mode — updates are previewed only and containers are not replaced.",
       "scanNow": "Şimdi tara",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "Sıfırla",
       "clearSkips": "Atlamaları Temizle",
       "clearPolicy": "Politikayı Temizle",
+      "overridden": "Overridden",
+      "revert": "Revert",
+      "revertAll": "Revert to Declarative",
       "snoozedUntil": "Şu tarihe kadar ertelendi:",
       "maturityMode": "Olgunluk modu:",
       "matureOnlyMinimum": "Yalnızca olgun ({days}d minimum)",
       "allowAllUpdates": "Tüm güncellemelere izin ver",
       "skippedTags": "Atlanan etiketler:",
       "skippedDigests": "Atlanan özetler:",
+      "noSkippedEntries": "No skipped entries",
       "noActivePolicy": "Etkin güncelleme politikası yok.",
       "removeSkip": "Atlamayı kaldır",
       "previewSection": "Önizleme",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "Güncellemeyi zorla",
       "updateAction": "Güncelle",
       "skipUpdateAction": "Bu güncellemeyi atla",
+      "setGroupAction": "Set group",
       "rollbackAction": "Geri al",
       "deleteAction": "Sil",
       "pinnedTooltip": "Sabitlendi",
+      "skippedLabel": "Skipped",
       "upToDateTooltip": "güncel",
+      "imageUpdateTooltip": "The tag {tag} now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.",
       "blockedTooltip": "Engellendi",
       "actionsDisabled": "İşlemler devre dışı bırakıldı",
       "openActionsMenu": "İşlemler menüsünü aç",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "Ertelenen güncellemeler",
       "ariaSkippedUpdates": "Atlanan güncellemeler",
       "ariaMaturityBlocked": "Olgunluğu engellenen güncellemeler",
+      "ariaPinnedTag": "Pinned tag",
+      "pinnedTagTooltip": "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or add a dd.tag.include filter to allow it.",
+      "unknownKindLabel": "Unknown",
       "emptyState": "Filtrelerinizle eşleşen kapsayıcı yok",
       "currentLabel": "Mevcut",
       "latestLabel": "En son",
+      "blockedByBouncer": "Bouncer tarafından engellendi",
       "registryErrorRateLimited": "İstek sınırı aşıldı",
       "registryErrorAuth": "Kimlik doğrulama başarısız",
       "registryErrorNotFound": "Bulunamadı",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "Gruptakilerin tümünü güncelle",
       "updateSingular": "güncelleme",
       "updatePlural": "güncellemeler"
+    },
+    "groupDialog": {
+      "title": "Set container group",
+      "description": "Choose how {name} is grouped in this browser. This overrides its server, Compose, or Swarm group until you clear it.",
+      "groupLabel": "Group name",
+      "groupPlaceholder": "e.g. Media services",
+      "helpText": "Existing groups are suggested as you type.",
+      "clear": "Use detected group",
+      "save": "Save group"
     },
     "sideDetail": {
       "stopTooltip": "Durdur",
@@ -258,6 +281,7 @@
       "allBouncer": "Tüm Bouncer",
       "safe": "Güvenli",
       "unsafe": "Güvenli değil",
+      "blocked": "Engellendi",
       "allRegistries": "Tüm Kayıtlar",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "Tüm Toplantı Sahipleri",
       "allContainers": "Tüm Konteynerler",
       "hasUpdate": "Güncelleme Var",
+      "versionUpdate": "Version Update",
       "major": "Binbaşı",
       "minor": "Küçük",
       "patch": "Yama",
+      "digest": "Özet",
       "hidePinned": "Sabitlenenleri Gizle",
       "hidePinnedTooltip": "Belirli sürümlere sabitlenmiş kapsayıcıları gizle",
       "clearAll": "Tümünü temizle",
@@ -334,6 +360,10 @@
       "tooltip": "Mevcut en iyi kararlı semver etiketi — sabitlemeyi düşünün",
       "tooltipWithTag": "Önerilen: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Güvenlik engellendi",
       "rolledBack": "Geri alındı",
@@ -350,6 +380,61 @@
       "noTrigger": "Tetikleyici yok",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Asansörler:"
+    },
+    "updateStatus": {
+      "title": "Update status",
+      "showDetails": "Show conditions",
+      "liftCountdown": "{countdown} · unlocks {date}",
+      "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
+      "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
+      "updateButton": "Update now",
+      "blockedButton": "Update blocked",
+      "notificationsOnlyButton": "Notifications only",
+      "summary": {
+        "upToDate": "Up to date.",
+        "insight": "Newer version available — this tag is pinned.",
+        "inProgress": "Update in progress.",
+        "hardBlocked": "Update blocked — fix required.",
+        "notify": "Notifications only — Drydock won't apply updates.",
+        "autoFiltered": "Update available — auto-dispatch is filtered (manual works).",
+        "manualFiltered": "Update available — a policy condition will require confirmation.",
+        "autoReady": "Update available — eligible for automatic dispatch.",
+        "manualReady": "Update available — ready to apply manually."
+      },
+      "conditions": {
+        "no-update-available": "No update available",
+        "rollback-container": "Rollback container",
+        "active-operation": "Update already running",
+        "security-scan-blocked": "Security policy blocked",
+        "last-update-rolled-back": "Previous update rolled back",
+        "snoozed": "Update snoozed",
+        "skip-tag": "Tag skipped",
+        "skip-digest": "Digest skipped",
+        "maturity-not-reached": "Maturity policy waiting",
+        "threshold-not-reached": "Trigger threshold not reached",
+        "trigger-excluded": "Trigger excluded by labels",
+        "trigger-not-included": "Trigger filtered by labels",
+        "agent-mismatch": "Trigger agent mismatch",
+        "no-update-trigger-configured": "No update trigger configured",
+        "self-update-unavailable": "Self-update unavailable",
+        "maintenance-window-closed": "Maintenance window closed",
+        "dry-run-trigger": "Dry-run trigger configuration"
+      },
+      "actions": {
+        "editPolicy": "Edit update policy",
+        "configureLabels": "Configure trigger labels",
+        "viewOperation": "View update operation",
+        "reviewSecurity": "Review scan results",
+        "viewRollback": "View rollback context",
+        "configureAgent": "Configure trigger agent",
+        "configureTriggers": "Configure update triggers",
+        "configureThreshold": "Configure trigger threshold",
+        "configureSelfUpdate": "Configure self-update",
+        "configureMaintenance": "Configure maintenance window"
+      }
+    },
+    "maturityBadge": {
+      "new": "YENİ"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "Reverted {field} to declarative policy",
+        "revertAll": "Reverted all overrides to declarative policy",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 day",
+      "availableDaysPlural": "{count} days",
+      "availableHoursSingular": "1 hour",
+      "availableHoursPlural": "{count} hours",
+      "availableMinutesSingular": "1 minute",
+      "availableMinutesPlural": "{count} minutes",
+      "justNow": "Detected just now"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Open registry settings",
+        "openTriggerSettings": "Open trigger settings"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

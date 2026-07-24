@@ -3,6 +3,7 @@
     "loading": "Dashboard wird geladen...",
     "loadFailed": "Dashboard konnte nicht geladen werden",
     "dragToReorder": "Zum Sortieren ziehen",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "Alle anzeigen ->",
     "editToggle": {
       "showWidgetPanel": "Widget-Panel anzeigen",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "Major",
       "minor": "Minor",
-      "patch": "Patch"
+      "patch": "Patch",
+      "digest": "Image update"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

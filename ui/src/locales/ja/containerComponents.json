@@ -7,6 +7,9 @@
       "previewUpdate": "更新をプレビュー",
       "forceUpdate": "強制更新",
       "updateNow": "今すぐ更新",
+      "previewOnly": "Preview only",
+      "dryRunUpdateTooltip": "This trigger is in dry-run mode — clicking will pull the new image but not replace the container.",
+      "dryRunCondition": "Action trigger {trigger} is in dry-run mode — updates are previewed only and containers are not replaced.",
       "scanNow": "今すぐスキャン",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "リセット",
       "clearSkips": "スキップをクリア",
       "clearPolicy": "ポリシーをクリア",
+      "overridden": "Overridden",
+      "revert": "Revert",
+      "revertAll": "Revert to Declarative",
       "snoozedUntil": "スヌーズ終了：",
       "maturityMode": "成熟度モード：",
       "matureOnlyMinimum": "成熟のみ（最低 {days} 日）",
       "allowAllUpdates": "すべての更新を許可",
       "skippedTags": "スキップ済みタグ：",
       "skippedDigests": "スキップ済みダイジェスト：",
+      "noSkippedEntries": "No skipped entries",
       "noActivePolicy": "有効な更新ポリシーがありません。",
       "removeSkip": "スキップを解除",
       "previewSection": "プレビュー",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "強制更新",
       "updateAction": "更新",
       "skipUpdateAction": "この更新をスキップ",
+      "setGroupAction": "Set group",
       "rollbackAction": "ロールバック",
       "deleteAction": "削除",
       "pinnedTooltip": "固定済み",
+      "skippedLabel": "Skipped",
       "upToDateTooltip": "最新の状態です",
+      "imageUpdateTooltip": "The tag {tag} now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.",
       "blockedTooltip": "ブロック済み",
       "actionsDisabled": "アクションが無効です",
       "openActionsMenu": "アクションメニューを開く",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "スヌーズ中の更新",
       "ariaSkippedUpdates": "スキップ済みの更新",
       "ariaMaturityBlocked": "成熟度によりブロックされた更新",
+      "ariaPinnedTag": "Pinned tag",
+      "pinnedTagTooltip": "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or add a dd.tag.include filter to allow it.",
+      "unknownKindLabel": "Unknown",
       "emptyState": "フィルターに一致するコンテナがありません",
       "currentLabel": "現在",
       "latestLabel": "最新",
+      "blockedByBouncer": "Bouncer によりブロック済み",
       "registryErrorRateLimited": "レート制限中",
       "registryErrorAuth": "認証失敗",
       "registryErrorNotFound": "見つかりません",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "グループ内をすべて更新",
       "updateSingular": "件の更新",
       "updatePlural": "件の更新"
+    },
+    "groupDialog": {
+      "title": "Set container group",
+      "description": "Choose how {name} is grouped in this browser. This overrides its server, Compose, or Swarm group until you clear it.",
+      "groupLabel": "Group name",
+      "groupPlaceholder": "e.g. Media services",
+      "helpText": "Existing groups are suggested as you type.",
+      "clear": "Use detected group",
+      "save": "Save group"
     },
     "sideDetail": {
       "stopTooltip": "停止",
@@ -258,6 +281,7 @@
       "allBouncer": "全 Bouncer",
       "safe": "安全",
       "unsafe": "危険",
+      "blocked": "ブロック済み",
       "allRegistries": "全レジストリ",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "全ホスト",
       "allContainers": "全コンテナ",
       "hasUpdate": "更新あり",
+      "versionUpdate": "Version Update",
       "major": "メジャー",
       "minor": "マイナー",
       "patch": "パッチ",
+      "digest": "ダイジェスト",
       "hidePinned": "固定済みを非表示",
       "hidePinnedTooltip": "特定バージョンに固定されたコンテナを非表示にする",
       "clearAll": "すべてクリア",
@@ -334,6 +360,10 @@
       "tooltip": "利用可能な最安定の semver タグです — ピン留めをご検討ください",
       "tooltipWithTag": "おすすめ：{tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
+    },
     "eligibilityBadges": {
       "securityBlocked": "セキュリティによりブロック",
       "rolledBack": "ロールバック済み",
@@ -350,6 +380,61 @@
       "noTrigger": "トリガーなし",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "解除条件："
+    },
+    "updateStatus": {
+      "title": "Update status",
+      "showDetails": "Show conditions",
+      "liftCountdown": "{countdown} · unlocks {date}",
+      "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
+      "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
+      "updateButton": "Update now",
+      "blockedButton": "Update blocked",
+      "notificationsOnlyButton": "Notifications only",
+      "summary": {
+        "upToDate": "Up to date.",
+        "insight": "Newer version available — this tag is pinned.",
+        "inProgress": "Update in progress.",
+        "hardBlocked": "Update blocked — fix required.",
+        "notify": "Notifications only — Drydock won't apply updates.",
+        "autoFiltered": "Update available — auto-dispatch is filtered (manual works).",
+        "manualFiltered": "Update available — a policy condition will require confirmation.",
+        "autoReady": "Update available — eligible for automatic dispatch.",
+        "manualReady": "Update available — ready to apply manually."
+      },
+      "conditions": {
+        "no-update-available": "No update available",
+        "rollback-container": "Rollback container",
+        "active-operation": "Update already running",
+        "security-scan-blocked": "Security policy blocked",
+        "last-update-rolled-back": "Previous update rolled back",
+        "snoozed": "Update snoozed",
+        "skip-tag": "Tag skipped",
+        "skip-digest": "Digest skipped",
+        "maturity-not-reached": "Maturity policy waiting",
+        "threshold-not-reached": "Trigger threshold not reached",
+        "trigger-excluded": "Trigger excluded by labels",
+        "trigger-not-included": "Trigger filtered by labels",
+        "agent-mismatch": "Trigger agent mismatch",
+        "no-update-trigger-configured": "No update trigger configured",
+        "self-update-unavailable": "Self-update unavailable",
+        "maintenance-window-closed": "Maintenance window closed",
+        "dry-run-trigger": "Dry-run trigger configuration"
+      },
+      "actions": {
+        "editPolicy": "Edit update policy",
+        "configureLabels": "Configure trigger labels",
+        "viewOperation": "View update operation",
+        "reviewSecurity": "Review scan results",
+        "viewRollback": "View rollback context",
+        "configureAgent": "Configure trigger agent",
+        "configureTriggers": "Configure update triggers",
+        "configureThreshold": "Configure trigger threshold",
+        "configureSelfUpdate": "Configure self-update",
+        "configureMaintenance": "Configure maintenance window"
+      }
+    },
+    "maturityBadge": {
+      "new": "新規"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "Reverted {field} to declarative policy",
+        "revertAll": "Reverted all overrides to declarative policy",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 day",
+      "availableDaysPlural": "{count} days",
+      "availableHoursSingular": "1 hour",
+      "availableHoursPlural": "{count} hours",
+      "availableMinutesSingular": "1 minute",
+      "availableMinutesPlural": "{count} minutes",
+      "justNow": "Detected just now"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Open registry settings",
+        "openTriggerSettings": "Open trigger settings"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

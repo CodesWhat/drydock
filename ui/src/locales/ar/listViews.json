@@ -22,6 +22,10 @@
       "status": "الحالة",
       "details": "التفاصيل"
     },
+    "card": {
+      "time": "الوقت",
+      "version": "الإصدار"
+    },
     "detail": {
       "timestamp": "الطابع الزمني",
       "event": "الحدث",
@@ -50,8 +54,11 @@
       "closed": "مغلق",
       "update-available": "تحديث متاح",
       "update-applied": "تم تطبيق التحديث",
+      "update-applied-dryrun": "Update Previewed (Dry Run)",
       "update-failed": "فشل التحديث",
       "auto-update-blocked": "التحديث التلقائي محظور",
+      "update-policy-override-set": "Update Policy Override Set",
+      "update-policy-override-cleared": "Update Policy Override Cleared",
       "auto-rollback": "تراجع تلقائي",
       "rollback": "تراجع",
       "preview": "معاينة",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "أُعيد اتصال الوكيل",
         "description": "عند إعادة اتصال وكيل بعيد بعد انقطاعه"
+      },
+      "container-unhealthy": {
+        "name": "Container Unhealthy",
+        "description": "When a container's Docker health check enters the unhealthy state"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "صفحة المشغّلات",
       "helpTextImplicitAll": "اتركه فارغاً لإرسال هذا الحدث إلى جميع مشغّلات الإشعارات. تحديد أي مشغّل يحوّل هذه القاعدة إلى قائمة مسموح بها.",
       "helpTextExplicit": "ستتلقى المشغّلات المحددة فقط هذا الحدث. اتركه فارغاً لقمع هذا الحدث لجميع المشغّلات.",
+      "bellLabel": "Notification bell",
+      "bellAriaLabel": "Notification bell",
+      "bellThresholdAriaLabel": "Bell severity threshold",
+      "bellHelp": "Choose whether this event appears in the in-app bell and the minimum update level to include.",
+      "thresholdAll": "All updates",
+      "thresholdMajor": "Major updates only",
+      "thresholdMinor": "Minor and major",
+      "thresholdPatch": "Patch, minor, and major",
+      "templatesLabel": "Message templates",
+      "templatesHelp": "Overrides apply only to the selected trigger. Empty fields keep its configured defaults. Variables use safe paths such as container.name and containers.length.",
+      "templateTriggerAriaLabel": "Template trigger",
+      "simpleTitle": "Simple title",
+      "simpleTitleAriaLabel": "Simple notification title",
+      "simpleBody": "Simple body",
+      "simpleBodyAriaLabel": "Simple notification body",
+      "batchTitle": "Batch title",
+      "batchTitleAriaLabel": "Batch notification title",
+      "preview": "Preview",
+      "previewAriaLabel": "Preview notification template",
+      "previewing": "Previewing...",
+      "previewError": "Failed to preview notification template",
+      "resetTemplate": "Reset template",
       "saving": "جارٍ الحفظ...",
       "saveChanges": "حفظ التغييرات",
       "reset": "إعادة ضبط",
@@ -158,7 +191,8 @@
       "critical": "حرجة",
       "high": "عالية",
       "medium": "متوسطة",
-      "low": "منخفضة"
+      "low": "منخفضة",
+      "clean": "Clean"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "إلغاء"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "Pull {provider}",
+      "warmAsset": "Warm {provider}",
+      "assetOperationFailed": "Scanner asset operation failed",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "النوع",
       "status": "الحالة",
       "url": "URL"
+    },
+    "card": {
+      "auth": "المصادقة",
+      "status": "الحالة"
     },
     "badge": {
       "private": "خاص",
@@ -278,6 +320,12 @@
       "containers": "الحاويات",
       "lastSeen": "آخر ظهور"
     },
+    "card": {
+      "containers": "الحاويات",
+      "running": "تعمل",
+      "images": "الصور",
+      "lastSeen": "آخر ظهور"
+    },
     "detail": {
       "containers": "الحاويات",
       "running": "تعمل",
@@ -302,6 +350,10 @@
     "status": {
       "active": "نشط",
       "inactive": "غير نشط"
+    },
+    "dryRun": {
+      "badge": "Dry-run mode",
+      "tooltip": "Updates are previewed only — containers will not be replaced. Set DRYRUN=false to apply."
     },
     "test": {
       "testing": "جارٍ الاختبار...",
@@ -335,6 +387,12 @@
       "schedule": "الجدول الزمني",
       "nextRun": "التشغيل التالي",
       "lastRun": "آخر تشغيل"
+    },
+    "card": {
+      "containers": "الحاويات",
+      "nextRun": "التشغيل التالي",
+      "lastRun": "آخر تشغيل",
+      "containersWatched": "{count} حاوية تحت المراقبة"
     },
     "status": {
       "watching": "يراقب",

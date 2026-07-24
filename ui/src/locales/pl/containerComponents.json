@@ -7,9 +7,12 @@
       "previewUpdate": "Podgląd aktualizacji",
       "forceUpdate": "Wymuś aktualizację",
       "updateNow": "Zaktualizuj teraz",
+      "previewOnly": "Tylko podgląd",
+      "dryRunUpdateTooltip": "Ten wyzwalacz jest w trybie próbnym — naciśnięcie pociągnie nowy obraz, ale nie zastąpi kontenera.",
+      "dryRunCondition": "Wyzwalacz akcji {trigger} jest w trybie próbnym — aktualizacje tylko w trybie podglądu, a kontenery nie są wymieniane.",
       "scanNow": "Skanuj teraz",
-      "recheckNow": "Recheck for Updates",
-      "rechecking": "Rechecking…",
+      "recheckNow": "Sprawdź ponownie dostępność aktualizacji",
+      "rechecking": "Ponowne sprawdzanie…",
       "skipSnoozeGroup": "Pomiń i odłóż",
       "skipThisUpdate": "Pomiń tę aktualizację",
       "snooze1d": "Odłóż 1 dzień",
@@ -24,12 +27,16 @@
       "resetGroup": "Resetuj",
       "clearSkips": "Usuń pominięcia",
       "clearPolicy": "Jasne zasady",
+      "overridden": "Zastąpiony",
+      "revert": "Przywróć",
+      "revertAll": "Przywróć do trybu deklaratywnego",
       "snoozedUntil": "Odłożone do:",
       "maturityMode": "Tryb dojrzałości:",
       "matureOnlyMinimum": "Tylko dojrzałe (minimum {days}d)",
       "allowAllUpdates": "Zezwalaj na wszystkie aktualizacje",
       "skippedTags": "Pominięte tagi:",
       "skippedDigests": "Pominięte podsumowania:",
+      "noSkippedEntries": "Brak pominiętych wpisów",
       "noActivePolicy": "Brak aktywnych zasad aktualizacji.",
       "removeSkip": "Usuń pominięcie",
       "previewSection": "Podgląd",
@@ -81,8 +88,8 @@
       "startButton": "Uruchom",
       "restartButton": "Uruchom ponownie",
       "scanButton": "Skanuj",
-      "recheckButton": "Recheck",
-      "ariaRecheckContainer": "Recheck container for updates",
+      "recheckButton": "Sprawdź ponownie",
+      "ariaRecheckContainer": "Ponownie sprawdź kontener pod kątem aktualizacji",
       "blockedButton": "Zablokowano",
       "updateButton": "Zaktualizuj",
       "deleteButton": "Usuń"
@@ -104,7 +111,7 @@
       "volumes": "Woluminy",
       "composeFiles": "Pliki Compose",
       "version": "Wersja",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Wersja Oprogramowania",
       "currentLabel": "Aktualne:",
       "latestLabel": "Najnowsze:",
       "digestLabel": "Skrót:",
@@ -118,7 +125,7 @@
       "registry": "Rejestr",
       "runtimeProcess": "Proces wykonawczy",
       "entrypoint": "Punkt wejścia",
-      "cmd": "Cmd",
+      "cmd": "Komenda",
       "lifecycleHooks": "Haki cyklu życia",
       "preUpdate": "Aktualizacja wstępna",
       "postUpdate": "Po aktualizacji",
@@ -148,8 +155,8 @@
       "noPortsExposed": "Żadne porty nie są odsłonięte",
       "notConfigured": "Nie skonfigurowano",
       "noVolumesMounted": "Nie zamontowano żadnych woluminów",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Czas pracy",
+      "uptimeAriaLabel": "Czas pracy kontenera"
     },
     "containerLogs": {
       "title": "Dzienniki kontenerów",
@@ -158,7 +165,7 @@
       "downloadError": "Nie można pobrać logów",
       "tailCount": "Tail {count}",
       "tailAll": "Tail All",
-      "statusPaused": "Paused",
+      "statusPaused": "Wstrzymano",
       "statusLive": "Live",
       "statusOffline": "Offline",
       "stdout": "stdout",
@@ -179,14 +186,17 @@
       "startAction": "Uruchom",
       "restartAction": "Uruchom ponownie",
       "scanAction": "Skanuj",
-      "recheckAction": "Recheck for updates",
+      "recheckAction": "Sprawdź ponownie dostępność aktualizacji",
       "forceUpdateAction": "Wymuś aktualizację",
       "updateAction": "Zaktualizuj",
       "skipUpdateAction": "Pomiń tę aktualizację",
+      "setGroupAction": "Set group",
       "rollbackAction": "Wycofaj",
       "deleteAction": "Usuń",
       "pinnedTooltip": "Przypięty",
+      "skippedLabel": "Skipped",
       "upToDateTooltip": "Aktualne",
+      "imageUpdateTooltip": "The tag {tag} now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.",
       "blockedTooltip": "Zablokowano",
       "actionsDisabled": "Działania wyłączone",
       "openActionsMenu": "Otwórz menu akcji",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "Odłożone aktualizacje",
       "ariaSkippedUpdates": "Pominięte aktualizacje",
       "ariaMaturityBlocked": "Aktualizacje z blokadą dojrzałości",
+      "ariaPinnedTag": "Pinned tag",
+      "pinnedTagTooltip": "This tag is pinned to an exact version — drydock won't climb to newer versions automatically. Set dd.tag.family=loose or add a dd.tag.include filter to allow it.",
+      "unknownKindLabel": "Unknown",
       "emptyState": "Żadne kontenery nie pasują do wybranych filtrów",
       "currentLabel": "Aktualny",
       "latestLabel": "Najnowsze",
+      "blockedByBouncer": "Zablokowany przez Bouncera",
       "registryErrorRateLimited": "Limit zapytań przekroczony",
       "registryErrorAuth": "Błąd uwierzytelniania",
       "registryErrorNotFound": "Nie znaleziono",
@@ -207,12 +221,12 @@
       "blockedTagWithCriticalsCVEs": "Zablokowano: {tag} ({count} krytycznych CVE)",
       "manualUpdateOnly": "Tylko aktualizacja ręczna",
       "manualUpdateOnlyWithMessage": "Tylko aktualizacja ręczna — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
+      "updateBtnTooltipDefault": "Zaktualizuj",
+      "cancelButton": "Anuluj",
       "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateButton": "Zaktualizuj",
+      "moreButton": "Więcej",
+      "cancelUpdateTooltip": "Anuluj aktualizację"
     },
     "groupHeader": {
       "ungrouped": "Rozgrupowane",
@@ -224,12 +238,21 @@
       "updateSingular": "aktualizacja",
       "updatePlural": "aktualizacje"
     },
+    "groupDialog": {
+      "title": "Set container group",
+      "description": "Choose how {name} is grouped in this browser. This overrides its server, Compose, or Swarm group until you clear it.",
+      "groupLabel": "Group name",
+      "groupPlaceholder": "e.g. Media services",
+      "helpText": "Existing groups are suggested as you type.",
+      "clear": "Use detected group",
+      "save": "Save group"
+    },
     "sideDetail": {
       "stopTooltip": "Zatrzymaj",
       "startTooltip": "Uruchom",
       "restartTooltip": "Uruchom ponownie",
       "scanTooltip": "Skanuj",
-      "recheckTooltip": "Recheck for updates",
+      "recheckTooltip": "Sprawdź ponownie dostępność aktualizacji",
       "blockedForceUpdateTooltip": "Zablokowano — wymuś aktualizację",
       "updateTooltip": "Zaktualizuj",
       "deleteTooltip": "Usuń",
@@ -247,7 +270,7 @@
       "unknown": "Nieznany",
       "imageMetadata": "Metadane obrazu",
       "imageAge": "Wiek obrazu",
-      "revealFailed": "Failed to reveal value"
+      "revealFailed": "Nie udało się ujawnić wartości"
     },
     "listContent": {
       "loadingContainers": "Ładowanie kontenerów...",
@@ -258,6 +281,7 @@
       "allBouncer": "Cały Bouncer",
       "safe": "Bezpieczny",
       "unsafe": "Niebezpieczne",
+      "blocked": "Zablokowano",
       "allRegistries": "Wszystkie rejestry",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "Wszyscy gospodarze",
       "allContainers": "Wszystkie kontenery",
       "hasUpdate": "Ma aktualizację",
+      "versionUpdate": "Version Update",
       "major": "Majorze",
       "minor": "Drobne",
       "patch": "Łatka",
+      "digest": "Podsumowanie",
       "hidePinned": "Ukryj przypięte",
       "hidePinnedTooltip": "Ukryj kontenery przypięte do określonych wersji",
       "clearAll": "Wyczyść wszystko",
@@ -298,17 +324,17 @@
       "memory": "Pamięć",
       "networkRxTx": "Sieć RX/TX",
       "blockIo": "Blokuj we/wy",
-      "loadFailed": "Failed to load container stats"
+      "loadFailed": "Nie udało się załadować statystyk kontenera"
     },
     "updateDialog": {
       "title": "Zaktualizuj kontener",
-      "thisContainer": "this container",
+      "thisContainer": "ten kontener",
       "confirmTagChange": "Zaktualizować {name}? Spowoduje to zmianę znacznika obrazu z :{currentTag} na :{newTag}{kind}.",
       "confirmDigestChange": "Zaktualizować {name}? Dostępna jest nowsza wersja :{currentTag} (zmiana skrótu).",
       "confirmLatest": "Zaktualizować {name} teraz? Spowoduje to zastosowanie najnowszego odkrytego obrazu.",
       "updating": "Aktualizowanie...",
       "update": "Zaktualizuj",
-      "updateFailed": "Update failed"
+      "updateFailed": "Aktualizacja nie powiodła się"
     },
     "floatingTag": {
       "badgeText": "pływający znacznik",
@@ -325,14 +351,18 @@
       "viewFullNotes": "Zobacz pełne notatki",
       "currentSuffix": "(bieżący)",
       "availableSuffix": "(dostępne)",
-      "intermediateNotes": "Intermediate releases ({count})",
-      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "intermediateNotes": "Wydania pośrednie ({count})",
+      "olderReleasesNotShown": "{count} starszych/e wydań/nia niewidoczne | {count} starszych/e wydań/nia niewidoczne",
       "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "Sugerowane",
       "tooltip": "Najlepszy dostępny stabilny tag semver — rozważ przypięcie",
       "tooltipWithTag": "Sugerowane: {tag}\n{hint}"
+    },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
     },
     "eligibilityBadges": {
       "securityBlocked": "Zabezpieczenia zablokowane",
@@ -350,6 +380,61 @@
       "noTrigger": "Brak spustu",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Windy:"
+    },
+    "updateStatus": {
+      "title": "Status aktualizacji",
+      "showDetails": "Pokaż warunki",
+      "liftCountdown": "{countdown} · unlocks {date}",
+      "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
+      "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
+      "updateButton": "Aktualizuj teraz",
+      "blockedButton": "Aktualizacja zablokowana",
+      "notificationsOnlyButton": "Tylko powiadomienia",
+      "summary": {
+        "upToDate": "Aktualne.",
+        "insight": "Newer version available — this tag is pinned.",
+        "inProgress": "Aktualizacja w toku.",
+        "hardBlocked": "Aktualizacja zablokowana — wymagana poprawka.",
+        "notify": "Tylko powiadomienia — Drydock nie będzie stosował aktualizacji.",
+        "autoFiltered": "Dostępna aktualizacja — automatyczna wysyłka jest filtrowana (ręczna działa).",
+        "manualFiltered": "Dostępna aktualizacja — warunek polityki będzie wymagał potwierdzenia.",
+        "autoReady": "Update available — eligible for automatic dispatch.",
+        "manualReady": "Update available — ready to apply manually."
+      },
+      "conditions": {
+        "no-update-available": "Brak dostępnych aktualizacji",
+        "rollback-container": "Rollback container",
+        "active-operation": "Update already running",
+        "security-scan-blocked": "Security policy blocked",
+        "last-update-rolled-back": "Previous update rolled back",
+        "snoozed": "Update snoozed",
+        "skip-tag": "Tag skipped",
+        "skip-digest": "Digest skipped",
+        "maturity-not-reached": "Maturity policy waiting",
+        "threshold-not-reached": "Trigger threshold not reached",
+        "trigger-excluded": "Trigger excluded by labels",
+        "trigger-not-included": "Trigger filtered by labels",
+        "agent-mismatch": "Trigger agent mismatch",
+        "no-update-trigger-configured": "No update trigger configured",
+        "self-update-unavailable": "Self-update unavailable",
+        "maintenance-window-closed": "Maintenance window closed",
+        "dry-run-trigger": "Dry-run trigger configuration"
+      },
+      "actions": {
+        "editPolicy": "Edit update policy",
+        "configureLabels": "Configure trigger labels",
+        "viewOperation": "View update operation",
+        "reviewSecurity": "Review scan results",
+        "viewRollback": "View rollback context",
+        "configureAgent": "Configure trigger agent",
+        "configureTriggers": "Configure update triggers",
+        "configureThreshold": "Configure trigger threshold",
+        "configureSelfUpdate": "Configure self-update",
+        "configureMaintenance": "Configure maintenance window"
+      }
+    },
+    "maturityBadge": {
+      "new": "NOWOŚĆ"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "Reverted {field} to declarative policy",
+        "revertAll": "Reverted all overrides to declarative policy",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 day",
+      "availableDaysPlural": "{count} days",
+      "availableHoursSingular": "1 hour",
+      "availableHoursPlural": "{count} hours",
+      "availableMinutesSingular": "1 minute",
+      "availableMinutesPlural": "{count} minutes",
+      "justNow": "Detected just now"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Open registry settings",
+        "openTriggerSettings": "Open trigger settings"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

@@ -22,6 +22,10 @@
       "status": "Durum",
       "details": "Ayrıntılar"
     },
+    "card": {
+      "time": "Zaman",
+      "version": "Sürüm"
+    },
     "detail": {
       "timestamp": "Zaman damgası",
       "event": "Etkinlik",
@@ -50,8 +54,11 @@
       "closed": "Kapatıldı",
       "update-available": "Güncelleme Mevcut",
       "update-applied": "Güncelleme Uygulandı",
+      "update-applied-dryrun": "Update Previewed (Dry Run)",
       "update-failed": "Güncelleme Başarısız",
       "auto-update-blocked": "Otomatik Güncelleme Engellendi",
+      "update-policy-override-set": "Update Policy Override Set",
+      "update-policy-override-cleared": "Update Policy Override Cleared",
       "auto-rollback": "Otomatik Geri Alma",
       "rollback": "Geri Al",
       "preview": "Önizleme",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "Aracı Yeniden Bağlandı",
         "description": "Uzak aracı bağlantısını kaybettikten sonra yeniden bağlandığında"
+      },
+      "container-unhealthy": {
+        "name": "Container Unhealthy",
+        "description": "When a container's Docker health check enters the unhealthy state"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "Tetikleyiciler sayfası",
       "helpTextImplicitAll": "Bu etkinliği tüm bildirim tetikleyicilerine göndermek için bunu boş bırakın. Herhangi bir tetikleyicinin seçilmesi bu kuralı izin verilenler listesine dönüştürür.",
       "helpTextExplicit": "Bu etkinliği yalnızca seçilen tetikleyiciler alacaktır. Bu etkinliği tüm tetikleyiciler için bastırmak amacıyla alanı boş bırakın.",
+      "bellLabel": "Notification bell",
+      "bellAriaLabel": "Notification bell",
+      "bellThresholdAriaLabel": "Bell severity threshold",
+      "bellHelp": "Choose whether this event appears in the in-app bell and the minimum update level to include.",
+      "thresholdAll": "All updates",
+      "thresholdMajor": "Major updates only",
+      "thresholdMinor": "Minor and major",
+      "thresholdPatch": "Patch, minor, and major",
+      "templatesLabel": "Message templates",
+      "templatesHelp": "Overrides apply only to the selected trigger. Empty fields keep its configured defaults. Variables use safe paths such as container.name and containers.length.",
+      "templateTriggerAriaLabel": "Template trigger",
+      "simpleTitle": "Simple title",
+      "simpleTitleAriaLabel": "Simple notification title",
+      "simpleBody": "Simple body",
+      "simpleBodyAriaLabel": "Simple notification body",
+      "batchTitle": "Batch title",
+      "batchTitleAriaLabel": "Batch notification title",
+      "preview": "Preview",
+      "previewAriaLabel": "Preview notification template",
+      "previewing": "Previewing...",
+      "previewError": "Failed to preview notification template",
+      "resetTemplate": "Reset template",
       "saving": "Kaydediliyor...",
       "saveChanges": "Değişiklikleri kaydet",
       "reset": "Sıfırla",
@@ -158,7 +191,8 @@
       "critical": "Kritik",
       "high": "Yüksek",
       "medium": "Orta",
-      "low": "Düşük"
+      "low": "Düşük",
+      "clean": "Clean"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "İptal"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "Pull {provider}",
+      "warmAsset": "Warm {provider}",
+      "assetOperationFailed": "Scanner asset operation failed",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "Tür",
       "status": "Durum",
       "url": "URL'si"
+    },
+    "card": {
+      "auth": "Kimlik doğrulama",
+      "status": "Durum"
     },
     "badge": {
       "private": "Özel",
@@ -278,6 +320,12 @@
       "containers": "Konteynerler",
       "lastSeen": "Son Görülme"
     },
+    "card": {
+      "containers": "Konteynerler",
+      "running": "Çalışıyor",
+      "images": "Görseller",
+      "lastSeen": "Son görülme"
+    },
     "detail": {
       "containers": "Konteynerler",
       "running": "koşu",
@@ -302,6 +350,10 @@
     "status": {
       "active": "Aktif",
       "inactive": "Etkin değil"
+    },
+    "dryRun": {
+      "badge": "Dry-run mode",
+      "tooltip": "Updates are previewed only — containers will not be replaced. Set DRYRUN=false to apply."
     },
     "test": {
       "testing": "Test ediliyor...",
@@ -335,6 +387,12 @@
       "schedule": "Program",
       "nextRun": "Sonraki Çalıştırma",
       "lastRun": "Son Çalıştırma"
+    },
+    "card": {
+      "containers": "Konteynerler",
+      "nextRun": "Sonraki çalıştırma",
+      "lastRun": "Son çalıştırma",
+      "containersWatched": "{count} kapsayıcıları izlendi"
     },
     "status": {
       "watching": "izliyorum",

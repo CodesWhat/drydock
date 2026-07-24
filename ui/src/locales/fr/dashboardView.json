@@ -3,6 +3,7 @@
     "loading": "Chargement du tableau de bord...",
     "loadFailed": "Impossible de charger le tableau de bord",
     "dragToReorder": "Glisser pour réordonner",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "Tout voir ->",
     "editToggle": {
       "showWidgetPanel": "Afficher le panneau de widgets",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "Majeure",
       "minor": "Mineure",
-      "patch": "Patch"
+      "patch": "Patch",
+      "digest": "Image update"
     },
     "maintenanceWindow": {
       "openNow": "Open now",

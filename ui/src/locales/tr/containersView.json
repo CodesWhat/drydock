@@ -35,6 +35,7 @@
       "container": "Kapsayıcı",
       "tag": "Tag",
       "version": "Sürüm",
+      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
       "update": "Güncelle",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Durum",

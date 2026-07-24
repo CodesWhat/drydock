@@ -3,6 +3,7 @@
     "loading": "Cargando panel...",
     "loadFailed": "No se pudo cargar el panel",
     "dragToReorder": "Arrastra para reordenar",
+    "resizeWidget": "Redimensionar el panel",
     "viewAll": "Ver todo ->",
     "editToggle": {
       "showWidgetPanel": "Mostrar panel de widgets",
@@ -101,24 +102,25 @@
     "updateKind": {
       "major": "Mayor",
       "minor": "Menor",
-      "patch": "Parche"
+      "patch": "Parche",
+      "digest": "Image update"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Abrir ahora",
+      "scheduled": "Programadas",
+      "openingSoon": "Próximamente"
     },
-    "dataLoadFailed": "Failed to load dashboard data",
+    "dataLoadFailed": "No se pudo cargar el panel",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
+      "statContainers": "Contenedores",
+      "statUpdates": "Actualizaciones disponibles",
+      "statSecurity": "Problemas de seguridad",
       "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "recentUpdates": "Actualizaciones disponibles",
+      "securityOverview": "Resumen de seguridad",
+      "resourceUsage": "Uso de recursos",
+      "hostStatus": "Estado del host",
+      "updateBreakdown": "Desglose de actualizaciones"
     }
   }
 }

@@ -3,8 +3,8 @@
     "heading": "Bandeja de salida",
     "refresh": "Actualizar",
     "loading": "Cargando entradas de la bandeja de salida…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "No se pudo cargar la bandeja de salida de notificaciones",
+    "ofCount": "{count} de {total}",
     "tabs": {
       "dead-letter": "Cola de mensajes fallidos",
       "pending": "Pendiente",
@@ -12,16 +12,16 @@
     },
     "columns": {
       "event": "Evento",
-      "trigger": "Trigger",
+      "trigger": "Disparador",
       "attempts": "Intentos",
       "lastError": "Último error",
       "created": "Creado"
     },
     "actions": {
       "retry": "Reintentar",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Reintentar entrada del buzón de salida",
       "discard": "Descartar",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Descartar entrada del buzón de salida"
     },
     "status": {
       "dead-letter": "Cola de mensajes fallidos",

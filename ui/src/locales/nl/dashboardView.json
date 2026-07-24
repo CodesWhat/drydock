@@ -3,6 +3,7 @@
     "loading": "Dashboard laden...",
     "loadFailed": "Kan dashboard niet laden",
     "dragToReorder": "Sleep om de volgorde te wijzigen",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "Bekijk alles →",
     "editToggle": {
       "showWidgetPanel": "Widgetpaneel weergeven",
@@ -101,7 +102,8 @@
     "updateKind": {
       "major": "Major",
       "minor": "Minor",
-      "patch": "Patch"
+      "patch": "Patch",
+      "digest": "Image update"
     },
     "maintenanceWindow": {
       "openNow": "Open now",
