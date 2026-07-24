@@ -28,9 +28,13 @@ on:
     branches:
       - main
   pull_request:
-    branches: [main]
+    # `dev/**` too: features land on the integration branch, and until now none
+    # of those PRs ran Playwright. Breakage stayed invisible until release-cut
+    # polled "Wait for successful E2E Playwright on release source SHA", which
+    # is a cut cycle burned on something a PR run would have caught.
+    branches: [main, 'dev/**']
   merge_group:
-    branches: [main]
+    branches: [main, 'dev/**']
 
 concurrency:
   group: e2e-playwright-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}

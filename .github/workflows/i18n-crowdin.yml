@@ -2,7 +2,11 @@ name: "🌐 i18n: Crowdin Sync"
 
 on:
   push:
-    branches: [main]
+    # Source strings live on the integration branch. main only advances by
+    # merging from dev/vX.Y before a cut, so uploading from main would lag a
+    # release behind and the returning translation PR would land on a branch
+    # that is not supposed to take independent commits.
+    branches: ['dev/**', main]
     paths:
       - 'ui/src/locales/en/**'
       - 'crowdin.yml'
@@ -33,7 +37,31 @@ jobs:
 
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Resolve the integration branch to open the translation PR against
+        id: base
+        run: |
+          set -euo pipefail
+          # Highest dev/vX.Y on origin, sorted numerically so dev/v1.10 beats
+          # dev/v1.9. Falls back to the default branch during the window between
+          # a GA and the next dev branch being cut, so translations are never
+          # stranded with nowhere to land.
+          base="$(git ls-remote --heads origin 'refs/heads/dev/v*' \
+            | sed 's#.*refs/heads/##' \
+            | grep -E '^dev/v[0-9]+\.[0-9]+$' \
+            | sort -t/ -k2 -V \
+            | tail -1)"
+          if [ -z "${base}" ]; then
+            base="${DEFAULT_BRANCH}"
+            echo "No dev/vX.Y branch on origin — falling back to ${base}."
+          fi
+          echo "name=${base}" >> "$GITHUB_OUTPUT"
+          echo "Translation PRs will target ${base}."
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
       - uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f  # v2.16.3
         with:
           user: auto
@@ -45,7 +73,7 @@ jobs:
           pull_request_title: "🔧 chore(i18n): sync translations from Crowdin"
           pull_request_body: "Automated sync from Crowdin. Review wording, then merge."
           pull_request_labels: "translations,crowdin"
-          pull_request_base_branch_name: main
+          pull_request_base_branch_name: ${{ steps.base.outputs.name }}
           commit_message: "🔧 chore(i18n): sync translations from Crowdin"
         env:
           # The crowdin/github-action entrypoint runs `git config --global`
