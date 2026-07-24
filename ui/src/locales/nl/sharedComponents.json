@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Kolommen in-/uitschakelen",
+      "heading": "Kolommen",
+      "reset": "Opnieuw instellen",
+      "hiddenBadgeTooltip": "{count} kolommen verborgen",
+      "autoHiddenAnnotation": "{column} — verborgen om te passen",
+      "autoHiddenBadgeTooltip": "{columns} verborgen om op je scherm te passen."
+    },
     "confirmDialog": {
       "cancel": "Annuleren",
       "confirm": "Bevestigen"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "Acties",
-      "resizeColumn": "Formaat van kolom wijzigen"
+      "resizeColumn": "Formaat van kolom wijzigen",
+      "sortBy": "Sorteren op",
+      "sortDirectionAscending": "Sorteervolgorde: oplopend",
+      "sortDirectionDescending": "Sorteervolgorde: aflopend"
     },
     "detailPanel": {
       "openFullPage": "Volledige paginaweergave openen",

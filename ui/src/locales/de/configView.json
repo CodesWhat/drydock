@@ -6,6 +6,24 @@
       "profile": "Profil"
     },
     "general": {
+      "updateMode": {
+        "title": "Globaler Update-Modus",
+        "description": "Wählen Sie, ob Drydock Updates nur meldet, auf eine manuelle Aktion wartet oder qualifizierte Updates automatisch ausliefert.",
+        "options": {
+          "notify": {
+            "label": "Benachrichtigen",
+            "description": "Nur erkennen und benachrichtigen; Updates werden nie angewendet."
+          },
+          "manual": {
+            "label": "Manuell",
+            "description": "Updates nur anwenden, wenn Sie es anfordern."
+          },
+          "auto": {
+            "label": "Automatisch",
+            "description": "Qualifizierte Updates automatisch ausliefern."
+          }
+        }
+      },
       "application": {
         "title": "Anwendung",
         "loadingServerInfo": "Serverinformationen werden geladen"
@@ -72,6 +90,7 @@
         "no": "Nein"
       },
       "errors": {
+        "updateMode": "Globaler Update-Modus konnte nicht aktualisiert werden",
         "loadServerInfo": "Serverinformationen konnten nicht geladen werden",
         "loadProfileData": "Profildaten konnten nicht geladen werden",
         "updateNetworkSettings": "Netzwerkeinstellungen konnten nicht aktualisiert werden",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Synchronisierung",
+        "label": "Geräteübergreifend synchronisieren",
+        "description": "Halten Sie Ihre Erscheinungsbild- und Layout-Einstellungen auf allen Geräten synchron, auf denen Sie sich anmelden"
+      },
       "language": {
         "title": "Sprache"
       },
@@ -118,6 +142,9 @@
           "soft": "Weich",
           "round": "Rund"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Synchronisierungseinstellungen konnten nicht aktualisiert werden"
       }
     },
     "profile": {

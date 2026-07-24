@@ -6,6 +6,24 @@
       "profile": "プロフィール"
     },
     "general": {
+      "updateMode": {
+        "title": "グローバル更新モード",
+        "description": "Drydock が更新を報告するだけにするか、手動操作を待つか、対象の更新を自動的に適用するかを選択します。",
+        "options": {
+          "notify": {
+            "label": "通知",
+            "description": "検出と通知のみ行い、更新は適用しません。"
+          },
+          "manual": {
+            "label": "手動",
+            "description": "リクエストしたときのみ更新を適用します。"
+          },
+          "auto": {
+            "label": "自動",
+            "description": "対象の更新を自動的に適用します。"
+          }
+        }
+      },
       "application": {
         "title": "アプリケーション",
         "loadingServerInfo": "サーバー情報を読み込み中"
@@ -72,6 +90,7 @@
         "no": "いいえ"
       },
       "errors": {
+        "updateMode": "グローバル更新モードの更新に失敗しました",
         "loadServerInfo": "サーバー情報の読み込みに失敗しました",
         "loadProfileData": "プロフィールデータの読み込みに失敗しました",
         "updateNetworkSettings": "ネットワーク設定の更新に失敗しました",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "同期",
+        "label": "デバイス間で同期",
+        "description": "サインインするすべてのデバイスで、外観とレイアウトの設定を同期して保持します"
+      },
       "language": {
         "title": "言語"
       },
@@ -118,6 +142,9 @@
           "soft": "ソフト",
           "round": "ラウンド"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "同期設定の更新に失敗しました"
       }
     },
     "profile": {

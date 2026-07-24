@@ -7,6 +7,9 @@
       "previewUpdate": "Xem trước cập nhật",
       "forceUpdate": "Cập nhật bắt buộc",
       "updateNow": "Cập nhật ngay",
+      "previewOnly": "Chỉ xem trước",
+      "dryRunUpdateTooltip": "Trigger này đang ở chế độ dry-run — nhấp vào sẽ tải image mới nhưng không thay thế container.",
+      "dryRunCondition": "Trigger hành động {trigger} đang ở chế độ dry-run — cập nhật chỉ được xem trước, container không bị thay thế.",
       "scanNow": "Quét ngay",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "Đặt lại",
       "clearSkips": "Xóa danh sách bỏ qua",
       "clearPolicy": "Xóa chính sách",
+      "overridden": "Đã ghi đè",
+      "revert": "Hoàn tác",
+      "revertAll": "Khôi phục về khai báo",
       "snoozedUntil": "Hoãn đến:",
       "maturityMode": "Chế độ độ chín:",
       "matureOnlyMinimum": "Chỉ chín ({days} ngày tối thiểu)",
       "allowAllUpdates": "Cho phép tất cả cập nhật",
       "skippedTags": "Tag đã bỏ qua:",
       "skippedDigests": "Digest đã bỏ qua:",
+      "noSkippedEntries": "Không có mục nào bị bỏ qua",
       "noActivePolicy": "Không có chính sách cập nhật đang hoạt động.",
       "removeSkip": "Xóa bỏ qua",
       "previewSection": "Xem trước",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "Cập nhật bắt buộc",
       "updateAction": "Cập nhật",
       "skipUpdateAction": "Bỏ qua cập nhật này",
+      "setGroupAction": "Đặt nhóm",
       "rollbackAction": "Khôi phục",
       "deleteAction": "Xóa",
       "pinnedTooltip": "Đã ghim",
+      "skippedLabel": "Đã bỏ qua",
       "upToDateTooltip": "Đã cập nhật",
+      "imageUpdateTooltip": "Tag {tag} hiện trỏ đến bản build image khác. Triển khai lại để tải image mới; tag phiên bản không thay đổi.",
       "blockedTooltip": "Bị chặn",
       "actionsDisabled": "Thao tác bị vô hiệu",
       "openActionsMenu": "Mở menu thao tác",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "Cập nhật bị hoãn",
       "ariaSkippedUpdates": "Cập nhật bị bỏ qua",
       "ariaMaturityBlocked": "Cập nhật bị chặn do độ chín",
+      "ariaPinnedTag": "Tag đã ghim",
+      "pinnedTagTooltip": "Tag này được ghim vào một phiên bản chính xác — drydock sẽ không tự động chuyển lên phiên bản mới hơn. Đặt dd.tag.family=loose hoặc thêm bộ lọc dd.tag.include để cho phép.",
+      "unknownKindLabel": "Không xác định",
       "emptyState": "Không có container nào khớp với bộ lọc của bạn",
       "currentLabel": "Hiện tại",
       "latestLabel": "Mới nhất",
+      "blockedByBouncer": "Bị chặn bởi Bouncer",
       "registryErrorRateLimited": "Bị giới hạn tốc độ",
       "registryErrorAuth": "Xác thực thất bại",
       "registryErrorNotFound": "Không tìm thấy",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "Cập nhật tất cả trong nhóm",
       "updateSingular": "cập nhật",
       "updatePlural": "cập nhật"
+    },
+    "groupDialog": {
+      "title": "Đặt nhóm container",
+      "description": "Chọn cách {name} được nhóm trong trình duyệt này. Điều này ghi đè nhóm server, Compose hoặc Swarm cho đến khi bạn xóa.",
+      "groupLabel": "Tên nhóm",
+      "groupPlaceholder": "ví dụ: Dịch vụ media",
+      "helpText": "Các nhóm hiện có sẽ được gợi ý khi bạn nhập.",
+      "clear": "Dùng nhóm đã phát hiện",
+      "save": "Lưu nhóm"
     },
     "sideDetail": {
       "stopTooltip": "Dừng",
@@ -258,6 +281,7 @@
       "allBouncer": "Tất cả Bouncer",
       "safe": "An toàn",
       "unsafe": "Không an toàn",
+      "blocked": "Bị chặn",
       "allRegistries": "Tất cả Registry",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "Tất cả máy chủ",
       "allContainers": "Tất cả container",
       "hasUpdate": "Có cập nhật",
+      "versionUpdate": "Cập nhật phiên bản",
       "major": "Major",
       "minor": "Minor",
       "patch": "Patch",
+      "digest": "Cập nhật image",
       "hidePinned": "Ẩn đã ghim",
       "hidePinnedTooltip": "Ẩn container được ghim ở phiên bản cụ thể",
       "clearAll": "Xóa tất cả",
@@ -334,6 +360,10 @@
       "tooltip": "Tag semver ổn định tốt nhất hiện có — cân nhắc ghim lại",
       "tooltipWithTag": "Gợi ý: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Có bản mới hơn",
+      "tooltip": "Đã có phiên bản mới hơn: {tag}. Tag này đã được ghim, drydock sẽ không tự động cập nhật."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Bị chặn do bảo mật",
       "rolledBack": "Đã khôi phục",
@@ -350,6 +380,61 @@
       "noTrigger": "Không có trigger",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Lifts:"
+    },
+    "updateStatus": {
+      "title": "Trạng thái cập nhật",
+      "showDetails": "Hiển thị điều kiện",
+      "liftCountdown": "{countdown} · mở khóa vào {date}",
+      "maturityClockPublished": "Bản ứng viên được phát hành {date} — còn {count} ngày nữa để đạt tối thiểu {minDays} ngày",
+      "maturityClockDetected": "Bản ứng viên được phát hiện {date} — còn {count} ngày nữa để đạt tối thiểu {minDays} ngày",
+      "updateButton": "Cập nhật ngay",
+      "blockedButton": "Cập nhật bị chặn",
+      "notificationsOnlyButton": "Chỉ thông báo",
+      "summary": {
+        "upToDate": "Đã cập nhật.",
+        "insight": "Có phiên bản mới hơn — tag này đã được ghim.",
+        "inProgress": "Đang cập nhật.",
+        "hardBlocked": "Cập nhật bị chặn — cần khắc phục.",
+        "notify": "Chỉ thông báo — Drydock sẽ không áp dụng cập nhật.",
+        "autoFiltered": "Có bản cập nhật — tự động triển khai bị lọc (thủ công vẫn hoạt động).",
+        "manualFiltered": "Có bản cập nhật — một điều kiện chính sách sẽ cần xác nhận.",
+        "autoReady": "Có bản cập nhật — đủ điều kiện triển khai tự động.",
+        "manualReady": "Có bản cập nhật — sẵn sàng áp dụng thủ công."
+      },
+      "conditions": {
+        "no-update-available": "Không có bản cập nhật",
+        "rollback-container": "Container rollback",
+        "active-operation": "Cập nhật đang chạy",
+        "security-scan-blocked": "Bị chặn bởi chính sách bảo mật",
+        "last-update-rolled-back": "Bản cập nhật trước đã được khôi phục",
+        "snoozed": "Cập nhật đã hoãn",
+        "skip-tag": "Tag đã bỏ qua",
+        "skip-digest": "Digest đã bỏ qua",
+        "maturity-not-reached": "Chính sách độ chín đang chờ",
+        "threshold-not-reached": "Chưa đạt ngưỡng trigger",
+        "trigger-excluded": "Trigger bị loại trừ bởi label",
+        "trigger-not-included": "Trigger bị lọc bởi label",
+        "agent-mismatch": "Agent của trigger không khớp",
+        "no-update-trigger-configured": "Chưa cấu hình trigger cập nhật",
+        "self-update-unavailable": "Không thể tự cập nhật",
+        "maintenance-window-closed": "Cửa sổ bảo trì đã đóng",
+        "dry-run-trigger": "Cấu hình trigger ở chế độ dry-run"
+      },
+      "actions": {
+        "editPolicy": "Chỉnh sửa chính sách cập nhật",
+        "configureLabels": "Cấu hình label của trigger",
+        "viewOperation": "Xem thao tác cập nhật",
+        "reviewSecurity": "Xem lại kết quả quét",
+        "viewRollback": "Xem ngữ cảnh rollback",
+        "configureAgent": "Cấu hình agent của trigger",
+        "configureTriggers": "Cấu hình trigger cập nhật",
+        "configureThreshold": "Cấu hình ngưỡng trigger",
+        "configureSelfUpdate": "Cấu hình tự cập nhật",
+        "configureMaintenance": "Cấu hình cửa sổ bảo trì"
+      }
+    },
+    "maturityBadge": {
+      "new": "MỚI"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "Đã khôi phục {field} về chính sách khai báo",
+        "revertAll": "Đã khôi phục tất cả các ghi đè về chính sách khai báo",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 ngày",
+      "availableDaysPlural": "{count} ngày",
+      "availableHoursSingular": "1 giờ",
+      "availableHoursPlural": "{count} giờ",
+      "availableMinutesSingular": "1 phút",
+      "availableMinutesPlural": "{count} phút",
+      "justNow": "Vừa mới phát hiện"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Mở cài đặt registry",
+        "openTriggerSettings": "Mở cài đặt trigger"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

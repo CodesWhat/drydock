@@ -15,7 +15,7 @@
         "status": "Статус",
         "containers": "Контейнеры",
         "docker": "Docker",
-        "os": "OS",
+        "os": "ОС",
         "version": "Версия",
         "lastSeen": "Последняя активность"
       }
@@ -45,10 +45,10 @@
         "levelInfo": "Info",
         "levelWarn": "Warn",
         "levelError": "Error",
-        "tail50": "Tail 50",
-        "tail100": "Tail 100",
-        "tail500": "Tail 500",
-        "tail1000": "Tail 1000",
+        "tail50": "Последние 50",
+        "tail100": "Последние 100",
+        "tail500": "Последние 500",
+        "tail1000": "Последние 1000",
         "componentPlaceholder": "Фильтр по компоненту...",
         "apply": "Применить",
         "reset": "Сбросить",
@@ -58,7 +58,7 @@
         "entries": "{count} записей",
         "statusLive": "В эфире",
         "statusOffline": "Не в сети",
-        "loadError": "Failed to load agent logs"
+        "loadError": "Не удалось загрузить журнал агента"
       },
       "fields": {
         "cpus": "CPU",
@@ -66,7 +66,7 @@
         "images": "Образы",
         "uptime": "Время работы",
         "docker": "Docker",
-        "os": "OS",
+        "os": "ОС",
         "architecture": "Архитектура",
         "agent": "Агент",
         "host": "Хост",

@@ -7,6 +7,9 @@
       "previewUpdate": "預覽更新",
       "forceUpdate": "強制更新",
       "updateNow": "立即更新",
+      "previewOnly": "僅預覽",
+      "dryRunUpdateTooltip": "此觸發器處於 dry-run 模式 — 點選會提取新映像檔但不會取代容器。",
+      "dryRunCondition": "操作觸發器 {trigger} 處於 dry-run 模式 — 更新僅供預覽，容器不會被取代。",
       "scanNow": "立即掃描",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "重設",
       "clearSkips": "清除跳過",
       "clearPolicy": "清除策略",
+      "overridden": "已覆寫",
+      "revert": "還原",
+      "revertAll": "還原為宣告式設定",
       "snoozedUntil": "推遲至：",
       "maturityMode": "成熟度模式：",
       "matureOnlyMinimum": "僅成熟（{days} 天最低）",
       "allowAllUpdates": "允許所有更新",
       "skippedTags": "跳過的標籤：",
       "skippedDigests": "跳過的摘要：",
+      "noSkippedEntries": "沒有已略過的項目",
       "noActivePolicy": "無活動更新策略。",
       "removeSkip": "移除跳過",
       "previewSection": "預覽",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "強制更新",
       "updateAction": "更新",
       "skipUpdateAction": "跳過此次更新",
+      "setGroupAction": "設定群組",
       "rollbackAction": "回滾",
       "deleteAction": "刪除",
       "pinnedTooltip": "已固定",
+      "skippedLabel": "已略過",
       "upToDateTooltip": "已是最新",
+      "imageUpdateTooltip": "標籤 {tag} 現在指向不同的映像檔建置。重新部署以提取新映像檔；版本標籤本身未變更。",
       "blockedTooltip": "已阻止",
       "actionsDisabled": "操作已停用",
       "openActionsMenu": "開啟操作選單",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "已推遲的更新",
       "ariaSkippedUpdates": "已跳過的更新",
       "ariaMaturityBlocked": "成熟度阻止的更新",
+      "ariaPinnedTag": "已固定的標籤",
+      "pinnedTagTooltip": "此標籤已固定到確切版本 — drydock 不會自動升級到更新版本。設定 dd.tag.family=loose 或新增 dd.tag.include 篩選器以允許升級。",
+      "unknownKindLabel": "未知",
       "emptyState": "沒有容器匹配您的篩選條件",
       "currentLabel": "目前",
       "latestLabel": "最新",
+      "blockedByBouncer": "被 Bouncer 阻止",
       "registryErrorRateLimited": "速率限制",
       "registryErrorAuth": "認證失敗",
       "registryErrorNotFound": "未找到",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "更新組內全部",
       "updateSingular": "更新",
       "updatePlural": "更新"
+    },
+    "groupDialog": {
+      "title": "設定容器群組",
+      "description": "選擇 {name} 在此瀏覽器中的分組方式。這會覆蓋其伺服器、Compose 或 Swarm 分組，直到您清除為止。",
+      "groupLabel": "群組名稱",
+      "groupPlaceholder": "例如：媒體服務",
+      "helpText": "輸入時會建議現有群組。",
+      "clear": "使用偵測到的群組",
+      "save": "儲存群組"
     },
     "sideDetail": {
       "stopTooltip": "停止",
@@ -258,6 +281,7 @@
       "allBouncer": "所有 Bouncer",
       "safe": "安全",
       "unsafe": "不安全",
+      "blocked": "已阻止",
       "allRegistries": "所有倉庫",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "所有主機",
       "allContainers": "所有容器",
       "hasUpdate": "有可用更新",
+      "versionUpdate": "版本更新",
       "major": "主版本",
       "minor": "次版本",
       "patch": "修補程式",
+      "digest": "映像檔更新",
       "hidePinned": "隱藏已固定",
       "hidePinnedTooltip": "隱藏已固定到特定版本的容器",
       "clearAll": "全部清除",
@@ -334,6 +360,10 @@
       "tooltip": "可用的最佳穩定 semver 標籤 — 建議固定使用",
       "tooltipWithTag": "建議：{tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "有更新版本",
+      "tooltip": "有更新版本可用：{tag}。此 Tag 已固定，drydock 不會自動更新。"
+    },
     "eligibilityBadges": {
       "securityBlocked": "安全阻止",
       "rolledBack": "已回滾",
@@ -350,6 +380,61 @@
       "noTrigger": "無觸發器",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "解除條件："
+    },
+    "updateStatus": {
+      "title": "更新狀態",
+      "showDetails": "顯示條件",
+      "liftCountdown": "{countdown} · 於 {date} 解鎖",
+      "maturityClockPublished": "候選版本於 {date} 發布 — 距達到 {minDays} 天最低要求還有 {count} 天",
+      "maturityClockDetected": "候選版本於 {date} 被偵測到 — 距達到 {minDays} 天最低要求還有 {count} 天",
+      "updateButton": "立即更新",
+      "blockedButton": "更新已阻止",
+      "notificationsOnlyButton": "僅通知",
+      "summary": {
+        "upToDate": "已是最新。",
+        "insight": "有更新版本可用 — 此標籤已固定。",
+        "inProgress": "更新進行中。",
+        "hardBlocked": "更新已阻止 — 需要修復。",
+        "notify": "僅通知 — Drydock 不會套用更新。",
+        "autoFiltered": "有可用更新 — 自動分發已被篩選（手動可用）。",
+        "manualFiltered": "有可用更新 — 某項策略條件將需要確認。",
+        "autoReady": "有可用更新 — 符合自動分發條件。",
+        "manualReady": "有可用更新 — 可手動套用。"
+      },
+      "conditions": {
+        "no-update-available": "沒有可用更新",
+        "rollback-container": "回滾容器",
+        "active-operation": "更新已在進行中",
+        "security-scan-blocked": "被安全策略阻止",
+        "last-update-rolled-back": "上一次更新已回滾",
+        "snoozed": "更新已推遲",
+        "skip-tag": "標籤已跳過",
+        "skip-digest": "摘要已跳過",
+        "maturity-not-reached": "成熟度策略等待中",
+        "threshold-not-reached": "未達到觸發閾值",
+        "trigger-excluded": "觸發器已被標籤排除",
+        "trigger-not-included": "觸發器已被標籤篩選",
+        "agent-mismatch": "觸發器代理不匹配",
+        "no-update-trigger-configured": "未設定更新觸發器",
+        "self-update-unavailable": "自我更新不可用",
+        "maintenance-window-closed": "維護視窗已關閉",
+        "dry-run-trigger": "觸發器設定處於 dry-run 模式"
+      },
+      "actions": {
+        "editPolicy": "編輯更新策略",
+        "configureLabels": "設定觸發器標籤",
+        "viewOperation": "檢視更新操作",
+        "reviewSecurity": "檢視掃描結果",
+        "viewRollback": "檢視回滾內容",
+        "configureAgent": "設定觸發器代理",
+        "configureTriggers": "設定更新觸發器",
+        "configureThreshold": "設定觸發閾值",
+        "configureSelfUpdate": "設定自我更新",
+        "configureMaintenance": "設定維護視窗"
+      }
+    },
+    "maturityBadge": {
+      "new": "新"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "已將 {field} 還原為宣告式策略",
+        "revertAll": "已將所有覆寫項目還原為宣告式策略",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 天",
+      "availableDaysPlural": "{count} 天",
+      "availableHoursSingular": "1 小時",
+      "availableHoursPlural": "{count} 小時",
+      "availableMinutesSingular": "1 分鐘",
+      "availableMinutesPlural": "{count} 分鐘",
+      "justNow": "剛剛偵測到"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "開啟登錄設定",
+        "openTriggerSettings": "開啟觸發器設定"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

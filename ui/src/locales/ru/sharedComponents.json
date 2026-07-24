@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Переключить столбцы",
+      "heading": "Столбцы",
+      "reset": "Сброс",
+      "hiddenBadgeTooltip": "Скрыто столбцов: {count}",
+      "autoHiddenAnnotation": "{column} — скрыт, чтобы уместиться",
+      "autoHiddenBadgeTooltip": "{columns} скрыто, чтобы поместиться на экране."
+    },
     "confirmDialog": {
       "cancel": "Отмена",
       "confirm": "Подтвердить"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "Действия",
-      "resizeColumn": "Изменить ширину столбца"
+      "resizeColumn": "Изменить ширину столбца",
+      "sortBy": "Сортировать по",
+      "sortDirectionAscending": "Направление сортировки: по возрастанию",
+      "sortDirectionDescending": "Направление сортировки: по убыванию"
     },
     "detailPanel": {
       "openFullPage": "Открыть на полной странице",

@@ -22,6 +22,10 @@
       "status": "الحالة",
       "details": "التفاصيل"
     },
+    "card": {
+      "time": "الوقت",
+      "version": "الإصدار"
+    },
     "detail": {
       "timestamp": "الطابع الزمني",
       "event": "الحدث",
@@ -50,8 +54,11 @@
       "closed": "مغلق",
       "update-available": "تحديث متاح",
       "update-applied": "تم تطبيق التحديث",
+      "update-applied-dryrun": "تمت معاينة التحديث (تشغيل تجريبي)",
       "update-failed": "فشل التحديث",
       "auto-update-blocked": "التحديث التلقائي محظور",
+      "update-policy-override-set": "تم تعيين تجاوز سياسة التحديث",
+      "update-policy-override-cleared": "تم مسح تجاوز سياسة التحديث",
       "auto-rollback": "تراجع تلقائي",
       "rollback": "تراجع",
       "preview": "معاينة",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "أُعيد اتصال الوكيل",
         "description": "عند إعادة اتصال وكيل بعيد بعد انقطاعه"
+      },
+      "container-unhealthy": {
+        "name": "الحاوية غير سليمة",
+        "description": "عندما يدخل فحص الحالة الصحية لـ Docker الخاص بالحاوية في حالة غير سليمة"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "صفحة المشغّلات",
       "helpTextImplicitAll": "اتركه فارغاً لإرسال هذا الحدث إلى جميع مشغّلات الإشعارات. تحديد أي مشغّل يحوّل هذه القاعدة إلى قائمة مسموح بها.",
       "helpTextExplicit": "ستتلقى المشغّلات المحددة فقط هذا الحدث. اتركه فارغاً لقمع هذا الحدث لجميع المشغّلات.",
+      "bellLabel": "جرس الإشعارات",
+      "bellAriaLabel": "جرس الإشعارات",
+      "bellThresholdAriaLabel": "حد شدة الجرس",
+      "bellHelp": "اختر ما إذا كان هذا الحدث يظهر في جرس التطبيق والحد الأدنى لمستوى التحديث المطلوب تضمينه.",
+      "thresholdAll": "جميع التحديثات",
+      "thresholdMajor": "تحديثات كبرى فقط",
+      "thresholdMinor": "صغرى وكبرى",
+      "thresholdPatch": "تصحيحية وصغرى وكبرى",
+      "templatesLabel": "قوالب الرسائل",
+      "templatesHelp": "تُطبَّق التجاوزات على المشغّل المحدد فقط. الحقول الفارغة تحتفظ بإعداداتها الافتراضية المهيأة. تستخدم المتغيرات مسارات آمنة مثل container.name و containers.length.",
+      "templateTriggerAriaLabel": "مشغّل القالب",
+      "simpleTitle": "عنوان بسيط",
+      "simpleTitleAriaLabel": "عنوان إشعار بسيط",
+      "simpleBody": "نص بسيط",
+      "simpleBodyAriaLabel": "نص إشعار بسيط",
+      "batchTitle": "عنوان الدفعة",
+      "batchTitleAriaLabel": "عنوان إشعار الدفعة",
+      "preview": "معاينة",
+      "previewAriaLabel": "معاينة قالب الإشعار",
+      "previewing": "جارٍ المعاينة...",
+      "previewError": "فشلت معاينة قالب الإشعار",
+      "resetTemplate": "إعادة تعيين القالب",
       "saving": "جارٍ الحفظ...",
       "saveChanges": "حفظ التغييرات",
       "reset": "إعادة ضبط",
@@ -158,7 +191,8 @@
       "critical": "حرجة",
       "high": "عالية",
       "medium": "متوسطة",
-      "low": "منخفضة"
+      "low": "منخفضة",
+      "clean": "نظيف"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "إلغاء"
     },
     "runtimeTools": {
+      "scanner": "الماسح",
+      "pullAsset": "سحب {provider}",
+      "warmAsset": "تهيئة {provider} مسبقًا",
+      "assetOperationFailed": "فشلت عملية أصل الماسح",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "النوع",
       "status": "الحالة",
       "url": "URL"
+    },
+    "card": {
+      "auth": "المصادقة",
+      "status": "الحالة"
     },
     "badge": {
       "private": "خاص",
@@ -278,6 +320,12 @@
       "containers": "الحاويات",
       "lastSeen": "آخر ظهور"
     },
+    "card": {
+      "containers": "الحاويات",
+      "running": "تعمل",
+      "images": "الصور",
+      "lastSeen": "آخر ظهور"
+    },
     "detail": {
       "containers": "الحاويات",
       "running": "تعمل",
@@ -302,6 +350,10 @@
     "status": {
       "active": "نشط",
       "inactive": "غير نشط"
+    },
+    "dryRun": {
+      "badge": "وضع المعاينة التجريبية",
+      "tooltip": "تُعرض التحديثات كمعاينة فقط — لن يتم استبدال الحاويات. اضبط DRYRUN=false للتطبيق."
     },
     "test": {
       "testing": "جارٍ الاختبار...",
@@ -335,6 +387,12 @@
       "schedule": "الجدول الزمني",
       "nextRun": "التشغيل التالي",
       "lastRun": "آخر تشغيل"
+    },
+    "card": {
+      "containers": "الحاويات",
+      "nextRun": "التشغيل التالي",
+      "lastRun": "آخر تشغيل",
+      "containersWatched": "{count} حاوية تحت المراقبة"
     },
     "status": {
       "watching": "يراقب",

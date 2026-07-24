@@ -157,6 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "{total} alias de configuração legado detectado",
       "legacyConfigTitlePlural": "{total} aliases de configuração legados detectados",
+      "legacyApiPathTitleSingular": "{total} solicitação para o caminho de API removido detectada",
+      "legacyApiPathTitlePlural": "{total} solicitações para o caminho de API removido detectadas",
       "dontShowAgain": "Não mostrar novamente",
       "curlHealthcheckTitle": "Override de healthcheck curl personalizado detectado",
       "envKeysLabel": "Chaves env ({count}): {keys}",

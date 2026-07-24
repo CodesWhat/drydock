@@ -22,6 +22,10 @@
       "status": "Status",
       "details": "Details"
     },
+    "card": {
+      "time": "Tijd",
+      "version": "Versie"
+    },
     "detail": {
       "timestamp": "Tijdstempel",
       "event": "Evenement",
@@ -50,8 +54,11 @@
       "closed": "Gesloten",
       "update-available": "Update beschikbaar",
       "update-applied": "Update toegepast",
+      "update-applied-dryrun": "Update in voorbeeld getoond (dry run)",
       "update-failed": "Update mislukt",
       "auto-update-blocked": "Automatische update geblokkeerd",
+      "update-policy-override-set": "Update-beleidsoverride ingesteld",
+      "update-policy-override-cleared": "Update-beleidsoverride gewist",
       "auto-rollback": "Automatisch terugdraaien",
       "rollback": "Terugdraaien",
       "preview": "Voorbeeld",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "Agent opnieuw verbonden",
         "description": "Wanneer een externe agent opnieuw verbinding maakt na verbindingsverlies"
+      },
+      "container-unhealthy": {
+        "name": "Container ongezond",
+        "description": "Wanneer de Docker-gezondheidscontrole van een container de status \"unhealthy\" bereikt"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "Triggers-pagina",
       "helpTextImplicitAll": "Laat dit leeg om deze gebeurtenis naar alle meldingstriggers te sturen. Als u een trigger selecteert, wordt deze regel omgezet in een toelatingslijst.",
       "helpTextExplicit": "Alleen geselecteerde triggers ontvangen deze gebeurtenis. Laat het leeg om deze gebeurtenis voor alle triggers te onderdrukken.",
+      "bellLabel": "Meldingsbel",
+      "bellAriaLabel": "Meldingsbel",
+      "bellThresholdAriaLabel": "Ernstdrempel van de bel",
+      "bellHelp": "Kies of deze gebeurtenis in de in-app-bel verschijnt en het minimale updateniveau om op te nemen.",
+      "thresholdAll": "Alle updates",
+      "thresholdMajor": "Alleen major-updates",
+      "thresholdMinor": "Minor en major",
+      "thresholdPatch": "Patch, minor en major",
+      "templatesLabel": "Berichtsjablonen",
+      "templatesHelp": "Overschrijvingen gelden alleen voor de geselecteerde trigger. Lege velden behouden hun geconfigureerde standaardwaarden. Variabelen gebruiken veilige paden zoals container.name en containers.length.",
+      "templateTriggerAriaLabel": "Sjabloontrigger",
+      "simpleTitle": "Eenvoudige titel",
+      "simpleTitleAriaLabel": "Eenvoudige meldingstitel",
+      "simpleBody": "Eenvoudige inhoud",
+      "simpleBodyAriaLabel": "Eenvoudige meldingsinhoud",
+      "batchTitle": "Batchtitel",
+      "batchTitleAriaLabel": "Batchmeldingstitel",
+      "preview": "Voorbeeld",
+      "previewAriaLabel": "Meldingssjabloon voorbeeld",
+      "previewing": "Voorbeeld laden...",
+      "previewError": "Voorbeeld van meldingssjabloon mislukt",
+      "resetTemplate": "Sjabloon opnieuw instellen",
       "saving": "Opslaan...",
       "saveChanges": "Wijzigingen opslaan",
       "reset": "Opnieuw instellen",
@@ -158,7 +191,8 @@
       "critical": "Kritisch",
       "high": "Hoog",
       "medium": "Middelmatig",
-      "low": "Laag"
+      "low": "Laag",
+      "clean": "Schoon"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "Annuleren"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "{provider} ophalen",
+      "warmAsset": "{provider} opwarmen",
+      "assetOperationFailed": "Scanner-assetbewerking mislukt",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "Typ",
       "status": "Status",
       "url": "URL"
+    },
+    "card": {
+      "auth": "Authenticatie",
+      "status": "Status"
     },
     "badge": {
       "private": "Privé",
@@ -278,6 +320,12 @@
       "containers": "Containers",
       "lastSeen": "Laatst gezien"
     },
+    "card": {
+      "containers": "Containers",
+      "running": "Actief",
+      "images": "Images",
+      "lastSeen": "Laatst gezien"
+    },
     "detail": {
       "containers": "Containers",
       "running": "rennen",
@@ -302,6 +350,10 @@
     "status": {
       "active": "Actief",
       "inactive": "Inactief"
+    },
+    "dryRun": {
+      "badge": "Dry-run-modus",
+      "tooltip": "Updates worden alleen als voorbeeld getoond — containers worden niet vervangen. Stel DRYRUN=false in om toe te passen."
     },
     "test": {
       "testing": "Testen...",
@@ -335,6 +387,12 @@
       "schedule": "Schema",
       "nextRun": "Volgende uitvoering",
       "lastRun": "Laatste run"
+    },
+    "card": {
+      "containers": "Containers",
+      "nextRun": "Volgende run",
+      "lastRun": "Laatste run",
+      "containersWatched": "{count} containers bekeken"
     },
     "status": {
       "watching": "Kijken",

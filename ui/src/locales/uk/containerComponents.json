@@ -7,6 +7,9 @@
       "previewUpdate": "Переглянути оновлення",
       "forceUpdate": "Примусово оновити",
       "updateNow": "Оновити зараз",
+      "previewOnly": "Лише попередній перегляд",
+      "dryRunUpdateTooltip": "Цей тригер у режимі dry-run — натискання завантажить новий образ, але не замінить контейнер.",
+      "dryRunCondition": "Тригер дії {trigger} у режимі dry-run — оновлення лише попередньо переглядаються, контейнери не замінюються.",
       "scanNow": "Сканувати зараз",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "Скинути",
       "clearSkips": "Скасувати пропуски",
       "clearPolicy": "Скасувати політику",
+      "overridden": "Перевизначено",
+      "revert": "Скасувати",
+      "revertAll": "Повернути до декларативної політики",
       "snoozedUntil": "Відкладено до:",
       "maturityMode": "Режим зрілості:",
       "matureOnlyMinimum": "Лише зрілі (мінімум {days}д)",
       "allowAllUpdates": "Дозволити всі оновлення",
       "skippedTags": "Пропущені теги:",
       "skippedDigests": "Пропущені дайджести:",
+      "noSkippedEntries": "Немає пропущених записів",
       "noActivePolicy": "Активна політика оновлення відсутня.",
       "removeSkip": "Скасувати пропуск",
       "previewSection": "Попередній перегляд",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "Примусово оновити",
       "updateAction": "Оновити",
       "skipUpdateAction": "Пропустити це оновлення",
+      "setGroupAction": "Встановити групу",
       "rollbackAction": "Відкат",
       "deleteAction": "Видалити",
       "pinnedTooltip": "Закріплено",
+      "skippedLabel": "Пропущено",
       "upToDateTooltip": "Актуально",
+      "imageUpdateTooltip": "Тег {tag} тепер вказує на іншу збірку образу. Розгорніть повторно, щоб завантажити новий образ; сам тег версії не змінився.",
       "blockedTooltip": "Заблоковано",
       "actionsDisabled": "Дії вимкнені",
       "openActionsMenu": "Відкрити меню дій",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "Відкладені оновлення",
       "ariaSkippedUpdates": "Пропущені оновлення",
       "ariaMaturityBlocked": "Оновлення заблоковані через зрілість",
+      "ariaPinnedTag": "Закріплений тег",
+      "pinnedTagTooltip": "Цей тег закріплено на точній версії — drydock не переходитиме автоматично на новіші версії. Встановіть dd.tag.family=loose або додайте фільтр dd.tag.include, щоб дозволити це.",
+      "unknownKindLabel": "Невідомо",
       "emptyState": "Жоден контейнер не відповідає вашим фільтрам",
       "currentLabel": "Поточний",
       "latestLabel": "Останній",
+      "blockedByBouncer": "Заблоковано Bouncer",
       "registryErrorRateLimited": "Обмеження запитів",
       "registryErrorAuth": "Помилка автентифікації",
       "registryErrorNotFound": "Не знайдено",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "Оновити всі в групі",
       "updateSingular": "оновлення",
       "updatePlural": "оновлень"
+    },
+    "groupDialog": {
+      "title": "Встановити групу контейнера",
+      "description": "Виберіть, як {name} групується в цьому браузері. Це замінює його групу сервера, Compose або Swarm, доки ви це не очистите.",
+      "groupLabel": "Назва групи",
+      "groupPlaceholder": "напр., Медіасервіси",
+      "helpText": "Під час введення пропонуються наявні групи.",
+      "clear": "Використати виявлену групу",
+      "save": "Зберегти групу"
     },
     "sideDetail": {
       "stopTooltip": "Зупинити",
@@ -258,6 +281,7 @@
       "allBouncer": "Всі Bouncer",
       "safe": "Безпечно",
       "unsafe": "Небезпечно",
+      "blocked": "Заблоковано",
       "allRegistries": "Всі реєстри",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "Всі хости",
       "allContainers": "Всі контейнери",
       "hasUpdate": "Є оновлення",
+      "versionUpdate": "Оновлення версії",
       "major": "Мажорне",
       "minor": "Мінорне",
       "patch": "Патч",
+      "digest": "Оновлення образу",
       "hidePinned": "Приховати закріплені",
       "hidePinnedTooltip": "Приховати контейнери, закріплені на конкретних версіях",
       "clearAll": "Очистити все",
@@ -334,6 +360,10 @@
       "tooltip": "Найкращий стабільний semver-тег — розгляньте закріплення",
       "tooltipWithTag": "Рекомендовано: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Доступна новіша",
+      "tooltip": "Доступна новіша версія: {tag}. Цей Tag закріплено, drydock не оновить його автоматично."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Заблоковано безпекою",
       "rolledBack": "Відкат виконано",
@@ -350,6 +380,61 @@
       "noTrigger": "Немає тригера",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Знімає обмеження:"
+    },
+    "updateStatus": {
+      "title": "Статус оновлення",
+      "showDetails": "Показати умови",
+      "liftCountdown": "{countdown} · розблокується {date}",
+      "maturityClockPublished": "Кандидата опубліковано {date} — залишився {count} день до мінімуму {minDays} дн. | Кандидата опубліковано {date} — залишилося {count} днів до мінімуму {minDays} дн.",
+      "maturityClockDetected": "Кандидата виявлено {date} — залишився {count} день до мінімуму {minDays} дн. | Кандидата виявлено {date} — залишилося {count} днів до мінімуму {minDays} дн.",
+      "updateButton": "Оновити зараз",
+      "blockedButton": "Оновлення заблоковано",
+      "notificationsOnlyButton": "Лише сповіщення",
+      "summary": {
+        "upToDate": "Актуально.",
+        "insight": "Доступна новіша версія — цей тег закріплено.",
+        "inProgress": "Оновлення виконується.",
+        "hardBlocked": "Оновлення заблоковано — потрібне виправлення.",
+        "notify": "Лише сповіщення — Drydock не застосовуватиме оновлення.",
+        "autoFiltered": "Доступне оновлення — автоматичну доставку відфільтровано (ручна працює).",
+        "manualFiltered": "Доступне оновлення — одна з умов політики вимагатиме підтвердження.",
+        "autoReady": "Доступне оновлення — придатне для автоматичної доставки.",
+        "manualReady": "Доступне оновлення — готове до ручного застосування."
+      },
+      "conditions": {
+        "no-update-available": "Немає доступного оновлення",
+        "rollback-container": "Контейнер відкату",
+        "active-operation": "Оновлення вже виконується",
+        "security-scan-blocked": "Заблоковано політикою безпеки",
+        "last-update-rolled-back": "Попереднє оновлення відкочено",
+        "snoozed": "Оновлення відкладено",
+        "skip-tag": "Тег пропущено",
+        "skip-digest": "Дайджест пропущено",
+        "maturity-not-reached": "Політика зрілості очікує",
+        "threshold-not-reached": "Поріг тригера не досягнуто",
+        "trigger-excluded": "Тригер виключено мітками",
+        "trigger-not-included": "Тригер відфільтровано мітками",
+        "agent-mismatch": "Невідповідність агента тригера",
+        "no-update-trigger-configured": "Не налаштовано тригер оновлення",
+        "self-update-unavailable": "Самооновлення недоступне",
+        "maintenance-window-closed": "Вікно обслуговування закрито",
+        "dry-run-trigger": "Конфігурація тригера в режимі dry-run"
+      },
+      "actions": {
+        "editPolicy": "Редагувати політику оновлення",
+        "configureLabels": "Налаштувати мітки тригера",
+        "viewOperation": "Переглянути операцію оновлення",
+        "reviewSecurity": "Переглянути результати сканування",
+        "viewRollback": "Переглянути контекст відкату",
+        "configureAgent": "Налаштувати агента тригера",
+        "configureTriggers": "Налаштувати тригери оновлення",
+        "configureThreshold": "Налаштувати поріг тригера",
+        "configureSelfUpdate": "Налаштувати самооновлення",
+        "configureMaintenance": "Налаштувати вікно обслуговування"
+      }
+    },
+    "maturityBadge": {
+      "new": "НОВЕ"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "{field} повернено до декларативної політики",
+        "revertAll": "Усі перевизначення повернено до декларативної політики",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 день",
+      "availableDaysPlural": "{count} дн.",
+      "availableHoursSingular": "1 година",
+      "availableHoursPlural": "{count} год.",
+      "availableMinutesSingular": "1 хвилина",
+      "availableMinutesPlural": "{count} хв.",
+      "justNow": "Щойно виявлено"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Відкрити налаштування реєстру",
+        "openTriggerSettings": "Відкрити налаштування тригера"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

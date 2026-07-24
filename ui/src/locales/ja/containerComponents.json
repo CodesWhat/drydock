@@ -7,6 +7,9 @@
       "previewUpdate": "更新をプレビュー",
       "forceUpdate": "強制更新",
       "updateNow": "今すぐ更新",
+      "previewOnly": "プレビューのみ",
+      "dryRunUpdateTooltip": "このトリガーはドライランモードです — クリックすると新しいイメージを取得しますが、コンテナは置き換えられません。",
+      "dryRunCondition": "アクショントリガー {trigger} はドライランモードです — 更新はプレビューのみで、コンテナは置き換えられません。",
       "scanNow": "今すぐスキャン",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "リセット",
       "clearSkips": "スキップをクリア",
       "clearPolicy": "ポリシーをクリア",
+      "overridden": "上書き済み",
+      "revert": "元に戻す",
+      "revertAll": "宣言的設定に戻す",
       "snoozedUntil": "スヌーズ終了：",
       "maturityMode": "成熟度モード：",
       "matureOnlyMinimum": "成熟のみ（最低 {days} 日）",
       "allowAllUpdates": "すべての更新を許可",
       "skippedTags": "スキップ済みタグ：",
       "skippedDigests": "スキップ済みダイジェスト：",
+      "noSkippedEntries": "スキップされた項目はありません",
       "noActivePolicy": "有効な更新ポリシーがありません。",
       "removeSkip": "スキップを解除",
       "previewSection": "プレビュー",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "強制更新",
       "updateAction": "更新",
       "skipUpdateAction": "この更新をスキップ",
+      "setGroupAction": "グループを設定",
       "rollbackAction": "ロールバック",
       "deleteAction": "削除",
       "pinnedTooltip": "固定済み",
+      "skippedLabel": "スキップ済み",
       "upToDateTooltip": "最新の状態です",
+      "imageUpdateTooltip": "タグ {tag} は現在別のイメージビルドを指しています。再デプロイして新しいイメージを取得してください。バージョンタグ自体は変更されていません。",
       "blockedTooltip": "ブロック済み",
       "actionsDisabled": "アクションが無効です",
       "openActionsMenu": "アクションメニューを開く",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "スヌーズ中の更新",
       "ariaSkippedUpdates": "スキップ済みの更新",
       "ariaMaturityBlocked": "成熟度によりブロックされた更新",
+      "ariaPinnedTag": "固定されたタグ",
+      "pinnedTagTooltip": "このタグは特定のバージョンに固定されています — drydock は自動的に新しいバージョンへ移行しません。dd.tag.family=loose を設定するか、dd.tag.include フィルターを追加して許可してください。",
+      "unknownKindLabel": "不明",
       "emptyState": "フィルターに一致するコンテナがありません",
       "currentLabel": "現在",
       "latestLabel": "最新",
+      "blockedByBouncer": "Bouncer によりブロック済み",
       "registryErrorRateLimited": "レート制限中",
       "registryErrorAuth": "認証失敗",
       "registryErrorNotFound": "見つかりません",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "グループ内をすべて更新",
       "updateSingular": "件の更新",
       "updatePlural": "件の更新"
+    },
+    "groupDialog": {
+      "title": "コンテナグループを設定",
+      "description": "このブラウザで {name} をどのようにグループ化するかを選択します。クリアするまで、サーバー、Compose、または Swarm のグループを上書きします。",
+      "groupLabel": "グループ名",
+      "groupPlaceholder": "例: メディアサービス",
+      "helpText": "入力すると既存のグループが候補として表示されます。",
+      "clear": "検出されたグループを使用",
+      "save": "グループを保存"
     },
     "sideDetail": {
       "stopTooltip": "停止",
@@ -258,6 +281,7 @@
       "allBouncer": "全 Bouncer",
       "safe": "安全",
       "unsafe": "危険",
+      "blocked": "ブロック済み",
       "allRegistries": "全レジストリ",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "全ホスト",
       "allContainers": "全コンテナ",
       "hasUpdate": "更新あり",
+      "versionUpdate": "バージョン更新",
       "major": "メジャー",
       "minor": "マイナー",
       "patch": "パッチ",
+      "digest": "イメージ更新",
       "hidePinned": "固定済みを非表示",
       "hidePinnedTooltip": "特定バージョンに固定されたコンテナを非表示にする",
       "clearAll": "すべてクリア",
@@ -334,6 +360,10 @@
       "tooltip": "利用可能な最安定の semver タグです — ピン留めをご検討ください",
       "tooltipWithTag": "おすすめ：{tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "新しいバージョンあり",
+      "tooltip": "新しいバージョンが利用可能です: {tag}。この Tag は固定済みのため、drydock は自動的に更新しません。"
+    },
     "eligibilityBadges": {
       "securityBlocked": "セキュリティによりブロック",
       "rolledBack": "ロールバック済み",
@@ -350,6 +380,61 @@
       "noTrigger": "トリガーなし",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "解除条件："
+    },
+    "updateStatus": {
+      "title": "更新ステータス",
+      "showDetails": "条件を表示",
+      "liftCountdown": "{countdown} ・{date} に解除",
+      "maturityClockPublished": "候補は {date} に公開されました — {minDays} 日の最低期間まであと {count} 日",
+      "maturityClockDetected": "候補は {date} に検出されました — {minDays} 日の最低期間まであと {count} 日",
+      "updateButton": "今すぐ更新",
+      "blockedButton": "更新はブロックされています",
+      "notificationsOnlyButton": "通知のみ",
+      "summary": {
+        "upToDate": "最新の状態です。",
+        "insight": "新しいバージョンが利用可能です — このタグは固定されています。",
+        "inProgress": "更新処理中です。",
+        "hardBlocked": "更新はブロックされています — 修正が必要です。",
+        "notify": "通知のみです — Drydock は更新を適用しません。",
+        "autoFiltered": "更新が利用可能です — 自動配信はフィルターされています（手動は可能）。",
+        "manualFiltered": "更新が利用可能です — ポリシー条件により確認が必要になります。",
+        "autoReady": "更新が利用可能です — 自動配信の対象です。",
+        "manualReady": "更新が利用可能です — 手動で適用できます。"
+      },
+      "conditions": {
+        "no-update-available": "利用可能な更新はありません",
+        "rollback-container": "ロールバックコンテナ",
+        "active-operation": "更新はすでに実行中です",
+        "security-scan-blocked": "セキュリティポリシーによりブロック",
+        "last-update-rolled-back": "前回の更新はロールバックされました",
+        "snoozed": "更新はスヌーズ中です",
+        "skip-tag": "タグスキップ済み",
+        "skip-digest": "ダイジェストスキップ済み",
+        "maturity-not-reached": "成熟度ポリシー待機中",
+        "threshold-not-reached": "トリガーのしきい値に達していません",
+        "trigger-excluded": "ラベルによりトリガーが除外されました",
+        "trigger-not-included": "ラベルによりトリガーがフィルターされました",
+        "agent-mismatch": "トリガーエージェントの不一致",
+        "no-update-trigger-configured": "更新トリガーが構成されていません",
+        "self-update-unavailable": "自己更新は利用できません",
+        "maintenance-window-closed": "メンテナンスウィンドウは終了しています",
+        "dry-run-trigger": "トリガー構成がドライランモードです"
+      },
+      "actions": {
+        "editPolicy": "更新ポリシーを編集",
+        "configureLabels": "トリガーラベルを構成",
+        "viewOperation": "更新オペレーションを表示",
+        "reviewSecurity": "スキャン結果を確認",
+        "viewRollback": "ロールバックのコンテキストを表示",
+        "configureAgent": "トリガーエージェントを構成",
+        "configureTriggers": "更新トリガーを構成",
+        "configureThreshold": "トリガーのしきい値を構成",
+        "configureSelfUpdate": "自己更新を構成",
+        "configureMaintenance": "メンテナンスウィンドウを構成"
+      }
+    },
+    "maturityBadge": {
+      "new": "新規"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "{field} を宣言的ポリシーに戻しました",
+        "revertAll": "すべての上書きを宣言的ポリシーに戻しました",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1日",
+      "availableDaysPlural": "{count}日",
+      "availableHoursSingular": "1時間",
+      "availableHoursPlural": "{count}時間",
+      "availableMinutesSingular": "1分",
+      "availableMinutesPlural": "{count}分",
+      "justNow": "たった今検出"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "レジストリ設定を開く",
+        "openTriggerSettings": "トリガー設定を開く"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

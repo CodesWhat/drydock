@@ -6,6 +6,24 @@
       "profile": "Profilo"
     },
     "general": {
+      "updateMode": {
+        "title": "Modalità di aggiornamento globale",
+        "description": "Scegli se Drydock deve solo segnalare gli aggiornamenti, attendere un'azione manuale o distribuire automaticamente gli aggiornamenti idonei.",
+        "options": {
+          "notify": {
+            "label": "Notifica",
+            "description": "Rileva e notifica soltanto; gli aggiornamenti non vengono mai applicati."
+          },
+          "manual": {
+            "label": "Manuale",
+            "description": "Applica gli aggiornamenti solo quando richiesto."
+          },
+          "auto": {
+            "label": "Automatico",
+            "description": "Distribuisci automaticamente gli aggiornamenti idonei."
+          }
+        }
+      },
       "application": {
         "title": "Applicazione",
         "loadingServerInfo": "Caricamento informazioni server"
@@ -72,6 +90,7 @@
         "no": "No"
       },
       "errors": {
+        "updateMode": "Aggiornamento della modalità di aggiornamento globale non riuscito",
         "loadServerInfo": "Impossibile caricare le informazioni server",
         "loadProfileData": "Impossibile caricare i dati profilo",
         "updateNetworkSettings": "Impossibile aggiornare le impostazioni di rete",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Sincronizzazione",
+        "label": "Sincronizza tra i dispositivi",
+        "description": "Mantieni sincronizzate le preferenze di aspetto e layout su ogni dispositivo da cui accedi"
+      },
       "language": {
         "title": "Lingua"
       },
@@ -118,6 +142,9 @@
           "soft": "Morbido",
           "round": "Rotondo"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Aggiornamento delle impostazioni di sincronizzazione non riuscito"
       }
     },
     "profile": {

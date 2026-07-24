@@ -6,6 +6,24 @@
       "profile": "프로필"
     },
     "general": {
+      "updateMode": {
+        "title": "전역 업데이트 모드",
+        "description": "Drydock가 업데이트를 보고만 할지, 수동 작업을 기다릴지, 적용 가능한 업데이트를 자동으로 실행할지 선택하세요.",
+        "options": {
+          "notify": {
+            "label": "알림",
+            "description": "감지 및 알림만 수행하며 업데이트는 적용하지 않습니다."
+          },
+          "manual": {
+            "label": "수동",
+            "description": "요청할 때만 업데이트를 적용합니다."
+          },
+          "auto": {
+            "label": "자동",
+            "description": "적용 가능한 업데이트를 자동으로 실행합니다."
+          }
+        }
+      },
       "application": {
         "title": "애플리케이션",
         "loadingServerInfo": "서버 정보 불러오는 중"
@@ -72,6 +90,7 @@
         "no": "아니요"
       },
       "errors": {
+        "updateMode": "전역 업데이트 모드를 업데이트하지 못했습니다",
         "loadServerInfo": "서버 정보를 불러오지 못했습니다",
         "loadProfileData": "프로필 데이터를 불러오지 못했습니다",
         "updateNetworkSettings": "네트워크 설정을 업데이트하지 못했습니다",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "동기화",
+        "label": "기기 간 동기화",
+        "description": "로그인하는 모든 기기에서 화면 모양과 레이아웃 설정을 동기화된 상태로 유지합니다"
+      },
       "language": {
         "title": "언어"
       },
@@ -118,6 +142,9 @@
           "soft": "부드럽게",
           "round": "둥글게"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "동기화 설정을 업데이트하지 못했습니다"
       }
     },
     "profile": {

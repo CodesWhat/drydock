@@ -157,6 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "{total} 件のレガシー設定エイリアスを検出しました",
       "legacyConfigTitlePlural": "{total} 件のレガシー設定エイリアスを検出しました",
+      "legacyApiPathTitleSingular": "削除された API パスへのリクエストを {total} 件検出しました",
+      "legacyApiPathTitlePlural": "削除された API パスへのリクエストを {total} 件検出しました",
       "dontShowAgain": "今後表示しない",
       "curlHealthcheckTitle": "カスタム curl ヘルスチェックのオーバーライドを検出しました",
       "envKeysLabel": "環境変数キー（{count} 件）：{keys}",

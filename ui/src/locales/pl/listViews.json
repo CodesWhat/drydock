@@ -22,6 +22,10 @@
       "status": "Stan",
       "details": "Szczegóły"
     },
+    "card": {
+      "time": "Czas",
+      "version": "Wersja"
+    },
     "detail": {
       "timestamp": "Znacznik czasu",
       "event": "Wydarzenie",
@@ -50,8 +54,11 @@
       "closed": "Zamknięto",
       "update-available": "Dostępna aktualizacja",
       "update-applied": "Aktualizacja zastosowana",
+      "update-applied-dryrun": "Podgląd aktualizacji (dry run)",
       "update-failed": "Aktualizacja nie powiodła się",
       "auto-update-blocked": "Automatyczna aktualizacja zablokowana",
+      "update-policy-override-set": "Ustawiono nadpisanie polityki aktualizacji",
+      "update-policy-override-cleared": "Wyczyszczono nadpisanie polityki aktualizacji",
       "auto-rollback": "Automatyczne cofnięcie",
       "rollback": "Cofnięcie",
       "preview": "Podgląd",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "Agent ponownie połączony",
         "description": "Gdy zdalny agent ponownie się połączy po utracie połączenia"
+      },
+      "container-unhealthy": {
+        "name": "Kontener niesprawny",
+        "description": "Gdy kontrola stanu Docker kontenera przejdzie w stan \"unhealthy\""
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "Strona wyzwalaczy",
       "helpTextImplicitAll": "Pozostaw to pole puste, aby wysłać to zdarzenie do wszystkich wyzwalaczy powiadomień. Wybranie dowolnego wyzwalacza zamienia tę regułę w listę dozwolonych.",
       "helpTextExplicit": "Tylko wybrane wyzwalacze otrzymają to zdarzenie. Pozostaw to pole puste, aby pominąć to zdarzenie dla wszystkich wyzwalaczy.",
+      "bellLabel": "Dzwonek powiadomień",
+      "bellAriaLabel": "Dzwonek powiadomień",
+      "bellThresholdAriaLabel": "Próg ważności dzwonka",
+      "bellHelp": "Wybierz, czy to zdarzenie pojawia się w dzwonku w aplikacji, oraz minimalny poziom aktualizacji do uwzględnienia.",
+      "thresholdAll": "Wszystkie aktualizacje",
+      "thresholdMajor": "Tylko aktualizacje major",
+      "thresholdMinor": "Minor i major",
+      "thresholdPatch": "Patch, minor i major",
+      "templatesLabel": "Szablony wiadomości",
+      "templatesHelp": "Nadpisania dotyczą tylko wybranego wyzwalacza. Puste pola zachowują skonfigurowane wartości domyślne. Zmienne używają bezpiecznych ścieżek, takich jak container.name i containers.length.",
+      "templateTriggerAriaLabel": "Wyzwalacz szablonu",
+      "simpleTitle": "Prosty tytuł",
+      "simpleTitleAriaLabel": "Prosty tytuł powiadomienia",
+      "simpleBody": "Prosta treść",
+      "simpleBodyAriaLabel": "Prosta treść powiadomienia",
+      "batchTitle": "Tytuł zbiorczy",
+      "batchTitleAriaLabel": "Tytuł powiadomienia zbiorczego",
+      "preview": "Podgląd",
+      "previewAriaLabel": "Podgląd szablonu powiadomienia",
+      "previewing": "Trwa podgląd...",
+      "previewError": "Nie udało się wyświetlić podglądu szablonu powiadomienia",
+      "resetTemplate": "Zresetuj szablon",
       "saving": "Zapisywanie...",
       "saveChanges": "Zapisz zmiany",
       "reset": "Resetuj",
@@ -158,7 +191,8 @@
       "critical": "Krytyczny",
       "high": "Wysoka",
       "medium": "Średni",
-      "low": "Niski"
+      "low": "Niski",
+      "clean": "Czysty"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "Anuluj"
     },
     "runtimeTools": {
+      "scanner": "Skaner",
+      "pullAsset": "Pobierz {provider}",
+      "warmAsset": "Rozgrzej {provider}",
+      "assetOperationFailed": "Operacja na zasobie skanera nie powiodła się",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "Wpisz",
       "status": "Stan",
       "url": "Adres URL"
+    },
+    "card": {
+      "auth": "Uwierzytelnianie",
+      "status": "Stan"
     },
     "badge": {
       "private": "Prywatny",
@@ -278,6 +320,12 @@
       "containers": "Kontenery",
       "lastSeen": "Ostatnio widziany"
     },
+    "card": {
+      "containers": "Kontenery",
+      "running": "Działa",
+      "images": "Obrazy",
+      "lastSeen": "Ostatnio widziany"
+    },
     "detail": {
       "containers": "Kontenery",
       "running": "bieganie",
@@ -302,6 +350,10 @@
     "status": {
       "active": "Aktywny",
       "inactive": "Nieaktywny"
+    },
+    "dryRun": {
+      "badge": "Tryb dry-run",
+      "tooltip": "Aktualizacje są tylko podglądane — kontenery nie zostaną zastąpione. Ustaw DRYRUN=false, aby zastosować."
     },
     "test": {
       "testing": "Testowanie...",
@@ -335,6 +387,12 @@
       "schedule": "Harmonogram",
       "nextRun": "Następny bieg",
       "lastRun": "Ostatni bieg"
+    },
+    "card": {
+      "containers": "Kontenery",
+      "nextRun": "Następny bieg",
+      "lastRun": "Ostatni bieg",
+      "containersWatched": "Obejrzane kontenery {count}"
     },
     "status": {
       "watching": "Oglądanie",

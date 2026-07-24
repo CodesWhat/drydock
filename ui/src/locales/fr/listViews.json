@@ -22,6 +22,10 @@
       "status": "État",
       "details": "Détails"
     },
+    "card": {
+      "time": "Heure",
+      "version": "Version"
+    },
     "detail": {
       "timestamp": "Horodatage",
       "event": "Événement",
@@ -50,8 +54,11 @@
       "closed": "Fermé",
       "update-available": "Mise à jour disponible",
       "update-applied": "Mise à jour appliquée",
+      "update-applied-dryrun": "Mise à jour prévisualisée (Dry Run)",
       "update-failed": "Échec de la mise à jour",
       "auto-update-blocked": "Mise à jour automatique bloquée",
+      "update-policy-override-set": "Substitution de la policy de mise à jour définie",
+      "update-policy-override-cleared": "Substitution de la policy de mise à jour effacée",
       "auto-rollback": "Rollback automatique",
       "rollback": "Rollback",
       "preview": "Aperçu",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "Agent reconnecté",
         "description": "Quand un agent distant se reconnecte après une perte de connexion"
+      },
+      "container-unhealthy": {
+        "name": "Conteneur défaillant",
+        "description": "Lorsque le healthcheck Docker d'un conteneur passe à l'état « unhealthy »"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "page Triggers",
       "helpTextImplicitAll": "Laissez vide pour envoyer cet événement à tous les triggers de notification. Sélectionner un trigger transforme cette règle en allow-list.",
       "helpTextExplicit": "Seuls les triggers sélectionnés recevront cet événement. Laissez vide pour supprimer cet événement pour tous les triggers.",
+      "bellLabel": "Cloche de notification",
+      "bellAriaLabel": "Cloche de notification",
+      "bellThresholdAriaLabel": "Seuil de gravité de la cloche",
+      "bellHelp": "Choisissez si cet événement apparaît dans la cloche de l'application et le niveau minimum de mise à jour à inclure.",
+      "thresholdAll": "Toutes les mises à jour",
+      "thresholdMajor": "Mises à jour majeures uniquement",
+      "thresholdMinor": "Mineures et majeures",
+      "thresholdPatch": "Correctifs, mineures et majeures",
+      "templatesLabel": "Modèles de message",
+      "templatesHelp": "Les substitutions ne s'appliquent qu'au trigger sélectionné. Les champs vides conservent leurs valeurs par défaut configurées. Les variables utilisent des chemins sûrs tels que container.name et containers.length.",
+      "templateTriggerAriaLabel": "Trigger du modèle",
+      "simpleTitle": "Titre simple",
+      "simpleTitleAriaLabel": "Titre de notification simple",
+      "simpleBody": "Corps simple",
+      "simpleBodyAriaLabel": "Corps de notification simple",
+      "batchTitle": "Titre de lot",
+      "batchTitleAriaLabel": "Titre de notification de lot",
+      "preview": "Aperçu",
+      "previewAriaLabel": "Aperçu du modèle de notification",
+      "previewing": "Aperçu en cours...",
+      "previewError": "Échec de l'aperçu du modèle de notification",
+      "resetTemplate": "Réinitialiser le modèle",
       "saving": "Enregistrement...",
       "saveChanges": "Enregistrer les modifications",
       "reset": "Réinitialiser",
@@ -158,7 +191,8 @@
       "critical": "Critique",
       "high": "Élevée",
       "medium": "Moyenne",
-      "low": "Faible"
+      "low": "Faible",
+      "clean": "Propre"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "Annuler"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "Récupérer {provider}",
+      "warmAsset": "Préchauffer {provider}",
+      "assetOperationFailed": "Échec de l'opération sur l'asset du scanner",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "Type",
       "status": "État",
       "url": "URL"
+    },
+    "card": {
+      "auth": "Authentification",
+      "status": "État"
     },
     "badge": {
       "private": "Privée",
@@ -278,6 +320,12 @@
       "containers": "Conteneurs",
       "lastSeen": "Dernière activité"
     },
+    "card": {
+      "containers": "Conteneurs",
+      "running": "En cours",
+      "images": "Images",
+      "lastSeen": "Dernière activité"
+    },
     "detail": {
       "containers": "Conteneurs",
       "running": "en cours",
@@ -302,6 +350,10 @@
     "status": {
       "active": "Actif",
       "inactive": "Inactif"
+    },
+    "dryRun": {
+      "badge": "Mode dry-run",
+      "tooltip": "Les mises à jour sont uniquement prévisualisées — les conteneurs ne seront pas remplacés. Définissez DRYRUN=false pour les appliquer."
     },
     "test": {
       "testing": "Test...",
@@ -335,6 +387,12 @@
       "schedule": "Planification",
       "nextRun": "Prochaine exécution",
       "lastRun": "Dernière exécution"
+    },
+    "card": {
+      "containers": "Conteneurs",
+      "nextRun": "Prochaine exécution",
+      "lastRun": "Dernière exécution",
+      "containersWatched": "{count} conteneurs surveillés"
     },
     "status": {
       "watching": "Surveillance",

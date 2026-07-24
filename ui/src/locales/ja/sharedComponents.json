@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "列の表示切り替え",
+      "heading": "列",
+      "reset": "リセット",
+      "hiddenBadgeTooltip": "{count} 列を非表示中",
+      "autoHiddenAnnotation": "{column} — 幅に合わせて非表示",
+      "autoHiddenBadgeTooltip": "画面に合わせて {columns} を非表示にしています。"
+    },
     "confirmDialog": {
       "cancel": "キャンセル",
       "confirm": "確認"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "アクション",
-      "resizeColumn": "列幅を変更"
+      "resizeColumn": "列幅を変更",
+      "sortBy": "並び替え",
+      "sortDirectionAscending": "並び順：昇順",
+      "sortDirectionDescending": "並び順：降順"
     },
     "detailPanel": {
       "openFullPage": "フルページ表示を開く",

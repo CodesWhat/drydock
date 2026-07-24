@@ -22,6 +22,10 @@
       "status": "Durum",
       "details": "Ayrıntılar"
     },
+    "card": {
+      "time": "Zaman",
+      "version": "Sürüm"
+    },
     "detail": {
       "timestamp": "Zaman damgası",
       "event": "Etkinlik",
@@ -50,8 +54,11 @@
       "closed": "Kapatıldı",
       "update-available": "Güncelleme Mevcut",
       "update-applied": "Güncelleme Uygulandı",
+      "update-applied-dryrun": "Güncelleme önizlendi (deneme)",
       "update-failed": "Güncelleme Başarısız",
       "auto-update-blocked": "Otomatik Güncelleme Engellendi",
+      "update-policy-override-set": "Güncelleme politikası geçersiz kılma ayarlandı",
+      "update-policy-override-cleared": "Güncelleme politikası geçersiz kılma temizlendi",
       "auto-rollback": "Otomatik Geri Alma",
       "rollback": "Geri Al",
       "preview": "Önizleme",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "Aracı Yeniden Bağlandı",
         "description": "Uzak aracı bağlantısını kaybettikten sonra yeniden bağlandığında"
+      },
+      "container-unhealthy": {
+        "name": "Container sağlıksız",
+        "description": "Bir container'ın Docker sağlık kontrolü \"unhealthy\" durumuna girdiğinde"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "Tetikleyiciler sayfası",
       "helpTextImplicitAll": "Bu etkinliği tüm bildirim tetikleyicilerine göndermek için bunu boş bırakın. Herhangi bir tetikleyicinin seçilmesi bu kuralı izin verilenler listesine dönüştürür.",
       "helpTextExplicit": "Bu etkinliği yalnızca seçilen tetikleyiciler alacaktır. Bu etkinliği tüm tetikleyiciler için bastırmak amacıyla alanı boş bırakın.",
+      "bellLabel": "Bildirim zili",
+      "bellAriaLabel": "Bildirim zili",
+      "bellThresholdAriaLabel": "Zil önem eşiği",
+      "bellHelp": "Bu olayın uygulama içi zilde görünüp görünmeyeceğini ve dahil edilecek minimum güncelleme düzeyini seçin.",
+      "thresholdAll": "Tüm güncellemeler",
+      "thresholdMajor": "Yalnızca major güncellemeler",
+      "thresholdMinor": "Minor ve major",
+      "thresholdPatch": "Patch, minor ve major",
+      "templatesLabel": "Mesaj şablonları",
+      "templatesHelp": "Geçersiz kılmalar yalnızca seçilen tetikleyici için geçerlidir. Boş alanlar yapılandırılmış varsayılanlarını korur. Değişkenler container.name ve containers.length gibi güvenli yollar kullanır.",
+      "templateTriggerAriaLabel": "Şablon tetikleyicisi",
+      "simpleTitle": "Basit başlık",
+      "simpleTitleAriaLabel": "Basit bildirim başlığı",
+      "simpleBody": "Basit gövde",
+      "simpleBodyAriaLabel": "Basit bildirim gövdesi",
+      "batchTitle": "Toplu başlık",
+      "batchTitleAriaLabel": "Toplu bildirim başlığı",
+      "preview": "Önizleme",
+      "previewAriaLabel": "Bildirim şablonunu önizle",
+      "previewing": "Önizleniyor...",
+      "previewError": "Bildirim şablonu önizlemesi başarısız oldu",
+      "resetTemplate": "Şablonu sıfırla",
       "saving": "Kaydediliyor...",
       "saveChanges": "Değişiklikleri kaydet",
       "reset": "Sıfırla",
@@ -158,7 +191,8 @@
       "critical": "Kritik",
       "high": "Yüksek",
       "medium": "Orta",
-      "low": "Düşük"
+      "low": "Düşük",
+      "clean": "Temiz"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "İptal"
     },
     "runtimeTools": {
+      "scanner": "Tarayıcı",
+      "pullAsset": "{provider} çek",
+      "warmAsset": "{provider} ısıt",
+      "assetOperationFailed": "Tarayıcı varlık işlemi başarısız oldu",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "Tür",
       "status": "Durum",
       "url": "URL'si"
+    },
+    "card": {
+      "auth": "Kimlik doğrulama",
+      "status": "Durum"
     },
     "badge": {
       "private": "Özel",
@@ -278,6 +320,12 @@
       "containers": "Konteynerler",
       "lastSeen": "Son Görülme"
     },
+    "card": {
+      "containers": "Konteynerler",
+      "running": "Çalışıyor",
+      "images": "Görseller",
+      "lastSeen": "Son görülme"
+    },
     "detail": {
       "containers": "Konteynerler",
       "running": "koşu",
@@ -302,6 +350,10 @@
     "status": {
       "active": "Aktif",
       "inactive": "Etkin değil"
+    },
+    "dryRun": {
+      "badge": "Deneme modu (dry-run)",
+      "tooltip": "Güncellemeler yalnızca önizlenir — container'lar değiştirilmeyecek. Uygulamak için DRYRUN=false ayarlayın."
     },
     "test": {
       "testing": "Test ediliyor...",
@@ -335,6 +387,12 @@
       "schedule": "Program",
       "nextRun": "Sonraki Çalıştırma",
       "lastRun": "Son Çalıştırma"
+    },
+    "card": {
+      "containers": "Konteynerler",
+      "nextRun": "Sonraki çalıştırma",
+      "lastRun": "Son çalıştırma",
+      "containersWatched": "{count} kapsayıcıları izlendi"
     },
     "status": {
       "watching": "izliyorum",
