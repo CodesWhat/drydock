@@ -53,6 +53,7 @@ async function loadEntryPoint({
   const agentManagerInit = vi.fn(async () => undefined);
   const apiInit = vi.fn(async () => undefined);
   const securitySchedulerInit = vi.fn();
+  const maturitySchedulerInit = vi.fn();
   const warmTrivyDatabase = vi.fn(async () => 'ready');
   const startOutboxWorker = vi.fn();
   const recoverQueuedOperationsOnStartup = vi.fn();
@@ -80,6 +81,7 @@ async function loadEntryPoint({
   vi.doMock('./agent/index.js', () => ({ init: agentManagerInit }));
   vi.doMock('./api/index.js', () => ({ init: apiInit }));
   vi.doMock('./security/scheduler.js', () => ({ init: securitySchedulerInit }));
+  vi.doMock('./maturity/scheduler.js', () => ({ init: maturitySchedulerInit }));
   vi.doMock('./security/scan.js', () => ({ warmTrivyDatabase }));
   vi.doMock('./notifications/outbox-worker.js', () => ({
     startOutboxWorker: vi.fn((options: { deliver: typeof deliverOutboxEntry }) => {
@@ -107,6 +109,7 @@ async function loadEntryPoint({
     agentManagerInit,
     apiInit,
     securitySchedulerInit,
+    maturitySchedulerInit,
     warmTrivyDatabase,
     startOutboxWorker,
     recoverQueuedOperationsOnStartup,
@@ -141,6 +144,7 @@ describe('entrypoint', () => {
     expect(harness.registryInit).not.toHaveBeenCalled();
     expect(harness.apiInit).not.toHaveBeenCalled();
     expect(harness.securitySchedulerInit).not.toHaveBeenCalled();
+    expect(harness.maturitySchedulerInit).not.toHaveBeenCalled();
     expect(harness.warmTrivyDatabase).not.toHaveBeenCalled();
     expect(harness.startOutboxWorker).not.toHaveBeenCalled();
     expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
@@ -161,6 +165,7 @@ describe('entrypoint', () => {
     expect(harness.registryInit).not.toHaveBeenCalled();
     expect(harness.apiInit).not.toHaveBeenCalled();
     expect(harness.securitySchedulerInit).not.toHaveBeenCalled();
+    expect(harness.maturitySchedulerInit).not.toHaveBeenCalled();
     expect(harness.warmTrivyDatabase).not.toHaveBeenCalled();
     expect(harness.startOutboxWorker).not.toHaveBeenCalled();
     expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
@@ -185,6 +190,7 @@ describe('entrypoint', () => {
     expect(harness.agentManagerInit).toHaveBeenCalledOnce();
     expect(harness.apiInit).toHaveBeenCalledOnce();
     expect(harness.securitySchedulerInit).toHaveBeenCalledOnce();
+    expect(harness.maturitySchedulerInit).toHaveBeenCalledOnce();
     expect(harness.warmTrivyDatabase).toHaveBeenCalledOnce();
     expect(harness.startOutboxWorker).toHaveBeenCalledOnce();
     expect(harness.recoverQueuedOperationsOnStartup).toHaveBeenCalledOnce();

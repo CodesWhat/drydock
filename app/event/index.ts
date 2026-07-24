@@ -193,6 +193,14 @@ export interface ContainerHealthTransitionEventPayload {
   health: 'unhealthy';
 }
 
+export interface MaturityGateClearedEventPayload {
+  container: Container;
+  clearedAt: string;
+  pendingSince?: string;
+  minAgeDays?: number;
+  clockSource?: string;
+}
+
 export interface AgentConnectedEventPayload {
   agentName: string;
   reconnected: boolean;
@@ -241,6 +249,10 @@ const securityAlertHandlers = new Map<number, OrderedEventHandler<SecurityAlertE
 const containerHealthTransitionHandlers = new Map<
   number,
   OrderedEventHandler<ContainerHealthTransitionEventPayload>
+>();
+const maturityGateClearedHandlers = new Map<
+  number,
+  OrderedEventHandler<MaturityGateClearedEventPayload>
 >();
 const securityScanCycleCompleteHandlers = new Map<
   number,
@@ -503,6 +515,27 @@ export function registerContainerHealthTransition(
 }
 
 /**
+ * Emit MaturityGateCleared event.
+ * @param payload
+ */
+export async function emitMaturityGateCleared(
+  payload: MaturityGateClearedEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(maturityGateClearedHandlers, payload);
+}
+
+/**
+ * Register to MaturityGateCleared event.
+ * @param handler
+ */
+export function registerMaturityGateCleared(
+  handler: OrderedEventHandlerFn<MaturityGateClearedEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(maturityGateClearedHandlers, handler, options);
+}
+
+/**
  * Emit SecurityScanCycleComplete event. Fired after a scan cycle finishes so digest-mode
  * triggers can flush any buffered per-container alerts into a single summary notification.
  * @param payload
@@ -716,6 +749,7 @@ registerAuditLogSubscriptions({
   registerContainerUpdateFailed,
   registerSecurityAlert,
   registerContainerHealthTransition,
+  registerMaturityGateCleared,
   registerAgentDisconnected,
   registerContainerAdded,
   registerContainerUpdated,
@@ -742,6 +776,7 @@ export function clearAllListenersForTests(): void {
   updateOperationChangedHandlers.clear();
   securityAlertHandlers.clear();
   containerHealthTransitionHandlers.clear();
+  maturityGateClearedHandlers.clear();
   securityScanCycleCompleteHandlers.clear();
   agentConnectedHandlers.clear();
   agentDisconnectedHandlers.clear();

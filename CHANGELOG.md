@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Maturity-cleared notification** ([Discussion #587](https://github.com/CodesWhat/drydock/discussions/587)). When an update previously withheld by the maturity gate (`maturityMode: mature`) becomes applicable, drydock now fires a dedicated `maturity-cleared` notification instead of waiting for the next scheduled scan's generic `update-available` notification. A new background sweep (`DD_MATURITY_SWEEP_CRON`, default every 5 minutes) re-checks containers currently withheld by the gate and fires the moment each one's soak window elapses; the same check also runs at every watch-cycle scan. Delivery respects the same `THRESHOLD`, include/exclude, and `ONCE` dedup rules as `update-available`, and is deduplicated against it so the same update is never announced twice. Action triggers (Docker, Docker Compose, Command) are unaffected and keep applying updates on their normal scan cadence.
+
 ## [1.6.0-rc.5] — 2026-07-23
 
 ### Changed

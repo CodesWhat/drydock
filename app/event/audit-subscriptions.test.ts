@@ -11,6 +11,7 @@ import type {
   ContainerLifecycleEventPayload,
   ContainerUpdateAppliedEvent,
   ContainerUpdateFailedEventPayload,
+  MaturityGateClearedEventPayload,
   SecurityAlertEventPayload,
 } from './index.js';
 
@@ -42,6 +43,7 @@ function setupAuditSubscriptions(): {
   containerUpdateAppliedHandler: OrderedEventHandlerFn<ContainerUpdateAppliedEvent>;
   securityAlertHandler: OrderedEventHandlerFn<SecurityAlertEventPayload>;
   containerHealthTransitionHandler: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
+  maturityGateClearedHandler: OrderedEventHandlerFn<MaturityGateClearedEventPayload>;
   agentDisconnectedHandler: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
   containerAddedHandler: (payload: ContainerLifecycleEventPayload) => void;
   containerUpdatedHandler: (payload: ContainerLifecycleEventPayload) => void;
@@ -52,6 +54,7 @@ function setupAuditSubscriptions(): {
     containerUpdateApplied?: OrderedEventHandlerFn<ContainerUpdateAppliedEvent>;
     securityAlert?: OrderedEventHandlerFn<SecurityAlertEventPayload>;
     containerHealthTransition?: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
+    maturityGateCleared?: OrderedEventHandlerFn<MaturityGateClearedEventPayload>;
     agentDisconnected?: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
     containerAdded?: (payload: ContainerLifecycleEventPayload) => void;
     containerUpdated?: (payload: ContainerLifecycleEventPayload) => void;
@@ -87,6 +90,9 @@ function setupAuditSubscriptions(): {
         handlers.containerHealthTransition = handler;
       },
     ),
+    registerMaturityGateCleared: registerOrdered<MaturityGateClearedEventPayload>((handler) => {
+      handlers.maturityGateCleared = handler;
+    }),
     registerAgentDisconnected: registerOrdered<AgentDisconnectedEventPayload>((handler) => {
       handlers.agentDisconnected = handler;
     }),
@@ -108,6 +114,7 @@ function setupAuditSubscriptions(): {
     !handlers.containerUpdateApplied ||
     !handlers.securityAlert ||
     !handlers.containerHealthTransition ||
+    !handlers.maturityGateCleared ||
     !handlers.agentDisconnected ||
     !handlers.containerAdded ||
     !handlers.containerUpdated ||
@@ -121,6 +128,7 @@ function setupAuditSubscriptions(): {
     containerUpdateAppliedHandler: handlers.containerUpdateApplied,
     securityAlertHandler: handlers.securityAlert,
     containerHealthTransitionHandler: handlers.containerHealthTransition,
+    maturityGateClearedHandler: handlers.maturityGateCleared,
     agentDisconnectedHandler: handlers.agentDisconnected,
     containerAddedHandler: handlers.containerAdded,
     containerUpdatedHandler: handlers.containerUpdated,
@@ -573,6 +581,180 @@ describe('audit-subscriptions dedupe windows', () => {
         details: '(was healthy)',
       }),
     );
+  });
+
+  function makeMaturityGateClearedPayload(
+    overrides: Partial<MaturityGateClearedEventPayload> = {},
+  ): MaturityGateClearedEventPayload {
+    return {
+      container: {
+        id: 'edge-a-web',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'edge-a',
+        image: { name: 'library/nginx' },
+      },
+      clearedAt: '2026-01-01T00:00:00.000Z',
+      ...overrides,
+    } as unknown as MaturityGateClearedEventPayload;
+  }
+
+  test('records maturity gate cleared audits, deduplicates per container, and expires after 5 minutes', async () => {
+    const { maturityGateClearedHandler } = setupAuditSubscriptions();
+    await maturityGateClearedHandler(makeMaturityGateClearedPayload({ minAgeDays: 7 }));
+
+    expect(mockInsertAudit).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'maturity-cleared',
+        status: 'info',
+        containerName: 'web',
+        containerImage: 'library/nginx',
+        containerIdentityKey: 'edge-a::docker::web',
+        details: 'maturity gate cleared after 7d',
+      }),
+    );
+    expect(mockInc).toHaveBeenLastCalledWith({ action: 'maturity-cleared' });
+
+    vi.advanceTimersByTime(5 * 60 * 1000 - 1);
+    await maturityGateClearedHandler(makeMaturityGateClearedPayload({ minAgeDays: 7 }));
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({
+        container: {
+          id: 'edge-a-api',
+          name: 'api',
+          watcher: 'docker',
+          agent: 'edge-a',
+        } as unknown as MaturityGateClearedEventPayload['container'],
+      }),
+    );
+    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+
+    vi.advanceTimersByTime(1);
+    await maturityGateClearedHandler(makeMaturityGateClearedPayload({ minAgeDays: 7 }));
+    expect(mockInsertAudit).toHaveBeenCalledTimes(3);
+    expect(mockInc).toHaveBeenCalledTimes(3);
+  });
+
+  test('scopes maturity gate cleared dedupe by agent and watcher', async () => {
+    const { maturityGateClearedHandler } = setupAuditSubscriptions();
+
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({
+        container: {
+          id: 'edge-a-web',
+          name: 'web',
+          watcher: 'docker',
+          agent: 'edge-a',
+        } as unknown as MaturityGateClearedEventPayload['container'],
+      }),
+    );
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({
+        container: {
+          id: 'edge-b-web',
+          name: 'web',
+          watcher: 'docker',
+          agent: 'edge-b',
+        } as unknown as MaturityGateClearedEventPayload['container'],
+      }),
+    );
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({
+        container: {
+          id: 'edge-a-podman-web',
+          name: 'web',
+          watcher: 'podman',
+          agent: 'edge-a',
+        } as unknown as MaturityGateClearedEventPayload['container'],
+      }),
+    );
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({
+        container: {
+          id: 'edge-a-web-repeated',
+          name: 'web',
+          watcher: 'docker',
+          agent: 'edge-a',
+        } as unknown as MaturityGateClearedEventPayload['container'],
+      }),
+    );
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(3);
+    expect(mockInc).toHaveBeenCalledTimes(3);
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ containerIdentityKey: 'edge-a::docker::web' }),
+    );
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ containerIdentityKey: 'edge-b::docker::web' }),
+    );
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ containerIdentityKey: 'edge-a::podman::web' }),
+    );
+  });
+
+  test('omits maturity gate cleared details when minAgeDays is not provided', async () => {
+    const { maturityGateClearedHandler } = setupAuditSubscriptions();
+
+    await maturityGateClearedHandler(makeMaturityGateClearedPayload({ minAgeDays: undefined }));
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'maturity-cleared',
+        details: undefined,
+      }),
+    );
+  });
+
+  test('falls back to the container name for the maturity gate cleared dedupe key without a stable identity', async () => {
+    const { maturityGateClearedHandler } = setupAuditSubscriptions();
+
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({
+        container: { name: 'web' } as unknown as MaturityGateClearedEventPayload['container'],
+      }),
+    );
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerName: 'web',
+      }),
+    );
+    expect(mockInsertAudit.mock.calls[0][0]).not.toHaveProperty('containerIdentityKey');
+  });
+
+  test('records distinct maturity gate cleared audits within the dedupe window when pendingSince differs', async () => {
+    const { maturityGateClearedHandler } = setupAuditSubscriptions();
+
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({ pendingSince: '2025-12-30T00:00:00.000Z' }),
+    );
+    vi.advanceTimersByTime(1);
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({ pendingSince: '2025-12-31T00:00:00.000Z' }),
+    );
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    expect(mockInc).toHaveBeenCalledTimes(2);
+  });
+
+  test('deduplicates maturity gate cleared audits with an identical pendingSince within the window', async () => {
+    const { maturityGateClearedHandler } = setupAuditSubscriptions();
+
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({ pendingSince: '2025-12-30T00:00:00.000Z' }),
+    );
+    vi.advanceTimersByTime(5 * 60 * 1000 - 1);
+    await maturityGateClearedHandler(
+      makeMaturityGateClearedPayload({ pendingSince: '2025-12-30T00:00:00.000Z' }),
+    );
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledTimes(1);
   });
 
   test('deduplicates agent disconnects that repeat before 60 seconds', async () => {

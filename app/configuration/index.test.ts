@@ -633,6 +633,35 @@ test('getPrometheusConfiguration should be disabled when overridden', async () =
   });
 });
 
+test('getMaturitySweepConfiguration should default to */5 * * * *', async () => {
+  delete configuration.ddEnvVars.DD_MATURITY_SWEEP_CRON;
+  expect(configuration.getMaturitySweepConfiguration()).toStrictEqual({
+    cron: '*/5 * * * *',
+  });
+});
+
+test('getMaturitySweepConfiguration should surface DD_MATURITY_SWEEP_CRON as a lowercase cron key', async () => {
+  configuration.ddEnvVars.DD_MATURITY_SWEEP_CRON = '0 */6 * * *';
+  expect(configuration.getMaturitySweepConfiguration()).toStrictEqual({
+    cron: '0 */6 * * *',
+  });
+  delete configuration.ddEnvVars.DD_MATURITY_SWEEP_CRON;
+});
+
+test('getMaturitySweepConfiguration should allow disabling via an empty cron expression', async () => {
+  configuration.ddEnvVars.DD_MATURITY_SWEEP_CRON = '';
+  expect(configuration.getMaturitySweepConfiguration()).toStrictEqual({
+    cron: '',
+  });
+  delete configuration.ddEnvVars.DD_MATURITY_SWEEP_CRON;
+});
+
+test('getMaturitySweepConfiguration should throw when the cron value is invalid', async () => {
+  configuration.ddEnvVars.DD_MATURITY_SWEEP_CRON_EXTRA = 'x';
+  expect(() => configuration.getMaturitySweepConfiguration()).toThrow();
+  delete configuration.ddEnvVars.DD_MATURITY_SWEEP_CRON_EXTRA;
+});
+
 test('replaceSecrets must read secret in file', async () => {
   const vars = {
     DD_SERVER_X__FILE: `${TEST_DIRECTORY}/secret.txt`,

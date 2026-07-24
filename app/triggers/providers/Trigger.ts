@@ -83,7 +83,8 @@ type NotificationRuleId =
   | 'security-alert'
   | 'agent-disconnect'
   | 'agent-reconnect'
-  | 'container-unhealthy';
+  | 'container-unhealthy'
+  | 'maturity-cleared';
 
 const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
   'update-available',
@@ -93,6 +94,7 @@ const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
   'agent-disconnect',
   'agent-reconnect',
   'container-unhealthy',
+  'maturity-cleared',
 ]);
 
 type ContainerUpdateFailedPayload = event.ContainerUpdateFailedEventPayload;
@@ -160,13 +162,21 @@ interface ContainerUnhealthyNotificationEvent {
   previousHealth?: string;
 }
 
+interface MaturityGateClearedNotificationEvent {
+  kind: 'maturity-cleared';
+  pendingSince?: string;
+  minAgeDays?: number;
+  clockSource?: string;
+}
+
 type TriggerNotificationEvent =
   | UpdateAppliedNotificationEvent
   | UpdateFailedNotificationEvent
   | SecurityAlertNotificationEvent
   | AgentDisconnectedNotificationEvent
   | AgentReconnectedNotificationEvent
-  | ContainerUnhealthyNotificationEvent;
+  | ContainerUnhealthyNotificationEvent
+  | MaturityGateClearedNotificationEvent;
 
 type TriggerContainer = Container & {
   notificationEvent?: TriggerNotificationEvent;
@@ -312,6 +322,8 @@ const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('
 const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
 const CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} is unhealthy`;
 const CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} has entered the unhealthy state${buildLiteralTemplateExpression('event.previousHealth ? " (was " + event.previousHealth + ")" : ""')}`;
+const MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update ready for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
+const MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} can now be updated to ${buildLiteralTemplateExpression('container.result.tag ? container.result.tag : container.result.digest')}: the maturity period has passed${buildLiteralTemplateExpression('event.minAgeDays ? " (" + event.minAgeDays + " day minimum)" : ""')}`;
 const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
 > = {
@@ -321,6 +333,7 @@ const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
   'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE,
+  'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE,
 };
 const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
@@ -331,6 +344,7 @@ const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE,
   'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE,
+  'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE,
 };
 const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
@@ -339,6 +353,7 @@ const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   'update-failed': `${buildLiteralTemplateExpression('containers.length')} updates failed`,
   'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
   'container-unhealthy': `${buildLiteralTemplateExpression('containers.length')} containers became unhealthy`,
+  'maturity-cleared': `${buildLiteralTemplateExpression('containers.length')} updates ready to apply`,
 };
 
 /** Per-container row used in the security digest body template. */
@@ -514,6 +529,17 @@ function getContainerUnhealthyNotificationEvent(
   };
 }
 
+function getMaturityGateClearedNotificationEvent(
+  notificationEvent: unknown,
+): MaturityGateClearedNotificationEvent {
+  return {
+    kind: 'maturity-cleared',
+    pendingSince: getNonEmptyString(notificationEvent, 'pendingSince'),
+    minAgeDays: getFiniteNumber(notificationEvent, 'minAgeDays'),
+    clockSource: getNonEmptyString(notificationEvent, 'clockSource'),
+  };
+}
+
 function getAgentNotificationEvent(
   kind: unknown,
   notificationEvent: unknown,
@@ -561,6 +587,10 @@ export function getNotificationEvent(
 
   if (kind === 'container-unhealthy') {
     return getContainerUnhealthyNotificationEvent(notificationEvent);
+  }
+
+  if (kind === 'maturity-cleared') {
+    return getMaturityGateClearedNotificationEvent(notificationEvent);
   }
 
   return getAgentNotificationEvent(kind, notificationEvent);
@@ -637,6 +667,7 @@ class Trigger<
   private unregisterAgentConnected?: () => void;
   private unregisterAgentDisconnected?: () => void;
   private unregisterContainerHealthTransition?: () => void;
+  private unregisterMaturityGateCleared?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
   /**
@@ -947,6 +978,9 @@ class Trigger<
 
     try {
       await this.triggerBatch(containers);
+      for (const container of containers) {
+        this.recordEventDeliverySuccess(ruleId, container);
+      }
     } catch (e: unknown) {
       const errorMessage = Trigger.getErrorMessage(e);
       const firstContainer = containers[0];
@@ -1015,11 +1049,27 @@ class Trigger<
     );
   }
 
+  /**
+   * Called once a dispatch has actually been delivered (optimistic
+   * dispatch's `this.trigger()` resolved, or a batch flush's
+   * `this.triggerBatch()` resolved) — never on a merely-accepted/queued
+   * dispatch. `maturity-cleared`'s symmetric dedup recording must wait for
+   * this signal so a failed delivery does not suppress the generic
+   * `update-available` retry on the next scan.
+   */
+  private recordEventDeliverySuccess(ruleId: NotificationRuleId, container: Container) {
+    if (ruleId !== 'maturity-cleared') {
+      return;
+    }
+    this.recordNotifiedForResult(container, 'maturity-cleared');
+    this.recordNotifiedForResult(container, 'update-available');
+  }
+
   private async dispatchContainerForEvent(
     ruleId: NotificationRuleId,
     container: TriggerContainer | undefined,
     options: EventDispatchOptions = {},
-  ) {
+  ): Promise<boolean> {
     // Update-action triggers (docker, dockercompose) implement `trigger()` as
     // the full pull-scan-recreate update lifecycle. Lifecycle handlers route
     // here for notification dispatch; calling `trigger()` from this path
@@ -1035,22 +1085,22 @@ class Trigger<
       this.log.debug(
         `Skipping ${ruleId} dispatch for update-action trigger (lifecycle events do not invoke update lifecycle)`,
       );
-      return;
+      return false;
     }
 
     if (!this.isTriggerEnabledForRule(ruleId, options)) {
-      return;
+      return false;
     }
 
     if (!container) {
       this.log.debug(`No container found for ${ruleId} event => ignore`);
-      return;
+      return false;
     }
 
     const threshold = (this.configuration.threshold ?? 'all').toLowerCase();
     if (!options.skipThreshold && !Trigger.isThresholdReached(container, threshold)) {
       this.log.debug(`Threshold not reached for ${ruleId} event => ignore`);
-      return;
+      return false;
     }
 
     const mustTriggerDecision = this.getMustTriggerDecision(container);
@@ -1058,7 +1108,7 @@ class Trigger<
       this.log.debug(
         `Trigger conditions not met for ${ruleId} event => ignore (${mustTriggerDecision.reason})`,
       );
-      return;
+      return false;
     }
 
     const notificationEvent = getNotificationEvent(container);
@@ -1069,9 +1119,10 @@ class Trigger<
       this.shouldDispatchNotificationEventInBatch(notificationEvent);
     if (shouldUseBatchMode) {
       this.queueEventBatchDispatch(ruleId, container);
-      return;
+      return true;
     }
     this.dispatchToTriggerOptimistically(ruleId, container);
+    return true;
   }
 
   /**
@@ -1086,21 +1137,26 @@ class Trigger<
     const triggerId = this.getId();
     void Promise.resolve()
       .then(() => this.trigger(container))
-      .catch((err: unknown) => {
-        const errorMessage = Trigger.getErrorMessage(err);
-        if (this.shouldSuppressAutoTriggerError(ruleId, container, errorMessage)) {
-          this.log.debug(`Suppressed repeated error handling ${ruleId} event (${errorMessage})`);
-        } else {
-          this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
-        }
-        this.log.debug(err);
-        enqueueOutboxEntry({
-          eventName: ruleId,
-          payload: { container },
-          triggerId,
-          containerId: container.id,
-        });
-      });
+      .then(
+        () => {
+          this.recordEventDeliverySuccess(ruleId, container);
+        },
+        (err: unknown) => {
+          const errorMessage = Trigger.getErrorMessage(err);
+          if (this.shouldSuppressAutoTriggerError(ruleId, container, errorMessage)) {
+            this.log.debug(`Suppressed repeated error handling ${ruleId} event (${errorMessage})`);
+          } else {
+            this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
+          }
+          this.log.debug(err);
+          enqueueOutboxEntry({
+            eventName: ruleId,
+            payload: { container },
+            triggerId,
+            containerId: container.id,
+          });
+        },
+      );
   }
 
   /**
@@ -1337,6 +1393,56 @@ class Trigger<
       allowAllWhenNoTriggers: true,
       defaultWhenRuleMissing: true,
       skipThreshold: true,
+    });
+  }
+
+  /**
+   * Handle the maturity-cleared event: a previously maturity-suppressed
+   * update has become applicable. Gating mirrors `update-available` (auto
+   * mode via the registration gate, threshold, include/exclude + agent
+   * filters, rollback exclusion, `once`) rather than the lifecycle-style
+   * skipThreshold pattern — this notification is a specialization of "update
+   * available", so a trigger that would never have announced this update
+   * must not announce its maturity either.
+   *
+   * Symmetric dedup: records notification-history hashes for BOTH
+   * `maturity-cleared` and `update-available` once delivery is actually
+   * confirmed (`recordEventDeliverySuccess`, invoked from the optimistic
+   * dispatch/batch-flush completion paths — never optimistically on mere
+   * dispatch acceptance), so the generic update-available dispatch on the
+   * next scan does not double-notify a successfully-delivered update, but a
+   * failed delivery still gets a natural retry. Before firing, skips if
+   * either kind was already recorded for the same result hash — covers the
+   * race where the generic notification beat us (e.g. an agent-container
+   * scan landing before the sweep).
+   */
+  async handleMaturityGateClearedEvent(payload: event.MaturityGateClearedEventPayload) {
+    const { container } = payload;
+
+    if (
+      container &&
+      this.configuration.once &&
+      (this.hasAlreadyNotifiedForResult(container, 'maturity-cleared') ||
+        this.hasAlreadyNotifiedForResult(container, 'update-available'))
+    ) {
+      this.log.debug(
+        `Skipping maturity-cleared notification for ${fullName(container)} (already notified)`,
+      );
+      return;
+    }
+
+    const notificationContainer = container
+      ? withNotificationEvent(container, {
+          kind: 'maturity-cleared',
+          pendingSince: payload.pendingSince,
+          minAgeDays: payload.minAgeDays,
+          clockSource: payload.clockSource,
+        })
+      : undefined;
+
+    await this.dispatchContainerForEvent('maturity-cleared', notificationContainer, {
+      allowAllWhenNoTriggers: true,
+      defaultWhenRuleMissing: true,
     });
   }
 
@@ -2586,6 +2692,14 @@ class Trigger<
         this.log.info(`Digest scheduled (${digestCronExpression})`);
       }
 
+      this.unregisterMaturityGateCleared = event.registerMaturityGateCleared(
+        async (payload) => this.handleMaturityGateClearedEvent(payload),
+        {
+          id: this.getId(),
+          order: this.configuration.order,
+        },
+      );
+
       this.seedNotificationHistoryFromStore();
       this.seedRecentApplicationSuppressionFromStore();
     } else {
@@ -2684,6 +2798,9 @@ class Trigger<
 
     this.unregisterContainerHealthTransition?.();
     this.unregisterContainerHealthTransition = undefined;
+
+    this.unregisterMaturityGateCleared?.();
+    this.unregisterMaturityGateCleared = undefined;
 
     this.unregisterContainerUpdateAppliedForResolution?.();
     this.unregisterContainerUpdateAppliedForResolution = undefined;
@@ -3106,7 +3223,9 @@ class Trigger<
                 ? { kind: ruleId, agentName: 'preview-agent' }
                 : ruleId === 'container-unhealthy'
                   ? { kind: ruleId, health: 'unhealthy', previousHealth: 'healthy' }
-                  : { kind: ruleId };
+                  : ruleId === 'maturity-cleared'
+                    ? { kind: ruleId, pendingSince: '2026-01-01T00:00:00.000Z', minAgeDays: 7 }
+                    : { kind: ruleId };
 
     return {
       id: 'drydock-preview',

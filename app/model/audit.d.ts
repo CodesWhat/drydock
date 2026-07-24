@@ -18,6 +18,7 @@ export interface AuditEntry {
     | 'scanner-asset-warm-failed'
     | 'agent-disconnect'
     | 'container-unhealthy'
+    | 'maturity-cleared'
     | 'container-added'
     | 'container-removed'
     | 'rollback'
