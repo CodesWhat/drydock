@@ -26,6 +26,7 @@ import {
 } from '../event/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import { maybeEmitMaturityGateCleared } from '../maturity/gate-watch.js';
 import {
   type Container,
   type ContainerReport,
@@ -766,6 +767,7 @@ export class AgentClient {
   async processContainer(container: Container): Promise<ContainerReport> {
     const containerReport = await this.buildContainerReport(container);
 
+    await maybeEmitMaturityGateCleared(containerReport.container);
     // Emit report so Triggers can fire if changed
     await emitContainerReport(containerReport);
     return containerReport;

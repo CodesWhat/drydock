@@ -1724,6 +1724,88 @@ test('container unhealthy batch title uses its dedicated template', () => {
   ).toBe('2 containers became unhealthy');
 });
 
+test('getNotificationEvent preserves maturity-cleared metadata', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'maturity-cleared',
+        pendingSince: '2026-01-01T00:00:00.000Z',
+        minAgeDays: 7,
+        clockSource: 'publishedAt',
+      },
+    } as any),
+  ).toEqual({
+    kind: 'maturity-cleared',
+    pendingSince: '2026-01-01T00:00:00.000Z',
+    minAgeDays: 7,
+    clockSource: 'publishedAt',
+  });
+});
+
+test('getNotificationEvent omits invalid maturity-cleared metadata', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'maturity-cleared',
+        pendingSince: '',
+        minAgeDays: 'not-a-number',
+        clockSource: 42,
+      },
+    } as any),
+  ).toEqual({
+    kind: 'maturity-cleared',
+    pendingSince: undefined,
+    minAgeDays: undefined,
+    clockSource: undefined,
+  });
+});
+
+test('maturity-cleared uses dedicated simple templates with tag, digest fallback, and minAgeDays', () => {
+  trigger.configuration.simpletitle = 'custom title';
+  trigger.configuration.simplebody = 'custom body';
+  const base = {
+    name: 'web',
+    watcher: 'local',
+    result: { tag: '2.0.0' },
+  };
+  expect(
+    trigger.renderSimpleTitle({
+      ...base,
+      notificationEvent: { kind: 'maturity-cleared', minAgeDays: 7 },
+    }),
+  ).toBe('Update ready for container web');
+  expect(
+    trigger.renderSimpleBody({
+      ...base,
+      notificationEvent: { kind: 'maturity-cleared', minAgeDays: 7 },
+    }),
+  ).toBe(
+    'Container web can now be updated to 2.0.0: the maturity period has passed (7 day minimum)',
+  );
+  expect(
+    trigger.renderSimpleBody({
+      ...base,
+      notificationEvent: { kind: 'maturity-cleared' },
+    }),
+  ).toBe('Container web can now be updated to 2.0.0: the maturity period has passed');
+  expect(
+    trigger.renderSimpleBody({
+      ...base,
+      result: { digest: 'sha256:abc' },
+      notificationEvent: { kind: 'maturity-cleared' },
+    }),
+  ).toBe('Container web can now be updated to sha256:abc: the maturity period has passed');
+});
+
+test('maturity-cleared batch title uses its dedicated template', () => {
+  expect(
+    trigger.renderBatchTitle([
+      { name: 'web', notificationEvent: { kind: 'maturity-cleared' } },
+      { name: 'api', notificationEvent: { kind: 'maturity-cleared' } },
+    ]),
+  ).toBe('2 updates ready to apply');
+});
+
 test('getNotificationEvent should return undefined when notification metadata is missing', () => {
   expect(getNotificationEvent({} as any)).toBeUndefined();
 });
@@ -1923,6 +2005,7 @@ test('previewNotificationTemplates supports every notification rule and rejects 
     'agent-disconnect',
     'agent-reconnect',
     'container-unhealthy',
+    'maturity-cleared',
   ];
 
   for (const ruleId of ruleIds) {
@@ -4254,6 +4337,278 @@ test('component lifecycle registers and unregisters container health transition 
 
   await trigger.deregisterComponent();
   expect(unregister).toHaveBeenCalledTimes(1);
+});
+
+describe('handleMaturityGateClearedEvent', () => {
+  const maturedContainer = {
+    id: 'mat-1',
+    watcher: 'local',
+    name: 'web',
+    labels: {},
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0', semverDiff: 'minor' },
+    result: { tag: '1.1.0' },
+  };
+
+  test('dispatches for a matured container and records both maturity-cleared and update-available hashes', async () => {
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleMaturityGateClearedEvent({
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+      pendingSince: '2026-01-01T00:00:00.000Z',
+      minAgeDays: 7,
+      clockSource: 'publishedAt',
+    });
+
+    expect(provider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationEvent: {
+          kind: 'maturity-cleared',
+          pendingSince: '2026-01-01T00:00:00.000Z',
+          minAgeDays: 7,
+          clockSource: 'publishedAt',
+        },
+      }),
+    );
+    // Dedup hashes are only recorded once optimistic dispatch's `.trigger()`
+    // call actually resolves; flush the queue before asserting on it.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'maturity-cleared'),
+    ).toBeDefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'update-available'),
+    ).toBeDefined();
+  });
+
+  test('respects threshold instead of bypassing it like lifecycle events', async () => {
+    trigger.configuration.threshold = 'patch';
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleMaturityGateClearedEvent({
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('does not dispatch when the notification rule is disabled or excluded', async () => {
+    notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleMaturityGateClearedEvent({
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('trigger-exclude filter (mustTrigger) prevents dispatch', async () => {
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleMaturityGateClearedEvent({
+      container: { ...maturedContainer, notificationTriggerExclude: trigger.getId() },
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('action triggers (docker/dockercompose) do not act on this event', async () => {
+    trigger.type = 'docker';
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleMaturityGateClearedEvent({
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    });
+    expect(provider).not.toHaveBeenCalled();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'maturity-cleared'),
+    ).toBeUndefined();
+  });
+
+  test('missing container returns without dispatch', async () => {
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleMaturityGateClearedEvent({
+      container: undefined,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('once=true dedup does not re-fire for an already-notified maturity-cleared result', async () => {
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const payload = {
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    };
+    await trigger.handleMaturityGateClearedEvent(payload);
+    // The dedup hash from the first call is only recorded once optimistic
+    // dispatch's `.trigger()` call actually resolves; flush the queue so the
+    // second call's dedup check observes it.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await trigger.handleMaturityGateClearedEvent(payload);
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
+
+  test('once=true dedup skips when update-available was already recorded for the same result', async () => {
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    notificationHistoryStore.recordNotification(
+      trigger.getId(),
+      'mat-1',
+      'update-available',
+      notificationHistoryStore.computeResultHash(maturedContainer),
+    );
+    await trigger.handleMaturityGateClearedEvent({
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('once=false fires every time with no extra dedup machinery', async () => {
+    trigger.configuration.once = false;
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const payload = {
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    };
+    await trigger.handleMaturityGateClearedEvent(payload);
+    await trigger.handleMaturityGateClearedEvent(payload);
+    expect(provider).toHaveBeenCalledTimes(2);
+  });
+
+  test('provider failure is queued in the outbox with the maturity-cleared event name', async () => {
+    const { enqueueOutboxEntry } = await import('../../store/notification-outbox.js');
+    vi.mocked(enqueueOutboxEntry).mockClear();
+    vi.spyOn(trigger, 'trigger').mockRejectedValue(new Error('provider exploded'));
+    await trigger.handleMaturityGateClearedEvent({
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(enqueueOutboxEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'maturity-cleared',
+        containerId: 'mat-1',
+      }),
+    );
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'maturity-cleared'),
+    ).toBeUndefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'update-available'),
+    ).toBeUndefined();
+  });
+
+  test('batch mode queues the event for batch dispatch and records dedup hashes only after the batch actually flushes', async () => {
+    vi.useFakeTimers();
+    try {
+      trigger.configuration.mode = 'batch';
+      const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+      const batch = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+      await trigger.handleMaturityGateClearedEvent({
+        container: maturedContainer,
+        clearedAt: '2026-01-08T00:00:00.000Z',
+      });
+      expect(provider).not.toHaveBeenCalled();
+      expect(batch).not.toHaveBeenCalled();
+      expect(
+        notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'maturity-cleared'),
+      ).toBeUndefined();
+      await vi.runOnlyPendingTimersAsync();
+      expect(batch).toHaveBeenCalledWith([
+        expect.objectContaining({
+          notificationEvent: expect.objectContaining({ kind: 'maturity-cleared' }),
+        }),
+      ]);
+      expect(
+        notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'maturity-cleared'),
+      ).toBeDefined();
+      expect(
+        notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'update-available'),
+      ).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('batch mode does not record dedup hashes when the batch flush fails', async () => {
+    vi.useFakeTimers();
+    try {
+      trigger.configuration.mode = 'batch';
+      vi.spyOn(trigger, 'triggerBatch').mockRejectedValue(new Error('batch provider exploded'));
+      await trigger.handleMaturityGateClearedEvent({
+        container: maturedContainer,
+        clearedAt: '2026-01-08T00:00:00.000Z',
+      });
+      await vi.runOnlyPendingTimersAsync();
+      expect(
+        notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'maturity-cleared'),
+      ).toBeUndefined();
+      expect(
+        notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'mat-1', 'update-available'),
+      ).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('regression: matured container fires exactly one notification across maturity-cleared and the next update-available scan', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleMaturityGateClearedEvent({
+      container: maturedContainer,
+      clearedAt: '2026-01-08T00:00:00.000Z',
+      pendingSince: '2026-01-01T00:00:00.000Z',
+      minAgeDays: 7,
+    });
+    // The dedup hash is only recorded once optimistic dispatch's `.trigger()`
+    // call actually resolves; flush the queue so the next scan's dedup check
+    // observes it.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await trigger.handleContainerReport({ changed: false, container: maturedContainer });
+
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+test('component lifecycle registers and unregisters maturity gate cleared handling', async () => {
+  const unregister = vi.fn();
+  let callback: any;
+  vi.spyOn(event, 'registerMaturityGateCleared').mockImplementation((handler) => {
+    callback = handler;
+    return unregister;
+  });
+  const handler = vi.spyOn(trigger, 'handleMaturityGateClearedEvent').mockResolvedValue(undefined);
+  trigger.configuration.auto = true;
+  trigger.configuration.mode = 'simple';
+
+  await trigger.init();
+  const payload = {
+    container: { id: 'c1', name: 'web' },
+    clearedAt: '2026-01-08T00:00:00.000Z',
+  };
+  await callback(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+
+  await trigger.deregisterComponent();
+  expect(unregister).toHaveBeenCalledTimes(1);
+});
+
+test('maturity gate cleared handler is not registered when auto mode is none', async () => {
+  const registerSpy = vi.spyOn(event, 'registerMaturityGateCleared');
+  trigger.configuration.auto = false;
+  await trigger.init();
+  expect(registerSpy).not.toHaveBeenCalled();
+  await trigger.deregisterComponent();
 });
 
 test('handleAgentDisconnectedEvent should omit agent disconnect reason when it is missing', async () => {

@@ -107,6 +107,10 @@
       "container-unhealthy": {
         "name": "Container Unhealthy",
         "description": "When a container's Docker health check enters the unhealthy state"
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {

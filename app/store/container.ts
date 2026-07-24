@@ -23,6 +23,7 @@ import {
   hasRawUpdate,
   isRollbackContainerName,
 } from '../model/container.js';
+import { isMaturityGatePending } from '../model/maturity-policy.js';
 import {
   applyDeclarativeUpdatePolicy,
   applyUpdatePolicyOverrides,
@@ -71,6 +72,7 @@ let securityStateCachePruneIterator:
 type UpdateLifecycleCacheEntry = {
   updateDetectedAt: string;
   firstSeenAt?: string;
+  maturityGatePendingSince?: string;
   resultSignature: string;
   expiresAt: number;
 };
@@ -873,6 +875,52 @@ function getUpdateLifecycleTimestamp(containerCurrent, containerNext, timestampF
 }
 
 /**
+ * Stamp/preserve the `maturityGatePendingSince` marker used by the
+ * maturity-cleared notification (`app/maturity/gate-watch.ts`) to detect the
+ * moment a previously maturity-suppressed update becomes applicable.
+ *
+ * Unlike `getUpdateLifecycleTimestamp`, this does NOT clear the marker just
+ * because the maturity clock has elapsed — that transition ("the gate
+ * opened") is the detection helper's job to observe and clear exactly once,
+ * paired with emitting the notification. This function only clears the
+ * marker when the raw update itself disappears, and (re)stamps it to now
+ * when the container is newly (or still, on a fresh candidate) suppressed
+ * specifically by the maturity gate.
+ */
+function getMaturityGatePendingSince(containerCurrent, containerNext) {
+  if (!hasRawUpdate(containerNext)) {
+    return undefined;
+  }
+
+  // Candidate identity change mid-soak restarts the pending marker in step
+  // with updateDetectedAt's own reset above.
+  if (
+    containerCurrent &&
+    hasRawUpdate(containerCurrent) &&
+    hasCandidateIdentityChanged(containerCurrent.result, containerNext.result)
+  ) {
+    return isMaturityGatePending(containerNext) ? new Date().toISOString() : undefined;
+  }
+
+  if (
+    typeof containerNext.maturityGatePendingSince === 'string' &&
+    containerNext.maturityGatePendingSince.length > 0
+  ) {
+    return containerNext.maturityGatePendingSince;
+  }
+
+  if (
+    containerCurrent &&
+    typeof containerCurrent.maturityGatePendingSince === 'string' &&
+    containerCurrent.maturityGatePendingSince.length > 0
+  ) {
+    return containerCurrent.maturityGatePendingSince;
+  }
+
+  return isMaturityGatePending(containerNext) ? new Date().toISOString() : undefined;
+}
+
+/**
  * Create container collections.
  * @param db
  */
@@ -1034,6 +1082,15 @@ export function insertContainer(container) {
           ) {
             container.firstSeenAt = lifecycleEntry.firstSeenAt;
           }
+          if (
+            lifecycleEntry.maturityGatePendingSince !== undefined &&
+            !(
+              typeof container.maturityGatePendingSince === 'string' &&
+              container.maturityGatePendingSince.length > 0
+            )
+          ) {
+            container.maturityGatePendingSince = lifecycleEntry.maturityGatePendingSince;
+          }
         }
         updateLifecycleCache.delete(lifecycleCacheKey);
       } else {
@@ -1045,6 +1102,10 @@ export function insertContainer(container) {
   normalizeContainerTriggerLabelFields(containerToSave);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
+  containerToSave.maturityGatePendingSince = getMaturityGatePendingSince(
+    undefined,
+    containerToSave,
+  );
   storeContainerSecurityStateHash(containerToSave);
   containers.insert({
     data: containerToSave,
@@ -1117,6 +1178,10 @@ export function updateContainer(container) {
   normalizeContainerTriggerLabelFields(containerToReturn);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
   containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
+  containerToReturn.maturityGatePendingSince = getMaturityGatePendingSince(
+    containerCurrent,
+    containerToReturn,
+  );
   const containerCurrentSecurityHash = getStoredContainerSecurityStateHash(containerCurrent);
   const containerNextSecurityHash =
     !hasSecurity && containerCurrent
@@ -1361,6 +1426,38 @@ export function getContainerRaw(id: string) {
   return undefined;
 }
 
+/**
+ * Clear the `maturityGatePendingSince` marker directly on the stored doc,
+ * bypassing the write-path recompute in `insertContainer`/`updateContainer`
+ * (`getMaturityGatePendingSince` above deliberately preserves an existing
+ * marker across ordinary writes so it survives until the gate-open
+ * transition is observed). Used exclusively by the maturity-cleared
+ * detection helper (`app/maturity/gate-watch.ts`), which must be able to
+ * clear the marker synchronously — both silently when the raw update
+ * disappears, and immediately before emitting the notification so a
+ * concurrent caller observing the same container next sees it already
+ * cleared.
+ */
+export function clearMaturityGatePendingSince(id: string): boolean {
+  const containerDoc = containers.findOne({
+    'data.id': id,
+  });
+  if (
+    !containerDoc ||
+    !(
+      typeof containerDoc.data.maturityGatePendingSince === 'string' &&
+      containerDoc.data.maturityGatePendingSince.length > 0
+    )
+  ) {
+    return false;
+  }
+  const containerBefore = containerDoc.data;
+  containerDoc.data = { ...containerBefore, maturityGatePendingSince: undefined };
+  containers.update(containerDoc);
+  invalidateContainersCacheForMutation(containerBefore, containerDoc.data);
+  return true;
+}
+
 interface DeleteContainerOptions {
   replacementExpected?: boolean;
 }
@@ -1399,6 +1496,11 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
         firstSeenAt:
           typeof containerRaw.firstSeenAt === 'string' && containerRaw.firstSeenAt.length > 0
             ? containerRaw.firstSeenAt
+            : undefined,
+        maturityGatePendingSince:
+          typeof containerRaw.maturityGatePendingSince === 'string' &&
+          containerRaw.maturityGatePendingSince.length > 0
+            ? containerRaw.maturityGatePendingSince
             : undefined,
         resultSignature: getResultSignature(containerRaw),
         expiresAt: Date.now() + UPDATE_LIFECYCLE_CACHE_TTL_MS,

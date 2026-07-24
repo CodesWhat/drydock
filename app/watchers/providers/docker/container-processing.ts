@@ -1,4 +1,5 @@
 import * as event from '../../../event/index.js';
+import { maybeEmitMaturityGateCleared } from '../../../maturity/gate-watch.js';
 import {
   type Container,
   type ContainerReport,
@@ -100,6 +101,7 @@ export async function watchContainer(
   }
 
   const containerReport = mapContainerToContainerReport(containerWithResult, watchStartedAtMs);
+  await maybeEmitMaturityGateCleared(containerReport.container);
   await event.emitContainerReport(containerReport);
   if (emitBatchEvent) {
     await event.emitContainerReports([containerReport]);

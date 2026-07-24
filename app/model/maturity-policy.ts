@@ -97,3 +97,32 @@ export function getMaturityStartMs(
 ): number | undefined {
   return resolveMaturityClock(container, nowMs).startMs;
 }
+
+/**
+ * Whether an update is currently withheld by an active maturity gate, i.e.
+ * `updatePolicy.maturityMode === 'mature'` and the resolved clock has not yet
+ * reached `maturityMinAgeDays`. Mirrors the maturity branch of
+ * `isUpdateSuppressed()` in model/container.ts, factored out here so callers
+ * that only have the update-policy/result shape (not a full validated
+ * Container) — e.g. the store write path stamping `maturityGatePendingSince`
+ * — can reuse the same check without a circular import back into
+ * model/container.ts.
+ */
+export function isMaturityGatePending(
+  container: {
+    updateDetectedAt?: string;
+    result?: { publishedAt?: string; publishedAtTrusted?: boolean };
+    updatePolicy?: { maturityMode?: MaturityMode; maturityMinAgeDays?: number };
+  },
+  nowMs: number = Date.now(),
+): boolean {
+  if (container.updatePolicy?.maturityMode !== MATURITY_MODE_MATURE_VALUE) {
+    return false;
+  }
+  const maturityStartMs = getMaturityStartMs(container, nowMs);
+  if (maturityStartMs === undefined) {
+    return true;
+  }
+  const maturityMinAgeDays = resolveMaturityMinAgeDays(container.updatePolicy?.maturityMinAgeDays);
+  return nowMs - maturityStartMs < maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
+}

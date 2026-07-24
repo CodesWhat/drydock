@@ -110,6 +110,7 @@ describe('NotificationBell', () => {
         'security-alert',
         'agent-disconnect',
         'container-unhealthy',
+        'maturity-cleared',
       ],
     });
   });
@@ -186,6 +187,7 @@ describe('NotificationBell', () => {
         'security-alert',
         'agent-disconnect',
         'container-unhealthy',
+        'maturity-cleared',
       ],
     });
   });

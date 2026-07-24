@@ -54,6 +54,9 @@ vi.mock('../event/index.js', () => ({
   emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
   emitSecurityScanCycleComplete: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('../maturity/gate-watch.js', () => ({
+  maybeEmitMaturityGateCleared: vi.fn().mockResolvedValue(false),
+}));
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: vi.fn(),
   insertOperation: vi.fn((operation) => ({
@@ -75,6 +78,7 @@ vi.mock('../registry/index.js', () => ({
 }));
 
 import * as event from '../event/index.js';
+import * as gateWatch from '../maturity/gate-watch.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
@@ -324,6 +328,7 @@ describe('AgentClient', () => {
       });
 
       await Promise.resolve();
+      await Promise.resolve();
 
       expect(event.emitContainerReport).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -336,6 +341,25 @@ describe('AgentClient', () => {
       resolveEmit();
       await processPromise;
       expect(resolved).toBe(true);
+    });
+
+    test('should await the maturity-cleared detection helper with the persisted container before emitting the report', async () => {
+      const callOrder: string[] = [];
+      vi.mocked(gateWatch.maybeEmitMaturityGateCleared).mockImplementationOnce(async () => {
+        callOrder.push('maturity');
+        return true;
+      });
+      event.emitContainerReport.mockImplementationOnce(async () => {
+        callOrder.push('report');
+      });
+      const persisted = { id: 'c1', updateAvailable: true };
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue(persisted);
+
+      await client.processContainer({ id: 'c1', name: 'test' });
+
+      expect(callOrder).toEqual(['maturity', 'report']);
+      expect(gateWatch.maybeEmitMaturityGateCleared).toHaveBeenCalledWith(persisted);
     });
 
     test('should insert new container and emit report with changed=true', async () => {

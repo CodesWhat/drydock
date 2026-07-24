@@ -138,6 +138,16 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     templates: {},
     description: "When a container's Docker health check enters the unhealthy state",
   },
+  {
+    id: 'maturity-cleared',
+    name: 'Maturity Gate Cleared',
+    enabled: true,
+    triggers: [],
+    bellEnabled: true,
+    bellThreshold: 'all',
+    templates: {},
+    description: 'When an update held back by the maturity policy becomes applicable',
+  },
 ];
 
 const notificationTemplateOverrideSchema = joi

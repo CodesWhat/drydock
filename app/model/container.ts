@@ -223,6 +223,7 @@ export interface Container {
   updateKind: ContainerUpdateKind;
   updateDetectedAt?: string;
   firstSeenAt?: string;
+  maturityGatePendingSince?: string;
   updateAge?: number;
   updateMaturityLevel?: 'hot' | 'mature' | 'established';
   updateOperation?: ContainerUpdateOperationState;
@@ -481,6 +482,7 @@ const schema = joi.object({
     .default({ kind: 'unknown' }),
   updateDetectedAt: joi.string().isoDate(),
   firstSeenAt: joi.string().isoDate(),
+  maturityGatePendingSince: joi.string().isoDate(),
   updateAge: joi.number().integer().min(0),
   updateMaturityLevel: joi.string().valid('hot', 'mature', 'established'),
   resultChanged: joi.function(),
@@ -1030,6 +1032,7 @@ export function clearDetectedUpdateState(container: Container): Container {
     firstSeenAt: _firstSeenAt,
     updateAge: _updateAge,
     updateMaturityLevel: _updateMaturityLevel,
+    maturityGatePendingSince: _maturityGatePendingSince,
     resultChanged: _resultChanged,
     ...containerWithoutUpdateState
   } = container;
