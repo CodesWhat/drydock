@@ -42,9 +42,14 @@ Drydock moves fast — open issues tend to get fixed quickly. The best way to fi
    cd ../ui && npm install
    ```
 
-4. **Create a branch** from the appropriate base:
-   - Bug fixes: branch from `main`
-   - New features: branch from the active feature branch (check open branches)
+4. **Create a branch from the active release branch, `dev/vX.Y`** — not from `main`.
+
+   `main` is the released branch. It's what tags are cut and signed from, and it only ever moves by merging the release branch into it right before a release. Everything else, bug fixes included, goes to `dev/vX.Y` first. A branch cut from `main` will be behind and its PR will target the wrong base.
+
+   ```bash
+   git fetch origin
+   git checkout -b my-fix origin/dev/v1.6   # whatever dev/* branch is currently open
+   ```
 
 ## Quick development loop
 
@@ -167,7 +172,7 @@ If you do want to write tests:
 
 ## Pull requests
 
-- **Target:** `main` for bug fixes, the active feature branch for new features
+- **Target:** the active release branch, `dev/vX.Y` — never `main`. GitHub preselects `main` because it's the default branch, so change the base when you open the PR. If you get it wrong it's a one-click fix, not a reason to redo the branch.
 - **Size:** Smaller is better — one concern per PR when possible
 - **Tests/coverage:** Nice to have, not required. The maintainer handles it.
 - **Docs:** If your change affects user-facing behavior, a docs update in the same PR is appreciated but not mandatory.
