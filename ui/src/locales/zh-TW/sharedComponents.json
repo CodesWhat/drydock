@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "切換欄位",
+      "heading": "欄位",
+      "reset": "重設",
+      "hiddenBadgeTooltip": "已隱藏 {count} 欄",
+      "autoHiddenAnnotation": "{column} — 為配合寬度已隱藏",
+      "autoHiddenBadgeTooltip": "為配合您的螢幕，已隱藏 {columns}。"
+    },
     "confirmDialog": {
       "cancel": "取消",
       "confirm": "確認"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "操作",
-      "resizeColumn": "調整列寬"
+      "resizeColumn": "調整列寬",
+      "sortBy": "排序方式",
+      "sortDirectionAscending": "排序方向：遞增",
+      "sortDirectionDescending": "排序方向：遞減"
     },
     "detailPanel": {
       "openFullPage": "開啟全頁檢視",

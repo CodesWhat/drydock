@@ -157,6 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "레거시 구성 별칭 {total}개 감지됨",
       "legacyConfigTitlePlural": "레거시 구성 별칭 {total}개 감지됨",
+      "legacyApiPathTitleSingular": "제거된 API 경로로의 요청 {total}건 감지됨",
+      "legacyApiPathTitlePlural": "제거된 API 경로로의 요청 {total}건 감지됨",
       "dontShowAgain": "다시 표시 안 함",
       "curlHealthcheckTitle": "사용자 정의 curl 헬스체크 재정의 감지됨",
       "envKeysLabel": "환경 변수 키 ({count}개): {keys}",

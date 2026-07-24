@@ -6,6 +6,24 @@
       "profile": "Profil"
     },
     "general": {
+      "updateMode": {
+        "title": "Globalny tryb aktualizacji",
+        "description": "Wybierz, czy Drydock ma tylko zgłaszać aktualizacje, czekać na ręczne działanie, czy automatycznie wdrażać kwalifikujące się aktualizacje.",
+        "options": {
+          "notify": {
+            "label": "Powiadamiaj",
+            "description": "Tylko wykrywaj i powiadamiaj; aktualizacje nigdy nie są stosowane."
+          },
+          "manual": {
+            "label": "Ręczny",
+            "description": "Stosuj aktualizacje tylko na żądanie."
+          },
+          "auto": {
+            "label": "Automatyczny",
+            "description": "Automatycznie wdrażaj kwalifikujące się aktualizacje."
+          }
+        }
+      },
       "application": {
         "title": "Aplikacja",
         "loadingServerInfo": "Ładowanie informacji o serwerze"
@@ -72,6 +90,7 @@
         "no": "Nie"
       },
       "errors": {
+        "updateMode": "Nie udało się zaktualizować globalnego trybu aktualizacji",
         "loadServerInfo": "Nie udało się załadować informacji o serwerze",
         "loadProfileData": "Nie udało się załadować danych profilu",
         "updateNetworkSettings": "Nie udało się zaktualizować ustawień sieciowych",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Synchronizacja",
+        "label": "Synchronizuj między urządzeniami",
+        "description": "Zachowaj synchronizację preferencji wyglądu i układu na każdym urządzeniu, na którym się logujesz"
+      },
       "language": {
         "title": "Język"
       },
@@ -118,6 +142,9 @@
           "soft": "Miękki",
           "round": "Okrągły"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Nie udało się zaktualizować ustawień synchronizacji"
       }
     },
     "profile": {

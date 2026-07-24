@@ -6,6 +6,24 @@
       "profile": "Profiel"
     },
     "general": {
+      "updateMode": {
+        "title": "Algemene updatemodus",
+        "description": "Kies of Drydock updates alleen meldt, wacht op een handmatige actie, of geschikte updates automatisch uitrolt.",
+        "options": {
+          "notify": {
+            "label": "Melden",
+            "description": "Alleen detecteren en melden; updates worden nooit toegepast."
+          },
+          "manual": {
+            "label": "Handmatig",
+            "description": "Updates alleen toepassen wanneer je erom vraagt."
+          },
+          "auto": {
+            "label": "Automatisch",
+            "description": "Geschikte updates automatisch uitrollen."
+          }
+        }
+      },
       "application": {
         "title": "Applicatie",
         "loadingServerInfo": "Serverinformatie laden"
@@ -72,6 +90,7 @@
         "no": "Nee"
       },
       "errors": {
+        "updateMode": "Bijwerken van algemene updatemodus mislukt",
         "loadServerInfo": "Kan serverinformatie niet laden",
         "loadProfileData": "Kan profielgegevens niet laden",
         "updateNetworkSettings": "Kan de netwerkinstellingen niet updaten",
@@ -81,6 +100,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Synchronisatie",
+        "label": "Synchroniseren tussen apparaten",
+        "description": "Houd je uiterlijk- en indelingsvoorkeuren gesynchroniseerd op elk apparaat waarop je inlogt"
+      },
       "language": {
         "title": "Taal"
       },
@@ -118,6 +142,9 @@
           "soft": "Zacht",
           "round": "Rond"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Bijwerken van synchronisatie-instellingen mislukt"
       }
     },
     "profile": {

@@ -157,6 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "Wykryto {total} starszy wyzwalacz",
       "legacyConfigTitlePlural": "Wykryto {total} starsze wyzwalacze",
+      "legacyApiPathTitleSingular": "Wykryto {total} żądanie do usuniętej ścieżki API",
+      "legacyApiPathTitlePlural": "Wykryto {total} żądań do usuniętej ścieżki API",
       "dontShowAgain": "Nie pokazuj więcej",
       "curlHealthcheckTitle": "Wykryto niestandardowe zastąpienie kontroli stanu zwijania",
       "envKeysLabel": "Klucze Env ({count}): {keys}",

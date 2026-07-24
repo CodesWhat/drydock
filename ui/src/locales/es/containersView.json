@@ -21,27 +21,28 @@
       "alreadyUpToDate": "Ya está actualizado: {name}",
       "queuedUpdateSingle": "Actualización en cola para {count} contenedor",
       "queuedUpdateMultiple": "Actualizaciones en cola para {count} contenedores",
-      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
-      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
+      "queuedUpdateGroupSingle": "Actualización en cola para {count} contenedor en el grupo: {group}",
+      "queuedUpdateGroupMultiple": "Actualizaciones en cola para {count} contenedores en {group}",
       "countAlreadyUpToDateSingle": "{count} contenedor ya actualizado",
       "countAlreadyUpToDateMultiple": "{count} contenedores ya actualizados"
     },
     "registryError": {
       "generic": "Error de registro",
       "detail": "Error de registro: {error}",
-      "detailWithRegistry": "{registryHost} — {error}"
+      "detailWithRegistry": "{registryHost}: {error}"
     },
     "columns": {
       "container": "Contenedor",
-      "tag": "Tag",
+      "tag": "Etiqueta",
       "version": "Versión",
+      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
       "update": "Actualización",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Estado",
       "host": "Host",
       "registry": "Registro",
       "resources": "Recursos",
-      "uptime": "Uptime"
+      "uptime": "Tiempo en funcionamiento"
     },
     "status": {
       "running": "en ejecución",

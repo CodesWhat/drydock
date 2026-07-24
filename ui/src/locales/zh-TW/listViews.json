@@ -22,6 +22,10 @@
       "status": "狀態",
       "details": "詳情"
     },
+    "card": {
+      "time": "時間",
+      "version": "版本"
+    },
     "detail": {
       "timestamp": "時間戳",
       "event": "事件",
@@ -50,8 +54,11 @@
       "closed": "已關閉",
       "update-available": "可用更新",
       "update-applied": "更新已套用",
+      "update-applied-dryrun": "更新已預覽（Dry Run）",
       "update-failed": "更新失敗",
       "auto-update-blocked": "自動更新被阻擋",
+      "update-policy-override-set": "更新策略覆寫已設定",
+      "update-policy-override-cleared": "更新策略覆寫已清除",
       "auto-rollback": "自動回滾",
       "rollback": "回滾",
       "preview": "預覽",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "代理已重新連線",
         "description": "遠端代理在失去連線後重新連線時"
+      },
+      "container-unhealthy": {
+        "name": "容器不健康",
+        "description": "當容器的 Docker 健康檢查進入 unhealthy 狀態時"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "觸發器頁面",
       "helpTextImplicitAll": "留空將此事件發送到所有通知觸發器。選擇任何觸發器會將此規則轉為允許清單。",
       "helpTextExplicit": "只有選定的觸發器會接收此事件。留空會抑制此事件對所有觸發器的通知。",
+      "bellLabel": "通知鈴鐺",
+      "bellAriaLabel": "通知鈴鐺",
+      "bellThresholdAriaLabel": "鈴鐺嚴重程度閾值",
+      "bellHelp": "選擇此事件是否出現在應用程式內鈴鐺中，以及要包含的最低更新等級。",
+      "thresholdAll": "所有更新",
+      "thresholdMajor": "僅限主要更新",
+      "thresholdMinor": "次要和主要",
+      "thresholdPatch": "修補、次要和主要",
+      "templatesLabel": "訊息範本",
+      "templatesHelp": "覆寫僅適用於所選觸發器。留空的欄位將保留其設定的預設值。變數使用安全路徑，例如 container.name 和 containers.length。",
+      "templateTriggerAriaLabel": "範本觸發器",
+      "simpleTitle": "簡單標題",
+      "simpleTitleAriaLabel": "簡單通知標題",
+      "simpleBody": "簡單內文",
+      "simpleBodyAriaLabel": "簡單通知內文",
+      "batchTitle": "批次標題",
+      "batchTitleAriaLabel": "批次通知標題",
+      "preview": "預覽",
+      "previewAriaLabel": "預覽通知範本",
+      "previewing": "預覽中……",
+      "previewError": "預覽通知範本失敗",
+      "resetTemplate": "重設範本",
       "saving": "儲存中……",
       "saveChanges": "儲存變更",
       "reset": "重設",
@@ -158,7 +191,8 @@
       "critical": "嚴重",
       "high": "高危",
       "medium": "中危",
-      "low": "低危"
+      "low": "低危",
+      "clean": "乾淨"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "取消"
     },
     "runtimeTools": {
+      "scanner": "掃描器",
+      "pullAsset": "提取 {provider}",
+      "warmAsset": "預熱 {provider}",
+      "assetOperationFailed": "掃描器資產操作失敗",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "類型",
       "status": "狀態",
       "url": "URL"
+    },
+    "card": {
+      "auth": "認證",
+      "status": "狀態"
     },
     "badge": {
       "private": "私有",
@@ -278,6 +320,12 @@
       "containers": "容器",
       "lastSeen": "最後活躍"
     },
+    "card": {
+      "containers": "容器",
+      "running": "執行中",
+      "images": "映像檔",
+      "lastSeen": "最後活躍"
+    },
     "detail": {
       "containers": "容器",
       "running": "執行中",
@@ -302,6 +350,10 @@
     "status": {
       "active": "活躍",
       "inactive": "不活躍"
+    },
+    "dryRun": {
+      "badge": "dry-run 模式",
+      "tooltip": "更新僅供預覽 — 容器不會被取代。設定 DRYRUN=false 以套用。"
     },
     "test": {
       "testing": "測試中……",
@@ -335,6 +387,12 @@
       "schedule": "計劃",
       "nextRun": "下次執行",
       "lastRun": "上次執行"
+    },
+    "card": {
+      "containers": "容器",
+      "nextRun": "下次執行",
+      "lastRun": "上次執行",
+      "containersWatched": "監視 {count} 個容器"
     },
     "status": {
       "watching": "監視中",

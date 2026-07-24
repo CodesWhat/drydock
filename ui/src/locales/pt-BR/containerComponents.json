@@ -7,6 +7,9 @@
       "previewUpdate": "Prévia da atualização",
       "forceUpdate": "Forçar atualização",
       "updateNow": "Atualizar agora",
+      "previewOnly": "Somente pré-visualização",
+      "dryRunUpdateTooltip": "Este trigger está em modo dry-run — clicar vai baixar a nova imagem, mas não substituirá o contêiner.",
+      "dryRunCondition": "O trigger de ação {trigger} está em modo dry-run — as atualizações são apenas pré-visualizadas e os contêineres não são substituídos.",
       "scanNow": "Escanear agora",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "Redefinir",
       "clearSkips": "Limpar ignoradas",
       "clearPolicy": "Limpar policy",
+      "overridden": "Sobrescrito",
+      "revert": "Reverter",
+      "revertAll": "Reverter para declarativo",
       "snoozedUntil": "Adiado até:",
       "maturityMode": "Modo de maturidade:",
       "matureOnlyMinimum": "Somente maduras (mínimo {days}d)",
       "allowAllUpdates": "Permitir todas as atualizações",
       "skippedTags": "Tags ignoradas:",
       "skippedDigests": "Digests ignorados:",
+      "noSkippedEntries": "Nenhuma entrada ignorada",
       "noActivePolicy": "Nenhuma policy de atualização ativa.",
       "removeSkip": "Remover ignorada",
       "previewSection": "Prévia",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "Forçar atualização",
       "updateAction": "Atualizar",
       "skipUpdateAction": "Ignorar esta atualização",
+      "setGroupAction": "Definir grupo",
       "rollbackAction": "Rollback",
       "deleteAction": "Excluir",
       "pinnedTooltip": "Fixado",
+      "skippedLabel": "Ignorado",
       "upToDateTooltip": "Atualizado",
+      "imageUpdateTooltip": "A tag {tag} agora aponta para um build de imagem diferente. Reimplante para baixar a nova imagem; a própria tag de versão não mudou.",
       "blockedTooltip": "Bloqueado",
       "actionsDisabled": "Ações desativadas",
       "openActionsMenu": "Abrir menu de ações",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "Atualizações adiadas",
       "ariaSkippedUpdates": "Atualizações ignoradas",
       "ariaMaturityBlocked": "Atualizações bloqueadas por maturidade",
+      "ariaPinnedTag": "Tag fixada",
+      "pinnedTagTooltip": "Esta tag está fixada em uma versão exata — o drydock não vai avançar automaticamente para versões mais novas. Defina dd.tag.family=loose ou adicione um filtro dd.tag.include para permitir isso.",
+      "unknownKindLabel": "Desconhecido",
       "emptyState": "Nenhum contêiner corresponde aos filtros",
       "currentLabel": "Atual",
       "latestLabel": "Mais recente",
+      "blockedByBouncer": "Bloqueado pelo Bouncer",
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "Atualizar todos no grupo",
       "updateSingular": "atualização",
       "updatePlural": "atualizações"
+    },
+    "groupDialog": {
+      "title": "Definir grupo do contêiner",
+      "description": "Escolha como {name} é agrupado neste navegador. Isso substitui o grupo de servidor, Compose ou Swarm até que você o limpe.",
+      "groupLabel": "Nome do grupo",
+      "groupPlaceholder": "ex.: Serviços de mídia",
+      "helpText": "Os grupos existentes são sugeridos enquanto você digita.",
+      "clear": "Usar grupo detectado",
+      "save": "Salvar grupo"
     },
     "sideDetail": {
       "stopTooltip": "Parar",
@@ -258,6 +281,7 @@
       "allBouncer": "Todos os Bouncer",
       "safe": "Seguro",
       "unsafe": "Inseguro",
+      "blocked": "Bloqueado",
       "allRegistries": "Todos os registries",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "Todos os hosts",
       "allContainers": "Todos os contêineres",
       "hasUpdate": "Tem atualização",
+      "versionUpdate": "Atualização de versão",
       "major": "Major",
       "minor": "Minor",
       "patch": "Patch",
+      "digest": "Atualização de imagem",
       "hidePinned": "Ocultar fixados",
       "hidePinnedTooltip": "Ocultar contêineres fixados em versões específicas",
       "clearAll": "Limpar tudo",
@@ -334,6 +360,10 @@
       "tooltip": "Melhor tag semver estável disponível - considere fixar",
       "tooltipWithTag": "Sugerida: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Mais recente disponível",
+      "tooltip": "Nova versão disponível: {tag}. Esta Tag está fixada, o drydock não vai atualizá-la automaticamente."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Bloqueado por segurança",
       "rolledBack": "Rollback feito",
@@ -350,6 +380,61 @@
       "noTrigger": "Sem trigger",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Libera:"
+    },
+    "updateStatus": {
+      "title": "Status da atualização",
+      "showDetails": "Mostrar condições",
+      "liftCountdown": "{countdown} · desbloqueia em {date}",
+      "maturityClockPublished": "Candidato publicado em {date} — falta {count} dia para o mínimo de {minDays} dias | Candidato publicado em {date} — faltam {count} dias para o mínimo de {minDays} dias",
+      "maturityClockDetected": "Candidato detectado em {date} — falta {count} dia para o mínimo de {minDays} dias | Candidato detectado em {date} — faltam {count} dias para o mínimo de {minDays} dias",
+      "updateButton": "Atualizar agora",
+      "blockedButton": "Atualização bloqueada",
+      "notificationsOnlyButton": "Somente notificações",
+      "summary": {
+        "upToDate": "Atualizado.",
+        "insight": "Nova versão disponível — esta tag está fixada.",
+        "inProgress": "Atualização em andamento.",
+        "hardBlocked": "Atualização bloqueada — correção necessária.",
+        "notify": "Somente notificações — o Drydock não vai aplicar as atualizações.",
+        "autoFiltered": "Atualização disponível — a aplicação automática está filtrada (a manual funciona).",
+        "manualFiltered": "Atualização disponível — uma condição de policy exigirá confirmação.",
+        "autoReady": "Atualização disponível — elegível para aplicação automática.",
+        "manualReady": "Atualização disponível — pronta para aplicar manualmente."
+      },
+      "conditions": {
+        "no-update-available": "Nenhuma atualização disponível",
+        "rollback-container": "Contêiner de rollback",
+        "active-operation": "A atualização já está em execução",
+        "security-scan-blocked": "Bloqueado pela política de segurança",
+        "last-update-rolled-back": "Atualização anterior revertida (rollback)",
+        "snoozed": "Atualização adiada",
+        "skip-tag": "Tag ignorada",
+        "skip-digest": "Digest ignorado",
+        "maturity-not-reached": "Política de maturidade aguardando",
+        "threshold-not-reached": "Limite do trigger não atingido",
+        "trigger-excluded": "Trigger excluído por labels",
+        "trigger-not-included": "Trigger filtrado por labels",
+        "agent-mismatch": "Agent do trigger diferente",
+        "no-update-trigger-configured": "Nenhum trigger de atualização configurado",
+        "self-update-unavailable": "Autoatualização indisponível",
+        "maintenance-window-closed": "Janela de manutenção fechada",
+        "dry-run-trigger": "Configuração do trigger em modo dry-run"
+      },
+      "actions": {
+        "editPolicy": "Editar policy de atualização",
+        "configureLabels": "Configurar labels do trigger",
+        "viewOperation": "Ver operação de atualização",
+        "reviewSecurity": "Revisar resultados do scan",
+        "viewRollback": "Ver contexto do rollback",
+        "configureAgent": "Configurar agent do trigger",
+        "configureTriggers": "Configurar triggers de atualização",
+        "configureThreshold": "Configurar limite do trigger",
+        "configureSelfUpdate": "Configurar autoatualização",
+        "configureMaintenance": "Configurar janela de manutenção"
+      }
+    },
+    "maturityBadge": {
+      "new": "NOVA"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "{field} revertido para a policy declarativa",
+        "revertAll": "Todas as substituições revertidas para a policy declarativa",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 dia",
+      "availableDaysPlural": "{count} dias",
+      "availableHoursSingular": "1 hora",
+      "availableHoursPlural": "{count} horas",
+      "availableMinutesSingular": "1 minuto",
+      "availableMinutesPlural": "{count} minutos",
+      "justNow": "Detectado agora mesmo"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Abrir configurações do registry",
+        "openTriggerSettings": "Abrir configurações do trigger"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

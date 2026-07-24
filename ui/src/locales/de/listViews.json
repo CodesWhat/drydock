@@ -22,6 +22,10 @@
       "status": "Status",
       "details": "Details"
     },
+    "card": {
+      "time": "Zeit",
+      "version": "Version"
+    },
     "detail": {
       "timestamp": "Zeitstempel",
       "event": "Ereignis",
@@ -50,8 +54,11 @@
       "closed": "Geschlossen",
       "update-available": "Update verfügbar",
       "update-applied": "Update angewendet",
+      "update-applied-dryrun": "Update in Vorschau angezeigt (Dry Run)",
       "update-failed": "Update fehlgeschlagen",
       "auto-update-blocked": "Automatisches Update blockiert",
+      "update-policy-override-set": "Update-Policy-Override gesetzt",
+      "update-policy-override-cleared": "Update-Policy-Override entfernt",
       "auto-rollback": "Automatischer Rollback",
       "rollback": "Rollback",
       "preview": "Vorschau",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "Agent verbunden",
         "description": "Wenn ein Remote-Agent nach einem Verbindungsverlust wieder verbunden wird"
+      },
+      "container-unhealthy": {
+        "name": "Container fehlerhaft",
+        "description": "Wenn der Docker-Healthcheck eines Containers in den Status „unhealthy“ wechselt"
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "Trigger-Seite",
       "helpTextImplicitAll": "Leer lassen, um dieses Ereignis an alle Benachrichtigungstrigger zu senden. Jede Trigger-Auswahl macht diese Regel zu einer Allow-List.",
       "helpTextExplicit": "Nur ausgewählte Trigger erhalten dieses Ereignis. Leer lassen, um dieses Ereignis für alle Trigger zu unterdrücken.",
+      "bellLabel": "Benachrichtigungsglocke",
+      "bellAriaLabel": "Benachrichtigungsglocke",
+      "bellThresholdAriaLabel": "Schweregrad-Schwelle der Glocke",
+      "bellHelp": "Wählen Sie, ob dieses Ereignis in der In-App-Glocke erscheint und das minimale Update-Level, das eingeschlossen werden soll.",
+      "thresholdAll": "Alle Updates",
+      "thresholdMajor": "Nur Major-Updates",
+      "thresholdMinor": "Minor und Major",
+      "thresholdPatch": "Patch, Minor und Major",
+      "templatesLabel": "Nachrichtenvorlagen",
+      "templatesHelp": "Überschreibungen gelten nur für den ausgewählten Trigger. Leere Felder behalten ihre konfigurierten Standardwerte. Variablen verwenden sichere Pfade wie container.name und containers.length.",
+      "templateTriggerAriaLabel": "Vorlagen-Trigger",
+      "simpleTitle": "Einfacher Titel",
+      "simpleTitleAriaLabel": "Einfacher Benachrichtigungstitel",
+      "simpleBody": "Einfacher Text",
+      "simpleBodyAriaLabel": "Einfacher Benachrichtigungstext",
+      "batchTitle": "Sammel-Titel",
+      "batchTitleAriaLabel": "Sammelbenachrichtigungstitel",
+      "preview": "Vorschau",
+      "previewAriaLabel": "Benachrichtigungsvorlage in Vorschau anzeigen",
+      "previewing": "Vorschau wird geladen …",
+      "previewError": "Vorschau der Benachrichtigungsvorlage fehlgeschlagen",
+      "resetTemplate": "Vorlage zurücksetzen",
       "saving": "Speichert...",
       "saveChanges": "Änderungen speichern",
       "reset": "Zurücksetzen",
@@ -158,7 +191,8 @@
       "critical": "Kritisch",
       "high": "Hoch",
       "medium": "Mittel",
-      "low": "Niedrig"
+      "low": "Niedrig",
+      "clean": "Sauber"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "Abbrechen"
     },
     "runtimeTools": {
+      "scanner": "Scanner",
+      "pullAsset": "{provider} abrufen",
+      "warmAsset": "{provider} vorwärmen",
+      "assetOperationFailed": "Scanner-Asset-Operation fehlgeschlagen",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "Typ",
       "status": "Status",
       "url": "URL"
+    },
+    "card": {
+      "auth": "Authentifizierung",
+      "status": "Status"
     },
     "badge": {
       "private": "Privat",
@@ -278,6 +320,12 @@
       "containers": "Container",
       "lastSeen": "Zuletzt gesehen"
     },
+    "card": {
+      "containers": "Container",
+      "running": "Laufend",
+      "images": "Images",
+      "lastSeen": "Zuletzt gesehen"
+    },
     "detail": {
       "containers": "Container",
       "running": "laufend",
@@ -302,6 +350,10 @@
     "status": {
       "active": "Aktiv",
       "inactive": "Inaktiv"
+    },
+    "dryRun": {
+      "badge": "Dry-Run-Modus",
+      "tooltip": "Updates werden nur als Vorschau angezeigt — Container werden nicht ersetzt. Setzen Sie DRYRUN=false, um anzuwenden."
     },
     "test": {
       "testing": "Test läuft...",
@@ -335,6 +387,12 @@
       "schedule": "Zeitplan",
       "nextRun": "Nächster Lauf",
       "lastRun": "Letzter Lauf"
+    },
+    "card": {
+      "containers": "Container",
+      "nextRun": "Nächster Lauf",
+      "lastRun": "Letzter Lauf",
+      "containersWatched": "{count} Container beobachtet"
     },
     "status": {
       "watching": "Wacht",

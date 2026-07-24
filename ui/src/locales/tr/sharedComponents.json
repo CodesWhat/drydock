@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Sütunları aç/kapat",
+      "heading": "Sütunlar",
+      "reset": "Sıfırla",
+      "hiddenBadgeTooltip": "{count} sütun gizlendi",
+      "autoHiddenAnnotation": "{column} — sığdırmak için gizlendi",
+      "autoHiddenBadgeTooltip": "Ekranınıza sığdırmak için {columns} gizlendi."
+    },
     "confirmDialog": {
       "cancel": "İptal",
       "confirm": "Onayla"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "Eylemler",
-      "resizeColumn": "Sütunu yeniden boyutlandır"
+      "resizeColumn": "Sütunu yeniden boyutlandır",
+      "sortBy": "Sıralama ölçütü",
+      "sortDirectionAscending": "Sıralama yönü: artan",
+      "sortDirectionDescending": "Sıralama yönü: azalan"
     },
     "detailPanel": {
       "openFullPage": "Tam sayfa görünümünü aç",

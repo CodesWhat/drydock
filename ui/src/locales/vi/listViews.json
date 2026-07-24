@@ -22,6 +22,10 @@
       "status": "Trạng thái",
       "details": "Chi tiết"
     },
+    "card": {
+      "time": "Thời gian",
+      "version": "Phiên bản"
+    },
     "detail": {
       "timestamp": "Dấu thời gian",
       "event": "Sự kiện",
@@ -50,8 +54,11 @@
       "closed": "Đã đóng",
       "update-available": "Có bản cập nhật",
       "update-applied": "Đã áp dụng cập nhật",
+      "update-applied-dryrun": "Đã xem trước cập nhật (Dry Run)",
       "update-failed": "Cập nhật thất bại",
       "auto-update-blocked": "Tự động cập nhật bị chặn",
+      "update-policy-override-set": "Đã đặt ghi đè chính sách cập nhật",
+      "update-policy-override-cleared": "Đã xóa ghi đè chính sách cập nhật",
       "auto-rollback": "Tự động khôi phục",
       "rollback": "Khôi phục",
       "preview": "Xem trước",
@@ -96,6 +103,10 @@
       "agent-reconnect": {
         "name": "Agent kết nối lại",
         "description": "Khi agent từ xa kết nối lại sau khi mất kết nối"
+      },
+      "container-unhealthy": {
+        "name": "Container không khỏe mạnh",
+        "description": "Khi health check Docker của container chuyển sang trạng thái \"unhealthy\""
       }
     },
     "columns": {
@@ -115,6 +126,28 @@
       "triggersPageLink": "Trang Trigger",
       "helpTextImplicitAll": "Để trống để gửi sự kiện này đến tất cả trigger thông báo. Chọn bất kỳ trigger nào sẽ biến quy tắc này thành danh sách cho phép.",
       "helpTextExplicit": "Chỉ các trigger đã chọn mới nhận sự kiện này. Để trống để chặn sự kiện này với tất cả trigger.",
+      "bellLabel": "Chuông thông báo",
+      "bellAriaLabel": "Chuông thông báo",
+      "bellThresholdAriaLabel": "Ngưỡng mức độ nghiêm trọng của chuông",
+      "bellHelp": "Chọn xem sự kiện này có xuất hiện trong chuông trong ứng dụng hay không và mức cập nhật tối thiểu cần bao gồm.",
+      "thresholdAll": "Tất cả bản cập nhật",
+      "thresholdMajor": "Chỉ bản cập nhật major",
+      "thresholdMinor": "Minor và major",
+      "thresholdPatch": "Patch, minor và major",
+      "templatesLabel": "Mẫu tin nhắn",
+      "templatesHelp": "Ghi đè chỉ áp dụng cho trigger đã chọn. Các trường trống giữ nguyên giá trị mặc định đã cấu hình. Biến sử dụng các đường dẫn an toàn như container.name và containers.length.",
+      "templateTriggerAriaLabel": "Trigger của mẫu",
+      "simpleTitle": "Tiêu đề đơn giản",
+      "simpleTitleAriaLabel": "Tiêu đề thông báo đơn giản",
+      "simpleBody": "Nội dung đơn giản",
+      "simpleBodyAriaLabel": "Nội dung thông báo đơn giản",
+      "batchTitle": "Tiêu đề hàng loạt",
+      "batchTitleAriaLabel": "Tiêu đề thông báo hàng loạt",
+      "preview": "Xem trước",
+      "previewAriaLabel": "Xem trước mẫu thông báo",
+      "previewing": "Đang xem trước...",
+      "previewError": "Không thể xem trước mẫu thông báo",
+      "resetTemplate": "Đặt lại mẫu",
       "saving": "Đang lưu...",
       "saveChanges": "Lưu thay đổi",
       "reset": "Đặt lại",
@@ -158,7 +191,8 @@
       "critical": "Nghiêm trọng",
       "high": "Cao",
       "medium": "Trung bình",
-      "low": "Thấp"
+      "low": "Thấp",
+      "clean": "Sạch"
     },
     "countLabel": {
       "images": "images",
@@ -207,6 +241,10 @@
       "cancel": "Hủy"
     },
     "runtimeTools": {
+      "scanner": "Trình quét",
+      "pullAsset": "Kéo {provider}",
+      "warmAsset": "Làm nóng {provider}",
+      "assetOperationFailed": "Thao tác tài sản trình quét thất bại",
       "trivy": "Trivy",
       "cosign": "Cosign",
       "sbom": "SBOM",
@@ -241,6 +279,10 @@
       "type": "Loại",
       "status": "Trạng thái",
       "url": "URL"
+    },
+    "card": {
+      "auth": "Xác thực",
+      "status": "Trạng thái"
     },
     "badge": {
       "private": "Riêng tư",
@@ -278,6 +320,12 @@
       "containers": "Container",
       "lastSeen": "Lần cuối thấy"
     },
+    "card": {
+      "containers": "Container",
+      "running": "Đang chạy",
+      "images": "Image",
+      "lastSeen": "Lần cuối thấy"
+    },
     "detail": {
       "containers": "Container",
       "running": "đang chạy",
@@ -302,6 +350,10 @@
     "status": {
       "active": "Đang hoạt động",
       "inactive": "Không hoạt động"
+    },
+    "dryRun": {
+      "badge": "Chế độ dry-run",
+      "tooltip": "Cập nhật chỉ được xem trước — container sẽ không bị thay thế. Đặt DRYRUN=false để áp dụng."
     },
     "test": {
       "testing": "Đang kiểm tra...",
@@ -335,6 +387,12 @@
       "schedule": "Lịch trình",
       "nextRun": "Lần chạy tiếp",
       "lastRun": "Lần chạy cuối"
+    },
+    "card": {
+      "containers": "Container",
+      "nextRun": "Lần chạy tiếp",
+      "lastRun": "Lần chạy cuối",
+      "containersWatched": "{count} container đang theo dõi"
     },
     "status": {
       "watching": "Đang theo dõi",

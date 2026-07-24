@@ -7,6 +7,9 @@
       "previewUpdate": "Voorbeeldupdate",
       "forceUpdate": "Update forceren",
       "updateNow": "Nu bijwerken",
+      "previewOnly": "Alleen voorbeeld",
+      "dryRunUpdateTooltip": "Deze trigger staat in dry-run-modus — klikken haalt de nieuwe image op, maar vervangt de container niet.",
+      "dryRunCondition": "Actietrigger {trigger} staat in dry-run-modus — updates worden alleen als voorbeeld getoond en containers worden niet vervangen.",
       "scanNow": "Nu scannen",
       "recheckNow": "Recheck for Updates",
       "rechecking": "Rechecking…",
@@ -24,12 +27,16 @@
       "resetGroup": "Opnieuw instellen",
       "clearSkips": "Wis overslaan",
       "clearPolicy": "Duidelijk beleid",
+      "overridden": "Overschreven",
+      "revert": "Terugzetten",
+      "revertAll": "Terugzetten naar declaratief",
       "snoozedUntil": "Gesnoozed tot:",
       "maturityMode": "Volwassenheidsmodus:",
       "matureOnlyMinimum": "Alleen rijp ({days}d minimum)",
       "allowAllUpdates": "Sta alle updates toe",
       "skippedTags": "Overgeslagen tags:",
       "skippedDigests": "Overgeslagen samenvattingen:",
+      "noSkippedEntries": "Geen overgeslagen items",
       "noActivePolicy": "Geen actief updatebeleid.",
       "removeSkip": "Overslaan verwijderen",
       "previewSection": "Voorbeeld",
@@ -183,10 +190,13 @@
       "forceUpdateAction": "Update forceren",
       "updateAction": "Bijwerken",
       "skipUpdateAction": "Sla deze update over",
+      "setGroupAction": "Groep instellen",
       "rollbackAction": "Terugdraaien",
       "deleteAction": "Verwijderen",
       "pinnedTooltip": "Vastgezet",
+      "skippedLabel": "Overgeslagen",
       "upToDateTooltip": "Up-to-date",
+      "imageUpdateTooltip": "De tag {tag} verwijst nu naar een andere image-build. Rol opnieuw uit om de nieuwe image op te halen; de versietag zelf is niet gewijzigd.",
       "blockedTooltip": "Geblokkeerd",
       "actionsDisabled": "Acties uitgeschakeld",
       "openActionsMenu": "Actiemenu openen",
@@ -195,9 +205,13 @@
       "ariaSnoozedUpdates": "Gesnoozede updates",
       "ariaSkippedUpdates": "Updates overgeslagen",
       "ariaMaturityBlocked": "Door de looptijd geblokkeerde updates",
+      "ariaPinnedTag": "Vastgezette tag",
+      "pinnedTagTooltip": "Deze tag is vastgezet op een exacte versie — drydock stapt niet automatisch over naar nieuwere versies. Stel dd.tag.family=loose in of voeg een dd.tag.include-filter toe om dit toe te staan.",
+      "unknownKindLabel": "Onbekend",
       "emptyState": "Er zijn geen containers die overeenkomen met uw filters",
       "currentLabel": "Huidig",
       "latestLabel": "Nieuwste",
+      "blockedByBouncer": "Geblokkeerd door Bouncer",
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
@@ -223,6 +237,15 @@
       "updateAllInGroupTooltip": "Update iedereen in de groep",
       "updateSingular": "bijwerken",
       "updatePlural": "updates"
+    },
+    "groupDialog": {
+      "title": "Containergroep instellen",
+      "description": "Kies hoe {name} in deze browser wordt gegroepeerd. Dit overschrijft de server-, Compose- of Swarm-groep totdat je het wist.",
+      "groupLabel": "Groepsnaam",
+      "groupPlaceholder": "bijv. Mediaservices",
+      "helpText": "Bestaande groepen worden voorgesteld terwijl je typt.",
+      "clear": "Gedetecteerde groep gebruiken",
+      "save": "Groep opslaan"
     },
     "sideDetail": {
       "stopTooltip": "Stoppen",
@@ -258,6 +281,7 @@
       "allBouncer": "Alle Bouncer",
       "safe": "Veilig",
       "unsafe": "Onveilig",
+      "blocked": "Geblokkeerd",
       "allRegistries": "Alle registers",
       "dockerHub": "Docker Hub",
       "ghcr": "GHCR",
@@ -265,9 +289,11 @@
       "allHosts": "Alle gastheren",
       "allContainers": "Alle containers",
       "hasUpdate": "Heeft update",
+      "versionUpdate": "Versie-update",
       "major": "Majoor",
       "minor": "Klein",
       "patch": "Patch",
+      "digest": "Image-update",
       "hidePinned": "Verberg vastgezet",
       "hidePinnedTooltip": "Verberg containers die zijn vastgemaakt aan specifieke versies",
       "clearAll": "Alles wissen",
@@ -334,6 +360,10 @@
       "tooltip": "Beste stabiele semver-tag die beschikbaar is – overweeg vastzetten",
       "tooltipWithTag": "Voorgesteld: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Nieuwere beschikbaar",
+      "tooltip": "Nieuwere versie beschikbaar: {tag}. Deze Tag is vastgezet, drydock werkt hem niet automatisch bij."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Beveiliging geblokkeerd",
       "rolledBack": "Teruggedraaid",
@@ -350,6 +380,61 @@
       "noTrigger": "Geen trigger",
       "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Liften:"
+    },
+    "updateStatus": {
+      "title": "Updatestatus",
+      "showDetails": "Voorwaarden tonen",
+      "liftCountdown": "{countdown} · ontgrendelt op {date}",
+      "maturityClockPublished": "Kandidaat gepubliceerd op {date} — nog {count} dag tot het minimum van {minDays} dagen | Kandidaat gepubliceerd op {date} — nog {count} dagen tot het minimum van {minDays} dagen",
+      "maturityClockDetected": "Kandidaat gedetecteerd op {date} — nog {count} dag tot het minimum van {minDays} dagen | Kandidaat gedetecteerd op {date} — nog {count} dagen tot het minimum van {minDays} dagen",
+      "updateButton": "Nu bijwerken",
+      "blockedButton": "Update geblokkeerd",
+      "notificationsOnlyButton": "Alleen meldingen",
+      "summary": {
+        "upToDate": "Up-to-date.",
+        "insight": "Nieuwere versie beschikbaar — deze tag is vastgezet.",
+        "inProgress": "Update wordt uitgevoerd.",
+        "hardBlocked": "Update geblokkeerd — herstel vereist.",
+        "notify": "Alleen meldingen — Drydock past geen updates toe.",
+        "autoFiltered": "Update beschikbaar — automatische uitrol is gefilterd (handmatig werkt wel).",
+        "manualFiltered": "Update beschikbaar — een beleidsvoorwaarde vereist bevestiging.",
+        "autoReady": "Update beschikbaar — komt in aanmerking voor automatische uitrol.",
+        "manualReady": "Update beschikbaar — klaar om handmatig toe te passen."
+      },
+      "conditions": {
+        "no-update-available": "Geen update beschikbaar",
+        "rollback-container": "Rollback-container",
+        "active-operation": "Update wordt al uitgevoerd",
+        "security-scan-blocked": "Geblokkeerd door beveiligingsbeleid",
+        "last-update-rolled-back": "Vorige update teruggedraaid",
+        "snoozed": "Update gesnoozed",
+        "skip-tag": "Tag overgeslagen",
+        "skip-digest": "Digest overgeslagen",
+        "maturity-not-reached": "Volwassenheidsbeleid wachtend",
+        "threshold-not-reached": "Triggerdrempel niet bereikt",
+        "trigger-excluded": "Trigger uitgesloten door labels",
+        "trigger-not-included": "Trigger gefilterd door labels",
+        "agent-mismatch": "Trigger-agent komt niet overeen",
+        "no-update-trigger-configured": "Geen update-trigger geconfigureerd",
+        "self-update-unavailable": "Zelfupdate niet beschikbaar",
+        "maintenance-window-closed": "Onderhoudsvenster gesloten",
+        "dry-run-trigger": "Triggerconfiguratie in dry-run-modus"
+      },
+      "actions": {
+        "editPolicy": "Updatebeleid bewerken",
+        "configureLabels": "Triggerlabels configureren",
+        "viewOperation": "Updatebewerking bekijken",
+        "reviewSecurity": "Scanresultaten bekijken",
+        "viewRollback": "Rollbackcontext bekijken",
+        "configureAgent": "Trigger-agent configureren",
+        "configureTriggers": "Updatetriggers configureren",
+        "configureThreshold": "Triggerdrempel configureren",
+        "configureSelfUpdate": "Zelfupdate configureren",
+        "configureMaintenance": "Onderhoudsvenster configureren"
+      }
+    },
+    "maturityBadge": {
+      "new": "NIEUW"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -446,6 +531,8 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
+        "revertField": "{field} teruggezet naar declaratief beleid",
+        "revertAll": "Alle overschrijvingen teruggezet naar declaratief beleid",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
@@ -475,7 +562,20 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "1 dag",
+      "availableDaysPlural": "{count} dagen",
+      "availableHoursSingular": "1 uur",
+      "availableHoursPlural": "{count} uur",
+      "availableMinutesSingular": "1 minuut",
+      "availableMinutesPlural": "{count} minuten",
+      "justNow": "Zojuist gedetecteerd"
+    },
     "preview": {
+      "actions": {
+        "openRegistrySettings": "Registry-instellingen openen",
+        "openTriggerSettings": "Triggerinstellingen openen"
+      },
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"
@@ -534,9 +634,6 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
-    },
-    "updateStatus": {
-      "summary": {}
     }
   }
 }

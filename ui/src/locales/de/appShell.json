@@ -157,6 +157,8 @@
     "banners": {
       "legacyConfigTitleSingular": "{total} Legacy-Konfigurationsalias erkannt",
       "legacyConfigTitlePlural": "{total} Legacy-Konfigurationsaliasse erkannt",
+      "legacyApiPathTitleSingular": "{total} Anfrage an den entfernten API-Pfad erkannt",
+      "legacyApiPathTitlePlural": "{total} Anfragen an den entfernten API-Pfad erkannt",
       "dontShowAgain": "Nicht erneut anzeigen",
       "curlHealthcheckTitle": "Benutzerdefinierter curl-Healthcheck-Override erkannt",
       "envKeysLabel": "Env-Keys ({count}): {keys}",

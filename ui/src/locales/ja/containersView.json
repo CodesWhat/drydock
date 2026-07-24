@@ -35,6 +35,7 @@
       "container": "コンテナ",
       "tag": "Tag",
       "version": "バージョン",
+      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
       "update": "更新",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "ステータス",

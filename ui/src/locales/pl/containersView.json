@@ -35,6 +35,7 @@
       "container": "Kontener",
       "tag": "Tag",
       "version": "Wersja",
+      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
       "update": "Aktualizacja",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Stan",

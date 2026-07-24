@@ -1,5 +1,13 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Alternar colunas",
+      "heading": "Colunas",
+      "reset": "Redefinir",
+      "hiddenBadgeTooltip": "{count} colunas ocultas",
+      "autoHiddenAnnotation": "{column} — oculta para ajustar",
+      "autoHiddenBadgeTooltip": "{columns} ocultas para caber na sua tela."
+    },
     "confirmDialog": {
       "cancel": "Cancelar",
       "confirm": "Confirmar"
@@ -21,7 +29,10 @@
     },
     "dataTable": {
       "actions": "Ações",
-      "resizeColumn": "Redimensionar coluna"
+      "resizeColumn": "Redimensionar coluna",
+      "sortBy": "Ordenar por",
+      "sortDirectionAscending": "Direção da ordenação: crescente",
+      "sortDirectionDescending": "Direção da ordenação: decrescente"
     },
     "detailPanel": {
       "openFullPage": "Abrir visualização em página inteira",
