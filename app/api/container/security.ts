@@ -1,7 +1,11 @@
 import type { Request, Response } from 'express';
 import type { SecurityConfiguration, SecuritySbomFormat } from '../../configuration/index.js';
 import type { SecurityScanCycleCompleteEventPayload } from '../../event/index.js';
-import type { Container, ContainerSecurityState } from '../../model/container.js';
+import {
+  type Container,
+  type ContainerSecurityState,
+  hasCandidateIdentityChanged,
+} from '../../model/container.js';
 import {
   getTrivyDatabaseStatus as getTrivyDatabaseStatusDefault,
   type TrivyDatabaseStatus,
@@ -19,6 +23,7 @@ import { getPathParamValue } from './request-helpers.js';
 
 interface SecurityStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
+  getContainerRaw: (id: string) => Container | undefined;
   updateContainer: (container: Container) => Container;
 }
 
@@ -398,11 +403,53 @@ function persistAndBroadcast(options: {
   res: Response;
 }): void {
   const { context, id, container, securityPatch, status, res } = options;
+
+  // Re-fetch the current store record at write-back time rather than
+  // merging onto the pre-scan `container` snapshot the caller captured.
+  // Current/update-image scans (plus optional signature/SBOM checks) can
+  // run for seconds to minutes, so by the time we persist, a watcher poll
+  // may have legitimately advanced result/updateAvailable/updateDetectedAt/
+  // maturityGatePendingSince. Spreading the stale snapshot would silently
+  // revert those fields and reset the maturity soak clock.
+  const current = context.storeContainer.getContainerRaw(id);
+  if (!current) {
+    // Container removed or recreated under a new id while the scan was
+    // in flight — skip the write rather than resurrecting a zombie
+    // record with the stale pre-scan snapshot.
+    context.broadcastScanCompleted(id, status);
+    sendErrorResponse(res, 404, 'Container not found');
+    return;
+  }
+
+  // `scanUpdateImage` computes updateScan/updateSignature/updateSbom against the
+  // PRE-scan candidate (`container.result.tag`). Re-fetching `current` above makes
+  // `result` live again, so if a watcher advanced the candidate mid-scan those three
+  // keys would now be attached to a different image than the one they describe —
+  // reporting the old candidate's CVEs, signature, and SBOM against the new pending
+  // update. Before this write-back re-fetch existed the snapshot and the patch were
+  // at least consistently stale together; making `result` live is what splits them.
+  //
+  // When the candidate has moved, clear the three update-image keys instead of
+  // applying them. Anything already stored describes the superseded candidate too,
+  // so clearing is correct in both directions and matches how `scanUpdateImage`
+  // already clears them when no update is available. The next scan repopulates them
+  // against the current candidate. Current-image `scan`/`signature`/`sbom` are
+  // unaffected: those describe the running image, not the update candidate.
+  const candidateMoved = hasCandidateIdentityChanged(container.result, current.result);
+  const patchToApply = candidateMoved
+    ? { ...securityPatch, updateScan: undefined, updateSignature: undefined, updateSbom: undefined }
+    : securityPatch;
+  if (candidateMoved) {
+    context.log.info(
+      `Update candidate for container ${id} changed during the scan; discarding update-image scan results`,
+    );
+  }
+
   const containerToStore = {
-    ...container,
+    ...current,
     security: {
-      ...(container.security || {}),
-      ...securityPatch,
+      ...(current.security || {}),
+      ...patchToApply,
     },
   };
   const updatedContainer = context.storeContainer.updateContainer(containerToStore);

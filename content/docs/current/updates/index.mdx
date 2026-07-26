@@ -3,6 +3,11 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
+## v1.6.0-rc.7 Highlights — July 26, 2026
+
+- **Four identity-drift bugs fixed** — the maturity soak clock no longer resets when a container is recreated, notification dedup no longer double-fires a `once: true` notification on a manual recheck, a finishing security scan no longer reverts an update the watcher detected mid-scan, and containers with no available update no longer surface under maturity/age filters or sorts. All four traced back to inconsistent candidate-identity comparisons, now unified behind one shared helper.
+- **Icon bundle regenerated** — `ui/src/boot/icon-bundle.json` is back in sync with the locked iconify versions, fixing drift since the tabler 1.2.35 → 1.2.37 lockfile bump.
+
 ## v1.6.0-rc.6 Highlights — July 26, 2026
 
 - **Maturity-cleared updates get their own notification** — when an update held back by the maturity gate (`maturityMode: mature`) finally clears its soak window, drydock now fires a dedicated `maturity-cleared` notification right away instead of waiting on the next scan's generic update-available message ([Discussion #587](https://github.com/CodesWhat/drydock/discussions/587)). A background sweep checks gated containers every few minutes so the notification lands close to the moment the update actually becomes applicable, and it's deduplicated against `update-available` so nothing gets announced twice.

@@ -43,6 +43,7 @@ describe('api/container/filters', () => {
     const containers = Array.from({ length: 12 }, (_, index) => ({
       id: `c${index + 1}`,
       name: `container-${index + 1}`,
+      updateAvailable: true,
       firstSeenAt: `2024-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
     }));
 

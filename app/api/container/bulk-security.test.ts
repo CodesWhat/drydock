@@ -40,6 +40,7 @@ function createHarness(options: { containers?: Record<string, unknown>[] } = {})
   const storeContainer = {
     getAllContainers: vi.fn(() => [...containers]),
     getContainer: vi.fn((id: string) => containers.find((c) => c.id === id)),
+    getContainerRaw: vi.fn((id: string) => containers.find((c) => c.id === id)),
     updateContainer: vi.fn((c: any) => {
       const idx = containers.findIndex((existing) => existing.id === c.id);
       if (idx >= 0) {
@@ -874,6 +875,78 @@ describe('api/container/bulk-security', () => {
       await waitForCycleComplete(harness.deps);
 
       expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith('sha256:abc', scan, '');
+    });
+
+    test('does not revert a concurrent watcher update detected while the scan was in flight', async () => {
+      const initialContainer = createContainer({
+        id: 'c1',
+        name: 'nginx',
+        updateAvailable: true,
+        result: { tag: 'a', digest: 'sha256:AAA' },
+        updateDetectedAt: 'T0',
+      });
+      const harness = createHarness({ containers: [initialContainer] });
+
+      let releaseScan: ((scan: ReturnType<typeof createScanResult>) => void) | undefined;
+      const deferredScan = new Promise<ReturnType<typeof createScanResult>>((resolve) => {
+        releaseScan = resolve;
+      });
+      harness.deps.scanImageForVulnerabilities.mockReturnValue(deferredScan);
+
+      await callScanAll(harness.handlers);
+
+      // Let the background scan get past the pre-scan snapshot capture and
+      // into the (still-pending) scan.
+      await vi.waitFor(() => {
+        expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalled();
+      });
+
+      // Simulate a concurrent watcher poll that legitimately detected a
+      // newer update and wrote it directly into the store while the scan
+      // was still in flight.
+      const liveRecord = {
+        ...initialContainer,
+        result: { tag: 'b', digest: 'sha256:BBB' },
+        updateDetectedAt: 'T1',
+      };
+      harness.storeContainer.getContainerRaw.mockReturnValue(liveRecord);
+
+      const scan = createScanResult();
+      releaseScan?.(scan);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.result).toEqual({ tag: 'b', digest: 'sha256:BBB' });
+      expect(persisted.updateDetectedAt).toBe('T1');
+      expect(persisted.security.scan).toEqual(scan);
+    });
+
+    test('skips the write when the container vanished while the scan was in flight', async () => {
+      const harness = createHarness({
+        containers: [{ id: 'c1', name: 'nginx' }],
+      });
+
+      let releaseScan: ((scan: ReturnType<typeof createScanResult>) => void) | undefined;
+      const deferredScan = new Promise<ReturnType<typeof createScanResult>>((resolve) => {
+        releaseScan = resolve;
+      });
+      harness.deps.scanImageForVulnerabilities.mockReturnValue(deferredScan);
+
+      await callScanAll(harness.handlers);
+
+      await vi.waitFor(() => {
+        expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalled();
+      });
+
+      // Container was removed (or recreated under a new id) mid-scan.
+      harness.storeContainer.getContainerRaw.mockReturnValue(undefined);
+
+      releaseScan?.(createScanResult());
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(harness.deps.broadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed');
     });
   });
 
