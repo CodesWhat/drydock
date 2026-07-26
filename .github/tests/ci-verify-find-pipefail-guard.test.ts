@@ -85,7 +85,14 @@ test('ci-verify.yml has find-into-variable assignments to guard against pipefail
 
 test('every find-into-variable pipeline in ci-verify.yml is guarded against a missing-directory exit', () => {
   const unguarded = findFindAssignmentSites().filter(
-    (site) => !GUARDED_FIND_PREFIX.test(site.inner),
+    (site) =>
+      !GUARDED_FIND_PREFIX.test(site.inner) ||
+      // GUARDED_FIND_PREFIX only anchors the *first* stage, so a pipeline like
+      // `{ find a || true; } | find b ...` would otherwise pass with its second
+      // find still able to abort under pipefail. Rather than try to parse each
+      // stage, require exactly one find per assignment: every site here has one,
+      // and a second one should fail this test so someone has to look at it.
+      (site.inner.match(/\bfind\b/g) ?? []).length !== 1,
   );
 
   expect(unguarded).toStrictEqual([]);
