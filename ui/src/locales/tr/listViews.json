@@ -64,7 +64,8 @@
       "preview": "Önizleme",
       "agent-disconnect": "Ajan Bağlantı Kesimi",
       "notification-delivery-failed": "Bildirim Teslimi Başarısız",
-      "security-alert": "Güvenlik Uyarısı"
+      "security-alert": "Güvenlik Uyarısı",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "Kapsayıcı",
@@ -107,6 +108,10 @@
       "container-unhealthy": {
         "name": "Container sağlıksız",
         "description": "Bir container'ın Docker sağlık kontrolü \"unhealthy\" durumuna girdiğinde"
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {

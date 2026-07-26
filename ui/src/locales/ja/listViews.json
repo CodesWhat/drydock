@@ -64,7 +64,8 @@
       "preview": "プレビュー",
       "agent-disconnect": "エージェント切断",
       "notification-delivery-failed": "通知送信失敗",
-      "security-alert": "セキュリティアラート"
+      "security-alert": "セキュリティアラート",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "コンテナ",
@@ -107,6 +108,10 @@
       "container-unhealthy": {
         "name": "コンテナ異常",
         "description": "コンテナの Docker ヘルスチェックが unhealthy 状態になったとき"
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {

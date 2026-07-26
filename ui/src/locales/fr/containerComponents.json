@@ -11,8 +11,8 @@
       "dryRunUpdateTooltip": "Ce trigger est en mode dry-run — cliquer récupérera la nouvelle image sans remplacer le conteneur.",
       "dryRunCondition": "Le trigger d'action {trigger} est en mode dry-run — les mises à jour sont seulement prévisualisées et les conteneurs ne sont pas remplacés.",
       "scanNow": "Scanner maintenant",
-      "recheckNow": "Recheck for Updates",
-      "rechecking": "Rechecking…",
+      "recheckNow": "Revérifier les mises à jour",
+      "rechecking": "Revérification…",
       "skipSnoozeGroup": "Ignorer et reporter",
       "skipThisUpdate": "Ignorer cette mise à jour",
       "snooze1d": "Reporter 1 j",
@@ -88,8 +88,8 @@
       "startButton": "Démarrer",
       "restartButton": "Redémarrer",
       "scanButton": "Scanner",
-      "recheckButton": "Recheck",
-      "ariaRecheckContainer": "Recheck container for updates",
+      "recheckButton": "Revérifier",
+      "ariaRecheckContainer": "Revérifier le conteneur pour les mises à jour",
       "blockedButton": "Bloqué",
       "updateButton": "Mettre à jour",
       "deleteButton": "Supprimer"
@@ -103,7 +103,7 @@
       "noVolumes": "Aucun volume monté"
     },
     "fullPageLabels": {
-      "labels": "Labels",
+      "labels": "Balises",
       "noLabels": "Aucun label assigné"
     },
     "fullPageOverview": {
@@ -111,7 +111,7 @@
       "volumes": "Volumes",
       "composeFiles": "Fichiers compose",
       "version": "Version",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Version du logiciel",
       "currentLabel": "Actuel :",
       "latestLabel": "Dernier :",
       "digestLabel": "Digest :",
@@ -122,14 +122,14 @@
       "transformLabel": "Transformer :",
       "notSet": "Non défini",
       "triggerFilters": "Filtres de trigger",
-      "registry": "Registry",
+      "registry": "Registre",
       "runtimeProcess": "Processus runtime",
-      "entrypoint": "Entrypoint",
+      "entrypoint": "Point d'entrée",
       "cmd": "Cmd",
       "lifecycleHooks": "Hooks de cycle de vie",
       "preUpdate": "Pré-mise à jour",
       "postUpdate": "Post-mise à jour",
-      "timeout": "Timeout",
+      "timeout": "Délai d'expiration",
       "templateVariables": "Variables de template",
       "autoRollback": "Auto-rollback",
       "status": "État",
@@ -155,21 +155,21 @@
       "noPortsExposed": "Aucun port exposé",
       "notConfigured": "Non configuré",
       "noVolumesMounted": "Aucun volume monté",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Temps de fonctionnement",
+      "uptimeAriaLabel": "Temps de fonctionnement du conteneur"
     },
     "containerLogs": {
       "title": "Logs du conteneur",
       "download": "Télécharger",
       "allLevels": "Tous les niveaux",
       "downloadError": "Impossible de télécharger les logs",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Queue {count}",
+      "tailAll": "Tout la queue",
+      "statusPaused": "En pause",
+      "statusLive": "En direct",
+      "statusOffline": "Hors ligne",
       "stdout": "stdout",
-      "stderr": "stderr"
+      "stderr": "sdterr"
     },
     "groupedViews": {
       "statusQueued": "En file",
@@ -186,12 +186,12 @@
       "startAction": "Démarrer",
       "restartAction": "Redémarrer",
       "scanAction": "Scanner",
-      "recheckAction": "Recheck for updates",
+      "recheckAction": "Revérifier les mises à jour",
       "forceUpdateAction": "Forcer la mise à jour",
       "updateAction": "Mettre à jour",
       "skipUpdateAction": "Ignorer cette mise à jour",
       "setGroupAction": "Définir le groupe",
-      "rollbackAction": "Rollback",
+      "rollbackAction": "Retour en arrière",
       "deleteAction": "Supprimer",
       "pinnedTooltip": "Épinglé",
       "skippedLabel": "Ignoré",
@@ -212,21 +212,21 @@
       "currentLabel": "Actuel",
       "latestLabel": "Dernier",
       "blockedByBouncer": "Bloqué par Bouncer",
-      "registryErrorRateLimited": "Rate limited",
-      "registryErrorAuth": "Auth failed",
-      "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed",
+      "registryErrorRateLimited": "Débit limité",
+      "registryErrorAuth": "Authentification échouée",
+      "registryErrorNotFound": "Introuvable",
+      "registryErrorCheckFailed": "Vérification échouée",
       "blockedTag": "Bloqué : {tag}",
       "blockedTagWithCriticals": "Bloqué : {tag} ({count} CVE critique)",
       "blockedTagWithCriticalsCVEs": "Bloqué : {tag} ({count} CVE critiques)",
       "manualUpdateOnly": "Mise à jour manuelle uniquement",
       "manualUpdateOnlyWithMessage": "Mise à jour manuelle uniquement — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "Mise à jour",
+      "cancelButton": "Annuler",
+      "blockedButton": "Bloqué",
+      "updateButton": "Mise à jour",
+      "moreButton": "Plus",
+      "cancelUpdateTooltip": "Annuler la mise à jour"
     },
     "groupHeader": {
       "ungrouped": "Non groupé",
@@ -252,7 +252,7 @@
       "startTooltip": "Démarrer",
       "restartTooltip": "Redémarrer",
       "scanTooltip": "Scanner",
-      "recheckTooltip": "Recheck for updates",
+      "recheckTooltip": "Revérifier les mises à jour",
       "blockedForceUpdateTooltip": "Bloqué - Forcer la mise à jour",
       "updateTooltip": "Mettre à jour",
       "deleteTooltip": "Supprimer",
@@ -265,12 +265,12 @@
       "previewEmptyState": "Lancez une prévisualisation pour voir quelles actions de mise à jour seront exécutées.",
       "architecture": "Architecture",
       "os": "OS",
-      "digest": "Digest",
+      "digest": "Récapitulatif",
       "created": "Créé",
       "unknown": "Inconnu",
       "imageMetadata": "Métadonnées de l'image",
       "imageAge": "Âge de l'image",
-      "revealFailed": "Failed to reveal value"
+      "revealFailed": "Impossible de révéler la valeur"
     },
     "listContent": {
       "loadingContainers": "Chargement des conteneurs...",
@@ -290,8 +290,8 @@
       "allContainers": "Tous les conteneurs",
       "hasUpdate": "A une mise à jour",
       "versionUpdate": "Mise à jour de version",
-      "major": "Major",
-      "minor": "Minor",
+      "major": "Majeure",
+      "minor": "Mineure",
       "patch": "Patch",
       "digest": "Mise à jour d'image",
       "hidePinned": "Masquer les épinglés",
@@ -314,7 +314,7 @@
     },
     "stats": {
       "paused": "En pause",
-      "live": "Live",
+      "live": "En direct",
       "heartbeatActive": "heartbeat actif",
       "resume": "Reprendre",
       "pause": "Pause",
@@ -323,18 +323,18 @@
       "cpu": "CPU",
       "memory": "Mémoire",
       "networkRxTx": "Réseau RX/TX",
-      "blockIo": "Block I/O",
-      "loadFailed": "Failed to load container stats"
+      "blockIo": "Bloc d'entrée/sortie",
+      "loadFailed": "Impossible de charger les statistiques du conteneur"
     },
     "updateDialog": {
       "title": "Mettre à jour le conteneur",
-      "thisContainer": "this container",
+      "thisContainer": "ce conteneur",
       "confirmTagChange": "Mettre à jour {name} ? Le tag d'image passera de :{currentTag} à :{newTag}{kind}.",
       "confirmDigestChange": "Mettre à jour {name} ? Un build plus récent de :{currentTag} est disponible (changement de digest).",
       "confirmLatest": "Mettre à jour {name} maintenant ? L'image la plus récente détectée sera appliquée.",
       "updating": "Mise à jour...",
       "update": "Mettre à jour",
-      "updateFailed": "Update failed"
+      "updateFailed": "Echec de la mise à jour"
     },
     "floatingTag": {
       "badgeText": "tag flottant",
@@ -351,9 +351,9 @@
       "viewFullNotes": "Voir les notes complètes",
       "currentSuffix": "(actuel)",
       "availableSuffix": "(disponible)",
-      "intermediateNotes": "Intermediate releases ({count})",
-      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
-      "loadingIntermediateNotes": "Loading intermediate releases…"
+      "intermediateNotes": "Versions intermédiaires ({count})",
+      "olderReleasesNotShown": "{count} version antérieure non affichée | {count} versions antérieures non affichées",
+      "loadingIntermediateNotes": "Chargement des versions intermédiaires…"
     },
     "suggestedTag": {
       "badgeText": "Suggéré",
@@ -372,13 +372,13 @@
       "digestSkipped": "Digest ignoré",
       "maturing": "En maturation",
       "belowThreshold": "Sous le seuil",
-      "rollback": "Rollback",
+      "rollback": "Retour en arrière",
       "inProgress": "En cours",
       "triggerExcluded": "Trigger exclu",
       "triggerFiltered": "Trigger filtré",
       "agentMismatch": "Agent différent",
       "noTrigger": "Aucun trigger",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Mise à jour automatique indisponible",
       "liftsLabel": "Lève :"
     },
     "updateStatus": {
@@ -437,84 +437,84 @@
       "new": "NOUVEAU"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Annuler",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Arrêter le conteneur",
+        "message": "Arrêter {name} ?",
+        "acceptLabel": "Arrêter",
+        "successMessage": "Arrêté : {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Redémarrer le Conteneur",
+        "message": "Redémarrer {name} ?",
+        "acceptLabel": "Redémarrer",
+        "successMessage": "Redémarré : {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
-        "message": "Force update {name}? This clears skip/snooze policy before attempting update.",
-        "acceptLabel": "Force Update"
+        "header": "Forcer la Mise à jour",
+        "message": "Forcer la mise à jour de {name} ? Cela supprime la politique de mise à jour avant d'essayer de mettre à jour.",
+        "acceptLabel": "Forcer la Mise à jour"
       },
       "update": {
-        "header": "Update Container",
-        "messageLatest": "Update {name} now? This will apply the latest discovered image.",
-        "messageTagChange": "Update {name}? This will change the image tag from :{currentTag} to :{newTag}{kind}.",
-        "messageDigestChange": "Update {name}? A newer build of :{currentTag} is available (digest change).",
-        "softBlockerSuffix": "\n\nThis update is currently policy-blocked:\n{list}\n\nClick Update anyway to override.",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "header": "Mettre à jour le conteneur",
+        "messageLatest": "Mettre à jour {name} maintenant ? L'image la plus récente détectée sera appliquée.",
+        "messageTagChange": "Mettre à jour {name} ? Le tag d'image passera de :{currentTag} à :{newTag}{kind}.",
+        "messageDigestChange": "Mettre à jour {name} ? Un build plus récent de :{currentTag} est disponible (changement de récapitulatif).",
+        "softBlockerSuffix": "\n\nCette mise à jour est actuellement bloquée par la politique :\n{list}\n\nCliquez sur Mettre à jour quand même pour remplacer.",
+        "acceptLabel": "Mettre à jour",
+        "acceptLabelOverride": "Mettre à jour quand même"
       },
       "delete": {
-        "header": "Delete Container",
-        "message": "Delete {name}? This will remove it from Drydock tracking until rediscovered.",
-        "acceptLabel": "Delete"
+        "header": "Supprimer le conteneur",
+        "message": "Supprimer {name} ? Cela le retirera du suivi Drydock jusqu'à ce qu'il soit redécouvert.",
+        "acceptLabel": "Supprimer"
       },
       "clearPolicy": {
-        "header": "Clear Update Policy",
-        "message": "Clear all update policy for {name}? This removes skips, snooze, and maturity settings.",
-        "acceptLabel": "Clear Policy"
+        "header": "Effacer la politique de mise à jour",
+        "message": "Effacer toutes les politiques pour {name} ? Ceci supprime les paramètres de saut, de mise en veille et de maturité.",
+        "acceptLabel": "Effacer la politique"
       },
       "rollback": {
-        "header": "Rollback Container",
-        "messageSelected": "Rollback {name} to the selected backup image? This will replace the running container image.",
-        "messageLatest": "Rollback {name} to the latest backup image? This will replace the running container image.",
-        "acceptLabel": "Rollback"
+        "header": "Restaurer le Conteneur",
+        "messageSelected": "Restaurer {name} à l'image de sauvegarde sélectionnée ? Ceci remplacera l'image du conteneur en cours d'exécution.",
+        "messageLatest": "Restaurer {name} à la dernière image de sauvegarde ? Ceci remplacera l'image du conteneur en cours d'exécution.",
+        "acceptLabel": "Restaurer"
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
-      "scanTriggered": "Scan triggered: {name}",
-      "scanFailedTitle": "Scan failed: {name}",
-      "scanFailedDetail": "Scan failed for {name}",
-      "actionFailedDetail": "Action failed for {name}",
-      "updateFailedTitle": "Update failed: {name}",
-      "deleted": "Deleted: {name}",
-      "deleteFailedTitle": "Delete failed: {name}",
-      "deleteFailedDetail": "Failed to delete {name}",
-      "cancellationRequested": "Cancellation requested: {name}",
-      "cancelled": "Cancelled: {name}",
-      "cancelAlreadyFinished": "Update already finished for {name}, cannot cancel",
-      "cancelOperationNotFound": "Operation not found: {name}",
-      "cancelFailed": "Failed to cancel update for {name}",
-      "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}",
-      "recheckComplete": "Recheck complete: {name}",
-      "recheckNotFound": "Container not found: {name}",
-      "recheckFailedTitle": "Recheck failed: {name}",
-      "recheckFailedDetail": "Recheck failed for {name}"
+      "started": "Démarré : {name}",
+      "scanTriggered": "Scan déclenché : {name}",
+      "scanFailedTitle": "Scan échoué : {name}",
+      "scanFailedDetail": "Scan échoué pour {name}",
+      "actionFailedDetail": "Action échouée pour {name}",
+      "updateFailedTitle": "Mise à jour échouée : {name}",
+      "deleted": "Supprimé : {name}",
+      "deleteFailedTitle": "Suppression échouée : {name}",
+      "deleteFailedDetail": "Impossible de supprimer {name}",
+      "cancellationRequested": "Annulation demandée : {name}",
+      "cancelled": "Annulée : {name}",
+      "cancelAlreadyFinished": "Mise à jour déjà terminée pour {name}, impossible d'annuler",
+      "cancelOperationNotFound": "Opération introuvable : {name}",
+      "cancelFailed": "Impossible d'annuler la mise à jour pour {name}",
+      "groupUpdateRejected": "Impossible de mettre à jour {name} : {message}",
+      "groupUpdateFailed": "Impossible de mettre à jour {name}",
+      "recheckComplete": "Revérification terminée : {name}",
+      "recheckNotFound": "Conteneur introuvable : {name}",
+      "recheckFailedTitle": "Revérification échouée : {name}",
+      "recheckFailedDetail": "Revérification échouée pour {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} entrée",
+      "entryCountPlural": "{count} entrées",
       "tooltips": {
-        "snoozedUntil": "Updates snoozed until {date}",
-        "snoozed": "Updates snoozed",
-        "maturityBlockedSingular": "Mature-only policy blocks updates younger than {days} day",
-        "maturityBlockedPlural": "Mature-only policy blocks updates younger than {days} days",
-        "maturityActiveSingular": "Mature-only policy active ({days} day minimum age)",
-        "maturityActivePlural": "Mature-only policy active ({days} days minimum age)",
-        "maturityAllowAll": "Maturity policy allows all updates",
-        "maturityGeneric": "Maturity policy active",
+        "snoozedUntil": "Mises à jour reportées jusqu'à {date}",
+        "snoozed": "Mises à jour reportées",
+        "maturityBlockedSingular": "La politique Mature-only bloque les mises à jour plus récentes que {days} jour",
+        "maturityBlockedPlural": "La politique Mature-only bloque les mises à jour plus récentes que {days} jours",
+        "maturityActiveSingular": "Politique Mature-only active ({days} jour d'âge minimal)",
+        "maturityActivePlural": "Politique Mature-only active ({days} jours d'âge minimal)",
+        "maturityAllowAll": "La politique de maturité autorise les mises à jour",
+        "maturityGeneric": "Politique de maturité active",
         "skippedGeneric": "Skipped updates policy active",
         "skippedWithCount": "Skipped updates policy active ({count})"
       },

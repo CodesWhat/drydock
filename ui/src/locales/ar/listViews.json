@@ -64,7 +64,8 @@
       "preview": "معاينة",
       "agent-disconnect": "قطع اتصال الوكيل",
       "notification-delivery-failed": "فشل تسليم الإشعار",
-      "security-alert": "تنبيه أمني"
+      "security-alert": "تنبيه أمني",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "الحاوية",
@@ -107,6 +108,10 @@
       "container-unhealthy": {
         "name": "الحاوية غير سليمة",
         "description": "عندما يدخل فحص الحالة الصحية لـ Docker الخاص بالحاوية في حالة غير سليمة"
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {
