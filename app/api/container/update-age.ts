@@ -8,7 +8,7 @@ export function getContainerUpdateAge(container: Container): number | undefined 
 
   // Match the model layer's own gate (model/container.ts getRawUpdateAge):
   // no available update means no age to report, full stop. A falsy check
-  // (not `=== false`) is deliberate — `updateAvailable` left unset (never
+  // (not `=== false`) is intentional: `updateAvailable` left unset (never
   // evaluated) and `updateAvailable: false` (evaluated and gated, e.g. by
   // maturityMode) both mean "nothing to age" here, same as upstream.
   if (!container.updateAvailable) {

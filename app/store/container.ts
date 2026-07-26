@@ -1421,7 +1421,13 @@ export function getContainer(id: string) {
 
 /**
  * Get container by id without redacting sensitive env values.
- * Only used by the env reveal endpoint.
+ *
+ * Used by the env reveal endpoint, and by every write-back path that persists
+ * a container it fetched earlier (security scans, the scan scheduler). Those
+ * callers must NOT use `getContainer`: it masks sensitive env to
+ * `'[REDACTED]'`, and while `updateContainer` restores classified details
+ * rather than storing the mask, re-fetching raw keeps the write-back honest
+ * instead of relying on that guard.
  * @param id
  */
 export function getContainerRaw(id: string) {
