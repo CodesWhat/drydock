@@ -52,7 +52,7 @@ test('release-gated workspace packages and locks use the v1.6 base version', () 
   }
 });
 
-test('demo runtime fixtures identify the exact v1.6.0-rc.6 candidate', () => {
+test(`demo runtime fixtures identify the exact v${RC_VERSION} candidate`, () => {
   for (const { path, valuePattern } of DEMO_RELEASE_FIXTURES) {
     const contents = readFileSync(path, 'utf8');
     assert.deepEqual(extractVersionValues(contents, valuePattern), [RC_VERSION], path);
@@ -63,18 +63,18 @@ test('release version patterns match exact optionally v-prefixed tokens', () => 
   const rcPattern = versionPattern(RC_VERSION);
   const legacyPattern = versionPattern('1.5.0');
 
-  assert.match('version: 1.6.0-rc.6', rcPattern);
-  assert.match('version: v1.6.0-rc.6', rcPattern);
-  assert.doesNotMatch('version: 1.6.0-rc.60', rcPattern);
-  assert.doesNotMatch('version: x1.6.0-rc.6', rcPattern);
+  assert.match(`version: ${RC_VERSION}`, rcPattern);
+  assert.match(`version: v${RC_VERSION}`, rcPattern);
+  assert.doesNotMatch(`version: ${RC_VERSION}0`, rcPattern);
+  assert.doesNotMatch(`version: x${RC_VERSION}`, rcPattern);
   assert.match('version: v1.5.0', legacyPattern);
   assert.doesNotMatch('version: 1.5.0-rc.1', legacyPattern);
 });
 
 test('fixture version extraction retains mixed candidate identities', () => {
-  const contents = "version: '1.6.0-rc.6', version: '1.6.0-rc.60'";
+  const contents = `version: '${RC_VERSION}', version: '${RC_VERSION}0'`;
   assert.deepEqual(extractVersionValues(contents, /version:\s*["']([^"']+)["']/gu), [
-    '1.6.0-rc.6',
-    '1.6.0-rc.60',
+    RC_VERSION,
+    `${RC_VERSION}0`,
   ]);
 });
