@@ -67,7 +67,10 @@ test('public release surfaces identify the v1.6 release candidate', () => {
     // backtick+pipe delimiters mean an un-bumped `X.Y.Z-rc.N` row does NOT satisfy this),
     // and no release-candidate row may still be present for this release line.
     assert.match(quickstart, new RegExp(`\\| \`${escapedRcVersion}\` \\|`, 'u'));
-    assert.doesNotMatch(quickstart, /\| `[^`]*-rc\.\d+` \| Immutable release candidate/u);
+    assert.doesNotMatch(
+      quickstart,
+      new RegExp(`\\| \`${escapedRcVersion}-rc\\.\\d+\` \\| Immutable release candidate`, 'u'),
+    );
   }
 
   assert.ok(changelog.includes(`## [${RC_VERSION}] — ${RC_DATE}`));
