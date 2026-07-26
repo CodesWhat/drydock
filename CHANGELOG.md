@@ -10,9 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.6] — 2026-07-26
+
 ### Added
 
 - **Maturity-cleared notification** ([Discussion #587](https://github.com/CodesWhat/drydock/discussions/587)). When an update previously withheld by the maturity gate (`maturityMode: mature`) becomes applicable, drydock now fires a dedicated `maturity-cleared` notification instead of waiting for the next scheduled scan's generic `update-available` notification. A new background sweep (`DD_MATURITY_SWEEP_CRON`, default every 5 minutes) re-checks containers currently withheld by the gate and fires the moment each one's soak window elapses; the same check also runs at every watch-cycle scan. Delivery respects the same `THRESHOLD`, include/exclude, and `ONCE` dedup rules as `update-available`, and is deduplicated against it so the same update is never announced twice. Action triggers (Docker, Docker Compose, Command) are unaffected and keep applying updates on their normal scan cadence.
+
+### Changed
+
+- **Routine dependency maintenance across every workspace.** Minor and patch updates for the app, UI, demo, documentation website, and end-to-end suites, including `undici` 8.8.0, `helmet` 8.3.0, `express-rate-limit` 8.6.0, `node-cron` 4.6.0, `re2js` 2.8.6, and `@aws-sdk/client-ecr` 3.1091.0.
+- **Translations resynced from Crowdin** ([#545](https://github.com/CodesWhat/drydock/pull/545)), refreshing the container, dashboard, list, and shared-component catalogs across the supported locales.
+
+### Fixed
+
+- **Empty-result fallbacks in CI scripts are reachable again** ([#599](https://github.com/CodesWhat/drydock/pull/599)). Steps that run under `bash -eo pipefail` piped a `grep` or `find` straight into a variable assignment, so an empty result — no matching branch, a load-test artifact directory that a failed run never created — exited non-zero and aborted the step before the deliberate "nothing found" handler beneath it could run. The Crowdin sync hit this for real on 2026-07-24 and retargeted its translation PR at the default branch. The fallible command is now guarded on its own so a genuine failure (network, auth, bad syntax) still fails loudly, and regression tests pin every affected site.
+- **Renovate no longer opens dependency PRs that bump `package.json` without the lockfile** ([#594](https://github.com/CodesWhat/drydock/pull/594)), which previously landed manifests and lockfiles out of step. A `lockfile-sync` test now enforces the pairing.
+- **The gitignored `.planning` directory is no longer tracked** ([#593](https://github.com/CodesWhat/drydock/pull/593)), with a test guarding against re-adding files that `.gitignore` already excludes.
 
 ## [1.6.0-rc.5] — 2026-07-23
 
@@ -2231,7 +2244,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.5...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.6...HEAD
+[1.6.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.5...v1.6.0-rc.6
 [1.6.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.4...v1.6.0-rc.5
 [1.6.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...v1.6.0-rc.4
 [1.6.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.2...v1.6.0-rc.3
