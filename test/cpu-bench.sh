@@ -68,7 +68,7 @@ printf "%-20s %10s %10s %10s %10s\n" "Container" "Avg CPU%" "Min CPU%" "Max CPU%
 printf "%-20s %10s %10s %10s %10s\n" "--------------------" "----------" "----------" "----------" "----------"
 
 for c in $CONTAINERS; do
-	RESULT=$(grep "^$c " "$TMPFILE" | awk '
+	RESULT=$({ grep "^$c " "$TMPFILE" || true; } | awk '
     BEGIN { sum=0; count=0; min=9999; max=0 }
     {
       sum += $2; count++

@@ -1249,7 +1249,7 @@ jobs:
       - name: Summarize load test metrics (ci)
         if: always()
         run: |
-          report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          report="$({ find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/summarize-load-test-report.sh "$report" "Load Test (CI)" "test/load-test-baselines/ci.json"
 
       - name: Correctness check (ci, enforced)
@@ -1261,7 +1261,7 @@ jobs:
           DD_LOAD_TEST_MIN_429: '0'
           DD_LOAD_TEST_MAX_429: '0'
         run: |
-          report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          report="$({ find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (CI)"
 
       - name: Resolve committed load test baseline (ci)
@@ -1299,7 +1299,7 @@ jobs:
             exit 1
           fi
 
-          current_report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          current_report="$({ find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -n1 | cut -d' ' -f2-)"
           if [ -z "${current_report}" ]; then
             echo "::error::Current CI report not found; cannot run regression gate."
             exit 1
@@ -1372,7 +1372,7 @@ jobs:
       - name: Summarize load test metrics (behavior)
         if: always()
         run: |
-          report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          report="$({ find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)" "test/load-test-baselines/behavior.json"
 
       - name: Correctness check (behavior, advisory)
@@ -1384,7 +1384,7 @@ jobs:
           DD_LOAD_TEST_MIN_429: '0'
           DD_LOAD_TEST_MAX_429: '0'
         run: |
-          report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          report="$({ find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
 
       - name: Resolve committed load test baseline (behavior)
@@ -1417,7 +1417,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          current_report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          current_report="$({ find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-regression.sh "${current_report}" "${BASELINE_REPORT}"
 
       - name: Upload load test artifact (behavior)
@@ -1442,7 +1442,7 @@ jobs:
       - name: Summarize load test metrics (stress)
         if: always()
         run: |
-          report="$(find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          report="$({ find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/summarize-load-test-report.sh "$report" "Load Test (Stress)"
 
       - name: Correctness check (stress, advisory)
@@ -1454,7 +1454,7 @@ jobs:
           DD_LOAD_TEST_MIN_429: '0'
           DD_LOAD_TEST_MAX_429: '0'
         run: |
-          report="$(find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          report="$({ find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null || true; } | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Stress)"
 
       - name: Upload load test artifact (stress)
