@@ -19,6 +19,7 @@ import {
 } from '../event/index.js';
 import {
   deriveContainerIdentityKey,
+  getCandidateIdentityFields,
   hasCandidateIdentityChanged,
   hasRawUpdate,
   isRollbackContainerName,
@@ -117,30 +118,18 @@ function toCacheKey(watcher, name) {
 /**
  * Signature of the update candidate a recreated container's stashed lifecycle
  * entry is compared against (see `deleteContainer`'s `replacementExpected`
- * stash and its `insertContainer` consumer). Must define "same candidate"
- * identically to `hasCandidateIdentityChanged` (#568), which restarts the
- * maturity soak on the same-container-ID recheck path: tag/digest are the
- * candidate identity, and `created` only participates when no digest is
- * available (legacy manifests, where it's the sole immutable discriminator).
- *
- * When a digest IS present, `created` is display-only metadata that can drift
- * between the pre-delete snapshot and the post-recreate rescan (registries
- * don't all cover it by the digest hash — e.g. a "last pushed"/tag-metadata
- * field vs. the image config `created`) without the candidate itself
- * changing. Including it unconditionally here (as this function did before
- * this fix) silently reset the soak clock on every such recreate, right after
- * an update lands — the same defect class as #565/#568, surviving in the
- * recreate path because #568 only touched `hasCandidateIdentityChanged`
- * (the same-ID recheck path), never this function.
+ * stash and its `insertContainer` consumer). Defines "same candidate" via the
+ * shared `getCandidateIdentityFields` (#568), which is also what
+ * `hasCandidateIdentityChanged` (same-container-ID recheck path) and
+ * `computeResultHash` (notification dedup) derive from — see that function's
+ * docstring for why `created` only participates when no digest is available.
  */
-function getResultSignature(
-  c: { result?: { tag?: unknown; digest?: unknown; created?: unknown } } | undefined,
-): string {
-  const digest = c?.result?.digest;
+function getResultSignature(c: { result?: container.ContainerResult } | undefined): string {
+  const fields = getCandidateIdentityFields(c?.result);
   return JSON.stringify({
-    tag: c?.result?.tag ?? null,
-    digest: digest ?? null,
-    created: digest === undefined ? (c?.result?.created ?? null) : null,
+    tag: fields.tag ?? null,
+    digest: fields.digest ?? null,
+    created: fields.created ?? null,
   });
 }
 

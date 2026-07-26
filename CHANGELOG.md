@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The maturity soak clock no longer resets when a container is recreated.** `getResultSignature` (`app/store/container.ts`) decided whether a recreated container inherits its stashed `updateDetectedAt` / `firstSeenAt` / `maturityGatePendingSince`, and it included `created` even when a digest was present. Registries don't all derive `created` from the digest, so it could differ between the pre-delete snapshot and the post-recreate rescan without the update candidate changing — discarding the stash and silently restarting the soak right after an update landed, which is exactly when clock continuity matters. Same defect class as [#565](https://github.com/CodesWhat/drydock/issues/565), surviving in the recreate path that [#568](https://github.com/CodesWhat/drydock/pull/568) never touched.
+- **Notification dedup no longer fires a duplicate `once: true` notification when a manual recheck bypasses the registry poll cache.** `computeResultHash` (`app/store/notification-history.ts`) hashed `suggestedTag` and `created` alongside `tag`/`digest`/`updateKind`, so a recheck that returned a drifted `created`/`suggestedTag` for the same candidate produced a different hash, made `hasAlreadyNotifiedForResult` report "not yet notified", and re-fired notifications that were supposed to be one-shot. The hash now derives from the same candidate-identity definition PR #568 established for the maturity soak (`tag` + `digest`, with `created` participating only when no digest is available), via a single shared helper (`getCandidateIdentityFields` in `app/model/container.ts`) now used by `hasCandidateIdentityChanged`, `getResultSignature`, and `computeResultHash` alike — previously three independently hand-rolled comparators that disagreed with each other. Upgrading may produce one extra notification for updates already in flight, since history persisted under the old hash formula won't match the new one; this is a one-time false positive, not a regression.
+
 ## [1.6.0-rc.6] — 2026-07-26
 
 ### Added

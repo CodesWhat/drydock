@@ -911,6 +911,48 @@ function hasResultChanged(
   );
 }
 
+export interface CandidateIdentityFields {
+  tag: string | undefined;
+  digest: string | undefined;
+  created: string | undefined;
+}
+
+/**
+ * Canonical "update candidate identity" for a result: the fields that
+ * actually define which candidate a result points at, as opposed to
+ * display-only metadata that can drift between scans without the candidate
+ * itself changing.
+ *
+ * This is the single source of truth for that notion across the codebase —
+ * `hasCandidateIdentityChanged` (same-container-ID recheck path, #568),
+ * `getResultSignature` in `app/store/container.ts` (container-recreate path,
+ * companion to #568), and `computeResultHash` in
+ * `app/store/notification-history.ts` (notification dedup) all derive from
+ * this. Three independently hand-rolled comparators previously disagreed
+ * with each other; do not add a fourth.
+ *
+ * `tag` and `digest` always participate. `created` participates only when
+ * `digest` is undefined: with a digest present the candidate is already
+ * uniquely identified, and `created` is display-only metadata that
+ * registries don't all derive identically from the digest, so it can differ
+ * between scans (e.g. pre-delete snapshot vs. post-recreate rescan, or a
+ * manual recheck bypassing the poll cache) without the candidate changing.
+ * Without a digest, `created` is the only available immutable discriminator
+ * (legacy manifests) and must participate.
+ * @param result
+ * @returns {CandidateIdentityFields}
+ */
+export function getCandidateIdentityFields(
+  result: Container['result'],
+): CandidateIdentityFields {
+  const digest = result?.digest;
+  return {
+    tag: result?.tag,
+    digest,
+    created: digest === undefined ? result?.created : undefined,
+  };
+}
+
 /**
  * Check whether the update candidate's identity changed, i.e. the tag or
  * digest a recheck would actually promote. Unlike hasResultChanged, this
@@ -927,13 +969,10 @@ export function hasCandidateIdentityChanged(
   currentResult: Container['result'],
   otherResult: Container['result'],
 ): boolean {
-  if (currentResult?.tag !== otherResult?.tag || currentResult?.digest !== otherResult?.digest) {
-    return true;
-  }
+  const current = getCandidateIdentityFields(currentResult);
+  const other = getCandidateIdentityFields(otherResult);
   return (
-    currentResult?.digest === undefined &&
-    otherResult?.digest === undefined &&
-    currentResult?.created !== otherResult?.created
+    current.tag !== other.tag || current.digest !== other.digest || current.created !== other.created
   );
 }
 

@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type Loki from 'lokijs';
-import type { Container } from '../model/container.js';
+import { getCandidateIdentityFields, type Container } from '../model/container.js';
 import { initCollection } from './util.js';
 
 export type NotificationEventKind =
@@ -48,17 +48,23 @@ function buildKey(
 
 /**
  * Compute a stable hash of the fields that define "a notification about this exact update."
- * Mirrors the fields used by `hasResultChanged()` so a hash change corresponds exactly to
- * what humans would call "a different update".
+ * Mirrors the candidate identity used by `hasCandidateIdentityChanged()` (#568) — tag and
+ * digest, with `created` participating only when no digest is available — plus `updateKind`,
+ * so a hash change corresponds exactly to what humans would call "a different update".
+ *
+ * Excludes `suggestedTag` and (when a digest is present) `created` on purpose: those are
+ * display-only metadata that can drift between scans — most notably on a manual recheck that
+ * bypasses the registry poll cache — without the candidate itself changing. Hashing them
+ * caused `hasAlreadyNotifiedForResult` to see a "new" result and fire a duplicate `once: true`
+ * notification for the same update.
  */
 export function computeResultHash(container: Pick<Container, 'result' | 'updateKind'>): string {
-  const result = container.result ?? {};
   const updateKind = container.updateKind ?? {};
+  const fields = getCandidateIdentityFields(container.result);
   const payload = {
-    tag: (result as { tag?: unknown }).tag ?? null,
-    suggestedTag: (result as { suggestedTag?: unknown }).suggestedTag ?? null,
-    digest: (result as { digest?: unknown }).digest ?? null,
-    created: (result as { created?: unknown }).created ?? null,
+    tag: fields.tag ?? null,
+    digest: fields.digest ?? null,
+    created: fields.created ?? null,
     kind: (updateKind as { kind?: unknown }).kind ?? null,
     remoteValue: (updateKind as { remoteValue?: unknown }).remoteValue ?? null,
   };
