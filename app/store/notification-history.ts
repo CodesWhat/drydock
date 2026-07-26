@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type Loki from 'lokijs';
-import { getCandidateIdentityFields, type Container } from '../model/container.js';
+import { type Container, getCandidateIdentityFields } from '../model/container.js';
 import { initCollection } from './util.js';
 
 export type NotificationEventKind =

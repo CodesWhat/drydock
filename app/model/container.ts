@@ -942,9 +942,7 @@ export interface CandidateIdentityFields {
  * @param result
  * @returns {CandidateIdentityFields}
  */
-export function getCandidateIdentityFields(
-  result: Container['result'],
-): CandidateIdentityFields {
+export function getCandidateIdentityFields(result: Container['result']): CandidateIdentityFields {
   const digest = result?.digest;
   return {
     tag: result?.tag,
@@ -972,7 +970,9 @@ export function hasCandidateIdentityChanged(
   const current = getCandidateIdentityFields(currentResult);
   const other = getCandidateIdentityFields(otherResult);
   return (
-    current.tag !== other.tag || current.digest !== other.digest || current.created !== other.created
+    current.tag !== other.tag ||
+    current.digest !== other.digest ||
+    current.created !== other.created
   );
 }
 
