@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.7] — 2026-07-26
+
+### Changed
+
+- **Regenerated `ui/src/boot/icon-bundle.json` against the locked iconify versions** ([#608](https://github.com/CodesWhat/drydock/pull/608)), fixing drift since the tabler 1.2.35 → 1.2.37 bump landed in #594.
+
 ### Fixed
 
 - **The maturity soak clock no longer resets when a container is recreated.** `getResultSignature` (`app/store/container.ts`) decided whether a recreated container inherits its stashed `updateDetectedAt` / `firstSeenAt` / `maturityGatePendingSince`, and it included `created` even when a digest was present. Registries don't all derive `created` from the digest, so it could differ between the pre-delete snapshot and the post-recreate rescan without the update candidate changing — discarding the stash and silently restarting the soak right after an update landed, which is exactly when clock continuity matters. Same defect class as [#565](https://github.com/CodesWhat/drydock/issues/565), surviving in the recreate path that [#568](https://github.com/CodesWhat/drydock/pull/568) never touched.
@@ -2251,7 +2257,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.6...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.7...HEAD
+[1.6.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.6...v1.6.0-rc.7
 [1.6.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.5...v1.6.0-rc.6
 [1.6.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.4...v1.6.0-rc.5
 [1.6.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...v1.6.0-rc.4
