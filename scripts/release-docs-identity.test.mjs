@@ -29,11 +29,10 @@ test('public release surfaces identify the v1.6 release candidate', () => {
   const changelog = read('CHANGELOG.md');
 
   const escapedRcVersion = escapeRegExp(RC_VERSION);
+  // RC_VERSION is either a prerelease (e.g. 1.6.0-rc.6) or, at the GA cut, the plain base
+  // version (e.g. 1.6.0). Both shapes drive every assertion below directly from the
+  // constant — no shape-specific literal is hand-maintained, and no shape throws.
   const rcSuffixMatch = /^(.*-rc\.)(\d+)$/u.exec(RC_VERSION);
-  if (!rcSuffixMatch) {
-    throw new Error(`RC_VERSION must end in -rc.<number>, got: ${RC_VERSION}`);
-  }
-  const [, rcPrefix, rcNumber] = rcSuffixMatch;
 
   assert.match(
     readme,
@@ -46,17 +45,34 @@ test('public release surfaces identify the v1.6 release candidate', () => {
   assert.match(agentApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
   assert.match(portwingApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
   assert.match(portwingApi, new RegExp(`"drydockVersion": "${escapedRcVersion}"`, 'u'));
-  assert.match(
-    quickstart,
-    new RegExp(`\\| \`${escapedRcVersion}\` \\| Immutable release candidate`, 'u'),
-  );
-  assert.doesNotMatch(
-    quickstart,
-    new RegExp(
-      `\\| \`${escapeRegExp(rcPrefix)}(?!${rcNumber}\\b)\\d+\` \\| Immutable release candidate`,
-      'u',
-    ),
-  );
+
+  if (rcSuffixMatch) {
+    // Prerelease shape: the quickstart tag matrix must show this exact candidate as an
+    // "Immutable release candidate" row, and must not still show any OTHER rc number under
+    // the same prefix (a stale/un-bumped candidate row left behind by a partial release cut).
+    const [, rcPrefix, rcNumber] = rcSuffixMatch;
+    assert.match(
+      quickstart,
+      new RegExp(`\\| \`${escapedRcVersion}\` \\| Immutable release candidate`, 'u'),
+    );
+    assert.doesNotMatch(
+      quickstart,
+      new RegExp(
+        `\\| \`${escapeRegExp(rcPrefix)}(?!${rcNumber}\\b)\\d+\` \\| Immutable release candidate`,
+        'u',
+      ),
+    );
+  } else {
+    // GA shape: the quickstart tag matrix must list this exact GA tag as its own row (the
+    // backtick+pipe delimiters mean an un-bumped `X.Y.Z-rc.N` row does NOT satisfy this),
+    // and no release-candidate row may still be present for this release line.
+    assert.match(quickstart, new RegExp(`\\| \`${escapedRcVersion}\` \\|`, 'u'));
+    assert.doesNotMatch(
+      quickstart,
+      new RegExp(`\\| \`${escapedRcVersion}-rc\\.\\d+\` \\| Immutable release candidate`, 'u'),
+    );
+  }
+
   assert.ok(changelog.includes(`## [${RC_VERSION}] — ${RC_DATE}`));
   assert.ok(
     changelog.includes(

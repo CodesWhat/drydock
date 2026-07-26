@@ -4942,6 +4942,65 @@ describe('updateLifecycleCache carry-forward', () => {
     expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
   });
 
+  // Recreate-path companion to the #565/#568 same-container-ID fix: #568 taught
+  // `hasCandidateIdentityChanged` that `created` is display-only metadata once a
+  // digest is present (it can drift between scans without the candidate itself
+  // changing), but never touched `getResultSignature`, which gates this recreate
+  // path. A container deleted and recreated with the SAME tag+digest but a
+  // drifted `created` therefore mismatched the stashed signature, discarded the
+  // cache entry, and silently reset the soak clock right after an update landed.
+  test('#recreate-companion-568: preserves updateDetectedAt/firstSeenAt/maturityGatePendingSince across recreation when only created drifts (digest present)', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-created-drift-old',
+      result: { tag: 'version', digest: 'sha256:new', created: '2026-06-01T00:00:00.000Z' },
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+      maturityGatePendingSince: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-created-drift-old', { replacementExpected: true });
+
+    // Same tag + same digest as the stashed entry — only the registry-reported
+    // `created` metadata drifted between the pre-delete snapshot and the
+    // post-recreate rescan.
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-created-drift-new',
+      result: { tag: 'version', digest: 'sha256:new', created: '2026-06-02T00:00:00.000Z' },
+    });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
+    expect(inserted.firstSeenAt).toBe(twelveHoursAgo);
+    expect(inserted.maturityGatePendingSince).toBe(twelveHoursAgo);
+  });
+
+  test('#recreate-companion-568: still resets the soak across recreation when the tag genuinely changes (digest present, created constant)', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-tag-change-old',
+      result: { tag: 'version', digest: 'sha256:new', created: '2026-06-01T00:00:00.000Z' },
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+      maturityGatePendingSince: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-tag-change-old', { replacementExpected: true });
+
+    // Same digest and created, but a genuinely different tag — must NOT inherit.
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-tag-change-new',
+      result: { tag: 'newversion', digest: 'sha256:new', created: '2026-06-01T00:00:00.000Z' },
+    });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).not.toBe(twelveHoursAgo);
+    expect(inserted.firstSeenAt).not.toBe(twelveHoursAgo);
+    expect(inserted.maturityGatePendingSince).not.toBe(twelveHoursAgo);
+  });
+
   test('BLOCKER-1: firstSeenAt is restored from cache independently when incoming has updateDetectedAt but no firstSeenAt', () => {
     const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
     const incomingDetectedAt = '2026-01-01T00:00:00.000Z';

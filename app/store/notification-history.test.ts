@@ -39,7 +39,27 @@ describe('notification-history store', () => {
       );
     });
 
-    test('returns a different hash when any result field changes', () => {
+    // Regression test for a duplicate-notification bug: a manual recheck bypasses the
+    // registry poll cache, so suggestedTag/created can come back drifted even though the
+    // candidate (tag + digest) is unchanged. The hash must NOT change here, or
+    // hasAlreadyNotifiedForResult sees a "new" result and a once:true trigger fires again
+    // for the same update. This replaces a prior version of this test that asserted the
+    // opposite (a `created` change producing a different hash), which pinned the bug.
+    test('returns the same hash when only display-only metadata drifts (digest present)', () => {
+      const base = {
+        result: { tag: '2.0', digest: 'sha256:abc', created: '2026-04-15', suggestedTag: '2.0' },
+        updateKind: { kind: 'tag', remoteValue: '2.0' },
+      } as any;
+      const drifted = {
+        ...base,
+        result: { ...base.result, created: '2026-04-20', suggestedTag: '2.1' },
+      };
+      expect(notificationHistory.computeResultHash(drifted)).toBe(
+        notificationHistory.computeResultHash(base),
+      );
+    });
+
+    test('returns a different hash when the candidate identity or updateKind changes', () => {
       const base = {
         result: { tag: '2.0', digest: 'sha256:abc', created: '2026-04-15' },
         updateKind: { kind: 'tag', remoteValue: '2.0' },
@@ -60,13 +80,27 @@ describe('notification-history store', () => {
       expect(
         notificationHistory.computeResultHash({
           ...base,
-          result: { ...base.result, created: '2026-04-16' },
+          updateKind: { ...base.updateKind, remoteValue: '2.1' },
         }),
       ).not.toBe(baseHash);
       expect(
         notificationHistory.computeResultHash({
           ...base,
-          updateKind: { ...base.updateKind, remoteValue: '2.1' },
+          updateKind: { ...base.updateKind, kind: 'digest' },
+        }),
+      ).not.toBe(baseHash);
+    });
+
+    test('treats created as the sole discriminator when no digest is present (legacy manifest path)', () => {
+      const base = {
+        result: { tag: 'latest', created: '2026-04-15' },
+        updateKind: { kind: 'tag', remoteValue: 'latest' },
+      } as any;
+      const baseHash = notificationHistory.computeResultHash(base);
+      expect(
+        notificationHistory.computeResultHash({
+          ...base,
+          result: { ...base.result, created: '2026-04-16' },
         }),
       ).not.toBe(baseHash);
     });

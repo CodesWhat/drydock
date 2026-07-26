@@ -19,6 +19,7 @@ import {
 } from '../event/index.js';
 import {
   deriveContainerIdentityKey,
+  getCandidateIdentityFields,
   hasCandidateIdentityChanged,
   hasRawUpdate,
   isRollbackContainerName,
@@ -114,13 +115,21 @@ function toCacheKey(watcher, name) {
   return `${watcher}::${name}`;
 }
 
-function getResultSignature(
-  c: { result?: { tag?: unknown; digest?: unknown; created?: unknown } } | undefined,
-): string {
+/**
+ * Signature of the update candidate a recreated container's stashed lifecycle
+ * entry is compared against (see `deleteContainer`'s `replacementExpected`
+ * stash and its `insertContainer` consumer). Defines "same candidate" via the
+ * shared `getCandidateIdentityFields` (#568), which is also what
+ * `hasCandidateIdentityChanged` (same-container-ID recheck path) and
+ * `computeResultHash` (notification dedup) derive from — see that function's
+ * docstring for why `created` only participates when no digest is available.
+ */
+function getResultSignature(c: { result?: container.ContainerResult } | undefined): string {
+  const fields = getCandidateIdentityFields(c?.result);
   return JSON.stringify({
-    tag: c?.result?.tag ?? null,
-    digest: c?.result?.digest ?? null,
-    created: c?.result?.created ?? null,
+    tag: fields.tag ?? null,
+    digest: fields.digest ?? null,
+    created: fields.created ?? null,
   });
 }
 
@@ -1412,7 +1421,13 @@ export function getContainer(id: string) {
 
 /**
  * Get container by id without redacting sensitive env values.
- * Only used by the env reveal endpoint.
+ *
+ * Used by the env reveal endpoint, and by every write-back path that persists
+ * a container it fetched earlier (security scans, the scan scheduler). Those
+ * callers must NOT use `getContainer`: it masks sensitive env to
+ * `'[REDACTED]'`, and while `updateContainer` restores classified details
+ * rather than storing the mask, re-fetching raw keeps the write-back honest
+ * instead of relying on that guard.
  * @param id
  */
 export function getContainerRaw(id: string) {
