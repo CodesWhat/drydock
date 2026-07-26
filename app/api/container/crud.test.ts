@@ -684,9 +684,9 @@ describe('api/container/crud', () => {
     test('supports sort=age and returns oldest updates first', () => {
       const harness = createHarness({
         containers: [
-          createContainer({ id: 'c1', updateAge: 2_000 }),
-          createContainer({ id: 'c2', updateAge: 8_000 }),
-          createContainer({ id: 'c3', updateAge: 4_000 }),
+          createContainer({ id: 'c1', updateAvailable: true, updateAge: 2_000 }),
+          createContainer({ id: 'c2', updateAvailable: true, updateAge: 8_000 }),
+          createContainer({ id: 'c3', updateAvailable: true, updateAge: 4_000 }),
         ],
       });
 
@@ -1328,19 +1328,23 @@ describe('api/container/crud', () => {
           containers: [
             createContainer({
               id: 'c-min',
+              updateAvailable: true,
               firstSeenAt: '2026-03-05T00:00:00.000Z',
               result: { publishedAt: '2026-03-12T00:00:00.000Z' },
             }),
             createContainer({
               id: 'c-first',
+              updateAvailable: true,
               firstSeenAt: '2026-03-07T00:00:00.000Z',
             }),
             createContainer({
               id: 'c-published',
+              updateAvailable: true,
               result: { publishedAt: '2026-03-09T00:00:00.000Z' },
             }),
             createContainer({
               id: 'c-detected',
+              updateAvailable: true,
               updateDetectedAt: '2026-03-11T00:00:00.000Z',
             }),
             createContainer({
@@ -1376,14 +1380,17 @@ describe('api/container/crud', () => {
           containers: [
             createContainer({
               id: 'c-hot',
+              updateAvailable: true,
               firstSeenAt: '2026-03-14T00:00:00.000Z',
             }),
             createContainer({
               id: 'c-mature',
+              updateAvailable: true,
               result: { publishedAt: '2026-03-07T00:00:00.000Z' },
             }),
             createContainer({
               id: 'c-established',
+              updateAvailable: true,
               updateDetectedAt: '2026-02-01T00:00:00.000Z',
             }),
           ],
@@ -1425,6 +1432,7 @@ describe('api/container/crud', () => {
             }),
             createContainer({
               id: 'c-hot',
+              updateAvailable: true,
               firstSeenAt: '2026-03-14T00:00:00.000Z',
             }),
           ],
@@ -1434,6 +1442,93 @@ describe('api/container/crud', () => {
         const payload = res.json.mock.calls[0][0];
 
         expect(payload.data.map((container: { id: string }) => container.id)).toEqual(['c-hot']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('excludes maturity-gated containers (updateAvailable: false) from the age fallback', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-15T00:00:00.000Z'));
+
+      try {
+        const harness = createHarness({
+          containers: [
+            createContainer({
+              id: 'c-gated',
+              updateAvailable: false,
+              firstSeenAt: '2026-01-01T00:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c-hot',
+              updateAvailable: true,
+              firstSeenAt: '2026-03-14T00:00:00.000Z',
+            }),
+          ],
+        });
+
+        // A container with no available update must never surface an age,
+        // so it cannot be caught by a maturity filter it was never gated
+        // into, nor ranked by ?sort=age as if it had a real pending update.
+        const maturityRes = callGetContainers(harness.handlers, { maturity: 'hot' });
+        expect(
+          maturityRes.json.mock.calls[0][0].data.map((container: { id: string }) => container.id),
+        ).toEqual(['c-hot']);
+
+        const establishedRes = callGetContainers(harness.handlers, { maturity: 'established' });
+        expect(establishedRes.json.mock.calls[0][0].data).toEqual([]);
+
+        const sortRes = callGetContainers(harness.handlers, { sort: 'age' });
+        expect(
+          sortRes.json.mock.calls[0][0].data.map((container: { id: string }) => container.id),
+        ).toEqual(['c-hot', 'c-gated']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('excludes gated containers carrying a materialized updateAge from the age fallback', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-03-15T00:00:00.000Z'));
+
+      try {
+        // buildFallbackContainerReport (watchers/providers/docker/docker-helpers.ts)
+        // spreads the container, which turns the self-gating `updateAge` getter into
+        // a plain frozen number, and only then sets updateAvailable = false. That
+        // shape reaches this code with a stale finite age attached to a container
+        // that has no available update, so the availability gate has to run before
+        // the cached age is read rather than after it.
+        const harness = createHarness({
+          containers: [
+            createContainer({
+              id: 'c-gated-cached-age',
+              updateAvailable: false,
+              updateAge: 73 * 24 * 3600 * 1000,
+              firstSeenAt: '2026-01-01T00:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c-hot',
+              updateAvailable: true,
+              firstSeenAt: '2026-03-14T00:00:00.000Z',
+            }),
+          ],
+        });
+
+        const establishedRes = callGetContainers(harness.handlers, { maturity: 'established' });
+        expect(establishedRes.json.mock.calls[0][0].data).toEqual([]);
+
+        const matureRes = callGetContainers(harness.handlers, { maturity: 'mature' });
+        expect(matureRes.json.mock.calls[0][0].data).toEqual([]);
+
+        const hotRes = callGetContainers(harness.handlers, { maturity: 'hot' });
+        expect(
+          hotRes.json.mock.calls[0][0].data.map((container: { id: string }) => container.id),
+        ).toEqual(['c-hot']);
+
+        const sortRes = callGetContainers(harness.handlers, { sort: 'age' });
+        expect(
+          sortRes.json.mock.calls[0][0].data.map((container: { id: string }) => container.id),
+        ).toEqual(['c-hot', 'c-gated-cached-age']);
       } finally {
         vi.useRealTimers();
       }

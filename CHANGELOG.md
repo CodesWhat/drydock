@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.7] — 2026-07-26
+
+### Changed
+
+- **Regenerated `ui/src/boot/icon-bundle.json` against the locked iconify versions** ([#608](https://github.com/CodesWhat/drydock/pull/608)), fixing drift since the tabler 1.2.35 → 1.2.37 bump landed in #594.
+
+### Fixed
+
+- **The maturity soak clock no longer resets when a container is recreated.** `getResultSignature` (`app/store/container.ts`) decided whether a recreated container inherits its stashed `updateDetectedAt` / `firstSeenAt` / `maturityGatePendingSince`, and it included `created` even when a digest was present. Registries don't all derive `created` from the digest, so it could differ between the pre-delete snapshot and the post-recreate rescan without the update candidate changing — discarding the stash and silently restarting the soak right after an update landed, which is exactly when clock continuity matters. Same defect class as [#565](https://github.com/CodesWhat/drydock/issues/565), surviving in the recreate path that [#568](https://github.com/CodesWhat/drydock/pull/568) never touched.
+- **Notification dedup no longer fires a duplicate `once: true` notification when a manual recheck bypasses the registry poll cache.** `computeResultHash` (`app/store/notification-history.ts`) hashed `suggestedTag` and `created` alongside `tag`/`digest`/`updateKind`, so a recheck that returned a drifted `created`/`suggestedTag` for the same candidate produced a different hash, made `hasAlreadyNotifiedForResult` report "not yet notified", and re-fired notifications that were supposed to be one-shot. The hash now derives from the same candidate-identity definition PR #568 established for the maturity soak (`tag` + `digest`, with `created` participating only when no digest is available), via a single shared helper (`getCandidateIdentityFields` in `app/model/container.ts`) now used by `hasCandidateIdentityChanged`, `getResultSignature`, and `computeResultHash` alike — previously three independently hand-rolled comparators that disagreed with each other. Upgrading may produce one extra notification for updates already in flight, since history persisted under the old hash formula won't match the new one; this is a one-time false positive, not a regression.
+- **A security scan finishing no longer reverts an update the watcher detected while it was running.** `runBulkScan` (`app/api/container/bulk-security.ts`) and `persistAndBroadcast` (`app/api/container/security.ts`) both captured a container snapshot before starting the scan, then wrote that whole snapshot back with only `security` changed. Vulnerability scans run for seconds to minutes, so a watcher poll during that window could legitimately detect a new update and have `result`, `updateAvailable`, `updateDetectedAt`, and `maturityGatePendingSince` silently rolled back by the scan's write-back. The next poll re-detected the same update and stamped a fresh timestamp, discarding the elapsed soak time. Both paths now re-fetch the live record at write-back time and merge only `security` onto it, matching what the scan scheduler already did, and skip the write entirely if the container is gone.
+- **Containers with no available update are no longer ranked or filtered as if they had one.** `getContainerUpdateAge` (`app/api/container/update-age.ts`) fell back to `firstSeenAt` / `publishedAt` / `updateDetectedAt` without checking `updateAvailable`, so a container gated by `maturityMode` could still appear under `?maturity=mature`, `?maturity=hot`, and `?sort=age` while its own `updateEligibility` blockers in the same response said it was blocked.
+
 ## [1.6.0-rc.6] — 2026-07-26
 
 ### Added
@@ -2244,7 +2257,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.6...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.7...HEAD
+[1.6.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.6...v1.6.0-rc.7
 [1.6.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.5...v1.6.0-rc.6
 [1.6.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.4...v1.6.0-rc.5
 [1.6.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.3...v1.6.0-rc.4

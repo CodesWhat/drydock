@@ -86,6 +86,7 @@ function createHarness(
 
   const storeContainer = {
     getContainer: vi.fn(() => container),
+    getContainerRaw: vi.fn(() => container),
     updateContainer: vi.fn((value) => value),
   };
   const deps = {
@@ -1071,6 +1072,156 @@ describe('api/container/security', () => {
 
       expect(harness.deps.getTrivyDatabaseStatus).not.toHaveBeenCalled();
       expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('concurrent write-back safety', () => {
+    test('does not revert a concurrent watcher update detected while the scan was in flight', async () => {
+      const initialContainer = createContainer({
+        result: { tag: 'a', digest: 'sha256:AAA' },
+        updateDetectedAt: 'T0',
+      });
+      const harness = createHarness({ container: initialContainer });
+
+      let releaseScan: ((scan: ReturnType<typeof createScanResult>) => void) | undefined;
+      const deferredScan = new Promise<ReturnType<typeof createScanResult>>((resolve) => {
+        releaseScan = resolve;
+      });
+      harness.deps.scanImageForVulnerabilities.mockReturnValue(deferredScan);
+
+      const scanContainerPromise = callScanContainer(harness.handlers);
+
+      // Let the handler get past the pre-scan snapshot capture and into the
+      // (still-pending) scan.
+      await vi.waitFor(() => {
+        expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalled();
+      });
+
+      // Simulate a concurrent watcher poll that legitimately detected a
+      // newer update and wrote it directly into the store while our scan
+      // was still in flight.
+      const liveRecord = {
+        ...initialContainer,
+        result: { tag: 'b', digest: 'sha256:BBB' },
+        updateDetectedAt: 'T1',
+      };
+      harness.storeContainer.getContainerRaw.mockReturnValue(liveRecord);
+
+      const scan = createScanResult();
+      releaseScan?.(scan);
+      const res = await scanContainerPromise;
+
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.result).toEqual({ tag: 'b', digest: 'sha256:BBB' });
+      expect(persisted.updateDetectedAt).toBe('T1');
+      expect(persisted.security.scan).toEqual(scan);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('discards update-image results when the candidate moved while the scan was in flight', async () => {
+      // scanUpdateImage resolves the update image from the PRE-scan
+      // container.result.tag, so its results describe that candidate. The
+      // write-back re-fetch makes result live again, and applying the patch
+      // unchanged would attach the old candidate's CVEs and signature to the
+      // new pending update.
+      const initialContainer = createContainer({
+        result: { tag: '2.0.0', digest: 'sha256:AAA' },
+        updateDetectedAt: 'T0',
+      });
+      const harness = createHarness({
+        container: initialContainer,
+        securityConfiguration: {
+          enabled: true,
+          scanner: 'trivy',
+          signature: { verify: true },
+          sbom: { enabled: false, formats: [] },
+        },
+      });
+
+      const currentScan = createScanResult({ image: CURRENT_IMAGE });
+      const updateScan = createScanResult({ image: UPDATE_IMAGE });
+      let releaseUpdateScan: ((scan: ReturnType<typeof createScanResult>) => void) | undefined;
+      const deferredUpdateScan = new Promise<ReturnType<typeof createScanResult>>((resolve) => {
+        releaseUpdateScan = resolve;
+      });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(currentScan)
+        .mockReturnValueOnce(deferredUpdateScan);
+      harness.deps.verifyImageSignature
+        .mockResolvedValueOnce(createSignatureResult(CURRENT_IMAGE))
+        .mockResolvedValueOnce(createSignatureResult(UPDATE_IMAGE));
+
+      const scanContainerPromise = callScanContainer(harness.handlers);
+
+      await vi.waitFor(() => {
+        expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(2);
+      });
+
+      harness.storeContainer.getContainerRaw.mockReturnValue({
+        ...initialContainer,
+        result: { tag: '2.1.0', digest: 'sha256:BBB' },
+        updateDetectedAt: 'T1',
+      });
+
+      releaseUpdateScan?.(updateScan);
+      const res = await scanContainerPromise;
+
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.result).toEqual({ tag: '2.1.0', digest: 'sha256:BBB' });
+      expect(persisted.security.updateScan).toBeUndefined();
+      expect(persisted.security.updateSignature).toBeUndefined();
+      expect(persisted.security.updateSbom).toBeUndefined();
+      // The current-image results describe the running image, not the
+      // candidate, so they must survive.
+      expect(persisted.security.scan).toEqual(currentScan);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('keeps update-image results when the candidate is unchanged at write-back', async () => {
+      const initialContainer = createContainer({
+        result: { tag: '2.0.0', digest: 'sha256:AAA' },
+      });
+      const harness = createHarness({ container: initialContainer });
+
+      const currentScan = createScanResult({ image: CURRENT_IMAGE });
+      const updateScan = createScanResult({ image: UPDATE_IMAGE });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(currentScan)
+        .mockResolvedValueOnce(updateScan);
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...initialContainer });
+
+      await callScanContainer(harness.handlers);
+
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.updateScan).toEqual(updateScan);
+    });
+
+    test('skips the write and returns 404 when the container vanished while the scan was in flight', async () => {
+      const harness = createHarness();
+
+      let releaseScan: ((scan: ReturnType<typeof createScanResult>) => void) | undefined;
+      const deferredScan = new Promise<ReturnType<typeof createScanResult>>((resolve) => {
+        releaseScan = resolve;
+      });
+      harness.deps.scanImageForVulnerabilities.mockReturnValue(deferredScan);
+
+      const scanContainerPromise = callScanContainer(harness.handlers);
+
+      await vi.waitFor(() => {
+        expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalled();
+      });
+
+      // Container was removed (or recreated under a new id) mid-scan.
+      harness.storeContainer.getContainerRaw.mockReturnValue(undefined);
+
+      releaseScan?.(createScanResult());
+      const res = await scanContainerPromise;
+
+      expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
   });
 });

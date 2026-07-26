@@ -1724,6 +1724,14 @@ describe('Container Router', () => {
       return res;
     }
 
+    beforeEach(() => {
+      // Write-back re-fetches the current store record via getContainerRaw
+      // rather than trusting the pre-scan snapshot (see security.ts
+      // persistAndBroadcast). None of these tests simulate a concurrent
+      // watcher poll, so mirror whatever getContainer was set up to return.
+      storeContainer.getContainerRaw.mockImplementation(() => storeContainer.getContainer());
+    });
+
     test('should return 404 when container not found', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       const res = await callScanContainer('missing');
