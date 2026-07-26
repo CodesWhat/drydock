@@ -3,6 +3,12 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
+## v1.6.0-rc.6 Highlights — July 26, 2026
+
+- **Maturity-cleared updates get their own notification** — when an update held back by the maturity gate (`maturityMode: mature`) finally clears its soak window, drydock now fires a dedicated `maturity-cleared` notification right away instead of waiting on the next scan's generic update-available message ([Discussion #587](https://github.com/CodesWhat/drydock/discussions/587)). A background sweep checks gated containers every few minutes so the notification lands close to the moment the update actually becomes applicable, and it's deduplicated against `update-available` so nothing gets announced twice.
+- **Routine dependency and translation maintenance** — minor and patch bumps across the app, UI, demo, website, and end-to-end workspaces, plus a refreshed translation sync from Crowdin covering the container, dashboard, list, and shared-component catalogs.
+- **CI scripts no longer choke on empty results** — steps that piped a `grep` or `find` straight into a variable assignment could abort before their own "nothing found" fallback ever ran, since an empty match exits non-zero under `bash -eo pipefail`. Fallible commands are now guarded individually so a real failure still fails loudly and an empty result still falls through to its handler.
+
 ## v1.6.0-rc.5 Highlights — July 23, 2026
 
 - **Resources can give the table its space back** — the Resources column remains visible by default, but the column picker can now hide it and preserve that choice. Source, release-note, and registry shortcuts move into each row's **More** menu while hidden; cards keep the same shortcuts in their footer without duplicating them.
