@@ -40,6 +40,10 @@ vi.mock('../security/scheduler.js', () => ({
   shutdown: vi.fn(),
 }));
 
+vi.mock('../maturity/scheduler.js', () => ({
+  shutdown: vi.fn(),
+}));
+
 let registries = {};
 let triggers = {};
 let watchers = {};
@@ -1084,6 +1088,7 @@ test('deregisterAll should deregister all components', async () => {
 test('shutdown should deregister all and exit 0', async () => {
   const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
   const securityScheduler = await import('../security/scheduler.js');
+  const maturityScheduler = await import('../maturity/scheduler.js');
   registry.getState().trigger = {};
   registry.getState().registry = {};
   registry.getState().watcher = {};
@@ -1091,6 +1096,7 @@ test('shutdown should deregister all and exit 0', async () => {
   await registry.testable_shutdown();
   expect(store.save).toHaveBeenCalledTimes(1);
   expect(securityScheduler.shutdown).toHaveBeenCalledTimes(1);
+  expect(maturityScheduler.shutdown).toHaveBeenCalledTimes(1);
   expect(exitSpy).toHaveBeenCalledWith(0);
   exitSpy.mockRestore();
 });
@@ -1103,6 +1109,7 @@ test('init should invoke scheduler shutdown from SIGTERM handler', async () => {
   }) as any);
   const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {});
   const securityScheduler = await import('../security/scheduler.js');
+  const maturityScheduler = await import('../maturity/scheduler.js');
 
   await registry.init();
 
@@ -1113,6 +1120,7 @@ test('init should invoke scheduler shutdown from SIGTERM handler', async () => {
   await sigtermHandler?.();
 
   expect(securityScheduler.shutdown).toHaveBeenCalledTimes(1);
+  expect(maturityScheduler.shutdown).toHaveBeenCalledTimes(1);
   expect(store.save).toHaveBeenCalledTimes(1);
   expect(exitSpy).toHaveBeenCalledWith(0);
 

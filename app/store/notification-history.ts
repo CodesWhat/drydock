@@ -12,7 +12,8 @@ export type NotificationEventKind =
   | 'security-alert-digest'
   | 'agent-connect'
   | 'agent-disconnect'
-  | 'agent-reconnect';
+  | 'agent-reconnect'
+  | 'maturity-cleared';
 
 export interface NotificationHistoryEntry {
   key: string;

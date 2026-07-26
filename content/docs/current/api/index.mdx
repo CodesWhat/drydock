@@ -139,7 +139,7 @@ Returns `202 Accepted` with registry dispatch counts, `401` for a missing or inv
 
 ## Notification rules
 
-Notification rules control which events trigger notifications, which triggers receive them, the in-app bell filters, and optional per-provider message templates. Seven default rules are created automatically.
+Notification rules control which events trigger notifications, which triggers receive them, the in-app bell filters, and optional per-provider message templates. Eight default rules are created automatically.
 
 ### Get all notification rules
 
@@ -217,9 +217,19 @@ curl http://drydock:3000/api/v1/notifications
       "bellEnabled": false,
       "bellThreshold": "all",
       "templates": {}
+    },
+    {
+      "id": "maturity-cleared",
+      "name": "Maturity Gate Cleared",
+      "description": "When an update held back by the maturity policy becomes applicable",
+      "enabled": true,
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
     }
   ],
-  "total": 7
+  "total": 8
 }
 ```
 
@@ -359,7 +369,7 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
 
 ### Action types
 
-`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`, `env-reveal`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `mqtt-command-update`
+`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`, `env-reveal`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `mqtt-command-update`
 
 ## Server-Sent Events (SSE)
 

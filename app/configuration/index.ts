@@ -1000,6 +1000,22 @@ export type SecurityConfiguration = Pick<
   signature: Pick<ReturnType<typeof getSecurityConfiguration>['signature'], 'verify'>;
 };
 
+/**
+ * Get maturity gate sweep scheduler configuration.
+ */
+export function getMaturitySweepConfiguration() {
+  const configurationFromEnv = get('dd.maturity.sweep', ddEnvVars);
+  const configurationSchema = joi.object().keys({
+    cron: joi.string().allow('').default('*/5 * * * *'),
+  });
+
+  const configurationToValidate = configurationSchema.validate(configurationFromEnv);
+  if (configurationToValidate.error) {
+    throw configurationToValidate.error;
+  }
+  return configurationToValidate.value;
+}
+
 const DNS_MODE_VALUES = ['ipv4first', 'ipv6first', 'verbatim'] as const;
 export type DnsMode = (typeof DNS_MODE_VALUES)[number];
 

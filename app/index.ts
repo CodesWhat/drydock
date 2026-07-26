@@ -6,6 +6,7 @@ import { renderBanner } from './banner/index.js';
 import { getDnsMode } from './configuration/index.js';
 import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
 import log from './log/index.js';
+import * as maturityScheduler from './maturity/scheduler.js';
 import type { NotificationOutboxEntry } from './model/notification-outbox.js';
 import { startOutboxWorker } from './notifications/outbox-worker.js';
 import * as prometheus from './prometheus/index.js';
@@ -73,6 +74,9 @@ if (commandExitCode !== null) {
 
     // Init scheduled security scanning
     securityScheduler.init();
+
+    // Init scheduled maturity gate sweep
+    maturityScheduler.init();
 
     // Drain the notification outbox in the background. The deliver callback
     // resolves the destination trigger by id and lets it handle the entry;

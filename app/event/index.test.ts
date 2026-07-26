@@ -48,6 +48,10 @@ const eventTestCases = [
     emitter: event.emitWatcherStop,
     register: event.registerWatcherStop,
   },
+  {
+    emitter: event.emitMaturityGateCleared,
+    register: event.registerMaturityGateCleared,
+  },
 ];
 test.each(
   eventTestCases,
@@ -430,6 +434,46 @@ test('a timed-out container health transition handler does not block the next ha
 
   expect(next).toHaveBeenCalledTimes(1);
   expect(warnMock).toHaveBeenCalledTimes(1);
+});
+
+function makeMaturityGateClearedPayload(
+  overrides: Partial<Parameters<typeof event.emitMaturityGateCleared>[0]> = {},
+): Parameters<typeof event.emitMaturityGateCleared>[0] {
+  return {
+    container: { id: 'container-1', name: 'web' } as Parameters<
+      typeof event.emitMaturityGateCleared
+    >[0]['container'],
+    clearedAt: '2026-05-31T09:15:00.000Z',
+    ...overrides,
+  };
+}
+
+test('emitMaturityGateCleared should call registered handlers with payload', async () => {
+  const handler = vi.fn();
+  const payload = makeMaturityGateClearedPayload({
+    pendingSince: '2026-05-24T09:15:00.000Z',
+    minAgeDays: 7,
+    clockSource: 'detectedAt',
+  });
+  event.registerMaturityGateCleared(handler, { order: 10 });
+  await event.emitMaturityGateCleared(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+});
+
+test('deregistration of maturity gate cleared handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerMaturityGateCleared(handler, { order: 10 });
+  deregister();
+  await event.emitMaturityGateCleared(makeMaturityGateClearedPayload());
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('clearAllListenersForTests should clear maturity gate cleared handlers', async () => {
+  const handler = vi.fn();
+  event.registerMaturityGateCleared(handler, { order: 10 });
+  event.clearAllListenersForTests();
+  await event.emitMaturityGateCleared(makeMaturityGateClearedPayload());
+  expect(handler).not.toHaveBeenCalled();
 });
 
 test('emitAgentStatsChanged should call registered handlers with payload', async () => {

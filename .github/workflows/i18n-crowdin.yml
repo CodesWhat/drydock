@@ -48,9 +48,15 @@ jobs:
           # dev/v1.9. Falls back to the default branch during the window between
           # a GA and the next dev branch being cut, so translations are never
           # stranded with nowhere to land.
+          #
+          # The grep is guarded: with `pipefail` a no-match grep exits 1 and
+          # aborts the assignment, which killed the fallback below before it
+          # could ever run (2026-07-24, when the sync PR merge briefly deleted
+          # dev/v1.6). A failing ls-remote still propagates, so a network or
+          # auth error fails loudly instead of silently retargeting main.
           base="$(git ls-remote --heads origin 'refs/heads/dev/v*' \
             | sed 's#.*refs/heads/##' \
-            | grep -E '^dev/v[0-9]+\.[0-9]+$' \
+            | { grep -E '^dev/v[0-9]+\.[0-9]+$' || true; } \
             | sort -t/ -k2 -V \
             | tail -1)"
           if [ -z "${base}" ]; then

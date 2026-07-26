@@ -3,6 +3,7 @@ import {
   DEFAULT_MATURITY_MIN_AGE_DAYS,
   daysToMs,
   getMaturityStartMs,
+  isMaturityGatePending,
   MATURITY_MIN_AGE_DAYS_MAX,
   MATURITY_MIN_AGE_DAYS_MIN,
   MS_PER_DAY,
@@ -303,6 +304,72 @@ describe('resolveMaturityClock', () => {
     ];
     for (const scenario of scenarios) {
       expect(getMaturityStartMs(scenario, NOW)).toBe(resolveMaturityClock(scenario, NOW).startMs);
+    }
+  });
+});
+
+describe('isMaturityGatePending', () => {
+  const NOW = new Date('2026-04-23T12:00:00.000Z').getTime();
+
+  test('returns false when updatePolicy is missing', () => {
+    expect(isMaturityGatePending({}, NOW)).toBe(false);
+  });
+
+  test('returns false when maturityMode is not mature', () => {
+    expect(isMaturityGatePending({ updatePolicy: { maturityMode: 'all' } }, NOW)).toBe(false);
+    expect(isMaturityGatePending({ updatePolicy: {} }, NOW)).toBe(false);
+  });
+
+  test('returns true when maturityMode is mature and the clock has not resolved', () => {
+    expect(isMaturityGatePending({ updatePolicy: { maturityMode: 'mature' } }, NOW)).toBe(true);
+  });
+
+  test('returns true while the resolved clock is within the min-age window', () => {
+    const updateDetectedAt = new Date(NOW - daysToMs(2)).toISOString();
+    expect(
+      isMaturityGatePending(
+        {
+          updateDetectedAt,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        },
+        NOW,
+      ),
+    ).toBe(true);
+  });
+
+  test('returns false once the resolved clock has cleared the min-age window', () => {
+    const updateDetectedAt = new Date(NOW - daysToMs(8)).toISOString();
+    expect(
+      isMaturityGatePending(
+        {
+          updateDetectedAt,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        },
+        NOW,
+      ),
+    ).toBe(false);
+  });
+
+  test('defaults maturityMinAgeDays to 7 when not provided', () => {
+    const updateDetectedAt = new Date(NOW - daysToMs(2)).toISOString();
+    expect(
+      isMaturityGatePending({ updateDetectedAt, updatePolicy: { maturityMode: 'mature' } }, NOW),
+    ).toBe(true);
+  });
+
+  test('defaults nowMs to Date.now() when omitted', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      const updateDetectedAt = new Date(NOW - daysToMs(2)).toISOString();
+      expect(
+        isMaturityGatePending({
+          updateDetectedAt,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

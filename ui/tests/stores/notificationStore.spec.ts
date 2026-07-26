@@ -201,6 +201,20 @@ describe('useNotificationStore', () => {
     });
   });
 
+  it('queries maturity-cleared audit entries when that bell rule is enabled', async () => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'maturity-cleared', bellEnabled: true, bellThreshold: 'all' },
+    ]);
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenCalledWith({
+      limit: 20,
+      actions: ['notification-delivery-failed', 'maturity-cleared'],
+    });
+  });
+
   it.each([
     ['all', ['unknown', 'digest', 'major', 'minor', 'patch']],
     ['major', ['digest', 'major']],

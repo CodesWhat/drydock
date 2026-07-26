@@ -19,6 +19,7 @@ export const BELL_ACTIONS = [
   'security-alert',
   'agent-disconnect',
   'container-unhealthy',
+  'maturity-cleared',
 ];
 
 const ALWAYS_BELL_ACTIONS = ['notification-delivery-failed'];

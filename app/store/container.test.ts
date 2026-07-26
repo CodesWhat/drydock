@@ -36,6 +36,7 @@ function createFilterableCollection(initialDocs) {
     insert: vi.fn((doc) => {
       docs.push(doc);
     }),
+    update: vi.fn(),
     chain: vi.fn(() => ({
       find: (filter = {}) => ({
         remove: () => {
@@ -1618,6 +1619,339 @@ test('updateContainer should preserve updateDetectedAt while update is suppresse
   // be preserved so the maturity clock keeps ticking. Before the fix it was wiped
   // to undefined because updateAvailable is false while still suppressed.
   expect(updated.updateDetectedAt).toBe(twelveHoursAgo);
+});
+
+describe('maturityGatePendingSince stamping', () => {
+  test('insertContainer stamps maturityGatePendingSince when raw update exists under mature mode and the clock has not elapsed', async () => {
+    const collection = { findOne: () => {}, insert: () => {} };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    const base = createContainerFixture();
+    const containerWithUpdate = {
+      ...base,
+      image: { ...base.image, tag: { ...base.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    };
+
+    container.createCollections(db);
+    const inserted = container.insertContainer(containerWithUpdate);
+
+    expect(typeof inserted.maturityGatePendingSince).toBe('string');
+  });
+
+  test('insertContainer does not stamp maturityGatePendingSince in all mode', async () => {
+    const collection = { findOne: () => {}, insert: () => {} };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    const base = createContainerFixture();
+    const containerWithUpdate = {
+      ...base,
+      image: { ...base.image, tag: { ...base.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updatePolicy: { maturityMode: 'all' },
+    };
+
+    container.createCollections(db);
+    const inserted = container.insertContainer(containerWithUpdate);
+
+    expect(inserted.maturityGatePendingSince).toBeUndefined();
+  });
+
+  test('insertContainer does not stamp maturityGatePendingSince when there is no raw update', async () => {
+    const collection = { findOne: () => {}, insert: () => {} };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    const containerToSave = createContainerFixture({
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    });
+
+    container.createCollections(db);
+    const inserted = container.insertContainer(containerToSave);
+
+    expect(inserted.maturityGatePendingSince).toBeUndefined();
+  });
+
+  test('updateContainer preserves maturityGatePendingSince while still soaking', async () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    const existingFixture = createContainerFixture();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+        result: { tag: '2.0.0' },
+        updateDetectedAt: twelveHoursAgo,
+        maturityGatePendingSince: twelveHoursAgo,
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
+    };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    const nextFixture = createContainerFixture();
+    const containerToSave = {
+      ...nextFixture,
+      image: { ...nextFixture.image, tag: { ...nextFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    expect(updated.maturityGatePendingSince).toBe(twelveHoursAgo);
+  });
+
+  test('updateContainer keeps maturityGatePendingSince set even after the maturity clock elapses (write path never auto-clears on gate-open)', async () => {
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    const existingFixture = createContainerFixture();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+        result: { tag: '2.0.0' },
+        updateDetectedAt: eightDaysAgo,
+        maturityGatePendingSince: eightDaysAgo,
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
+    };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    const nextFixture = createContainerFixture();
+    const containerToSave = {
+      ...nextFixture,
+      image: { ...nextFixture.image, tag: { ...nextFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    // The clock has elapsed, so the update is applicable again...
+    expect(updated.updateAvailable).toBe(true);
+    // ...but the write path leaves the marker in place; only the detection
+    // helper (maybeEmitMaturityGateCleared) is responsible for clearing it,
+    // paired with the notification emit.
+    expect(updated.maturityGatePendingSince).toBe(eightDaysAgo);
+  });
+
+  test('updateContainer clears maturityGatePendingSince when update is no longer available', async () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    const existingFixture = createContainerFixture();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+        result: { tag: '2.0.0' },
+        updateDetectedAt: twelveHoursAgo,
+        maturityGatePendingSince: twelveHoursAgo,
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
+    };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    const nextFixture = createContainerFixture();
+    const containerToSave = {
+      ...nextFixture,
+      image: { ...nextFixture.image, tag: { ...nextFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '1.0.0' },
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    expect(updated.maturityGatePendingSince).toBeUndefined();
+  });
+
+  test('updateContainer resets maturityGatePendingSince when the candidate update changes mid-soak and the new candidate is still pending', () => {
+    vi.useFakeTimers();
+    try {
+      const frozenNow = new Date('2026-06-01T12:00:00.000Z');
+      vi.setSystemTime(frozenNow);
+      const oldPendingSince = '2026-05-31T09:15:00.000Z';
+      const existingFixture = createContainerFixture();
+      const existingContainer = {
+        data: {
+          ...existingFixture,
+          image: {
+            ...existingFixture.image,
+            tag: { ...existingFixture.image.tag, value: '1.0.0' },
+          },
+          result: { tag: '2.0.0' },
+          updateDetectedAt: oldPendingSince,
+          maturityGatePendingSince: oldPendingSince,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        },
+      };
+      const collection = {
+        findOne: () => existingContainer,
+        insert: () => {},
+        chain: () => ({ find: () => ({ remove: () => ({}) }) }),
+      };
+      const db = { getCollection: () => collection, addCollection: () => null };
+      const nextFixture = createContainerFixture();
+      // containerToSave simulates the local watch path: the old timestamps are
+      // carried forward from the previous store record, but the candidate changed.
+      const containerToSave = {
+        ...nextFixture,
+        image: { ...nextFixture.image, tag: { ...nextFixture.image.tag, value: '1.0.0' } },
+        result: { tag: '2.1.0' },
+        updateDetectedAt: oldPendingSince,
+        maturityGatePendingSince: oldPendingSince,
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      };
+
+      container.createCollections(db);
+      const updated = container.updateContainer(containerToSave);
+
+      expect(updated.maturityGatePendingSince).toBe(frozenNow.toISOString());
+      expect(updated.maturityGatePendingSince).not.toBe(oldPendingSince);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('updateContainer does not stamp maturityGatePendingSince when the candidate update changes mid-soak but the new candidate is already mature', () => {
+    const oldPendingSince = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    const veryOldDetectedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const existingFixture = createContainerFixture();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+        result: { tag: '2.0.0' },
+        updateDetectedAt: oldPendingSince,
+        maturityGatePendingSince: oldPendingSince,
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
+    };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    const nextFixture = createContainerFixture();
+    // A trusted publishedAt far in the past means the new candidate clears the
+    // maturity gate immediately, even though the previous candidate's marker
+    // (and updateDetectedAt) is still carried forward from the store record.
+    const containerToSave = {
+      ...nextFixture,
+      image: { ...nextFixture.image, tag: { ...nextFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.1.0', publishedAt: veryOldDetectedAt, publishedAtTrusted: true },
+      updateDetectedAt: oldPendingSince,
+      maturityGatePendingSince: oldPendingSince,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    expect(updated.maturityGatePendingSince).toBeUndefined();
+  });
+
+  test('updateContainer stamps a fresh maturityGatePendingSince when a container newly switches into mature mode mid-soak', () => {
+    const existingFixture = createContainerFixture();
+    const oldDetectedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+        result: { tag: '2.0.0' },
+        updateDetectedAt: oldDetectedAt,
+        updatePolicy: { maturityMode: 'all' },
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
+    };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    const nextFixture = createContainerFixture();
+    const containerToSave = {
+      ...nextFixture,
+      image: { ...nextFixture.image, tag: { ...nextFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    expect(typeof updated.maturityGatePendingSince).toBe('string');
+  });
+
+  test('updateContainer does not stamp maturityGatePendingSince when a container switches into mature mode but the clock already cleared the window', () => {
+    const existingFixture = createContainerFixture();
+    const oldDetectedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: { ...existingFixture.image, tag: { ...existingFixture.image.tag, value: '1.0.0' } },
+        result: { tag: '2.0.0' },
+        updateDetectedAt: oldDetectedAt,
+        updatePolicy: { maturityMode: 'all' },
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({ find: () => ({ remove: () => ({}) }) }),
+    };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    const nextFixture = createContainerFixture();
+    const containerToSave = {
+      ...nextFixture,
+      image: { ...nextFixture.image, tag: { ...nextFixture.image.tag, value: '1.0.0' } },
+      result: { tag: '2.0.0' },
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    expect(updated.maturityGatePendingSince).toBeUndefined();
+  });
+});
+
+describe('clearMaturityGatePendingSince', () => {
+  test('returns false and does nothing when the container does not exist', () => {
+    const collection = createFilterableCollection([]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+    expect(container.clearMaturityGatePendingSince('missing-id')).toBe(false);
+  });
+
+  test('returns false and does nothing when the marker is not set', () => {
+    const fixture = createContainerFixture({ id: 'no-marker' });
+    const collection = createFilterableCollection([{ data: fixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+    expect(container.clearMaturityGatePendingSince('no-marker')).toBe(false);
+  });
+
+  test('clears the marker and returns true when set', () => {
+    const fixture = createContainerFixture({
+      id: 'has-marker',
+      maturityGatePendingSince: '2026-05-31T09:15:00.000Z',
+    });
+    const collection = createFilterableCollection([{ data: fixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+    expect(container.clearMaturityGatePendingSince('has-marker')).toBe(true);
+    expect(container.getContainerRaw('has-marker').maturityGatePendingSince).toBeUndefined();
+  });
 });
 
 test('getContainers should return all containers sorted by name', async () => {
@@ -4164,6 +4498,82 @@ describe('updateLifecycleCache carry-forward', () => {
     const inserted = container.insertContainer(newFixture);
     expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
     expect(inserted.firstSeenAt).toBe(twelveHoursAgo);
+  });
+
+  test('carries forward maturityGatePendingSince on container recreation', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-maturity-1',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+      maturityGatePendingSince: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-maturity-1', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-maturity-1' });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.maturityGatePendingSince).toBe(twelveHoursAgo);
+  });
+
+  test('carries forward updateDetectedAt but not maturityGatePendingSince when the old container had no maturityGatePendingSince', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-maturity-2',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-maturity-2', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-maturity-2' });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
+    expect(inserted.maturityGatePendingSince).toBeUndefined();
+  });
+
+  test('does not carry forward maturityGatePendingSince when the update result changed', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-maturity-3',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+      maturityGatePendingSince: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-maturity-3', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-new-maturity-3',
+      result: { tag: 'version', digest: 'sha256:completely-different' },
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.maturityGatePendingSince).not.toBe(twelveHoursAgo);
+    expect(typeof inserted.maturityGatePendingSince).toBe('string');
+  });
+
+  test('does not overwrite existing incoming maturityGatePendingSince with cached value', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-maturity-4',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+      maturityGatePendingSince: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-maturity-4', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-new-maturity-4',
+      maturityGatePendingSince: '2026-01-01T00:00:00.000Z',
+    });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.maturityGatePendingSince).toBe('2026-01-01T00:00:00.000Z');
   });
 
   test('does not carry forward when the update result changed', () => {

@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import capitalize from 'capitalize';
 import logger from '../log/index.js';
+import * as maturityScheduler from '../maturity/scheduler.js';
 import * as securityScheduler from '../security/scheduler.js';
 import * as storeContainer from '../store/container.js';
 import * as store from '../store/index.js';
@@ -784,6 +785,7 @@ async function deregisterAll() {
 async function shutdown() {
   try {
     securityScheduler.shutdown();
+    maturityScheduler.shutdown();
     await deregisterAll();
     await store.save();
     process.exit(0);

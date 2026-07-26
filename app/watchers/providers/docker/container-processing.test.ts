@@ -8,7 +8,13 @@ const eventMocks = vi.hoisted(() => ({
   emitContainerReports: vi.fn().mockResolvedValue(undefined),
 }));
 
+const maturityGateWatchMocks = vi.hoisted(() => ({
+  maybeEmitMaturityGateCleared: vi.fn().mockResolvedValue(false),
+}));
+
 vi.mock('../../../event/index.js', () => eventMocks);
+
+vi.mock('../../../maturity/gate-watch.js', () => maturityGateWatchMocks);
 
 vi.mock('./release-notes-enrichment.js', () => ({
   enrichContainerWithReleaseNotes: vi.fn().mockResolvedValue(undefined),
@@ -186,5 +192,35 @@ describe('watchContainer error result preservation', () => {
 
     expect(report.container.result?.tag).toBe('1.4.0');
     expect(report.container.error?.message).toBe('notes fetch failed');
+  });
+});
+
+describe('watchContainer maturity-cleared hook', () => {
+  test('awaits the maturity-cleared detection helper with the persisted container before emitting the report', async () => {
+    const callOrder: string[] = [];
+    maturityGateWatchMocks.maybeEmitMaturityGateCleared.mockImplementationOnce(async () => {
+      callOrder.push('maturity');
+      return true;
+    });
+    eventMocks.emitContainerReport.mockImplementationOnce(async () => {
+      callOrder.push('report');
+    });
+    const persistedContainer = createValidatedContainer({ result: { tag: '1.4.0' } });
+    const container = createValidatedContainer({ result: { tag: '1.3.0' } });
+    const dependencies = createDependencies(vi.fn().mockResolvedValue({ tag: '1.4.0' }));
+    dependencies.mapContainerToContainerReport.mockReturnValueOnce({
+      container: persistedContainer,
+      changed: true,
+    });
+
+    await watchContainer(container, dependencies);
+
+    expect(callOrder).toEqual(['maturity', 'report']);
+    expect(maturityGateWatchMocks.maybeEmitMaturityGateCleared).toHaveBeenCalledWith(
+      persistedContainer,
+    );
+    expect(eventMocks.emitContainerReport).toHaveBeenCalledWith(
+      expect.objectContaining({ container: persistedContainer }),
+    );
   });
 });
