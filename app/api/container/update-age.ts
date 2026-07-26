@@ -6,6 +6,15 @@ export function getContainerUpdateAge(container: Container): number | undefined 
     return age;
   }
 
+  // Match the model layer's own gate (model/container.ts getRawUpdateAge):
+  // no available update means no age to report, full stop. A falsy check
+  // (not `=== false`) is deliberate — `updateAvailable` left unset (never
+  // evaluated) and `updateAvailable: false` (evaluated and gated, e.g. by
+  // maturityMode) both mean "nothing to age" here, same as upstream.
+  if (!container.updateAvailable) {
+    return undefined;
+  }
+
   // Fallback for containers not processed through validate() — includes
   // updateDetectedAt as a third date source that the model layer omits.
   const firstSeenAtMs = Date.parse(container.firstSeenAt || '');
