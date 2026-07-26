@@ -48,6 +48,31 @@ interface FindAssignmentSite {
   line: string;
 }
 
+// Reconstructs logical shell lines from a `run:` block by folding backslash
+// continuations, so a site reformatted across `\` line breaks is still
+// discovered by the single-line FIND_ASSIGNMENT_LINE regex below. A line
+// ending in a trailing `\` (optionally followed by trailing whitespace)
+// continues onto the next physical line.
+function joinContinuations(run: string): string[] {
+  const logicalLines: string[] = [];
+  let pending = '';
+
+  for (const rawLine of run.split('\n')) {
+    const continued = /\\\s*$/.test(rawLine);
+    const chunk = continued ? rawLine.replace(/\\\s*$/, '') : rawLine;
+    pending += (pending ? ' ' : '') + chunk.trim();
+
+    if (!continued) {
+      logicalLines.push(pending);
+      pending = '';
+    }
+  }
+
+  if (pending) logicalLines.push(pending);
+
+  return logicalLines;
+}
+
 function findFindAssignmentSites(): FindAssignmentSite[] {
   const workflow = loadWorkflow();
   const sites: FindAssignmentSite[] = [];
@@ -56,7 +81,7 @@ function findFindAssignmentSites(): FindAssignmentSite[] {
     for (const step of job.steps ?? []) {
       if (!step.run) continue;
 
-      for (const line of step.run.split('\n')) {
+      for (const line of joinContinuations(step.run)) {
         const match = line.match(FIND_ASSIGNMENT_LINE);
         if (!match) continue;
 
@@ -76,11 +101,19 @@ function findFindAssignmentSites(): FindAssignmentSite[] {
   return sites;
 }
 
+// Pinned to the current count of guarded find-into-assignment sites in
+// ci-verify.yml. This must be bumped deliberately, in either direction, when
+// a site is added or removed -- a plain `> 0` sanity check would let the
+// sweep silently drop sites (e.g. a regex that stops matching a reformatted
+// site) without failing.
+const EXPECTED_FIND_ASSIGNMENT_SITE_COUNT = 8;
+
 test('ci-verify.yml has find-into-variable assignments to guard against pipefail', () => {
-  // Sanity check on the sweep itself: if this ever drops to zero, the regex
-  // above stopped matching the workflow's actual shape and the guard test
-  // below would be vacuously true.
-  expect(findFindAssignmentSites().length).toBeGreaterThan(0);
+  // Sanity check on the sweep itself: pinned to the exact expected count
+  // rather than `> 0` so a drop in EITHER direction fails loudly -- including
+  // a site silently falling out of the sweep (e.g. reformatted across a
+  // backslash continuation that the regex no longer matches).
+  expect(findFindAssignmentSites().length).toBe(EXPECTED_FIND_ASSIGNMENT_SITE_COUNT);
 });
 
 test('every find-into-variable pipeline in ci-verify.yml is guarded against a missing-directory exit', () => {
