@@ -19,6 +19,7 @@ import { getPathParamValue } from './request-helpers.js';
 
 interface SecurityStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
+  getContainerRaw: (id: string) => Container | undefined;
   updateContainer: (container: Container) => Container;
 }
 
@@ -397,11 +398,29 @@ function persistAndBroadcast(options: {
   status: ContainerSecurityScan['status'];
   res: Response;
 }): void {
-  const { context, id, container, securityPatch, status, res } = options;
+  const { context, id, securityPatch, status, res } = options;
+
+  // Re-fetch the current store record at write-back time rather than
+  // merging onto the pre-scan `container` snapshot the caller captured.
+  // Current/update-image scans (plus optional signature/SBOM checks) can
+  // run for seconds to minutes, so by the time we persist, a watcher poll
+  // may have legitimately advanced result/updateAvailable/updateDetectedAt/
+  // maturityGatePendingSince. Spreading the stale snapshot would silently
+  // revert those fields and reset the maturity soak clock.
+  const current = context.storeContainer.getContainerRaw(id);
+  if (!current) {
+    // Container removed or recreated under a new id while the scan was
+    // in flight — skip the write rather than resurrecting a zombie
+    // record with the stale pre-scan snapshot.
+    context.broadcastScanCompleted(id, status);
+    sendErrorResponse(res, 404, 'Container not found');
+    return;
+  }
+
   const containerToStore = {
-    ...container,
+    ...current,
     security: {
-      ...(container.security || {}),
+      ...(current.security || {}),
       ...securityPatch,
     },
   };

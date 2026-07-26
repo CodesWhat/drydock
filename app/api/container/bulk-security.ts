@@ -25,6 +25,7 @@ interface BulkSecurityAlertPayload {
 interface BulkSecurityStoreApi {
   getAllContainers: () => Container[];
   getContainer: (id: string) => Container | undefined;
+  getContainerRaw: (id: string) => Container | undefined;
   updateContainer: (container: Container) => Container;
 }
 
@@ -179,13 +180,25 @@ async function runBulkScan(
           scannedCount += 1;
 
           try {
-            deps.storeContainer.updateContainer({
-              ...container,
-              security: {
-                ...(container.security || {}),
-                scan: scanResult,
-              },
-            });
+            // Re-fetch the current store record at write-back time rather than
+            // spreading the stale `container` snapshot captured when the scan
+            // was queued. The scan can take seconds to minutes, so by the time
+            // we write back, a watcher poll may have legitimately advanced
+            // `result`/`updateAvailable`/`updateDetectedAt`/`maturityGatePendingSince`.
+            // Spreading the stale snapshot would silently revert those fields
+            // and reset the maturity soak clock. If the record is gone
+            // (container removed or recreated under a new id) skip the write
+            // rather than resurrecting a zombie record.
+            const current = deps.storeContainer.getContainerRaw(containerId);
+            if (current) {
+              deps.storeContainer.updateContainer({
+                ...current,
+                security: {
+                  ...(current.security || {}),
+                  scan: scanResult,
+                },
+              });
+            }
           } catch (persistErr: unknown) {
             deps.log.info(
               `Bulk scan persistence failed for container ${containerId} (${deps.getErrorMessage(persistErr)})`,
