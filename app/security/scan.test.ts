@@ -1248,26 +1248,29 @@ test.each([
   'net/http: TLS handshake timeout',
   'dial tcp 10.0.0.2:443: connect: connection refused',
   'lookup registry.example.com: no such host',
-])('scanImageForVulnerabilities should retry realistic transient Trivy stderr: %s', async (stderr) => {
-  let invocations = 0;
-  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
-    invocations += 1;
-    const child = { exitCode: invocations === 1 ? 1 : 0 };
-    if (invocations === 1) {
-      const error = new Error('Trivy failed') as NodeJS.ErrnoException;
-      error.code = '1';
-      setTimeout(() => callback(error, '', stderr), 0);
-    } else {
-      setTimeout(() => callback(null, JSON.stringify({ Results: [] }), ''), 0);
-    }
-    return child;
-  };
+])(
+  'scanImageForVulnerabilities should retry realistic transient Trivy stderr: %s',
+  async (stderr) => {
+    let invocations = 0;
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      invocations += 1;
+      const child = { exitCode: invocations === 1 ? 1 : 0 };
+      if (invocations === 1) {
+        const error = new Error('Trivy failed') as NodeJS.ErrnoException;
+        error.code = '1';
+        setTimeout(() => callback(error, '', stderr), 0);
+      } else {
+        setTimeout(() => callback(null, JSON.stringify({ Results: [] }), ''), 0);
+      }
+      return child;
+    };
 
-  const result = await scanImageForVulnerabilities({ image: 'img:test', retryTransient: true });
+    const result = await scanImageForVulnerabilities({ image: 'img:test', retryTransient: true });
 
-  expect(result.status).toBe('passed');
-  expect(invocations).toBe(2);
-});
+    expect(result.status).toBe('passed');
+    expect(invocations).toBe(2);
+  },
+);
 
 test('scanImageForVulnerabilities should stop after two transient failures', async () => {
   let invocations = 0;

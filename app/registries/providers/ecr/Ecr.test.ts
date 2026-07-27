@@ -676,17 +676,20 @@ test('getAuthPull should throw when private ECR authorization token is missing',
 test.each([
   Buffer.from(':password-only').toString('base64'),
   Buffer.from('username-only:').toString('base64'),
-])('getAuthPull should reject decoded credentials with a missing token segment (%s)', async (token) => {
-  const ecrPrivate = new Ecr();
-  ecrPrivate.configuration = {
-    accesskeyid: 'accesskeyid',
-    secretaccesskey: 'secretaccesskey',
-    region: 'region',
-  };
-  ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue(token);
+])(
+  'getAuthPull should reject decoded credentials with a missing token segment (%s)',
+  async (token) => {
+    const ecrPrivate = new Ecr();
+    ecrPrivate.configuration = {
+      accesskeyid: 'accesskeyid',
+      secretaccesskey: 'secretaccesskey',
+      region: 'region',
+    };
+    ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue(token);
 
-  await expect(ecrPrivate.getAuthPull()).rejects.toThrow('ECR authorization token is malformed');
-});
+    await expect(ecrPrivate.getAuthPull()).rejects.toThrow('ECR authorization token is malformed');
+  },
+);
 
 test('match should return true for public ECR gallery', async () => {
   expect(

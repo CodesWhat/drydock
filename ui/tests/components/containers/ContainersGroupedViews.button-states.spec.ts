@@ -646,26 +646,26 @@ describe('ContainersGroupedViews — update button states', () => {
     expect(row.find('[data-icon="lock"]').exists()).toBe(false);
   });
 
-  it.each([
-    'icons',
-    'buttons',
-  ] as const)('%s mode: notify mode renders no update or blocker control', async (actionStyle) => {
-    const container = makeContainer({
-      id: `c-notify-${actionStyle}`,
-      name: 'alpha',
-      newTag: '2.0.0',
-      updateEligibility: makeEligibility([
-        { reason: 'agent-mismatch', message: 'Agent mismatch.', actionable: true },
-      ]),
-    });
-    const { wrapper } = mountWithSingleContainer(container, actionStyle, 'notify');
-    await nextTick();
+  it.each(['icons', 'buttons'] as const)(
+    '%s mode: notify mode renders no update or blocker control',
+    async (actionStyle) => {
+      const container = makeContainer({
+        id: `c-notify-${actionStyle}`,
+        name: 'alpha',
+        newTag: '2.0.0',
+        updateEligibility: makeEligibility([
+          { reason: 'agent-mismatch', message: 'Agent mismatch.', actionable: true },
+        ]),
+      });
+      const { wrapper } = mountWithSingleContainer(container, actionStyle, 'notify');
+      await nextTick();
 
-    const row = rowByName(wrapper, 'alpha');
-    expect(row.find('[data-icon="cloud-download"]').exists()).toBe(false);
-    expect(row.find('[data-icon="lock"]').exists()).toBe(false);
-    expect(row.find('[data-icon="stop"]').exists()).toBe(true);
-  });
+      const row = rowByName(wrapper, 'alpha');
+      expect(row.find('[data-icon="cloud-download"]').exists()).toBe(false);
+      expect(row.find('[data-icon="lock"]').exists()).toBe(false);
+      expect(row.find('[data-icon="stop"]').exists()).toBe(true);
+    },
+  );
 
   // -------------------------------------------------------------------------
   // cards mode — same state machine, 44px icon targets in the custom #card footer

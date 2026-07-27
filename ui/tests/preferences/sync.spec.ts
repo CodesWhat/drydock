@@ -297,56 +297,56 @@ describe('preference sync engine', () => {
     await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalled());
   });
 
-  it.each([
-    'resolve',
-    'reject',
-  ] as const)('blocks SSE refetch during an in-flight debounced write, then resumes after %s', async (outcome) => {
-    const { sync, preferences } = await load();
-    mocks.getPreferences.mockResolvedValue(response(null));
-    await sync.hydrateFromServer('alice');
-    mocks.getPreferences.mockClear();
-    const write = deferred<ReturnType<typeof response>>();
-    mocks.updatePreferences.mockReturnValue(write.promise);
-    preferences.sync.enabled = true;
-    mocks.watchCallbacks[0]();
-    await vi.advanceTimersByTimeAsync(3000);
+  it.each(['resolve', 'reject'] as const)(
+    'blocks SSE refetch during an in-flight debounced write, then resumes after %s',
+    async (outcome) => {
+      const { sync, preferences } = await load();
+      mocks.getPreferences.mockResolvedValue(response(null));
+      await sync.hydrateFromServer('alice');
+      mocks.getPreferences.mockClear();
+      const write = deferred<ReturnType<typeof response>>();
+      mocks.updatePreferences.mockReturnValue(write.promise);
+      preferences.sync.enabled = true;
+      mocks.watchCallbacks[0]();
+      await vi.advanceTimersByTimeAsync(3000);
 
-    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
-    expect(mocks.getPreferences).not.toHaveBeenCalled();
+      mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
+      expect(mocks.getPreferences).not.toHaveBeenCalled();
 
-    if (outcome === 'resolve') write.resolve(response(preferences));
-    else write.reject(new Error('write failed'));
-    await Promise.resolve();
-    await Promise.resolve();
-    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
-    await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
-  });
+      if (outcome === 'resolve') write.resolve(response(preferences));
+      else write.reject(new Error('write failed'));
+      await Promise.resolve();
+      await Promise.resolve();
+      mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
+      await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
+    },
+  );
 
-  it.each([
-    'resolve',
-    'reject',
-  ] as const)('blocks SSE refetch during an explicit push, then resumes after %s', async (outcome) => {
-    const { sync, preferences } = await load();
-    mocks.getPreferences.mockResolvedValue(response(null));
-    await sync.hydrateFromServer('alice');
-    mocks.getPreferences.mockClear();
-    const write = deferred<ReturnType<typeof response>>();
-    mocks.updatePreferences.mockReturnValue(write.promise);
-    const push = sync.pushInitialSync('alice');
+  it.each(['resolve', 'reject'] as const)(
+    'blocks SSE refetch during an explicit push, then resumes after %s',
+    async (outcome) => {
+      const { sync, preferences } = await load();
+      mocks.getPreferences.mockResolvedValue(response(null));
+      await sync.hydrateFromServer('alice');
+      mocks.getPreferences.mockClear();
+      const write = deferred<ReturnType<typeof response>>();
+      mocks.updatePreferences.mockReturnValue(write.promise);
+      const push = sync.pushInitialSync('alice');
 
-    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
-    expect(mocks.getPreferences).not.toHaveBeenCalled();
+      mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
+      expect(mocks.getPreferences).not.toHaveBeenCalled();
 
-    if (outcome === 'resolve') {
-      write.resolve(response(preferences));
-      await push;
-    } else {
-      write.reject(new Error('push failed'));
-      await expect(push).rejects.toThrow('push failed');
-    }
-    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
-    await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
-  });
+      if (outcome === 'resolve') {
+        write.resolve(response(preferences));
+        await push;
+      } else {
+        write.reject(new Error('push failed'));
+        await expect(push).rejects.toThrow('push failed');
+      }
+      mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
+      await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
+    },
+  );
 
   it('cancels the previous user debounce and hydrates a switched user', async () => {
     const { sync, preferences } = await load();

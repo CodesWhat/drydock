@@ -3190,15 +3190,15 @@ describe('ContainersGroupedViews', () => {
         currentTag: 'compose-X-version-9.0.1',
         newTag: 'compose-X-version-9.0.1',
       },
-    ])('table view — $label shows human-readable tag, never sha256 (non-pinned digest)', async ({
-      currentTag,
-      newTag,
-    }) => {
-      const { wrapper } = mountGuardContainer({ currentTag, newTag });
-      const text = rowByName(wrapper, 'alpha').text();
-      expect(text).toContain(currentTag);
-      expect(text).not.toContain('sha256:');
-    });
+    ])(
+      'table view — $label shows human-readable tag, never sha256 (non-pinned digest)',
+      async ({ currentTag, newTag }) => {
+        const { wrapper } = mountGuardContainer({ currentTag, newTag });
+        const text = rowByName(wrapper, 'alpha').text();
+        expect(text).toContain(currentTag);
+        expect(text).not.toContain('sha256:');
+      },
+    );
 
     it('table view — hybrid both-halves change (1.2.3 → 1.2.4, digest also changes) shows currentTag, never sha256', async () => {
       const { wrapper } = mountGuardContainer({

@@ -161,13 +161,12 @@ describe('isGreater', () => {
     },
   ];
 
-  test.each(comparisonTests)('should handle $desc: $v1 >= $v2 = $expected', ({
-    v1,
-    v2,
-    expected,
-  }) => {
-    expect(semver.isGreater(v1, v2)).toBe(expected);
-  });
+  test.each(comparisonTests)(
+    'should handle $desc: $v1 >= $v2 = $expected',
+    ({ v1, v2, expected }) => {
+      expect(semver.isGreater(v1, v2)).toBe(expected);
+    },
+  );
 });
 
 describe('diff', () => {
@@ -235,13 +234,12 @@ describe('diff', () => {
     },
   ];
 
-  test.each(diffTests)('should detect $desc: diff($v1, $v2) = $expected', ({
-    v1,
-    v2,
-    expected,
-  }) => {
-    expect(semver.diff(v1, v2)).toBe(expected);
-  });
+  test.each(diffTests)(
+    'should detect $desc: diff($v1, $v2) = $expected',
+    ({ v1, v2, expected }) => {
+      expect(semver.diff(v1, v2)).toBe(expected);
+    },
+  );
 });
 
 describe('transform', () => {

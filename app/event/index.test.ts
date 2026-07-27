@@ -53,23 +53,21 @@ const eventTestCases = [
     register: event.registerMaturityGateCleared,
   },
 ];
-test.each(
-  eventTestCases,
-)('the registered $register.name function must execute the handler when the $emitter.name emitter function is called', async ({
-  register,
-  emitter,
-}) => {
-  // Register an handler
-  const handlerMock = vi.fn((item) => item);
-  register(handlerMock);
+test.each(eventTestCases)(
+  'the registered $register.name function must execute the handler when the $emitter.name emitter function is called',
+  async ({ register, emitter }) => {
+    // Register an handler
+    const handlerMock = vi.fn((item) => item);
+    register(handlerMock);
 
-  // Emit the event
-  const emitResult = await emitter();
+    // Emit the event
+    const emitResult = await emitter();
 
-  // Ensure handler is called
-  expect([undefined, true, false]).toContain(emitResult);
-  expect(handlerMock).toHaveBeenCalledTimes(1);
-});
+    // Ensure handler is called
+    expect([undefined, true, false]).toContain(emitResult);
+    expect(handlerMock).toHaveBeenCalledTimes(1);
+  },
+);
 
 test('deregistration of container added handler should work', () => {
   const handler = vi.fn();

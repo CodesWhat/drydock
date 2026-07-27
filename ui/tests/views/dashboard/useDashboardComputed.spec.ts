@@ -344,27 +344,26 @@ describe('useDashboardComputed update summary', () => {
       color: 'var(--dd-danger)',
       colorMuted: 'var(--dd-danger-muted)',
     },
-  ])('uses the expected updates stat colors when $updates of 4 containers have updates', ({
-    updates,
-    color,
-    colorMuted,
-  }) => {
-    const containers = Array.from({ length: 4 }, (_, index) =>
-      makeBaseContainer({
-        id: `ratio-${index}`,
-        updateKind: index < updates ? 'minor' : null,
-      }),
-    );
-    const state = createState({ containers });
-    const updateStat = state.stats.value.find((card) => card.id === 'stat-updates');
+  ])(
+    'uses the expected updates stat colors when $updates of 4 containers have updates',
+    ({ updates, color, colorMuted }) => {
+      const containers = Array.from({ length: 4 }, (_, index) =>
+        makeBaseContainer({
+          id: `ratio-${index}`,
+          updateKind: index < updates ? 'minor' : null,
+        }),
+      );
+      const state = createState({ containers });
+      const updateStat = state.stats.value.find((card) => card.id === 'stat-updates');
 
-    expect(updateStat).toMatchObject({
-      value: String(updates),
-      color,
-      colorMuted,
-      route: { path: '/containers', query: { filterKind: 'any' } },
-    });
-  });
+      expect(updateStat).toMatchObject({
+        value: String(updates),
+        color,
+        colorMuted,
+        route: { path: '/containers', query: { filterKind: 'any' } },
+      });
+    },
+  );
 
   it('shows new and mature counts in the updates stat detail when new updates exist', () => {
     const now = Date.now();

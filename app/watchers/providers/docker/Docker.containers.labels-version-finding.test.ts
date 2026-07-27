@@ -109,23 +109,25 @@ describe('Docker Watcher', () => {
         ['dd.rollback.interval', 'wud.rollback.interval'],
       ];
 
-      test.each(
-        labelPairs,
-      )('should use %s and ignore %s when both are present', (ddKey, wudKey) => {
-        const labels = { [ddKey]: 'dd-value', [wudKey]: 'wud-value' };
-        expect(testable_getLabel(labels, ddKey)).toBe('dd-value');
-      });
+      test.each(labelPairs)(
+        'should use %s and ignore %s when both are present',
+        (ddKey, wudKey) => {
+          const labels = { [ddKey]: 'dd-value', [wudKey]: 'wud-value' };
+          expect(testable_getLabel(labels, ddKey)).toBe('dd-value');
+        },
+      );
 
       test.each(labelPairs)('should ignore %s when %s is absent', (ddKey, wudKey) => {
         const labels = { [wudKey]: 'legacy-value' };
         expect(testable_getLabel(labels, ddKey)).toBeUndefined();
       });
 
-      test.each(
-        labelPairs,
-      )('should return undefined when neither %s nor %s is set', (ddKey, wudKey) => {
-        expect(testable_getLabel({}, ddKey)).toBeUndefined();
-      });
+      test.each(labelPairs)(
+        'should return undefined when neither %s nor %s is set',
+        (ddKey, wudKey) => {
+          expect(testable_getLabel({}, ddKey)).toBeUndefined();
+        },
+      );
     });
   });
 

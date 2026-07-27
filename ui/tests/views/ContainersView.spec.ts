@@ -1693,27 +1693,26 @@ describe('ContainersView', () => {
       expect(vm.availableContentWidth).toBe(1440 - 240 - 48);
     });
 
-    it.each([
-      'sm',
-      'md',
-      'lg',
-    ] as const)('uses the real DataViewLayout measurement once emitted, regardless of panelSize=%s', async (size) => {
-      mockDetailPanelOpen.value = true;
-      mockPanelSize.value = size;
-      const wrapper = await mountContainersView([makeContainer()]);
-      const vm = wrapper.vm as any;
+    it.each(['sm', 'md', 'lg'] as const)(
+      'uses the real DataViewLayout measurement once emitted, regardless of panelSize=%s',
+      async (size) => {
+        mockDetailPanelOpen.value = true;
+        mockPanelSize.value = size;
+        const wrapper = await mountContainersView([makeContainer()]);
+        const vm = wrapper.vm as any;
 
-      const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
-      layout.vm.$emit('content-width', 905);
-      await flushPromises();
+        const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
+        layout.vm.$emit('content-width', 905);
+        await flushPromises();
 
-      // The old hand-rolled formula subtracted a fixed PANEL_WIDTH_PX[panelSize] (sm=420,
-      // md=560, lg=720) and was ~23px too generous versus the real box. Once a real
-      // measurement has been emitted, availableContentWidth must equal it exactly — the same
-      // number for every panelSize — because DataViewLayout's ResizeObserver already accounts
-      // for the actual panel width, the flexbox gap, and the panel's own margins.
-      expect(vm.availableContentWidth).toBe(905);
-    });
+        // The old hand-rolled formula subtracted a fixed PANEL_WIDTH_PX[panelSize] (sm=420,
+        // md=560, lg=720) and was ~23px too generous versus the real box. Once a real
+        // measurement has been emitted, availableContentWidth must equal it exactly — the same
+        // number for every panelSize — because DataViewLayout's ResizeObserver already accounts
+        // for the actual panel width, the flexbox gap, and the panel's own margins.
+        expect(vm.availableContentWidth).toBe(905);
+      },
+    );
 
     it('prefers the latest measurement over the fallback once one has arrived', async () => {
       mockWindowWidth.value = 1440;

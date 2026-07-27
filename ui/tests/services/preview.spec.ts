@@ -109,30 +109,33 @@ describe('preview service', () => {
   it.each([
     [{ label: 42, href: '/registries' }, 'Bad Gateway'],
     [{ label: 'Unsafe link', href: 'https://attacker.example' }, ''],
-  ])('drops malformed preview actions and handles optional status text', async (action, statusText) => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 502,
-      statusText,
-      json: () =>
-        Promise.resolve({
-          code: ' ',
-          message: ' ',
-          details: [],
-          action,
-        }),
-    });
+  ])(
+    'drops malformed preview actions and handles optional status text',
+    async (action, statusText) => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        statusText,
+        json: () =>
+          Promise.resolve({
+            code: ' ',
+            message: ' ',
+            details: [],
+            action,
+          }),
+      });
 
-    const failure = await previewContainer('bad-id').catch((error) => error);
+      const failure = await previewContainer('bad-id').catch((error) => error);
 
-    expect(failure).toMatchObject({
-      code: 'preview-http-error',
-      message: `Unable to prepare this update preview (502${statusText ? ` ${statusText}` : ''})`,
-      status: 502,
-      details: undefined,
-      action: undefined,
-    });
-  });
+      expect(failure).toMatchObject({
+        code: 'preview-http-error',
+        message: `Unable to prepare this update preview (502${statusText ? ` ${statusText}` : ''})`,
+        status: 502,
+        details: undefined,
+        action: undefined,
+      });
+    },
+  );
 
   it('normalizes compose preview fields while preserving generic preview fields', async () => {
     global.fetch = vi.fn().mockResolvedValue({
