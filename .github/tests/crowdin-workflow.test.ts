@@ -16,6 +16,8 @@ interface CrowdinConfig {
 const workflowPath = fileURLToPath(new URL('../workflows/i18n-crowdin.yml', import.meta.url));
 const crowdinConfigPath = fileURLToPath(new URL('../../crowdin.yml', import.meta.url));
 const crowdinActionRef = 'crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f';
+const integrationBranchCheckoutStepName =
+  'Check out the integration branch so l10n_crowdin forks from it';
 
 function loadCrowdinWorkflowStep(): WorkflowStep {
   const workflow = loadWorkflow(workflowPath);
@@ -39,6 +41,33 @@ test('Crowdin action runs as workspace owner and surfaces sync failures', () => 
 
   expect(step.with?.user).toBe('auto');
   expect(step['continue-on-error']).toBeUndefined();
+});
+
+test('Crowdin checks out the resolved integration branch before creating its branch', () => {
+  const steps = loadWorkflow(workflowPath).jobs?.sync?.steps ?? [];
+  const baseStepIndex = steps.findIndex((step) => step.id === 'base');
+  const checkoutStepIndex = steps.findIndex(
+    (step) => step.name === integrationBranchCheckoutStepName,
+  );
+  const crowdinStepIndex = steps.findIndex((step) =>
+    step.uses?.startsWith('crowdin/github-action@'),
+  );
+  const checkoutStep = steps[checkoutStepIndex];
+
+  expect(baseStepIndex).toBeGreaterThanOrEqual(0);
+  expect(checkoutStepIndex).toBeGreaterThan(baseStepIndex);
+  expect(crowdinStepIndex).toBeGreaterThan(checkoutStepIndex);
+
+  expect(checkoutStep?.env?.BASE).toBe('${{ steps.base.outputs.name }}');
+  expect(checkoutStep?.run).not.toContain('${{ steps.base.outputs.name }}');
+
+  const fetchCommand = 'git fetch origin "refs/heads/${BASE}:refs/remotes/origin/${BASE}"';
+  const checkoutCommand = 'git checkout -B "${BASE}" "refs/remotes/origin/${BASE}"';
+  expect(checkoutStep?.run).toContain(fetchCommand);
+  expect(checkoutStep?.run).toContain(checkoutCommand);
+  expect(checkoutStep?.run?.indexOf(fetchCommand)).toBeLessThan(
+    checkoutStep?.run?.indexOf(checkoutCommand) ?? -1,
+  );
 });
 
 test('Crowdin workflow lets crowdin.yml own the target language list', () => {
