@@ -498,23 +498,26 @@ describe('api/container/update-policy', () => {
     test.each([
       ['tag', '2.0.0', 'skipTags'],
       ['digest', 'sha256:new', 'skipDigests'],
-    ] as const)('skips the current %s using the effective list as the override base', (kind, value, field) => {
-      const harness = createLayeredHarness({
-        updateKind: { kind, remoteValue: value },
-        updatePolicy: {
-          maturityMode: 'mature',
-          maturityMinAgeDays: 7,
-          [field]: ['existing'],
-        },
-      });
+    ] as const)(
+      'skips the current %s using the effective list as the override base',
+      (kind, value, field) => {
+        const harness = createLayeredHarness({
+          updateKind: { kind, remoteValue: value },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+            [field]: ['existing'],
+          },
+        });
 
-      const res = callPatchContainerUpdatePolicy(harness.handlers, { action: 'skip-current' });
+        const res = callPatchContainerUpdatePolicy(harness.handlers, { action: 'skip-current' });
 
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(
-        harness.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides[field],
-      ).toEqual(['existing', value]);
-    });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(
+          harness.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides[field],
+        ).toEqual(['existing', value]);
+      },
+    );
 
     test('skips the current value when neither effective nor override skip lists exist', () => {
       const harness = createLayeredHarness({

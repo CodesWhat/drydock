@@ -307,20 +307,20 @@ test.each([
     expectedPicture:
       'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
   },
-])('addContainerSensor should map $displayIcon to entity_picture URL', async ({
-  displayIcon,
-  expectedPicture,
-}) => {
-  await hass.addContainerSensor({
-    name: 'container-name',
-    watcher: 'watcher-name',
-    displayIcon,
-  });
+])(
+  'addContainerSensor should map $displayIcon to entity_picture URL',
+  async ({ displayIcon, expectedPicture }) => {
+    await hass.addContainerSensor({
+      name: 'container-name',
+      watcher: 'watcher-name',
+      displayIcon,
+    });
 
-  const discoveryCall = mqttClientMock.publish.mock.calls[0];
-  const discoveryPayload = JSON.parse(discoveryCall[1]);
-  expect(discoveryPayload.entity_picture).toBe(expectedPicture);
-});
+    const discoveryCall = mqttClientMock.publish.mock.calls[0];
+    const discoveryPayload = JSON.parse(discoveryCall[1]);
+    expect(discoveryPayload.entity_picture).toBe(expectedPicture);
+  },
+);
 
 test('addContainerSensor should use direct URL icon as entity_picture', async () => {
   await hass.addContainerSensor({
@@ -474,215 +474,213 @@ test('addContainerSensor should not warn when a watcher name has only one distin
   expect(logWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Multiple agents share'));
 });
 
-test.each(
-  containerData,
-)('removeContainerSensor must publish sensor discovery message expected by HA', async ({
-  containerName,
-  data,
-}) => {
-  await hass.removeContainerSensor({
-    name: containerName,
-    watcher: 'watcher-name',
-    displayIcon: 'mdi:docker',
-  });
-  expect(mqttClientMock.publish).toHaveBeenCalledWith(data.discoveryTopic, '', {
-    retain: true,
-  });
-});
+test.each(containerData)(
+  'removeContainerSensor must publish sensor discovery message expected by HA',
+  async ({ containerName, data }) => {
+    await hass.removeContainerSensor({
+      name: containerName,
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+    });
+    expect(mqttClientMock.publish).toHaveBeenCalledWith(data.discoveryTopic, '', {
+      retain: true,
+    });
+  },
+);
 
-test.each(containerData)('updateContainerSensors must publish all sensors expected by HA', async ({
-  containerName,
-  data,
-}) => {
-  await hass.updateContainerSensors({
-    name: containerName,
-    watcher: 'watcher-name',
-    displayIcon: 'mdi:docker',
-  });
-  expect(mqttClientMock.publish).toHaveBeenCalledTimes(15);
+test.each(containerData)(
+  'updateContainerSensors must publish all sensors expected by HA',
+  async ({ containerName, data }) => {
+    await hass.updateContainerSensors({
+      name: containerName,
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+    });
+    expect(mqttClientMock.publish).toHaveBeenCalledTimes(15);
 
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    1,
-    'homeassistant/sensor/topic_total_count/config',
-    JSON.stringify({
-      unique_id: 'topic_total_count',
-      default_entity_id: 'sensor.topic_total_count',
-      name: 'Total container count',
-      device: {
-        identifiers: ['drydock'],
-        manufacturer: 'drydock',
-        model: 'drydock',
-        name: 'drydock',
-        sw_version: MOCK_VERSION,
-      },
-      icon: 'mdi:docker',
-      entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
-      state_topic: 'topic/total_count',
-    }),
-    { retain: true },
-  );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      1,
+      'homeassistant/sensor/topic_total_count/config',
+      JSON.stringify({
+        unique_id: 'topic_total_count',
+        default_entity_id: 'sensor.topic_total_count',
+        name: 'Total container count',
+        device: {
+          identifiers: ['drydock'],
+          manufacturer: 'drydock',
+          model: 'drydock',
+          name: 'drydock',
+          sw_version: MOCK_VERSION,
+        },
+        icon: 'mdi:docker',
+        entity_picture:
+          'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
+        state_topic: 'topic/total_count',
+      }),
+      { retain: true },
+    );
 
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    2,
-    'homeassistant/sensor/topic_update_count/config',
-    JSON.stringify({
-      unique_id: 'topic_update_count',
-      default_entity_id: 'sensor.topic_update_count',
-      name: 'Total container update count',
-      device: {
-        identifiers: ['drydock'],
-        manufacturer: 'drydock',
-        model: 'drydock',
-        name: 'drydock',
-        sw_version: MOCK_VERSION,
-      },
-      icon: 'mdi:docker',
-      entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
-      state_topic: 'topic/update_count',
-    }),
-    { retain: true },
-  );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      2,
+      'homeassistant/sensor/topic_update_count/config',
+      JSON.stringify({
+        unique_id: 'topic_update_count',
+        default_entity_id: 'sensor.topic_update_count',
+        name: 'Total container update count',
+        device: {
+          identifiers: ['drydock'],
+          manufacturer: 'drydock',
+          model: 'drydock',
+          name: 'drydock',
+          sw_version: MOCK_VERSION,
+        },
+        icon: 'mdi:docker',
+        entity_picture:
+          'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
+        state_topic: 'topic/update_count',
+      }),
+      { retain: true },
+    );
 
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    3,
-    'homeassistant/binary_sensor/topic_update_status/config',
-    JSON.stringify({
-      unique_id: 'topic_update_status',
-      default_entity_id: 'binary_sensor.topic_update_status',
-      name: 'Total container update status',
-      device: {
-        identifiers: ['drydock'],
-        manufacturer: 'drydock',
-        model: 'drydock',
-        name: 'drydock',
-        sw_version: MOCK_VERSION,
-      },
-      icon: 'mdi:docker',
-      entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
-      state_topic: 'topic/update_status',
-      payload_on: 'true',
-      payload_off: 'false',
-    }),
-    { retain: true },
-  );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      3,
+      'homeassistant/binary_sensor/topic_update_status/config',
+      JSON.stringify({
+        unique_id: 'topic_update_status',
+        default_entity_id: 'binary_sensor.topic_update_status',
+        name: 'Total container update status',
+        device: {
+          identifiers: ['drydock'],
+          manufacturer: 'drydock',
+          model: 'drydock',
+          name: 'drydock',
+          sw_version: MOCK_VERSION,
+        },
+        icon: 'mdi:docker',
+        entity_picture:
+          'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
+        state_topic: 'topic/update_status',
+        payload_on: 'true',
+        payload_off: 'false',
+      }),
+      { retain: true },
+    );
 
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    4,
-    'homeassistant/sensor/topic_watcher-name_total_count/config',
-    JSON.stringify({
-      unique_id: 'topic_watcher-name_total_count',
-      default_entity_id: 'sensor.topic_watcher-name_total_count',
-      name: 'Watcher watcher-name container count',
-      device: {
-        identifiers: ['drydock'],
-        manufacturer: 'drydock',
-        model: 'drydock',
-        name: 'drydock',
-        sw_version: MOCK_VERSION,
-      },
-      icon: 'mdi:docker',
-      entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
-      state_topic: 'topic/watcher-name/total_count',
-    }),
-    { retain: true },
-  );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      4,
+      'homeassistant/sensor/topic_watcher-name_total_count/config',
+      JSON.stringify({
+        unique_id: 'topic_watcher-name_total_count',
+        default_entity_id: 'sensor.topic_watcher-name_total_count',
+        name: 'Watcher watcher-name container count',
+        device: {
+          identifiers: ['drydock'],
+          manufacturer: 'drydock',
+          model: 'drydock',
+          name: 'drydock',
+          sw_version: MOCK_VERSION,
+        },
+        icon: 'mdi:docker',
+        entity_picture:
+          'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
+        state_topic: 'topic/watcher-name/total_count',
+      }),
+      { retain: true },
+    );
 
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    5,
-    'homeassistant/sensor/topic_watcher-name_update_count/config',
-    JSON.stringify({
-      unique_id: 'topic_watcher-name_update_count',
-      default_entity_id: 'sensor.topic_watcher-name_update_count',
-      name: 'Watcher watcher-name container update count',
-      device: {
-        identifiers: ['drydock'],
-        manufacturer: 'drydock',
-        model: 'drydock',
-        name: 'drydock',
-        sw_version: MOCK_VERSION,
-      },
-      icon: 'mdi:docker',
-      entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
-      state_topic: 'topic/watcher-name/update_count',
-    }),
-    { retain: true },
-  );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      5,
+      'homeassistant/sensor/topic_watcher-name_update_count/config',
+      JSON.stringify({
+        unique_id: 'topic_watcher-name_update_count',
+        default_entity_id: 'sensor.topic_watcher-name_update_count',
+        name: 'Watcher watcher-name container update count',
+        device: {
+          identifiers: ['drydock'],
+          manufacturer: 'drydock',
+          model: 'drydock',
+          name: 'drydock',
+          sw_version: MOCK_VERSION,
+        },
+        icon: 'mdi:docker',
+        entity_picture:
+          'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
+        state_topic: 'topic/watcher-name/update_count',
+      }),
+      { retain: true },
+    );
 
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    6,
-    'homeassistant/binary_sensor/topic_watcher-name_update_status/config',
-    JSON.stringify({
-      unique_id: 'topic_watcher-name_update_status',
-      default_entity_id: 'binary_sensor.topic_watcher-name_update_status',
-      name: 'Watcher watcher-name container update status',
-      device: {
-        identifiers: ['drydock'],
-        manufacturer: 'drydock',
-        model: 'drydock',
-        name: 'drydock',
-        sw_version: MOCK_VERSION,
-      },
-      icon: 'mdi:docker',
-      entity_picture:
-        'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
-      state_topic: 'topic/watcher-name/update_status',
-      payload_on: 'true',
-      payload_off: 'false',
-    }),
-    { retain: true },
-  );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      6,
+      'homeassistant/binary_sensor/topic_watcher-name_update_status/config',
+      JSON.stringify({
+        unique_id: 'topic_watcher-name_update_status',
+        default_entity_id: 'binary_sensor.topic_watcher-name_update_status',
+        name: 'Watcher watcher-name container update status',
+        device: {
+          identifiers: ['drydock'],
+          manufacturer: 'drydock',
+          model: 'drydock',
+          name: 'drydock',
+          sw_version: MOCK_VERSION,
+        },
+        icon: 'mdi:docker',
+        entity_picture:
+          'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
+        state_topic: 'topic/watcher-name/update_status',
+        payload_on: 'true',
+        payload_off: 'false',
+      }),
+      { retain: true },
+    );
 
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(7, 'topic/total_count', '0', {
-    retain: true,
-  });
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(8, 'topic/update_count', '0', {
-    retain: true,
-  });
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(9, 'topic/update_status', 'false', {
-    retain: true,
-  });
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    10,
-    'topic/watcher-name/total_count',
-    '0',
-    { retain: true },
-  );
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    11,
-    'topic/watcher-name/update_count',
-    '0',
-    { retain: true },
-  );
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    12,
-    'topic/watcher-name/update_status',
-    'false',
-    { retain: true },
-  );
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    13,
-    'homeassistant/sensor/topic_watcher-name_total_count/config',
-    '',
-    { retain: true },
-  );
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    14,
-    'homeassistant/sensor/topic_watcher-name_update_count/config',
-    '',
-    { retain: true },
-  );
-  expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
-    15,
-    'homeassistant/binary_sensor/topic_watcher-name_update_status/config',
-    '',
-    { retain: true },
-  );
-});
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(7, 'topic/total_count', '0', {
+      retain: true,
+    });
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(8, 'topic/update_count', '0', {
+      retain: true,
+    });
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(9, 'topic/update_status', 'false', {
+      retain: true,
+    });
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      10,
+      'topic/watcher-name/total_count',
+      '0',
+      { retain: true },
+    );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      11,
+      'topic/watcher-name/update_count',
+      '0',
+      { retain: true },
+    );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      12,
+      'topic/watcher-name/update_status',
+      'false',
+      { retain: true },
+    );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      13,
+      'homeassistant/sensor/topic_watcher-name_total_count/config',
+      '',
+      { retain: true },
+    );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      14,
+      'homeassistant/sensor/topic_watcher-name_update_count/config',
+      '',
+      { retain: true },
+    );
+    expect(mqttClientMock.publish).toHaveBeenNthCalledWith(
+      15,
+      'homeassistant/binary_sensor/topic_watcher-name_update_status/config',
+      '',
+      { retain: true },
+    );
+  },
+);
 
 test('updateContainerSensors should use container count queries instead of full list cloning', async () => {
   const getContainersSpy = vi.spyOn(containerStore, 'getContainers');
@@ -704,21 +702,19 @@ test('updateContainerSensors should use container count queries instead of full 
   expect(getContainersSpy).not.toHaveBeenCalled();
 });
 
-test.each(
-  containerData,
-)('removeContainerSensor must publish all sensor removal messages expected by HA', async ({
-  containerName,
-  data,
-}) => {
-  await hass.removeContainerSensor({
-    name: containerName,
-    watcher: 'watcher-name',
-    displayIcon: 'mdi:docker',
-  });
-  expect(mqttClientMock.publish).toHaveBeenCalledWith(data.discoveryTopic, '', {
-    retain: true,
-  });
-});
+test.each(containerData)(
+  'removeContainerSensor must publish all sensor removal messages expected by HA',
+  async ({ containerName, data }) => {
+    await hass.removeContainerSensor({
+      name: containerName,
+      watcher: 'watcher-name',
+      displayIcon: 'mdi:docker',
+    });
+    expect(mqttClientMock.publish).toHaveBeenCalledWith(data.discoveryTopic, '', {
+      retain: true,
+    });
+  },
+);
 
 test('updateWatcherSensors must publish all watcher sensor messages expected by HA', async () => {
   await hass.updateWatcherSensors({
@@ -2384,21 +2380,19 @@ describe('hass install commands (#210)', () => {
       expect(mockRecordAuditEvent).not.toHaveBeenCalled();
     });
 
-    test.each([
-      '',
-      'ON',
-      '{"install":true}',
-      'Install',
-    ])('unexpected payload %j is dropped independently, debug-logged, no call', async (payload) => {
-      const container = seedContainer();
-      const debugSpy = vi.spyOn(log, 'debug').mockImplementation(() => {});
-      await fireCommandMessage(commandClientMock, commandTopicFor(container), payload, {
-        retain: false,
-      });
-      expect(requestUpdateModule.requestContainerUpdate).not.toHaveBeenCalled();
-      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
-      expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('unexpected payload'));
-    });
+    test.each(['', 'ON', '{"install":true}', 'Install'])(
+      'unexpected payload %j is dropped independently, debug-logged, no call',
+      async (payload) => {
+        const container = seedContainer();
+        const debugSpy = vi.spyOn(log, 'debug').mockImplementation(() => {});
+        await fireCommandMessage(commandClientMock, commandTopicFor(container), payload, {
+          retain: false,
+        });
+        expect(requestUpdateModule.requestContainerUpdate).not.toHaveBeenCalled();
+        expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+        expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('unexpected payload'));
+      },
+    );
 
     // ── Reverse lookup (Gotcha B) ─────────────────────────────────────────
 

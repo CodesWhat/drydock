@@ -557,88 +557,89 @@ const handleContainerReportTestCases = [
   },
 ];
 
-test.each(
-  handleContainerReportTestCases,
-)('handleContainerReport should call trigger? ($shouldTrigger) when changed=$changed and updateAvailable=$updateAvailable and threshold=$threshold', async (item) => {
-  trigger.configuration = {
-    threshold: item.threshold,
-    once: item.once,
-    mode: 'simple',
-  };
-  await trigger.init();
+test.each(handleContainerReportTestCases)(
+  'handleContainerReport should call trigger? ($shouldTrigger) when changed=$changed and updateAvailable=$updateAvailable and threshold=$threshold',
+  async (item) => {
+    trigger.configuration = {
+      threshold: item.threshold,
+      once: item.once,
+      mode: 'simple',
+    };
+    await trigger.init();
 
-  const spy = vi.spyOn(trigger, 'trigger');
-  await trigger.handleContainerReport({
-    changed: item.changed,
-    container: {
-      name: 'container1',
-      updateAvailable: item.updateAvailable,
-      updateKind: {
-        kind: item.kind,
-        semverDiff: item.semverDiff,
-      },
-    },
-  });
-  if (item.shouldTrigger) {
-    expect(spy).toHaveBeenCalledWith({
-      name: 'container1',
-      updateAvailable: item.updateAvailable,
-      updateKind: {
-        kind: item.kind,
-        semverDiff: item.semverDiff,
+    const spy = vi.spyOn(trigger, 'trigger');
+    await trigger.handleContainerReport({
+      changed: item.changed,
+      container: {
+        name: 'container1',
+        updateAvailable: item.updateAvailable,
+        updateKind: {
+          kind: item.kind,
+          semverDiff: item.semverDiff,
+        },
       },
     });
-  } else {
-    expect(spy).not.toHaveBeenCalled();
-  }
-});
+    if (item.shouldTrigger) {
+      expect(spy).toHaveBeenCalledWith({
+        name: 'container1',
+        updateAvailable: item.updateAvailable,
+        updateKind: {
+          kind: item.kind,
+          semverDiff: item.semverDiff,
+        },
+      });
+    } else {
+      expect(spy).not.toHaveBeenCalled();
+    }
+  },
+);
 
-test.each([
-  'manual',
-  'notify',
-] as const)('%s mode suppresses automatic action triggers without suppressing notification triggers', async (updateMode) => {
-  mockGetUpdateMode.mockReturnValue(updateMode);
-  const report = {
-    changed: true,
-    container: {
-      id: 'c1',
-      name: 'container1',
-      updateAvailable: true,
-      updateKind: { kind: 'tag', semverDiff: 'major' },
-    },
-  } as any;
+test.each(['manual', 'notify'] as const)(
+  '%s mode suppresses automatic action triggers without suppressing notification triggers',
+  async (updateMode) => {
+    mockGetUpdateMode.mockReturnValue(updateMode);
+    const report = {
+      changed: true,
+      container: {
+        id: 'c1',
+        name: 'container1',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+    } as any;
 
-  trigger.type = 'docker';
-  const actionSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
-  await trigger.handleContainerReport(report);
-  expect(actionSpy).not.toHaveBeenCalled();
+    trigger.type = 'docker';
+    const actionSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerReport(report);
+    expect(actionSpy).not.toHaveBeenCalled();
 
-  trigger.type = 'slack';
-  const notificationSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
-  await trigger.handleContainerReport(report);
-  expect(notificationSpy).toHaveBeenCalledWith(report.container);
-});
+    trigger.type = 'slack';
+    const notificationSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerReport(report);
+    expect(notificationSpy).toHaveBeenCalledWith(report.container);
+  },
+);
 
-test.each([
-  'manual',
-  'notify',
-] as const)('%s mode suppresses automatic Command triggers in simple mode', async (updateMode) => {
-  mockGetUpdateMode.mockReturnValue(updateMode);
-  trigger.type = 'command';
-  const commandSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+test.each(['manual', 'notify'] as const)(
+  '%s mode suppresses automatic Command triggers in simple mode',
+  async (updateMode) => {
+    mockGetUpdateMode.mockReturnValue(updateMode);
+    trigger.type = 'command';
+    const commandSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
 
-  await trigger.handleContainerReport({
-    changed: true,
-    container: {
-      id: 'c1',
-      name: 'container1',
-      updateAvailable: true,
-      updateKind: { kind: 'tag', semverDiff: 'major' },
-    },
-  } as any);
+    await trigger.handleContainerReport({
+      changed: true,
+      container: {
+        id: 'c1',
+        name: 'container1',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+      },
+    } as any);
 
-  expect(commandSpy).not.toHaveBeenCalled();
-});
+    expect(commandSpy).not.toHaveBeenCalled();
+  },
+);
 
 test('simple action dispatch rechecks mode before enqueueing when mode changes mid-report', async () => {
   mockGetUpdateMode.mockReturnValueOnce('auto').mockReturnValueOnce('manual');
@@ -901,45 +902,46 @@ const handleContainerReportsTestCases = [
   },
 ];
 
-test.each(
-  handleContainerReportsTestCases,
-)('handleContainerReports should call triggerBatch? ($shouldTrigger) when changed=$changed and updateAvailable=$updateAvailable and threshold=$threshold', async (item) => {
-  trigger.configuration = {
-    threshold: item.threshold,
-    once: item.once,
-    mode: 'simple',
-  };
-  await trigger.init();
+test.each(handleContainerReportsTestCases)(
+  'handleContainerReports should call triggerBatch? ($shouldTrigger) when changed=$changed and updateAvailable=$updateAvailable and threshold=$threshold',
+  async (item) => {
+    trigger.configuration = {
+      threshold: item.threshold,
+      once: item.once,
+      mode: 'simple',
+    };
+    await trigger.init();
 
-  const spy = vi.spyOn(trigger, 'triggerBatch');
-  await trigger.handleContainerReports([
-    {
-      changed: item.changed,
-      container: {
-        name: 'container1',
-        updateAvailable: item.updateAvailable,
-        updateKind: {
-          kind: 'tag',
-          semverDiff: item.semverDiff,
-        },
-      },
-    },
-  ]);
-  if (item.shouldTrigger) {
-    expect(spy).toHaveBeenCalledWith([
+    const spy = vi.spyOn(trigger, 'triggerBatch');
+    await trigger.handleContainerReports([
       {
-        name: 'container1',
-        updateAvailable: item.updateAvailable,
-        updateKind: {
-          kind: 'tag',
-          semverDiff: item.semverDiff,
+        changed: item.changed,
+        container: {
+          name: 'container1',
+          updateAvailable: item.updateAvailable,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: item.semverDiff,
+          },
         },
       },
     ]);
-  } else {
-    expect(spy).not.toHaveBeenCalled();
-  }
-});
+    if (item.shouldTrigger) {
+      expect(spy).toHaveBeenCalledWith([
+        {
+          name: 'container1',
+          updateAvailable: item.updateAvailable,
+          updateKind: {
+            kind: 'tag',
+            semverDiff: item.semverDiff,
+          },
+        },
+      ]);
+    } else {
+      expect(spy).not.toHaveBeenCalled();
+    }
+  },
+);
 
 const isThresholdReachedTestCases = [
   {
@@ -1070,24 +1072,25 @@ const isThresholdReachedTestCases = [
   },
 ];
 
-test.each(
-  isThresholdReachedTestCases,
-)('isThresholdReached should return $result when threshold is $threshold and change is $change', (item) => {
-  trigger.configuration = {
-    threshold: item.threshold,
-  };
-  expect(
-    Trigger.isThresholdReached(
-      {
-        updateKind: {
-          kind: item.kind,
-          semverDiff: item.change,
+test.each(isThresholdReachedTestCases)(
+  'isThresholdReached should return $result when threshold is $threshold and change is $change',
+  (item) => {
+    trigger.configuration = {
+      threshold: item.threshold,
+    };
+    expect(
+      Trigger.isThresholdReached(
+        {
+          updateKind: {
+            kind: item.kind,
+            semverDiff: item.change,
+          },
         },
-      },
-      trigger.configuration.threshold,
-    ),
-  ).toEqual(item.result);
-});
+        trigger.configuration.threshold,
+      ),
+    ).toEqual(item.result);
+  },
+);
 
 test('isThresholdReached should return true when there is no semverDiff regardless of the threshold', async () => {
   trigger.configuration = {
@@ -7072,52 +7075,52 @@ describe('digest mode', () => {
     expect((trigger as any).digestBuffer.size).toBe(0);
   });
 
-  test.each([
-    'manual',
-    'notify',
-  ] as const)('Command digest reports are not buffered in %s mode', async (updateMode) => {
-    mockGetUpdateMode.mockReturnValue(updateMode);
-    trigger.type = 'command';
-    trigger.configuration.mode = 'digest';
+  test.each(['manual', 'notify'] as const)(
+    'Command digest reports are not buffered in %s mode',
+    async (updateMode) => {
+      mockGetUpdateMode.mockReturnValue(updateMode);
+      trigger.type = 'command';
+      trigger.configuration.mode = 'digest';
 
-    await trigger.handleContainerReportDigest({
-      changed: true,
-      container: {
+      await trigger.handleContainerReportDigest({
+        changed: true,
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        },
+      } as any);
+
+      expect((trigger as any).digestBuffer.size).toBe(0);
+    },
+  );
+
+  test.each(['manual', 'notify'] as const)(
+    'Command digest flush preserves buffered updates in %s mode',
+    async (updateMode) => {
+      mockGetUpdateMode.mockReturnValue(updateMode);
+      trigger.type = 'command';
+      trigger.configuration.mode = 'digest';
+      const container = {
         id: 'c1',
         name: 'app',
         watcher: 'test',
         updateAvailable: true,
         updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
-      },
-    } as any);
+      };
+      (trigger as any).digestBuffer.set(container.id, container);
+      storeContainer.getContainersRaw.mockReturnValue([container]);
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
 
-    expect((trigger as any).digestBuffer.size).toBe(0);
-  });
+      await trigger.flushDigestBuffer();
 
-  test.each([
-    'manual',
-    'notify',
-  ] as const)('Command digest flush preserves buffered updates in %s mode', async (updateMode) => {
-    mockGetUpdateMode.mockReturnValue(updateMode);
-    trigger.type = 'command';
-    trigger.configuration.mode = 'digest';
-    const container = {
-      id: 'c1',
-      name: 'app',
-      watcher: 'test',
-      updateAvailable: true,
-      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
-    };
-    (trigger as any).digestBuffer.set(container.id, container);
-    storeContainer.getContainersRaw.mockReturnValue([container]);
-    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
-
-    await trigger.flushDigestBuffer();
-
-    expect(triggerBatchSpy).not.toHaveBeenCalled();
-    expect((trigger as any).digestBuffer.size).toBe(1);
-    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
-  });
+      expect(triggerBatchSpy).not.toHaveBeenCalled();
+      expect((trigger as any).digestBuffer.size).toBe(1);
+      expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+    },
+  );
 
   test('handleContainerReports should use the accepted update batch path for action triggers', async () => {
     trigger.configuration.mode = 'batch';
@@ -7142,57 +7145,57 @@ describe('digest mode', () => {
     expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
   });
 
-  test.each([
-    'manual',
-    'notify',
-  ] as const)('handleContainerReports should not dispatch or record automatic action batches in %s mode', async (updateMode) => {
-    mockGetUpdateMode.mockReturnValue(updateMode);
-    trigger.type = 'docker';
-    trigger.configuration.mode = 'batch';
-    const runAcceptedUpdateBatchSpy = vi.spyOn(trigger as any, 'runAcceptedUpdateBatch');
+  test.each(['manual', 'notify'] as const)(
+    'handleContainerReports should not dispatch or record automatic action batches in %s mode',
+    async (updateMode) => {
+      mockGetUpdateMode.mockReturnValue(updateMode);
+      trigger.type = 'docker';
+      trigger.configuration.mode = 'batch';
+      const runAcceptedUpdateBatchSpy = vi.spyOn(trigger as any, 'runAcceptedUpdateBatch');
 
-    await trigger.handleContainerReports([
-      {
-        container: {
-          id: 'c1',
-          name: 'app',
-          watcher: 'test',
-          updateAvailable: true,
-          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
-        },
-        changed: true,
-      } as any,
-    ]);
+      await trigger.handleContainerReports([
+        {
+          container: {
+            id: 'c1',
+            name: 'app',
+            watcher: 'test',
+            updateAvailable: true,
+            updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+          },
+          changed: true,
+        } as any,
+      ]);
 
-    expect(runAcceptedUpdateBatchSpy).not.toHaveBeenCalled();
-    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
-  });
+      expect(runAcceptedUpdateBatchSpy).not.toHaveBeenCalled();
+      expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+    },
+  );
 
-  test.each([
-    'manual',
-    'notify',
-  ] as const)('Command batches are not dispatched or recorded in %s mode', async (updateMode) => {
-    mockGetUpdateMode.mockReturnValue(updateMode);
-    trigger.type = 'command';
-    trigger.configuration.mode = 'batch';
-    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+  test.each(['manual', 'notify'] as const)(
+    'Command batches are not dispatched or recorded in %s mode',
+    async (updateMode) => {
+      mockGetUpdateMode.mockReturnValue(updateMode);
+      trigger.type = 'command';
+      trigger.configuration.mode = 'batch';
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
 
-    await trigger.handleContainerReports([
-      {
-        container: {
-          id: 'c1',
-          name: 'app',
-          watcher: 'test',
-          updateAvailable: true,
-          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
-        },
-        changed: true,
-      } as any,
-    ]);
+      await trigger.handleContainerReports([
+        {
+          container: {
+            id: 'c1',
+            name: 'app',
+            watcher: 'test',
+            updateAvailable: true,
+            updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+          },
+          changed: true,
+        } as any,
+      ]);
 
-    expect(triggerBatchSpy).not.toHaveBeenCalled();
-    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
-  });
+      expect(triggerBatchSpy).not.toHaveBeenCalled();
+      expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+    },
+  );
 
   test('runAcceptedUpdateBatch should fail closed when mode changes before admission', async () => {
     mockGetUpdateMode.mockReturnValue('manual');
@@ -9664,7 +9667,7 @@ describe('security digest templates (6.7)', () => {
     expect(callArgs?.[1]).toMatchObject({
       eventKind: 'security-alert-digest',
     });
-    expect((callArgs?.[1] as any).title).toContain('1 container with findings');
+    expect((callArgs![1] as any).title).toContain('1 container with findings');
   });
 
   test('renderSecurityDigestTemplate does not execute arbitrary code via process.env', async () => {

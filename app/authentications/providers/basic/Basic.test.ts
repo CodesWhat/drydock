@@ -454,22 +454,21 @@ describe('Basic Authentication', () => {
     });
   });
 
-  test.each([
-    ['m=65536,t=3,p=4'],
-    ['t=3,p=4,m=65536'],
-    ['p=4,m=65536,t=3'],
-  ])('should accept PHC argon2id hashes with reordered parameters (%s)', (parameterSegment) => {
-    const hash = `$argon2id$v=19$${parameterSegment}$${VALID_SALT_BASE64URL}$${VALID_HASH_BASE64URL}`;
-    expect(
-      basic.validateConfiguration({
+  test.each([['m=65536,t=3,p=4'], ['t=3,p=4,m=65536'], ['p=4,m=65536,t=3']])(
+    'should accept PHC argon2id hashes with reordered parameters (%s)',
+    (parameterSegment) => {
+      const hash = `$argon2id$v=19$${parameterSegment}$${VALID_SALT_BASE64URL}$${VALID_HASH_BASE64URL}`;
+      expect(
+        basic.validateConfiguration({
+          user: 'testuser',
+          hash,
+        }),
+      ).toEqual({
         user: 'testuser',
         hash,
-      }),
-    ).toEqual({
-      user: 'testuser',
-      hash,
-    });
-  });
+      });
+    },
+  );
 
   test('should accept PHC argon2id hashes with padded base64url segments', async () => {
     const hash = createPhcArgon2Hash('password', { paddedSegments: true });

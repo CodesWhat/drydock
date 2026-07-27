@@ -1094,29 +1094,24 @@ describe('api/container/crud', () => {
       );
     });
 
-    test.each([
-      'running',
-      'stopped',
-      'exited',
-      'paused',
-      'restarting',
-      'dead',
-      'created',
-    ])('accepts Docker runtime status=%s as a valid filter', (runtimeStatus) => {
-      const harness = createHarness({
-        containers: [createContainer({ id: 'c1', status: runtimeStatus })],
-      });
+    test.each(['running', 'stopped', 'exited', 'paused', 'restarting', 'dead', 'created'])(
+      'accepts Docker runtime status=%s as a valid filter',
+      (runtimeStatus) => {
+        const harness = createHarness({
+          containers: [createContainer({ id: 'c1', status: runtimeStatus })],
+        });
 
-      const res = callGetContainers(harness.handlers, {
-        status: runtimeStatus,
-      });
+        const res = callGetContainers(harness.handlers, {
+          status: runtimeStatus,
+        });
 
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
-        buildVisibleContainersStoreQuery({ status: runtimeStatus }),
-        { limit: 0, offset: 0 },
-      );
-    });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
+          buildVisibleContainersStoreQuery({ status: runtimeStatus }),
+          { limit: 0, offset: 0 },
+        );
+      },
+    );
 
     test('maps kind=digest to updateKind.kind filter', () => {
       const harness = createHarness({

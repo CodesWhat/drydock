@@ -71,28 +71,28 @@ describe('ContainerLinkActions', () => {
     expect(wrapper.find('[data-test="update-release-notes-panel"]').exists()).toBe(true);
   });
 
-  it.each([
-    'Enter',
-    ' ',
-  ])('stops %s keydown events from activating the clickable parent row', async (key) => {
-    const parentKeydown = vi.fn();
-    const Host = defineComponent({
-      components: { ContainerLinkActions },
-      setup() {
-        return { parentKeydown };
-      },
-      template: `
+  it.each(['Enter', ' '])(
+    'stops %s keydown events from activating the clickable parent row',
+    async (key) => {
+      const parentKeydown = vi.fn();
+      const Host = defineComponent({
+        components: { ContainerLinkActions },
+        setup() {
+          return { parentKeydown };
+        },
+        template: `
           <div data-test="clickable-row" @keydown="parentKeydown">
             <ContainerLinkActions source-repo="github.com/example/project" />
           </div>
         `,
-    });
-    const wrapper = mountWithPlugins(Host);
+      });
+      const wrapper = mountWithPlugins(Host);
 
-    await wrapper.get('[data-test="project-link"]').trigger('keydown', { key });
+      await wrapper.get('[data-test="project-link"]').trigger('keydown', { key });
 
-    expect(parentKeydown).not.toHaveBeenCalled();
-  });
+      expect(parentKeydown).not.toHaveBeenCalled();
+    },
+  );
 
   it('allows non-activation keys to reach containing keyboard handlers', async () => {
     const parentKeydown = vi.fn();

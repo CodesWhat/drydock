@@ -49,20 +49,20 @@ describe('preview errors', () => {
     );
   });
 
-  test.each([
-    'registry-manager-unsupported',
-    'registry-manager-misconfigured',
-  ])('classifies %s as missing registry configuration', (code) => {
-    const result = classifyPreviewError(
-      Object.assign(new Error('bad registry'), { code }),
-      container(),
-    );
-    expect(result.status).toBe(422);
-    expect(result.payload).toMatchObject({
-      code: 'registry-not-found',
-      message: 'No matching registry configured for ghcr.io/private/web',
-    });
-  });
+  test.each(['registry-manager-unsupported', 'registry-manager-misconfigured'])(
+    'classifies %s as missing registry configuration',
+    (code) => {
+      const result = classifyPreviewError(
+        Object.assign(new Error('bad registry'), { code }),
+        container(),
+      );
+      expect(result.status).toBe(422);
+      expect(result.payload).toMatchObject({
+        code: 'registry-not-found',
+        message: 'No matching registry configured for ghcr.io/private/web',
+      });
+    },
+  );
 
   test('does not duplicate a registry host already present in the image name', () => {
     const result = classifyPreviewError(
@@ -113,15 +113,14 @@ describe('preview errors', () => {
     expect(result.payload.details?.registry).toBe('registry.example');
   });
 
-  test.each([
-    'ECONNABORTED',
-    'ECONNRESET',
-    'ENETUNREACH',
-  ])('classifies a network message containing %s without a structured code', (code) => {
-    const result = classifyPreviewError(new Error(`request failed: ${code}`), container());
-    expect(result.status).toBe(503);
-    expect(result.payload.code).toBe('registry-network-error');
-  });
+  test.each(['ECONNABORTED', 'ECONNRESET', 'ENETUNREACH'])(
+    'classifies a network message containing %s without a structured code',
+    (code) => {
+      const result = classifyPreviewError(new Error(`request failed: ${code}`), container());
+      expect(result.status).toBe(503);
+      expect(result.payload.code).toBe('registry-network-error');
+    },
+  );
 
   test('uses container-runtime language when a network failure has no registry', () => {
     const result = classifyPreviewError(
@@ -154,17 +153,16 @@ describe('preview errors', () => {
     expect(result.payload.details?.registry).toBe('[invalid');
   });
 
-  test.each([
-    new Error('runtime exploded'),
-    'runtime string',
-    null,
-  ])('falls back to a typed runtime error for %s', (error) => {
-    const result = classifyPreviewError(error, container({ registry: undefined }));
-    expect(result.status).toBe(500);
-    expect(result.payload.code).toBe('preview-runtime-error');
-    expect(result.payload.message).toBe('Unable to prepare this update preview');
-    expect(result.payload.details).toBeUndefined();
-  });
+  test.each([new Error('runtime exploded'), 'runtime string', null])(
+    'falls back to a typed runtime error for %s',
+    (error) => {
+      const result = classifyPreviewError(error, container({ registry: undefined }));
+      expect(result.status).toBe(500);
+      expect(result.payload.code).toBe('preview-runtime-error');
+      expect(result.payload.message).toBe('Unable to prepare this update preview');
+      expect(result.payload.details).toBeUndefined();
+    },
+  );
 
   test('sends an exact typed payload', () => {
     const json = vi.fn();

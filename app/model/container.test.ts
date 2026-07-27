@@ -824,36 +824,36 @@ test('model should migrate legacy lookupUrl only when lookupImage is absent', ()
   expect(preserved.image.registry.lookupUrl).toBeUndefined();
 });
 
-test.each([
-  'specific',
-  'floating',
-] as const)('model should accept image.tag.tagPrecision=%s', (tagPrecision) => {
-  const containerValidated = container.validate({
-    id: `container-tag-precision-${tagPrecision}`,
-    name: 'test',
-    watcher: 'test',
-    image: {
-      id: `image-tag-precision-${tagPrecision}`,
-      registry: {
-        name: 'hub',
-        url: 'https://hub',
+test.each(['specific', 'floating'] as const)(
+  'model should accept image.tag.tagPrecision=%s',
+  (tagPrecision) => {
+    const containerValidated = container.validate({
+      id: `container-tag-precision-${tagPrecision}`,
+      name: 'test',
+      watcher: 'test',
+      image: {
+        id: `image-tag-precision-${tagPrecision}`,
+        registry: {
+          name: 'hub',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: tagPrecision === 'specific' ? '1.2.3' : 'latest',
+          semver: tagPrecision === 'specific',
+          tagPrecision,
+        },
+        digest: {
+          watch: false,
+        },
+        architecture: 'arch',
+        os: 'os',
       },
-      name: 'organization/image',
-      tag: {
-        value: tagPrecision === 'specific' ? '1.2.3' : 'latest',
-        semver: tagPrecision === 'specific',
-        tagPrecision,
-      },
-      digest: {
-        watch: false,
-      },
-      architecture: 'arch',
-      os: 'os',
-    },
-  });
+    });
 
-  expect(containerValidated.image.tag.tagPrecision).toBe(tagPrecision);
-});
+    expect(containerValidated.image.tag.tagPrecision).toBe(tagPrecision);
+  },
+);
 
 test('model should flag numeric version aliases as tagPinned even when tagPrecision is floating', () => {
   const containerValidated = container.validate({

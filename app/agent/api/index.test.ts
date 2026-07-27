@@ -495,17 +495,20 @@ describe('Agent API index', () => {
       test.each([
         ['level', 123, 'Invalid level query parameter'],
         ['component', ['docker'], 'Invalid component query parameter'],
-      ])('should return 400 when %s query parameter is not a string', async (param, value, error) => {
-        const { getEntries } = await import('../../log/buffer.js');
-        const req = { query: { [param]: value } };
-        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+      ])(
+        'should return 400 when %s query parameter is not a string',
+        async (param, value, error) => {
+          const { getEntries } = await import('../../log/buffer.js');
+          const req = { query: { [param]: value } };
+          const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
 
-        logEntriesHandler(req, res);
+          logEntriesHandler(req, res);
 
-        expect(res.status).toHaveBeenCalledWith(400);
-        expect(res.json).toHaveBeenCalledWith({ error });
-        expect(getEntries).not.toHaveBeenCalled();
-      });
+          expect(res.status).toHaveBeenCalledWith(400);
+          expect(res.json).toHaveBeenCalledWith({ error });
+          expect(getEntries).not.toHaveBeenCalled();
+        },
+      );
 
       test('should pass level=null to getEntries when no level query param (undefined, not null)', async () => {
         const { getEntries } = await import('../../log/buffer.js');
@@ -518,22 +521,18 @@ describe('Agent API index', () => {
         );
       });
 
-      test.each([
-        'trace',
-        'debug',
-        'info',
-        'warn',
-        'error',
-        'fatal',
-      ])('should accept log level %s', async (level) => {
-        const { getEntries } = await import('../../log/buffer.js');
-        getEntries.mockReturnValue([]);
-        const req = { query: { level } };
-        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
-        logEntriesHandler(req, res);
-        expect(res.status).toHaveBeenCalledWith(200);
-        expect(getEntries).toHaveBeenCalledWith(expect.objectContaining({ level }));
-      });
+      test.each(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])(
+        'should accept log level %s',
+        async (level) => {
+          const { getEntries } = await import('../../log/buffer.js');
+          getEntries.mockReturnValue([]);
+          const req = { query: { level } };
+          const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+          logEntriesHandler(req, res);
+          expect(res.status).toHaveBeenCalledWith(200);
+          expect(getEntries).toHaveBeenCalledWith(expect.objectContaining({ level }));
+        },
+      );
 
       test('should normalize level to lowercase', async () => {
         const { getEntries } = await import('../../log/buffer.js');

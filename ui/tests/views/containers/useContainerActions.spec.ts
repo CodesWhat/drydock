@@ -508,29 +508,28 @@ describe('useContainerActions', () => {
     expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Update started: web');
   });
 
-  it.each([
-    null,
-    undefined,
-    { code: 'E_UNKNOWN' },
-  ])('treats %p update failures as normal errors instead of stale-update refreshes', async (rejection) => {
-    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
-    const { composable, error, loadContainers } = await mountActionsHarness({
-      containers: [container],
-      selectedContainer: container,
-      selectedContainerId: container.id,
-      containerIdMap: { web: 'container-1' },
-    });
-    mocks.updateContainer.mockRejectedValueOnce(rejection);
-    loadContainers.mockClear();
+  it.each([null, undefined, { code: 'E_UNKNOWN' }])(
+    'treats %p update failures as normal errors instead of stale-update refreshes',
+    async (rejection) => {
+      const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+      const { composable, error, loadContainers } = await mountActionsHarness({
+        containers: [container],
+        selectedContainer: container,
+        selectedContainerId: container.id,
+        containerIdMap: { web: 'container-1' },
+      });
+      mocks.updateContainer.mockRejectedValueOnce(rejection);
+      loadContainers.mockClear();
 
-    await composable.updateContainer('web');
+      await composable.updateContainer('web');
 
-    expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
-    expect(loadContainers).toHaveBeenCalledTimes(1);
-    expect(error.value).toBe('Action failed for web');
-    expect(mocks.toastError).toHaveBeenCalledWith('Update failed: web', 'Action failed for web');
-    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Update started: web');
-  });
+      expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+      expect(loadContainers).toHaveBeenCalledTimes(1);
+      expect(error.value).toBe('Action failed for web');
+      expect(mocks.toastError).toHaveBeenCalledWith('Update failed: web', 'Action failed for web');
+      expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Update started: web');
+    },
+  );
 
   it('validates snooze-until input before policy updates', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });

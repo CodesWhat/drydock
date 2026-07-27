@@ -2375,7 +2375,7 @@ test('getContainersForStats should return projected stat fields only', async () 
   });
 
   // Heavy fields are NOT present on the projection
-  expect((projection.security?.scan as Record<string, unknown>).vulnerabilities).toBeUndefined();
+  expect((projection.security!.scan as Record<string, unknown>).vulnerabilities).toBeUndefined();
   expect((projection as Record<string, unknown>).details).toBeUndefined();
   expect((projection as Record<string, unknown>).labels).toBeUndefined();
   expect((projection as Record<string, unknown>).result).toBeUndefined();
@@ -4192,21 +4192,20 @@ describe('container unhealthy transition emission', () => {
     { previous: 'unhealthy', incoming: 'unhealthy', change: { status: 'stopped' } },
     { previous: 'unhealthy', incoming: 'healthy', change: {} },
     { previous: 'unhealthy', incoming: undefined, change: {} },
-  ])('does not emit for previous=$previous incoming=$incoming', ({
-    previous,
-    incoming,
-    change,
-  }) => {
-    const existing = healthFixture({
-      health: previous,
-      status: 'running',
-      details: { startedAt: '2026-01-01T00:00:00.000Z' },
-    });
-    initialize(existing);
-    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
-    container.updateContainer({ ...existing, ...change, health: incoming });
-    expect(emitted).not.toHaveBeenCalled();
-  });
+  ])(
+    'does not emit for previous=$previous incoming=$incoming',
+    ({ previous, incoming, change }) => {
+      const existing = healthFixture({
+        health: previous,
+        status: 'running',
+        details: { startedAt: '2026-01-01T00:00:00.000Z' },
+      });
+      initialize(existing);
+      const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+      container.updateContainer({ ...existing, ...change, health: incoming });
+      expect(emitted).not.toHaveBeenCalled();
+    },
+  );
 
   test('consecutive unhealthy observations emit again when startedAt changes', () => {
     const existing = healthFixture({

@@ -613,26 +613,26 @@ describe('ConfigView', () => {
     it.each([
       { initial: false, expected: false, label: 'ON' },
       { initial: true, expected: true, label: 'OFF' },
-    ])('restores the prior state and shows an error after a failed $label push', async ({
-      initial,
-      expected,
-    }) => {
-      let reject!: (error: Error) => void;
-      const wrapper = await mountAppearance('alice');
-      preferences.sync.enabled = initial;
-      mockPushInitialSync.mockReturnValue(
-        new Promise((_resolve, rejectPromise) => {
-          reject = rejectPromise;
-        }),
-      );
-      const toggle = wrapper.find('[data-test="sync-toggle"]');
-      await toggle.trigger('click');
-      await nextTick();
-      expect(wrapper.find('[data-test="sync-toggle"]').attributes('disabled')).toBeDefined();
-      reject(new Error('sync failed'));
-      await vi.waitFor(() => expect(wrapper.text()).toContain('sync failed'));
-      expect(preferences.sync.enabled).toBe(expected);
-    });
+    ])(
+      'restores the prior state and shows an error after a failed $label push',
+      async ({ initial, expected }) => {
+        let reject!: (error: Error) => void;
+        const wrapper = await mountAppearance('alice');
+        preferences.sync.enabled = initial;
+        mockPushInitialSync.mockReturnValue(
+          new Promise((_resolve, rejectPromise) => {
+            reject = rejectPromise;
+          }),
+        );
+        const toggle = wrapper.find('[data-test="sync-toggle"]');
+        await toggle.trigger('click');
+        await nextTick();
+        expect(wrapper.find('[data-test="sync-toggle"]').attributes('disabled')).toBeDefined();
+        reject(new Error('sync failed'));
+        await vi.waitFor(() => expect(wrapper.text()).toContain('sync failed'));
+        expect(preferences.sync.enabled).toBe(expected);
+      },
+    );
 
     it('hides the toggle when the profile load fails', async () => {
       mockRouteQuery.value = { tab: 'appearance' };

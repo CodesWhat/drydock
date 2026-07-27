@@ -585,12 +585,15 @@ test.each([
     { username: 'sub-abc-service-account' },
   ],
   ['email and sub both absent', {}, { username: 'unknown' }],
-])('getUserFromAccessToken should return correct user when %s', async (_label, mockUserInfo, expected) => {
-  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue(mockUserInfo);
+])(
+  'getUserFromAccessToken should return correct user when %s',
+  async (_label, mockUserInfo, expected) => {
+    openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue(mockUserInfo);
 
-  const user = await oidc.getUserFromAccessToken('token');
-  expect(user).toEqual(expected);
-});
+    const user = await oidc.getUserFromAccessToken('token');
+    expect(user).toEqual(expected);
+  },
+);
 
 test('getUserFromAccessToken should pass skipSubjectCheck when no expectedSubject is provided (bearer path)', async () => {
   openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
