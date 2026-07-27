@@ -3,30 +3,30 @@ import { resolve } from 'node:path';
 
 const liveWorkerPath = resolve(process.cwd(), '../apps/demo/public/mockServiceWorker.js');
 const messageHandlerPattern =
-  /addEventListener\('message',\s*(?:async\s*function\s*\(event\)|async\s*\(event\)\s*=>)\s*\{[\s\S]*?\n\}\);/;
-const fallbackMessageHandler = `addEventListener('message', async (event) => {
-  const clientId = Reflect.get(event.source || {}, 'id');
+  /addEventListener\('message',\s*(?:async\s*function\s*\(event\)|async\s*\(event\)\s*=>)\s*\{[\s\S]*?\n\}\)/;
+const fallbackMessageHandler = `addEventListener('message', async function (event) {
+  const clientId = Reflect.get(event.source || {}, 'id')
 
   if (!clientId || !self.clients) {
-    return;
+    return
   }
 
-  const client = await self.clients.get(clientId);
+  const client = await self.clients.get(clientId)
 
   if (!client) {
-    return;
+    return
   }
 
   const allClients = await self.clients.matchAll({
     type: 'window',
-  });
+  })
 
   switch (event.data) {
     case 'KEEPALIVE_REQUEST': {
       sendToClient(client, {
         type: 'KEEPALIVE_RESPONSE',
-      });
-      break;
+      })
+      break
     }
 
     case 'INTEGRITY_CHECK_REQUEST': {
@@ -36,12 +36,12 @@ const fallbackMessageHandler = `addEventListener('message', async (event) => {
           packageVersion: PACKAGE_VERSION,
           checksum: INTEGRITY_CHECKSUM,
         },
-      });
-      break;
+      })
+      break
     }
 
     case 'MOCK_ACTIVATE': {
-      activeClientIds.add(clientId);
+      activeClientIds.add(clientId)
 
       sendToClient(client, {
         type: 'MOCKING_ENABLED',
@@ -51,26 +51,26 @@ const fallbackMessageHandler = `addEventListener('message', async (event) => {
             frameType: client.frameType,
           },
         },
-      });
-      break;
+      })
+      break
     }
 
     case 'CLIENT_CLOSED': {
-      activeClientIds.delete(clientId);
+      activeClientIds.delete(clientId)
 
       const remainingClients = allClients.filter((client) => {
-        return client.id !== clientId;
-      });
+        return client.id !== clientId
+      })
 
       // Unregister itself when there are no more clients
       if (remainingClients.length === 0) {
-        self.registration.unregister();
+        self.registration.unregister()
       }
 
-      break;
+      break
     }
   }
-});`;
+})`;
 
 function readWorkerSource(): string {
   if (existsSync(liveWorkerPath)) {
