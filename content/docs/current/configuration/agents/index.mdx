@@ -16,14 +16,9 @@ The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes r
 
 <Callout type="info">**The controller dials out to each agent — the agent does not need to know where the controller is.** Only the controller side gets `DD_AGENT_{name}_HOST`. The agent just needs its port reachable from the controller. (Both ends share the same secret so they trust each other.)</Callout>
 
-## Experimental edge-agent dial-out (Portwing)
+## Edge-agent dial-out (Portwing)
 
-When an agent is behind NAT or a firewall and cannot accept inbound controller requests, Drydock can accept an experimental Portwing edge-agent WebSocket instead. Enable the controller endpoint with:
-
-```yaml
-environment:
-  - DD_EXPERIMENTAL_PORTWING=true
-```
+When an agent is behind NAT or a firewall and cannot accept inbound controller requests, Drydock accepts a Portwing edge-agent WebSocket instead. The endpoint is enabled by default. `DD_EXPERIMENTAL_PORTWING=false` is retained only as an emergency disable; no enable flag is required.
 
 The WebSocket endpoint is `WS /api/v1/portwing/ws` (compatibility alias: `/api/portwing/ws`) and speaks `portwing/1.0`. Authentication uses Ed25519 public-key challenge-response, not the shared `DD_AGENT_SECRET` token. Register authorized agent keys through the authenticated API:
 
@@ -58,7 +53,7 @@ secrets:
     file: ./portwing_ed25519.pem
 ```
 
-The Drydock controller enables the endpoint with `DD_EXPERIMENTAL_PORTWING=true` and needs the agent's public key registered before it connects:
+The Drydock controller needs the agent's public key registered before it connects. No Portwing-specific environment variable is required:
 
 ```yaml
 services:
@@ -66,15 +61,13 @@ services:
     image: codeswhat/drydock
     ports:
       - "3000:3000"
-    environment:
-      - DD_EXPERIMENTAL_PORTWING=true
 ```
 
 Generate the agent's keypair with `portwing keygen -comment "edge-host-01"`, then register the printed public key with the controller (`POST /api/v1/portwing/keys`, or preload it via `DD_PORTWING_AUTHORIZED_KEYS`) before starting the agent — see the REST API table above.
 
-<Callout type="warn">Portwing support is experimental. Its REST API and wire protocol may change before it is promoted out of `DD_EXPERIMENTAL_PORTWING=true`.</Callout>
+<Callout type="info">Portwing's `portwing/1.0` wire protocol and key-registry API are stable under the published compatibility policy. Set `DD_EXPERIMENTAL_PORTWING=false` only when an emergency rollback requires disabling new edge connections.</Callout>
 
-<Callout type="info">**Container log downloads from an edge (Portwing) agent now honor the `timestamps` query parameter,** the same as regular (HTTP/SSE) agents. The `dd:container_log_request` wire message carries a `timestamps` field that a current Portwing agent reads, so the [container logs endpoint](/docs/api/container#download-container-logs) (and the UI "show timestamps" toggle) works over the edge tunnel. Tail-follow (`follow`/`until`) is honored by the agent as a short bounded window, but the one-shot log download endpoint doesn't expose it; continuous live tailing over an edge agent isn't wired up yet. An older Portwing agent that predates the `timestamps` wire field simply omits timestamps, degrading gracefully.</Callout>
+<Callout type="info">**Container logs work continuously over the authenticated edge tunnel.** Live viewers receive separate stdout/stderr chunks, may request timestamps, and cancel the upstream Docker stream when the viewer closes. Both ends enforce bounded queues so a stalled viewer or controller is disconnected instead of growing memory without limit. Older Portwing agents fall back to the bounded one-shot log response, so mixed-version fleets degrade gracefully.</Callout>
 
 ## Quickstart
 

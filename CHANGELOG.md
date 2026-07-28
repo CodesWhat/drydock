@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Continuous Portwing edge log streams.** The authenticated container-log WebSocket now bridges correlated `dd:container_log_chunk`, `dd:container_log_end`, and `dd:container_log_error` frames, cancels the agent stream when the viewer closes, preserves stdout/stderr and timestamp decoding, and caps each downstream viewer at 1 MiB of buffered data. Older Portwing agents degrade to their one-shot response without breaking the viewer.
+- **Real Portwing fleet-soak workflow.** Pull requests and the weekly quality schedule run actual signed Portwing processes against Drydock's production edge gateway through concurrent exec, sustained logs, forced controller backpressure, and reconnect storms. Machine-readable evidence records RSS/heap budgets and is retained for 90 days.
+
+### Changed
+
+- **The `portwing/1.0` edge endpoint is enabled by default.** `DD_EXPERIMENTAL_PORTWING=false` remains as an emergency disable for new edge connections. OpenAPI, operator docs, and translated feature summaries now describe the stable/default-on behavior.
+
 ## [1.6.0-rc.8] — 2026-07-28
 
 ### Fixed

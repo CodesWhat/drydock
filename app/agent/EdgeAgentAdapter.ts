@@ -59,6 +59,26 @@ interface PendingRequest {
   chunks?: Buffer[];
 }
 
+export interface ContainerLogStreamChunk {
+  stream: 'stdout' | 'stderr';
+  logs: string;
+}
+
+export interface ContainerLogStreamHandlers {
+  onChunk: (chunk: ContainerLogStreamChunk) => void;
+  onEnd: (reason?: string) => void;
+  onError: (error: Error) => void;
+}
+
+export interface ContainerLogStreamHandle {
+  cancel: () => void;
+}
+
+interface LiveContainerLogStream {
+  containerId: string;
+  handlers: ContainerLogStreamHandlers;
+}
+
 interface AgentComponentDescriptor {
   type: string;
   name: string;
@@ -103,6 +123,7 @@ export class EdgeAgentAdapter {
   private readonly reconnected: boolean;
   private readonly execSessions: Map<string, ExecSession>;
   private readonly pendingRequests: Map<string, PendingRequest>;
+  private readonly liveContainerLogStreams: Map<string, LiveContainerLogStream>;
   private pingInterval: ReturnType<typeof setInterval> | undefined;
   private containerSyncWarnTimer: ReturnType<typeof setTimeout> | undefined;
   private connected = false;
@@ -139,6 +160,7 @@ export class EdgeAgentAdapter {
     this.reconnected = options.reconnected ?? false;
     this.execSessions = new Map();
     this.pendingRequests = new Map();
+    this.liveContainerLogStreams = new Map();
     this.containerRequestQueues = new Map();
 
     this.messageListener = (raw: unknown): void => {
@@ -318,6 +340,15 @@ export class EdgeAgentAdapter {
         return;
       case 'dd:container_log_response':
         this.handleContainerLogResponse(data);
+        return;
+      case 'dd:container_log_chunk':
+        this.handleContainerLogChunk(data);
+        return;
+      case 'dd:container_log_end':
+        this.handleContainerLogEnd(data);
+        return;
+      case 'dd:container_log_error':
+        this.handleContainerLogError(data);
         return;
       case 'dd:container_delete_response':
         this.handleContainerDeleteResponse(data);
@@ -570,11 +601,73 @@ export class EdgeAgentAdapter {
     if (!containerId) {
       return;
     }
+    const requestId = typeof data.requestId === 'string' ? data.requestId : undefined;
+    const liveStream = requestId ? this.liveContainerLogStreams.get(requestId) : undefined;
+    if (requestId && liveStream?.containerId === containerId) {
+      this.liveContainerLogStreams.delete(requestId);
+      if (typeof data.logs === 'string' && data.logs.length > 0) {
+        liveStream.handlers.onChunk({ stream: 'stdout', logs: data.logs });
+      }
+      liveStream.handlers.onEnd('legacy-response');
+      return;
+    }
     const pending = this.takePendingContainerResponse('log', containerId, data);
     if (!pending) {
       return;
     }
     pending.resolve(data.logs);
+  }
+
+  private handleContainerLogChunk(data: Record<string, unknown>): void {
+    const requestId = typeof data.requestId === 'string' ? data.requestId : undefined;
+    const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
+    const logs = typeof data.logs === 'string' ? data.logs : undefined;
+    if (!requestId || !containerId || logs === undefined) {
+      return;
+    }
+    const liveStream = this.liveContainerLogStreams.get(requestId);
+    if (!liveStream || liveStream.containerId !== containerId) {
+      return;
+    }
+    const stream = data.stream === 'stderr' ? 'stderr' : 'stdout';
+    try {
+      liveStream.handlers.onChunk({ stream, logs });
+    } catch (error: unknown) {
+      this.cancelContainerLogStream(requestId, containerId);
+      liveStream.handlers.onError(
+        error instanceof Error ? error : new Error(getErrorMessage(error)),
+      );
+    }
+  }
+
+  private handleContainerLogEnd(data: Record<string, unknown>): void {
+    const requestId = typeof data.requestId === 'string' ? data.requestId : undefined;
+    const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
+    if (!requestId || !containerId) {
+      return;
+    }
+    const liveStream = this.liveContainerLogStreams.get(requestId);
+    if (!liveStream || liveStream.containerId !== containerId) {
+      return;
+    }
+    this.liveContainerLogStreams.delete(requestId);
+    liveStream.handlers.onEnd(typeof data.reason === 'string' ? data.reason : undefined);
+  }
+
+  private handleContainerLogError(data: Record<string, unknown>): void {
+    const requestId = typeof data.requestId === 'string' ? data.requestId : undefined;
+    const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
+    if (!requestId || !containerId) {
+      return;
+    }
+    const liveStream = this.liveContainerLogStreams.get(requestId);
+    if (!liveStream || liveStream.containerId !== containerId) {
+      return;
+    }
+    this.liveContainerLogStreams.delete(requestId);
+    liveStream.handlers.onError(
+      new Error(typeof data.error === 'string' ? data.error : 'container log stream failed'),
+    );
   }
 
   private handleContainerDeleteResponse(data: Record<string, unknown>): void {
@@ -836,6 +929,72 @@ export class EdgeAgentAdapter {
         reject(err);
       }
     });
+  }
+
+  /**
+   * Open a continuous, cancellable container-log stream over the Drydock
+   * namespace. An older Portwing agent may answer with the one-shot
+   * dd:container_log_response; handleContainerLogResponse converts that into
+   * one stdout chunk followed by a legacy-response completion.
+   */
+  streamContainerLogs(
+    containerId: string,
+    options: {
+      tail?: number;
+      since?: string | number;
+      follow?: boolean;
+      timestamps?: boolean;
+    },
+    handlers: ContainerLogStreamHandlers,
+  ): ContainerLogStreamHandle {
+    if (this.pendingRequests.size + this.liveContainerLogStreams.size >= MAX_PENDING_REQUESTS) {
+      handlers.onError(new Error('concurrent request limit reached'));
+      return { cancel: () => {} };
+    }
+
+    const requestId = uuidv7();
+    this.liveContainerLogStreams.set(requestId, { containerId, handlers });
+    try {
+      this.ws.send(
+        JSON.stringify({
+          type: 'dd:container_log_request',
+          data: {
+            containerId,
+            requestId,
+            ...options,
+            follow: options.follow ?? true,
+            stream: true,
+          },
+        }),
+      );
+    } catch (error: unknown) {
+      this.liveContainerLogStreams.delete(requestId);
+      handlers.onError(error instanceof Error ? error : new Error(getErrorMessage(error)));
+    }
+
+    return {
+      cancel: () => {
+        this.cancelContainerLogStream(requestId, containerId);
+      },
+    };
+  }
+
+  private cancelContainerLogStream(requestId: string, containerId: string): void {
+    const liveStream = this.liveContainerLogStreams.get(requestId);
+    if (!liveStream || liveStream.containerId !== containerId) {
+      return;
+    }
+    this.liveContainerLogStreams.delete(requestId);
+    try {
+      this.ws.send(
+        JSON.stringify({
+          type: 'dd:container_log_cancel',
+          data: { requestId, containerId },
+        }),
+      );
+    } catch {
+      // connection may be closing
+    }
   }
 
   /**
@@ -1115,6 +1274,10 @@ export class EdgeAgentAdapter {
       this.pendingRequests.delete(requestId);
     }
     this.containerRequestQueues.clear();
+    for (const [requestId, stream] of this.liveContainerLogStreams.entries()) {
+      stream.handlers.onError(new Error('connection closed'));
+      this.liveContainerLogStreams.delete(requestId);
+    }
 
     // Close all exec sessions — session.close() sends exec_end before deleting (O5)
     for (const session of this.execSessions.values()) {

@@ -109,9 +109,15 @@ test('getLocalWatcherEnabled should return false when disabled via env', async (
   delete configuration.ddEnvVars.DD_LOCAL_WATCHER;
 });
 
-test('getExperimentalPortwingEnabled should default to false', () => {
+test('getExperimentalPortwingEnabled should default to true after edge graduation', () => {
   delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
+  expect(configuration.getExperimentalPortwingEnabled()).toStrictEqual(true);
+});
+
+test('getExperimentalPortwingEnabled should allow an explicit emergency disable', () => {
+  configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING = 'false';
   expect(configuration.getExperimentalPortwingEnabled()).toStrictEqual(false);
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
 });
 
 test('getExperimentalPortwingEnabled should return true when set to "true"', () => {
