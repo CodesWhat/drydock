@@ -934,6 +934,20 @@ class Trigger<
         defaultWhenRuleMissing: true,
       },
     );
+    if (
+      !dispatchDecision.enabled &&
+      dispatchDecision.reason === 'excluded-from-allow-list' &&
+      getTriggerCategoryForType(this.type) === 'action'
+    ) {
+      // #623: the update-available rule's trigger allow-list can only ever contain
+      // notification triggers (the API validator and the UI picker both bar action
+      // types), so membership can never be granted to an action trigger. Treat
+      // non-membership as exempt; rule.enabled stays authoritative as the kill switch.
+      return {
+        enabled: true,
+        reason: 'action-trigger-exempt-from-allow-list',
+      };
+    }
     this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
     return dispatchDecision;
   }
