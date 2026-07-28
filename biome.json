@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.5/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -12,6 +12,7 @@
       "!ui/public/index.html",
       "!apps/web/src/app/globals.css",
       "!apps/demo/public/favicon.svg",
+      "!apps/demo/public/mockServiceWorker.js",
       "!ui/public/favicon.svg",
       "!docs/assets/codeswhat-logo-dark.svg",
       "!docs/assets/codeswhat-logo-original.svg",

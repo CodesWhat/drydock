@@ -714,40 +714,39 @@ describe('AppLayout', () => {
       }
     });
 
-    it.each([
-      ['succeeded'],
-      ['rolled-back'],
-      ['expired'],
-    ])('recovers when status is %s', async (terminalStatus) => {
-      const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: terminalStatus }),
-      } as unknown as Response);
+    it.each([['succeeded'], ['rolled-back'], ['expired']])(
+      'recovers when status is %s',
+      async (terminalStatus) => {
+        const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
+        mockFetch.mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: async () => ({ status: terminalStatus }),
+        } as unknown as Response);
 
-      try {
-        const wrapper = mountLayout();
-        mountedWrappers.push(wrapper);
-        await flushPromises();
+        try {
+          const wrapper = mountLayout();
+          mountedWrappers.push(wrapper);
+          await flushPromises();
 
-        const emit = getEmit(wrapper);
-        emit?.('self-update', { opId: 'abc-123' });
-        await flushPromises();
+          const emit = getEmit(wrapper);
+          emit?.('self-update', { opId: 'abc-123' });
+          await flushPromises();
 
-        const pollTimer = setIntervalSpy.mock.results[0]?.value;
+          const pollTimer = setIntervalSpy.mock.results[0]?.value;
 
-        vi.advanceTimersByTime(5_000);
-        await flushPromises();
+          vi.advanceTimersByTime(5_000);
+          await flushPromises();
 
-        expect(mockSseDisconnect).toHaveBeenCalledTimes(1);
-        expect(clearIntervalSpy).toHaveBeenCalledWith(pollTimer);
-      } finally {
-        clearIntervalSpy.mockRestore();
-        setIntervalSpy.mockRestore();
-        vi.useRealTimers();
-      }
-    });
+          expect(mockSseDisconnect).toHaveBeenCalledTimes(1);
+          expect(clearIntervalSpy).toHaveBeenCalledWith(pollTimer);
+        } finally {
+          clearIntervalSpy.mockRestore();
+          setIntervalSpy.mockRestore();
+          vi.useRealTimers();
+        }
+      },
+    );
 
     it('recovers on 404 (operation unknown)', async () => {
       const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();

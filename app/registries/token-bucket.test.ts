@@ -25,12 +25,15 @@ describe('getBucketForUrl', () => {
     ['https://api.github.com/repos/acme/svc/releases/tags/v1', 'api.github.com', 1, 3],
     ['https://registry.example.com/v2/img/tags/list', 'registry.example.com', 5, 10],
     ['https://quay.io/v2/acme/img/tags/list', 'quay.io', 5, 10],
-  ])('maps %s to host=%s ratePerSec=%d burst=%d', (url, expectedKey, expectedRate, expectedBurst) => {
-    const bucket = getBucketForUrl(url);
-    expect(bucket.key).toBe(expectedKey);
-    expect(bucket.ratePerSec).toBe(expectedRate);
-    expect(bucket.burst).toBe(expectedBurst);
-  });
+  ])(
+    'maps %s to host=%s ratePerSec=%d burst=%d',
+    (url, expectedKey, expectedRate, expectedBurst) => {
+      const bucket = getBucketForUrl(url);
+      expect(bucket.key).toBe(expectedKey);
+      expect(bucket.ratePerSec).toBe(expectedRate);
+      expect(bucket.burst).toBe(expectedBurst);
+    },
+  );
 });
 
 describe('getOrCreateBucket guard', () => {

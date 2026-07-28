@@ -1303,7 +1303,7 @@ describe('buildContainerListResponse', () => {
     // The underlying store container must not be mutated
     expect((container.security as any).sbom).toBe(sbomDoc);
     expect((container.security as any).signature).toBeDefined();
-    expect((container.security?.scan as any).vulnerabilities).toEqual(['v1']);
+    expect((container.security as any).scan.vulnerabilities).toEqual(['v1']);
   });
 });
 

@@ -170,25 +170,21 @@ describe('SBOM storage', () => {
     ).rejects.toThrow('Invalid SBOM JSON document');
   });
 
-  test.each([
-    '../spdx-json',
-    'SPDX-JSON',
-    'json',
-    '',
-    'spdx-json\\escape',
-    'spdx-json\0',
-  ])('rejects unsupported write format %j', async (format) => {
-    const storage = createSbomStorage({ rootDir });
+  test.each(['../spdx-json', 'SPDX-JSON', 'json', '', 'spdx-json\\escape', 'spdx-json\0'])(
+    'rejects unsupported write format %j',
+    async (format) => {
+      const storage = createSbomStorage({ rootDir });
 
-    await expect(
-      storage.writeDocument({
-        subjectDigest: VALID_DIGEST,
-        image: 'registry.example/app:latest',
-        format: format as never,
-        document: {},
-      }),
-    ).rejects.toThrow('Unsupported SBOM format');
-  });
+      await expect(
+        storage.writeDocument({
+          subjectDigest: VALID_DIGEST,
+          image: 'registry.example/app:latest',
+          format: format as never,
+          document: {},
+        }),
+      ).rejects.toThrow('Unsupported SBOM format');
+    },
+  );
 
   test.each([
     '/tmp/document.json',
@@ -237,16 +233,14 @@ describe('SBOM storage', () => {
     );
   });
 
-  test.each([
-    0,
-    -1,
-    1.5,
-    Number.MAX_SAFE_INTEGER + 1,
-  ])('rejects invalid maxDocumentBytes %j', (maxDocumentBytes) => {
-    expect(() => createSbomStorage({ rootDir, maxDocumentBytes })).toThrow(
-      'maxDocumentBytes must be a positive integer',
-    );
-  });
+  test.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects invalid maxDocumentBytes %j',
+    (maxDocumentBytes) => {
+      expect(() => createSbomStorage({ rootDir, maxDocumentBytes })).toThrow(
+        'maxDocumentBytes must be a positive integer',
+      );
+    },
+  );
 
   test('rejects oversized writes without replacing the existing valid document', async () => {
     const storage = createSbomStorage({ rootDir, maxDocumentBytes: 32 });

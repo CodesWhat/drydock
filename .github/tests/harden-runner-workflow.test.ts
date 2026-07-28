@@ -7,8 +7,8 @@ import yaml from 'yaml';
 import type { WorkflowDefinition } from './workflow-test-utils';
 
 const workflowsDir = fileURLToPath(new URL('../workflows', import.meta.url));
-const hardenRunnerRef = 'step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411';
-const hardenRunnerVersion = 'v2.19.4';
+const hardenRunnerRef = 'step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920';
+const hardenRunnerVersion = 'v2.20.0';
 
 function loadWorkflowFiles(): Array<{
   file: string;

@@ -590,25 +590,28 @@ describe('Agent Log Entries Route', () => {
   test.each([
     ['level', 123, 'Invalid level query parameter'],
     ['component', ['docker'], 'Invalid component query parameter'],
-  ])('should return 400 when %s query parameter is not a string', async (param, value, expectedError) => {
-    const getLogEntries = vi.fn().mockResolvedValue([]);
-    mockGetAgent.mockReturnValue({
-      isConnected: true,
-      getLogEntries,
-    });
+  ])(
+    'should return 400 when %s query parameter is not a string',
+    async (param, value, expectedError) => {
+      const getLogEntries = vi.fn().mockResolvedValue([]);
+      mockGetAgent.mockReturnValue({
+        isConnected: true,
+        getLogEntries,
+      });
 
-    const req = createMockRequest({
-      params: { name: 'agent-1' },
-      query: { [param]: value },
-    });
-    const res = createResponse();
+      const req = createMockRequest({
+        params: { name: 'agent-1' },
+        query: { [param]: value },
+      });
+      const res = createResponse();
 
-    await handler(req, res);
+      await handler(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ error: expectedError });
-    expect(getLogEntries).not.toHaveBeenCalled();
-  });
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+      expect(getLogEntries).not.toHaveBeenCalled();
+    },
+  );
 
   test('should return 400 when component query parameter contains unsafe characters', async () => {
     const getLogEntries = vi.fn().mockResolvedValue([]);

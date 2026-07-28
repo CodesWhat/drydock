@@ -95,27 +95,27 @@ test.each([
     fromValue: 'Multiline\nSender <from@xx.com>',
     expectedResult: null,
   },
-])("smtp from value should normalize to '$expectedResult' when configuration is '$fromValue'", async ({
-  fromValue,
-  expectedResult,
-}) => {
-  const config = {
-    ...configurationValid,
-    from: fromValue,
-  };
+])(
+  "smtp from value should normalize to '$expectedResult' when configuration is '$fromValue'",
+  async ({ fromValue, expectedResult }) => {
+    const config = {
+      ...configurationValid,
+      from: fromValue,
+    };
 
-  if (expectedResult) {
-    let validatedConfiguration;
-    expect(() => {
-      validatedConfiguration = smtp.validateConfiguration(config);
-    }).not.toThrow(joi.ValidationError);
-    expect(validatedConfiguration.from).toStrictEqual(expectedResult);
-  } else {
-    expect(() => {
-      smtp.validateConfiguration(config);
-    }).toThrow(joi.ValidationError);
-  }
-});
+    if (expectedResult) {
+      let validatedConfiguration;
+      expect(() => {
+        validatedConfiguration = smtp.validateConfiguration(config);
+      }).not.toThrow(joi.ValidationError);
+      expect(validatedConfiguration.from).toStrictEqual(expectedResult);
+    } else {
+      expect(() => {
+        smtp.validateConfiguration(config);
+      }).toThrow(joi.ValidationError);
+    }
+  },
+);
 
 test.each([
   { allowCustomTld: true, field: 'from' },
@@ -124,27 +124,27 @@ test.each([
   { allowCustomTld: false, field: 'to' },
   { allowCustomTld: true, field: 'both' },
   { allowCustomTld: false, field: 'both' },
-])('trigger should $allowCustomTld allow custom tld for $field field', async ({
-  allowCustomTld,
-  field,
-}) => {
-  const config = {
-    ...configurationValid,
-    allowcustomtld: allowCustomTld,
-    from: field === 'from' || field === 'both' ? 'user@domain.lan' : configurationValid.from,
-    to: field === 'to' || field === 'both' ? 'user@domain.lan' : configurationValid.to,
-  };
+])(
+  'trigger should $allowCustomTld allow custom tld for $field field',
+  async ({ allowCustomTld, field }) => {
+    const config = {
+      ...configurationValid,
+      allowcustomtld: allowCustomTld,
+      from: field === 'from' || field === 'both' ? 'user@domain.lan' : configurationValid.from,
+      to: field === 'to' || field === 'both' ? 'user@domain.lan' : configurationValid.to,
+    };
 
-  if (allowCustomTld) {
-    expect(() => {
-      smtp.validateConfiguration(config);
-    }).not.toThrow(joi.ValidationError);
-  } else {
-    expect(() => {
-      smtp.validateConfiguration(config);
-    }).toThrow(joi.ValidationError);
-  }
-});
+    if (allowCustomTld) {
+      expect(() => {
+        smtp.validateConfiguration(config);
+      }).not.toThrow(joi.ValidationError);
+    } else {
+      expect(() => {
+        smtp.validateConfiguration(config);
+      }).toThrow(joi.ValidationError);
+    }
+  },
+);
 
 test('validateConfiguration should throw error when invalid', async () => {
   const configuration = {

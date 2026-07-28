@@ -50,17 +50,16 @@ test('getAuditUpdateAvailableDedupeMs should accept a non-negative integer', () 
   delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
 });
 
-test.each([
-  '-1',
-  '1.5',
-  'not-a-number',
-])('getAuditUpdateAvailableDedupeMs should reject invalid values (%s)', (value) => {
-  configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = value;
-  expect(() => configuration.getAuditUpdateAvailableDedupeMs()).toThrow(
-    'DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS must be a non-negative integer',
-  );
-  delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
-});
+test.each(['-1', '1.5', 'not-a-number'])(
+  'getAuditUpdateAvailableDedupeMs should reject invalid values (%s)',
+  (value) => {
+    configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS = value;
+    expect(() => configuration.getAuditUpdateAvailableDedupeMs()).toThrow(
+      'DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS must be a non-negative integer',
+    );
+    delete configuration.ddEnvVars.DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS;
+  },
+);
 
 test('getLogLevel should return debug when overridden', async () => {
   configuration.ddEnvVars.DD_LOG_LEVEL = 'debug';
@@ -607,17 +606,17 @@ test('getServerConfiguration should allow overriding the outer API rate-limit ma
   });
 });
 
-test.each([
-  '0',
-  '1.5',
-])('getServerConfiguration should reject invalid outer API rate-limit maximum %s', (value) => {
-  configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX = value;
-  try {
-    expect(() => configuration.getServerConfiguration()).toThrow('ratelimit.max');
-  } finally {
-    delete configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX;
-  }
-});
+test.each(['0', '1.5'])(
+  'getServerConfiguration should reject invalid outer API rate-limit maximum %s',
+  (value) => {
+    configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX = value;
+    try {
+      expect(() => configuration.getServerConfiguration()).toThrow('ratelimit.max');
+    } finally {
+      delete configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX;
+    }
+  },
+);
 
 test('getPrometheusConfiguration should result in enabled by default', async () => {
   delete configuration.ddEnvVars.DD_PROMETHEUS_ENABLED;

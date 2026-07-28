@@ -214,20 +214,18 @@ describe('preferences migration', () => {
       expect(result.appearance.radius).toBe(DEFAULTS.appearance.radius);
     });
 
-    it.each([
-      {},
-      [],
-      42,
-      null,
-    ])('should delete non-string allow-listed fields and restore defaults for %j', (invalid) => {
-      const result = migrate({
-        schemaVersion: CURRENT_SCHEMA_VERSION,
-        appearance: { radius: invalid },
-        theme: { family: invalid },
-      });
-      expect(result.appearance.radius).toBe(DEFAULTS.appearance.radius);
-      expect(result.theme.family).toBe(DEFAULTS.theme.family);
-    });
+    it.each([{}, [], 42, null])(
+      'should delete non-string allow-listed fields and restore defaults for %j',
+      (invalid) => {
+        const result = migrate({
+          schemaVersion: CURRENT_SCHEMA_VERSION,
+          appearance: { radius: invalid },
+          theme: { family: invalid },
+        });
+        expect(result.appearance.radius).toBe(DEFAULTS.appearance.radius);
+        expect(result.theme.family).toBe(DEFAULTS.theme.family);
+      },
+    );
 
     it('should replace invalid fontSize with default', () => {
       const result = migrate({ schemaVersion: 1, appearance: { fontSize: 5 } });
@@ -600,21 +598,22 @@ describe('preferences migration', () => {
       );
     });
 
-    it.each([
-      1, 2,
-    ] as const)('cascades released schema v%s preferences through the softwareVersion migration', (schemaVersion) => {
-      const result = migrate({
-        schemaVersion,
-        containers: {
-          columns: ['icon', 'name', 'version', 'kind', 'status', 'server', 'registry'],
-        },
-      });
+    it.each([1, 2] as const)(
+      'cascades released schema v%s preferences through the softwareVersion migration',
+      (schemaVersion) => {
+        const result = migrate({
+          schemaVersion,
+          containers: {
+            columns: ['icon', 'name', 'version', 'kind', 'status', 'server', 'registry'],
+          },
+        });
 
-      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
-      expect(result.containers.columns.indexOf('softwareVersion')).toBe(
-        result.containers.columns.indexOf('version') + 1,
-      );
-    });
+        expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+        expect(result.containers.columns.indexOf('softwareVersion')).toBe(
+          result.containers.columns.indexOf('version') + 1,
+        );
+      },
+    );
 
     it('should add softwareVersion column when migrating from schemaVersion 6', () => {
       const result = migrate({

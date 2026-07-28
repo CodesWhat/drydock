@@ -18,7 +18,10 @@ import { getPathParamValue } from './request-helpers.js';
 
 interface UpdatePolicyStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
-  updateContainer: (container: Container) => Container;
+  updateContainer: (
+    container: Container,
+    options?: { authoritativeEmptyOverrides?: boolean },
+  ) => Container;
 }
 
 interface UpdatePolicyHandlerDependencies {
@@ -450,7 +453,9 @@ function createPatchContainerUpdatePolicy({
         container.updatePolicy =
           Object.keys(normalizedPolicy).length > 0 ? normalizedPolicy : undefined;
       }
-      const containerUpdated = storeContainer.updateContainer(container);
+      const containerUpdated = storeContainer.updateContainer(container, {
+        authoritativeEmptyOverrides: true,
+      });
       if (previousOverrides) {
         recordOverrideAuditEvents(
           recordAuditEvent,

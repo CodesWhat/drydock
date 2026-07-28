@@ -430,18 +430,18 @@ describe('debug dump utilities', () => {
       expectedMinutes: MAX_RECENT_EVENT_MINUTES,
     },
     { label: 'truncation', options: { recentMinutes: 12.9 }, expectedMinutes: 12 },
-  ])('collectDebugDump normalizes recent minutes ($label)', async ({
-    options,
-    expectedMinutes,
-  }) => {
-    configureFixture();
+  ])(
+    'collectDebugDump normalizes recent minutes ($label)',
+    async ({ options, expectedMinutes }) => {
+      configureFixture();
 
-    const dump = await collectDebugDump(options);
+      const dump = await collectDebugDump(options);
 
-    expect(dump.metadata.recentMinutes).toBe(expectedMinutes);
-    expect(dump.metadata.generatedAt).toBe(BASE_TIME.toISOString());
-    expect(dump.metadata.generatedAtWindowStart).toBe(minutesAgoIso(expectedMinutes));
-  });
+      expect(dump.metadata.recentMinutes).toBe(expectedMinutes);
+      expect(dump.metadata.generatedAt).toBe(BASE_TIME.toISOString());
+      expect(dump.metadata.generatedAtWindowStart).toBe(minutesAgoIso(expectedMinutes));
+    },
+  );
 
   test('collectDebugDump composes debug data from watchers, triggers, store, and environment', async () => {
     const fixture = configureFixture();
