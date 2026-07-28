@@ -257,7 +257,7 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 | 🪝 | **Lifecycle Hooks** | Pre and post-update shell commands via container labels, with per-hook timeouts and abort-on-failure control. |
 | 🗂️ | **Docker Compose Updates** | Pull and recreate Compose services through the Docker Engine API with YAML-preserving image patching. |
 | 🎛️ | **Per-Container Policy** | Regex tag rules and trigger routing use `dd.*` labels; maturity gates, skip/snooze/pin, and maintenance windows are stored via UI/API or watcher configuration. |
-| 🛰️ | **Distributed Agents** | Monitor remote Docker hosts over SSE. Edge agents behind NAT dial out over WebSocket with Ed25519 key auth, no inbound port required (`DD_EXPERIMENTAL_PORTWING=true`). |
+| 🛰️ | **Distributed Agents** | Monitor remote Docker hosts over SSE. Portwing edge agents behind NAT dial out over WebSocket with Ed25519 key auth and continuous live logs, with no inbound port required. The endpoint is enabled by default; `DD_EXPERIMENTAL_PORTWING=false` is an emergency disable. |
 | 🖥️ | **Web Dashboard** | Vue 3 UI with a zero-dependency customizable widget grid, responsive table/card views, live SSE updates, notification-bell controls, and per-container detail, logs, and stats. |
 | 🔗 | **REST API & Webhooks** | Token-authenticated endpoints for CI/CD watch and update triggers, plus signed registry webhook ingestion for push events. |
 | 🔐 | **OIDC Authentication** | Secure the dashboard with OpenID Connect (Authelia, Auth0, Authentik). All auth flows fail closed by default. |

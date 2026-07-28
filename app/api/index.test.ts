@@ -1984,9 +1984,7 @@ describe('API Index', () => {
       serverConfiguration: expect.objectContaining({ enabled: true }),
       isRateLimited: expect.any(Function),
     });
-    expect(mockLog.info).toHaveBeenCalledWith(
-      'portwing/1.0 edge endpoint enabled (experimental, DD_EXPERIMENTAL_PORTWING=true)',
-    );
+    expect(mockLog.info).toHaveBeenCalledWith('portwing/1.0 edge endpoint enabled by default');
   });
 
   test('should NOT attach Portwing WS server when DD_EXPERIMENTAL_PORTWING is disabled', async () => {
@@ -2019,7 +2017,7 @@ describe('API Index', () => {
     await indexRouter.init();
 
     expect(mockLog.info).toHaveBeenCalledWith(
-      'portwing/1.0 edge endpoint is disabled — set DD_EXPERIMENTAL_PORTWING=true to enable it',
+      'portwing/1.0 edge endpoint disabled by DD_EXPERIMENTAL_PORTWING=false',
     );
   });
 });

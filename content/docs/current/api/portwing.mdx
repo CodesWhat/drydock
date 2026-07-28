@@ -5,7 +5,7 @@ description: "Ed25519 agent-key registry and the portwing/1.0 WebSocket edge end
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-<Callout type="warn">Portwing support is experimental. Both the WebSocket gateway and the key-registry REST API below only exist when the server is started with `DD_EXPERIMENTAL_PORTWING=true` — the wire protocol and REST shapes may still change before this graduates out of the flag.</Callout>
+<Callout type="info">The Portwing WebSocket gateway and key-registry API are enabled by default and follow the published `portwing/1.0` compatibility policy. `DD_EXPERIMENTAL_PORTWING=false` remains available only as an emergency disable for new edge connections.</Callout>
 
 Edge mode inverts the normal drydock connection model. In the standard setup the controller dials out to each remote agent. Edge mode is for agents that sit behind NAT or a firewall and cannot accept inbound connections: the `portwing` agent dials **out** to drydock over an encrypted WebSocket (`wss://`), and drydock registers the connection as if the agent had been reached normally. No inbound port on the agent host is needed. The chain is `sockguard → portwing (edge client) → drydock (this endpoint)`.
 
@@ -194,6 +194,46 @@ A name collision with an already-connected agent under the same key (or the in-f
 ```
 
 `serverCompatLevel` is `1.4.0` — the compatibility level actually implemented by this server, not a target for a future release. If the hello's `drydockCompat` field has a different major version, the connection is still accepted; drydock only logs a warning so operators can check the compat matrix.
+
+### Continuous container-log streaming
+
+The authenticated edge connection carries live Docker logs without opening another port on the agent. Drydock starts a stream with:
+
+```json
+{
+  "type": "dd:container_log_request",
+  "data": {
+    "requestId": "log-8f31",
+    "containerId": "8d3f…",
+    "stream": true,
+    "follow": true,
+    "tail": 200,
+    "timestamps": true,
+    "since": 0,
+    "until": 0
+  }
+}
+```
+
+A current Portwing agent responds with zero or more chunk frames, preserving the Docker stream:
+
+```json
+{
+  "type": "dd:container_log_chunk",
+  "data": {
+    "requestId": "log-8f31",
+    "containerId": "8d3f…",
+    "stream": "stderr",
+    "logs": "2026-07-28T12:00:00Z warning\n"
+  }
+}
+```
+
+The agent finishes with `dd:container_log_end` (`requestId`, `containerId`, optional `reason`) or `dd:container_log_error` (`requestId`, `containerId`, `error`). When the browser closes its log WebSocket, Drydock sends `dd:container_log_cancel` with the same `requestId` and `containerId`; Portwing cancels the Docker request promptly.
+
+`requestId` is mandatory and correlates concurrent viewers. Drydock caps each downstream viewer at 1 MiB of queued data, while Portwing uses a bounded controller send queue and admits at most 128 live log streams. A slow consumer is closed instead of allowing unbounded memory growth.
+
+Mixed-version fleets remain compatible. An older Portwing agent ignores `stream` and returns the legacy `dd:container_log_response`; Drydock renders that response as one stdout chunk and then ends the viewer. A newer agent still uses the legacy response for requests that omit `stream: true`.
 
 ### Protocol limits
 

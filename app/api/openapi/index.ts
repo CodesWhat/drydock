@@ -45,7 +45,8 @@ export const openApiDocument = {
     { name: 'Docs', description: 'API documentation endpoints' },
     {
       name: 'Portwing',
-      description: 'Edge agent key registry — experimental, requires DD_EXPERIMENTAL_PORTWING=true',
+      description:
+        'Stable edge-agent key registry — enabled by default; DD_EXPERIMENTAL_PORTWING=false is the emergency disable',
     },
   ],
   security: [{ sessionAuth: [] }],

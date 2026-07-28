@@ -18,9 +18,9 @@ describe('portwingPaths', () => {
       expect(getPath.summary).toBe('List all registered edge-agent keys');
     });
 
-    test('description mentions EXPERIMENTAL and DD_EXPERIMENTAL_PORTWING=true', () => {
-      expect(getPath.description).toContain('EXPERIMENTAL');
-      expect(getPath.description).toContain('DD_EXPERIMENTAL_PORTWING=true');
+    test('description documents default enable and emergency disable', () => {
+      expect(getPath.description).toMatch(/enabled by default/i);
+      expect(getPath.description).toContain('DD_EXPERIMENTAL_PORTWING=false');
     });
 
     test('200 response is a json array', () => {
@@ -78,9 +78,9 @@ describe('portwingPaths', () => {
       expect(postPath.summary).toBe('Register a new authorized edge-agent key');
     });
 
-    test('description mentions EXPERIMENTAL and DD_EXPERIMENTAL_PORTWING=true', () => {
-      expect(postPath.description).toContain('EXPERIMENTAL');
-      expect(postPath.description).toContain('DD_EXPERIMENTAL_PORTWING=true');
+    test('description documents default enable and emergency disable', () => {
+      expect(postPath.description).toMatch(/enabled by default/i);
+      expect(postPath.description).toContain('DD_EXPERIMENTAL_PORTWING=false');
     });
 
     test('request body requires pubkeyBase64 and label', () => {
@@ -147,9 +147,9 @@ describe('portwingPaths', () => {
       expect(deletePath.summary).toBe('Revoke a registered edge-agent key');
     });
 
-    test('description mentions EXPERIMENTAL and DD_EXPERIMENTAL_PORTWING=true', () => {
-      expect(deletePath.description).toContain('EXPERIMENTAL');
-      expect(deletePath.description).toContain('DD_EXPERIMENTAL_PORTWING=true');
+    test('description documents default enable and emergency disable', () => {
+      expect(deletePath.description).toMatch(/enabled by default/i);
+      expect(deletePath.description).toContain('DD_EXPERIMENTAL_PORTWING=false');
     });
 
     test('keyId path param has correct name and pattern', () => {

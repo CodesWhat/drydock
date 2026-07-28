@@ -811,6 +811,431 @@ describe('EdgeAgentAdapter — requestContainerLogs', () => {
   });
 });
 
+describe('EdgeAgentAdapter — continuous container log streams', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('opens the dd streaming variant and delivers correlated chunks through completion', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const chunks: Array<{ stream: string; logs: string }> = [];
+    const ended = vi.fn();
+    const failed = vi.fn();
+    const streamMethod = (
+      adapter as unknown as {
+        streamContainerLogs?: (
+          containerId: string,
+          options: Record<string, unknown>,
+          handlers: {
+            onChunk: (chunk: { stream: string; logs: string }) => void;
+            onEnd: (reason?: string) => void;
+            onError: (error: Error) => void;
+          },
+        ) => { cancel: () => void };
+      }
+    ).streamContainerLogs;
+
+    expect(typeof streamMethod).toBe('function');
+    if (!streamMethod) return;
+
+    streamMethod.call(
+      adapter,
+      'container-live',
+      { tail: 25, since: 42, follow: true, timestamps: true },
+      {
+        onChunk: (chunk) => chunks.push(chunk),
+        onEnd: ended,
+        onError: failed,
+      },
+    );
+
+    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
+      type: string;
+      data: { requestId: string; stream: boolean; follow: boolean; containerId: string };
+    };
+    expect(request.type).toBe('dd:container_log_request');
+    expect(request.data).toMatchObject({
+      containerId: 'container-live',
+      stream: true,
+      follow: true,
+    });
+
+    sendFrame(ws, 'dd:container_log_chunk', {
+      requestId: request.data.requestId,
+      containerId: 'container-live',
+      stream: 'stderr',
+      logs: '2026-07-28T18:00:00Z warning\n',
+    });
+    sendFrame(ws, 'dd:container_log_end', {
+      requestId: request.data.requestId,
+      containerId: 'container-live',
+      reason: 'eof',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(chunks).toEqual([
+      {
+        stream: 'stderr',
+        logs: '2026-07-28T18:00:00Z warning\n',
+      },
+    ]);
+    expect(ended).toHaveBeenCalledWith('eof');
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  test('cancels one live dd log stream without disturbing another request', () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const streamMethod = (
+      adapter as unknown as {
+        streamContainerLogs?: (
+          containerId: string,
+          options: Record<string, unknown>,
+          handlers: { onChunk: () => void; onEnd: () => void; onError: () => void },
+        ) => { cancel: () => void };
+      }
+    ).streamContainerLogs;
+
+    expect(typeof streamMethod).toBe('function');
+    if (!streamMethod) return;
+
+    const handle = streamMethod.call(
+      adapter,
+      'container-cancel',
+      {},
+      { onChunk: vi.fn(), onEnd: vi.fn(), onError: vi.fn() },
+    );
+    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
+      data: { requestId: string };
+    };
+
+    handle.cancel();
+
+    expect(JSON.parse(ws.sentMessages.at(-1) ?? '{}')).toEqual({
+      type: 'dd:container_log_cancel',
+      data: {
+        requestId: request.data.requestId,
+        containerId: 'container-cancel',
+      },
+    });
+  });
+
+  test('treats a legacy one-shot response as a complete stream fallback', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const chunks: string[] = [];
+    const ended = vi.fn();
+    const streamMethod = (
+      adapter as unknown as {
+        streamContainerLogs?: (
+          containerId: string,
+          options: Record<string, unknown>,
+          handlers: {
+            onChunk: (chunk: { logs: string }) => void;
+            onEnd: (reason?: string) => void;
+            onError: (error: Error) => void;
+          },
+        ) => { cancel: () => void };
+      }
+    ).streamContainerLogs;
+
+    expect(typeof streamMethod).toBe('function');
+    if (!streamMethod) return;
+
+    streamMethod.call(
+      adapter,
+      'legacy-container',
+      {},
+      {
+        onChunk: (chunk) => chunks.push(chunk.logs),
+        onEnd: ended,
+        onError: vi.fn(),
+      },
+    );
+    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
+      data: { requestId: string };
+    };
+    sendFrame(ws, 'dd:container_log_response', {
+      requestId: request.data.requestId,
+      containerId: 'legacy-container',
+      logs: 'legacy buffered logs\n',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(chunks).toEqual(['legacy buffered logs\n']);
+    expect(ended).toHaveBeenCalledWith('legacy-response');
+  });
+
+  test('ends an empty legacy fallback without emitting an empty chunk', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const chunked = vi.fn();
+    const ended = vi.fn();
+    adapter.streamContainerLogs(
+      'legacy-empty',
+      {},
+      { onChunk: chunked, onEnd: ended, onError: vi.fn() },
+    );
+    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
+      data: { requestId: string };
+    };
+
+    sendFrame(ws, 'dd:container_log_response', {
+      requestId: request.data.requestId,
+      containerId: 'legacy-empty',
+      logs: '',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(chunked).not.toHaveBeenCalled();
+    expect(ended).toHaveBeenCalledWith('legacy-response');
+  });
+
+  test('delivers a correlated terminal error and ignores later chunks', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const chunked = vi.fn();
+    const failed = vi.fn();
+    const handle = adapter.streamContainerLogs(
+      'broken-container',
+      {},
+      { onChunk: chunked, onEnd: vi.fn(), onError: failed },
+    );
+    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
+      data: { requestId: string };
+    };
+
+    sendFrame(ws, 'dd:container_log_error', {
+      requestId: request.data.requestId,
+      containerId: 'broken-container',
+      error: 'docker stream failed',
+    });
+    sendFrame(ws, 'dd:container_log_chunk', {
+      requestId: request.data.requestId,
+      containerId: 'broken-container',
+      stream: 'stdout',
+      logs: 'late data',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(failed).toHaveBeenCalledWith(new Error('docker stream failed'));
+    expect(chunked).not.toHaveBeenCalled();
+    handle.cancel();
+  });
+
+  test('fails every live log stream when the agent connection closes', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+    const firstFailed = vi.fn();
+    const secondFailed = vi.fn();
+    adapter.streamContainerLogs(
+      'first',
+      {},
+      {
+        onChunk: vi.fn(),
+        onEnd: vi.fn(),
+        onError: firstFailed,
+      },
+    );
+    adapter.streamContainerLogs(
+      'second',
+      {},
+      {
+        onChunk: vi.fn(),
+        onEnd: vi.fn(),
+        onError: secondFailed,
+      },
+    );
+
+    await adapter.onDisconnect();
+
+    expect(firstFailed).toHaveBeenCalledWith(new Error('connection closed'));
+    expect(secondFailed).toHaveBeenCalledWith(new Error('connection closed'));
+  });
+
+  test('ignores malformed, uncorrelated, and duplicate terminal stream frames', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const chunked = vi.fn();
+    const ended = vi.fn();
+    const failed = vi.fn();
+    adapter.streamContainerLogs(
+      'strict-container',
+      {},
+      { onChunk: chunked, onEnd: ended, onError: failed },
+    );
+    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
+      data: { requestId: string };
+    };
+
+    for (const data of [
+      {},
+      { requestId: request.data.requestId },
+      { containerId: 'strict-container' },
+      { requestId: request.data.requestId, containerId: 'strict-container' },
+      { requestId: 'unknown', containerId: 'strict-container', logs: 'ignored' },
+      { requestId: request.data.requestId, containerId: 'other', logs: 'ignored' },
+    ]) {
+      sendFrame(ws, 'dd:container_log_chunk', data);
+    }
+    sendFrame(ws, 'dd:container_log_chunk', {
+      requestId: request.data.requestId,
+      containerId: 'strict-container',
+      logs: '',
+    });
+    sendFrame(ws, 'dd:container_log_end', {});
+    sendFrame(ws, 'dd:container_log_end', { requestId: request.data.requestId });
+    sendFrame(ws, 'dd:container_log_end', { containerId: 'strict-container' });
+    sendFrame(ws, 'dd:container_log_end', {
+      requestId: 'unknown',
+      containerId: 'strict-container',
+    });
+    sendFrame(ws, 'dd:container_log_end', {
+      requestId: request.data.requestId,
+      containerId: 'other',
+    });
+    sendFrame(ws, 'dd:container_log_error', {});
+    sendFrame(ws, 'dd:container_log_error', { requestId: request.data.requestId });
+    sendFrame(ws, 'dd:container_log_error', { containerId: 'strict-container' });
+    sendFrame(ws, 'dd:container_log_error', {
+      requestId: 'unknown',
+      containerId: 'strict-container',
+    });
+    sendFrame(ws, 'dd:container_log_error', {
+      requestId: request.data.requestId,
+      containerId: 'other',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(chunked).toHaveBeenCalledWith({ stream: 'stdout', logs: '' });
+    expect(ended).not.toHaveBeenCalled();
+    expect(failed).not.toHaveBeenCalled();
+
+    sendFrame(ws, 'dd:container_log_end', {
+      requestId: request.data.requestId,
+      containerId: 'strict-container',
+    });
+    sendFrame(ws, 'dd:container_log_end', {
+      requestId: request.data.requestId,
+      containerId: 'strict-container',
+    });
+    sendFrame(ws, 'dd:container_log_error', {
+      requestId: request.data.requestId,
+      containerId: 'strict-container',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(ended).toHaveBeenCalledWith(undefined);
+    expect(ended).toHaveBeenCalledTimes(1);
+    expect(failed).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { thrown: new Error('chunk callback failed'), message: 'chunk callback failed' },
+    { thrown: 'non-error callback failure', message: 'non-error callback failure' },
+  ])('cancels and reports a throwing chunk handler: $message', async ({ thrown, message }) => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const failed = vi.fn();
+    adapter.streamContainerLogs(
+      'throwing-container',
+      {},
+      {
+        onChunk: () => {
+          throw thrown;
+        },
+        onEnd: vi.fn(),
+        onError: failed,
+      },
+    );
+    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
+      data: { requestId: string };
+    };
+
+    sendFrame(ws, 'dd:container_log_chunk', {
+      requestId: request.data.requestId,
+      containerId: 'throwing-container',
+      stream: 'stdout',
+      logs: 'boom',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(failed).toHaveBeenCalledWith(new Error(message));
+    expect(JSON.parse(ws.sentMessages.at(-1) ?? '{}')).toEqual({
+      type: 'dd:container_log_cancel',
+      data: {
+        requestId: request.data.requestId,
+        containerId: 'throwing-container',
+      },
+    });
+  });
+
+  test('uses the default stream error when the agent omits an error string', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const failed = vi.fn();
+    adapter.streamContainerLogs(
+      'broken-container',
+      {},
+      { onChunk: vi.fn(), onEnd: vi.fn(), onError: failed },
+    );
+    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
+      data: { requestId: string };
+    };
+
+    sendFrame(ws, 'dd:container_log_error', {
+      requestId: request.data.requestId,
+      containerId: 'broken-container',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(failed).toHaveBeenCalledWith(new Error('container log stream failed'));
+  });
+
+  test('reports the stream capacity limit and returns an inert cancel handle', () => {
+    const { adapter, ws } = createAdapter();
+    const internals = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+    for (let index = 0; index < 1000; index += 1) {
+      internals.pendingRequests.set(`occupied-${index}`, {});
+    }
+    const failed = vi.fn();
+    const sentBefore = ws.sentMessages.length;
+
+    const handle = adapter.streamContainerLogs(
+      'over-capacity',
+      {},
+      { onChunk: vi.fn(), onEnd: vi.fn(), onError: failed },
+    );
+    handle.cancel();
+
+    expect(failed).toHaveBeenCalledWith(new Error('concurrent request limit reached'));
+    expect(ws.sentMessages).toHaveLength(sentBefore);
+  });
+
+  test.each([
+    { thrown: new Error('send failed'), message: 'send failed' },
+    { thrown: 'socket exploded', message: 'socket exploded' },
+  ])('reports and cleans up an initial stream send failure: $message', ({ thrown, message }) => {
+    const { adapter, ws } = createAdapter();
+    vi.mocked(ws.send).mockImplementationOnce(() => {
+      throw thrown;
+    });
+    const failed = vi.fn();
+
+    const handle = adapter.streamContainerLogs(
+      'send-failure',
+      {},
+      { onChunk: vi.fn(), onEnd: vi.fn(), onError: failed },
+    );
+    handle.cancel();
+
+    expect(failed).toHaveBeenCalledWith(new Error(message));
+  });
+});
+
 describe('EdgeAgentAdapter — deleteContainer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
