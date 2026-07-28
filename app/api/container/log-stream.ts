@@ -2,6 +2,12 @@ import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
 import type { Readable } from 'node:stream';
 import { type WebSocket, WebSocketServer } from 'ws';
+import type {
+  ContainerLogStreamChunk,
+  ContainerLogStreamHandle,
+  ContainerLogStreamHandlers,
+} from '../../agent/EdgeAgentAdapter.js';
+import { getAgent } from '../../agent/manager.js';
 import { getServerConfiguration } from '../../configuration/index.js';
 import { formatLogDisplayTimestamp } from '../../log/display-timestamp.js';
 import type { Container } from '../../model/container.js';
@@ -26,9 +32,12 @@ const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX = 1000;
 const CLOSE_CODE_CONTAINER_NOT_RUNNING = 4001;
 const CLOSE_CODE_CONTAINER_NOT_FOUND = 4004;
+const MAX_VIEWER_BUFFER_BYTES = 1024 * 1024;
+const MAX_WEBSOCKET_CLOSE_REASON_BYTES = 123;
 
 type WebSocketLike = Pick<WebSocket, 'close' | 'on' | 'send'> & {
   off?: (event: 'close' | 'error', listener: () => void) => void;
+  bufferedAmount?: number;
 };
 
 type WebSocketServerLike = {
@@ -66,6 +75,22 @@ interface LogStreamContainerApi {
 interface ContainerLogStreamGatewayDependencies {
   getContainer: LogStreamContainerApi['getContainer'];
   getWatchers: () => Record<string, unknown>;
+  getAgent?: (name: string) =>
+    | {
+        edgeAdapter?: {
+          streamContainerLogs: (
+            containerId: string,
+            options: {
+              tail?: number;
+              since?: string | number;
+              follow?: boolean;
+              timestamps?: boolean;
+            },
+            handlers: ContainerLogStreamHandlers,
+          ) => ContainerLogStreamHandle;
+        };
+      }
+    | undefined;
   sessionMiddleware?: SessionMiddleware;
   webSocketServer?: WebSocketServerLike;
   isRateLimited?: (key: string) => boolean;
@@ -258,12 +283,140 @@ export function createDockerLogMessageDecoder() {
   };
 }
 
+function streamEdgeAgentLogsToWebSocket({
+  webSocket,
+  container,
+  query,
+  getAgent: resolveAgent,
+}: {
+  webSocket: WebSocketLike;
+  container: Container;
+  query: ParsedContainerLogStreamQuery;
+  getAgent: NonNullable<ContainerLogStreamGatewayDependencies['getAgent']>;
+}): Promise<void> {
+  return new Promise((resolve) => {
+    const agent = resolveAgent(container.agent as string);
+    if (!agent?.edgeAdapter) {
+      webSocket.close(1011, 'Edge agent not available');
+      resolve();
+      return;
+    }
+
+    const decoder = createDockerLogMessageDecoder();
+    let handle: ContainerLogStreamHandle | undefined;
+    let cleaned = false;
+
+    const cleanup = (cancelAgent: boolean) => {
+      if (cleaned) {
+        return;
+      }
+      cleaned = true;
+      webSocket.off?.('close', handleViewerClose);
+      webSocket.off?.('error', handleViewerError);
+      if (cancelAgent) {
+        handle?.cancel();
+      }
+      resolve();
+    };
+
+    const emitMessages = (messages: DockerLogMessage[]): boolean => {
+      for (const message of messages) {
+        if (
+          (message.type === 'stdout' && !query.stdout) ||
+          (message.type === 'stderr' && !query.stderr)
+        ) {
+          continue;
+        }
+        if ((webSocket.bufferedAmount ?? 0) > MAX_VIEWER_BUFFER_BYTES) {
+          webSocket.close(1013, 'Log viewer is too slow');
+          cleanup(true);
+          return false;
+        }
+        try {
+          webSocket.send(
+            JSON.stringify({
+              ...message,
+              displayTs: formatLogDisplayTimestamp(message.ts),
+            }),
+          );
+        } catch {
+          cleanup(true);
+          return false;
+        }
+      }
+      return true;
+    };
+
+    const handleChunk = (chunk: ContainerLogStreamChunk) => {
+      if (cleaned) {
+        return;
+      }
+      emitMessages(decoder.push({ type: chunk.stream, payload: chunk.logs }));
+    };
+    const handleEnd = () => {
+      if (cleaned) {
+        return;
+      }
+      if (emitMessages(decoder.flush())) {
+        webSocket.close(1000, 'Stream ended');
+      }
+      cleanup(false);
+    };
+    const handleError = (error: Error) => {
+      if (cleaned) {
+        return;
+      }
+      webSocket.close(1011, truncateWebSocketCloseReason(`Log stream error (${error.message})`));
+      cleanup(false);
+    };
+    const handleViewerClose = () => {
+      cleanup(true);
+    };
+    const handleViewerError = () => {
+      cleanup(true);
+    };
+
+    webSocket.on('close', handleViewerClose);
+    webSocket.on('error', handleViewerError);
+    handle = agent.edgeAdapter.streamContainerLogs(
+      container.id,
+      {
+        tail: query.tail,
+        since: query.since,
+        follow: query.follow,
+        timestamps: true,
+      },
+      {
+        onChunk: handleChunk,
+        onEnd: handleEnd,
+        onError: handleError,
+      },
+    );
+  });
+}
+
+function truncateWebSocketCloseReason(reason: string): string {
+  if (Buffer.byteLength(reason, 'utf8') <= MAX_WEBSOCKET_CLOSE_REASON_BYTES) {
+    return reason;
+  }
+
+  let truncated = '';
+  for (const character of reason) {
+    if (Buffer.byteLength(truncated + character, 'utf8') > MAX_WEBSOCKET_CLOSE_REASON_BYTES) {
+      break;
+    }
+    truncated += character;
+  }
+  return truncated;
+}
+
 async function streamContainerLogsToWebSocket({
   webSocket,
   containerId,
   query,
   getContainer,
   getWatchers,
+  getAgent: resolveAgent,
   getErrorMessage,
 }: {
   webSocket: WebSocketLike;
@@ -271,6 +424,7 @@ async function streamContainerLogsToWebSocket({
   query: ParsedContainerLogStreamQuery;
   getContainer: ContainerLogStreamGatewayDependencies['getContainer'];
   getWatchers: ContainerLogStreamGatewayDependencies['getWatchers'];
+  getAgent: NonNullable<ContainerLogStreamGatewayDependencies['getAgent']>;
   getErrorMessage: (error: unknown) => string;
 }): Promise<void> {
   const container = getContainer(containerId);
@@ -280,6 +434,15 @@ async function streamContainerLogsToWebSocket({
   }
   if (container.status !== 'running') {
     webSocket.close(CLOSE_CODE_CONTAINER_NOT_RUNNING, 'Container not running');
+    return;
+  }
+  if (container.agent) {
+    await streamEdgeAgentLogsToWebSocket({
+      webSocket,
+      container,
+      query,
+      getAgent: resolveAgent,
+    });
     return;
   }
 
@@ -396,6 +559,7 @@ export function createContainerLogStreamGateway(
   const {
     getContainer,
     getWatchers,
+    getAgent: resolveAgent = () => undefined,
     sessionMiddleware,
     webSocketServer = new WebSocketServer({ noServer: true }),
     isRateLimited = (() => {
@@ -454,6 +618,7 @@ export function createContainerLogStreamGateway(
             query: parsedRequest.query,
             getContainer,
             getWatchers,
+            getAgent: resolveAgent,
             getErrorMessage: getLogStreamErrorMessage,
           }).finally(resolve);
         });
@@ -478,6 +643,7 @@ export function attachContainerLogStreamWebSocketServer(options: {
   const gateway = createContainerLogStreamGateway({
     getContainer: storeContainer.getContainer,
     getWatchers: () => registry.getState().watcher,
+    getAgent,
     sessionMiddleware: options.sessionMiddleware,
     getRateLimitKey: createIdentityAwareUpgradeRateLimitKeyResolver(serverConfiguration),
     isRateLimited: options.isRateLimited,

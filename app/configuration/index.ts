@@ -230,7 +230,11 @@ function envFlagEnabled(value: string | undefined) {
 }
 
 export function getExperimentalPortwingEnabled() {
-  return envFlagEnabled(ddEnvVars.DD_EXPERIMENTAL_PORTWING);
+  const value = ddEnvVars.DD_EXPERIMENTAL_PORTWING;
+  if (value === undefined) {
+    return true;
+  }
+  return envFlagEnabled(value);
 }
 
 /**

@@ -3,6 +3,12 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
+## v1.6.0-rc.9 Highlights — July 28, 2026
+
+- **Portwing edge log streaming is on by default** — the authenticated container-log WebSocket now bridges correlated chunk/end/error frames from the edge gateway, cancels the agent stream when the viewer closes, and caps each downstream viewer at 1 MiB of buffered data; older Portwing agents degrade gracefully to their one-shot response. `DD_EXPERIMENTAL_PORTWING=false` remains available as an emergency disable.
+- **The row status overlay is no longer clipped at the pinned-column edge** — the "Updating/Queued/Scanning" chip is now layered above the sticky identity-cluster cells instead of being cut in half at the cluster boundary ([#631](https://github.com/CodesWhat/drydock/pull/631)).
+- **Registry errors no longer replace the container's tag** — a rate-limit/auth/not-found registry error used to overwrite or duplicate the tag cell with a danger pill; the tag column now always shows the actual tag, with the registry column glyph remaining the single error flag ([#631](https://github.com/CodesWhat/drydock/pull/631)).
+
 ## v1.6.0-rc.8 Highlights — July 28, 2026
 
 - **Agent-managed containers keep their update policy** — remote agents never learn controller-side runtime overrides, so every agent report carried an empty override layer that the controller persisted verbatim, wiping maturity mode, min-age days, skip lists, and snoozes on every sync or recheck. The controller now reapplies its stored overrides when ingesting agent reports, and the store only honors an empty override layer when the update-policy API marks the clear as deliberate — so settings finally survive agent syncs while UI clears still stick ([#565](https://github.com/CodesWhat/drydock/issues/565)).

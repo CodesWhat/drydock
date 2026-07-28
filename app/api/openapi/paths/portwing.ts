@@ -33,8 +33,8 @@ const agentKeyRecord = {
   additionalProperties: false,
 } as const;
 
-const experimentalNote =
-  'EXPERIMENTAL: only available when the server is started with DD_EXPERIMENTAL_PORTWING=true.';
+const availabilityNote =
+  'Enabled by default; set DD_EXPERIMENTAL_PORTWING=false for an emergency disable.';
 
 const keyIdPathParam = {
   name: 'keyId',
@@ -50,7 +50,7 @@ export const portwingPaths = {
       tags: ['Portwing'],
       summary: 'List all registered edge-agent keys',
       operationId: 'listPortwingKeys',
-      description: `Returns all keys — active and revoked. ${experimentalNote}`,
+      description: `Returns all keys — active and revoked. ${availabilityNote}`,
       responses: {
         200: jsonResponse('Array of agent key records', {
           type: 'array',
@@ -63,7 +63,7 @@ export const portwingPaths = {
       tags: ['Portwing'],
       summary: 'Register a new authorized edge-agent key',
       operationId: 'createPortwingKey',
-      description: `Registers a new Ed25519 public key for edge agent authentication. ${experimentalNote}`,
+      description: `Registers a new Ed25519 public key for edge agent authentication. ${availabilityNote}`,
       requestBody: {
         required: true,
         content: {
@@ -113,7 +113,7 @@ export const portwingPaths = {
       tags: ['Portwing'],
       summary: 'Revoke a registered edge-agent key',
       operationId: 'revokePortwingKey',
-      description: `Revokes the key and disconnects any live WebSocket session authenticated with it. ${experimentalNote}`,
+      description: `Revokes the key and disconnects any live WebSocket session authenticated with it. ${availabilityNote}`,
       parameters: [keyIdPathParam],
       responses: {
         204: noContentResponse,
