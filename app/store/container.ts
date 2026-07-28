@@ -1133,10 +1133,21 @@ export function insertContainer(container) {
  * Update existing container.
  * @param container
  */
-export function updateContainer(container) {
+export function updateContainer(
+  container,
+  options: { authoritativeEmptyOverrides?: boolean } = {},
+) {
   const hasUpdatePolicy = Object.hasOwn(container, 'updatePolicy');
   const hasUpdatePolicyDeclarative = Object.hasOwn(container, 'updatePolicyDeclarative');
-  const hasUpdatePolicyOverrides = Object.hasOwn(container, 'updatePolicyOverrides');
+  // #565: a present-but-empty updatePolicyOverrides is watcher/agent normalization, not
+  // controller intent, and must not clear stored overrides — mirrors the rule in
+  // restoreRetainedUpdatePolicy above. Only an authoritative caller (the update-policy PATCH
+  // handler) may clear overrides with an empty layer, signaled via options.authoritativeEmptyOverrides.
+  const incomingOverridesPresent = Object.hasOwn(container, 'updatePolicyOverrides');
+  const hasUpdatePolicyOverrides =
+    incomingOverridesPresent &&
+    (options.authoritativeEmptyOverrides === true ||
+      Object.keys(container.updatePolicyOverrides ?? {}).length > 0);
   const hasUpdateRollback = Object.hasOwn(container, 'updateRollback');
   const hasSecurity = Object.hasOwn(container, 'security');
   const hasDetails = Object.hasOwn(container, 'details');

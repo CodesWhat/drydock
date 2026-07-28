@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Controller-set update policy overrides no longer vanish from agent-managed containers** ([#565](https://github.com/CodesWhat/drydock/issues/565)). Remote agents resolve their own declarative (env/label) policy but never learn controller-side runtime overrides, so every container report they send carries an explicit empty override layer. The controller persisted that layer verbatim, and `updateContainer` (`app/store/container.ts`) treated any present `updatePolicyOverrides` key as authoritative — clearing maturity mode/min-age days, skip lists, and snoozes on every periodic agent sync or manual recheck. This was the settings-deletion mechanism behind #565, distinct from the soak-clock resets fixed in [#568](https://github.com/CodesWhat/drydock/pull/568) and rc.7. The controller now reapplies its stored overrides when ingesting agent reports, and the store itself encodes the rule the recreate path has had since [#497](https://github.com/CodesWhat/drydock/pull/497): an empty incoming override layer carries no controller intent and only clears stored overrides when the update-policy PATCH handler marks the write as authoritative, so deliberate clears from the UI still stick.
+
 ## [1.6.0-rc.7] — 2026-07-26
 
 ### Changed
