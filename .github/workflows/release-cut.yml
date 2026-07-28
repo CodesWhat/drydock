@@ -144,6 +144,54 @@ jobs:
           echo "Target SHA: ${sha}"
           echo "Repository (lowercase): ${repo_lower}"
 
+      - name: Capture CHANGELOG snapshot from target SHA
+        id: target_changelog
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # Defect: GA promotes a seven-day-old RC candidate whose checked-out
+          # tree (after "Checkout exact release source" below) can only ever
+          # contain "## [X.Y.Z-rc.N] - ..." headings — each RC promotes
+          # [Unreleased] to its own rc heading at prep time, and the GA heading
+          # "## [X.Y.Z] - ..." is not added to CHANGELOG.md until GA day, on
+          # main, AFTER the candidate was already tagged. Reading CHANGELOG.md
+          # out of the detached candidate checkout therefore can never find the
+          # GA entry — both changelog-reading steps below would deterministically
+          # fail on every possible GA dispatch. They must instead read
+          # CHANGELOG.md as it exists at TARGET_SHA (this run's dispatch-time
+          # main HEAD), which is where the GA heading actually lives.
+          #
+          # For prereleases SOURCE_SHA == TARGET_SHA, so this is behavior-neutral
+          # there — same file, same content, just read one commit earlier than
+          # the detached checkout that follows.
+          #
+          # `git show SHA:path` reads the blob straight out of the object
+          # database and needs no checkout of that SHA, so this is safe to run
+          # here (before "Checkout exact release source") or after — the
+          # earlier checkout step fetched full history (fetch-depth: 0), so the
+          # TARGET_SHA tree's objects are already present either way.
+          changelog_path="${RUNNER_TEMP}/target-sha-changelog.md"
+          git show "${TARGET_SHA}:CHANGELOG.md" > "${changelog_path}"
+          echo "path=${changelog_path}" >> "$GITHUB_OUTPUT"
+          # Snapshot the extractor script too, for the same reason: at GA the
+          # working tree is the candidate's seven-day-old checkout, so running
+          # its scripts/extract-changelog-entry.mjs against main's CHANGELOG
+          # would pair main's data with stale parser code. Pin both to
+          # TARGET_SHA so a parser fix that lands on main during the soak is
+          # the code that actually parses main's file.
+          #
+          # The whole scripts/ tree is extracted (not a single-file `git show`)
+          # because the extractor imports relative siblings — e.g.
+          # ./lib/parse-args.mjs — and Node resolves those against the script's
+          # own location, so a lone copied file dies with ERR_MODULE_NOT_FOUND.
+          scripts_snapshot_dir="${RUNNER_TEMP}/target-sha-scripts"
+          mkdir -p "${scripts_snapshot_dir}"
+          git archive "${TARGET_SHA}" scripts | tar -x -C "${scripts_snapshot_dir}"
+          extract_script_path="${scripts_snapshot_dir}/scripts/extract-changelog-entry.mjs"
+          test -f "${extract_script_path}"
+          echo "extract_script=${extract_script_path}" >> "$GITHUB_OUTPUT"
+
       - name: Resolve release tag from input
         id: next
         env:
@@ -311,12 +359,18 @@ jobs:
 
       - name: Validate CHANGELOG entry for release tag
         env:
+          CHANGELOG_PATH: ${{ steps.target_changelog.outputs.path }}
+          EXTRACT_SCRIPT: ${{ steps.target_changelog.outputs.extract_script }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
         run: |
           set -euo pipefail
           entry_file="$(mktemp)"
 
-          if ! node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_file}" 2>/dev/null; then
+          # Read from the TARGET_SHA snapshots captured above (both the
+          # CHANGELOG and the extractor script), not the checked-out SOURCE_SHA
+          # tree — see the rationale in "Capture CHANGELOG snapshot from
+          # target SHA".
+          if ! node "${EXTRACT_SCRIPT}" --version "${RELEASE_TAG}" --file "${CHANGELOG_PATH}" > "${entry_file}" 2>/dev/null; then
             echo "::error::CHANGELOG entry for ${RELEASE_TAG} missing. Add heading '## [${RELEASE_TAG#v}] - YYYY-MM-DD' and retry."
             exit 1
           fi
@@ -687,16 +741,199 @@ jobs:
 
       - name: Build release artifact
         env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         run: |
           set -euo pipefail
           mkdir -p dist
-          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
-          git archive --format=tar.gz --prefix="drydock-${RELEASE_TAG}/" --output="${artifact}" "${SOURCE_SHA}"
+          # At GA, SOURCE_SHA is the RC candidate's commit, not this run's own
+          # tag. Archive it under the prefix the RC build itself used
+          # (CANDIDATE_TAG), not RELEASE_TAG's GA-versioned prefix. git archive
+          # embeds no build-time timestamps (each entry's mtime is that blob's
+          # committer date) and the tree + prefix are its only other inputs, so
+          # identical tree + identical prefix + same git version reproduces the
+          # RC artifact byte-for-byte. That equality is what "Verify candidate
+          # artifact is reproducible from source SHA" below relies on — using
+          # RELEASE_TAG's own prefix here would make this rebuild diverge from
+          # the RC artifact by construction and always fail that check. This
+          # rebuild is never published directly at GA; see the promotion steps
+          # below for why (Defect 2: attestation provenance).
+          if [ "${IS_PRERELEASE}" = "true" ]; then
+            archive_tag="${RELEASE_TAG}"
+          else
+            archive_tag="${CANDIDATE_TAG}"
+          fi
+          artifact="dist/drydock-${archive_tag}.tar.gz"
+          git archive --format=tar.gz --prefix="drydock-${archive_tag}/" --output="${artifact}" "${SOURCE_SHA}"
           sha256sum "${artifact}" > "${artifact}.sha256"
 
+      # ────────────────────────────────────────────────────────────────────
+      # Defect 2 — artifact provenance at GA: design decision
+      #
+      # actions/attest-build-provenance always records the WORKFLOW RUN's own
+      # checkout commit (github.sha) as the attested subject's build source.
+      # At GA that is TARGET_SHA (today's main HEAD), never SOURCE_SHA (the
+      # seven-day-soaked candidate commit the tarball is actually built from).
+      # Rebuilding and re-attesting inside the GA run — option (b): keep
+      # rebuilding, keep attesting, verify with TARGET_SHA since that is what
+      # the attestation truthfully records — would produce an attestation
+      # that verifies cleanly while asserting a false claim: "this tarball
+      # was built from TARGET_SHA" when its tree is actually SOURCE_SHA's.
+      # That is silently wrong provenance, worse than a hard failure, and it
+      # also breaks the promotion model everywhere else in this workflow:
+      # the container image is never rebuilt at GA either — it reuses the
+      # exact RC digest and re-verifies the RC-time attestation against
+      # SOURCE_SHA (see "Verify container build provenance attestation" and
+      # "Verify container SBOM attestation" above, both intentionally
+      # SOURCE_SHA-keyed and correct as-is).
+      #
+      # Chosen instead — option (a), mirroring that container-image pattern:
+      # at GA, do not rebuild or re-attest the release artifact at all.
+      # Download the candidate's already-published tar.gz and its
+      # .intoto.jsonl bundle from the RC's GitHub release, re-verify that
+      # existing attestation against SOURCE_SHA (honest at RC time, since
+      # SOURCE_SHA == TARGET_SHA when the RC was cut), prove by a fresh
+      # git-archive rebuild that the downloaded bytes still match SOURCE_SHA's
+      # tree today, and republish those same soaked bytes under the GA tag.
+      # The GA artifact IS the promoted RC artifact with its original honest
+      # provenance — true promotion semantics, not a rebuild with mislabeled
+      # provenance. The signing/attestation steps below therefore only run
+      # for prereleases, where SOURCE_SHA == TARGET_SHA and rebuild-then-attest
+      # is correct exactly as it was before this fix.
+      # ────────────────────────────────────────────────────────────────────
+
+      - name: Download candidate release artifact for promotion
+        if: steps.tag.outputs.is_prerelease == 'false'
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          GH_TOKEN: ${{ github.token }}
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: |
+            set -euo pipefail
+            mkdir -p dist/candidate
+            gh release download "${CANDIDATE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --dir dist/candidate \
+              --clobber \
+              --pattern "drydock-${CANDIDATE_TAG}.tar.gz" \
+              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.sha256" \
+              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.bundle" \
+              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.sig" \
+              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.pem" \
+              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.intoto.jsonl"
+
+      - name: Verify downloaded candidate artifact checksum
+        if: steps.tag.outputs.is_prerelease == 'false'
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          # Not `sha256sum -c`: the .sha256 file was written as
+          # `sha256sum dist/drydock-<tag>.tar.gz > ...` at repo-root cwd during
+          # the RC build, so it embeds the path "dist/drydock-<tag>.tar.gz".
+          # The download step above lands the file flat in dist/candidate/, so
+          # -c's embedded-path lookup would miss it regardless of directory —
+          # compare the recorded hash value directly instead.
+          artifact="dist/candidate/drydock-${CANDIDATE_TAG}.tar.gz"
+          recorded_hash="$(awk '{print $1}' "${artifact}.sha256")"
+          actual_hash="$(sha256sum "${artifact}" | awk '{print $1}')"
+          if [ "${recorded_hash}" != "${actual_hash}" ]; then
+            echo "::error::Downloaded ${artifact} (sha256=${actual_hash}) does not match its published checksum (${recorded_hash})."
+            exit 1
+          fi
+
+      - name: Verify candidate artifact provenance attestation
+        if: steps.tag.outputs.is_prerelease == 'false'
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          # This re-verifies the attestation actions/attest-build-provenance
+          # produced during the RC run, which honestly recorded SOURCE_SHA as
+          # its build source (SOURCE_SHA == TARGET_SHA at RC-cut time).
+          artifact="dist/candidate/drydock-${CANDIDATE_TAG}.tar.gz"
+          gh attestation verify "${artifact}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "${SOURCE_SHA}" \
+            --bundle "${artifact}.intoto.jsonl" >/dev/null
+
+      - name: Verify candidate artifact signature
+        if: steps.tag.outputs.is_prerelease == 'false'
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          artifact="dist/candidate/drydock-${CANDIDATE_TAG}.tar.gz"
+          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml@refs/heads/main$"
+          issuer="https://token.actions.githubusercontent.com"
+
+          cosign verify-blob \
+            --bundle "${artifact}.bundle" \
+            --certificate-identity-regexp "${identity_regex}" \
+            --certificate-oidc-issuer "${issuer}" \
+            "${artifact}" >/dev/null
+
+      - name: Verify candidate artifact is reproducible from source SHA
+        if: steps.tag.outputs.is_prerelease == 'false'
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          set -euo pipefail
+          # "Build release artifact" above already rebuilt SOURCE_SHA's tree
+          # under CANDIDATE_TAG's own prefix for exactly this comparison. This
+          # proves the downloaded RC bytes still carry what SOURCE_SHA's tree
+          # contains today before they get promoted to the GA release below.
+          #
+          # Compare DECOMPRESSED tar streams, not gzip bytes: gzip encoding can
+          # drift between the git versions on the RC-cut and GA runners, which
+          # would fail a byte-compare on identical trees and hard-block a
+          # legitimate GA. Tamper detection is not this step's job — the
+          # signature and attestation verifies above already pin the downloaded
+          # artifact's exact original bytes. This step only asserts tree
+          # identity, which the tar stream captures fully (entry mtimes are
+          # commit dates, no build-time inputs).
+          rebuilt="dist/drydock-${CANDIDATE_TAG}.tar.gz"
+          downloaded="dist/candidate/drydock-${CANDIDATE_TAG}.tar.gz"
+          rebuilt_sha="$(gzip -dc "${rebuilt}" | sha256sum | cut -d ' ' -f 1)"
+          downloaded_sha="$(gzip -dc "${downloaded}" | sha256sum | cut -d ' ' -f 1)"
+          if [ "${rebuilt_sha}" != "${downloaded_sha}" ]; then
+            echo "::error::Candidate artifact ${downloaded} (content sha256=${downloaded_sha}) does not match a fresh git archive of ${CANDIDATE_TAG}'s source SHA (content sha256=${rebuilt_sha}). Refusing to promote a non-reproducible artifact."
+            exit 1
+          fi
+          echo "Candidate artifact is reproducible from source SHA."
+
+      - name: Promote candidate artifact to GA release filenames
+        if: steps.tag.outputs.is_prerelease == 'false'
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          # The promoted asset keeps the RC build's internal tar prefix
+          # (drydock-${CANDIDATE_TAG}/) — renaming the release-asset *filename*
+          # to the GA tag is cosmetic, not a content change, so the RC's
+          # existing cosign signature and provenance attestation (both computed
+          # over file bytes, never over the filename) stay valid without being
+          # redone.
+          for ext in tar.gz tar.gz.sha256 tar.gz.bundle tar.gz.sig tar.gz.pem tar.gz.intoto.jsonl; do
+            cp "dist/candidate/drydock-${CANDIDATE_TAG}.${ext}" "dist/drydock-${RELEASE_TAG}.${ext}"
+          done
+          # Regenerate the checksum file so its embedded filename matches the
+          # promoted name; the hash itself is unchanged since the bytes are.
+          (cd dist && sha256sum "drydock-${RELEASE_TAG}.tar.gz" > "drydock-${RELEASE_TAG}.tar.gz.sha256")
+
       - name: Sign release artifact
+        if: steps.tag.outputs.is_prerelease == 'true'
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -731,6 +968,7 @@ jobs:
             fi
 
       - name: Verify release artifact signature
+        if: steps.tag.outputs.is_prerelease == 'true'
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
         run: |
@@ -747,11 +985,13 @@ jobs:
 
       - name: Attest release artifact provenance
         id: attest_release_artifact
+        if: steps.tag.outputs.is_prerelease == 'true'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
         with:
           subject-path: dist/drydock-${{ steps.next.outputs.release_tag }}.tar.gz
 
       - name: Export release provenance asset
+        if: steps.tag.outputs.is_prerelease == 'true'
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           BUNDLE_PATH: ${{ steps.attest_release_artifact.outputs.bundle-path }}
@@ -761,12 +1001,16 @@ jobs:
           cp "${BUNDLE_PATH}" "${artifact}.intoto.jsonl"
 
       - name: Verify release artifact provenance attestation
+        if: steps.tag.outputs.is_prerelease == 'true'
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ steps.target.outputs.sha }}
         run: |
           set -euo pipefail
+          # Prerelease only: SOURCE_SHA == TARGET_SHA here, so asserting
+          # TARGET_SHA is equivalent to asserting SOURCE_SHA and matches what
+          # "Attest release artifact provenance" actually just recorded.
           artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
           gh attestation verify "${artifact}" \
             --repo "${GITHUB_REPOSITORY}" \
@@ -778,6 +1022,8 @@ jobs:
       - name: Generate release notes from changelog
         id: release_notes
         env:
+          CHANGELOG_PATH: ${{ steps.target_changelog.outputs.path }}
+          EXTRACT_SCRIPT: ${{ steps.target_changelog.outputs.extract_script }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
@@ -787,7 +1033,10 @@ jobs:
 
           entry_path="$(mktemp)"
           missing_heading="## [${RELEASE_TAG#v}] - YYYY-MM-DD"
-          if ! node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_path}"; then
+          # Same TARGET_SHA snapshots as the validation step above — the GA
+          # heading (and the parser that reads it) live on main, never in the
+          # detached SOURCE_SHA checkout.
+          if ! node "${EXTRACT_SCRIPT}" --version "${RELEASE_TAG}" --file "${CHANGELOG_PATH}" > "${entry_path}"; then
             rm -f "${entry_path}" "${notes_path}"
             echo "::error::Release notes generation failed: CHANGELOG entry missing for ${RELEASE_TAG}. Add heading '${missing_heading}' and retry release."
             {
