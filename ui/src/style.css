@@ -292,6 +292,11 @@ tr.dd-row-updating > td.dd-data-table-row-overlay-host,
 tr.dd-row-scanning > td.dd-data-table-row-overlay-host {
   position: relative;
   overflow: visible;
+  /* The pinned identity-cluster cells are `sticky z-10`; the later siblings in
+     DOM order otherwise paint over this cell's full-width overlay and clip the
+     centered chip at the cluster's edge. While an overlay is active, lift the
+     host cell above its z-10 row siblings (but below the z-20 sticky header). */
+  z-index: 11;
 }
 
 tr.dd-row-updating > td.dd-data-table-row-overlay-host > .dd-row-overlay,
