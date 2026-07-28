@@ -180,8 +180,16 @@ jobs:
           # would pair main's data with stale parser code. Pin both to
           # TARGET_SHA so a parser fix that lands on main during the soak is
           # the code that actually parses main's file.
-          extract_script_path="${RUNNER_TEMP}/target-sha-extract-changelog-entry.mjs"
-          git show "${TARGET_SHA}:scripts/extract-changelog-entry.mjs" > "${extract_script_path}"
+          #
+          # The whole scripts/ tree is extracted (not a single-file `git show`)
+          # because the extractor imports relative siblings — e.g.
+          # ./lib/parse-args.mjs — and Node resolves those against the script's
+          # own location, so a lone copied file dies with ERR_MODULE_NOT_FOUND.
+          scripts_snapshot_dir="${RUNNER_TEMP}/target-sha-scripts"
+          mkdir -p "${scripts_snapshot_dir}"
+          git archive "${TARGET_SHA}" scripts | tar -x -C "${scripts_snapshot_dir}"
+          extract_script_path="${scripts_snapshot_dir}/scripts/extract-changelog-entry.mjs"
+          test -f "${extract_script_path}"
           echo "extract_script=${extract_script_path}" >> "$GITHUB_OUTPUT"
 
       - name: Resolve release tag from input

@@ -44,6 +44,11 @@ test('release-cut captures a CHANGELOG snapshot from the target SHA', () => {
 
   expect(step?.id).toBe('target_changelog');
   expect(step?.run).toContain('git show "${TARGET_SHA}:CHANGELOG.md"');
+  // The extractor must be snapshotted as the whole scripts/ tree, not a single
+  // file: it imports relative siblings (./lib/parse-args.mjs), which Node
+  // resolves against the script's own location.
+  expect(step?.run).toContain('git archive "${TARGET_SHA}" scripts | tar -x -C');
+  expect(step?.run).not.toContain('git show "${TARGET_SHA}:scripts/');
 });
 
 test('release-cut reads CHANGELOG from the target-sha snapshot, not the checked-out tree', () => {
