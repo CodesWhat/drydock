@@ -8,19 +8,6 @@ run-name: >-
 
 on:
   workflow_dispatch:
-    inputs:
-      duration:
-        description: "Soak duration (for example 5m or 1h)"
-        required: false
-        default: "5m"
-      agents:
-        description: "Number of real Portwing processes"
-        required: false
-        default: "8"
-      exec_per_agent:
-        description: "Concurrent exec sessions per agent"
-        required: false
-        default: "3"
   pull_request:
     branches: [main, 'dev/**']
     paths:
@@ -93,10 +80,6 @@ jobs:
 
       - name: Resolve soak parameters
         id: parameters
-        env:
-          INPUT_DURATION: ${{ github.event.inputs.duration }}
-          INPUT_AGENTS: ${{ github.event.inputs.agents }}
-          INPUT_EXEC_PER_AGENT: ${{ github.event.inputs.exec_per_agent }}
         run: |
           set -euo pipefail
           if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
@@ -112,9 +95,9 @@ jobs:
             rss_threshold="134217728"
             heap_threshold="67108864"
           else
-            duration="${INPUT_DURATION:-5m}"
-            agents="${INPUT_AGENTS:-8}"
-            exec_per_agent="${INPUT_EXEC_PER_AGENT:-3}"
+            duration="5m"
+            agents="8"
+            exec_per_agent="3"
             rss_threshold="268435456"
             heap_threshold="134217728"
           fi
