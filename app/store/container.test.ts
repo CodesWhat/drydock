@@ -384,7 +384,60 @@ test('updateContainer should keep overrides when a declarative label is removed'
   expect(updated.updatePolicySources).toEqual({ skipTags: 'override' });
 });
 
-test('updateContainer should honor an explicit empty override layer', () => {
+test('updateContainer should preserve existing overrides for a non-authoritative empty override layer', () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updatePolicy: { maturityMode: 'all' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: { maturityMode: 'all' },
+      updatePolicySources: { maturityMode: 'override' },
+    }),
+  };
+  const collection = { findOne: () => existingContainer, update: vi.fn() };
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: { maturityMode: 'mature' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: {},
+      updatePolicySources: { maturityMode: 'env' },
+    }),
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({ maturityMode: 'all' });
+  expect(updated.updatePolicy).toEqual({ maturityMode: 'all' });
+  expect(updated.updatePolicySources).toEqual({ maturityMode: 'override' });
+});
+
+test('updateContainer should clear overrides for an authoritative empty override layer', () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updatePolicy: { maturityMode: 'all' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: { maturityMode: 'all' },
+      updatePolicySources: { maturityMode: 'override' },
+    }),
+  };
+  const collection = { findOne: () => existingContainer, update: vi.fn() };
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: { maturityMode: 'mature' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: {},
+      updatePolicySources: { maturityMode: 'env' },
+    }),
+    { authoritativeEmptyOverrides: true },
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({});
+  expect(updated.updatePolicy).toEqual({ maturityMode: 'mature' });
+  expect(updated.updatePolicySources).toEqual({ maturityMode: 'env' });
+});
+
+test('updateContainer should normalize an authoritative undefined override layer to empty', () => {
   const existingContainer = {
     data: createContainerFixture({
       updatePolicy: { maturityMode: 'all' },
@@ -403,10 +456,98 @@ test('updateContainer should honor an explicit empty override layer', () => {
       updatePolicyOverrides: undefined,
       updatePolicySources: { maturityMode: 'env' },
     }),
+    { authoritativeEmptyOverrides: true },
   );
 
   expect(updated.updatePolicyOverrides).toEqual({});
   expect(updated.updatePolicy).toEqual({ maturityMode: 'mature' });
+  expect(updated.updatePolicySources).toEqual({ maturityMode: 'env' });
+});
+
+test('updateContainer should honor a non-empty incoming override layer without an authority flag', () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updatePolicy: { maturityMode: 'all', maturityMinAgeDays: 7 },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: {},
+      },
+      updatePolicyOverrides: { maturityMode: 'all' },
+      updatePolicySources: {
+        maturityMode: 'override',
+        maturityMinAgeDays: 'env',
+      },
+    }),
+  };
+  const collection = { findOne: () => existingContainer, update: vi.fn() };
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 21 },
+      updatePolicyDeclarative: {
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: {},
+      },
+      updatePolicyOverrides: { maturityMinAgeDays: 21 },
+      updatePolicySources: {
+        maturityMode: 'env',
+        maturityMinAgeDays: 'override',
+      },
+    }),
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({ maturityMinAgeDays: 21 });
+  expect(updated.updatePolicy).toEqual({ maturityMode: 'mature', maturityMinAgeDays: 21 });
+  expect(updated.updatePolicySources).toEqual({
+    maturityMode: 'env',
+    maturityMinAgeDays: 'override',
+  });
+});
+
+test('updateContainer should preserve overrides when an empty layer omits declarative policy', () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updatePolicy: { maturityMode: 'all' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: { maturityMode: 'all' },
+      updatePolicySources: { maturityMode: 'override' },
+    }),
+  };
+  const collection = { findOne: () => existingContainer, update: vi.fn() };
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicyOverrides: {},
+    }),
+  );
+
+  expect(updated.updatePolicyDeclarative).toEqual({
+    env: { maturityMode: 'mature' },
+    label: {},
+  });
+  expect(updated.updatePolicyOverrides).toEqual({ maturityMode: 'all' });
+  expect(updated.updatePolicy).toEqual({ maturityMode: 'all' });
+  expect(updated.updatePolicySources).toEqual({ maturityMode: 'override' });
+});
+
+test('updateContainer should keep an empty override layer on the first write', () => {
+  const collection = createFilterableCollection([]);
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: { maturityMode: 'mature' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: {},
+      updatePolicySources: { maturityMode: 'env' },
+    }),
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({});
+  expect(updated.updatePolicy).toEqual({ maturityMode: 'mature' });
+  expect(updated.updatePolicySources).toEqual({ maturityMode: 'env' });
 });
 
 test('updateContainer should resolve a declarative policy without a current stored container', () => {

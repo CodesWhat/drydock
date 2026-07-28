@@ -642,6 +642,24 @@ describe('api/container/update-policy', () => {
       });
     });
 
+    test('passes authoritative empty override intent when an action clears the last override', () => {
+      const harness = createLayeredHarness({
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturityMinAgeDays: 7,
+          snoozeUntil: '2030-01-01T00:00:00.000Z',
+        },
+        updatePolicyOverrides: { snoozeUntil: '2030-01-01T00:00:00.000Z' },
+      });
+
+      callPatchContainerUpdatePolicy(harness.handlers, { action: 'unsnooze' });
+
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ updatePolicyOverrides: {} }),
+        { authoritativeEmptyOverrides: true },
+      );
+    });
+
     test('supports layered clear, snooze, unsnooze, maturity-clear, and whole revert actions', () => {
       const clearSkips = createLayeredHarness();
       callPatchContainerUpdatePolicy(clearSkips.handlers, { action: 'clear-skips' });

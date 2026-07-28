@@ -3768,6 +3768,159 @@ describe('AgentClient', () => {
       expect(result).toBe(report);
     });
 
+    test('preserves controller-owned maturity overrides when an agent recheck reports an empty override layer (#565)', async () => {
+      const controllerOverrides = {
+        maturityMode: 'mature',
+        maturityMinAgeDays: 5,
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'test',
+        updateAvailable: false,
+        updatePolicy: controllerOverrides,
+        updatePolicyDeclarative: { env: {}, label: {} },
+        updatePolicyOverrides: controllerOverrides,
+        updatePolicySources: {
+          maturityMode: 'override',
+          maturityMinAgeDays: 'override',
+        },
+      });
+      storeContainer.updateContainer.mockImplementation((container) => container);
+      const report = {
+        container: {
+          id: 'c1',
+          name: 'test',
+          updateAvailable: false,
+          updatePolicy: undefined,
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: {},
+          updatePolicySources: {},
+        },
+      };
+      axios.post.mockResolvedValue({ data: report });
+
+      const result = await client.watchContainer('docker', 'local', {
+        id: 'c1',
+        name: 'test',
+      });
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updatePolicy: controllerOverrides,
+          updatePolicyOverrides: controllerOverrides,
+          updatePolicySources: {
+            maturityMode: 'override',
+            maturityMinAgeDays: 'override',
+          },
+        }),
+      );
+      expect(result.container).toMatchObject({
+        updatePolicy: controllerOverrides,
+        updatePolicyOverrides: controllerOverrides,
+      });
+    });
+
+    test('preserves controller-owned skip and snooze overrides when an agent report has an empty override layer (#565)', async () => {
+      const controllerOverrides = {
+        skipTags: ['beta'],
+        skipDigests: ['sha256:abc'],
+        snoozeUntil: '2099-01-01T00:00:00.000Z',
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'test',
+        updateAvailable: false,
+        updatePolicy: controllerOverrides,
+        updatePolicyDeclarative: { env: {}, label: {} },
+        updatePolicyOverrides: controllerOverrides,
+        updatePolicySources: {
+          skipTags: 'override',
+          skipDigests: 'override',
+        },
+      });
+      storeContainer.updateContainer.mockImplementation((container) => container);
+      axios.post.mockResolvedValue({
+        data: {
+          container: {
+            id: 'c1',
+            name: 'test',
+            updateAvailable: false,
+            updatePolicy: undefined,
+            updatePolicyDeclarative: { env: {}, label: {} },
+            updatePolicyOverrides: {},
+            updatePolicySources: {},
+          },
+        },
+      });
+
+      const result = await client.watchContainer('docker', 'local', {
+        id: 'c1',
+        name: 'test',
+      });
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updatePolicy: controllerOverrides,
+          updatePolicyOverrides: controllerOverrides,
+          updatePolicySources: {
+            skipTags: 'override',
+            skipDigests: 'override',
+          },
+        }),
+      );
+      expect(result.container).toMatchObject({
+        updatePolicy: controllerOverrides,
+        updatePolicyOverrides: controllerOverrides,
+      });
+    });
+
+    test('keeps cleared controller overrides empty when an agent report carries stale values (#565)', async () => {
+      const staleOverrides = {
+        skipTags: ['beta'],
+        snoozeUntil: '2099-01-01T00:00:00.000Z',
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'test',
+        updateAvailable: false,
+        updatePolicy: { skipTags: ['stable'] },
+        updatePolicyDeclarative: { env: { skipTags: ['stable'] }, label: {} },
+        updatePolicyOverrides: {},
+        updatePolicySources: { skipTags: 'env' },
+      });
+      storeContainer.updateContainer.mockImplementation((container) => container);
+      axios.post.mockResolvedValue({
+        data: {
+          container: {
+            id: 'c1',
+            name: 'test',
+            updateAvailable: false,
+            updatePolicy: staleOverrides,
+            updatePolicyDeclarative: { env: { skipTags: ['stable'] }, label: {} },
+            updatePolicyOverrides: staleOverrides,
+            updatePolicySources: { skipTags: 'override' },
+          },
+        },
+      });
+
+      const result = await client.watchContainer('docker', 'local', {
+        id: 'c1',
+        name: 'test',
+      });
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updatePolicy: { skipTags: ['stable'] },
+          updatePolicyOverrides: {},
+          updatePolicySources: { skipTags: 'env' },
+        }),
+      );
+      expect(result.container).toMatchObject({
+        updatePolicy: { skipTags: ['stable'] },
+        updatePolicyOverrides: {},
+      });
+    });
+
     test('should throw on failure', async () => {
       axios.post.mockRejectedValue(new Error('watch failed'));
       await expect(
