@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Auto-update no longer stops when the update-available notification rule is scoped to specific channels** ([#623](https://github.com/CodesWhat/drydock/issues/623)). Action triggers (`docker`, `dockercompose`, `command`) were gated by the same trigger allow-list on the `update-available` notification rule that routes messages to notification channels — but action-trigger ids are deliberately barred from that list by the API validator, the UI picker, and the documented rule model, so the moment any notification trigger was assigned to the rule, every action trigger (local and agent-hosted alike) silently failed the membership check with `excluded-from-allow-list` and auto-update stopped fleet-wide, with only a debug log as evidence. Action-category triggers are now exempt from the allow-list membership check in `getUpdateAvailableAutoTriggerDispatchDecision` (`app/triggers/providers/Trigger.ts`), mirroring the exemption the lifecycle-notification path has always had; disabling the rule itself still acts as the global kill switch. Present since the rule allow-list landed in v1.6.0-rc.1.
+
 ## [1.6.0-rc.7] — 2026-07-26
 
 ### Changed
