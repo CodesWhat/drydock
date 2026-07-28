@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.8] — 2026-07-28
+
 ### Fixed
 
 - **Auto-update no longer stops when the update-available notification rule is scoped to specific channels** ([#623](https://github.com/CodesWhat/drydock/issues/623)). Action triggers (`docker`, `dockercompose`, `command`) were gated by the same trigger allow-list on the `update-available` notification rule that routes messages to notification channels — but action-trigger ids are deliberately barred from that list by the API validator, the UI picker, and the documented rule model, so the moment any notification trigger was assigned to the rule, every action trigger (local and agent-hosted alike) silently failed the membership check with `excluded-from-allow-list` and auto-update stopped fleet-wide, with only a debug log as evidence. Action-category triggers are now exempt from the allow-list membership check in `getUpdateAvailableAutoTriggerDispatchDecision` (`app/triggers/providers/Trigger.ts`), mirroring the exemption the lifecycle-notification path has always had; disabling the rule itself still acts as the global kill switch. Present since the rule allow-list landed in v1.6.0-rc.1.
@@ -2262,7 +2264,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.7...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.8...HEAD
+[1.6.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.7...v1.6.0-rc.8
 [1.6.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.6...v1.6.0-rc.7
 [1.6.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.5...v1.6.0-rc.6
 [1.6.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.4...v1.6.0-rc.5
