@@ -1022,6 +1022,16 @@ function stashUpdatePolicyForReplacement(containerRaw) {
 }
 
 /**
+ * #565: a present-but-empty updatePolicyOverrides layer is watcher/agent normalization, not
+ * controller intent, and must never replace stored overrides. Only a non-empty layer — or an
+ * empty one from an explicitly authoritative caller (the update-policy PATCH handler clearing
+ * the last override) — carries intent.
+ */
+function isAuthoritativeOverrideLayer(overrides, authoritativeEmptyOverrides = false) {
+  return authoritativeEmptyOverrides || Object.keys(overrides ?? {}).length > 0;
+}
+
+/**
  * #496: restore a retained updatePolicy onto a replacement container. The entry is consumed
  * either way, so a stale policy can never attach to a later, unrelated container.
  */
@@ -1038,13 +1048,9 @@ function restoreRetainedUpdatePolicy(container) {
   if (entry.expiresAt <= Date.now()) {
     return;
   }
-  // A non-empty incoming controller layer is authoritative. Watcher normalization also stamps
-  // updatePolicyOverrides={} on fresh declarative data; that empty layer carries no controller
-  // intent and must not discard the retained overrides from the container being replaced.
-  if (
-    container.updatePolicyOverrides !== undefined &&
-    Object.keys(container.updatePolicyOverrides).length > 0
-  ) {
+  // A non-empty incoming controller layer is authoritative and must not be replaced; an empty
+  // one must not discard the retained overrides from the container being replaced.
+  if (isAuthoritativeOverrideLayer(container.updatePolicyOverrides)) {
     return;
   }
   if (container.updatePolicyDeclarative !== undefined) {
@@ -1139,15 +1145,15 @@ export function updateContainer(
 ) {
   const hasUpdatePolicy = Object.hasOwn(container, 'updatePolicy');
   const hasUpdatePolicyDeclarative = Object.hasOwn(container, 'updatePolicyDeclarative');
-  // #565: a present-but-empty updatePolicyOverrides is watcher/agent normalization, not
-  // controller intent, and must not clear stored overrides — mirrors the rule in
-  // restoreRetainedUpdatePolicy above. Only an authoritative caller (the update-policy PATCH
-  // handler) may clear overrides with an empty layer, signaled via options.authoritativeEmptyOverrides.
-  const incomingOverridesPresent = Object.hasOwn(container, 'updatePolicyOverrides');
+  // #565: an incoming override layer only participates in the merge when it carries controller
+  // intent (see isAuthoritativeOverrideLayer); the PATCH handler signals a deliberate clear via
+  // options.authoritativeEmptyOverrides.
   const hasUpdatePolicyOverrides =
-    incomingOverridesPresent &&
-    (options.authoritativeEmptyOverrides === true ||
-      Object.keys(container.updatePolicyOverrides ?? {}).length > 0);
+    Object.hasOwn(container, 'updatePolicyOverrides') &&
+    isAuthoritativeOverrideLayer(
+      container.updatePolicyOverrides,
+      options.authoritativeEmptyOverrides === true,
+    );
   const hasUpdateRollback = Object.hasOwn(container, 'updateRollback');
   const hasSecurity = Object.hasOwn(container, 'security');
   const hasDetails = Object.hasOwn(container, 'details');
