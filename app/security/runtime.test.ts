@@ -220,33 +220,33 @@ test('getSecurityRuntimeStatus should report missing trivy command', async () =>
   ]);
 });
 
-test.each([
-  'EACCES',
-  'EPERM',
-])('getSecurityRuntimeStatus should report scanner command as unavailable when exec returns %s', async (errorCode) => {
-  mockGetSecurityConfiguration.mockReturnValue({
-    ...createEnabledConfiguration(),
-    signature: {
-      ...createEnabledConfiguration().signature,
-      verify: false,
-    },
-  });
-  const execFileMock = vi.fn((_command, _args, _options, callback) => {
-    const error = new Error('permission denied') as NodeJS.ErrnoException;
-    error.code = errorCode;
-    callback(error, '', '');
-    return { exitCode: 1 };
-  });
-  childProcessControl.execFileImpl = execFileMock;
+test.each(['EACCES', 'EPERM'])(
+  'getSecurityRuntimeStatus should report scanner command as unavailable when exec returns %s',
+  async (errorCode) => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      signature: {
+        ...createEnabledConfiguration().signature,
+        verify: false,
+      },
+    });
+    const execFileMock = vi.fn((_command, _args, _options, callback) => {
+      const error = new Error('permission denied') as NodeJS.ErrnoException;
+      error.code = errorCode;
+      callback(error, '', '');
+      return { exitCode: 1 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
 
-  const status = await getSecurityRuntimeStatus();
+    const status = await getSecurityRuntimeStatus();
 
-  expect(status.ready).toBe(false);
-  expect(status.scanner.status).toBe('missing');
-  expect(status.scanner.commandAvailable).toBe(false);
-  expect(status.scanner.message).toContain('not available');
-  expect(status.requirements).toContain('Install trivy (configured command: "trivy")');
-});
+    expect(status.ready).toBe(false);
+    expect(status.scanner.status).toBe('missing');
+    expect(status.scanner.commandAvailable).toBe(false);
+    expect(status.scanner.message).toContain('not available');
+    expect(status.requirements).toContain('Install trivy (configured command: "trivy")');
+  },
+);
 
 test('getSecurityRuntimeStatus should report disabled scanner when not configured', async () => {
   mockGetSecurityConfiguration.mockReturnValue({
@@ -451,24 +451,27 @@ test('getSecurityRuntimeStatus explains missing Docker scanner and SBOM assets',
 test.each([
   [new Error('Docker daemon unavailable'), 'Docker daemon unavailable'],
   ['socket closed', 'Docker scanner runtime is unavailable'],
-])('getSecurityRuntimeStatus normalizes Docker runtime status failures', async (failure, message) => {
-  mockGetSecurityConfiguration.mockReturnValue({
-    ...createEnabledConfiguration(),
-    scanner: 'grype',
-    backend: 'docker',
-    signature: { ...createEnabledConfiguration().signature, verify: false },
-    sbom: { enabled: true, formats: ['spdx-json'], generator: 'syft' },
-  });
-  mockScannerAssetsStatus.mockRejectedValue(failure);
+])(
+  'getSecurityRuntimeStatus normalizes Docker runtime status failures',
+  async (failure, message) => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scanner: 'grype',
+      backend: 'docker',
+      signature: { ...createEnabledConfiguration().signature, verify: false },
+      sbom: { enabled: true, formats: ['spdx-json'], generator: 'syft' },
+    });
+    mockScannerAssetsStatus.mockRejectedValue(failure);
 
-  const status = await getSecurityRuntimeStatus();
+    const status = await getSecurityRuntimeStatus();
 
-  expect(status.ready).toBe(false);
-  expect(status.providers).toEqual([
-    expect.objectContaining({ provider: 'grype', role: 'scanner', message }),
-    expect.objectContaining({ provider: 'syft', role: 'sbom', message }),
-  ]);
-});
+    expect(status.ready).toBe(false);
+    expect(status.providers).toEqual([
+      expect.objectContaining({ provider: 'grype', role: 'scanner', message }),
+      expect.objectContaining({ provider: 'syft', role: 'sbom', message }),
+    ]);
+  },
+);
 
 test('getScannerAssetManager returns the default runtime manager', () => {
   expect(getScannerAssetManager().status).toBe(mockScannerAssetsStatus);
@@ -719,30 +722,30 @@ test('getSecurityRuntimeStatus should reject relative signature command paths', 
   expect(status.signature.message).toContain('invalid');
 });
 
-test.each([
-  'EACCES',
-  'EPERM',
-])('getSecurityRuntimeStatus should report signature command as unavailable when exec returns %s', async (errorCode) => {
-  const execFileMock = vi.fn((command, _args, _options, callback) => {
-    if (command === 'trivy') {
-      callback(null, 'trivy 0.1.0', '');
-      return { exitCode: 0 };
-    }
-    const error = new Error('permission denied') as NodeJS.ErrnoException;
-    error.code = errorCode;
-    callback(error, '', '');
-    return { exitCode: 1 };
-  });
-  childProcessControl.execFileImpl = execFileMock;
+test.each(['EACCES', 'EPERM'])(
+  'getSecurityRuntimeStatus should report signature command as unavailable when exec returns %s',
+  async (errorCode) => {
+    const execFileMock = vi.fn((command, _args, _options, callback) => {
+      if (command === 'trivy') {
+        callback(null, 'trivy 0.1.0', '');
+        return { exitCode: 0 };
+      }
+      const error = new Error('permission denied') as NodeJS.ErrnoException;
+      error.code = errorCode;
+      callback(error, '', '');
+      return { exitCode: 1 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
 
-  const status = await getSecurityRuntimeStatus();
+    const status = await getSecurityRuntimeStatus();
 
-  expect(status.ready).toBe(false);
-  expect(status.signature.status).toBe('missing');
-  expect(status.signature.commandAvailable).toBe(false);
-  expect(status.signature.message).toContain('not available');
-  expect(status.requirements).toContain('Install cosign (configured command: "cosign")');
-});
+    expect(status.ready).toBe(false);
+    expect(status.signature.status).toBe('missing');
+    expect(status.signature.commandAvailable).toBe(false);
+    expect(status.signature.message).toContain('not available');
+    expect(status.requirements).toContain('Install cosign (configured command: "cosign")');
+  },
+);
 
 test('getSecurityRuntimeStatus should report scanner command as unavailable when exec returns ETIMEDOUT', async () => {
   mockGetSecurityConfiguration.mockReturnValue({

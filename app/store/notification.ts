@@ -60,7 +60,8 @@ export type NotificationRuleDispatchReason =
   | 'allow-all-when-empty'
   | 'empty-trigger-list'
   | 'matched-allow-list'
-  | 'excluded-from-allow-list';
+  | 'excluded-from-allow-list'
+  | 'action-trigger-exempt-from-allow-list';
 
 export interface NotificationRuleDispatchDecision {
   enabled: boolean;

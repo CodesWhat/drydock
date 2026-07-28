@@ -414,26 +414,29 @@ describe('deriveUpdateStatus', () => {
     ['no-update-trigger-configured', 'hard', 'danger', 'external'],
     ['self-update-unavailable', 'hard', 'danger', 'external'],
     ['maintenance-window-closed', 'soft', 'warning', 'external'],
-  ] as const)('maps %s to a localized presentation and safe action', (reason, severity, tone, actionKind) => {
-    const status = deriveUpdateStatus(
-      input({
-        container: {
-          id: 'container-1',
-          name: 'nginx',
-          newTag: '1.2.3',
-          updateEligibility: eligibility([
-            blocker({ reason, severity, details: { triggerId: 'docker.local' } }),
-          ]),
-        },
-      }),
-    );
-    const condition = status.conditions[0];
+  ] as const)(
+    'maps %s to a localized presentation and safe action',
+    (reason, severity, tone, actionKind) => {
+      const status = deriveUpdateStatus(
+        input({
+          container: {
+            id: 'container-1',
+            name: 'nginx',
+            newTag: '1.2.3',
+            updateEligibility: eligibility([
+              blocker({ reason, severity, details: { triggerId: 'docker.local' } }),
+            ]),
+          },
+        }),
+      );
+      const condition = status.conditions[0];
 
-    expect(condition.heading).not.toBe(reason);
-    expect(condition.icon).toBeTruthy();
-    expect(condition.tone).toBe(tone);
-    expect(condition.action?.kind).toBe(actionKind);
-  });
+      expect(condition.heading).not.toBe(reason);
+      expect(condition.icon).toBeTruthy();
+      expect(condition.tone).toBe(tone);
+      expect(condition.action?.kind).toBe(actionKind);
+    },
+  );
 
   it('composes the maturity condition body from a trusted-publishedAt clock (#display-honesty)', () => {
     const clockStartAt = '2026-07-18T00:00:00.000Z';

@@ -313,34 +313,37 @@ describe('Group Router', () => {
       ['dd.group', 'constructor'],
       ['com.docker.compose.project', 'hasOwnProperty'],
       ['com.docker.stack.namespace', '__proto__'],
-    ])('should group %s value %s without colliding with object prototype keys', (label, groupName) => {
-      mockGetContainers.mockReturnValue([
-        makeContainer('c1', 'service', { [label]: groupName }, true),
-      ]);
+    ])(
+      'should group %s value %s without colliding with object prototype keys',
+      (label, groupName) => {
+        mockGetContainers.mockReturnValue([
+          makeContainer('c1', 'service', { [label]: groupName }, true),
+        ]);
 
-      const handler = getHandler('get', '/groups');
-      const req = createMockRequest();
-      const res = createMockResponse();
+        const handler = getHandler('get', '/groups');
+        const req = createMockRequest();
+        const res = createMockResponse();
 
-      expect(() => handler(req, res)).not.toThrow();
+        expect(() => handler(req, res)).not.toThrow();
 
-      expect(res.status).toHaveBeenCalledWith(200);
-      const { data: groups, total } = getGroupsPayload(res);
-      expect(total).toBe(1);
-      expect(groups).toHaveLength(1);
-      expect(groups[0]).toEqual({
-        name: groupName,
-        containers: [
-          {
-            id: 'c1',
-            name: 'service',
-            displayName: 'service',
-            updateAvailable: true,
-          },
-        ],
-        containerCount: 1,
-        updatesAvailable: 1,
-      });
-    });
+        expect(res.status).toHaveBeenCalledWith(200);
+        const { data: groups, total } = getGroupsPayload(res);
+        expect(total).toBe(1);
+        expect(groups).toHaveLength(1);
+        expect(groups[0]).toEqual({
+          name: groupName,
+          containers: [
+            {
+              id: 'c1',
+              name: 'service',
+              displayName: 'service',
+              updateAvailable: true,
+            },
+          ],
+          containerCount: 1,
+          updatesAvailable: 1,
+        });
+      },
+    );
   });
 });

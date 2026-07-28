@@ -42,14 +42,12 @@ describe('isHassInstallPayload', () => {
     expect(isHassInstallPayload(Buffer.from('install'))).toBe(true);
   });
 
-  test.each([
-    'update',
-    '',
-    'INSTALL',
-    'installer',
-  ])('returns false for a non-matching payload %j', (payload) => {
-    expect(isHassInstallPayload(payload)).toBe(false);
-  });
+  test.each(['update', '', 'INSTALL', 'installer'])(
+    'returns false for a non-matching payload %j',
+    (payload) => {
+      expect(isHassInstallPayload(payload)).toBe(false);
+    },
+  );
 
   test('trims surrounding whitespace/newlines before comparing', () => {
     expect(isHassInstallPayload('  install\n')).toBe(true);

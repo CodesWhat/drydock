@@ -481,25 +481,25 @@ describe('api/container/security', () => {
       });
     });
 
-    test.each([
-      {},
-      undefined,
-    ])('returns 500 when sbom generation succeeds without requested document (%j)', async (documents) => {
-      const harness = createHarness();
-      harness.deps.generateImageSbom.mockResolvedValueOnce(
-        createSbomResult(CURRENT_IMAGE, {
-          status: 'generated',
-          documents,
-        }),
-      );
+    test.each([{}, undefined])(
+      'returns 500 when sbom generation succeeds without requested document (%j)',
+      async (documents) => {
+        const harness = createHarness();
+        harness.deps.generateImageSbom.mockResolvedValueOnce(
+          createSbomResult(CURRENT_IMAGE, {
+            status: 'generated',
+            documents,
+          }),
+        );
 
-      const res = await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+        const res = await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
 
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'Error generating SBOM',
-      });
-    });
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'Error generating SBOM',
+        });
+      },
+    );
 
     test('returns 500 when sbom generation throws', async () => {
       const harness = createHarness();
@@ -1046,33 +1046,35 @@ describe('api/container/security', () => {
       expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
     });
 
-    test.each([
-      'grype',
-      'both',
-    ])('does not populate the Trivy digest cache for %s on-demand scans', async (scanner) => {
-      const harness = createHarness({
-        container: createContainer({
-          image: {
-            registry: { name: 'hub', url: 'my-registry' },
-            name: 'test/app',
-            tag: { value: '1.2.3' },
-            digest: { watch: true, value: 'sha256:abc123' },
+    test.each(['grype', 'both'])(
+      'does not populate the Trivy digest cache for %s on-demand scans',
+      async (scanner) => {
+        const harness = createHarness({
+          container: createContainer({
+            image: {
+              registry: { name: 'hub', url: 'my-registry' },
+              name: 'test/app',
+              tag: { value: '1.2.3' },
+              digest: { watch: true, value: 'sha256:abc123' },
+            },
+          }),
+          securityConfiguration: {
+            enabled: true,
+            scanner,
+            signature: { verify: false },
+            sbom: { enabled: false, formats: [] },
           },
-        }),
-        securityConfiguration: {
-          enabled: true,
-          scanner,
-          signature: { verify: false },
-          sbom: { enabled: false, formats: [] },
-        },
-      });
-      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(createScanResult({ scanner }));
+        });
+        harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(
+          createScanResult({ scanner }),
+        );
 
-      await callScanContainer(harness.handlers);
+        await callScanContainer(harness.handlers);
 
-      expect(harness.deps.getTrivyDatabaseStatus).not.toHaveBeenCalled();
-      expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
-    });
+        expect(harness.deps.getTrivyDatabaseStatus).not.toHaveBeenCalled();
+        expect(harness.deps.updateDigestScanCache).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('concurrent write-back safety', () => {

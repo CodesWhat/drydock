@@ -84,16 +84,15 @@ describe('preferences router', () => {
     assertContract('get', res);
   });
 
-  it.each([
-    undefined,
-    { username: 'anonymous' },
-    { username: '   ' },
-  ])('rejects anonymous GET before store access', (user) => {
-    const res = createMockResponse();
-    handler('get')({ user }, res);
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(getStored).not.toHaveBeenCalled();
-  });
+  it.each([undefined, { username: 'anonymous' }, { username: '   ' }])(
+    'rejects anonymous GET before store access',
+    (user) => {
+      const res = createMockResponse();
+      handler('get')({ user }, res);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(getStored).not.toHaveBeenCalled();
+    },
+  );
 
   it('replaces preferences, broadcasts, and returns an OpenAPI-valid response', () => {
     const res = createMockResponse();
@@ -127,19 +126,18 @@ describe('preferences router', () => {
     expect(broadcast).not.toHaveBeenCalled();
   });
 
-  it.each([
-    undefined,
-    {},
-    { apiVersion: 1, schemaVersion: 11 },
-  ])('returns 400 for malformed payload %#', (body) => {
-    const res = createMockResponse();
-    handler('patch')({ user: { username: 'alice' }, body }, res);
-    expect(res.status).toHaveBeenCalledWith(body?.apiVersion === undefined ? 409 : 400);
-    if (body?.apiVersion !== undefined) {
-      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid request parameters' });
-    }
-    expect(replaceStored).not.toHaveBeenCalled();
-  });
+  it.each([undefined, {}, { apiVersion: 1, schemaVersion: 11 }])(
+    'returns 400 for malformed payload %#',
+    (body) => {
+      const res = createMockResponse();
+      handler('patch')({ user: { username: 'alice' }, body }, res);
+      expect(res.status).toHaveBeenCalledWith(body?.apiVersion === undefined ? 409 : 400);
+      if (body?.apiVersion !== undefined) {
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid request parameters' });
+      }
+      expect(replaceStored).not.toHaveBeenCalled();
+    },
+  );
 
   it('normalizes a falsy request body before Joi validation', () => {
     Object.defineProperty(Number.prototype, 'apiVersion', {

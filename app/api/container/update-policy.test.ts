@@ -498,23 +498,26 @@ describe('api/container/update-policy', () => {
     test.each([
       ['tag', '2.0.0', 'skipTags'],
       ['digest', 'sha256:new', 'skipDigests'],
-    ] as const)('skips the current %s using the effective list as the override base', (kind, value, field) => {
-      const harness = createLayeredHarness({
-        updateKind: { kind, remoteValue: value },
-        updatePolicy: {
-          maturityMode: 'mature',
-          maturityMinAgeDays: 7,
-          [field]: ['existing'],
-        },
-      });
+    ] as const)(
+      'skips the current %s using the effective list as the override base',
+      (kind, value, field) => {
+        const harness = createLayeredHarness({
+          updateKind: { kind, remoteValue: value },
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturityMinAgeDays: 7,
+            [field]: ['existing'],
+          },
+        });
 
-      const res = callPatchContainerUpdatePolicy(harness.handlers, { action: 'skip-current' });
+        const res = callPatchContainerUpdatePolicy(harness.handlers, { action: 'skip-current' });
 
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(
-        harness.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides[field],
-      ).toEqual(['existing', value]);
-    });
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(
+          harness.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides[field],
+        ).toEqual(['existing', value]);
+      },
+    );
 
     test('skips the current value when neither effective nor override skip lists exist', () => {
       const harness = createLayeredHarness({
@@ -637,6 +640,24 @@ describe('api/container/update-policy', () => {
         skipTags: 'override',
         skipDigests: 'override',
       });
+    });
+
+    test('passes authoritative empty override intent when an action clears the last override', () => {
+      const harness = createLayeredHarness({
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturityMinAgeDays: 7,
+          snoozeUntil: '2030-01-01T00:00:00.000Z',
+        },
+        updatePolicyOverrides: { snoozeUntil: '2030-01-01T00:00:00.000Z' },
+      });
+
+      callPatchContainerUpdatePolicy(harness.handlers, { action: 'unsnooze' });
+
+      expect(harness.storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ updatePolicyOverrides: {} }),
+        { authoritativeEmptyOverrides: true },
+      );
     });
 
     test('supports layered clear, snooze, unsnooze, maturity-clear, and whole revert actions', () => {

@@ -91,25 +91,25 @@ test('validateConfiguration should reject removed clientId alias', () => {
   ).toThrow(/clientId.*not allowed/i);
 });
 
-test.each([
-  'SCRAM-SHA-256',
-  'SCRAM-SHA-512',
-])('validateConfiguration should accept %s authentication', (authType) => {
-  const validatedConfiguration = kafka.validateConfiguration({
-    brokers: 'broker1:9000, broker2:9000',
-    authentication: {
+test.each(['SCRAM-SHA-256', 'SCRAM-SHA-512'])(
+  'validateConfiguration should accept %s authentication',
+  (authType) => {
+    const validatedConfiguration = kafka.validateConfiguration({
+      brokers: 'broker1:9000, broker2:9000',
+      authentication: {
+        user: 'user',
+        password: 'password',
+        type: authType,
+      },
+    });
+
+    expect(validatedConfiguration.authentication).toStrictEqual({
       user: 'user',
       password: 'password',
       type: authType,
-    },
-  });
-
-  expect(validatedConfiguration.authentication).toStrictEqual({
-    user: 'user',
-    password: 'password',
-    type: authType,
-  });
-});
+    });
+  },
+);
 
 test('validateConfiguration should reject unsupported authentication type', async () => {
   expect(() => {

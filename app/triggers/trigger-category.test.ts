@@ -9,24 +9,19 @@ function buildContainer(overrides: Partial<Container> = {}): Container {
 }
 
 describe('getTriggerCategoryForType', () => {
-  test.each([
-    'docker',
-    'dockercompose',
-    'command',
-  ])('classifies %s as an action trigger', (type) => {
-    expect(getTriggerCategoryForType(type)).toBe('action');
-  });
+  test.each(['docker', 'dockercompose', 'command'])(
+    'classifies %s as an action trigger',
+    (type) => {
+      expect(getTriggerCategoryForType(type)).toBe('action');
+    },
+  );
 
-  test.each([
-    'slack',
-    'smtp',
-    'ntfy',
-    'mqtt',
-    'discord',
-    'http',
-  ])('classifies %s as a notification trigger', (type) => {
-    expect(getTriggerCategoryForType(type)).toBe('notification');
-  });
+  test.each(['slack', 'smtp', 'ntfy', 'mqtt', 'discord', 'http'])(
+    'classifies %s as a notification trigger',
+    (type) => {
+      expect(getTriggerCategoryForType(type)).toBe('notification');
+    },
+  );
 
   test('is case insensitive', () => {
     expect(getTriggerCategoryForType('DockerCompose')).toBe('action');

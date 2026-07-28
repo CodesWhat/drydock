@@ -238,7 +238,7 @@ const bulkSecurityHandlers = createBulkSecurityHandlers({
     getAllContainers: () => storeContainer.getContainers({}),
     getContainer: (id) => storeContainer.getContainer(id),
     getContainerRaw: (id) => storeContainer.getContainerRaw(id),
-    updateContainer: (c) => storeContainer.updateContainer(c),
+    updateContainer: (c, options?) => storeContainer.updateContainer(c, options),
   },
   getSecurityConfiguration,
   scanImageForVulnerabilities,

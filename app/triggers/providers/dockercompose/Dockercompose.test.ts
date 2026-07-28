@@ -4147,35 +4147,35 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
-  test.each([
-    undefined,
-    'op-123',
-  ])('runRuntimeUpdatesForComposeMappings should ignore non-object requested runtime context (%p)', async (runtimeContext) => {
-    const container = makeContainer({
-      labels: { 'com.docker.compose.service': 'nginx' },
-    });
-    const runContainerUpdateLifecycleSpy = vi
-      .spyOn(trigger, 'runContainerUpdateLifecycle')
-      .mockResolvedValue();
+  test.each([undefined, 'op-123'])(
+    'runRuntimeUpdatesForComposeMappings should ignore non-object requested runtime context (%p)',
+    async (runtimeContext) => {
+      const container = makeContainer({
+        labels: { 'com.docker.compose.service': 'nginx' },
+      });
+      const runContainerUpdateLifecycleSpy = vi
+        .spyOn(trigger, 'runContainerUpdateLifecycle')
+        .mockResolvedValue();
 
-    await (trigger as any).runRuntimeUpdatesForComposeMappings(
-      '/opt/drydock/test/stack.yml',
-      ['/opt/drydock/test/stack.yml'],
-      makeCompose({
-        nginx: { image: 'nginx:1.0.0' },
-      }),
-      [{ container, service: 'nginx' }],
-      runtimeContext,
-    );
+      await (trigger as any).runRuntimeUpdatesForComposeMappings(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        makeCompose({
+          nginx: { image: 'nginx:1.0.0' },
+        }),
+        [{ container, service: 'nginx' }],
+        runtimeContext,
+      );
 
-    expect(runContainerUpdateLifecycleSpy).toHaveBeenCalledWith(
-      container,
-      expect.objectContaining({
-        service: 'nginx',
-        runtimeContext: undefined,
-      }),
-    );
-  });
+      expect(runContainerUpdateLifecycleSpy).toHaveBeenCalledWith(
+        container,
+        expect.objectContaining({
+          service: 'nginx',
+          runtimeContext: undefined,
+        }),
+      );
+    },
+  );
 
   test('runRuntimeUpdatesForComposeMappings should preserve requested runtime context when compose-file-once context is absent', async () => {
     const container = makeContainer({

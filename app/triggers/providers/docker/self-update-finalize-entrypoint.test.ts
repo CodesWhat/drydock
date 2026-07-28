@@ -85,7 +85,7 @@ describe('self-update-finalize entrypoint', () => {
       expect(mockHttpsRequest).not.toHaveBeenCalled();
       expect(mockHttpRequest).toHaveBeenCalledTimes(1);
       expect(
-        (capturedRequestOptions?.headers as Record<string, string>)[
+        (capturedRequestOptions!.headers as Record<string, string>)[
           SELF_UPDATE_FINALIZE_SECRET_HEADER
         ],
       ).toBe('self-update-finalize-secret');
@@ -346,7 +346,7 @@ describe('self-update-finalize entrypoint', () => {
       await new Promise((resolve) => setImmediate(resolve));
 
       expect(
-        (capturedRequestOptions?.headers as Record<string, string>)[
+        (capturedRequestOptions!.headers as Record<string, string>)[
           SELF_UPDATE_FINALIZE_SECRET_HEADER
         ],
       ).toBe('self-update-finalize-secret');

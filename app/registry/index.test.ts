@@ -281,35 +281,35 @@ test('registerRegistries should reject removed public token-only compatibility c
   expect(spyLog).not.toHaveBeenCalledWith(expect.stringContaining('Falling back to anonymous'));
 });
 
-test.each([
-  'hub',
-  'dhi',
-])('registerRegistries should not fallback %s.public when auth-only credentials are valid', async (provider) => {
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
-  registries = {
-    [provider]: {
-      public: {
-        auth: 'valid-auth-token',
+test.each(['hub', 'dhi'])(
+  'registerRegistries should not fallback %s.public when auth-only credentials are valid',
+  async (provider) => {
+    const spyLog = vi.spyOn(registry.testable_log, 'warn');
+    registries = {
+      [provider]: {
+        public: {
+          auth: 'valid-auth-token',
+        },
       },
-    },
-  };
+    };
 
-  await registry.testable_registerRegistries();
+    await registry.testable_registerRegistries();
 
-  expect(Object.keys(registry.getState().registry)).not.toContain(`${provider}.public`);
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes(
-        `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials`,
+    expect(Object.keys(registry.getState().registry)).not.toContain(`${provider}.public`);
+    expect(
+      spyLog.mock.calls.some(([message]) =>
+        `${message}`.includes(
+          `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials`,
+        ),
       ),
-    ),
-  ).toBe(false);
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes('Some registries failed to register'),
-    ),
-  ).toBe(true);
-});
+    ).toBe(false);
+    expect(
+      spyLog.mock.calls.some(([message]) =>
+        `${message}`.includes('Some registries failed to register'),
+      ),
+    ).toBe(true);
+  },
+);
 
 test('registerRegistries should register defaults when registry configuration is undefined', async () => {
   const originalGetRegistryConfigurations = mockGetRegistryConfigurations.getMockImplementation();
@@ -433,67 +433,67 @@ test('registerRegistries should keep fail-closed behavior for incomplete hub.pri
   );
 });
 
-test.each([
-  'hub',
-  'dhi',
-])('registerRegistries should not fallback %s.public when login/token auth is valid', async (provider) => {
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
-  registries = {
-    [provider]: {
-      public: {
-        login: 'valid-user',
-        token: 'valid-token',
+test.each(['hub', 'dhi'])(
+  'registerRegistries should not fallback %s.public when login/token auth is valid',
+  async (provider) => {
+    const spyLog = vi.spyOn(registry.testable_log, 'warn');
+    registries = {
+      [provider]: {
+        public: {
+          login: 'valid-user',
+          token: 'valid-token',
+        },
       },
-    },
-  };
+    };
 
-  await registry.testable_registerRegistries();
+    await registry.testable_registerRegistries();
 
-  expect(Object.keys(registry.getState().registry)).toContain(`${provider}.public`);
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes(
-        `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials`,
+    expect(Object.keys(registry.getState().registry)).toContain(`${provider}.public`);
+    expect(
+      spyLog.mock.calls.some(([message]) =>
+        `${message}`.includes(
+          `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials`,
+        ),
       ),
-    ),
-  ).toBe(false);
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes('Some registries failed to register'),
-    ),
-  ).toBe(false);
-});
+    ).toBe(false);
+    expect(
+      spyLog.mock.calls.some(([message]) =>
+        `${message}`.includes('Some registries failed to register'),
+      ),
+    ).toBe(false);
+  },
+);
 
-test.each([
-  'hub',
-  'dhi',
-])('registerRegistries should not fallback %s.public when login/password auth is valid', async (provider) => {
-  const spyLog = vi.spyOn(registry.testable_log, 'warn');
-  registries = {
-    [provider]: {
-      public: {
-        login: 'valid-user',
-        password: 'valid-password',
+test.each(['hub', 'dhi'])(
+  'registerRegistries should not fallback %s.public when login/password auth is valid',
+  async (provider) => {
+    const spyLog = vi.spyOn(registry.testable_log, 'warn');
+    registries = {
+      [provider]: {
+        public: {
+          login: 'valid-user',
+          password: 'valid-password',
+        },
       },
-    },
-  };
+    };
 
-  await registry.testable_registerRegistries();
+    await registry.testable_registerRegistries();
 
-  expect(Object.keys(registry.getState().registry)).toContain(`${provider}.public`);
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes(
-        `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials`,
+    expect(Object.keys(registry.getState().registry)).toContain(`${provider}.public`);
+    expect(
+      spyLog.mock.calls.some(([message]) =>
+        `${message}`.includes(
+          `Detected incompatible DD_REGISTRY_${provider.toUpperCase()}_PUBLIC_* token-auth credentials`,
+        ),
       ),
-    ),
-  ).toBe(false);
-  expect(
-    spyLog.mock.calls.some(([message]) =>
-      `${message}`.includes('Some registries failed to register'),
-    ),
-  ).toBe(false);
-});
+    ).toBe(false);
+    expect(
+      spyLog.mock.calls.some(([message]) =>
+        `${message}`.includes('Some registries failed to register'),
+      ),
+    ).toBe(false);
+  },
+);
 
 test('registerTriggers should register all triggers', async () => {
   triggers = {

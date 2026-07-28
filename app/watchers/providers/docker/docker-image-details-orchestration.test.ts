@@ -414,40 +414,40 @@ describe('docker image details orchestration module', () => {
     expect(result?.health).toBeUndefined();
   });
 
-  test.each([
-    true,
-    false,
-  ])('already-stored containers inspect and refresh health with watchevents=%s', async (watchevents) => {
-    const stored = {
-      id: 'container-1',
-      name: 'service',
-      displayName: 'service',
-      status: 'running',
-      health: 'healthy',
-      details: { ports: [], volumes: [], env: [] },
-      image: {
-        id: 'image-old',
-        name: 'acme/service',
-        registry: { name: 'ghcr', url: 'ghcr.io' },
-        tag: { value: 'latest', semver: false },
-        digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
-        created: '2025-01-01T00:00:00.000Z',
-      },
-    };
-    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
-    const { watcher, inspectContainer } = createWatcher({ configuration: { watchevents } });
-    inspectContainer.mockResolvedValue({ State: { Health: { Status: 'unhealthy' } } });
+  test.each([true, false])(
+    'already-stored containers inspect and refresh health with watchevents=%s',
+    async (watchevents) => {
+      const stored = {
+        id: 'container-1',
+        name: 'service',
+        displayName: 'service',
+        status: 'running',
+        health: 'healthy',
+        details: { ports: [], volumes: [], env: [] },
+        image: {
+          id: 'image-old',
+          name: 'acme/service',
+          registry: { name: 'ghcr', url: 'ghcr.io' },
+          tag: { value: 'latest', semver: false },
+          digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+          created: '2025-01-01T00:00:00.000Z',
+        },
+      };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher, inspectContainer } = createWatcher({ configuration: { watchevents } });
+      inspectContainer.mockResolvedValue({ State: { Health: { Status: 'unhealthy' } } });
 
-    const result = await addImageDetailsToContainerOrchestration(
-      watcher as any,
-      createDockerSummaryContainer(),
-      {},
-      createHelpers() as any,
-    );
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
 
-    expect(inspectContainer).toHaveBeenCalledTimes(1);
-    expect(result?.health).toBe('unhealthy');
-  });
+      expect(inspectContainer).toHaveBeenCalledTimes(1);
+      expect(result?.health).toBe('unhealthy');
+    },
+  );
 
   test('failed stored-container inspect preserves the previous health value', async () => {
     const stored = {

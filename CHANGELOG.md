@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.8] — 2026-07-28
+
+### Fixed
+
+- **Auto-update no longer stops when the update-available notification rule is scoped to specific channels** ([#623](https://github.com/CodesWhat/drydock/issues/623)). Action triggers (`docker`, `dockercompose`, `command`) were gated by the same trigger allow-list on the `update-available` notification rule that routes messages to notification channels — but action-trigger ids are deliberately barred from that list by the API validator, the UI picker, and the documented rule model, so the moment any notification trigger was assigned to the rule, every action trigger (local and agent-hosted alike) silently failed the membership check with `excluded-from-allow-list` and auto-update stopped fleet-wide, with only a debug log as evidence. Action-category triggers are now exempt from the allow-list membership check in `getUpdateAvailableAutoTriggerDispatchDecision` (`app/triggers/providers/Trigger.ts`), mirroring the exemption the lifecycle-notification path has always had; disabling the rule itself still acts as the global kill switch. Present since the rule allow-list landed in v1.6.0-rc.1.
+- **Controller-set update policy overrides no longer vanish from agent-managed containers** ([#565](https://github.com/CodesWhat/drydock/issues/565)). Remote agents resolve their own declarative (env/label) policy but never learn controller-side runtime overrides, so every container report they send carries an explicit empty override layer. The controller persisted that layer verbatim, and `updateContainer` (`app/store/container.ts`) treated any present `updatePolicyOverrides` key as authoritative — clearing maturity mode/min-age days, skip lists, and snoozes on every periodic agent sync or manual recheck. This was the settings-deletion mechanism behind #565, distinct from the soak-clock resets fixed in [#568](https://github.com/CodesWhat/drydock/pull/568) and rc.7. The controller now reapplies its stored overrides when ingesting agent reports, and the store itself encodes the rule the recreate path has had since [#497](https://github.com/CodesWhat/drydock/pull/497): an empty incoming override layer carries no controller intent and only clears stored overrides when the update-policy PATCH handler marks the write as authoritative, so deliberate clears from the UI still stick.
+
 ## [1.6.0-rc.7] — 2026-07-26
 
 ### Changed
@@ -2257,7 +2264,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.7...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.8...HEAD
+[1.6.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.7...v1.6.0-rc.8
 [1.6.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.6...v1.6.0-rc.7
 [1.6.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.5...v1.6.0-rc.6
 [1.6.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.4...v1.6.0-rc.5

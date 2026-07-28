@@ -239,60 +239,52 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test.each(
-  basicAuthProviderCases,
-)('$providerName authenticate should add Basic auth without remote token request', async ({
-  createRegistry,
-  image,
-  expectedAuthorization,
-}) => {
-  const registry = createRegistry();
+test.each(basicAuthProviderCases)(
+  '$providerName authenticate should add Basic auth without remote token request',
+  async ({ createRegistry, image, expectedAuthorization }) => {
+    const registry = createRegistry();
 
-  await expect(
-    registry.authenticate(image, {
-      url: `${image.registry.url}/${image.name}/tags/list`,
-      headers: { Accept: 'application/json' },
-    }),
-  ).resolves.toEqual(
-    expect.objectContaining({
-      headers: expect.objectContaining({
-        Accept: 'application/json',
-        Authorization: expectedAuthorization,
+    await expect(
+      registry.authenticate(image, {
+        url: `${image.registry.url}/${image.name}/tags/list`,
+        headers: { Accept: 'application/json' },
       }),
-    }),
-  );
-  expect(axios).not.toHaveBeenCalled();
-});
-
-test.each(
-  registryFailureCases,
-)('$providerName should propagate $failureName after Basic authenticate', async ({
-  createRegistry,
-  image,
-  expectedAuthorization,
-  createError,
-  expectedMessage,
-}) => {
-  const registry = createRegistry();
-  const requestUrl = `${image.registry.url}/${image.name}/tags/list`;
-  axios.mockRejectedValueOnce(createError());
-
-  await expect(
-    registry.callRegistry({
-      image,
-      url: requestUrl,
-      method: 'get',
-    }),
-  ).rejects.toThrow(expectedMessage);
-
-  expect(axios).toHaveBeenCalledWith(
-    expect.objectContaining({
-      url: requestUrl,
-      method: 'get',
-      headers: expect.objectContaining({
-        Accept: 'application/json',
-        Authorization: expectedAuthorization,
+    ).resolves.toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+          Authorization: expectedAuthorization,
+        }),
       }),
-    }),
-  );
-});
+    );
+    expect(axios).not.toHaveBeenCalled();
+  },
+);
+
+test.each(registryFailureCases)(
+  '$providerName should propagate $failureName after Basic authenticate',
+  async ({ createRegistry, image, expectedAuthorization, createError, expectedMessage }) => {
+    const registry = createRegistry();
+    const requestUrl = `${image.registry.url}/${image.name}/tags/list`;
+    axios.mockRejectedValueOnce(createError());
+
+    await expect(
+      registry.callRegistry({
+        image,
+        url: requestUrl,
+        method: 'get',
+      }),
+    ).rejects.toThrow(expectedMessage);
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: requestUrl,
+        method: 'get',
+        headers: expect.objectContaining({
+          Accept: 'application/json',
+          Authorization: expectedAuthorization,
+        }),
+      }),
+    );
+  },
+);

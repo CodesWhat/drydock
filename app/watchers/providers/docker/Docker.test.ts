@@ -3113,11 +3113,14 @@ describe('isDigestToWatch Logic', () => {
     ['true', 'my.registry', 'latest', false, true, 'label=true, non-semver'],
     ['false', 'my.registry', '1.0.0', true, false, 'label=false, semver'],
     ['false', 'my.registry', 'latest', false, false, 'label=false, non-semver'],
-  ])('should respect explicit dd.watch.digest=%s (%s)', async (labelValue, domain, tag, isSemver, expected) => {
-    const container = await setupTest({ 'dd.watch.digest': labelValue }, domain, tag, isSemver);
-    const result = await docker.addImageDetailsToContainer(container);
-    expect(result.image.digest.watch).toBe(expected);
-  });
+  ])(
+    'should respect explicit dd.watch.digest=%s (%s)',
+    async (labelValue, domain, tag, isSemver, expected) => {
+      const container = await setupTest({ 'dd.watch.digest': labelValue }, domain, tag, isSemver);
+      const result = await docker.addImageDetailsToContainer(container);
+      expect(result.image.digest.watch).toBe(expected);
+    },
+  );
 
   // Case 2: Pinned specific semver (no label) -> default true, so same-tag
   // rebuilds are detected by digest (#498).

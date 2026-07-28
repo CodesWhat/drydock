@@ -244,9 +244,11 @@ describe('DashboardGrid', () => {
     resizers[0]!.element.dispatchEvent(pointerEvent('pointerdown', { clientX: 0, clientY: 0 }));
     window.dispatchEvent(pointerEvent('pointermove', { clientX: 500, clientY: 200 }));
     window.dispatchEvent(pointerEvent('pointercancel', {}));
-    expect(
-      (wrapper.emitted('update:layout')?.at(-1)?.[0] as Array<{ w: number; h: number }>)[0],
-    ).toMatchObject({ w: 4, h: 5 });
+    const cancelledLayout = wrapper.emitted('update:layout')?.at(-1)?.[0] as Array<{
+      w: number;
+      h: number;
+    }>;
+    expect(cancelledLayout[0]).toMatchObject({ w: 4, h: 5 });
 
     resizers[1]!.element.dispatchEvent(pointerEvent('pointerdown', { clientX: 0, clientY: 0 }));
     window.dispatchEvent(pointerEvent('pointermove', { clientX: 100, clientY: 50 }));

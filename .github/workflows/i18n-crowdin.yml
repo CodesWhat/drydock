@@ -31,7 +31,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
         with:
           egress-policy: audit
 
@@ -67,6 +67,19 @@ jobs:
           echo "Translation PRs will target ${base}."
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
+      - name: Check out the integration branch so l10n_crowdin forks from it
+        env:
+          BASE: ${{ steps.base.outputs.name }}
+        run: |
+          set -euo pipefail
+          # The checkout above pinned HEAD to the triggering ref, which is main
+          # whenever a sync merge touches locale files. The crowdin action forks
+          # l10n_crowdin from HEAD, so without this switch the translation PR
+          # carries main's squash history and shows as permanently conflicting
+          # against the dev base (bit #601 and #618).
+          git fetch origin "refs/heads/${BASE}:refs/remotes/origin/${BASE}"
+          git checkout -B "${BASE}" "refs/remotes/origin/${BASE}"
 
       - uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f  # v2.16.3
         with:

@@ -75,17 +75,15 @@ describe('createDockerScannerBackend', () => {
     ).toThrow('requires a client');
   });
 
-  test.each([
-    'scanner-cache',
-    '/',
-    '/bad\0cache',
-    '/var/run/docker.sock',
-  ])('rejects unsafe cache directory %j', (cacheDir) => {
-    const { client } = createHarness();
-    expect(() => createDockerScannerBackend({ client, cacheDir })).toThrow(
-      'safe absolute provider cache directory',
-    );
-  });
+  test.each(['scanner-cache', '/', '/bad\0cache', '/var/run/docker.sock'])(
+    'rejects unsafe cache directory %j',
+    (cacheDir) => {
+      const { client } = createHarness();
+      expect(() => createDockerScannerBackend({ client, cacheDir })).toThrow(
+        'safe absolute provider cache directory',
+      );
+    },
+  );
 
   test.each([
     { hardening: { cacheTarget: 'cache' }, message: 'cacheTarget' },
@@ -755,27 +753,27 @@ describe('createDockerScannerBackend', () => {
     expect(container.remove).toHaveBeenCalledWith({ force: true });
   });
 
-  test.each([
-    new Error('stream failed'),
-    'stream failed',
-  ])('reports attached stream failures and removes the worker', async (streamFailure) => {
-    const { backend, container, demuxStream, stream } = createHarness({
-      wait: () => new Promise(() => undefined),
-    });
-    demuxStream.mockImplementationOnce(() => {
-      queueMicrotask(() => stream.emit('error', streamFailure));
-    });
+  test.each([new Error('stream failed'), 'stream failed'])(
+    'reports attached stream failures and removes the worker',
+    async (streamFailure) => {
+      const { backend, container, demuxStream, stream } = createHarness({
+        wait: () => new Promise(() => undefined),
+      });
+      demuxStream.mockImplementationOnce(() => {
+        queueMicrotask(() => stream.emit('error', streamFailure));
+      });
 
-    await expect(
-      backend.run({
-        image: PINNED_IMAGE,
-        args: ['scan'],
-        timeoutMs: 1_000,
-        maxOutputBytes: 1_024,
-      }),
-    ).rejects.toThrow('stream failed');
-    expect(container.remove).toHaveBeenCalledWith({ force: true });
-  });
+      await expect(
+        backend.run({
+          image: PINNED_IMAGE,
+          args: ['scan'],
+          timeoutMs: 1_000,
+          maxOutputBytes: 1_024,
+        }),
+      ).rejects.toThrow('stream failed');
+      expect(container.remove).toHaveBeenCalledWith({ force: true });
+    },
+  );
 
   test('rejects an invalid worker exit status', async () => {
     const { backend } = createHarness({ wait: async () => ({ StatusCode: Number.NaN }) });

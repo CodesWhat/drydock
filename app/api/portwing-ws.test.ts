@@ -1344,15 +1344,18 @@ describe('hello verification — agentName type validation (Bug 1 regression)', 
     ['boolean', true],
     ['array', ['a', 'b']],
     ['object', { evil: true }],
-  ])('rejects a %s agentName with invalid-agent-name instead of throwing', async (_label, badValue) => {
-    const ws = sendHelloWithAgentName(badValue);
-    await new Promise((r) => setTimeout(r, 0));
+  ])(
+    'rejects a %s agentName with invalid-agent-name instead of throwing',
+    async (_label, badValue) => {
+      const ws = sendHelloWithAgentName(badValue);
+      await new Promise((r) => setTimeout(r, 0));
 
-    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
-    expect(errorFrame.type).toBe('error');
-    expect(errorFrame.data.code).toBe('invalid-agent-name');
-    expect(ws.close).toHaveBeenCalledWith(1008, 'invalid-agent-name');
-  });
+      const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+      expect(errorFrame.type).toBe('error');
+      expect(errorFrame.data.code).toBe('invalid-agent-name');
+      expect(ws.close).toHaveBeenCalledWith(1008, 'invalid-agent-name');
+    },
+  );
 
   test('rejects an agentName exceeding the maximum input length', async () => {
     // MAX_AGENT_NAME_INPUT_LENGTH in portwing-ws.ts is 256; 257 chars must be rejected.

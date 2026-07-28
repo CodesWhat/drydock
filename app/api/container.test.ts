@@ -2523,14 +2523,14 @@ describe('Container Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });
 
-    test.each([
-      'docker',
-      'dockercompose',
-    ])('should return 400 for local %s trigger on remote container', async (triggerType) => {
-      storeContainer.getContainer.mockReturnValue({ id: 'c1', agent: 'remote' });
-      const res = await callRunTrigger({ id: 'c1', triggerType, triggerName: 'restart' });
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
+    test.each(['docker', 'dockercompose'])(
+      'should return 400 for local %s trigger on remote container',
+      async (triggerType) => {
+        storeContainer.getContainer.mockReturnValue({ id: 'c1', agent: 'remote' });
+        const res = await callRunTrigger({ id: 'c1', triggerType, triggerName: 'restart' });
+        expect(res.status).toHaveBeenCalledWith(400);
+      },
+    );
 
     test('should return 404 when trigger not found', async () => {
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });

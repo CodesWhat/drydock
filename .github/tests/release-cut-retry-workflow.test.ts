@@ -12,7 +12,7 @@ const changelogExtractorPath = fileURLToPath(
 const changelogPath = fileURLToPath(new URL('../../CHANGELOG.md', import.meta.url));
 const gitignorePath = fileURLToPath(new URL('../../.gitignore', import.meta.url));
 const retryAction = 'nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60';
-const metadataAction = 'docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9';
+const metadataAction = 'docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302';
 const transientRetryStepNames = [
   'Retry GHCR login',
   'Retry Docker Hub login',
