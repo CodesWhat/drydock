@@ -43,6 +43,7 @@ import {
   isTerminalContainerUpdateOperationStatus,
   type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
+import { applyUpdatePolicyOverrides, getUpdatePolicyOverrides } from '../model/update-policy.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { createConfiguredSbomStorage } from '../security/configured-sbom-storage.js';
@@ -629,6 +630,12 @@ export class AgentClient {
 
     // Save to store logic with Change Detection
     const existing = storeContainer.getContainer(container.id);
+    if (existing && container.updatePolicyDeclarative !== undefined) {
+      // The controller owns runtime overrides. Agent watcher normalization always
+      // contributes an override layer (often `{}`), but that layer only reflects
+      // the agent's local store and must not clear controller-set policy on ingest.
+      applyUpdatePolicyOverrides(container, getUpdatePolicyOverrides(existing));
+    }
     const containerReport = {
       container: container,
       changed: false,
