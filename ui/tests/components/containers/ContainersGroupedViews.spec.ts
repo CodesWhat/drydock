@@ -3035,7 +3035,7 @@ describe('ContainersGroupedViews', () => {
       expect(text).toContain('1.26');
     });
 
-    it('renders the rate-limited error pill in the version cell when registryError is set and newTag is null', async () => {
+    it('keeps the current tag in the version cell when registryError is set and newTag is null (error surfaces via the registry glyph, not a tag pill)', async () => {
       const container = makeContainer({
         id: 'c-ratelimited',
         name: 'alpha',
@@ -3063,7 +3063,8 @@ describe('ContainersGroupedViews', () => {
       mocked.context = context;
       const wrapper = mountSubject();
       const row = rowByName(wrapper, 'alpha');
-      expect(row.text()).toContain('Rate limited');
+      expect(row.text()).toContain('1.0.0');
+      expect(row.text()).not.toContain('Rate limited');
     });
 
     it('renders the human-readable currentTag for a hybrid both-halves-change row (fix #356, #370)', async () => {
