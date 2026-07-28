@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.9] — 2026-07-28
+
 ### Added
 
 - **Continuous Portwing edge log streams.** The authenticated container-log WebSocket now bridges correlated `dd:container_log_chunk`, `dd:container_log_end`, and `dd:container_log_error` frames, cancels the agent stream when the viewer closes, preserves stdout/stderr and timestamp decoding, and caps each downstream viewer at 1 MiB of buffered data. Older Portwing agents degrade to their one-shot response without breaking the viewer.
@@ -18,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **The `portwing/1.0` edge endpoint is enabled by default.** `DD_EXPERIMENTAL_PORTWING=false` remains as an emergency disable for new edge connections. OpenAPI, operator docs, and translated feature summaries now describe the stable/default-on behavior.
+
+### Fixed
+
+- **The row "Updating/Queued/Scanning" overlay chip is no longer clipped at the pinned-column edge.** The table's pinned identity-cluster cells (`sticky z-10`) painted over the full-width row overlay hosted in the first cell and cut the centered chip in half at the cluster boundary. While an overlay is active the host cell now sits above its z-10 row siblings (and still below the sticky header). ([#631](https://github.com/CodesWhat/drydock/pull/631))
+- **Registry errors no longer replace the container's tag in the tag column.** A rate-limit/auth/not-found registry error rendered a danger pill instead of the current tag (table mode) or appended one (card mode), duplicating the warning glyph + tooltip the registry column already shows. The tag cell now always shows the actual tag; the registry column glyph remains the single error flag. ([#631](https://github.com/CodesWhat/drydock/pull/631))
 
 ## [1.6.0-rc.8] — 2026-07-28
 
@@ -2273,7 +2280,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.8...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.9...HEAD
+[1.6.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.8...v1.6.0-rc.9
 [1.6.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.7...v1.6.0-rc.8
 [1.6.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.6...v1.6.0-rc.7
 [1.6.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.5...v1.6.0-rc.6
