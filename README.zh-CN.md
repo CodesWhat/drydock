@@ -251,7 +251,7 @@ docker run -d \
 | 🪝 | **生命周期挂钩** |通过容器标签执行更新前和更新后的 shell 命令，并具有每个钩子超时和失败时中止控制。 |
 | 🗂️ | **Docker Compose 更新** |通过 Docker Engine API 以及保留 YAML 的映像修补来拉取并重新创建 Compose 服务。 |
 | 🎛️ | **每个容器的政策** |正则表达式标签规则和触发路由使用`dd.*`标签；成熟度门、跳过/暂停/固定和维护窗口通过 UI/API 或观察者配置存储。 |
-| 🛰️ | **分布式代理** |通过 SSE 监控远程 Docker 主机。 NAT 后面的边缘代理使用 Ed25519 密钥身份验证通过 WebSocket 拨出，无需入站端口 (`DD_EXPERIMENTAL_PORTWING=true`)。 |
+| 🛰️ | **分布式代理** |通过 SSE 监控远程 Docker 主机。NAT 后面的 Portwing 边缘代理使用 Ed25519 密钥身份验证通过 WebSocket 主动连接，并支持连续实时日志，无需入站端口。该端点默认启用；`DD_EXPERIMENTAL_PORTWING=false` 仅用于紧急禁用。 |
 | 🖥️ | **网络仪表板** | Vue 3 UI 具有零依赖可定制小部件网格、响应式表格/卡片视图、实时 SSE 更新、通知铃控件以及每个容器的详细信息、日志和统计信息。 |
 | 🔗 | **REST API 和 Webhook** |用于 CI/CD 监视和更新触发器的令牌身份验证端点，以及用于推送事件的签名注册表 Webhook 摄取。 |
 | 🔐 | **OIDC 身份验证** |使用 OpenID Connect（Authelia、Auth0、Authentik）保护仪表板。默认情况下，所有身份验证流程都会失败关闭。 |

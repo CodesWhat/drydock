@@ -92,9 +92,9 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/operations/:id/cancel` | `POST` | Cancel a queued or in-progress update operation (see [Container API](/docs/api/container#cancel-an-update-operation)) |
 | `/api/v1/containers/:id/release-notes` | `GET` | Structured release notes for a container's current update target (see [Container API](/docs/api/container#get-container-release-notes)) |
 | `/api/v1/containers/:id/intermediate-release-notes` | `GET` | Semver-only release notes between two tags, with `from` required and `to` defaulting to the pending update target (see [Container API](/docs/api/container#get-intermediate-release-notes)) |
-| `/api/v1/portwing/keys` | `GET`, `POST` | Experimental Portwing edge-agent key registry, available only with `DD_EXPERIMENTAL_PORTWING=true` |
-| `/api/v1/portwing/keys/:keyId` | `DELETE` | Revoke an experimental Portwing Ed25519 public key and disconnect live sessions authenticated with it |
-| `/api/v1/portwing/ws` | `WS` | Experimental Portwing edge-agent WebSocket endpoint using the `portwing/1.0` protocol |
+| `/api/v1/portwing/keys` | `GET`, `POST` | Stable Portwing edge-agent key registry, enabled by default (`DD_EXPERIMENTAL_PORTWING=false` is an emergency disable) |
+| `/api/v1/portwing/keys/:keyId` | `DELETE` | Revoke a Portwing Ed25519 public key and disconnect live sessions authenticated with it |
+| `/api/v1/portwing/ws` | `WS` | Stable Portwing edge-agent WebSocket endpoint using the `portwing/1.0` protocol |
 | `/api/v1/containers/update` | `POST` | Bulk queue updates for multiple containers (see [Container API](/docs/api/container#bulk-update-containers)) |
 | `/api/v1/containers/backups` | `GET` | [All image backups](/docs/api/container#list-all-backups) (optionally filter by `containerName`) |
 | `/api/v1/icons/:provider/:slug` | `GET` | Proxy and cache registry icon images |

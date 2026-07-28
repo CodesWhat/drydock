@@ -400,15 +400,13 @@ export async function init() {
     isRateLimited,
   });
   if (getExperimentalPortwingEnabled()) {
-    log.info('portwing/1.0 edge endpoint enabled (experimental, DD_EXPERIMENTAL_PORTWING=true)');
+    log.info('portwing/1.0 edge endpoint enabled by default');
     attachPortwingWsServer({
       server,
       serverConfiguration: configuration as Record<string, unknown>,
       isRateLimited,
     });
   } else {
-    log.info(
-      'portwing/1.0 edge endpoint is disabled — set DD_EXPERIMENTAL_PORTWING=true to enable it',
-    );
+    log.info('portwing/1.0 edge endpoint disabled by DD_EXPERIMENTAL_PORTWING=false');
   }
 }

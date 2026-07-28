@@ -1412,6 +1412,447 @@ describe('api/container/log-stream', () => {
     });
   });
 
+  describe('edge-agent container log streams', () => {
+    function createAuthenticatedEdgeGateway(
+      streamContainerLogs: ReturnType<typeof vi.fn>,
+      viewer: EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+        bufferedAmount: number;
+      },
+      agentResolver:
+        | (() => { edgeAdapter?: { streamContainerLogs: ReturnType<typeof vi.fn> } } | undefined)
+        | null = () => ({
+        edgeAdapter: { streamContainerLogs },
+      }),
+    ) {
+      const dependencies = {
+        getContainer: vi.fn(() => ({
+          id: 'edge-container',
+          name: 'edge-container',
+          status: 'running',
+          watcher: 'docker',
+          agent: 'edge-agent',
+        })) as any,
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-edge';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn(
+            (
+              _request: unknown,
+              _socket: unknown,
+              _head: unknown,
+              callback: (webSocket: unknown) => void,
+            ) => callback(viewer),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      } as any;
+      if (agentResolver !== null) {
+        dependencies.getAgent = vi.fn(agentResolver);
+      }
+      return createContainerLogStreamGateway(dependencies);
+    }
+
+    test('forwards correlated dd chunks from an edge agent to the authenticated viewer', async () => {
+      let handlers:
+        | {
+            onChunk: (chunk: { stream: 'stdout' | 'stderr'; logs: string }) => void;
+            onEnd: (reason?: string) => void;
+            onError: (error: Error) => void;
+          }
+        | undefined;
+      const cancel = vi.fn();
+      const streamContainerLogs = vi.fn(
+        (
+          _containerId: string,
+          _options: Record<string, unknown>,
+          nextHandlers: NonNullable<typeof handlers>,
+        ) => {
+          handlers = nextHandlers;
+          return { cancel };
+        },
+      );
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: undefined as unknown as number,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest(
+          '/api/v1/containers/edge-container/logs/stream?tail=25&since=42&follow=true',
+        ) as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      expect(streamContainerLogs).toHaveBeenCalledWith(
+        'edge-container',
+        { tail: 25, since: 42, follow: true, timestamps: true },
+        expect.any(Object),
+      );
+      handlers?.onChunk({
+        stream: 'stderr',
+        logs: '2026-07-28T18:00:00.000000000Z warning\n',
+      });
+      handlers?.onEnd('eof');
+      await handling;
+
+      const message = JSON.parse(String(viewer.send.mock.calls[0]?.[0])) as {
+        type: string;
+        ts: string;
+        line: string;
+      };
+      expect(message).toMatchObject({
+        type: 'stderr',
+        ts: '2026-07-28T18:00:00.000000000Z',
+        line: 'warning',
+      });
+      expect(viewer.close).toHaveBeenCalledWith(1000, 'Stream ended');
+      expect(cancel).not.toHaveBeenCalled();
+    });
+
+    test('cancels the agent stream when the downstream viewer disconnects', async () => {
+      const cancel = vi.fn();
+      const streamContainerLogs = vi.fn(() => ({ cancel }));
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: 0,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/edge-container/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      viewer.emit('close');
+      await handling;
+
+      expect(cancel).toHaveBeenCalledTimes(1);
+    });
+
+    test('evicts a slow viewer before its websocket buffer can grow without bound', async () => {
+      let handlers:
+        | {
+            onChunk: (chunk: { stream: 'stdout' | 'stderr'; logs: string }) => void;
+          }
+        | undefined;
+      const cancel = vi.fn();
+      const streamContainerLogs = vi.fn(
+        (
+          _containerId: string,
+          _options: Record<string, unknown>,
+          nextHandlers: NonNullable<typeof handlers>,
+        ) => {
+          handlers = nextHandlers;
+          return { cancel };
+        },
+      );
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: 2 * 1024 * 1024,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/edge-container/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      handlers?.onChunk({ stream: 'stdout', logs: 'too slow\n' });
+      await handling;
+
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(viewer.close).toHaveBeenCalledWith(1013, 'Log viewer is too slow');
+      expect(viewer.send).not.toHaveBeenCalled();
+    });
+
+    test('keeps an edge stream error within the WebSocket close-reason limit', async () => {
+      let handlers:
+        | {
+            onError: (error: Error) => void;
+          }
+        | undefined;
+      const streamContainerLogs = vi.fn(
+        (
+          _containerId: string,
+          _options: Record<string, unknown>,
+          nextHandlers: NonNullable<typeof handlers>,
+        ) => {
+          handlers = nextHandlers;
+          return { cancel: vi.fn() };
+        },
+      );
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn((_code: number, reason: string) => {
+          if (Buffer.byteLength(reason, 'utf8') > 123) {
+            throw new RangeError('WebSocket close reason exceeds 123 bytes');
+          }
+        }),
+        bufferedAmount: 0,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/edge-container/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      expect(() => handlers?.onError(new Error('x'.repeat(500)))).not.toThrow();
+      await handling;
+
+      const reason = String(viewer.close.mock.calls[0]?.[1]);
+      expect(Buffer.byteLength(reason, 'utf8')).toBeLessThanOrEqual(123);
+      expect(reason).toContain('Log stream error');
+    });
+
+    test.each([
+      {
+        resolver: () => undefined,
+        label: 'configured resolver',
+      },
+      {
+        resolver: null,
+        label: 'default resolver',
+      },
+    ])('closes when the edge agent is unavailable through the $label', async ({ resolver }) => {
+      const streamContainerLogs = vi.fn();
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: 0,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer, resolver);
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/edge-container/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      expect(viewer.close).toHaveBeenCalledWith(1011, 'Edge agent not available');
+      expect(streamContainerLogs).not.toHaveBeenCalled();
+    });
+
+    test('cancels when sending a decoded chunk to the viewer throws', async () => {
+      let handlers:
+        | {
+            onChunk: (chunk: { stream: 'stdout' | 'stderr'; logs: string }) => void;
+            onEnd: () => void;
+            onError: (error: Error) => void;
+          }
+        | undefined;
+      const cancel = vi.fn();
+      const streamContainerLogs = vi.fn(
+        (
+          _containerId: string,
+          _options: Record<string, unknown>,
+          nextHandlers: NonNullable<typeof handlers>,
+        ) => {
+          handlers = nextHandlers;
+          return { cancel };
+        },
+      );
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(() => {
+          throw new Error('viewer closed during send');
+        }),
+        close: vi.fn(),
+        bufferedAmount: 0,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/edge-container/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      handlers?.onChunk({
+        stream: 'stdout',
+        logs: '2026-07-28T18:00:00.000000000Z line\n',
+      });
+      handlers?.onChunk({ stream: 'stdout', logs: 'ignored after cleanup\n' });
+      handlers?.onEnd();
+      handlers?.onError(new Error('ignored after cleanup'));
+      viewer.emit('close');
+      await handling;
+
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(viewer.close).not.toHaveBeenCalled();
+    });
+
+    test('cleans up once when sending a flushed partial line throws', async () => {
+      let handlers:
+        | {
+            onChunk: (chunk: { stream: 'stdout' | 'stderr'; logs: string }) => void;
+            onEnd: () => void;
+          }
+        | undefined;
+      const cancel = vi.fn();
+      const streamContainerLogs = vi.fn(
+        (
+          _containerId: string,
+          _options: Record<string, unknown>,
+          nextHandlers: NonNullable<typeof handlers>,
+        ) => {
+          handlers = nextHandlers;
+          return { cancel };
+        },
+      );
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(() => {
+          throw new Error('viewer closed during flush');
+        }),
+        close: vi.fn(),
+        bufferedAmount: 0,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/edge-container/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      handlers?.onChunk({ stream: 'stdout', logs: 'partial without newline' });
+      handlers?.onEnd();
+      await handling;
+
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(viewer.close).not.toHaveBeenCalled();
+    });
+
+    test('cancels on a downstream viewer error and ignores later agent callbacks', async () => {
+      let handlers:
+        | {
+            onChunk: (chunk: { stream: 'stdout' | 'stderr'; logs: string }) => void;
+            onEnd: () => void;
+            onError: (error: Error) => void;
+          }
+        | undefined;
+      const cancel = vi.fn();
+      const streamContainerLogs = vi.fn(
+        (
+          _containerId: string,
+          _options: Record<string, unknown>,
+          nextHandlers: NonNullable<typeof handlers>,
+        ) => {
+          handlers = nextHandlers;
+          return { cancel };
+        },
+      );
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: 0,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/edge-container/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      viewer.emit('error', new Error('viewer failed'));
+      handlers?.onChunk({ stream: 'stdout', logs: 'ignored\n' });
+      handlers?.onEnd();
+      handlers?.onError(new Error('ignored'));
+      viewer.emit('close');
+      await handling;
+
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(viewer.send).not.toHaveBeenCalled();
+      expect(viewer.close).not.toHaveBeenCalled();
+    });
+
+    test('filters disabled stdout and stderr streams before sending', async () => {
+      let handlers:
+        | {
+            onChunk: (chunk: { stream: 'stdout' | 'stderr'; logs: string }) => void;
+            onEnd: () => void;
+          }
+        | undefined;
+      const streamContainerLogs = vi.fn(
+        (
+          _containerId: string,
+          _options: Record<string, unknown>,
+          nextHandlers: NonNullable<typeof handlers>,
+        ) => {
+          handlers = nextHandlers;
+          return { cancel: vi.fn() };
+        },
+      );
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: 0,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest(
+          '/api/v1/containers/edge-container/logs/stream?stdout=false&stderr=false',
+        ) as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      handlers?.onChunk({ stream: 'stdout', logs: 'stdout ignored\n' });
+      handlers?.onChunk({ stream: 'stderr', logs: 'stderr ignored\n' });
+      handlers?.onEnd();
+      await handling;
+
+      expect(viewer.send).not.toHaveBeenCalled();
+      expect(viewer.close).toHaveBeenCalledWith(1000, 'Stream ended');
+    });
+
+    test('uses an untruncated close reason for a short stream error', async () => {
+      let handlers: { onError: (error: Error) => void } | undefined;
+      const streamContainerLogs = vi.fn(
+        (
+          _containerId: string,
+          _options: Record<string, unknown>,
+          nextHandlers: NonNullable<typeof handlers>,
+        ) => {
+          handlers = nextHandlers;
+          return { cancel: vi.fn() };
+        },
+      );
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: 0,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/edge-container/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      handlers?.onError(new Error('short'));
+      await handling;
+
+      expect(viewer.close).toHaveBeenCalledWith(1011, 'Log stream error (short)');
+    });
+  });
+
   describe('attachContainerLogStreamWebSocketServer', () => {
     test('uses default ip-based key resolver when identity-aware keying is disabled', async () => {
       const webSocketUpgradeSpy = vi

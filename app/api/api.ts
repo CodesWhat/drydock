@@ -189,7 +189,9 @@ export function init(): express.Router {
   // Mount agents
   router.use('/agents', agentRouter.init());
 
-  // Mount Portwing key management (edge agent auth registry) — experimental.
+  // Mount Portwing key management (edge agent auth registry). It is enabled by
+  // default after edge graduation and can be disabled explicitly for emergency
+  // rollback with DD_EXPERIMENTAL_PORTWING=false.
   if (getExperimentalPortwingEnabled()) {
     router.use('/portwing', portwingRouter.init());
   }
