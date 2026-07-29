@@ -93,7 +93,7 @@ services:
 
 The preset's allow-rules are the security boundary, in the same spirit as the proxy's environment flags — everything not explicitly allowed is denied.
 
-sockguard also ships a separate [`portwing-with-exec.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing-with-exec.yaml) preset for deployments that need remote exec through the Edge agent (see the [exec session protocol](/docs/api/portwing#exec-session-protocol)); exec authorization — privileged/root escalation and per-command allowlisting — is enforced by sockguard's exec policy, not by drydock.
+sockguard also ships a separate [`portwing-with-exec.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing-with-exec.yaml) preset for deployments that need remote exec through the Edge agent (see the [exec session protocol](/docs/api/portwing#exec-session-protocol)). To activate it, replace the preset file the compose example mounts (swap `sockguard.yaml` for a copy of `portwing-with-exec.yaml`, or point the sockguard service's config mount at it) and restart sockguard — merely having the file present changes nothing, and the default preset above denies all exec. Exec authorization — privileged/root escalation and per-command allowlisting — is enforced by sockguard's exec policy, not by drydock.
 
 </Tab>
 </Tabs>

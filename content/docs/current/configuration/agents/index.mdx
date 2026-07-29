@@ -40,6 +40,9 @@ services:
     image: ghcr.io/codeswhat/portwing:latest
     restart: unless-stopped
     volumes:
+      # NOTE: :ro only read-protects the socket *file* — the agent still gets
+      # the full Docker Engine API through it. It is not an API boundary; see
+      # the warning below for the production setup.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - DRYDOCK_URL=https://drydock.example.com
@@ -53,7 +56,7 @@ secrets:
     file: ./portwing_ed25519.pem
 ```
 
-<Callout type="warn">This example bind-mounts the raw Docker socket into the Portwing container for brevity. In production, front it with a socket filter instead — see the [sockguard tab](/docs/guides/security#isolate-the-docker-socket) of the Security Hardening Guide, and sockguard's [`examples/compose/tri-tool/`](https://github.com/CodesWhat/sockguard/tree/main/examples/compose/tri-tool) bundle for a runnable compose stack that fronts an Edge agent's Docker socket with sockguard instead of a raw bind mount.</Callout>
+<Callout type="warn">This example bind-mounts the raw Docker socket into the Portwing container for brevity, and `:ro` is not a security boundary — it only prevents modifying the socket file itself, while every Docker Engine API operation (create, exec, delete) remains available through it. In production, front it with a socket filter instead — see the [sockguard tab](/docs/guides/security#isolate-the-docker-socket) of the Security Hardening Guide, and sockguard's [`examples/compose/tri-tool/`](https://github.com/CodesWhat/sockguard/tree/main/examples/compose/tri-tool) bundle for a runnable compose stack that fronts an Edge agent's Docker socket with sockguard instead of a raw bind mount.</Callout>
 
 The Drydock controller needs the agent's public key registered before it connects. No Portwing-specific environment variable is required:
 
