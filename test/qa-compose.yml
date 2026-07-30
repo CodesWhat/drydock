@@ -94,8 +94,9 @@ services:
       # - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
       # - DD_SECURITY_VERIFY_SIGNATURES=false
       # --- Maintenance window (QA) ---
-      # Uncomment to test; adjust cron to match/not-match current time
-      # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *
+      # Uncomment to test; adjust cron to match/not-match current time.
+      # Matched per minute, so keep `*` in the minute field for a real window.
+      # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=* 2-6 * * *
       # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ=UTC
       # --- Remote Docker watcher (DinD) ---
       - DD_WATCHER_REMOTE_HOST=docker-remote

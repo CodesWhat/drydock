@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Maintenance-window documentation corrected and made findable** ([Discussion #639](https://github.com/CodesWhat/drydock/discussions/639)). Every documented example used a minute-precise cron (`0 2-6 * * *`) while describing it as an hourly range ("2am–6am daily"). `MAINTENANCE_WINDOW` is matched minute by minute, so that expression opens the window for one minute at the top of each listed hour and reports "closed" the rest of the day. Examples now use `* 2-6 * * *`, with a table of correct forms in [Watchers](https://getdrydock.com/docs/configuration/watchers#maintenance-window). The update confirm dialog's own wording ("This update is currently policy-blocked", "Outside maintenance window — auto update deferred until the window opens", "Update anyway") appeared nowhere in the docs, so searching for the on-screen message returned nothing; [Update Eligibility & Blockers](https://getdrydock.com/docs/configuration/actions/update-eligibility) now documents that dialog verbatim and states plainly that a soft blocker never gates a manual update.
+
 ## [1.6.0-rc.9] — 2026-07-28
 
 ### Added
