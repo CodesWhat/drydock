@@ -64,7 +64,8 @@
       "preview": "Xem trước",
       "agent-disconnect": "Agent ngắt kết nối",
       "notification-delivery-failed": "Gửi thông báo thất bại",
-      "security-alert": "Cảnh báo bảo mật"
+      "security-alert": "Cảnh báo bảo mật",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "Container",
@@ -107,6 +108,10 @@
       "container-unhealthy": {
         "name": "Container không khỏe mạnh",
         "description": "Khi health check Docker của container chuyển sang trạng thái \"unhealthy\""
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {

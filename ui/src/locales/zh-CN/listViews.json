@@ -64,7 +64,8 @@
       "preview": "预览",
       "agent-disconnect": "代理已断开",
       "notification-delivery-failed": "通知发送失败",
-      "security-alert": "安全警报"
+      "security-alert": "安全警报",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "容器",
@@ -107,6 +108,10 @@
       "container-unhealthy": {
         "name": "容器不健康",
         "description": "当容器的 Docker 健康检查进入 unhealthy 状态时"
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {

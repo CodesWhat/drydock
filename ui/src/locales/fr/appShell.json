@@ -47,29 +47,29 @@
       "switchTo": "Passer au thème {id}",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Claire",
+        "system": "Système",
+        "dark": "Sombre"
       }
     },
     "layout": {
       "nav": {
         "dashboard": "Tableau de bord",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "Tableau de bord",
         "containers": "Conteneurs",
         "security": "Sécurité",
         "audit": "Audit",
         "systemLogs": "Logs système",
         "manageGroup": "Gérer",
         "hosts": "Hôtes",
-        "registries": "Registries",
-        "watchers": "Watchers",
+        "registries": "Registres",
+        "watchers": "Observateurs",
         "settingsGroup": "Paramètres",
         "general": "Général",
         "notifications": "Notifications",
         "outbox": "Boîte d’envoi",
         "triggers": "Triggers",
-        "auth": "Auth",
+        "auth": "Authentification",
         "agents": "Agents"
       },
       "sidebar": {
@@ -87,14 +87,14 @@
         "userMenu": "Menu utilisateur",
         "profile": "Profil",
         "signOut": "Se déconnecter",
-        "userFallback": "User"
+        "userFallback": "Utilisateur"
       },
       "about": {
         "title": "Drydock",
         "subtitle": "Gestionnaire de mises à jour de conteneurs Docker",
         "documentation": "Documentation",
         "github": "GitHub",
-        "changelog": "Changelog",
+        "changelog": "Journal de modifications",
         "close": "Fermer"
       },
       "search": {
@@ -107,38 +107,38 @@
         "prefixScopeHint": "Portée de préfixe active ; utilisez ",
         "typeHint": "Tapez",
         "slashComma": ",",
-        "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "atOrConnector": ", ou",
+        "hashSemicolon": "; utilisez",
         "useTab": " pour changer de portée",
         "moveHint": "déplacer",
         "openHint": "ouvrir",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
+        "recentGroup": "Récent",
+        "unknownHost": "hôte inconnu",
+        "containerSubtitle": "Conteneur · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
-        "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "watcherSubtitle": "Observateur · {type}",
+        "registrySubtitle": "Registre · {type}",
+        "authSubtitle": "Authentification · {type}",
+        "notificationSubtitle": "Règle de notification · {id}",
         "scope": {
-          "all": "All",
+          "all": "Tout",
           "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "containers": "Conteneurs",
+          "runtime": "Exécution",
+          "config": "Configuration"
         },
         "group": {
           "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
+          "containers": "Conteneurs",
+          "runtime": "Exécution",
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
-          "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "appearanceTitle": "Paramètres d'Apparence",
+          "appearanceSubtitle": "Configuration · Apparence",
+          "profileTitle": "Paramètres de Profil",
+          "profileSubtitle": "Configuration · Profil"
         }
       },
       "connection": {
@@ -165,10 +165,10 @@
       "labelKeysLabel": "Clés label ({count}) : {keys}",
       "apiPathsLabel": "Chemins API ({count}) : {keys}",
       "healthcheckCommandLabel": "Commande healthcheck : {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
-      "hiddenMore": "(+{count} more)"
+      "legacyConfigBody": "Les anciens triggers d'entrées sont toujours actifs pour la compatibilité v1.6. Renommez les variables {triggerEnv} en {actionEnv} ou {notificationEnv} et remplacez les balises {triggerLabel} par {actionLabel} ou {notificationLabel} avant v1.7.",
+      "legacyApiBody": "Les clients sur cette instance ont récemment appelé le chemin d'accès {oldPrefix} supprimé non versionné et reçoivent des erreurs {statusCode} . Migrez-les vers le préfixe {v1Prefix} . Les intégrations de l'ère WUD comme la carte wud-card ou le widget whatsupdocker de la page d'accueil peuvent définir {compatFlag} au lieu de migrer.",
+      "curlHealthcheckBody": "Votre conteneur Drydock utilise une substitution de contrôle de santé personnalisée basée sur curl. curl reste disponible pour la compatibilité du backend en v1.5.x et v1.6.x ; v1.6.0 est la dernière version d'avertissement, et curl sera supprimé de l'image en v1.7.0. Préférez l'image intégrée de vérification de santé ou mettez à jour votre replacement à {bin}.",
+      "hiddenMore": "(+{count} en plus)"
     }
   }
 }
