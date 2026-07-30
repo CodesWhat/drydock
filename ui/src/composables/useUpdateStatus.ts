@@ -76,7 +76,7 @@ const POLICY_REASONS = new Set<UpdateBlockerReason>([
   'maturity-not-reached',
 ]);
 
-const ELIGIBILITY_DOCS =
+export const ELIGIBILITY_DOCS =
   'https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference';
 
 function conditionAction(

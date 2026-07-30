@@ -1,11 +1,18 @@
 import { ref } from 'vue';
 
+interface ConfirmDialogLink {
+  href: string;
+  label: string;
+}
+
 interface ConfirmOptions {
   header: string;
   message: string;
   acceptLabel?: string;
   rejectLabel?: string;
   severity?: 'danger' | 'warn';
+  /** Optional docs/help link rendered below the message body. */
+  link?: ConfirmDialogLink;
   accept?: () => void | Promise<void>;
   reject?: () => void;
 }
