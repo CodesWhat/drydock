@@ -41,6 +41,7 @@ vi.mock('axios');
 vi.mock('./maintenance.js', () => ({
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
+  hasNarrowMinuteField: vi.fn(() => false),
 }));
 vi.mock('./socket-version-probe.js', () => ({
   probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),

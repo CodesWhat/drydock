@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
+import {
+  getNextMaintenanceWindow,
+  hasNarrowMinuteField,
+  isInMaintenanceWindow,
+} from './maintenance.js';
 
 describe('isInMaintenanceWindow', () => {
   afterEach(() => {
@@ -102,6 +106,32 @@ describe('getNextMaintenanceWindow', () => {
   it('should return undefined for invalid timezone', () => {
     const next = getNextMaintenanceWindow('0 15 * * *', 'Invalid/Timezone', new Date());
     expect(next).toBeUndefined();
+  });
+});
+
+describe('hasNarrowMinuteField', () => {
+  it('should return true for a fixed minute value', () => {
+    expect(hasNarrowMinuteField('0 2-6 * * *')).toBe(true);
+  });
+
+  it('should return false for a wildcard minute field', () => {
+    expect(hasNarrowMinuteField('* 2-3 * * *')).toBe(false);
+  });
+
+  it('should return false for a step value minute field', () => {
+    expect(hasNarrowMinuteField('*/5 2-3 * * *')).toBe(false);
+  });
+
+  it('should return true for a minute list', () => {
+    expect(hasNarrowMinuteField('0,30 2 * * *')).toBe(true);
+  });
+
+  it('should return true for a minute range', () => {
+    expect(hasNarrowMinuteField('15-20 2 * * *')).toBe(true);
+  });
+
+  it('should return false for an empty string', () => {
+    expect(hasNarrowMinuteField('')).toBe(false);
   });
 });
 
