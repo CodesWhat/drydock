@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Startup warning for minute-precise maintenance-window crons.** `DD_WATCHER_{name}_MAINTENANCE_WINDOW` is matched minute-by-minute, so a fixed minute field like `0 2-6 * * *` only opens the window for one minute per matching hour instead of the whole hour range — a common copy-paste trap reported in [Discussion #639](https://github.com/CodesWhat/drydock/discussions/639). The Docker watcher now logs a one-time warning at init when the configured window's minute field doesn't contain `*`, pointing at the fix (`* 2-3 * * *`). Step values like `*/5` are intentional and are not flagged.
+- **"Learn more" link in the update confirm dialog for policy-blocked overrides.** When overriding a soft-blocked update, the confirm dialog now links to the [update-eligibility reasons reference](https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference), matching the link already shown in the Update Status panel. ([Discussion #639](https://github.com/CodesWhat/drydock/discussions/639))
+
 ## [1.6.0-rc.9] — 2026-07-28
 
 ### Added

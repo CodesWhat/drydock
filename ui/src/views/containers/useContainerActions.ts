@@ -6,6 +6,7 @@ import { useScanLifecycle } from '../../composables/useScanLifecycle';
 import { useServerFeatures } from '../../composables/useServerFeatures';
 import { useToast } from '../../composables/useToast';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
+import { ELIGIBILITY_DOCS } from '../../composables/useUpdateStatus';
 import {
   deleteContainer as apiDeleteContainer,
   refreshContainer as apiRefreshContainer,
@@ -794,6 +795,13 @@ function createConfirmHandlers(args: {
           ? args.t('containerComponents.confirmDialogs.update.acceptLabelOverride')
           : args.t('containerComponents.confirmDialogs.update.acceptLabel'),
       severity: 'warn',
+      link:
+        softBlockers.length > 0
+          ? {
+              href: ELIGIBILITY_DOCS,
+              label: args.t('containerComponents.confirmDialogs.update.softBlockerLearnMore'),
+            }
+          : undefined,
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
           kind: 'update',

@@ -1823,10 +1823,12 @@ describe('useContainerActions', () => {
     const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
       header: string;
       acceptLabel: string;
+      link?: { href: string; label: string };
       accept?: () => Promise<unknown>;
     };
     expect(confirmCall.header).toBe('Update Container');
     expect(confirmCall.acceptLabel).toBe('Update');
+    expect(confirmCall.link).toBeUndefined();
 
     await confirmCall.accept?.();
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
@@ -4061,11 +4063,16 @@ describe('useContainerActions', () => {
     const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
       message: string;
       acceptLabel: string;
+      link?: { href: string; label: string };
     };
     expect(confirmCall.message).toContain('• Container is snoozed until 2026-06-01');
     expect(confirmCall.message).toContain('• Trigger is not in the include list');
     expect(confirmCall.message).toContain('Click Update anyway to override.');
     expect(confirmCall.acceptLabel).toBe('Update anyway');
+    expect(confirmCall.link).toEqual({
+      href: 'https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference',
+      label: 'Learn more',
+    });
   });
 
   it('sets inputError and returns early from scanContainer when container actions are disabled', async () => {

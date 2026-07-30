@@ -93,4 +93,43 @@ describe('ConfirmDialog', () => {
 
     wrapper.unmount();
   });
+
+  it('does not render a link when none is provided', async () => {
+    const wrapper = mount(ConfirmDialog);
+    showDialog();
+    await nextTick();
+
+    expect(document.body.querySelector('[data-test="confirm-dialog-link"]')).toBeNull();
+
+    wrapper.unmount();
+  });
+
+  it('renders a docs link below the message when provided', async () => {
+    const wrapper = mount(ConfirmDialog);
+    visible.value = true;
+    current.value = {
+      header: 'Update Container',
+      message: 'This update is currently policy-blocked.',
+      acceptLabel: 'Update anyway',
+      rejectLabel: 'Cancel',
+      link: {
+        href: 'https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference',
+        label: 'Learn more',
+      },
+    };
+    await nextTick();
+
+    const link = document.body.querySelector(
+      '[data-test="confirm-dialog-link"]',
+    ) as HTMLAnchorElement | null;
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute('href')).toBe(
+      'https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference',
+    );
+    expect(link?.getAttribute('target')).toBe('_blank');
+    expect(link?.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(link?.textContent?.trim()).toBe('Learn more');
+
+    wrapper.unmount();
+  });
 });
