@@ -22,12 +22,19 @@ function resolvedVersion(lockfile, packageName) {
   return lockfile.packages?.[`node_modules/${packageName}`]?.version;
 }
 
-test('fast-uri is pinned to the patched 3.x release in app and ui', () => {
+// fast-uri was pinned to 3.1.4 in app/ and ui/ for CVE-2026-16221
+// (GHSA-v2hh-gcrm-f6hx). 4.1.1 retains the fix, and Renovate's override
+// bump to 4.1.1 (#617) is accepted alongside the original pin below.
+// Transitional: drop the 3.1.4 branch once #617 lands.
+test('fast-uri is pinned to a patched release in app and ui', () => {
   for (const workspace of ['app', 'ui']) {
     const manifest = readJson(`${workspace}/package.json`);
     const lockfile = readJson(`${workspace}/package-lock.json`);
 
-    assert.equal(manifest.overrides?.['fast-uri'], '3.1.4', `${workspace} override`);
+    assert.ok(
+      ['3.1.4', '4.1.1'].includes(manifest.overrides?.['fast-uri']),
+      `${workspace} override`,
+    );
     assert.ok(
       compareSemver(resolvedVersion(lockfile, 'fast-uri'), '3.1.4') >= 0,
       `${workspace} lockfile`,
