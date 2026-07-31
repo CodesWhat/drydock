@@ -144,6 +144,8 @@ services:
 
 <Callout type="info">`dd.update.mode=infrastructure` is only needed for the socket proxy container (or another infrastructure container that Drydock routes through). Regular application containers do not need this label.</Callout>
 
+During an infrastructure update, the helper container runs Drydock's own currently-running image, resolved to the same name the Docker daemon has locally (for example `codeswhat/drydock:1.6.0` on Docker Hub installs). No extra image pull happens for the helper — the image is already present on the host running Drydock.
+
 ## Restart recovery
 
 For ordinary container updates, restart recovery depends on which phase was interrupted:
