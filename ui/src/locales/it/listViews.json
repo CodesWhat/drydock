@@ -64,7 +64,8 @@
       "preview": "Anteprima",
       "agent-disconnect": "Disconnessione agente",
       "notification-delivery-failed": "Invio notifica non riuscito",
-      "security-alert": "Avviso di sicurezza"
+      "security-alert": "Avviso di sicurezza",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "Container",
@@ -107,6 +108,10 @@
       "container-unhealthy": {
         "name": "Container non integro",
         "description": "Quando l'healthcheck Docker di un container entra nello stato \"unhealthy\""
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {

@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Startup warning for minute-precise maintenance-window crons.** `DD_WATCHER_{name}_MAINTENANCE_WINDOW` is matched minute-by-minute, so a fixed minute field like `0 2-6 * * *` only opens the window for one minute per matching hour instead of the whole hour range — a common copy-paste trap reported in [Discussion #639](https://github.com/CodesWhat/drydock/discussions/639). The Docker watcher now logs a one-time warning at init when the configured window's minute field doesn't contain `*`, pointing at the fix (`* 2-3 * * *`). Step values like `*/5` are intentional and are not flagged.
 - **"Learn more" link in the update confirm dialog for policy-blocked overrides.** When overriding a soft-blocked update, the confirm dialog now links to the [update-eligibility reasons reference](https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference), matching the link already shown in the Update Status panel. ([Discussion #639](https://github.com/CodesWhat/drydock/discussions/639))
 
+### Changed
+
+- **Translations resynced from Crowdin** ([#620](https://github.com/CodesWhat/drydock/pull/620)), refreshing the container-component and list-view catalogs across all 15 non-English locales, plus a fuller French pass over the agents, app-shell, common, and config catalogs.
+
 ### Fixed
 
 - **Unchanged `update-available` audit entries are no longer re-recorded on a timer.** Previously an unchanged pending update was re-written to the audit log every time the 1-hour dedupe window lapsed, bloating the audit log for fleets with long-pending updates (a fleet with 10 persistent pending updates wrote 140 rows in 24h). Audit rows are now recorded only on first detection or when the update target/kind changes. The RC-only `DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS` variable is removed.

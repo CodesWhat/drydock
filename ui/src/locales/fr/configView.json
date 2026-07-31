@@ -80,7 +80,7 @@
         "containerActions": "Actions de conteneur",
         "webhook": "Webhook",
         "deleteEnabled": "Suppression activée",
-        "trustProxy": "Trust Proxy",
+        "trustProxy": "Proxy de confiance",
         "metricsAuth": "Auth métriques",
         "storePath": "Chemin du stockage",
         "storeFile": "Fichier de stockage",
@@ -149,7 +149,7 @@
     },
     "profile": {
       "loading": "Chargement du profil",
-      "unknownUser": "Unknown User",
+      "unknownUser": "Utilisateur Inconnu",
       "fields": {
         "username": "Nom d'utilisateur",
         "email": "E-mail",
@@ -163,11 +163,11 @@
       "loading": "Chargement des logs...",
       "emptyMessage": "Aucune entrée de log trouvée pour les filtres actuels.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "En pause",
+        "offline": "Hors ligne"
       },
       "toolbar": {
-        "live": "Live",
+        "live": "En direct",
         "allLevels": "Tous les niveaux",
         "debug": "Debug",
         "info": "Info",

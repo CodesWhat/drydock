@@ -64,7 +64,8 @@
       "preview": "미리 보기",
       "agent-disconnect": "에이전트 연결 해제",
       "notification-delivery-failed": "알림 전송 실패",
-      "security-alert": "보안 경고"
+      "security-alert": "보안 경고",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "컨테이너",
@@ -107,6 +108,10 @@
       "container-unhealthy": {
         "name": "컨테이너 비정상",
         "description": "컨테이너의 Docker 헬스체크가 unhealthy 상태가 될 때"
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {
