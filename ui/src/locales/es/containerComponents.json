@@ -461,6 +461,7 @@
         "messageTagChange": "Update {name}? This will change the image tag from :{currentTag} to :{newTag}{kind}.",
         "messageDigestChange": "Update {name}? A newer build of :{currentTag} is available (digest change).",
         "softBlockerSuffix": "\n\nThis update is currently policy-blocked:\n{list}\n\nClick Update anyway to override.",
+        "softBlockerLearnMore": "Learn more",
         "acceptLabel": "Update",
         "acceptLabelOverride": "Update anyway"
       },

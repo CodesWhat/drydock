@@ -15,6 +15,7 @@ import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useToast } from '../composables/useToast';
+import { ELIGIBILITY_DOCS } from '../composables/useUpdateStatus';
 import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
 import { ROUTES } from '../router/routes';
@@ -611,6 +612,13 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
         ? t('containerComponents.confirmDialogs.update.acceptLabelOverride')
         : t('dashboardView.confirm.updateContainer.accept'),
     rejectLabel: t('common.cancel'),
+    link:
+      softBlockers.length > 0
+        ? {
+            href: ELIGIBILITY_DOCS,
+            label: t('containerComponents.confirmDialogs.update.softBlockerLearnMore'),
+          }
+        : undefined,
     accept: async () => {
       if (!managedUpdatesAllowed.value) {
         toast.warning(t('containerComponents.updateStatus.summary.notify'));

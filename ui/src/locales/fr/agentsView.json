@@ -24,7 +24,7 @@
       "tabs": {
         "overview": "Vue d'ensemble",
         "logs": "Logs",
-        "config": "Config"
+        "config": "Configuration"
       },
       "overview": {
         "resources": "Ressources",
@@ -35,7 +35,7 @@
         "containerStopped": "Arrêtés",
         "viewContainers": "Voir les conteneurs",
         "automation": "Automatisation",
-        "watchers": "Watchers",
+        "watchers": "Observateurs",
         "triggers": "Triggers",
         "none": "Aucun"
       },
@@ -56,9 +56,9 @@
         "emptyMessage": "Aucune entrée de log trouvée pour les filtres actuels.",
         "lastFetched": "Dernière récupération : {time}",
         "entries": "{count} entrées",
-        "statusLive": "Live",
+        "statusLive": "En direct",
         "statusOffline": "Hors ligne",
-        "loadError": "Failed to load agent logs"
+        "loadError": "Impossible de charger le log d'agent"
       },
       "fields": {
         "cpus": "CPU",

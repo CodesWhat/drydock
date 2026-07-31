@@ -42,6 +42,27 @@ export function isInMaintenanceWindow(
 }
 
 /**
+ * Detect whether a cron expression's minute field is "narrow", i.e. it matches
+ * only specific minute(s) rather than every minute of the matching hour(s).
+ *
+ * Maintenance windows are matched minute-by-minute (see isInMaintenanceWindow),
+ * so a fixed minute field like `0 2-6 * * *` only opens the window for one
+ * minute per matching hour instead of the whole hour range. Step values such
+ * as "every 5th minute" are intentional and still contain '*', so they are
+ * not flagged.
+ *
+ * @param cronExpr - A standard 5-field cron expression (minute hour day month weekday)
+ * @returns true if the minute field does not contain '*' (a fixed value/list/range)
+ */
+export function hasNarrowMinuteField(cronExpr: string): boolean {
+  if (!cronExpr) {
+    return false;
+  }
+  const minuteField = cronExpr.trim().split(/\s+/)[0];
+  return !minuteField?.includes('*');
+}
+
+/**
  * Return the next date/time matching the maintenance window cron expression.
  *
  * @param cronExpr - A standard 5-field cron expression (minute hour day month weekday)

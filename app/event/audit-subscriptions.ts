@@ -1,4 +1,3 @@
-import { getAuditUpdateAvailableDedupeMs } from '../configuration/index.js';
 import { type ContainerReport, getContainerIdentityKey } from '../model/container.js';
 import { getAuditCounter } from '../prometheus/audit.js';
 import * as auditStore from '../store/audit.js';
@@ -48,9 +47,8 @@ const securityAlertAuditSeenAt = new Map<string, number>();
 const agentDisconnectedAuditSeenAt = new Map<string, number>();
 const containerUnhealthyAuditSeenAt = new Map<string, number>();
 const maturityGateClearedAuditSeenAt = new Map<string, number>();
-const updateAvailableAuditState = new Map<string, { signature: string; seenAt: number }>();
+const updateAvailableAuditState = new Map<string, string>();
 const containerLifecycleAuditState = new Map<string, { signature: string; lastSeenAt: number }>();
-let updateAvailableAuditDedupeWindowMs: number | undefined;
 
 function normalizeLifecyclePolicy(
   policy:
@@ -165,11 +163,6 @@ function shouldRecordContainerLifecycleUpdate(container: ContainerLifecycleEvent
   return { record: true, identity, signature };
 }
 
-function getUpdateAvailableAuditDedupeWindowMs(): number {
-  updateAvailableAuditDedupeWindowMs ??= getAuditUpdateAvailableDedupeMs();
-  return updateAvailableAuditDedupeWindowMs;
-}
-
 function getUpdateAvailableAuditIdentity(containerReport: ContainerReport): string | undefined {
   const container = containerReport.container;
   if (!container?.name) {
@@ -178,38 +171,32 @@ function getUpdateAvailableAuditIdentity(containerReport: ContainerReport): stri
   return getContainerIdentityKey(container) ?? container.name;
 }
 
-function shouldRecordUpdateAvailableAudit(containerReport: ContainerReport): boolean {
+function shouldRecordUpdateAvailableAudit(containerReport: ContainerReport): {
+  record: boolean;
+  identity?: string;
+  signature?: string;
+} {
   const identity = getUpdateAvailableAuditIdentity(containerReport);
   if (!identity) {
-    return false;
+    return { record: false };
   }
 
   if (!containerReport.container?.updateAvailable) {
     updateAvailableAuditState.delete(identity);
-    return false;
+    return { record: false };
   }
 
-  const now = Date.now();
-  const dedupeWindowMs = getUpdateAvailableAuditDedupeWindowMs();
   const updateKind = containerReport.container.updateKind;
   const signature = JSON.stringify([
     updateKind?.kind ?? '',
     updateKind?.localValue ?? '',
     updateKind?.remoteValue ?? '',
   ]);
-  const previousState = updateAvailableAuditState.get(identity);
-  if (previousState?.signature === signature && now - previousState.seenAt < dedupeWindowMs) {
-    return false;
+  if (updateAvailableAuditState.get(identity) === signature) {
+    return { record: false };
   }
 
-  updateAvailableAuditState.set(identity, { signature, seenAt: now });
-  const oldestAllowedTimestamp = now - dedupeWindowMs * 2;
-  for (const [cachedIdentity, state] of updateAvailableAuditState.entries()) {
-    if (state.seenAt < oldestAllowedTimestamp) {
-      updateAvailableAuditState.delete(cachedIdentity);
-    }
-  }
-  return true;
+  return { record: true, identity, signature };
 }
 
 function getContainerUpdateAppliedEventContainerName(
@@ -258,7 +245,8 @@ function isDuplicateAuditEvent(
 
 export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegistrars): void {
   registrars.registerContainerReport(async (containerReport) => {
-    if (shouldRecordUpdateAvailableAudit(containerReport)) {
+    const updateAvailableAudit = shouldRecordUpdateAvailableAudit(containerReport);
+    if (updateAvailableAudit.record) {
       const containerIdentityKey = getContainerIdentityKey(containerReport.container!);
       auditStore.insertAudit({
         id: '',
@@ -273,6 +261,12 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
         semverDiff: containerReport.container.updateKind?.semverDiff,
         status: 'info',
       });
+      if (updateAvailableAudit.identity && updateAvailableAudit.signature) {
+        updateAvailableAuditState.set(
+          updateAvailableAudit.identity,
+          updateAvailableAudit.signature,
+        );
+      }
       getAuditCounter()?.inc({ action: 'update-available' });
     }
   }, AUDIT_HANDLER_OPTIONS);
@@ -457,6 +451,15 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
     if (containerIdentityKey) {
       containerLifecycleAuditState.delete(containerIdentityKey);
     }
+    // Mirrors getUpdateAvailableAuditIdentity's derivation exactly (rather than
+    // reusing containerIdentityKey above, which may prefer a compose-aware
+    // identityKey field the update-available path never looks at) so a removed
+    // container's update-available state is actually forgotten, not orphaned.
+    const updateAvailableIdentityKey =
+      getContainerIdentityKey(containerRemoved) ?? containerRemoved.name;
+    if (updateAvailableIdentityKey) {
+      updateAvailableAuditState.delete(updateAvailableIdentityKey);
+    }
     auditStore.insertAudit({
       id: '',
       timestamp: new Date().toISOString(),
@@ -486,5 +489,4 @@ export function clearAuditSubscriptionCachesForTests(): void {
   maturityGateClearedAuditSeenAt.clear();
   updateAvailableAuditState.clear();
   containerLifecycleAuditState.clear();
-  updateAvailableAuditDedupeWindowMs = undefined;
 }
