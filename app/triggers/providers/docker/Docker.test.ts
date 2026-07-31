@@ -5,6 +5,7 @@ import {
   SELF_UPDATE_FINALIZE_SECRET_HEADER,
 } from '../../../api/internal-self-update.js';
 import log from '../../../log/index.js';
+import Hub from '../../../registries/providers/hub/Hub.js';
 import * as registryStore from '../../../registry';
 import * as backupStore from '../../../store/backup';
 import { createMockRequest, createMockResponse } from '../../../test/helpers.js';
@@ -3496,7 +3497,14 @@ describe('resolveHelperImage for infrastructure updates', () => {
     expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0-rc.11');
   });
 
-  test('normalizes docker hub v2 registry URL', async () => {
+  // Regression test for issue #644: helper containers are spawned without ever
+  // being pulled, so the reference must match how the Docker daemon names the
+  // image locally. The pre-fix manual construction produced
+  // 'registry-1.docker.io/codeswhat/drydock:1.5.0', which the daemon doesn't
+  // recognize because it stores Hub images under the short name. The fix
+  // delegates to the resolved registry manager's getImageFullName, which for
+  // Hub strips the registry-1.docker.io/ host prefix.
+  test('normalizes docker hub v2 registry URL (#644)', async () => {
     const storeContainer = await import('../../../store/container.js');
     (storeContainer.getContainers as any).mockReturnValueOnce([
       {
@@ -3504,10 +3512,19 @@ describe('resolveHelperImage for infrastructure updates', () => {
         image: {
           name: 'codeswhat/drydock',
           tag: { value: '1.5.0' },
-          registry: { url: 'https://registry-1.docker.io/v2' },
+          registry: { name: 'hub.public', url: 'https://registry-1.docker.io/v2' },
         },
       },
     ]);
+
+    const baseState = registryStore.getState();
+    vi.spyOn(registryStore, 'getState').mockReturnValueOnce({
+      ...baseState,
+      registry: {
+        ...baseState.registry,
+        'hub.public': new Hub(),
+      },
+    } as any);
 
     const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
       image: { name: 'linuxserver/socket-proxy' },
@@ -3515,7 +3532,7 @@ describe('resolveHelperImage for infrastructure updates', () => {
     });
     expect(resolved).not.toMatch(/https?:\/\//);
     expect(resolved).not.toMatch(/\/v2\//);
-    expect(resolved).toBe('registry-1.docker.io/codeswhat/drydock:1.5.0');
+    expect(resolved).toBe('codeswhat/drydock:1.5.0');
   });
 
   test('handles registry URL without scheme', async () => {

@@ -418,6 +418,18 @@ class Docker<
         if (!name || !tag?.value) {
           return undefined;
         }
+        // The helper container is spawned from this reference without ever being
+        // pulled, so it must match how the Docker daemon names the image locally.
+        // Provider-specific getImageFullName implementations already encode that
+        // normalization (e.g. Hub strips the registry-1.docker.io/ host prefix
+        // the daemon also omits) — delegate to the resolved registry manager
+        // rather than reconstructing the same logic here (#644).
+        try {
+          const registryManager = this.resolveRegistryManager(drydockContainer, this.log);
+          return registryManager.getImageFullName(drydockContainer.image, tag.value);
+        } catch {
+          // No compatible registry manager — fall back to manual construction below.
+        }
         // registry.url is the v2 API base (e.g. "https://ghcr.io/v2" or
         // "https://ghcr.io/v2/"). Docker's POST /containers/create rejects
         // that form with HTTP 400.  Delegate to buildImageReference which
