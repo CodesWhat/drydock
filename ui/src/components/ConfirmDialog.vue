@@ -74,6 +74,16 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
           <!-- Body -->
           <div :id="dialogDescriptionId" class="px-5 py-4.5 text-xs leading-relaxed dd-text-secondary">
             {{ current.message }}
+            <a
+              v-if="current.link"
+              :href="current.link.href"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex items-center mt-2 text-2xs font-semibold underline underline-offset-2 dd-text"
+              data-test="confirm-dialog-link"
+            >
+              {{ current.link.label }}
+            </a>
           </div>
 
           <!-- Footer -->

@@ -2162,6 +2162,10 @@ describe('DashboardView', () => {
 
       expect(confirm.current.value?.message).toContain('Update is still maturing for 3 more days.');
       expect(confirm.current.value?.acceptLabel).toBe('Update anyway');
+      expect(confirm.current.value?.link?.href).toBe(
+        'https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference',
+      );
+      expect(confirm.current.value?.link?.label).toBe('Learn more');
     });
 
     it('shows the shared update-started toast when a single dashboard update starts successfully', async () => {
@@ -2179,6 +2183,9 @@ describe('DashboardView', () => {
       const { toasts } = useToast();
 
       await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+
+      expect(confirm.current.value?.link).toBeUndefined();
+
       await confirm.accept();
       await flushPromises();
 

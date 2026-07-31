@@ -33,7 +33,7 @@
     "tailwindcss": "4.3.3",
     "vue": "3.5.40",
     "vue-draggable-plus": "0.6.1",
-    "vue-i18n": "11.4.7",
+    "vue-i18n": "11.4.8",
     "vue-router": "5.2.0"
   },
   "devDependencies": {
@@ -45,9 +45,9 @@
     "@iconify-json/fa6-solid": "1.2.4",
     "@iconify-json/heroicons": "1.2.3",
     "@iconify-json/iconoir": "1.2.11",
-    "@iconify-json/lucide": "1.2.118",
+    "@iconify-json/lucide": "1.2.120",
     "@iconify-json/ph": "1.2.2",
-    "@iconify-json/tabler": "1.2.37",
+    "@iconify-json/tabler": "1.2.38",
     "@stryker-mutator/core": "9.6.1",
     "@stryker-mutator/typescript-checker": "9.6.1",
     "@stryker-mutator/vitest-runner": "9.6.1",
@@ -57,20 +57,20 @@
     "@vitest/coverage-v8": "4.1.10",
     "@vue/test-utils": "2.4.11",
     "jsdom": "29.1.1",
-    "knip": "6.27.0",
+    "knip": "6.29.0",
     "typescript": "6.0.3",
     "vite": "8.1.5",
     "vitest": "4.1.10"
   },
   "overrides": {
-    "fast-uri": "3.1.4",
+    "fast-uri": "4.1.1",
     "js-cookie": "3.0.8",
-    "minimatch": "10.2.5",
+    "minimatch": "10.2.6",
     "picomatch": "4.0.5",
-    "postcss": "8.5.22",
+    "postcss": "8.5.24",
     "qs": "6.15.3",
     "yaml": "2.9.0",
     "@babel/core": "7.29.7",
-    "undici": "7.28.0"
+    "undici": "7.29.0"
   }
 }

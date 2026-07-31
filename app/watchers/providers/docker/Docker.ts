@@ -116,7 +116,11 @@ import {
   ddTagTransform,
   ddWatch,
 } from './label.js';
-import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
+import {
+  getNextMaintenanceWindow,
+  hasNarrowMinuteField,
+  isInMaintenanceWindow,
+} from './maintenance.js';
 import {
   createMutableOidcState,
   getRemoteAuthResolution as getRemoteAuthResolutionState,
@@ -616,6 +620,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async init() {
     this.ensureLogger();
     this.isWatcherDeregistered = false;
+    this.warnIfNarrowMaintenanceWindow();
     await this.initWatcher();
     this.log.info(`Cron scheduled (${this.configuration.cron})`);
     this.watchCron = cron.schedule(this.configuration.cron, () => this.watchFromCron(), {
@@ -647,6 +652,23 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
   async initWatcher() {
     await initWatcherWithRemoteAuth(this.asRemoteAuthWatcher());
+  }
+
+  /**
+   * Warn once at init when the configured maintenance window has a fixed
+   * minute field, since it only opens the window for that exact minute per
+   * matching hour rather than the whole hour(s) (#639).
+   */
+  warnIfNarrowMaintenanceWindow() {
+    const { maintenancewindow } = this.configuration;
+    if (maintenancewindow && hasNarrowMinuteField(maintenancewindow)) {
+      this.log.warn(
+        `Maintenance window '${maintenancewindow}' has a fixed minute field, so the window ` +
+          'is only open during those exact minutes (cron is matched per minute, not as a ' +
+          "range). Use '*' in the minute field to keep the window open for the whole hour(s), " +
+          "e.g. '* 2-3 * * *'.",
+      );
+    }
   }
 
   async recreateDockerClient() {

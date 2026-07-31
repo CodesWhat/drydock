@@ -64,7 +64,8 @@
       "preview": "Voorbeeld",
       "agent-disconnect": "Agent verbroken",
       "notification-delivery-failed": "Melding mislukt",
-      "security-alert": "Beveiligingswaarschuwing"
+      "security-alert": "Beveiligingswaarschuwing",
+      "maturity-cleared": "Maturity Cleared"
     },
     "target": {
       "container": "Container",
@@ -107,6 +108,10 @@
       "container-unhealthy": {
         "name": "Container ongezond",
         "description": "Wanneer de Docker-gezondheidscontrole van een container de status \"unhealthy\" bereikt"
+      },
+      "maturity-cleared": {
+        "name": "Maturity Cleared",
+        "description": "When an update held back by the maturity policy becomes applicable"
       }
     },
     "columns": {

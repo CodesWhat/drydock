@@ -57,6 +57,7 @@ vi.mock('axios');
 vi.mock('./maintenance.js', () => ({
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
+  hasNarrowMinuteField: vi.fn(() => false),
 }));
 vi.mock('./socket-version-probe.js', () => ({
   probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),
@@ -279,6 +280,7 @@ describe('Docker Watcher', () => {
     // Setup maintenance helpers
     maintenance.isInMaintenanceWindow.mockReturnValue(true);
     maintenance.getNextMaintenanceWindow.mockReturnValue(undefined);
+    maintenance.hasNarrowMinuteField.mockReturnValue(false);
 
     // Setup parse mock
     mockParse.mockReturnValue({
@@ -687,6 +689,47 @@ describe('Docker Watcher', () => {
       await scheduledCallback();
 
       expect(docker.watchFromCron).toHaveBeenCalledTimes(1);
+    });
+
+    // Startup warning for minute-precise maintenance-window crons (#639).
+    test('should warn at init when maintenance window has a narrow minute field', async () => {
+      maintenance.hasNarrowMinuteField.mockReturnValue(true);
+      await docker.register('watcher', 'docker', 'test', {
+        maintenancewindow: '0 2-6 * * *',
+      });
+      const mockLog = createMockLog(['info', 'warn', 'debug', 'error']);
+      docker.log = mockLog;
+
+      await docker.init();
+
+      expect(maintenance.hasNarrowMinuteField).toHaveBeenCalledWith('0 2-6 * * *');
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Maintenance window '0 2-6 * * *' has a fixed minute field"),
+      );
+    });
+
+    test('should not warn at init when maintenance window minute field is wildcard', async () => {
+      const mockLog = createMockLog(['info', 'warn', 'debug', 'error']);
+      maintenance.hasNarrowMinuteField.mockReturnValue(false);
+      await docker.register('watcher', 'docker', 'test', {
+        maintenancewindow: '* 2-3 * * *',
+      });
+      docker.log = mockLog;
+
+      await docker.init();
+
+      expect(mockLog.warn).not.toHaveBeenCalled();
+    });
+
+    test('should not warn at init when no maintenance window is configured', async () => {
+      const mockLog = createMockLog(['info', 'warn', 'debug', 'error']);
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = mockLog;
+
+      await docker.init();
+
+      expect(maintenance.hasNarrowMinuteField).not.toHaveBeenCalled();
+      expect(mockLog.warn).not.toHaveBeenCalled();
     });
   });
 

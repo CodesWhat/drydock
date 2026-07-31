@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.10] — 2026-07-31
+
+### Added
+
+- **Startup warning for minute-precise maintenance-window crons.** `DD_WATCHER_{name}_MAINTENANCE_WINDOW` is matched minute-by-minute, so a fixed minute field like `0 2-6 * * *` only opens the window for one minute per matching hour instead of the whole hour range — a common copy-paste trap reported in [Discussion #639](https://github.com/CodesWhat/drydock/discussions/639). The Docker watcher now logs a one-time warning at init when the configured window's minute field doesn't contain `*`, pointing at the fix (`* 2-3 * * *`). Step values like `*/5` are intentional and are not flagged.
+- **"Learn more" link in the update confirm dialog for policy-blocked overrides.** When overriding a soft-blocked update, the confirm dialog now links to the [update-eligibility reasons reference](https://getdrydock.com/docs/configuration/actions/update-eligibility#reasons-reference), matching the link already shown in the Update Status panel. ([Discussion #639](https://github.com/CodesWhat/drydock/discussions/639))
+
+### Changed
+
+- **Translations resynced from Crowdin** ([#620](https://github.com/CodesWhat/drydock/pull/620)), refreshing the container-component and list-view catalogs across all 15 non-English locales, plus a fuller French pass over the agents, app-shell, common, and config catalogs.
+- **Routine dependency maintenance across the app and UI workspaces** ([#614](https://github.com/CodesWhat/drydock/pull/614), [#615](https://github.com/CodesWhat/drydock/pull/615), [#617](https://github.com/CodesWhat/drydock/pull/617), [#646](https://github.com/CodesWhat/drydock/pull/646)): undici 8.9.0 (app) and the 7.29.0 UI override, express-rate-limit 8.6.1, @aws-sdk/client-ecr 3.1096.0, vue-i18n 11.4.8, knip 6.29.0, postcss 8.5.24, and the `fast-uri` security override advanced from 3.1.4 to 4.1.1 (both retain the CVE-2026-16221 fix; the dependency-version guard now rejects the still-vulnerable 4.0.0–4.1.0 range). Renovate no longer proposes `@babel/core` majors while Stryker's instrumenter requires Babel 7.
+
+### Fixed
+
+- **Unchanged `update-available` audit entries are no longer re-recorded on a timer.** Previously an unchanged pending update was re-written to the audit log every time the 1-hour dedupe window lapsed, bloating the audit log for fleets with long-pending updates (a fleet with 10 persistent pending updates wrote 140 rows in 24h). Audit rows are now recorded only on first detection or when the update target/kind changes. The RC-only `DD_AUDIT_UPDATE_AVAILABLE_DEDUPE_MS` variable is removed.
+- **Maintenance-window documentation corrected and made findable** ([Discussion #639](https://github.com/CodesWhat/drydock/discussions/639)). Every documented example used a minute-precise cron (`0 2-6 * * *`) while describing it as an hourly range ("2am–6am daily"). `MAINTENANCE_WINDOW` is matched minute by minute, so that expression opens the window for one minute at the top of each listed hour and reports "closed" the rest of the day. Examples now use `* 2-6 * * *`, with a table of correct forms in [Watchers](https://getdrydock.com/docs/configuration/watchers#maintenance-window). The update confirm dialog's own wording ("This update is currently policy-blocked", "Outside maintenance window — auto update deferred until the window opens", "Update anyway") appeared nowhere in the docs, so searching for the on-screen message returned nothing; [Update Eligibility & Blockers](https://getdrydock.com/docs/configuration/actions/update-eligibility) now documents that dialog verbatim and states plainly that a soft blocker never gates a manual update.
+- **Infrastructure-mode self-updates no longer fail to spawn the helper container on Docker Hub installs** ([#644](https://github.com/CodesWhat/drydock/issues/644)). For containers labeled `dd.update.mode=infrastructure`, the self-update helper is spawned from Drydock's own image, but the reference was rebuilt as `registry-1.docker.io/codeswhat/drydock:<tag>` — the Docker daemon stores Hub images under their short name (`codeswhat/drydock:<tag>`), the helper image is never pulled since it must already exist locally, and container creation failed with `404 No such image`, rolling the update back. The helper image reference is now resolved through the registry provider's `getImageFullName` normalization (the Hub provider strips `registry-1.docker.io/`, `docker.io/`, `library/`) so it matches the daemon-local image name; the previous raw construction remains only as a fallback when no registry manager resolves.
+
 ## [1.6.0-rc.9] — 2026-07-28
 
 ### Added
@@ -2280,7 +2298,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.9...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.10...HEAD
+[1.6.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.9...v1.6.0-rc.10
 [1.6.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.8...v1.6.0-rc.9
 [1.6.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.7...v1.6.0-rc.8
 [1.6.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.6...v1.6.0-rc.7
