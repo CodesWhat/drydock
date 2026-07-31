@@ -15,17 +15,10 @@ import type {
   SecurityAlertEventPayload,
 } from './index.js';
 
-const { mockInsertAudit, mockInc, mockGetAuditCounter, mockGetUpdateAvailableDedupeMs } =
-  vi.hoisted(() => ({
-    mockInsertAudit: vi.fn(),
-    mockInc: vi.fn(),
-    mockGetAuditCounter: vi.fn(),
-    mockGetUpdateAvailableDedupeMs: vi.fn(() => 60 * 60 * 1000),
-  }));
-
-vi.mock('../configuration/index.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../configuration/index.js')>()),
-  getAuditUpdateAvailableDedupeMs: mockGetUpdateAvailableDedupeMs,
+const { mockInsertAudit, mockInc, mockGetAuditCounter } = vi.hoisted(() => ({
+  mockInsertAudit: vi.fn(),
+  mockInc: vi.fn(),
+  mockGetAuditCounter: vi.fn(),
 }));
 
 vi.mock('../store/audit.js', () => ({
@@ -158,7 +151,6 @@ describe('audit-subscriptions dedupe windows', () => {
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
     clearAuditSubscriptionCachesForTests();
     mockGetAuditCounter.mockReturnValue({ inc: mockInc });
-    mockGetUpdateAvailableDedupeMs.mockReturnValue(60 * 60 * 1000);
   });
 
   afterEach(() => {
@@ -228,7 +220,7 @@ describe('audit-subscriptions dedupe windows', () => {
     expect(mockInc).not.toHaveBeenCalled();
   });
 
-  test('deduplicates repeated update-available reports inside the configured window', async () => {
+  test('deduplicates repeated update-available reports with an unchanged signature', async () => {
     const { containerReportHandler } = setupAuditSubscriptions();
     const report = {
       container: {
@@ -242,14 +234,34 @@ describe('audit-subscriptions dedupe windows', () => {
     } as ContainerReport;
 
     await containerReportHandler(report);
-    vi.advanceTimersByTime(60 * 60 * 1000 - 1);
     await containerReportHandler(report);
 
     expect(mockInsertAudit).toHaveBeenCalledTimes(1);
     expect(mockInc).toHaveBeenCalledTimes(1);
   });
 
-  test('records a changed update target immediately inside the dedupe window', async () => {
+  test('does not re-record an unchanged update after elapsed time', async () => {
+    const { containerReportHandler } = setupAuditSubscriptions();
+    const report = {
+      container: {
+        name: 'api',
+        watcher: 'docker',
+        agent: 'edge-a',
+        updateAvailable: true,
+        updateKind: { localValue: '1.0.0', remoteValue: '1.1.0' },
+      },
+      changed: false,
+    } as ContainerReport;
+
+    await containerReportHandler(report);
+    vi.advanceTimersByTime(10 * 60 * 60 * 1000);
+    await containerReportHandler(report);
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledTimes(1);
+  });
+
+  test('records a changed update target immediately', async () => {
     const { containerReportHandler } = setupAuditSubscriptions();
     const container = {
       name: 'api',
@@ -357,7 +369,7 @@ describe('audit-subscriptions dedupe windows', () => {
     );
   });
 
-  test('records a new no-to-yes update transition inside the dedupe window', async () => {
+  test('records a new no-to-yes update transition immediately', async () => {
     const { containerReportHandler } = setupAuditSubscriptions();
     const container = {
       name: 'api',
@@ -378,7 +390,7 @@ describe('audit-subscriptions dedupe windows', () => {
     expect(mockInc).toHaveBeenCalledTimes(2);
   });
 
-  test('records the same update again after the configured dedupe window', async () => {
+  test('retries after audit persistence failure', async () => {
     const { containerReportHandler } = setupAuditSubscriptions();
     const report = {
       container: {
@@ -388,18 +400,48 @@ describe('audit-subscriptions dedupe windows', () => {
         updateAvailable: true,
         updateKind: { localValue: '1.0.0', remoteValue: '1.1.0' },
       },
-      changed: false,
+      changed: true,
     } as ContainerReport;
 
-    await containerReportHandler(report);
-    vi.advanceTimersByTime(60 * 60 * 1000);
+    mockInsertAudit.mockImplementationOnce(() => {
+      throw new Error('audit write failed');
+    });
+
+    await expect(containerReportHandler(report)).rejects.toThrow('audit write failed');
     await containerReportHandler(report);
 
     expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    expect(mockInc).toHaveBeenCalledTimes(1);
   });
 
-  test('captures the configured update dedupe window when the first update report is handled', async () => {
-    mockGetUpdateAvailableDedupeMs.mockReturnValue(1_000);
+  test('forgets update-available state when a container is removed', async () => {
+    const { containerReportHandler, containerRemovedHandler } = setupAuditSubscriptions();
+    const report = {
+      container: {
+        name: 'api',
+        watcher: 'docker',
+        agent: 'edge-a',
+        updateAvailable: true,
+        updateKind: { localValue: '1.0.0', remoteValue: '1.1.0' },
+      },
+      changed: true,
+    } as ContainerReport;
+
+    await containerReportHandler(report);
+    containerRemovedHandler({
+      name: 'api',
+      watcher: 'docker',
+      agent: 'edge-a',
+    } as ContainerLifecycleEventPayload);
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
+    await containerReportHandler(report);
+
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+    expect(mockInc).toHaveBeenCalledTimes(1);
+  });
+
+  test('records once after simulated restart', async () => {
     const { containerReportHandler } = setupAuditSubscriptions();
     const report = {
       container: {
@@ -409,39 +451,43 @@ describe('audit-subscriptions dedupe windows', () => {
         updateAvailable: true,
         updateKind: { localValue: '1.0.0', remoteValue: '1.1.0' },
       },
-      changed: false,
+      changed: true,
     } as ContainerReport;
 
-    expect(mockGetUpdateAvailableDedupeMs).not.toHaveBeenCalled();
     await containerReportHandler(report);
-    expect(mockGetUpdateAvailableDedupeMs).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(1_000);
+    clearAuditSubscriptionCachesForTests();
     await containerReportHandler(report);
 
-    expect(mockGetUpdateAvailableDedupeMs).toHaveBeenCalledTimes(1);
     expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    expect(mockInc).toHaveBeenCalledTimes(2);
   });
 
-  test('prunes stale update identities while accepting a later transition', async () => {
+  test('does not churn a stable fleet of pending updates at scale', async () => {
     const { containerReportHandler } = setupAuditSubscriptions();
-    const reportFor = (name: string) =>
+    const reportFor = (index: number) =>
       ({
         container: {
-          name,
+          name: `web-${index}`,
           watcher: 'docker',
           agent: 'edge-a',
           updateAvailable: true,
           updateKind: { localValue: '1.0.0', remoteValue: '1.1.0' },
         },
-        changed: true,
+        changed: false,
       }) as ContainerReport;
 
-    await containerReportHandler(reportFor('old-api'));
-    vi.advanceTimersByTime(2 * 60 * 60 * 1000 + 1);
-    await containerReportHandler(reportFor('new-api'));
+    for (let index = 0; index < 10_001; index += 1) {
+      await containerReportHandler(reportFor(index));
+    }
+    mockInsertAudit.mockClear();
+    mockInc.mockClear();
 
-    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
-    expect(mockInc).toHaveBeenCalledTimes(2);
+    for (let index = 0; index < 10_001; index += 1) {
+      await containerReportHandler(reportFor(index));
+    }
+
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+    expect(mockInc).not.toHaveBeenCalled();
   });
 
   test('deduplicates security alerts that repeat before 5 minutes', async () => {

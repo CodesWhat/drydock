@@ -40,6 +40,9 @@ services:
     image: ghcr.io/codeswhat/portwing:latest
     restart: unless-stopped
     volumes:
+      # NOTE: :ro only read-protects the socket *file* — the agent still gets
+      # the full Docker Engine API through it. It is not an API boundary; see
+      # the warning below for the production setup.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - DRYDOCK_URL=https://drydock.example.com
@@ -52,6 +55,8 @@ secrets:
   portwing_key:
     file: ./portwing_ed25519.pem
 ```
+
+<Callout type="warn">This example bind-mounts the raw Docker socket into the Portwing container for brevity, and `:ro` is not a security boundary — it only prevents modifying the socket file itself, while every Docker Engine API operation (create, exec, delete) remains available through it. In production, front it with a socket filter instead — see the [sockguard tab](/docs/guides/security#isolate-the-docker-socket) of the Security Hardening Guide, and sockguard's [`examples/compose/tri-tool/`](https://github.com/CodesWhat/sockguard/tree/main/examples/compose/tri-tool) bundle for a runnable compose stack that fronts an Edge agent's Docker socket with sockguard instead of a raw bind mount.</Callout>
 
 The Drydock controller needs the agent's public key registered before it connects. No Portwing-specific environment variable is required:
 
@@ -68,6 +73,8 @@ Generate the agent's keypair with `portwing keygen -comment "edge-host-01"`, the
 <Callout type="info">Portwing's `portwing/1.0` wire protocol and key-registry API are stable under the published compatibility policy. Set `DD_EXPERIMENTAL_PORTWING=false` only when an emergency rollback requires disabling new edge connections.</Callout>
 
 <Callout type="info">**Container logs work continuously over the authenticated edge tunnel.** Live viewers receive separate stdout/stderr chunks, may request timestamps, and cancel the upstream Docker stream when the viewer closes. Both ends enforce bounded queues so a stalled viewer or controller is disconnected instead of growing memory without limit. Older Portwing agents fall back to the bounded one-shot log response, so mixed-version fleets degrade gracefully.</Callout>
+
+<Callout type="warn">**Update triggers are not yet proxied over Edge Mode.** `docker` and `dockercompose` action triggers only run on a standard (inbound HTTP) agent today — Edge Mode currently proxies discovery/watch state, continuous container logs, and container delete, but not update triggers. If you need to update containers on a NAT'd/firewalled host, configure it as a standard agent instead.</Callout>
 
 ## Quickstart
 
@@ -379,7 +386,7 @@ When the controller proxies an update to an agent, it posts to the agent-local `
 - **Watchers**: Run on the Agent to discover containers.
 - **Registries**: Configured on the Agent to check for updates.
 - **Triggers**:
-  - `docker` and `dockercompose` triggers are configured and executed **on the Agent** (allowing update of remote containers). The controller automatically proxies update requests to the correct agent.
+  - `docker` and `dockercompose` triggers are configured and executed **on the Agent** (allowing update of remote containers). The controller automatically proxies update requests to the correct agent. **Exception:** this proxying only works for standard (inbound HTTP) agents — [Edge (Portwing) agents](#edge-agent-dial-out-portwing) don't yet support update triggers.
   - Notification triggers (e.g. `smtp`, `discord`) are configured and executed **on the Controller**. Notifications automatically include a `[server-name]` prefix identifying which server each update comes from. The controller name defaults to the detected Docker or Podman daemon host name when available, then the process hostname, and can be overridden with `DD_SERVER_NAME`.
 
 ## Troubleshooting

@@ -297,11 +297,13 @@ Restrict when auto-updates can run:
 
 ```yaml
 environment:
-  - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *   # 2am–6am daily
+  - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=* 2-6 * * *   # 2am–6:59am daily
   - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ=America/New_York
 ```
 
-Updates detected outside the window are queued and applied when it opens.
+Updates detected outside the window are queued and applied when it opens. The window only gates what drydock does on its own — you can still update any container manually at any time, and the confirm dialog will note the window is closed and offer **Update anyway**.
+
+The expression is matched minute by minute rather than as a start/end range, so keep `*` in the minute field: `0 2-6 * * *` would open the window for one minute at the top of each of those hours. See [Watchers — Maintenance window](/docs/configuration/watchers#maintenance-window).
 
 ### Lifecycle hooks
 
@@ -385,7 +387,7 @@ services:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
       - DD_WATCHER_LOCAL_CRON=0 */6 * * *
-      - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *
+      - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=* 2-6 * * *
 
       # Auth
       - DD_AUTH_BASIC_ADMIN_USER=admin

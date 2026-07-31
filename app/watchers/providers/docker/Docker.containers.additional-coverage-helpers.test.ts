@@ -35,6 +35,7 @@ vi.mock('axios');
 vi.mock('./maintenance.js', () => ({
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
+  hasNarrowMinuteField: vi.fn(() => false),
 }));
 
 import * as registry from '../../../registry/index.js';
