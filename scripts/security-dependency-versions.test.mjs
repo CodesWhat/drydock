@@ -22,6 +22,22 @@ function resolvedVersion(lockfile, packageName) {
   return lockfile.packages?.[`node_modules/${packageName}`]?.version;
 }
 
+// The CVE-2026-16221 fix was backported per-line: 3.1.4 on the 3.x line,
+// 4.1.1 on the 4.x line. A plain ">= 3.1.4" semver floor would wrongly pass
+// 4.0.0 and 4.1.0, which are newer than 3.1.4 but predate the 4.x backport
+// and are still vulnerable. Require the patched floor for whichever major
+// line the resolved version is on.
+function isFastUriPatched(version) {
+  const major = Number(version.split('.')[0]);
+  return major === 3 ? compareSemver(version, '3.1.4') >= 0 : compareSemver(version, '4.1.1') >= 0;
+}
+
+test('isFastUriPatched rejects unpatched 4.x releases newer than 3.1.4', () => {
+  assert.ok(isFastUriPatched('3.1.4'), '3.1.4 (3.x floor) should pass');
+  assert.ok(!isFastUriPatched('4.1.0'), '4.1.0 predates the 4.x backport and should fail');
+  assert.ok(isFastUriPatched('4.1.1'), '4.1.1 (4.x floor) should pass');
+});
+
 // fast-uri was pinned to 3.1.4 in app/ and ui/ for CVE-2026-16221
 // (GHSA-v2hh-gcrm-f6hx). 4.1.1 retains the fix, and Renovate's override
 // bump to 4.1.1 (#617) is accepted alongside the original pin below.
@@ -35,10 +51,7 @@ test('fast-uri is pinned to a patched release in app and ui', () => {
       ['3.1.4', '4.1.1'].includes(manifest.overrides?.['fast-uri']),
       `${workspace} override`,
     );
-    assert.ok(
-      compareSemver(resolvedVersion(lockfile, 'fast-uri'), '3.1.4') >= 0,
-      `${workspace} lockfile`,
-    );
+    assert.ok(isFastUriPatched(resolvedVersion(lockfile, 'fast-uri')), `${workspace} lockfile`);
   }
 });
 
