@@ -438,7 +438,16 @@ class Docker<
         if (!registry?.url) {
           return `${name}:${tag.value}`;
         }
-        return buildImageReference(registry.url, name, tag.value);
+        const builtReference = buildImageReference(registry.url, name, tag.value);
+        // Mirrors Hub.getImageFullName: when no registry manager resolved (so
+        // this manual fallback ran instead), a Docker Hub registry URL still
+        // needs its host stripped — the daemon stores Hub images under the
+        // short name, not under registry-1.docker.io/. Anchored at the start
+        // only so non-Hub references pass through untouched (#644).
+        return builtReference.replace(
+          /^(?:registry-1\.docker\.io|index\.docker\.io|docker\.io)\//,
+          '',
+        );
       },
       touchOperation: (operationId) => {
         updateOperationStore.updateOperation(operationId, {});

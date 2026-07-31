@@ -3600,6 +3600,32 @@ describe('resolveHelperImage for infrastructure updates', () => {
     expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
   });
 
+  // Coverage for the CodeRabbit review on PR #645: when no registry manager
+  // resolves (no registry.name, no matching registered registry) the catch
+  // block falls through to the manual buildImageReference construction. That
+  // fallback must strip the Docker Hub host too, or it regresses #644 for the
+  // exact case that first exposed the bug — just via the fallback path
+  // instead of the delegated Hub.getImageFullName path.
+  test('strips docker hub v2 registry URL in the manual fallback path (#645 follow-up)', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'codeswhat/drydock',
+          tag: { value: '1.5.0' },
+          registry: { url: 'https://registry-1.docker.io/v2' },
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).toBe('codeswhat/drydock:1.5.0');
+  });
+
   // Regression: the common case (registry.url without trailing slash) must be unchanged
   // after the buildImageReference swap.
   test('common case — registry URL without trailing slash still resolves correctly', async () => {
