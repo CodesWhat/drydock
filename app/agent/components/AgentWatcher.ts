@@ -4,6 +4,7 @@ import DockerWatcher, {
   type DockerWatcherConfiguration,
 } from '../../watchers/providers/docker/Docker.js';
 import Watcher from '../../watchers/Watcher.js';
+import { usesControllerDockerTransport } from '../controller-docker-transport.js';
 import { PortwingDockerBridge } from '../PortwingDockerBridge.js';
 import { getRequiredAgentClient } from './getRequiredAgentClient.js';
 
@@ -15,18 +16,8 @@ class AgentWatcher extends Watcher {
   private controllerWatcher?: DockerWatcher;
   private controllerBridge?: PortwingDockerBridge;
 
-  private usesControllerDockerTransport(): boolean {
-    const configuration = this.configuration as Record<string, unknown>;
-    return (
-      this.type === 'docker' &&
-      configuration.transport === 'docker-api' &&
-      configuration.execution === 'controller' &&
-      configuration.events === 'portwing'
-    );
-  }
-
   override async init(): Promise<void> {
-    if (!this.usesControllerDockerTransport()) {
+    if (!usesControllerDockerTransport(this.type, this.configuration)) {
       return;
     }
 

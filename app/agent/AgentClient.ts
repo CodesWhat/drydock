@@ -55,6 +55,7 @@ import { getRequestedOperationId } from '../triggers/providers/docker/update-run
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import type { AgentAuthMode } from './components/Agent.js';
+import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
 
@@ -114,6 +115,7 @@ export interface DockerApiProxyResponse {
 }
 
 const MAX_DOCKER_PROXY_RESPONSE_BYTES = 100 * 1024 * 1024;
+const PORTWING_DOCKER_PROXY_INACTIVITY_TIMEOUT_MS = 30_000;
 
 function isStreamingDockerTarget(target: string): boolean {
   const path = target.split('?', 1)[0];
@@ -168,12 +170,7 @@ interface AgentComponentDescriptor {
 }
 
 function isControllerDockerTransportWatcher(descriptor: AgentComponentDescriptor): boolean {
-  return (
-    descriptor.type === 'docker' &&
-    descriptor.configuration?.transport === 'docker-api' &&
-    descriptor.configuration?.execution === 'controller' &&
-    descriptor.configuration?.events === 'portwing'
-  );
+  return usesControllerDockerTransport(descriptor.type, descriptor.configuration);
 }
 
 interface AgentRuntimeAckPayload {
@@ -501,7 +498,7 @@ export class AgentClient {
     headers: Record<string, string> = {},
     body?: Buffer,
   ): Promise<DockerApiProxyResponse> {
-    if (!target.startsWith('/') || target.startsWith('//')) {
+    if (!target.startsWith('/') || target.startsWith('//') || target.includes('\\')) {
       throw new Error('Docker API request target must be an origin-form path');
     }
 
@@ -542,6 +539,7 @@ export class AgentClient {
         ...(authConfig.headers as Record<string, string> | undefined),
       },
       responseType: 'arraybuffer',
+      timeout: PORTWING_DOCKER_PROXY_INACTIVITY_TIMEOUT_MS,
       maxContentLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxBodyLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxRedirects: 0,

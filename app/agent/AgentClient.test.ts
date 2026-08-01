@@ -8271,6 +8271,7 @@ describe('AgentClient', () => {
           url: 'https://localhost:3001/v1.44/containers/create?name=web%2Fblue',
           data: body,
           responseType: 'arraybuffer',
+          timeout: 30_000,
           headers: expect.objectContaining({
             'X-Dd-Agent-Secret': 'test-secret',
             'x-registry-auth': 'registry-token',
@@ -8298,6 +8299,25 @@ describe('AgentClient', () => {
         validateStatus: (status: number) => boolean;
       };
       expect(request.validateStatus(418)).toBe(true);
+    });
+
+    test('standard mode rejects literal backslashes before signing or dispatch', async () => {
+      await expect(
+        client.requestDockerApi('GET', '/\\attacker.example/v1.44/info'),
+      ).rejects.toThrow('origin-form path');
+      await expect(client.requestDockerApi('GET', '/v1.44/foo\\bar')).rejects.toThrow(
+        'origin-form path',
+      );
+
+      expect(axios).not.toHaveBeenCalled();
+    });
+
+    test('standard mode applies the Docker proxy inactivity timeout to streaming targets', async () => {
+      axios.mockResolvedValue({ status: 200, headers: {}, data: Buffer.alloc(0) });
+
+      await client.requestDockerApi('GET', '/v1.44/events');
+
+      expect(axios).toHaveBeenCalledWith(expect.objectContaining({ timeout: 30_000 }));
     });
 
     test('edge mode routes ordinary and streaming Docker targets through correlated generic requests', async () => {

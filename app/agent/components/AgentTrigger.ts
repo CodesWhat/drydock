@@ -3,6 +3,7 @@ import DockerTrigger, {
   type DockerTriggerConfiguration,
 } from '../../triggers/providers/docker/Docker.js';
 import Trigger from '../../triggers/providers/Trigger.js';
+import { usesControllerDockerTransport } from '../controller-docker-transport.js';
 import { getRequiredAgentClient } from './getRequiredAgentClient.js';
 
 /**
@@ -21,18 +22,8 @@ class AgentTrigger extends Trigger {
     return this.controllerTrigger;
   }
 
-  private usesControllerDockerTransport(): boolean {
-    const configuration = this.configuration as Record<string, unknown>;
-    return (
-      this.type === 'docker' &&
-      configuration.transport === 'docker-api' &&
-      configuration.execution === 'controller' &&
-      configuration.events === 'portwing'
-    );
-  }
-
   override async init(): Promise<void> {
-    if (!this.usesControllerDockerTransport()) {
+    if (!usesControllerDockerTransport(this.type, this.configuration)) {
       await super.init();
       return;
     }
