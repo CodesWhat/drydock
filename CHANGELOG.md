@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.11] — 2026-08-01
+
+### Added
+
+- **Portwing controller-owned Docker watcher, update, and lifecycle transport** ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76)). Drydock 1.6.0-rc.11+ recognizes Portwing 0.9.0's exact Docker watcher marker (`transport=docker-api`, `execution=controller`, `events=portwing`) and runs its native registry checks plus single/batch Docker updates controller-side. Container start, stop, restart, update preview, and backup rollback actions use that same native Docker capability surface instead of failing because Portwing intentionally advertises no remote trigger. A loopback-only bearer-authenticated bridge carries Docker API calls through Portwing over Standard HTTP or Edge correlated `request`/`response`/`stream` messages, while Portwing remains the lifecycle-event source. Later raw Portwing inventory (`updateAvailable=false`, `updateKind=unknown`) preserves rather than erases the controller-enriched update state.
+
+### Changed
+
+- **Standard Portwing Ed25519 requests now use signature version 2.** The controller sends five authentication headers, including `X-Portwing-Signature-Version: 2`, and signs the exact origin-form request target (escaped path plus the unmodified raw query) instead of a decoded path without its query.
+
 ## [1.6.0-rc.10] — 2026-07-31
 
 ### Added
@@ -2298,7 +2308,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.10...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.11...HEAD
+[1.6.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.10...v1.6.0-rc.11
 [1.6.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.9...v1.6.0-rc.10
 [1.6.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.8...v1.6.0-rc.9
 [1.6.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.7...v1.6.0-rc.8

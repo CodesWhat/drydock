@@ -74,7 +74,7 @@ Generate the agent's keypair with `portwing keygen -comment "edge-host-01"`, the
 
 <Callout type="info">**Container logs work continuously over the authenticated edge tunnel.** Live viewers receive separate stdout/stderr chunks, may request timestamps, and cancel the upstream Docker stream when the viewer closes. Both ends enforce bounded queues so a stalled viewer or controller is disconnected instead of growing memory without limit. Older Portwing agents fall back to the bounded one-shot log response, so mixed-version fleets degrade gracefully.</Callout>
 
-<Callout type="warn">**Update triggers are not yet proxied over Edge Mode.** `docker` and `dockercompose` action triggers only run on a standard (inbound HTTP) agent today — Edge Mode currently proxies discovery/watch state, continuous container logs, and container delete, but not update triggers. If you need to update containers on a NAT'd/firewalled host, configure it as a standard agent instead.</Callout>
+<Callout type="info">**Portwing Docker updates and lifecycle actions work in both connection modes with Drydock 1.6.0-rc.11+ and Portwing 0.9.0+.** When Portwing advertises a `docker` watcher whose configuration is exactly `transport=docker-api`, `execution=controller`, and `events=portwing`, Drydock runs its native registry checks, single/batch Docker updates, container start/stop/restart, update preview, and backup rollback controller-side. Docker API calls traverse Portwing over authenticated Standard HTTP or correlated Edge `request`/`response`/`stream` messages. Portwing remains the lifecycle-event source, so the controller does not open a duplicate Docker event stream. This transport registers the native `docker` action; it does not add a controller-side Docker Compose action.</Callout>
 
 ## Quickstart
 
@@ -239,7 +239,15 @@ services:
 
 ### Ed25519 request signing (standard-mode)
 
-By default the controller authenticates to each agent with a shared secret token (the `X-Dd-Agent-Secret` header). Setting `DD_AGENT_{name}_AUTHMODE=ed25519` switches that agent to **per-request Ed25519 signing** instead: every request the controller sends carries four `X-Portwing-*` headers — `X-Portwing-Key-ID`, `X-Portwing-Timestamp` (unix seconds), `X-Portwing-Nonce`, and a base64url `X-Portwing-Signature` over the canonical `METHOD\nPATH\nSHA-256-hex(body)\ntimestamp\nnonce` message — matching [Portwing's verifier](/docs/api/portwing). No `X-Dd-Agent-Secret` is sent.
+By default the controller authenticates to each agent with a shared secret token (the `X-Dd-Agent-Secret` header). Setting `DD_AGENT_{name}_AUTHMODE=ed25519` switches that agent to **per-request Ed25519 signing** instead. Every request carries five headers:
+
+- `X-Portwing-Key-ID`
+- `X-Portwing-Timestamp` (Unix seconds)
+- `X-Portwing-Nonce`
+- `X-Portwing-Signature` (base64url Ed25519 signature)
+- `X-Portwing-Signature-Version: 2`
+
+Signature version 2 signs `METHOD\nREQUEST-TARGET\nSHA-256-hex(body)\ntimestamp\nnonce`, where `REQUEST-TARGET` is the exact origin-form target placed on the wire: the escaped path plus `?` and the unmodified raw query when present. Percent escaping, query ordering, repeated parameters, and the raw body bytes are signature inputs and must not be decoded, normalized, or reordered. This matches [Portwing's verifier](/docs/api/portwing#standard-mode-ed25519-request-signing). No `X-Dd-Agent-Secret` is sent.
 
 Use it when the remote agent verifies requests with a registered Ed25519 public key (Portwing's scheme) rather than a shared secret. Unlike a static token, a captured signature can't be replayed and there's no long-lived shared secret on the wire.
 
@@ -381,12 +389,17 @@ When the Docker watcher on an agent fails to enumerate containers (e.g. a brief 
 
 When the controller proxies an update to an agent, it posts to the agent-local `POST /api/triggers/{type}/{name}` route (or `…/batch` for batch updates). Agent-local routes are intentionally unversioned and authenticated with `X-Dd-Agent-Secret`; controller API clients should continue to use the canonical `/api/v1/*` routes. For single-update calls on `docker` and `dockercompose` triggers the controller sends only `{ id, name }` (plus an `operationId` when one is in flight) rather than the full container object, which prevents HTTP 413 errors where full payloads exceeded the agent's 256 KB body cap. Batch update calls (`…/batch`) still send the full container per item, so a very large fleet updated in one batch can still approach that cap.
 
+Portwing 0.9.0's controller-owned Docker transport does not use those legacy watcher/trigger POST routes. The exact `transport=docker-api`, `execution=controller`, `events=portwing` marker causes Drydock to start its native Docker watcher and update action against a loopback-only, random bearer-authenticated bridge. That bridge forwards Docker API calls through the agent client's existing authentication: Standard HTTP (token or Ed25519 signature version 2) or Edge correlated `request`/`response`/`stream` transport.
+
+Because registry enrichment is controller-owned on this path, later Portwing inventory commonly carries the raw defaults `updateAvailable=false` and `updateKind=unknown`. Drydock preserves its stored `result`, update status, policy, security, rollback, and operation fields instead of allowing those raw defaults to erase a controller-enriched result. Portwing's lifecycle events remain authoritative; the delegated native watcher runs with its own Docker event subscription disabled to avoid duplicate streams.
+
 ## Features in Agent Mode
 
-- **Watchers**: Run on the Agent to discover containers.
-- **Registries**: Configured on the Agent to check for updates.
+- **Watchers**: Traditional agents run watchers locally. A Portwing 0.9.0 watcher with the exact controller-transport marker runs Drydock's native Docker watcher on the Controller through Portwing.
+- **Registries**: Traditional agents perform their configured checks locally; marked Portwing watchers use the Controller's native registry configuration and enrichment.
 - **Triggers**:
-  - `docker` and `dockercompose` triggers are configured and executed **on the Agent** (allowing update of remote containers). The controller automatically proxies update requests to the correct agent. **Exception:** this proxying only works for standard (inbound HTTP) agents — [Edge (Portwing) agents](#edge-agent-dial-out-portwing) don't yet support update triggers.
+  - Traditional-agent `docker` and `dockercompose` triggers are configured and executed **on the Agent**, with the controller proxying update requests to it.
+  - A marked Portwing watcher automatically receives a controller-owned native `docker` action. Single/batch updates, start/stop/restart, update preview, and backup rollback work over Standard or Edge transport; Docker Compose is not part of this marker contract.
   - Notification triggers (e.g. `smtp`, `discord`) are configured and executed **on the Controller**. Notifications automatically include a `[server-name]` prefix identifying which server each update comes from. The controller name defaults to the detected Docker or Podman daemon host name when available, then the process hostname, and can be overridden with `DD_SERVER_NAME`.
 
 ## Troubleshooting

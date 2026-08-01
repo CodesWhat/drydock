@@ -1492,6 +1492,32 @@ test('deregisterAgentComponents should remove agent-specific watchers and trigge
   expect(registry.getState().trigger[triggerComponent.getId()]).toBeUndefined();
 });
 
+test('late cleanup of a disconnected agent does not delete a replacement component with the same id', async () => {
+  let finishCleanup!: () => void;
+  const oldComponent = new Component();
+  await oldComponent.register('watcher', 'docker', 'docker', {});
+  oldComponent.agent = 'myagent';
+  oldComponent.deregister = vi.fn(
+    () =>
+      new Promise((resolve) => {
+        finishCleanup = () => resolve(oldComponent);
+      }),
+  );
+  registry.getState().watcher[oldComponent.getId()] = oldComponent;
+
+  const cleanup = registry.deregisterAgentComponents('myagent');
+  await Promise.resolve();
+  const replacement = new Component();
+  await replacement.register('watcher', 'docker', 'docker', {});
+  replacement.agent = 'myagent';
+  registry.getState().watcher[replacement.getId()] = replacement;
+
+  finishCleanup();
+  await cleanup;
+
+  expect(registry.getState().watcher[replacement.getId()]).toBe(replacement);
+});
+
 test('registerTriggers in agent mode should filter out unsupported trigger types', async () => {
   // Clean all existing triggers first
   const state = registry.getState();

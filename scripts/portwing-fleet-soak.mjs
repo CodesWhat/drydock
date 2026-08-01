@@ -16,6 +16,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { cleanupFleetAgents } from './lib/cleanup-fleet-agents.mjs';
 
 const DEFAULTS = {
   agents: 8,
@@ -234,6 +235,7 @@ let sampler;
 let controllerAddress;
 let getAgents;
 let removeAgent;
+let deregisterAgentComponents;
 let clearNonceCacheForTesting;
 let assertionFailure;
 const evidence = {
@@ -329,9 +331,11 @@ function spawnAgent(index) {
 async function run() {
   const gatewayModule = await import(pathToFileURL(join(appRoot, 'dist/api/portwing-ws.js')).href);
   const managerModule = await import(pathToFileURL(join(appRoot, 'dist/agent/manager.js')).href);
+  const registryModule = await import(pathToFileURL(join(appRoot, 'dist/registry/index.js')).href);
   const storeModule = await import(pathToFileURL(join(appRoot, 'dist/store/index.js')).href);
   const { createPortwingWsGateway, clearNonceCacheForTesting: clearNonceCache } = gatewayModule;
   ({ getAgents, removeAgent } = managerModule);
+  ({ deregisterAgentComponents } = registryModule);
   clearNonceCacheForTesting = clearNonceCache;
   await storeModule.init({ memory: true });
 
@@ -557,14 +561,15 @@ async function cleanup() {
     clearInterval(sampler);
   }
   try {
-    for (const agent of getAgents?.() ?? []) {
-      try {
-        agent.edgeAdapter?.ws?.close(1001, 'fleet soak complete');
-      } catch {
-        // best effort
-      }
-      removeAgent?.(agent.name);
-    }
+    await cleanupFleetAgents({
+      agents: [...(getAgents?.() ?? [])],
+      deregisterAgentComponents,
+      removeAgent,
+      onError: (name, error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`fleet-soak: component cleanup failed for ${name}: ${message}\n`);
+      },
+    });
   } catch {
     // best effort
   }

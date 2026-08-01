@@ -10,6 +10,7 @@
 import { emitAgentConnected, emitAgentDisconnected } from '../event/index.js';
 import logger from '../log/index.js';
 import type { Container } from '../model/container.js';
+import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import type { AgentClient, AgentClientConfig } from './AgentClient.js';
@@ -17,9 +18,17 @@ import { addAgent, getAgent, removeAgent } from './index.js';
 
 const MAX_EXEC_SESSIONS = 100;
 const MAX_PENDING_REQUESTS = 100;
+const MAX_STREAM_RESPONSE_BYTES = 100 * 1024 * 1024;
 const PING_INTERVAL_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CONTAINER_SYNC_WARN_MS = 30_000;
+const ORDERED_STATE_FRAME_TYPES = new Set([
+  'dd:component_sync',
+  'dd:container_sync',
+  'dd:container_added',
+  'dd:container_updated',
+  'dd:container_removed',
+]);
 // Number of consecutive server-initiated ping cycles that may pass without a
 // pong reply before the connection is considered dead. 2 cycles × 30s = 60s,
 // matching portwing's own readDeadline of max(2*heartbeat, 60s) for symmetry.
@@ -57,6 +66,7 @@ interface PendingRequest {
   statusCode?: number;
   headers?: Record<string, string>;
   chunks?: Buffer[];
+  streamBytes?: number;
 }
 
 export interface ContainerLogStreamChunk {
@@ -152,6 +162,7 @@ export class EdgeAgentAdapter {
   private readonly messageListener: (raw: unknown) => void;
   private readonly closeListener: () => void;
   private readonly errorListener: (err: unknown) => void;
+  private orderedStateFrameChain: Promise<void> = Promise.resolve();
 
   constructor(client: AgentClient, ws: WebSocketLike, options: EdgeAgentAdapterOptions = {}) {
     this.client = client;
@@ -307,6 +318,28 @@ export class EdgeAgentAdapter {
     const { type, data } = frame;
     if (typeof type !== 'string' || !data || typeof data !== 'object') {
       log.warn(`${this.agentName}: malformed frame (type=${String(type)})`);
+      return;
+    }
+
+    if (ORDERED_STATE_FRAME_TYPES.has(type)) {
+      const frameTask = this.orderedStateFrameChain.then(() => this.dispatchFrame(type, data));
+      // Contain failures so one bad component/snapshot/event frame cannot
+      // poison the FIFO. Attaching the rejection handler immediately also
+      // prevents unhandled-rejection windows in the WebSocket callback.
+      this.orderedStateFrameChain = frameTask.catch((err: unknown) => {
+        log.error(`Frame handling error on ${this.agentName}: ${getErrorMessage(err)}`);
+      });
+      await this.orderedStateFrameChain;
+      return;
+    }
+
+    await this.dispatchFrame(type, data);
+  }
+
+  private async dispatchFrame(type: string, data: Record<string, unknown>): Promise<void> {
+    // A frame may have been admitted to the ordered queue immediately before
+    // teardown. Re-check liveness when it reaches the head of the queue.
+    if (this.disconnected) {
       return;
     }
 
@@ -749,6 +782,18 @@ export class EdgeAgentAdapter {
     // O10: accumulate base64-decoded chunk on the pending entry
     if (typeof data.data === 'string') {
       const chunk = Buffer.from(data.data, 'base64');
+      const streamBytes = (pending.streamBytes ?? 0) + chunk.length;
+      if (streamBytes > MAX_STREAM_RESPONSE_BYTES) {
+        clearTimeout(pending.timer);
+        this.pendingRequests.delete(streamKey);
+        pending.reject(
+          new Error(
+            `Stream response exceeded the ${MAX_STREAM_RESPONSE_BYTES}-byte response limit`,
+          ),
+        );
+        return;
+      }
+      pending.streamBytes = streamBytes;
       if (!pending.chunks) {
         pending.chunks = [];
       }
@@ -1296,7 +1341,15 @@ export class EdgeAgentAdapter {
     // evict it too. Only remove when the registry's current entry for this
     // name is still THIS adapter's own client instance.
     if (getAgent(this.agentName) === this.client) {
+      const componentCleanup = registry
+        .deregisterAgentComponents(this.agentName)
+        .catch((error: unknown) => {
+          log.warn(
+            `Failed to clean up components for disconnected edge agent ${this.agentName}: ${getErrorMessage(error)}`,
+          );
+        });
       removeAgent(this.agentName);
+      await componentCleanup;
     }
 
     if (wasConnected) {

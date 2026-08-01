@@ -1,6 +1,6 @@
 ---
-title: "Portwing Edge API"
-description: "Ed25519 agent-key registry and the portwing/1.0 WebSocket edge endpoint for firewall-traversing agents."
+title: "Portwing API & Transport"
+description: "Standard request signing, controller-owned Docker transport, the Ed25519 key registry, and the portwing/1.0 edge endpoint."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -10,6 +10,41 @@ import { Callout } from 'fumadocs-ui/components/callout';
 Edge mode inverts the normal drydock connection model. In the standard setup the controller dials out to each remote agent. Edge mode is for agents that sit behind NAT or a firewall and cannot accept inbound connections: the `portwing` agent dials **out** to drydock over an encrypted WebSocket (`wss://`), and drydock registers the connection as if the agent had been reached normally. No inbound port on the agent host is needed. The chain is `sockguard → portwing (edge client) → drydock (this endpoint)`.
 
 > For agents that accept inbound connections from the controller, see the [Agent API](/docs/api/agent).
+
+---
+
+## Standard Mode Ed25519 request signing
+
+Standard Mode can authenticate each controller request with a shared
+`X-Dd-Agent-Secret` token or with Portwing's per-request Ed25519 scheme. With
+`DD_AGENT_{name}_AUTHMODE=ed25519`, Drydock sends these five headers and does not
+send the shared secret:
+
+| Header | Value |
+| --- | --- |
+| `X-Portwing-Key-ID` | Registered 16-character public-key id |
+| `X-Portwing-Timestamp` | Unix timestamp in seconds |
+| `X-Portwing-Nonce` | Fresh request nonce |
+| `X-Portwing-Signature` | Base64url Ed25519 signature |
+| `X-Portwing-Signature-Version` | `2` |
+
+Signature version 2 signs the following UTF-8 bytes with no trailing newline:
+
+```text
+METHOD
+REQUEST-TARGET
+<SHA-256 hex of the exact request body bytes>
+<unix-timestamp-seconds>
+<nonce>
+```
+
+`REQUEST-TARGET` is the exact origin-form target sent on the wire: the escaped
+path followed by `?` and the unmodified raw query when present. For example,
+`/v1.44/containers/json?all=1&filters=%7B%7D` is signed exactly as shown.
+Percent escapes, query parameter order, repeated parameters, and raw query
+bytes must not be decoded, normalized, or reordered. This differs from the
+Edge hello signature below, whose canonical WebSocket path remains fixed by
+the `portwing/1.0` protocol.
 
 ---
 
@@ -151,7 +186,7 @@ A versioned alias `/api/v1/portwing/ws` is also accepted and is signature-equiva
 1. The agent opens a WebSocket upgrade to `wss://drydock/api/portwing/ws` with the `portwing/1.0` subprotocol header. The upgrade is rejected before any WebSocket frame is read if the `Origin` header doesn't match the server (`403`) or the connection is rate-limited (`429`).
 2. The agent sends a **hello frame** as the first message, within 30 seconds — otherwise the connection is closed (code `1008`, no error frame). The frame carries `pubKeyId`, `timestamp`, `nonce`, and `signature` as described under [Ed25519 authentication model](#ed25519-authentication-model) above, plus `agentId`, `protocol` (must be `portwing/1.0`), and `version`.
 3. drydock verifies the hello. On success it replies with a **welcome frame** carrying poll configuration and server version information.
-4. The connection is then live: the agent multiplexes container-sync, exec, and (for the controller-initiated log/delete actions) request-response frames over the same WebSocket. The server also sends a `ping` frame every 30 seconds; an agent that misses two consecutive pongs (60 seconds of silence) is force-disconnected (close code `1001`, reason `ping timeout`).
+4. The connection is then live: the agent multiplexes container-sync, exec, logs, deletes, and controller-owned Docker watcher/update calls over correlated request-response-stream frames on the same WebSocket. The server also sends a `ping` frame every 30 seconds; an agent that misses two consecutive pongs (60 seconds of silence) is force-disconnected (close code `1001`, reason `ping timeout`).
 
 ### Hello frame
 
@@ -162,7 +197,7 @@ A versioned alias `/api/v1/portwing/ws` is also accepted and is signature-equiva
     "agentId": "edge-host-01",
     "agentName": "edge-host-01",
     "protocol": "portwing/1.0",
-    "version": "1.6.0-rc.10",
+    "version": "1.6.0-rc.11",
     "pubKeyId": "3f8a1c2e9b047d56",
     "timestamp": 1780329600,
     "nonce": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
@@ -173,7 +208,7 @@ A versioned alias `/api/v1/portwing/ws` is also accepted and is signature-equiva
 
 `agentId` must match `^[a-zA-Z0-9_-]+$` (max 64 chars). `agentName`, if present, must be a string no longer than 256 raw characters — a non-string or oversized value is rejected with `invalid-agent-name` (close code `1008`) before it is ever sanitized or logged. A valid `agentName` is then sanitized to a safe slug (lowercase, `a-z0-9-`, max 63 chars) and used as the agent's display/registry name; an empty, missing, or all-invalid-chars name falls back to `portwing-edge-<agentId>`.
 
-**Identity binding (anti-squat/anti-theft).** A sanitized or fallback name has no cryptographic meaning of its own, so drydock binds each name to the `pubKeyId` that first authenticates a hello under it. A later hello that reuses the same name is admitted only if it authenticates under that *same* key; a hello for a name already bound to a *different* key is rejected with `agent-name-claimed`. The binding is not released on a plain disconnect — it persists so a reconnecting agent keeps its name — but it *is* released the moment the owning key is [revoked](#revoke-a-key), freeing the name for a legitimately re-provisioned agent to reclaim. The binding registry is capped at 10,000 distinct names; once full, drydock first tries evicting bindings that are both idle 24+ hours and not backing a live connection, and only rejects the hello with `registry-full` if that doesn't free up room.
+**Identity binding (anti-squat/anti-theft).** A sanitized or fallback name has no cryptographic meaning of its own, so drydock binds each name to the `pubKeyId` that first authenticates a hello under it. A later hello that reuses the same name is admitted only if it authenticates under that *same* key; a hello for a name already bound to a *different* key is rejected with `agent-name-claimed`. The binding is not released on a plain disconnect or by age alone — it persists across restarts so a reconnecting agent keeps its name — but it *is* released the moment the owning key is [revoked](#revoke-a-key), freeing the name for a legitimately re-provisioned agent to reclaim. The binding registry is capped at 10,000 distinct names; only when admitting a brand-new name at that cap does drydock try evicting bindings that are both idle 24+ hours and not backing a live connection. It rejects the hello with `registry-full` if that doesn't free up room.
 
 A name collision with an already-connected agent under the same key (or the in-flight reservation for a hello still being processed) is rejected with `agent-already-connected`. The frame also carries `dockerVersion`, `hostname`, and `capabilities` host-descriptor fields (and optionally `drydockCompat`, `watcherTypes`, `triggerTypes`) that aren't yet consumed on this path.
 
@@ -185,7 +220,7 @@ A name collision with an already-connected agent under the same key (or the in-f
   "data": {
     "pollInterval": 300,
     "config": {
-      "drydockVersion": "1.6.0-rc.10",
+      "drydockVersion": "1.6.0-rc.11",
       "supportedProtocols": "portwing/1.0",
       "serverCompatLevel": "1.4.0"
     }
@@ -194,6 +229,46 @@ A name collision with an already-connected agent under the same key (or the in-f
 ```
 
 `serverCompatLevel` is `1.4.0` — the compatibility level actually implemented by this server, not a target for a future release. If the hello's `drydockCompat` field has a different major version, the connection is still accepted; drydock only logs a warning so operators can check the compat matrix.
+
+### Controller-owned Docker watcher, updates, and lifecycle actions
+
+Drydock 1.6.0-rc.11+ activates this path only for Portwing 0.9.0+ watcher
+descriptors whose type is `docker` and whose configuration contains all three
+exact marker values:
+
+```json
+{
+  "transport": "docker-api",
+  "execution": "controller",
+  "events": "portwing"
+}
+```
+
+Drydock then runs its native Docker watcher, registry checks, and native Docker
+action controller-side. This capability surface includes single/batch updates,
+container start/stop/restart, update preview, and backup rollback. Dockerode
+connects to a loopback-only bridge on an ephemeral port using a random bearer
+credential. The bridge strips
+hop-by-hop and caller-supplied authorization headers before forwarding each
+Docker Engine request through the already-authenticated Portwing connection:
+
+- **Standard Mode:** HTTP requests use the configured agent token or the
+  [five-header Ed25519 signature-version-2 scheme](#standard-mode-ed25519-request-signing).
+- **Edge Mode:** non-streaming calls use correlated `request`/`response`
+  messages; Docker streaming targets use the correlated `stream` path.
+
+Both Docker updates and lifecycle actions use this controller-owned path over
+Standard or Edge mode. It does not advertise or invoke a Portwing remote
+trigger, and Portwing's legacy watcher/trigger POST endpoints may continue to
+return 501. Docker Compose actions are not part of this marker contract.
+
+`events: "portwing"` keeps Portwing authoritative for Docker lifecycle events.
+The delegated native watcher disables its own event subscription, preventing a
+duplicate Docker event stream through the bridge. Portwing inventory remains
+the raw runtime view, so its `updateAvailable=false` and `updateKind=unknown`
+defaults must not erase controller-owned enrichment. Drydock preserves its
+stored registry result, update state, policy, security, rollback, and operation
+fields when later inventory and lifecycle reports arrive.
 
 ### Continuous container-log streaming
 
