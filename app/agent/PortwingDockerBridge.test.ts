@@ -229,6 +229,53 @@ describe('PortwingDockerBridge', () => {
     }
   });
 
+  test('contains an aborted request body without an unhandled rejection', async () => {
+    const requestDockerApi = vi.fn();
+    const bridge = new PortwingDockerBridge({ requestDockerApi });
+    const endpoint = await bridge.start();
+    const bodyReadStarted = deferred<void>();
+    const bodyReadSettled = deferred<void>();
+    const internal = bridge as unknown as {
+      readBody: (request: IncomingMessage) => Promise<Buffer | undefined>;
+    };
+    const originalReadBody = internal.readBody.bind(bridge);
+    const readBody = vi
+      .spyOn(internal, 'readBody')
+      .mockImplementation(async (request: IncomingMessage) => {
+        bodyReadStarted.resolve(undefined);
+        return originalReadBody(request).finally(() => {
+          bodyReadSettled.resolve(undefined);
+        });
+      });
+
+    try {
+      const clientClosed = new Promise<void>((resolve) => {
+        const request = http.request(`${endpoint.baseUrl}/v1.44/containers/create`, {
+          method: 'POST',
+          headers: {
+            authorization: endpoint.authorization,
+            'content-length': '10',
+          },
+        });
+        request.once('error', () => resolve());
+        request.flushHeaders();
+        void bodyReadStarted.promise.then(() => {
+          request.write('part');
+          request.destroy(new Error('intentional client abort'));
+        });
+      });
+
+      await clientClosed;
+      await bodyReadSettled.promise;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(readBody).toHaveBeenCalledOnce();
+      expect(requestDockerApi).not.toHaveBeenCalled();
+    } finally {
+      readBody.mockRestore();
+      await bridge.stop();
+    }
+  });
+
   test('keeps concurrent responses correlated when the remote requests complete out of order', async () => {
     const first = deferred<{
       statusCode: number;

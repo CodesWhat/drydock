@@ -84,7 +84,9 @@ export class PortwingDockerBridge {
       return this.endpoint;
     }
     const server = http.createServer((req, res) => {
-      void this.handle(req, res);
+      void this.handle(req, res).catch(() => {
+        res.destroy();
+      });
     });
     server.on('connection', (socket) => {
       this.sockets.add(socket);
