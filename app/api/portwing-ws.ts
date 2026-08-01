@@ -126,25 +126,25 @@ const inFlightAgents = new Set<string>();
 // key could grow this map without bound by reconnecting under a fresh
 // agentId/agentName every time (nothing but the 200/60s per-key nonce-admission
 // limit throttles that, which still permits ~288k new bindings/day/key). Bound
-// memory the same way nonceCache is bounded: a hard size cap plus periodic
+// memory the same way nonceCache is bounded: a hard size cap plus admission-time
 // pruning of bindings that are both stale (idle past NAME_BINDING_STALE_MS) and
 // not currently backing a live connection (checked via getAgent so an active
-// agent's own binding is never evicted out from under it).
+// agent's own binding is never evicted out from under it). Age alone must never
+// release stable ownership.
 const nameToKeyId = new Map<string, { keyId: string; lastSeenAt: number }>();
 // Hard cap on distinct name bindings, matching nonceCache's cap in spirit.
 const MAX_NAME_BINDINGS = 10_000;
 // A binding idle longer than this (no hello seen under its name) becomes
-// eligible for eviction once the map is at/over MAX_NAME_BINDINGS, provided the
-// name isn't currently backing a live connection.
+// eligible for eviction only when a brand-new name would exceed
+// MAX_NAME_BINDINGS, provided the name isn't currently backing a live
+// connection.
 const NAME_BINDING_STALE_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Evict name bindings that are both idle past NAME_BINDING_STALE_MS and not
  * currently backing a live agent connection. Called opportunistically when a
- * new binding would push the map over MAX_NAME_BINDINGS, and periodically
- * alongside nonce pruning so long-idle bindings don't just wait for a cap hit.
- * Every eviction here is also write-through'd to the durable store so the two
- * never drift.
+ * new binding would push the map over MAX_NAME_BINDINGS. Every eviction here is
+ * also write-through'd to the durable store so the two never drift.
  */
 function pruneStaleNameBindings(nowMs: number): void {
   for (const [name, binding] of nameToKeyId.entries()) {
@@ -160,19 +160,12 @@ function pruneStaleNameBindings(nowMs: number): void {
  * createPortwingWsGateway() so a restarted server knows which key owns which
  * name before any agent reconnects — see the nameToKeyId doc comment above.
  *
- * Only evaluates staleness against the records it just loaded (not the whole
- * map — that's pruneStaleNameBindings()'s job on its own cadence) so a
- * binding that was already past NAME_BINDING_STALE_MS before the restart
- * doesn't get a fresh 24h lease purely from being reloaded, while a genuinely
- * fresh binding is admitted as-is.
+ * Rehydration preserves every durable binding regardless of age. Stable name
+ * ownership is released only by explicit key revocation, or by cap-pressure
+ * eviction while admitting a brand-new name.
  */
 function rehydrateNameBindings(): void {
-  const nowMs = Date.now();
   for (const record of nameBindingsStore.listBindings()) {
-    if (nowMs - record.lastSeenAt > NAME_BINDING_STALE_MS && !getAgent(record.agentName)) {
-      nameBindingsStore.deleteBinding(record.agentName);
-      continue;
-    }
     nameToKeyId.set(record.agentName, { keyId: record.keyId, lastSeenAt: record.lastSeenAt });
   }
 }
@@ -190,8 +183,6 @@ function startNoncePruning(): void {
     }
     // Reset per-key admission counters each pruning cycle (every 60 s).
     noncesPerKey.clear();
-    // Bound nameToKeyId growth the same cycle — see pruneStaleNameBindings.
-    pruneStaleNameBindings(Date.now());
   }, 60_000);
   /* v8 ignore next */
   if (typeof noncePruneInterval.unref === 'function') {
@@ -241,11 +232,12 @@ export function disconnectByKeyId(keyId: string): number {
   // restart. Best-effort/not awaited: disconnectByKeyId is called
   // synchronously (and un-awaited) from the DELETE /keys/:keyId route
   // (app/api/portwing.ts) and from many synchronous test call sites, so
-  // making this async would ripple across both for no matching benefit — a
-  // missed flush here only denies a name temporarily and self-heals via
-  // pruneStaleNameBindings()/rehydrateNameBindings()'s stale-lease check,
-  // unlike the NEW-BIND flush in processHello() below, which must be a hard,
-  // awaited failure because it is the only guard against a genuine squat.
+  // making this async would ripple across both for no matching benefit. A
+  // missed flush here fails closed: after a restart the old binding may deny
+  // reclaim until an operator retries revocation or cap-pressure eviction
+  // applies, but it never lets a different key squat the name. By contrast,
+  // the NEW-BIND flush in processHello() below must be a hard, awaited failure
+  // because it is the only guard against a genuine squat.
   // Wrapped defensively: Promise.resolve(...) guards against saveStore() ever
   // not returning a genuine thenable (the real store/index.ts save() always
   // does, being declared `async function`), and the outer try/catch guards

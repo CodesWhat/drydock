@@ -696,7 +696,7 @@ async function deregisterComponent(component: Component, kind: ComponentKind) {
     );
   } finally {
     const components = getState()[kind];
-    if (components) {
+    if (components?.[component.getId()] === component) {
       delete components[component.getId()];
     }
   }

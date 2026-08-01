@@ -1,7 +1,7 @@
 /**
  * Ed25519 standard-mode request signing client.
  *
- * Produces the four `X-Portwing-*` headers Portwing's HTTP verifier
+ * Produces the five `X-Portwing-*` headers Portwing's HTTP verifier
  * (`internal/auth/verify.go`) expects on every authenticated standard-mode
  * request, as an opt-in alternative to the legacy `X-Dd-Agent-Secret` token
  * header (see AgentClient.ts / app/agent/components/Agent.ts `authMode`).
@@ -13,13 +13,11 @@
  * edge-mode hello signer in app/api/portwing-ws.ts#verifyHelloSignature.
  *
  * Canonical message (UTF-8, no trailing newline):
- *   METHOD\nPATH\nbody-sha256-hex\nunix-timestamp\nnonce
+ *   METHOD\nREQUEST-TARGET\nbody-sha256-hex\nunix-timestamp\nnonce
  *
  * - METHOD: HTTP method, uppercase, as sent.
- * - PATH: the request URL path only (no query string) — must match what the
- *   server's URL router reconstructs as the *decoded* path (Go's r.URL.Path),
- *   so callers must pass the plain, unescaped path segments here rather than
- *   a percent-encoded one.
+ * - REQUEST-TARGET: exact origin-form target, using the escaped path and
+ *   unmodified raw query string (for example `/v1.44/info?verbose=1`).
  * - body-sha256-hex: lowercase hex SHA-256 of the raw request body bytes as
  *   they will appear on the wire. An empty/zero-length body hashes to the
  *   well-known SHA-256-of-empty-string constant (EMPTY_BODY_SHA256_HEX).
@@ -38,6 +36,7 @@ export const ED25519_AUTH_HEADER_NAMES = {
   timestamp: 'X-Portwing-Timestamp',
   nonce: 'X-Portwing-Nonce',
   signature: 'X-Portwing-Signature',
+  signatureVersion: 'X-Portwing-Signature-Version',
 } as const;
 
 /** SHA-256 hex digest of the empty string — the body hash for empty-body requests. */
@@ -49,6 +48,7 @@ export interface Ed25519SignedHeaders {
   'X-Portwing-Timestamp': string;
   'X-Portwing-Nonce': string;
   'X-Portwing-Signature': string;
+  'X-Portwing-Signature-Version': '2';
 }
 
 /**
@@ -95,7 +95,7 @@ export function buildCanonicalMessage(
 export interface SignRequestOptions {
   /** HTTP method, any case — normalized to uppercase before signing. */
   method: string;
-  /** URL path only, no query string, unescaped (see module doc). */
+  /** Exact origin-form request target: escaped path plus unmodified raw query. */
   path: string;
   /** Raw request body bytes as they will be sent on the wire. Omit/empty for no body. */
   body?: Uint8Array;
@@ -115,7 +115,7 @@ export function generateNonce(): string {
 }
 
 /**
- * Sign a standard-mode request and return the four X-Portwing-* headers to
+ * Sign a standard-mode request and return the five X-Portwing-* headers to
  * attach to it. Pure aside from the injectable clock/nonce and the
  * node:crypto calls (randomBytes/sign) — no network or AgentClient coupling.
  */
@@ -140,5 +140,6 @@ export function signRequest(options: SignRequestOptions): Ed25519SignedHeaders {
     'X-Portwing-Timestamp': String(timestampSeconds),
     'X-Portwing-Nonce': nonce,
     'X-Portwing-Signature': signature.toString('base64url'),
+    'X-Portwing-Signature-Version': '2',
   };
 }
