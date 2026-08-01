@@ -234,6 +234,7 @@ describe('PortwingDockerBridge', () => {
     const bridge = new PortwingDockerBridge({ requestDockerApi });
     const endpoint = await bridge.start();
     const bodyReadStarted = deferred<void>();
+    const bodyReadSettled = deferred<void>();
     const internal = bridge as unknown as {
       readBody: (request: IncomingMessage) => Promise<Buffer | undefined>;
     };
@@ -242,7 +243,9 @@ describe('PortwingDockerBridge', () => {
       .spyOn(internal, 'readBody')
       .mockImplementation(async (request: IncomingMessage) => {
         bodyReadStarted.resolve(undefined);
-        return originalReadBody(request);
+        return originalReadBody(request).finally(() => {
+          bodyReadSettled.resolve(undefined);
+        });
       });
 
     try {
@@ -263,6 +266,7 @@ describe('PortwingDockerBridge', () => {
       });
 
       await clientClosed;
+      await bodyReadSettled.promise;
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(readBody).toHaveBeenCalledOnce();
       expect(requestDockerApi).not.toHaveBeenCalled();
