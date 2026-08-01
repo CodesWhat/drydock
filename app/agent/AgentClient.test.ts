@@ -14,6 +14,13 @@ const mockGetValidatedStoreConfiguration = vi.hoisted(() =>
 );
 const mockOffloadSbomDocuments = vi.hoisted(() => vi.fn());
 const mockCreateSbomStorage = vi.hoisted(() => vi.fn(() => ({ storage: 'controller' })));
+const mockRegistryState = vi.hoisted(() => ({
+  trigger: {},
+  watcher: {} as Record<string, { watchContainer?: ReturnType<typeof vi.fn> }>,
+  registry: {},
+  authentication: {},
+  agent: {},
+}));
 vi.mock('../runtime/paths.js', () => ({
   resolveConfiguredPath: mockResolveConfiguredPath,
 }));
@@ -75,6 +82,7 @@ vi.mock('../util/uuid.js', () => ({
 vi.mock('../registry/index.js', () => ({
   deregisterAgentComponents: vi.fn(),
   registerComponent: vi.fn(),
+  getState: vi.fn(() => mockRegistryState),
 }));
 
 import * as event from '../event/index.js';
@@ -94,6 +102,9 @@ describe('AgentClient', () => {
     vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
     vi.mocked(storeContainer.getContainers).mockReturnValue([]);
     vi.mocked(updateOperationStore.getOperationById).mockReturnValue(undefined);
+    for (const watcherId of Object.keys(mockRegistryState.watcher)) {
+      delete mockRegistryState.watcher[watcherId];
+    }
     vi.useFakeTimers();
     client = new AgentClient('test-agent', {
       host: 'localhost',
@@ -657,6 +668,58 @@ describe('AgentClient', () => {
   });
 
   describe('handshake', () => {
+    test('registers controller transport marker before applying the standard-mode inventory', async () => {
+      axios.get
+        .mockResolvedValueOnce({
+          data: [
+            {
+              id: 'c1',
+              name: 'web',
+              watcher: 'docker',
+              status: 'stopped',
+              updateAvailable: false,
+              updateKind: { kind: 'unknown' },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          data: [
+            {
+              type: 'docker',
+              name: 'docker',
+              configuration: {
+                transport: 'docker-api',
+                execution: 'controller',
+                events: 'portwing',
+              },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] });
+      const existing = {
+        id: 'c1',
+        watcher: 'docker',
+        result: { tag: '2.0.0' },
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+
+      await client.handshake();
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'stopped',
+          result: existing.result,
+          updateAvailable: true,
+          updateKind: existing.updateKind,
+        }),
+      );
+    });
+
     test('should fetch containers, process them, and register components', async () => {
       const containers = [{ id: 'c1' }, { id: 'c2' }];
       axios.get
@@ -7594,6 +7657,7 @@ describe('AgentClient', () => {
       expect(headers['X-Portwing-Timestamp']).toMatch(/^[0-9]+$/);
       expect(headers['X-Portwing-Nonce']).toMatch(/^[0-9a-f]{32}$/);
       expect(headers['X-Portwing-Signature']).not.toMatch(/[+/=]/);
+      expect(headers['X-Portwing-Signature-Version']).toBe('2');
 
       const bodyHashHex = bodySha256Hex(bodyBytes);
       const canonicalMessage = buildCanonicalMessage(
@@ -7738,26 +7802,35 @@ describe('AgentClient', () => {
         );
       });
 
-      test('getContainerLogs (GET with query string) signs the bare path, not the query string', async () => {
+      test('getContainerLogs signs the exact escaped path and query string', async () => {
         const edClient = makeEd25519Client();
         axios.get.mockResolvedValue({ data: {} });
         await edClient.getContainerLogs('cid', { tail: 100, since: 0, timestamps: false });
         const url = axios.get.mock.calls[0][0];
         // The wire URL still carries the query string...
         expect(url).toContain('?tail=100');
-        // ...but the signed canonical path must be query-free.
         const headers = headersFromGetOrDeleteCall(axios.get);
-        expectHeadersVerify(headers, 'GET', '/api/containers/cid/logs', Buffer.alloc(0));
+        expectHeadersVerify(
+          headers,
+          'GET',
+          '/api/containers/cid/logs?tail=100&since=0&timestamps=false',
+          Buffer.alloc(0),
+        );
       });
 
-      test('getLogEntries (GET with query string) signs the bare path, not the query string', async () => {
+      test('getLogEntries signs the exact query string in wire order', async () => {
         const edClient = makeEd25519Client();
         axios.get.mockResolvedValue({ data: [] });
         await edClient.getLogEntries({ level: 'error', tail: 50 });
         const url = axios.get.mock.calls[0][0];
         expect(url).toContain('?level=error');
         const headers = headersFromGetOrDeleteCall(axios.get);
-        expectHeadersVerify(headers, 'GET', '/api/log/entries', Buffer.alloc(0));
+        expectHeadersVerify(
+          headers,
+          'GET',
+          '/api/log/entries?level=error&tail=50',
+          Buffer.alloc(0),
+        );
       });
 
       test('startSse (GET /api/events) signs an empty-body GET request', async () => {
@@ -7792,6 +7865,649 @@ describe('AgentClient', () => {
         expect(headers['X-Portwing-Timestamp']).toMatch(/^[0-9]+$/);
         expect(Number.isInteger(Number(headers['X-Portwing-Timestamp']))).toBe(true);
       });
+    });
+  });
+
+  describe('Portwing Docker API transport', () => {
+    test('component sync synthesizes docker/update only for a controller Docker transport watcher', async () => {
+      const watcher = {
+        type: 'docker',
+        name: 'docker',
+        configuration: {
+          transport: 'docker-api',
+          execution: 'controller',
+          events: 'portwing',
+        },
+      };
+
+      await client.handleComponentSync([watcher], []);
+
+      expect(registry.registerComponent).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ kind: 'watcher', provider: 'docker', name: 'docker' }),
+      );
+      expect(registry.registerComponent).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          kind: 'trigger',
+          provider: 'docker',
+          name: 'update',
+          agent: 'test-agent',
+          configuration: expect.objectContaining({
+            transport: 'docker-api',
+            execution: 'controller',
+          }),
+        }),
+      );
+    });
+
+    test('legacy component descriptors retain remote delegation and do not synthesize a trigger', async () => {
+      await client.handleComponentSync(
+        [{ type: 'docker', name: 'docker', configuration: { description: 'legacy agent' } }],
+        [],
+      );
+
+      expect(registry.registerComponent).toHaveBeenCalledTimes(1);
+      expect(registry.registerComponent).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'watcher', componentPath: 'agent/components' }),
+      );
+    });
+
+    test('marker-mode inventory preserves controller-owned update enrichment while refreshing runtime state', async () => {
+      const existing = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'test-agent',
+        status: 'running',
+        result: {
+          tag: '2.0.0',
+          digest: 'sha256:new',
+          updateInsight: { tag: '3.0.0', kind: 'major' },
+        },
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+        updateDetectedAt: '2026-08-01T12:00:00.000Z',
+        maturityGatePendingSince: '2026-08-01T12:01:00.000Z',
+        updateAge: 86400,
+        updateMaturityLevel: 'mature',
+        updateEligibility: { eligible: false, reasons: ['maintenance-window'] },
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'stopped',
+          updateAvailable: false,
+          updateKind: { kind: 'unknown' },
+          image: { id: 'sha256:current' },
+        } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'c1',
+          status: 'stopped',
+          image: { id: 'sha256:current' },
+          result: existing.result,
+          updateAvailable: true,
+          updateKind: existing.updateKind,
+          updateDetectedAt: existing.updateDetectedAt,
+          maturityGatePendingSince: existing.maturityGatePendingSince,
+          updateAge: existing.updateAge,
+          updateMaturityLevel: existing.updateMaturityLevel,
+          updateEligibility: existing.updateEligibility,
+        }),
+      );
+    });
+
+    test('marker-mode incremental events cannot clear controller-owned update enrichment', async () => {
+      const existing = {
+        id: 'c1',
+        watcher: 'docker',
+        result: { tag: '2.0.0' },
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+        updateDetectedAt: '2026-08-01T12:00:00.000Z',
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        status: 'restarting',
+        updateAvailable: false,
+        updateKind: { kind: 'unknown' },
+      });
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'restarting',
+          result: existing.result,
+          updateAvailable: true,
+          updateKind: existing.updateKind,
+          updateDetectedAt: existing.updateDetectedAt,
+        }),
+      );
+    });
+
+    test('marker-mode Portwing container events immediately invoke the controller-native watcher', async () => {
+      const refreshContainer = vi.fn().mockResolvedValue({
+        container: { id: 'c1', watcher: 'docker', updateAvailable: false },
+        changed: false,
+      });
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+      mockRegistryState.watcher['test-agent.docker.docker'] = {
+        watchContainer: refreshContainer,
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((value) => value);
+
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        image: { id: 'sha256:changed' },
+        labels: { 'com.example.channel': 'stable' },
+      });
+
+      expect(refreshContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'c1',
+          agent: 'test-agent',
+          image: { id: 'sha256:changed' },
+          labels: { 'com.example.channel': 'stable' },
+        }),
+        { emitBatchEvent: true },
+      );
+    });
+
+    test('standard mode rolls back a registered watcher when synthetic trigger registration fails', async () => {
+      axios.get
+        .mockResolvedValueOnce({
+          data: [
+            {
+              id: 'c1',
+              name: 'web',
+              watcher: 'docker',
+              updateAvailable: false,
+              updateKind: { kind: 'unknown' },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          data: [
+            {
+              type: 'docker',
+              name: 'docker',
+              configuration: {
+                transport: 'docker-api',
+                execution: 'controller',
+                events: 'portwing',
+              },
+            },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] });
+      vi.mocked(registry.registerComponent)
+        .mockResolvedValueOnce(undefined as never)
+        .mockRejectedValueOnce(new Error('synthetic controller trigger failed to register'));
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        watcher: 'docker',
+        result: { tag: '2.0.0' },
+        updateAvailable: true,
+        updateKind: { kind: 'tag' },
+        resultChanged: vi.fn().mockReturnValue(true),
+      } as never);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+
+      await client.handshake();
+
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledTimes(2);
+      expect(registry.deregisterAgentComponents).toHaveBeenNthCalledWith(2, 'test-agent');
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          updateAvailable: false,
+          updateKind: { kind: 'unknown' },
+        }),
+      );
+      expect(vi.mocked(storeContainer.updateContainer).mock.calls[0][0].result).toBeUndefined();
+    });
+
+    test('edge component sync rolls back a registered watcher when synthetic trigger registration fails', async () => {
+      vi.mocked(registry.registerComponent)
+        .mockResolvedValueOnce(undefined as never)
+        .mockRejectedValueOnce(new Error('synthetic controller trigger failed to register'));
+
+      await expect(
+        client.handleComponentSync(
+          [
+            {
+              type: 'docker',
+              name: 'docker',
+              configuration: {
+                transport: 'docker-api',
+                execution: 'controller',
+                events: 'portwing',
+              },
+            },
+          ],
+          [],
+        ),
+      ).rejects.toThrow('synthetic controller trigger failed to register');
+
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledTimes(2);
+      expect(registry.deregisterAgentComponents).toHaveBeenNthCalledWith(2, 'test-agent');
+    });
+
+    test('watcher rollback preserves the registration error when cleanup also fails', async () => {
+      vi.mocked(registry.deregisterAgentComponents)
+        .mockResolvedValueOnce(undefined as never)
+        .mockRejectedValueOnce(new Error('component rollback failed'));
+      vi.mocked(registry.registerComponent).mockRejectedValueOnce(
+        new Error('watcher registration failed'),
+      );
+
+      await expect(
+        client.handleComponentSync(
+          [
+            {
+              type: 'docker',
+              name: 'docker',
+              configuration: {
+                transport: 'docker-api',
+                execution: 'controller',
+                events: 'portwing',
+              },
+            },
+          ],
+          [],
+        ),
+      ).rejects.toThrow('watcher registration failed');
+
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to roll back components after watcher registration error'),
+      );
+    });
+
+    test('a failed reconnect clears the previous controller transport marker before fetching', async () => {
+      const refreshContainer = vi.fn();
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+      mockRegistryState.watcher['test-agent.docker.docker'] = {
+        watchContainer: refreshContainer,
+      };
+      axios.get.mockRejectedValueOnce(new Error('container inventory unavailable'));
+
+      await expect(client.handshake()).rejects.toThrow('container inventory unavailable');
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+      });
+
+      expect(refreshContainer).not.toHaveBeenCalled();
+    });
+
+    test('legacy agent inventory remains authoritative for update enrichment', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        watcher: 'docker',
+        result: { tag: '2.0.0' },
+        updateAvailable: true,
+        updateKind: { kind: 'tag' },
+        resultChanged: vi.fn().mockReturnValue(true),
+      } as never);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [{ type: 'docker', name: 'docker', configuration: { description: 'legacy' } }],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          updateAvailable: false,
+          updateKind: { kind: 'unknown' },
+        } as never,
+      ]);
+
+      const persisted = vi.mocked(storeContainer.updateContainer).mock.calls[0][0];
+      expect(persisted).toEqual(
+        expect.objectContaining({
+          updateAvailable: false,
+          updateKind: { kind: 'unknown' },
+        }),
+      );
+      expect(persisted.result).toBeUndefined();
+    });
+
+    test('standard mode forwards the exact target, Docker headers, and raw body through authenticated axios', async () => {
+      const responseBody = Buffer.from('{"Id":"new-container"}');
+      axios.mockResolvedValue({
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+        data: responseBody,
+      });
+      const body = Buffer.from('{"Image":"nginx:latest"}');
+
+      const response = await client.requestDockerApi(
+        'POST',
+        '/v1.44/containers/create?name=web%2Fblue',
+        { 'content-type': 'application/json', 'x-registry-auth': 'registry-token' },
+        body,
+      );
+
+      expect(axios).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'POST',
+          url: 'https://localhost:3001/v1.44/containers/create?name=web%2Fblue',
+          data: body,
+          responseType: 'arraybuffer',
+          headers: expect.objectContaining({
+            'X-Dd-Agent-Secret': 'test-secret',
+            'x-registry-auth': 'registry-token',
+          }),
+        }),
+      );
+      expect(response).toEqual({
+        statusCode: 201,
+        headers: { 'content-type': 'application/json' },
+        body: responseBody,
+      });
+    });
+
+    test('standard mode rejects non-origin targets and accepts every upstream status', async () => {
+      await expect(client.requestDockerApi('GET', 'v1.44/info')).rejects.toThrow(
+        'origin-form path',
+      );
+      await expect(client.requestDockerApi('GET', '//docker.example/info')).rejects.toThrow(
+        'origin-form path',
+      );
+
+      axios.mockResolvedValue({ status: 418, headers: {}, data: Buffer.alloc(0) });
+      await client.requestDockerApi('GET', '/v1.44/info');
+      const request = axios.mock.calls[0][0] as {
+        validateStatus: (status: number) => boolean;
+      };
+      expect(request.validateStatus(418)).toBe(true);
+    });
+
+    test('edge mode routes ordinary and streaming Docker targets through correlated generic requests', async () => {
+      const sendRequest = vi.fn().mockResolvedValue({
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: [{ Id: 'c1' }],
+      });
+      const sendStreamRequest = vi.fn().mockResolvedValue({
+        statusCode: 200,
+        headers: { 'content-type': 'application/json' },
+        body: Buffer.from('{"status":"pulled"}\n'),
+      });
+      client.edgeAdapter = { sendRequest, sendStreamRequest } as never;
+
+      const listed = await client.requestDockerApi('GET', '/v1.44/containers/json?all=1', {});
+      const pulled = await client.requestDockerApi(
+        'POST',
+        '/v1.44/images/create?fromImage=nginx&tag=latest',
+        { 'x-registry-auth': 'registry-token' },
+      );
+
+      expect(sendRequest).toHaveBeenCalledWith(
+        'GET',
+        '/v1.44/containers/json?all=1',
+        {},
+        undefined,
+      );
+      expect(sendStreamRequest).toHaveBeenCalledWith(
+        'POST',
+        '/v1.44/images/create?fromImage=nginx&tag=latest',
+        { 'x-registry-auth': 'registry-token' },
+        undefined,
+      );
+      expect(listed.body.toString()).toBe('[{"Id":"c1"}]');
+      expect(pulled.body.toString()).toBe('{"status":"pulled"}\n');
+    });
+
+    test('edge mode parses JSON request bodies and recognizes exec start as streaming', async () => {
+      const sendRequest = vi.fn().mockResolvedValue({ statusCode: 204, headers: {}, body: null });
+      const sendStreamRequest = vi
+        .fn()
+        .mockResolvedValue({ statusCode: 200, headers: {}, body: 'started' });
+      client.edgeAdapter = { sendRequest, sendStreamRequest } as never;
+      const body = Buffer.from('{"Detach":false,"Tty":false}');
+
+      await client.requestDockerApi('POST', '/v1.44/exec/e1/start', {}, body);
+
+      expect(sendStreamRequest).toHaveBeenCalledWith(
+        'POST',
+        '/v1.44/exec/e1/start',
+        {},
+        {
+          Detach: false,
+          Tty: false,
+        },
+      );
+      await expect(
+        client.requestDockerApi('POST', '/v1.44/containers/create', {}, Buffer.from('{invalid')),
+      ).rejects.toThrow('must be valid JSON');
+    });
+
+    test('edge mode normalizes response body and header variants', async () => {
+      const sendRequest = vi
+        .fn()
+        .mockResolvedValueOnce({ statusCode: 200, headers: null, body: undefined })
+        .mockResolvedValueOnce({ statusCode: 200, headers: [], body: null })
+        .mockResolvedValueOnce({
+          statusCode: 200,
+          headers: {
+            'x-list': ['first', 2],
+            'x-number': 42,
+            'x-undefined': undefined,
+            'x-null': null,
+          },
+          body: new Uint8Array([65, 66]),
+        })
+        .mockResolvedValueOnce({ statusCode: 200, headers: false, body: 'plain-text' });
+      client.edgeAdapter = { sendRequest, sendStreamRequest: vi.fn() } as never;
+
+      const missing = await client.requestDockerApi('GET', '/v1.44/missing');
+      const nullBody = await client.requestDockerApi('GET', '/v1.44/null');
+      const typed = await client.requestDockerApi('GET', '/v1.44/typed');
+      const text = await client.requestDockerApi('GET', '/v1.44/text');
+
+      expect(missing).toEqual({ statusCode: 200, headers: {}, body: Buffer.alloc(0) });
+      expect(nullBody).toEqual({ statusCode: 200, headers: {}, body: Buffer.alloc(0) });
+      expect(typed.headers).toEqual({ 'x-list': 'first, 2', 'x-number': '42' });
+      expect(typed.body).toEqual(Buffer.from('AB'));
+      expect(text).toEqual({ statusCode: 200, headers: {}, body: Buffer.from('plain-text') });
+    });
+
+    test.each([
+      ['null response', null],
+      ['primitive response', 'invalid'],
+      ['array response', []],
+      ['non-integer status', { statusCode: 200.5 }],
+    ])('edge mode rejects a malformed %s', async (_label, response) => {
+      client.edgeAdapter = {
+        sendRequest: vi.fn().mockResolvedValue(response),
+        sendStreamRequest: vi.fn(),
+      } as never;
+
+      await expect(client.requestDockerApi('GET', '/v1.44/info')).rejects.toThrow(
+        'Malformed Docker API response',
+      );
+    });
+
+    test('Ed25519 signing normalizes string and Uint8Array bodies', () => {
+      const { privateKey } = generateKeyPairSync('ed25519');
+      const edClient = new AgentClient('proxy-body-signing', {
+        host: 'portwing.example.com',
+        port: 443,
+        secret: '',
+        authmode: 'ed25519',
+        signingkeyid: 'proxy-key',
+        signingkey: privateKey.export({ type: 'pkcs8', format: 'pem' }) as string,
+      });
+      const internal = edClient as unknown as {
+        buildRequestConfig: (
+          method: string,
+          target: string,
+          body: unknown,
+        ) => {
+          headers: Record<string, string>;
+        };
+      };
+
+      expect(internal.buildRequestConfig('POST', '/string', 'literal').headers).toHaveProperty(
+        'X-Portwing-Signature',
+      );
+      expect(
+        internal.buildRequestConfig('POST', '/bytes', new Uint8Array([1, 2])).headers,
+      ).toHaveProperty('X-Portwing-Signature');
+    });
+
+    test('Ed25519 standard proxy signs raw bytes and the exact escaped query target', async () => {
+      const { privateKeyPem, publicKeyObject: proxyPublicKey } = (() => {
+        const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+        return {
+          publicKeyObject: publicKey,
+          privateKeyPem: privateKey.export({ type: 'pkcs8', format: 'pem' }) as string,
+        };
+      })();
+      const edClient = new AgentClient('proxy-ed25519', {
+        host: 'portwing.example.com',
+        port: 443,
+        secret: '',
+        authmode: 'ed25519',
+        signingkeyid: 'proxy-key',
+        signingkey: privateKeyPem,
+      });
+      axios.mockResolvedValue({ status: 204, headers: {}, data: Buffer.alloc(0) });
+      const target = '/v1.44/containers/web%2Fblue/stop?t=30';
+      const body = Buffer.from('{"signal":"SIGTERM"}');
+
+      await edClient.requestDockerApi('POST', target, { 'content-type': 'application/json' }, body);
+
+      const config = axios.mock.calls[0][0] as {
+        headers: Record<string, string>;
+      };
+      expect(config.headers['X-Portwing-Signature-Version']).toBe('2');
+      const canonical = buildCanonicalMessage(
+        'POST',
+        target,
+        bodySha256Hex(body),
+        Number(config.headers['X-Portwing-Timestamp']),
+        config.headers['X-Portwing-Nonce'],
+      );
+      expect(
+        cryptoVerify(
+          null,
+          Buffer.from(canonical),
+          proxyPublicKey,
+          Buffer.from(config.headers['X-Portwing-Signature'], 'base64url'),
+        ),
+      ).toBe(true);
+    });
+
+    test('controller-native refresh failures remain best effort after Portwing events', async () => {
+      const refreshContainer = vi.fn().mockRejectedValue(new Error('registry unavailable'));
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+      mockRegistryState.watcher['test-agent.docker.docker'] = {
+        watchContainer: refreshContainer,
+      };
+
+      await expect(
+        client.handleEvent('dd:container-added', {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to refresh Portwing container c1'),
+      );
     });
   });
 });

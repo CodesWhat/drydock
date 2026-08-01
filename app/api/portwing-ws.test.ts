@@ -1781,7 +1781,7 @@ describe('name binding registry cap (memory-exhaustion regression)', () => {
   });
 });
 
-describe('startNoncePruning — also prunes idle name bindings', () => {
+describe('startNoncePruning — preserves stable name ownership', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     clearNonceCacheForTesting();
@@ -1791,7 +1791,7 @@ describe('startNoncePruning — also prunes idle name bindings', () => {
     vi.useRealTimers();
   });
 
-  test('prunes idle, non-live name bindings after 60s but leaves live ones intact', () => {
+  test('does not release an offline name binding solely because it is old', () => {
     vi.useFakeTimers();
     createGateway();
 
@@ -1807,7 +1807,7 @@ describe('startNoncePruning — also prunes idle name bindings', () => {
 
     vi.advanceTimersByTime(61_000);
 
-    expect(nameBindingsSizeForTesting()).toBe(0);
+    expect(nameBindingsSizeForTesting()).toBe(1);
   });
 });
 
@@ -3336,7 +3336,7 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
     expect(welcome.type).toBe('welcome');
   });
 
-  test('a stale persisted binding is pruned on reload (load-time pruning), same as the periodic sweep', async () => {
+  test('an old persisted binding survives restart and still rejects a different key', async () => {
     const { db, docs } = createPersistentMockDb();
     nameBindingsStore.createCollections(db);
 
@@ -3352,8 +3352,8 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
     expect(docs).toHaveLength(1);
 
     // "Restart": wipe in-memory state, re-init the collection from the same
-    // db, and create a fresh gateway — rehydrateNameBindings() checks each
-    // loaded record's own staleness before adding it back to the map.
+    // db, and create a fresh gateway. Age alone must not release the name from
+    // its key; only explicit revocation or cap-pressure eviction may do that.
     clearNonceCacheForTesting();
     clearLiveSessionsForTesting();
     nameBindingsStore.createCollections(db);
@@ -3379,9 +3379,12 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
     );
     await new Promise((r) => setTimeout(r, 10));
 
-    // The stale binding was pruned on load, so a brand-new key can claim the
-    // name — and the persisted store no longer carries the pruned entry.
-    const welcome = JSON.parse(ws.sentMessages[0]) as { type: string };
-    expect(welcome.type).toBe('welcome');
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as {
+      type: string;
+      data: { code: string };
+    };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('agent-name-claimed');
+    expect(docs).toHaveLength(1);
   });
 });

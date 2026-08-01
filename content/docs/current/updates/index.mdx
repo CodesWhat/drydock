@@ -3,6 +3,13 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
+## Unreleased
+
+## v1.6.0-rc.11 Highlights — August 1, 2026
+
+- **Portwing 0.9 Docker watcher, updates, and lifecycle actions now run controller-side** — Drydock 1.6.0-rc.11+ recognizes the exact `transport=docker-api`, `execution=controller`, `events=portwing` watcher marker, starts its native registry checks and Docker action against a loopback-only authenticated bridge, and carries Docker calls over Standard HTTP or Edge correlated request/response/stream transport. Single/batch updates, start/stop/restart, update preview, and backup rollback use this path even though Portwing advertises no remote trigger. Portwing stays authoritative for lifecycle events, and raw false/unknown inventory no longer erases controller enrichment ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76)).
+- **Standard Portwing request signing matches signature version 2** — Ed25519 agents now receive five headers including `X-Portwing-Signature-Version: 2`; the signature covers the exact escaped request path plus its unmodified raw query instead of a decoded path with the query omitted.
+
 ## v1.6.0-rc.10 Highlights — July 31, 2026
 
 - **Infrastructure-mode self-updates no longer fail to spawn the helper container on Docker Hub installs** — for containers labeled `dd.update.mode=infrastructure`, the helper image reference is now resolved through the registry provider's `getImageFullName` normalization instead of a raw Hub URL, so it matches the daemon-local image name and the helper actually pulls ([#645](https://github.com/CodesWhat/drydock/pull/645), fixes [#644](https://github.com/CodesWhat/drydock/issues/644)).

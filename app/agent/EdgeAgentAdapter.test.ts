@@ -2,6 +2,7 @@
  * Tests for EdgeAgentAdapter frame dispatch.
  */
 import { emitAgentConnected, emitAgentDisconnected } from '../event/index.js';
+import * as registry from '../registry/index.js';
 import { AgentClient } from './AgentClient.js';
 import {
   buildEdgeSentinelConfig,
@@ -27,6 +28,9 @@ vi.mock('../event/index.js', () => ({
   emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
   emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
   emitSecurityScanCycleComplete: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../registry/index.js', () => ({
+  deregisterAgentComponents: vi.fn().mockResolvedValue(undefined),
 }));
 // Stateful mock: mirrors the real manager.ts single-registry-slot-per-name
 // semantics closely enough for onDisconnect()'s instance-checked removal
@@ -209,6 +213,113 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     expect(
       (client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }).handleComponentSync,
     ).toHaveBeenCalledWith(watchers, triggers);
+  });
+
+  test('serializes component sync before the following container sync in wire order', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+    let finishComponentSync!: () => void;
+    const componentSyncFinished = new Promise<void>((resolve) => {
+      finishComponentSync = resolve;
+    });
+    const callOrder: string[] = [];
+    const componentSync = (
+      client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }
+    ).handleComponentSync.mockImplementationOnce(async () => {
+      callOrder.push('component:start');
+      await componentSyncFinished;
+      callOrder.push('component:end');
+    });
+    const containerSync = (
+      client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }
+    ).handleContainerSync.mockImplementationOnce(async () => {
+      callOrder.push('container');
+    });
+
+    sendFrame(ws, 'dd:component_sync', { watchers: [], triggers: [] });
+    sendFrame(ws, 'dd:container_sync', { containers: [{ id: 'c1' }] });
+    await vi.waitFor(() => expect(componentSync).toHaveBeenCalledOnce());
+
+    expect(containerSync).not.toHaveBeenCalled();
+    expect(callOrder).toEqual(['component:start']);
+
+    finishComponentSync();
+    await vi.waitFor(() => expect(containerSync).toHaveBeenCalledOnce());
+    expect(callOrder).toEqual(['component:start', 'component:end', 'container']);
+  });
+
+  test('a slow state sync does not block correlated Docker responses', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+    let finishComponentSync!: () => void;
+    (
+      client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }
+    ).handleComponentSync.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishComponentSync = resolve;
+        }),
+    );
+
+    sendFrame(ws, 'dd:component_sync', { watchers: [], triggers: [] });
+    await vi.waitFor(() => expect(finishComponentSync).toBeTypeOf('function'));
+    const requestPromise = adapter.sendRequest('GET', '/v1.44/version');
+    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
+      data: { requestId: string };
+    };
+    sendFrame(ws, 'response', {
+      requestId: request.data.requestId,
+      statusCode: 200,
+      body: { ApiVersion: '1.46' },
+    });
+
+    await expect(requestPromise).resolves.toEqual(
+      expect.objectContaining({ statusCode: 200, body: { ApiVersion: '1.46' } }),
+    );
+    finishComponentSync();
+  });
+
+  test('a failed ordered state frame does not poison the following frame or escape unhandled', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+    const containerSync = (client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> })
+      .handleContainerSync;
+    (
+      client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }
+    ).handleComponentSync.mockRejectedValueOnce(new Error('component registration failed'));
+
+    sendFrame(ws, 'dd:component_sync', { watchers: [], triggers: [] });
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+
+    await vi.waitFor(() => expect(containerSync).toHaveBeenCalledOnce());
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('an ordered frame waiting behind an in-flight sync becomes inert after disconnect', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+    let finishComponentSync!: () => void;
+    (
+      client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }
+    ).handleComponentSync.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishComponentSync = resolve;
+        }),
+    );
+    const handleContainerSync = (
+      client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }
+    ).handleContainerSync;
+
+    sendFrame(ws, 'dd:component_sync', { watchers: [], triggers: [] });
+    await vi.waitFor(() => expect(finishComponentSync).toBeTypeOf('function'));
+    sendFrame(ws, 'dd:container_sync', { containers: [{ id: 'late' }] });
+    await adapter.onDisconnect();
+    finishComponentSync();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(handleContainerSync).not.toHaveBeenCalled();
   });
 
   test('dd:container_added reaches handleEvent with hyphenated name', async () => {
@@ -496,6 +607,18 @@ describe('EdgeAgentAdapter — disconnect cleanup', () => {
     expect(manager.removeAgent).toHaveBeenCalled();
   });
 
+  test('onDisconnect deregisters controller transport delegates before removing the current agent', async () => {
+    const { adapter, client } = createAdapter();
+    adapter.activate();
+
+    await adapter.onDisconnect();
+
+    expect(registry.deregisterAgentComponents).toHaveBeenCalledWith(client.name);
+    expect(vi.mocked(registry.deregisterAgentComponents).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(manager.removeAgent).mock.invocationCallOrder[0],
+    );
+  });
+
   test('onDisconnect emits agentDisconnected when was connected', async () => {
     const { adapter, ws, client } = createAdapter();
     adapter.activate();
@@ -661,6 +784,40 @@ describe('EdgeAgentAdapter — sendStreamRequest / stream frames', () => {
     expect(resolved).toBe(false);
     // Clean up by disconnecting to avoid timer leaks
     await adapter.onDisconnect();
+  });
+
+  test('rejects and releases a streamed Docker response that exceeds the memory bound', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const streamPromise = adapter.sendStreamRequest('POST', '/v1.44/images/create');
+    const rejection = streamPromise.catch((error: Error) => error.message);
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const pendingKey = `stream:${sentFrame.data.requestId}`;
+    const pendingRequests = (
+      adapter as unknown as {
+        pendingRequests: Map<string, { streamBytes?: number }>;
+      }
+    ).pendingRequests;
+    const pending = pendingRequests.get(pendingKey);
+    expect(pending).toBeDefined();
+    if (pending) {
+      pending.streamBytes = 100 * 1024 * 1024;
+    }
+
+    sendFrame(ws, 'stream', {
+      requestId: sentFrame.data.requestId,
+      data: Buffer.from('x').toString('base64'),
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const releasedBeforeCleanup = !pendingRequests.has(pendingKey);
+    if (!releasedBeforeCleanup) {
+      await adapter.onDisconnect();
+    }
+    expect(releasedBeforeCleanup).toBe(true);
+    expect(await rejection).toMatch(/response.*limit/i);
   });
 });
 
@@ -1420,6 +1577,21 @@ describe('EdgeAgentAdapter — activate error handler', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     // No crash — the error was caught and logged
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('the WebSocket message listener contains failures from direct frame handlers', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    (adapter as unknown as { handlePing: (data: Record<string, unknown>) => void }).handlePing =
+      vi.fn(() => {
+        throw new Error('direct frame handler failed');
+      });
+
+    expect(() => sendFrame(ws, 'ping', {})).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
     expect(ws.close).not.toHaveBeenCalled();
   });
 });
@@ -2678,6 +2850,19 @@ describe('EdgeAgentAdapter — torn-down adapter inertness regressions', () => {
     expect(emitAgentConnected).not.toHaveBeenCalled();
   });
 
+  test('component cleanup failure is contained while disconnect still removes the agent', async () => {
+    const { adapter, client } = createAdapter();
+    adapter.activate();
+    vi.mocked(registry.deregisterAgentComponents).mockRejectedValueOnce(
+      new Error('component cleanup failed'),
+    );
+
+    await expect(adapter.onDisconnect()).resolves.toBeUndefined();
+
+    expect(registry.deregisterAgentComponents).toHaveBeenCalledWith(client.name);
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+  });
+
   test('forced close from checkLivenessAndPing detaches the message listener so a frame arriving in the close window is not dispatched', () => {
     vi.useFakeTimers();
     const { adapter, ws, client } = createAdapter();
@@ -2718,9 +2903,9 @@ describe('EdgeAgentAdapter — torn-down adapter inertness regressions', () => {
     handleContainerSyncMock.mockReturnValueOnce(pendingSync);
 
     sendFrame(ws, 'dd:container_sync', { containers: [] });
-    // handleContainerSync() has been called synchronously and is now awaiting
-    // pendingSync — this.connected is still false at this point.
-    expect(handleContainerSyncMock).toHaveBeenCalledTimes(1);
+    // Ordered state frames enter through a promise-chain microtask. Wait until
+    // this one reaches the queue head and is awaiting pendingSync.
+    await vi.waitFor(() => expect(handleContainerSyncMock).toHaveBeenCalledTimes(1));
 
     // Force-disconnect the adapter while the sync above is still pending.
     await adapter.onDisconnect();

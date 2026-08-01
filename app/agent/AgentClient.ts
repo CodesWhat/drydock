@@ -77,7 +77,7 @@ export interface AgentClientConfig {
   keyfile?: string;
   // Selects how requests to this agent are authenticated. Defaults to 'token'
   // (X-Dd-Agent-Secret header, unchanged). 'ed25519' signs each request with
-  // the four X-Portwing-* headers per Portwing's verifier instead — see
+  // the five X-Portwing-* headers per Portwing's verifier instead — see
   // app/agent/ed25519-signer.ts and app/agent/components/Agent.ts.
   authmode?: AgentAuthMode;
   // Required when authmode is 'ed25519'.
@@ -107,6 +107,57 @@ interface AgentClientRuntimeInfo {
   networkTxBytes?: number;
 }
 
+export interface DockerApiProxyResponse {
+  statusCode: number;
+  headers: Record<string, string>;
+  body: Buffer;
+}
+
+const MAX_DOCKER_PROXY_RESPONSE_BYTES = 100 * 1024 * 1024;
+
+function isStreamingDockerTarget(target: string): boolean {
+  const path = target.split('?', 1)[0];
+  return (
+    ['/logs', '/attach', '/events', '/build', '/images/create', '/images/push'].some((suffix) =>
+      path.endsWith(suffix),
+    ) ||
+    (path.includes('/exec/') && path.endsWith('/start'))
+  );
+}
+
+function normalizeDockerProxyBody(body: unknown): Buffer {
+  if (body === undefined || body === null) {
+    return Buffer.alloc(0);
+  }
+  if (Buffer.isBuffer(body)) {
+    return body;
+  }
+  if (body instanceof Uint8Array) {
+    return Buffer.from(body);
+  }
+  if (typeof body === 'string') {
+    return Buffer.from(body);
+  }
+  return Buffer.from(JSON.stringify(body));
+}
+
+function normalizeDockerProxyHeaders(headers: unknown): Record<string, string> {
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
+    return {};
+  }
+  const normalized: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (typeof value === 'string') {
+      normalized[name] = value;
+    } else if (Array.isArray(value)) {
+      normalized[name] = value.map(String).join(', ');
+    } else if (value !== undefined && value !== null) {
+      normalized[name] = String(value);
+    }
+  }
+  return normalized;
+}
+
 interface AgentComponentDescriptor {
   id?: string;
   type: string;
@@ -114,6 +165,15 @@ interface AgentComponentDescriptor {
   configuration: Record<string, unknown>;
   agent?: string;
   metadata?: Record<string, unknown>;
+}
+
+function isControllerDockerTransportWatcher(descriptor: AgentComponentDescriptor): boolean {
+  return (
+    descriptor.type === 'docker' &&
+    descriptor.configuration?.transport === 'docker-api' &&
+    descriptor.configuration?.execution === 'controller' &&
+    descriptor.configuration?.events === 'portwing'
+  );
 }
 
 interface AgentRuntimeAckPayload {
@@ -229,6 +289,7 @@ export class AgentClient {
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
   private readonly watcherSnapshotCache: Map<string, WatcherSnapshotCacheEntry>;
+  private readonly controllerDockerTransportWatchers: Set<string>;
   private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
   private handshakeInProgress: Promise<void> | null = null;
   /**
@@ -262,6 +323,7 @@ export class AgentClient {
     this.pendingFreshStateAfterRemoteUpdate = new Set();
     this.pendingWatcherCycleReports = new Map();
     this.watcherSnapshotCache = new Map();
+    this.controllerDockerTransportWatchers = new Set();
     this.statsChangedTimer = undefined;
   }
 
@@ -364,16 +426,20 @@ export class AgentClient {
     if (data === undefined) {
       return Buffer.alloc(0);
     }
+    if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
+      return Buffer.from(data);
+    }
+    if (typeof data === 'string') {
+      return Buffer.from(data, 'utf8');
+    }
     return Buffer.from(JSON.stringify(data), 'utf8');
   }
 
   /**
    * Builds the AxiosRequestConfig for a single request to this agent.
-   * `path` must be the *unescaped* canonical request path (no query string,
-   * not percent-encoded) — it is signed as-is and must match what Portwing's
-   * router reconstructs as r.URL.Path, which is percent-decoded. Callers that
-   * embed encodeURIComponent()'d segments in the request URL must pass the
-   * corresponding plain (un-encoded) segments here instead.
+   * `path` is the exact origin-form request target placed on the wire:
+   * escaped path plus the unmodified raw query string. Portwing signature v2
+   * verifies those bytes verbatim, including query ordering and escaping.
    * In token mode this just returns the static axiosOptions, unchanged.
    */
   private buildRequestConfig(method: string, path: string, data?: unknown): AxiosRequestConfig {
@@ -422,6 +488,70 @@ export class AgentClient {
     this.log.info(`Connecting to agent ${this.name} at ${this.baseUrl}`);
     this.stopped = false;
     this.startSse();
+  }
+
+  /**
+   * Forward one Docker Engine API request through a standard or edge Portwing
+   * connection. The exact origin-form target is preserved for Docker routing
+   * and Ed25519 signature v2 verification.
+   */
+  async requestDockerApi(
+    method: string,
+    target: string,
+    headers: Record<string, string> = {},
+    body?: Buffer,
+  ): Promise<DockerApiProxyResponse> {
+    if (!target.startsWith('/') || target.startsWith('//')) {
+      throw new Error('Docker API request target must be an origin-form path');
+    }
+
+    if (this.edgeAdapter) {
+      let edgeBody: unknown;
+      if (body && body.length > 0) {
+        try {
+          edgeBody = JSON.parse(body.toString('utf8'));
+        } catch {
+          throw new Error('Edge Docker API request body must be valid JSON');
+        }
+      }
+      const response = await (isStreamingDockerTarget(target)
+        ? this.edgeAdapter.sendStreamRequest(method, target, headers, edgeBody)
+        : this.edgeAdapter.sendRequest(method, target, headers, edgeBody));
+      if (!response || typeof response !== 'object' || Array.isArray(response)) {
+        throw new Error('Malformed Docker API response from edge agent');
+      }
+      const record = response as Record<string, unknown>;
+      if (!Number.isInteger(record.statusCode)) {
+        throw new Error('Malformed Docker API response status from edge agent');
+      }
+      return {
+        statusCode: Number(record.statusCode),
+        headers: normalizeDockerProxyHeaders(record.headers),
+        body: normalizeDockerProxyBody(record.body),
+      };
+    }
+
+    const authConfig = this.buildRequestConfig(method, target, body);
+    const response = await axios({
+      ...authConfig,
+      method,
+      url: `${this.baseUrl}${target}`,
+      data: body,
+      headers: {
+        ...headers,
+        ...(authConfig.headers as Record<string, string> | undefined),
+      },
+      responseType: 'arraybuffer',
+      maxContentLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
+      maxBodyLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
+      maxRedirects: 0,
+      validateStatus: () => true,
+    });
+    return {
+      statusCode: response.status,
+      headers: normalizeDockerProxyHeaders(response.headers),
+      body: normalizeDockerProxyBody(response.data),
+    };
   }
 
   private pruneOldContainers(newContainers: Container[], watcher?: string) {
@@ -613,6 +743,7 @@ export class AgentClient {
       };
     }
     container.agent = this.name;
+    container = this.preserveControllerDockerEnrichment(container);
     // The container coming from Agent should already be normalized and have results
     // We rely on the Agent to perform Registry checks if configured
 
@@ -663,6 +794,57 @@ export class AgentClient {
     return containerReport;
   }
 
+  private preserveControllerDockerEnrichment(container: Container): Container {
+    if (!this.controllerDockerTransportWatchers.has(container.watcher)) {
+      return container;
+    }
+    const existing = storeContainer.getContainer(container.id);
+    if (!existing) {
+      return container;
+    }
+
+    const controllerOwnedFields: (keyof Container)[] = [
+      'result',
+      'error',
+      'updateAvailable',
+      'updateKind',
+      'updateDetectedAt',
+      'firstSeenAt',
+      'maturityGatePendingSince',
+      'updateAge',
+      'updateMaturityLevel',
+      'updateEligibility',
+      'updatePolicy',
+      'updatePolicyDeclarative',
+      'updatePolicyOverrides',
+      'updatePolicySources',
+      'security',
+      'updateRollback',
+      'updateOperation',
+      'sourceRepo',
+      'currentReleaseNotes',
+      'tagPinned',
+      'tagPinGated',
+    ];
+    const merged = { ...container } as unknown as Record<string, unknown>;
+    const existingRecord = existing as unknown as Record<string, unknown>;
+    for (const field of controllerOwnedFields) {
+      if (Object.hasOwn(existingRecord, field)) {
+        merged[field] = existingRecord[field];
+      }
+    }
+    return merged as unknown as Container;
+  }
+
+  private setControllerDockerTransportWatchers(descriptors: AgentComponentDescriptor[]): void {
+    this.controllerDockerTransportWatchers.clear();
+    for (const descriptor of descriptors) {
+      if (isControllerDockerTransportWatcher(descriptor)) {
+        this.controllerDockerTransportWatchers.add(descriptor.name);
+      }
+    }
+  }
+
   private async processAuthoritativeContainer(container: Container): Promise<ContainerReport> {
     this.clearPendingFreshState(container.id);
     return this.processContainer(container);
@@ -693,6 +875,42 @@ export class AgentClient {
         componentPath: 'agent/components',
         agent: this.name,
       });
+
+      if (kind === 'watcher' && isControllerDockerTransportWatcher(remoteComponent)) {
+        await registry.registerComponent({
+          kind: 'trigger',
+          provider: 'docker',
+          name: 'update',
+          configuration: {
+            transport: 'docker-api',
+            execution: 'controller',
+            events: 'portwing',
+            watcher: remoteComponent.name,
+          },
+          componentPath: 'agent/components',
+          agent: this.name,
+        });
+      }
+    }
+  }
+
+  private async registerAgentWatchersTransactional(
+    watchers: AgentComponentDescriptor[],
+  ): Promise<void> {
+    try {
+      await this.registerAgentComponents('watcher', watchers);
+    } catch (registrationError: unknown) {
+      try {
+        // A controller-transport watcher starts a cron and loopback bridge
+        // before its synthetic Docker trigger is registered. Tear down every
+        // component from this attempt if any later registration step fails.
+        await registry.deregisterAgentComponents(this.name);
+      } catch (cleanupError: unknown) {
+        this.log.warn(
+          `Failed to roll back components after watcher registration error (${getErrorMessage(cleanupError)})`,
+        );
+      }
+      throw registrationError;
     }
   }
 
@@ -707,6 +925,10 @@ export class AgentClient {
   }
 
   private async _doHandshake() {
+    // A reconnect is a fresh capability negotiation. Do not let a failed or
+    // removed watcher descriptor leave the previous connection's ownership
+    // contract active while the new inventory/components are fetched.
+    this.setControllerDockerTransportWatchers([]);
     const wasConnected = this.isConnected;
     const reconnected = this.hasConnectedOnce;
     const response = await axios.get<Container[]>(
@@ -716,6 +938,27 @@ export class AgentClient {
     const containers = response.data;
     this.log.info(`Handshake successful. Received ${containers.length} containers.`);
 
+    // Unregister existing components for this agent
+    await registry.deregisterAgentComponents(this.name);
+
+    // Fetch and register watchers
+    try {
+      const responseWatchers = await axios.get<AgentComponentDescriptor[]>(
+        `${this.baseUrl}/api/watchers`,
+        this.buildRequestConfig('GET', '/api/watchers'),
+      );
+      await this.registerAgentWatchersTransactional(responseWatchers.data);
+      // Only transfer update-enrichment ownership after every controller-side
+      // watcher/delegate has registered successfully.
+      this.setControllerDockerTransportWatchers(responseWatchers.data);
+      this.seedWatcherSnapshotCacheFromHandshake(responseWatchers.data);
+    } catch (error: unknown) {
+      this.log.warn(`Failed to fetch/register watchers: ${getErrorMessage(error)}`);
+    }
+
+    // Apply inventory only after watcher registration. Controller-transport
+    // descriptors change which fields are authoritative: Portwing owns live
+    // runtime state, while Drydock's native watcher owns update enrichment.
     await this.processAuthoritativeContainers(containers);
     // A zero-container handshake is ambiguous: it could mean the agent has
     // no running containers, or its in-memory store is fresh-empty after a
@@ -731,21 +974,6 @@ export class AgentClient {
       this.log.warn(
         'Handshake returned 0 containers; preserving last-known state until the first watch cycle completes',
       );
-    }
-
-    // Unregister existing components for this agent
-    await registry.deregisterAgentComponents(this.name);
-
-    // Fetch and register watchers
-    try {
-      const responseWatchers = await axios.get<AgentComponentDescriptor[]>(
-        `${this.baseUrl}/api/watchers`,
-        this.buildRequestConfig('GET', '/api/watchers'),
-      );
-      await this.registerAgentComponents('watcher', responseWatchers.data);
-      this.seedWatcherSnapshotCacheFromHandshake(responseWatchers.data);
-    } catch (error: unknown) {
-      this.log.warn(`Failed to fetch/register watchers: ${getErrorMessage(error)}`);
     }
 
     // Fetch and register triggers
@@ -1002,7 +1230,42 @@ export class AgentClient {
   private async handleContainerChangeEvent(data: unknown) {
     const containerReport = await this.processContainer(data as Container);
     this.rememberPendingWatcherCycleReport(containerReport);
+    if (containerReport?.container) {
+      await this.refreshControllerDockerTransportContainer(containerReport.container);
+    }
     this.scheduleStatsChanged();
+  }
+
+  private async refreshControllerDockerTransportContainer(container: Container): Promise<void> {
+    if (!this.controllerDockerTransportWatchers.has(container.watcher)) {
+      return;
+    }
+
+    const watcherId = `${this.name}.docker.${container.watcher}`;
+    const watcher = registry.getState().watcher[watcherId] as unknown as
+      | {
+          watchContainer?: (
+            target: Container,
+            options?: { emitBatchEvent?: boolean },
+          ) => Promise<ContainerReport>;
+        }
+      | undefined;
+    if (typeof watcher?.watchContainer !== 'function') {
+      this.log.warn(
+        `Unable to refresh Portwing container ${sanitizeLogParam(container.id)}: controller watcher ${sanitizeLogParam(watcherId)} is unavailable`,
+      );
+      return;
+    }
+
+    try {
+      await watcher.watchContainer(container, { emitBatchEvent: true });
+    } catch (error: unknown) {
+      // The Portwing event already refreshed runtime state. Preserve that
+      // useful update and retry enrichment on the next event/scheduled poll.
+      this.log.warn(
+        `Unable to refresh Portwing container ${sanitizeLogParam(container.id)} with controller watcher ${sanitizeLogParam(watcherId)} (${sanitizeLogParam(getErrorMessage(error))})`,
+      );
+    }
   }
 
   private handleContainerRemovedEvent(data: unknown) {
@@ -1687,10 +1950,11 @@ export class AgentClient {
       this.log.debug(
         `Running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (payload=${sanitizeLogParam(JSON.stringify(payload), 500)})`,
       );
+      const target = `/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`;
       await axios.post(
-        `${this.baseUrl}/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`,
+        `${this.baseUrl}${target}`,
         payload,
-        this.buildRequestConfig('POST', `/api/triggers/${triggerType}/${triggerName}`, payload),
+        this.buildRequestConfig('POST', target, payload),
       );
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {
         this.markPendingFreshState(container.id);
@@ -1721,10 +1985,11 @@ export class AgentClient {
       } else {
         body = containers;
       }
+      const target = `/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/batch`;
       await axios.post(
-        `${this.baseUrl}/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/batch`,
+        `${this.baseUrl}${target}`,
         body,
-        this.buildRequestConfig('POST', `/api/triggers/${triggerType}/${triggerName}/batch`, body),
+        this.buildRequestConfig('POST', target, body),
       );
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {
         containers.forEach(({ id }) => this.markPendingFreshState(id));
@@ -1751,7 +2016,7 @@ export class AgentClient {
       const requestUrl = query ? `${logEntriesUrl}?${query}` : logEntriesUrl;
       const response = await axios.get(
         requestUrl,
-        this.buildRequestConfig('GET', '/api/log/entries'),
+        this.buildRequestConfig('GET', query ? `/api/log/entries?${query}` : '/api/log/entries'),
       );
       return response.data;
     } catch (error: unknown) {
@@ -1779,9 +2044,10 @@ export class AgentClient {
       });
     }
     try {
+      const target = `/api/containers/${encodeURIComponent(containerId)}/logs?tail=${options.tail}&since=${options.since}&timestamps=${options.timestamps}`;
       const response = await axios.get(
-        `${this.baseUrl}/api/containers/${encodeURIComponent(containerId)}/logs?tail=${options.tail}&since=${options.since}&timestamps=${options.timestamps}`,
-        this.buildRequestConfig('GET', `/api/containers/${containerId}/logs`),
+        `${this.baseUrl}${target}`,
+        this.buildRequestConfig('GET', target),
       );
       return response.data;
     } catch (error: unknown) {
@@ -1796,10 +2062,8 @@ export class AgentClient {
     }
     try {
       this.log.debug(`Deleting container ${sanitizeLogParam(containerId)} on agent`);
-      await axios.delete(
-        `${this.baseUrl}/api/containers/${encodeURIComponent(containerId)}`,
-        this.buildRequestConfig('DELETE', `/api/containers/${containerId}`),
-      );
+      const target = `/api/containers/${encodeURIComponent(containerId)}`;
+      await axios.delete(`${this.baseUrl}${target}`, this.buildRequestConfig('DELETE', target));
     } catch (error: unknown) {
       this.log.error(`Error deleting container on agent: ${getErrorMessage(error)}`);
       throw error;
@@ -1808,9 +2072,10 @@ export class AgentClient {
 
   async getWatcher(watcherType: string, watcherName: string) {
     try {
+      const target = `/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`;
       const response = await axios.get<AgentComponentDescriptor>(
-        `${this.baseUrl}/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`,
-        this.buildRequestConfig('GET', `/api/watchers/${watcherType}/${watcherName}`),
+        `${this.baseUrl}${target}`,
+        this.buildRequestConfig('GET', target),
       );
       return response.data;
     } catch (error: unknown) {
@@ -1823,10 +2088,11 @@ export class AgentClient {
 
   async watch(watcherType: string, watcherName: string) {
     try {
+      const target = `/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`;
       const response = await axios.post<ContainerReport[]>(
-        `${this.baseUrl}/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`,
+        `${this.baseUrl}${target}`,
         {},
-        this.buildRequestConfig('POST', `/api/watchers/${watcherType}/${watcherName}`, {}),
+        this.buildRequestConfig('POST', target, {}),
       );
       const reports = response.data;
       await this.processAuthoritativeContainers(reports.map((report) => report.container));
@@ -1842,14 +2108,11 @@ export class AgentClient {
 
   async watchContainer(watcherType: string, watcherName: string, container: Container) {
     try {
+      const target = `/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}/container/${encodeURIComponent(container.id)}`;
       const response = await axios.post<ContainerReport>(
-        `${this.baseUrl}/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}/container/${encodeURIComponent(container.id)}`,
+        `${this.baseUrl}${target}`,
         {},
-        this.buildRequestConfig(
-          'POST',
-          `/api/watchers/${watcherType}/${watcherName}/container/${container.id}`,
-          {},
-        ),
+        this.buildRequestConfig('POST', target, {}),
       );
       const report = response.data;
 
@@ -1887,8 +2150,10 @@ export class AgentClient {
     watchers: AgentComponentDescriptor[],
     triggers: AgentComponentDescriptor[],
   ): Promise<void> {
+    this.setControllerDockerTransportWatchers([]);
     await registry.deregisterAgentComponents(this.name);
-    await this.registerAgentComponents('watcher', watchers);
+    await this.registerAgentWatchersTransactional(watchers);
+    this.setControllerDockerTransportWatchers(watchers);
     this.seedWatcherSnapshotCacheFromHandshake(watchers);
     await this.registerAgentComponents('trigger', triggers);
   }
