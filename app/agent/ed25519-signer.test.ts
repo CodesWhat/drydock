@@ -4,7 +4,7 @@
  * Includes known-answer / cross-check tests that pin the exact wire contract
  * required by Portwing's verifier (internal/auth/verify.go):
  *  - the empty-body SHA-256 constant
- *  - the exact canonical-message byte layout (METHOD\nPATH\nhash\nts\nnonce)
+ *  - the exact canonical-message byte layout (METHOD\nREQUEST-TARGET\nhash\nts\nnonce)
  *  - a real Ed25519 sign/verify round trip over that canonical message
  */
 import {
@@ -61,7 +61,7 @@ describe('EMPTY_BODY_SHA256_HEX / bodySha256Hex', () => {
 });
 
 describe('buildCanonicalMessage', () => {
-  test('produces the exact METHOD\\nPATH\\nhash\\nts\\nnonce byte layout with no trailing newline', () => {
+  test('produces the exact METHOD\\nREQUEST-TARGET\\nhash\\nts\\nnonce byte layout with no trailing newline', () => {
     const message = buildCanonicalMessage(
       'GET',
       '/api/containers',
@@ -121,6 +121,39 @@ describe('generateNonce', () => {
 });
 
 describe('signRequest', () => {
+  test('uses the exact escaped request target including query and declares signature version 2', () => {
+    const { privateKeyPem, publicKeyObject } = generateKeypairPem();
+    const privateKey = loadEd25519PrivateKey(privateKeyPem);
+    const requestTarget =
+      '/v1.44/containers/json?all=1&filters=%7B%22label%22%3A%5B%22a%2Fb%22%5D%7D';
+
+    const headers = signRequest({
+      method: 'GET',
+      path: requestTarget,
+      keyId: 'docker-proxy-key',
+      privateKey,
+      now: () => 1_700_000_000_000,
+      nonce: 'd'.repeat(32),
+    });
+
+    expect(headers['X-Portwing-Signature-Version']).toBe('2');
+    const canonicalMessage = buildCanonicalMessage(
+      'GET',
+      requestTarget,
+      EMPTY_BODY_SHA256_HEX,
+      1_700_000_000,
+      'd'.repeat(32),
+    );
+    expect(
+      cryptoVerify(
+        null,
+        Buffer.from(canonicalMessage, 'utf8'),
+        publicKeyObject,
+        Buffer.from(headers['X-Portwing-Signature'], 'base64url'),
+      ),
+    ).toBe(true);
+  });
+
   test('cross-check: signature verifies against the corresponding public key using the same canonical bytes', () => {
     const { privateKeyPem, publicKeyObject } = generateKeypairPem();
     const privateKey = loadEd25519PrivateKey(privateKeyPem);
