@@ -749,7 +749,10 @@ function getRawUpdateMaturityLevel(
     return 'established';
   }
 
-  const maturityThresholdDays = resolveUiMaturityThresholdDays();
+  const maturityThresholdDays = resolveMaturityMinAgeDays(
+    container.updatePolicy?.maturityMinAgeDays,
+    resolveUiMaturityThresholdDays(),
+  );
   const maturityThresholdMs = maturityMinAgeDaysToMilliseconds(maturityThresholdDays);
   return updateAge >= maturityThresholdMs ? 'mature' : 'hot';
 }

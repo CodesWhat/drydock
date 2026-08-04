@@ -12,18 +12,29 @@ const {
   mockLogWarn,
   mockStatSync,
   mockGetUpdateMode,
-} = vi.hoisted(() => ({
-  mockGetOperationById: vi.fn(),
-  mockGetActiveOperationByContainerId: vi.fn(),
-  mockGetActiveOperationByContainerName: vi.fn(),
-  mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
-  mockHasOtherActiveOperationByContainerName: vi.fn(() => false),
-  mockInsertOperation: vi.fn(),
-  mockMarkOperationTerminal: vi.fn(),
-  mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
-  mockLogWarn: vi.fn(),
-  mockStatSync: vi.fn(() => ({ isSocket: () => false })),
-  mockGetUpdateMode: vi.fn(() => 'auto' as const),
+  mockGetAgent,
+  agentFixture,
+} = vi.hoisted(() => {
+  const agentFixture = { name: 'edge-2', isRegisteringComponents: false };
+  return {
+    mockGetOperationById: vi.fn(),
+    mockGetActiveOperationByContainerId: vi.fn(),
+    mockGetActiveOperationByContainerName: vi.fn(),
+    mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
+    mockHasOtherActiveOperationByContainerName: vi.fn(() => false),
+    mockInsertOperation: vi.fn(),
+    mockMarkOperationTerminal: vi.fn(),
+    mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
+    mockLogWarn: vi.fn(),
+    mockStatSync: vi.fn(() => ({ isSocket: () => false })),
+    mockGetUpdateMode: vi.fn(() => 'auto' as const),
+    mockGetAgent: vi.fn(),
+    agentFixture,
+  };
+});
+
+vi.mock('../agent/manager.js', () => ({
+  getAgent: mockGetAgent,
 }));
 
 vi.mock('../store/settings.js', () => ({
@@ -106,6 +117,8 @@ describe('request-update', () => {
     mockGetState.mockReturnValue({ trigger: {}, watcher: {} });
     mockStatSync.mockReturnValue({ isSocket: () => false });
     mockGetUpdateMode.mockReturnValue('auto');
+    agentFixture.isRegisteringComponents = false;
+    mockGetAgent.mockReturnValue(undefined);
     mockInsertOperation.mockImplementation((operation) => ({
       id: operation.id || 'op-1',
       ...operation,
@@ -875,6 +888,31 @@ describe('request-update', () => {
         statusCode: 404,
         message: expect.stringContaining("Update trigger runs on agent 'edge-1'"),
       });
+    });
+
+    test('stays a hard agent-mismatch rejection even when the agent is still completing registration (#605)', async () => {
+      agentFixture.isRegisteringComponents = true;
+      mockGetAgent.mockImplementation((name) =>
+        name === agentFixture.name ? agentFixture : undefined,
+      );
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        agent: 'edge-1',
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      await expect(
+        enqueueContainerUpdate(createContainerWithRawUpdate({ agent: 'edge-2' })),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 404,
+        message: expect.stringContaining("Update trigger runs on agent 'edge-1'"),
+      });
+      expect(mockGetAgent).not.toHaveBeenCalled();
     });
 
     test('rejects with 409 when self-update-unavailable blocker fires (drydock self-container, socket absent)', async () => {

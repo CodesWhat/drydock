@@ -1006,6 +1006,72 @@ describe('computeUpdateEligibility', () => {
       const blocker = result.blockers.find((b) => b.reason === 'no-update-trigger-configured');
       expect(blocker).toBeDefined();
     });
+
+    describe('severity during the trigger registration window (#605)', () => {
+      test('downgrades to soft when container is agent-owned and its agent is pending registration', () => {
+        const container = makeContainerWithTagUpdate({ agent: 'agent-b' });
+        const isAgentPendingRegistration = vi.fn().mockReturnValue(true);
+        const result = computeUpdateEligibility(
+          container,
+          makeContext({
+            triggers: undefined,
+            now: FIXED_NOW,
+            isAgentPendingRegistration,
+          }),
+        );
+        const blocker = result.blockers.find((b) => b.reason === 'no-update-trigger-configured');
+        expect(blocker).toBeDefined();
+        expect(blocker?.severity).toBe('soft');
+        expect(isAgentPendingRegistration).toHaveBeenCalledWith('agent-b');
+      });
+
+      test('stays hard when container is agent-owned but its agent is not pending registration', () => {
+        const container = makeContainerWithTagUpdate({ agent: 'agent-b' });
+        const isAgentPendingRegistration = vi.fn().mockReturnValue(false);
+        const result = computeUpdateEligibility(
+          container,
+          makeContext({
+            triggers: undefined,
+            now: FIXED_NOW,
+            isAgentPendingRegistration,
+          }),
+        );
+        const blocker = result.blockers.find((b) => b.reason === 'no-update-trigger-configured');
+        expect(blocker).toBeDefined();
+        expect(blocker?.severity).toBe('hard');
+      });
+
+      test('stays hard for non-agent containers even when isAgentPendingRegistration would return true', () => {
+        const container = makeContainerWithTagUpdate(); // no agent property
+        const isAgentPendingRegistration = vi.fn().mockReturnValue(true);
+        const result = computeUpdateEligibility(
+          container,
+          makeContext({
+            triggers: undefined,
+            now: FIXED_NOW,
+            isAgentPendingRegistration,
+          }),
+        );
+        const blocker = result.blockers.find((b) => b.reason === 'no-update-trigger-configured');
+        expect(blocker).toBeDefined();
+        expect(blocker?.severity).toBe('hard');
+        expect(isAgentPendingRegistration).not.toHaveBeenCalled();
+      });
+
+      test('stays hard for agent-owned containers when no isAgentPendingRegistration callback is supplied', () => {
+        const container = makeContainerWithTagUpdate({ agent: 'agent-b' });
+        const result = computeUpdateEligibility(
+          container,
+          makeContext({
+            triggers: undefined,
+            now: FIXED_NOW,
+          }),
+        );
+        const blocker = result.blockers.find((b) => b.reason === 'no-update-trigger-configured');
+        expect(blocker).toBeDefined();
+        expect(blocker?.severity).toBe('hard');
+      });
+    });
   });
 
   describe('threshold-not-reached', () => {
@@ -1380,6 +1446,58 @@ describe('computeUpdateEligibility', () => {
         }),
       );
       expect(result.blockers.find((b) => b.reason === 'agent-mismatch')).toBeUndefined();
+    });
+
+    describe('severity during the trigger registration window (#605)', () => {
+      test('downgrades to soft when isAgentPendingRegistration returns true for the container agent', () => {
+        const trigger = makeTrigger({ agent: 'agent-a' });
+        const container = makeContainerWithTagUpdate({ agent: 'agent-b' });
+        const isAgentPendingRegistration = vi.fn().mockReturnValue(true);
+        const result = computeUpdateEligibility(
+          container,
+          makeContext({
+            triggers: { 'docker.update': trigger as never },
+            now: FIXED_NOW,
+            isAgentPendingRegistration,
+          }),
+        );
+        const blocker = result.blockers.find((b) => b.reason === 'agent-mismatch');
+        expect(blocker).toBeDefined();
+        expect(blocker?.severity).toBe('soft');
+        expect(isAgentPendingRegistration).toHaveBeenCalledWith('agent-b');
+      });
+
+      test('stays hard when isAgentPendingRegistration returns false for the container agent', () => {
+        const trigger = makeTrigger({ agent: 'agent-a' });
+        const container = makeContainerWithTagUpdate({ agent: 'agent-b' });
+        const isAgentPendingRegistration = vi.fn().mockReturnValue(false);
+        const result = computeUpdateEligibility(
+          container,
+          makeContext({
+            triggers: { 'docker.update': trigger as never },
+            now: FIXED_NOW,
+            isAgentPendingRegistration,
+          }),
+        );
+        const blocker = result.blockers.find((b) => b.reason === 'agent-mismatch');
+        expect(blocker).toBeDefined();
+        expect(blocker?.severity).toBe('hard');
+      });
+
+      test('stays hard when no isAgentPendingRegistration callback is supplied on the context', () => {
+        const trigger = makeTrigger({ agent: 'agent-a' });
+        const container = makeContainerWithTagUpdate({ agent: 'agent-b' });
+        const result = computeUpdateEligibility(
+          container,
+          makeContext({
+            triggers: { 'docker.update': trigger as never },
+            now: FIXED_NOW,
+          }),
+        );
+        const blocker = result.blockers.find((b) => b.reason === 'agent-mismatch');
+        expect(blocker).toBeDefined();
+        expect(blocker?.severity).toBe('hard');
+      });
     });
   });
 

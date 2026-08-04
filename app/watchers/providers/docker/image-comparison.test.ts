@@ -419,7 +419,28 @@ describe('image-comparison', () => {
     expect(result.publishedAt).toBeUndefined();
     expect(result.publishedAtTrusted).toBeUndefined();
     expect(result.digest).toBe('sha256:def456');
-    expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('registry timeout'));
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('registry timeout'));
+  });
+
+  test('digest-only with comparisonTag continues when getImagePublishedAt throws and logContainer.warn is absent', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+          getImagePublishedAt: vi.fn().mockRejectedValue(new Error('timeout')),
+        },
+      },
+    });
+    const log = { error: vi.fn(), debug: vi.fn() } as unknown as Parameters<
+      typeof findNewVersion
+    >[1];
+
+    const result = await findNewVersion(createDigestOnlyContainer() as never, log);
+
+    expect(result.publishedAt).toBeUndefined();
+    expect(result.digest).toBe('sha256:def456');
   });
 
   test('digest-only with comparisonTag does not set publishedAt when getImagePublishedAt returns non-string', async () => {
@@ -808,7 +829,7 @@ describe('image-comparison', () => {
     expect(result.publishedAtTrusted).toBeUndefined();
   });
 
-  test('logs debug and continues when getImagePublishedAt throws', async () => {
+  test('logs warn and continues when getImagePublishedAt throws', async () => {
     mockGetState.mockReturnValue({
       registry: {
         hub: {
@@ -819,8 +840,8 @@ describe('image-comparison', () => {
         },
       },
     });
-    const debugFn = vi.fn();
-    const log = { error: vi.fn(), warn: vi.fn(), debug: debugFn };
+    const warnFn = vi.fn();
+    const log = { error: vi.fn(), warn: warnFn, debug: vi.fn() };
     const container = {
       image: {
         id: 'image-1',
@@ -832,10 +853,37 @@ describe('image-comparison', () => {
     };
     const result = await findNewVersion(container as never, log);
     expect(result.publishedAt).toBeUndefined();
-    expect(debugFn).toHaveBeenCalledWith(expect.stringContaining('API error'));
+    expect(warnFn).toHaveBeenCalledWith(expect.stringContaining('API error'));
   });
 
-  test('continues silently when getImagePublishedAt throws and logContainer.debug is absent', async () => {
+  test('logs warn on registry auth failure so it is not silently swallowed', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['1.1.0']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+          getImagePublishedAt: vi.fn().mockRejectedValue(new Error('401 Unauthorized')),
+        },
+      },
+    });
+    const warnFn = vi.fn();
+    const log = { error: vi.fn(), warn: warnFn, debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub' },
+        name: 'library/nginx',
+        tag: { value: '1.0.0', semver: false },
+        digest: { watch: false },
+      },
+    };
+    const result = await findNewVersion(container as never, log);
+    expect(result.publishedAt).toBeUndefined();
+    expect(warnFn).toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+  });
+
+  test('continues silently when getImagePublishedAt throws and logContainer.warn is absent', async () => {
     mockGetState.mockReturnValue({
       registry: {
         hub: {
@@ -846,8 +894,8 @@ describe('image-comparison', () => {
         },
       },
     });
-    // Intentionally omit debug from log to exercise the false branch of typeof logContainer.debug
-    const log = { error: vi.fn(), warn: vi.fn() } as unknown as Parameters<
+    // Intentionally omit warn from log to exercise the false branch of typeof logContainer.warn
+    const log = { error: vi.fn(), debug: vi.fn() } as unknown as Parameters<
       typeof findNewVersion
     >[1];
     const container = {

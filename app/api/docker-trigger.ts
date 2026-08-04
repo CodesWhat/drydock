@@ -1,9 +1,12 @@
 import path from 'node:path';
+import { getAgent } from '../agent/manager.js';
 import type { Container } from '../model/container.js';
 import type Docker from '../triggers/providers/docker/Docker.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 
 export const NO_DOCKER_TRIGGER_FOUND_ERROR = 'No docker trigger found for this container';
+export const AGENT_LIFECYCLE_UNSUPPORTED_ERROR =
+  "Lifecycle actions (start/stop/restart) are not supported over this container's agent connection, typically because the agent has not advertised the usesControllerDockerTransport capability.";
 const DEFAULT_TRIGGER_TYPES = ['docker', 'dockercompose'];
 const COMPOSE_DIRECTORY_FILE_CANDIDATES = new Set([
   'compose.yaml',
@@ -253,6 +256,33 @@ export function isTriggerCompatibleWithContainer(
   }
 
   return true;
+}
+
+/**
+ * Whether lifecycle actions (start/stop/restart/rollback) are unsupported for
+ * an agent-owned container, decided from the agent's actual advertised
+ * capability rather than trigger presence/absence:
+ *
+ * - No agent on the container: never unsupported (non-agent containers are
+ *   handled by the plain docker-trigger lookup).
+ * - Agent not currently connected/registered: not decided here; the caller's
+ *   docker-trigger lookup will report the honest transient 404 instead.
+ * - Agent connected but its watcher hasn't advertised controller Docker
+ *   transport: unsupported, regardless of whether a legacy AgentTrigger is
+ *   still registered for it (that trigger's getWatcher()/rollback methods
+ *   throw rather than working).
+ */
+export function isAgentLifecycleUnsupported(
+  container: Pick<Container, 'agent' | 'watcher'>,
+): boolean {
+  if (!container.agent) {
+    return false;
+  }
+  const agentClient = getAgent(container.agent);
+  if (!agentClient) {
+    return false;
+  }
+  return !agentClient.hasControllerDockerTransport(container.watcher);
 }
 
 /**
