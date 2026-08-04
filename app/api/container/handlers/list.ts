@@ -208,6 +208,8 @@ export function attachInProgressUpdateOperation(
 function buildEligibilityContext(context: CrudHandlerContext): UpdateEligibilityContext {
   return {
     triggers: context.getTriggers ? context.getTriggers() : undefined,
+    isAgentPendingRegistration: (agentName) =>
+      context.getAgent(agentName ?? '')?.isRegisteringComponents === true,
     getActiveOperation: (container: Container) => {
       const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
       // Scoped by agent+watcher so cross-agent same-named ops don't affect eligibility (issue #411).
