@@ -422,6 +422,27 @@ describe('image-comparison', () => {
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('registry timeout'));
   });
 
+  test('digest-only with comparisonTag continues when getImagePublishedAt throws and logContainer.warn is absent', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+          getImagePublishedAt: vi.fn().mockRejectedValue(new Error('timeout')),
+        },
+      },
+    });
+    const log = { error: vi.fn(), debug: vi.fn() } as unknown as Parameters<
+      typeof findNewVersion
+    >[1];
+
+    const result = await findNewVersion(createDigestOnlyContainer() as never, log);
+
+    expect(result.publishedAt).toBeUndefined();
+    expect(result.digest).toBe('sha256:def456');
+  });
+
   test('digest-only with comparisonTag does not set publishedAt when getImagePublishedAt returns non-string', async () => {
     mockGetState.mockReturnValue({
       registry: {
@@ -835,7 +856,7 @@ describe('image-comparison', () => {
     expect(warnFn).toHaveBeenCalledWith(expect.stringContaining('API error'));
   });
 
-  test('logs warn on GHCR/LSCR auth failure so it is not silently swallowed', async () => {
+  test('logs warn on registry auth failure so it is not silently swallowed', async () => {
     mockGetState.mockReturnValue({
       registry: {
         hub: {

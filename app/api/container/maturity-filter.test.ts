@@ -35,28 +35,39 @@ describe('api/container/maturity-filter', () => {
   });
 
   test('applyContainerMaturityFilter uses per-container updatePolicy.maturityMinAgeDays over the global threshold on the uncached fallback path', () => {
-    const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
-    const containers = [
-      {
-        id: 'c1',
-        updateAvailable: true,
-        updateAge: tenDaysMs,
-        updatePolicy: { maturityMinAgeDays: 30 },
-      } as unknown as Container,
-      {
-        id: 'c2',
-        updateAvailable: true,
-        updateAge: tenDaysMs,
-      } as unknown as Container,
-    ];
+    const previousThreshold = process.env.DD_UI_MATURITY_THRESHOLD_DAYS;
+    process.env.DD_UI_MATURITY_THRESHOLD_DAYS = '7';
 
-    // Default global threshold is 7 days: c2 has no override so it's 'mature'.
-    // c1 overrides to 30 days, so the same 10-day-old update is still 'hot'.
-    expect(
-      applyContainerMaturityFilter(containers, 'hot').map((container) => container.id),
-    ).toEqual(['c1']);
-    expect(
-      applyContainerMaturityFilter(containers, 'mature').map((container) => container.id),
-    ).toEqual(['c2']);
+    try {
+      const tenDaysMs = 10 * 24 * 60 * 60 * 1000;
+      const containers = [
+        {
+          id: 'c1',
+          updateAvailable: true,
+          updateAge: tenDaysMs,
+          updatePolicy: { maturityMinAgeDays: 30 },
+        } as unknown as Container,
+        {
+          id: 'c2',
+          updateAvailable: true,
+          updateAge: tenDaysMs,
+        } as unknown as Container,
+      ];
+
+      // Global threshold is pinned to 7 days: c2 has no override so it's 'mature'.
+      // c1 overrides to 30 days, so the same 10-day-old update is still 'hot'.
+      expect(
+        applyContainerMaturityFilter(containers, 'hot').map((container) => container.id),
+      ).toEqual(['c1']);
+      expect(
+        applyContainerMaturityFilter(containers, 'mature').map((container) => container.id),
+      ).toEqual(['c2']);
+    } finally {
+      if (previousThreshold === undefined) {
+        delete process.env.DD_UI_MATURITY_THRESHOLD_DAYS;
+      } else {
+        process.env.DD_UI_MATURITY_THRESHOLD_DAYS = previousThreshold;
+      }
+    }
   });
 });
