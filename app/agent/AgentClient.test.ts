@@ -7626,10 +7626,23 @@ describe('AgentClient', () => {
   });
 
   describe('handleComponentSync (edge agent public shim)', () => {
-    test('deregisters agent components and re-registers watchers and triggers', async () => {
+    test('keeps isRegisteringComponents true through edge component replacement and resets it after success (#605)', async () => {
       const watchers = [{ type: 'docker', name: 'local', configuration: {} }];
       const triggers = [{ type: 'mock', name: 'update', configuration: {} }];
+      const observedSteps: string[] = [];
 
+      vi.mocked(registry.deregisterAgentComponents).mockImplementationOnce(async () => {
+        observedSteps.push(`deregister:${client.isRegisteringComponents}`);
+      });
+      vi.mocked(registry.registerComponent)
+        .mockImplementationOnce(async (component) => {
+          observedSteps.push(`${component.kind}:${client.isRegisteringComponents}`);
+        })
+        .mockImplementationOnce(async (component) => {
+          observedSteps.push(`${component.kind}:${client.isRegisteringComponents}`);
+        });
+
+      expect(client.isRegisteringComponents).toBe(false);
       await client.handleComponentSync(watchers, triggers);
 
       expect(registry.deregisterAgentComponents).toHaveBeenCalledWith('test-agent');
@@ -7639,6 +7652,38 @@ describe('AgentClient', () => {
       expect(registry.registerComponent).toHaveBeenCalledWith(
         expect.objectContaining({ kind: 'trigger', provider: 'mock', name: 'update' }),
       );
+      expect(observedSteps).toEqual(['deregister:true', 'watcher:true', 'trigger:true']);
+      expect(client.isRegisteringComponents).toBe(false);
+    });
+
+    test('resets isRegisteringComponents when edge watcher registration throws (#605)', async () => {
+      const observedDuringDeregister: boolean[] = [];
+      let observedDuringWatcherRegistration = false;
+
+      vi.mocked(registry.deregisterAgentComponents)
+        .mockImplementationOnce(async () => {
+          observedDuringDeregister.push(client.isRegisteringComponents);
+        })
+        .mockImplementationOnce(async () => {
+          observedDuringDeregister.push(client.isRegisteringComponents);
+        });
+      vi.mocked(registry.registerComponent).mockImplementationOnce(async () => {
+        observedDuringWatcherRegistration = client.isRegisteringComponents;
+        throw new Error('watcher registration failed');
+      });
+
+      await expect(
+        client.handleComponentSync(
+          [{ type: 'docker', name: 'local', configuration: {} }],
+          [{ type: 'mock', name: 'update', configuration: {} }],
+        ),
+      ).rejects.toThrow('watcher registration failed');
+
+      expect(observedDuringDeregister).toEqual([true, true]);
+      expect(observedDuringWatcherRegistration).toBe(true);
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledTimes(2);
+      expect(registry.registerComponent).toHaveBeenCalledTimes(1);
+      expect(client.isRegisteringComponents).toBe(false);
     });
 
     test('works with empty watchers and triggers (no-op)', async () => {

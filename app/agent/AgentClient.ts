@@ -277,9 +277,11 @@ export class AgentClient {
   private readonly ed25519PrivateKey?: KeyObject;
   public isConnected: boolean;
   /**
-   * True only for the span inside `_doHandshake()` between deregistering this
-   * agent's components and finishing their re-registration (watchers, then
-   * triggers). Eligibility display surfaces (container list, SSE enrichment)
+   * True only while this agent's components are being replaced — the span
+   * inside `_doHandshake()` (and the equivalent edge-path
+   * `handleComponentSync()`) between deregistering and finishing the
+   * re-registration (watchers, then triggers).
+   * Eligibility display surfaces (container list, SSE enrichment)
    * read this to soften `agent-mismatch` / `no-update-trigger-configured` to a
    * soft blocker during that transient window — see issue #605. Always reset
    * in a `finally` so a handshake failure, or a disconnect via
@@ -2183,12 +2185,19 @@ export class AgentClient {
     watchers: AgentComponentDescriptor[],
     triggers: AgentComponentDescriptor[],
   ): Promise<void> {
-    this.setControllerDockerTransportWatchers([]);
-    await registry.deregisterAgentComponents(this.name);
-    await this.registerAgentWatchersTransactional(watchers);
-    this.setControllerDockerTransportWatchers(watchers);
-    this.seedWatcherSnapshotCacheFromHandshake(watchers);
-    await this.registerAgentComponents('trigger', triggers);
+    // Same deregister → re-register window as _doHandshake(): keep transient
+    // eligibility blockers soft while components are being replaced.
+    this.isRegisteringComponents = true;
+    try {
+      this.setControllerDockerTransportWatchers([]);
+      await registry.deregisterAgentComponents(this.name);
+      await this.registerAgentWatchersTransactional(watchers);
+      this.setControllerDockerTransportWatchers(watchers);
+      this.seedWatcherSnapshotCacheFromHandshake(watchers);
+      await this.registerAgentComponents('trigger', triggers);
+    } finally {
+      this.isRegisteringComponents = false;
+    }
   }
 
   /**
