@@ -74,7 +74,7 @@
   "overrides": {
     "axios": "1.18.1",
     "body-parser": "2.3.0",
-    "fast-uri": "4.1.1",
+    "fast-uri": "4.1.2",
     "fast-xml-parser": "5.10.1",
     "picomatch": "4.0.5",
     "postcss": "8.5.24",
