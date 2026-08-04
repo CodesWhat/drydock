@@ -765,6 +765,7 @@ test('registerAuthentications should register anonymous auth when confirmation i
     mockIsUpgrade.mockReturnValue(false);
     await registry.testable_registerAuthentications();
     expect(Object.keys(registry.getState().authentication)).toEqual(['anonymous.anonymous']);
+    expect(registry.isAnonymousAuthenticationActive()).toBe(true);
   } finally {
     if (previousAnonymousConfirmation === undefined) {
       delete process.env.DD_ANONYMOUS_AUTH_CONFIRM;
@@ -772,6 +773,19 @@ test('registerAuthentications should register anonymous auth when confirmation i
       process.env.DD_ANONYMOUS_AUTH_CONFIRM = previousAnonymousConfirmation;
     }
   }
+});
+
+test('isAnonymousAuthenticationActive should return false when no anonymous strategy is registered', async () => {
+  authentications = {
+    basic: {
+      john: {
+        user: 'john',
+        hash: TEST_BASIC_HASH,
+      },
+    },
+  };
+  await registry.testable_registerAuthentications();
+  expect(registry.isAnonymousAuthenticationActive()).toBe(false);
 });
 
 test('registerAuthentications should fallback to anonymous when all configured providers fail and confirmation is enabled', async () => {

@@ -103,7 +103,12 @@ test('Next.js is pinned past the 16.2.9 security advisory batch', () => {
   const manifest = readJson('apps/web/package.json');
   const lockfile = readJson('apps/web/package-lock.json');
 
-  assert.equal(manifest.dependencies?.next, '16.2.11');
+  // Floor, not an exact pin: 16.2.11 closed the advisory batch, and routine
+  // Renovate bumps past it must not fail the guard (16.x only — a new major
+  // is a deliberate migration, not a routine bump).
+  const manifestNext = manifest.dependencies?.next;
+  assert.ok(manifestNext?.startsWith('16.'), 'apps/web next must stay on the vetted 16.x line');
+  assert.ok(compareSemver(manifestNext, '16.2.11') >= 0);
   assert.ok(compareSemver(resolvedVersion(lockfile, 'next'), '16.2.11') >= 0);
 });
 
