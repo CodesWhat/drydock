@@ -336,6 +336,16 @@ describe('ws-upgrade-utils', () => {
       const request = {} as any;
       expect(isAuthenticatedSession(request)).toBe(false);
     });
+
+    test('returns true when anonymousAuthActive is true even without a passport user', () => {
+      const request = { session: { passport: {} } } as any;
+      expect(isAuthenticatedSession(request, { anonymousAuthActive: true })).toBe(true);
+    });
+
+    test('returns false when anonymousAuthActive is false and passport user is missing', () => {
+      const request = { session: { passport: {} } } as any;
+      expect(isAuthenticatedSession(request, { anonymousAuthActive: false })).toBe(false);
+    });
   });
 
   describe('getDefaultRateLimitKey', () => {

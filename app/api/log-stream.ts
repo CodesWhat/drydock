@@ -11,6 +11,7 @@ import {
   onEntry,
 } from '../log/buffer.js';
 import { toDisplayLogEntry } from '../log/display-timestamp.js';
+import * as registry from '../registry/index.js';
 import {
   applySessionMiddleware,
   createFixedWindowRateLimiter,
@@ -255,13 +256,19 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
       }
 
       const upgradeRequest = request as UpgradeRequest;
-      const authenticated = isAuthenticatedSession(upgradeRequest);
-      const rateLimitKey = getRateLimitKey(upgradeRequest, authenticated);
+      // Rate-limit keying must stay based on genuine passport authentication only —
+      // anonymous auth being active shouldn't let anonymous clients earn session-keyed
+      // (rotatable) rate limits instead of IP-keyed ones.
+      const passportAuthenticated = isAuthenticatedSession(upgradeRequest);
+      const gateAuthenticated = isAuthenticatedSession(upgradeRequest, {
+        anonymousAuthActive: registry.isAnonymousAuthenticationActive(),
+      });
+      const rateLimitKey = getRateLimitKey(upgradeRequest, passportAuthenticated);
       if (isRateLimited(rateLimitKey)) {
         writeUpgradeError(socket, 429, 'Too Many Requests');
         return;
       }
-      if (!authenticated) {
+      if (!gateAuthenticated) {
         writeUpgradeError(socket, 401, 'Unauthorized');
         return;
       }
