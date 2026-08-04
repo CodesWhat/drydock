@@ -10,7 +10,12 @@ import {
 } from '../triggers/providers/docker/created-container-candidate.js';
 import { recordAuditEvent } from './audit-events.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
-import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import {
+  AGENT_LIFECYCLE_UNSUPPORTED_ERROR,
+  findDockerTriggerForContainer,
+  isAgentLifecycleUnsupported,
+  NO_DOCKER_TRIGGER_FOUND_ERROR,
+} from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
 
@@ -80,6 +85,11 @@ async function rollbackContainer(req: Request, res: Response) {
       return;
     }
     backup = backups[0];
+  }
+
+  if (isAgentLifecycleUnsupported(container)) {
+    sendErrorResponse(res, 501, AGENT_LIFECYCLE_UNSUPPORTED_ERROR);
+    return;
   }
 
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);

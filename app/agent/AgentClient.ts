@@ -331,6 +331,15 @@ export class AgentClient {
     return this.watcherSnapshotCache.get(watcherSnapshotCacheKey(watcherType, watcherName));
   }
 
+  /**
+   * Whether the given watcher on this agent advertises controller Docker
+   * transport, i.e. lifecycle actions (start/stop/restart/rollback) execute
+   * locally on the controller instead of being proxied to the agent.
+   */
+  hasControllerDockerTransport(watcherName: string): boolean {
+    return this.controllerDockerTransportWatchers.has(watcherName);
+  }
+
   private parseBaseUrl(): URL {
     // Validate the URL to prevent request forgery (CodeQL js/request-forgery)
     const parsed = new URL(this.getCandidateUrl());
