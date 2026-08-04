@@ -339,7 +339,7 @@ export async function findNewVersion(
             }
           }
         } catch (error: unknown) {
-          logContainer.debug(`Remote publish date lookup failed (${getErrorMessage(error)})`);
+          logContainer.warn(`Remote publish date lookup failed (${getErrorMessage(error)})`);
         }
       } else {
         logContainer.debug('Digest-only image — no registry tag candidate available');
@@ -423,8 +423,8 @@ export async function findNewVersion(
       }
     }
   } catch (error: unknown) {
-    if (typeof logContainer.debug === 'function') {
-      logContainer.debug(`Remote publish date lookup failed (${getErrorMessage(error)})`);
+    if (typeof logContainer.warn === 'function') {
+      logContainer.warn(`Remote publish date lookup failed (${getErrorMessage(error)})`);
     }
   }
 
