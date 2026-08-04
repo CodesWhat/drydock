@@ -743,6 +743,50 @@ describe('AgentClient', () => {
       expect(client.isConnected).toBe(true);
     });
 
+    test('sets isRegisteringComponents for the deregister -> re-register span and resets after completion (#605)', async () => {
+      const observedDuringDeregister: boolean[] = [];
+      const observedDuringWatcherFetch: boolean[] = [];
+      const observedDuringTriggerFetch: boolean[] = [];
+
+      vi.mocked(registry.deregisterAgentComponents).mockImplementationOnce(async () => {
+        observedDuringDeregister.push(client.isRegisteringComponents);
+      });
+
+      axios.get
+        .mockResolvedValueOnce({ data: [] }) // containers
+        .mockImplementationOnce(async () => {
+          observedDuringWatcherFetch.push(client.isRegisteringComponents);
+          return { data: [] };
+        })
+        .mockImplementationOnce(async () => {
+          observedDuringTriggerFetch.push(client.isRegisteringComponents);
+          return { data: [] };
+        });
+
+      storeContainer.getContainers.mockReturnValue([]);
+
+      expect(client.isRegisteringComponents).toBe(false);
+      await client.handshake();
+
+      expect(observedDuringDeregister).toEqual([true]);
+      expect(observedDuringWatcherFetch).toEqual([true]);
+      expect(observedDuringTriggerFetch).toEqual([true]);
+      expect(client.isRegisteringComponents).toBe(false);
+    });
+
+    test('resets isRegisteringComponents to false when a mid-handshake step throws (#605)', async () => {
+      axios.get.mockResolvedValueOnce({ data: [] }); // containers succeeds
+      vi.mocked(registry.deregisterAgentComponents).mockRejectedValueOnce(
+        new Error('deregister failed'),
+      );
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await expect(client.handshake()).rejects.toThrow('deregister failed');
+
+      expect(client.isRegisteringComponents).toBe(false);
+      expect(client.isConnected).toBe(false);
+    });
+
     test('should emit agent-connected when transitioning to connected state', async () => {
       axios.get
         .mockResolvedValueOnce({ data: [] })
@@ -1118,6 +1162,13 @@ describe('AgentClient', () => {
       expect(client.isConnected).toBe(false);
       vi.advanceTimersByTime(1000);
       expect(spy).toHaveBeenCalled();
+    });
+
+    test('should reset isRegisteringComponents to false on disconnect (#605)', () => {
+      client.isConnected = true;
+      client.isRegisteringComponents = true;
+      client.scheduleReconnect(1000);
+      expect(client.isRegisteringComponents).toBe(false);
     });
 
     test('should not schedule duplicate reconnects', () => {

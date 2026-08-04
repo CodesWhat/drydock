@@ -877,6 +877,30 @@ describe('request-update', () => {
       });
     });
 
+    test('stays a hard agent-mismatch rejection even when the agent is still completing registration (#605)', async () => {
+      // Admission never wires isAgentPendingRegistration in — only display surfaces
+      // (container list, SSE enrichment) soften agent-mismatch during the agent's
+      // component re-registration window. A manual update request must still be
+      // rejected so it can never be enqueued through a wrong-agent trigger.
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        agent: 'edge-1',
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      await expect(
+        enqueueContainerUpdate(createContainerWithRawUpdate({ agent: 'edge-2' })),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 404,
+        message: expect.stringContaining("Update trigger runs on agent 'edge-1'"),
+      });
+    });
+
     test('rejects with 409 when self-update-unavailable blocker fires (drydock self-container, socket absent)', async () => {
       const trigger = {
         type: 'docker',

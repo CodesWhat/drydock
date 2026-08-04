@@ -292,6 +292,12 @@ function prepareContainerUpdateRequest(
   //
   // The raw-candidate check above is the source of truth for "an update exists"
   // when a soft gate deliberately makes updateAvailable false.
+  //
+  // isAgentPendingRegistration is deliberately NOT wired in here. That softening
+  // exists only for display surfaces (container list, SSE enrichment) — admission
+  // stays hard/fail-closed so a hard agent-mismatch can never be bypassed to enqueue
+  // an update through a wrong-agent trigger during the component re-registration
+  // window. See issue #605.
   const eligibility = computeUpdateEligibility(container, {
     triggers: registry.getState().trigger,
     getActiveOperation: () => undefined,

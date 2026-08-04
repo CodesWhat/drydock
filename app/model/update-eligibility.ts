@@ -106,8 +106,11 @@ function updateScanMatchesCandidate(container: Container, updateScan: UpdateSecu
   );
 }
 
-function makeBlocker(blocker: Omit<UpdateBlocker, 'severity'>): UpdateBlocker {
-  return { ...blocker, severity: BLOCKER_SEVERITY[blocker.reason] };
+function makeBlocker(
+  blocker: Omit<UpdateBlocker, 'severity'>,
+  severityOverride?: UpdateBlockerSeverity,
+): UpdateBlocker {
+  return { ...blocker, severity: severityOverride ?? BLOCKER_SEVERITY[blocker.reason] };
 }
 
 export interface UpdateEligibility {
@@ -134,6 +137,20 @@ export interface UpdateEligibilityContext {
    * eligibility model. Manual UI/API update requests leave it undefined and are never gated by it.
    */
   maintenanceWindowOpen?: boolean;
+  /**
+   * Optional. Called with the container's own agent name when the `agent-mismatch` or
+   * `no-update-trigger-configured` branch is about to fire. Returning `true` (e.g. because
+   * the agent's client is mid-registration, per `AgentClient.isRegisteringComponents`)
+   * downgrades that blocker to `soft` instead of the reason's default `hard` severity, so the
+   * transient window between `AgentClient._doHandshake()` deregistering an agent's components
+   * and finishing their re-registration doesn't disable manual updates on display surfaces.
+   *
+   * This only softens *display* eligibility (container list, SSE enrichment). Admission
+   * (`app/updates/request-update.ts`) never wires this callback in, so a hard agent-mismatch
+   * always blocks the actual update request — an update can never be enqueued through a
+   * wrong-agent trigger during the registration window. See issue #605.
+   */
+  isAgentPendingRegistration?: (agentName: string | undefined) => boolean;
 }
 
 /**
@@ -442,32 +459,45 @@ export function computeUpdateEligibility(
     );
 
   if (!typeOnlyTrigger) {
-    // 11. no-update-trigger-configured — no docker/dockercompose trigger exists at all
+    // 11. no-update-trigger-configured — no docker/dockercompose trigger exists at all.
+    // AgentClient._doHandshake() deregisters an agent's components before re-registering,
+    // so an agent-owned container can transiently see zero triggers of any kind during that
+    // window too. Apply the same #605 downgrade as agent-mismatch below.
+    const isPendingRegistration = container.agent
+      ? (context.isAgentPendingRegistration?.(container.agent) ?? false)
+      : false;
     blockers.push(
-      makeBlocker({
-        reason: 'no-update-trigger-configured',
-        message: 'No docker or dockercompose action trigger is configured for this container.',
-        actionable: true,
-        actionHint: 'Configure `DD_ACTION_DOCKER_*` or `DD_ACTION_DOCKERCOMPOSE_*`.',
-      }),
+      makeBlocker(
+        {
+          reason: 'no-update-trigger-configured',
+          message: 'No docker or dockercompose action trigger is configured for this container.',
+          actionable: true,
+          actionHint: 'Configure `DD_ACTION_DOCKER_*` or `DD_ACTION_DOCKERCOMPOSE_*`.',
+        },
+        isPendingRegistration ? 'soft' : undefined,
+      ),
     );
   } else if (!candidateTrigger) {
     // A docker trigger exists but it's not compatible with this container's agent.
     // 10. agent-mismatch (detected here because full lookup failed but type-only succeeded)
     const t = typeOnlyTrigger;
     const triggerAgent = t.agent;
+    const isPendingRegistration = context.isAgentPendingRegistration?.(container.agent) ?? false;
     blockers.push(
-      makeBlocker({
-        reason: 'agent-mismatch',
-        message: `Update trigger runs on agent '${triggerAgent ?? '<none>'}'; container is on agent '${container.agent ?? '<none>'}'.`,
-        actionable: true,
-        actionHint: 'Configure an update trigger for the target agent.',
-        details: {
-          triggerAgent,
-          containerAgent: container.agent,
-          triggerId: t.getId?.(),
+      makeBlocker(
+        {
+          reason: 'agent-mismatch',
+          message: `Update trigger runs on agent '${triggerAgent ?? '<none>'}'; container is on agent '${container.agent ?? '<none>'}'.`,
+          actionable: true,
+          actionHint: 'Configure an update trigger for the target agent.',
+          details: {
+            triggerAgent,
+            containerAgent: container.agent,
+            triggerId: t.getId?.(),
+          },
         },
-      }),
+        isPendingRegistration ? 'soft' : undefined,
+      ),
     );
   } else {
     const t = candidateTrigger;
