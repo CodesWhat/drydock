@@ -112,6 +112,17 @@ export function getAuthenticationRegistrationErrors(): AuthenticationRegistratio
   return [...authenticationRegistrationErrors];
 }
 
+/**
+ * Returns true when the registered authentication state contains a strategy
+ * whose description type is 'anonymous', i.e. anonymous authentication is
+ * the configured (and confirmed) auth mode.
+ */
+export function isAnonymousAuthenticationActive(): boolean {
+  return Object.values(state.authentication).some(
+    (authentication) => authentication.getStrategyDescription().type === 'anonymous',
+  );
+}
+
 function addComponentToState(kind: ComponentKind, component: Component) {
   const components = state[kind] as Record<string, Component>;
   components[component.getId()] = component;

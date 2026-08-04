@@ -1,12 +1,14 @@
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
 import * as configuration from '../configuration/index.js';
+import * as registry from '../registry/index.js';
 import {
   attachSystemLogStreamWebSocketServer,
   createSystemLogStreamGateway,
   parseSystemLogStreamQuery,
 } from './log-stream.js';
 import * as rateLimitKey from './rate-limit-key.js';
+import { createIdentityAwareUpgradeRateLimitKeyResolver } from './ws-upgrade-utils.js';
 
 function createUpgradeSocket() {
   return {
@@ -401,6 +403,148 @@ describe('api/log-stream', () => {
       );
 
       expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+    });
+
+    test('accepts passport-less upgrades when anonymous authentication is active', async () => {
+      const isAnonymousAuthenticationActiveSpy = vi
+        .spyOn(registry, 'isAnonymousAuthenticationActive')
+        .mockReturnValue(true);
+      const mockHandleUpgrade = vi.fn(
+        (_req: unknown, _socket: unknown, _head: unknown, callback: (ws: unknown) => void) => {
+          const ws = {
+            on: vi.fn((event: string, listener: () => void) => {
+              if (event === 'close') listener();
+            }),
+            off: vi.fn(),
+            send: vi.fn(),
+            close: vi.fn(),
+          };
+          callback(ws);
+        },
+      );
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: (_req: unknown, _res: unknown, next: (error?: unknown) => void) =>
+          next(),
+        webSocketServer: { handleUpgrade: mockHandleUpgrade },
+        isRateLimited: vi.fn(() => false),
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+      expect(mockHandleUpgrade).toHaveBeenCalledTimes(1);
+
+      isAnonymousAuthenticationActiveSpy.mockRestore();
+    });
+
+    test('rejects unauthenticated upgrades when anonymous authentication is not active', async () => {
+      const isAnonymousAuthenticationActiveSpy = vi
+        .spyOn(registry, 'isAnonymousAuthenticationActive')
+        .mockReturnValue(false);
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: (_req: unknown, _res: unknown, next: (error?: unknown) => void) =>
+          next(),
+        webSocketServer: { handleUpgrade: vi.fn() },
+        isRateLimited: vi.fn(() => false),
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+
+      isAnonymousAuthenticationActiveSpy.mockRestore();
+    });
+
+    test('keys rate limiting by IP for anonymous-authenticated upgrades, not by session', async () => {
+      const isAnonymousAuthenticationActiveSpy = vi
+        .spyOn(registry, 'isAnonymousAuthenticationActive')
+        .mockReturnValue(true);
+      const capturedRateLimitKeys: string[] = [];
+      const mockHandleUpgrade = vi.fn(
+        (_req: unknown, _socket: unknown, _head: unknown, callback: (ws: unknown) => void) => {
+          const ws = {
+            on: vi.fn((event: string, listener: () => void) => {
+              if (event === 'close') listener();
+            }),
+            off: vi.fn(),
+            send: vi.fn(),
+            close: vi.fn(),
+          };
+          callback(ws);
+        },
+      );
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: (_req: unknown, _res: unknown, next: (error?: unknown) => void) =>
+          next(),
+        webSocketServer: { handleUpgrade: mockHandleUpgrade },
+        isRateLimited: (key: string) => {
+          capturedRateLimitKeys.push(key);
+          return false;
+        },
+        getRateLimitKey: createIdentityAwareUpgradeRateLimitKeyResolver({
+          ratelimit: { identitykeying: true },
+        }),
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+      expect(capturedRateLimitKeys).toEqual(['ip:127.0.0.1']);
+
+      isAnonymousAuthenticationActiveSpy.mockRestore();
+    });
+
+    test('keeps session-keyed rate limiting for passport-authenticated upgrades', async () => {
+      const capturedRateLimitKeys: string[] = [];
+      const mockHandleUpgrade = vi.fn(
+        (_req: unknown, _socket: unknown, _head: unknown, callback: (ws: unknown) => void) => {
+          const ws = {
+            on: vi.fn((event: string, listener: () => void) => {
+              if (event === 'close') listener();
+            }),
+            off: vi.fn(),
+            send: vi.fn(),
+            close: vi.fn(),
+          };
+          callback(ws);
+        },
+      );
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: { handleUpgrade: mockHandleUpgrade },
+        isRateLimited: (key: string) => {
+          capturedRateLimitKeys.push(key);
+          return false;
+        },
+        getRateLimitKey: createIdentityAwareUpgradeRateLimitKeyResolver({
+          ratelimit: { identitykeying: true },
+        }),
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+      expect(capturedRateLimitKeys).toEqual(['session:session-1']);
     });
 
     test('does not write error when socket is already destroyed', async () => {
