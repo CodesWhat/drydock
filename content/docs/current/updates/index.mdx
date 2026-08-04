@@ -5,6 +5,14 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.0-rc.12 Highlights — August 4, 2026
+
+- **Security dependency refresh** — `brace-expansion` advanced to 5.0.9 across the app, UI, and e2e workspaces (CVE-2026-69152), `ip-address` to 10.3.1 in the app runtime (CVE-2026-54272, CVE-2026-69192, CVE-2026-69198), and `fast-uri` to 4.1.2 in app and UI (backslash-authority host confusion, CVE-2026-18446) ([#659](https://github.com/CodesWhat/drydock/pull/659)).
+- **Maturity badge and gate agree again** — the hot/mature badge now resolves each container's own `updatePolicy.maturityMinAgeDays` before the global `DD_UI_MATURITY_THRESHOLD_DAYS`, matching the gate, and registry publish-date lookup failures (including GHCR/LSCR auth errors) log at `warn` instead of vanishing at `debug` ([#604](https://github.com/CodesWhat/drydock/issues/604)).
+- **No more transient "Agent Mismatch"** — the container list and SSE stream soften `agent-mismatch`/`no-update-trigger-configured` to soft blockers while an agent's components are mid-(re)registration; update admission stays fail-closed throughout ([#605](https://github.com/CodesWhat/drydock/issues/605)).
+- **WebSocket log streams accept anonymous-auth sessions** — under `DD_ANONYMOUS_AUTH_CONFIRM=true`, both the system and container log-stream upgrades now pass the same auth gate as every REST endpoint ([#636](https://github.com/CodesWhat/drydock/issues/636)).
+- **Explicit 501 for missing agent lifecycle transport** — start/stop/restart/rollback on an agent-owned container without controller Docker transport returns a 501 naming the cause instead of an ambiguous 404 ([#637](https://github.com/CodesWhat/drydock/issues/637)).
+
 ## v1.6.0-rc.11 Highlights — August 1, 2026
 
 - **Portwing 0.9 Docker watcher, updates, and lifecycle actions now run controller-side** — Drydock 1.6.0-rc.11+ recognizes the exact `transport=docker-api`, `execution=controller`, `events=portwing` watcher marker, starts its native registry checks and Docker action against a loopback-only authenticated bridge, and carries Docker calls over Standard HTTP or Edge correlated request/response/stream transport. Single/batch updates, start/stop/restart, update preview, and backup rollback use this path even though Portwing advertises no remote trigger. Portwing stays authoritative for lifecycle events, and raw false/unknown inventory no longer erases controller enrichment ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76)).
