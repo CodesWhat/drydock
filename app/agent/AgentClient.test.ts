@@ -7869,6 +7869,26 @@ describe('AgentClient', () => {
   });
 
   describe('Portwing Docker API transport', () => {
+    test('reports whether a watcher uses controller Docker transport', async () => {
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      expect(client.hasControllerDockerTransport('docker')).toBe(true);
+      expect(client.hasControllerDockerTransport('missing')).toBe(false);
+    });
+
     test('component sync synthesizes docker/update only for a controller Docker transport watcher', async () => {
       const watcher = {
         type: 'docker',

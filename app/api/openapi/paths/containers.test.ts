@@ -73,6 +73,7 @@ describe('containerPaths', () => {
           200: jsonResponse('Container started', {
             $ref: '#/components/schemas/ContainerActionResponse',
           }),
+          501: errorResponse("Lifecycle actions unsupported by this container's agent connection"),
           401: errorResponse('Authentication required'),
           403: errorResponse('Container actions feature disabled'),
           404: errorResponse('Container or docker trigger not found'),
@@ -94,6 +95,7 @@ describe('containerPaths', () => {
           200: jsonResponse('Container stopped', {
             $ref: '#/components/schemas/ContainerActionResponse',
           }),
+          501: errorResponse("Lifecycle actions unsupported by this container's agent connection"),
           401: errorResponse('Authentication required'),
           403: errorResponse('Container actions feature disabled'),
           404: errorResponse('Container or docker trigger not found'),
@@ -115,6 +117,7 @@ describe('containerPaths', () => {
           200: jsonResponse('Container restarted', {
             $ref: '#/components/schemas/ContainerActionResponse',
           }),
+          501: errorResponse("Lifecycle actions unsupported by this container's agent connection"),
           401: errorResponse('Authentication required'),
           403: errorResponse('Container actions feature disabled'),
           404: errorResponse('Container or docker trigger not found'),

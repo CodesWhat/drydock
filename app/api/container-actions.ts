@@ -15,7 +15,12 @@ import {
   UpdateRequestError,
 } from '../updates/request-update.js';
 import { recordAuditEvent } from './audit-events.js';
-import { findDockerTriggerForContainer, NO_DOCKER_TRIGGER_FOUND_ERROR } from './docker-trigger.js';
+import {
+  AGENT_LIFECYCLE_UNSUPPORTED_ERROR,
+  findDockerTriggerForContainer,
+  isAgentLifecycleUnsupported,
+  NO_DOCKER_TRIGGER_FOUND_ERROR,
+} from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
 
@@ -115,6 +120,11 @@ async function executeAction(
   const container = storeContainer.getContainer(id);
   if (!container) {
     sendErrorResponse(res, 404, 'Container not found');
+    return;
+  }
+
+  if (isAgentLifecycleUnsupported(container)) {
+    sendErrorResponse(res, 501, AGENT_LIFECYCLE_UNSUPPORTED_ERROR);
     return;
   }
 

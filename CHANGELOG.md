@@ -13,11 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **WebSocket log streams no longer reject anonymous-auth sessions** ([#636](https://github.com/CodesWhat/drydock/issues/636)). Both WS upgrade paths — the system log stream and the container log stream — gated on `isAuthenticatedSession()` requiring `session.passport.user`, which `passport-anonymous` never sets, so under `DD_ANONYMOUS_AUTH_CONFIRM=true` the log stream WebSocket always rejected the upgrade even though every REST endpoint worked. `isAuthenticatedSession` now also accepts the session when anonymous authentication is the registered mode.
+- **Container start/stop/restart/rollback return an explicit 501 instead of an ambiguous 404 for agent containers without lifecycle transport** ([#637](https://github.com/CodesWhat/drydock/issues/637)). `POST /:id/start|stop|restart` and `POST /:id/rollback` returned a bare 404 `No docker trigger found for this container` whenever the lookup missed, indistinguishable from "container not found" — for agent-owned containers this was the only signal the UI got. That lookup miss now returns 501 naming the likely cause (the agent's connection typically hasn't advertised `usesControllerDockerTransport`) when `container.agent` is set; non-agent containers still get the existing 404. This complements the native-transport support that shipped in rc.11 via [#651](https://github.com/CodesWhat/drydock/pull/651), which closed #637's core gap — this is the remaining explicit-error half.
 
 ### Security
 
 - **`brace-expansion`, `ip-address`, and `fast-uri` overrides advanced to patched releases.** `brace-expansion` moved to 5.0.9 in `app/`, `ui/`, and `e2e/` (CVE-2026-69152, [GHSA-rgw5-rvv9-x895](https://github.com/advisories/GHSA-rgw5-rvv9-x895)); `ip-address` moved to 10.3.1 in `app/` (CVE-2026-54272, CVE-2026-69192, CVE-2026-69198), pulled in transitively via `express-rate-limit` and `mqtt` → `socks`; `fast-uri` advanced from 4.1.1 to 4.1.2 in `app/` and `ui/` (host confusion via backslash authority introducer, CVE-2026-18446, [GHSA-7p8r-x3mc-p8w7](https://github.com/advisories/GHSA-7p8r-x3mc-p8w7), superseding [#658](https://github.com/CodesWhat/drydock/pull/658)).
-||||||| parent of 16d6927c (🐛 fix(api): honor active anonymous auth in WS log-stream upgrades)
 
 ## [1.6.0-rc.11] — 2026-08-01
 
