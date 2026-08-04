@@ -169,7 +169,7 @@
       "statusLive": "En direct",
       "statusOffline": "Hors ligne",
       "stdout": "stdout",
-      "stderr": "stderr"
+      "stderr": "sdterr"
     },
     "groupedViews": {
       "statusQueued": "En file",
