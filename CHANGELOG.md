@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.12] — 2026-08-04
+
+### Changed
+
+- **Routine dependency maintenance across the root tooling, demo, UI, and website workspaces** ([#653](https://github.com/CodesWhat/drydock/pull/653), [#654](https://github.com/CodesWhat/drydock/pull/654), [#655](https://github.com/CodesWhat/drydock/pull/655), [#656](https://github.com/CodesWhat/drydock/pull/656)). The dependency-version guard's Next.js check became a 16.x floor instead of an exact pin so routine patch bumps stop tripping it ([#664](https://github.com/CodesWhat/drydock/pull/664)).
+- **Crowdin translation sync** ([#665](https://github.com/CodesWhat/drydock/pull/665)): one French container-component string corrected.
+
 ### Fixed
 
 - **"Agent Mismatch" no longer appears in the container list/SSE display during the brief window an agent's docker/dockercompose trigger is still (re)registering** ([#605](https://github.com/CodesWhat/drydock/issues/605)). Eligibility is recomputed live on every read, and `AgentClient._doHandshake()` deregisters the agent's components before awaiting the `/api/triggers` fetch and re-register. A read in that window found zero triggers for the agent and `computeUpdateEligibility` raised a hard `agent-mismatch` blocker, disabling the Update button, even though nothing was actually misconfigured — the condition self-corrected once registration finished. `agent-mismatch` now downgrades to a soft blocker (button stays enabled) on display surfaces whenever the container's own agent is mid-registration, per the new `AgentClient.isRegisteringComponents` flag (true only for the deregister→re-register span, not the whole reconnect backoff). Update **admission** (`app/updates/request-update.ts`) is unaffected and stays hard/fail-closed throughout, so an update can never be enqueued through a wrong-agent trigger during that window.
@@ -2319,7 +2326,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.11...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.12...HEAD
+[1.6.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.11...v1.6.0-rc.12
 [1.6.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.10...v1.6.0-rc.11
 [1.6.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.9...v1.6.0-rc.10
 [1.6.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.8...v1.6.0-rc.9
