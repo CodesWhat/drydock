@@ -22,37 +22,64 @@ function resolvedVersion(lockfile, packageName) {
   return lockfile.packages?.[`node_modules/${packageName}`]?.version;
 }
 
-// The CVE-2026-16221 fix was backported per-line: 3.1.4 on the 3.x line,
-// 4.1.1 on the 4.x line. A plain ">= 3.1.4" semver floor would wrongly pass
-// 4.0.0 and 4.1.0, which are newer than 3.1.4 but predate the 4.x backport
-// and are still vulnerable. Require the patched floor for whichever major
-// line the resolved version is on.
+// Only the 4.x line is vetted now: 4.1.2 carries both the CVE-2026-16221 fix
+// and the backslash-authority host-confusion fix (GHSA-7p8r-x3mc-p8w7).
+// The transitional 3.1.4 branch was dropped once the override moved to 4.x,
+// and any other major (including a future 5.x) fails until explicitly vetted.
 function isFastUriPatched(version) {
   const major = Number(version.split('.')[0]);
-  return major === 3 ? compareSemver(version, '3.1.4') >= 0 : compareSemver(version, '4.1.1') >= 0;
+  return major === 4 && compareSemver(version, '4.1.2') >= 0;
 }
 
-test('isFastUriPatched rejects unpatched 4.x releases newer than 3.1.4', () => {
-  assert.ok(isFastUriPatched('3.1.4'), '3.1.4 (3.x floor) should pass');
-  assert.ok(!isFastUriPatched('4.1.0'), '4.1.0 predates the 4.x backport and should fail');
-  assert.ok(isFastUriPatched('4.1.1'), '4.1.1 (4.x floor) should pass');
+test('isFastUriPatched only accepts vetted 4.x releases at or above 4.1.2', () => {
+  assert.ok(!isFastUriPatched('3.1.4'), '3.x is no longer a supported line and should fail');
+  assert.ok(
+    !isFastUriPatched('4.1.1'),
+    '4.1.1 predates the backslash-authority fix and should fail',
+  );
+  assert.ok(isFastUriPatched('4.1.2'), '4.1.2 (current floor) should pass');
+  assert.ok(!isFastUriPatched('5.0.0'), 'an unvetted future major should fail');
 });
 
-// fast-uri was pinned to 3.1.4 in app/ and ui/ for CVE-2026-16221
-// (GHSA-v2hh-gcrm-f6hx). 4.1.1 retains the fix, and Renovate's override
-// bump to 4.1.1 (#617) is accepted alongside the original pin below.
-// Transitional: drop the 3.1.4 branch once #617 lands.
+// fast-uri is pinned to 4.1.2 in app/ and ui/: it carries the CVE-2026-16221
+// fix (GHSA-v2hh-gcrm-f6hx) plus the backslash-authority host-confusion fix.
 test('fast-uri is pinned to a patched release in app and ui', () => {
   for (const workspace of ['app', 'ui']) {
     const manifest = readJson(`${workspace}/package.json`);
     const lockfile = readJson(`${workspace}/package-lock.json`);
 
-    assert.ok(
-      ['3.1.4', '4.1.1'].includes(manifest.overrides?.['fast-uri']),
-      `${workspace} override`,
-    );
+    assert.ok(isFastUriPatched(manifest.overrides?.['fast-uri']), `${workspace} override`);
     assert.ok(isFastUriPatched(resolvedVersion(lockfile, 'fast-uri')), `${workspace} lockfile`);
   }
+});
+
+// brace-expansion 5.0.8 was vulnerable to CVE-2026-69152 (GHSA-rgw5-rvv9-x895),
+// patched in 5.0.9.
+test('brace-expansion is pinned to a patched release in app, ui, and e2e', () => {
+  for (const workspace of ['app', 'ui', 'e2e']) {
+    const manifest = readJson(`${workspace}/package.json`);
+    const lockfile = readJson(`${workspace}/package-lock.json`);
+
+    assert.ok(
+      compareSemver(manifest.overrides?.['brace-expansion'], '5.0.9') >= 0,
+      `${workspace} override`,
+    );
+    assert.ok(
+      compareSemver(resolvedVersion(lockfile, 'brace-expansion'), '5.0.9') >= 0,
+      `${workspace} lockfile`,
+    );
+  }
+});
+
+// ip-address 10.2.0 was vulnerable to CVE-2026-54272, CVE-2026-69192, and
+// CVE-2026-69198 (pulled in via express-rate-limit and mqtt -> socks in
+// app), patched in 10.3.1.
+test('ip-address is pinned to a patched release in app', () => {
+  const manifest = readJson('app/package.json');
+  const lockfile = readJson('app/package-lock.json');
+
+  assert.ok(compareSemver(manifest.overrides?.['ip-address'], '10.3.1') >= 0, 'app override');
+  assert.ok(compareSemver(resolvedVersion(lockfile, 'ip-address'), '10.3.1') >= 0, 'app lockfile');
 });
 
 test('fast-xml-parser is pinned to the patched release in app', () => {
