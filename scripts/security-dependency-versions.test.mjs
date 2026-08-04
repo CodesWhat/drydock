@@ -39,20 +39,44 @@ test('isFastUriPatched rejects unpatched 4.x releases newer than 3.1.4', () => {
 });
 
 // fast-uri was pinned to 3.1.4 in app/ and ui/ for CVE-2026-16221
-// (GHSA-v2hh-gcrm-f6hx). 4.1.1 retains the fix, and Renovate's override
-// bump to 4.1.1 (#617) is accepted alongside the original pin below.
-// Transitional: drop the 3.1.4 branch once #617 lands.
+// (GHSA-v2hh-gcrm-f6hx). The 4.x line retains the fix from 4.1.1 onward.
 test('fast-uri is pinned to a patched release in app and ui', () => {
   for (const workspace of ['app', 'ui']) {
     const manifest = readJson(`${workspace}/package.json`);
     const lockfile = readJson(`${workspace}/package-lock.json`);
 
-    assert.ok(
-      ['3.1.4', '4.1.1'].includes(manifest.overrides?.['fast-uri']),
-      `${workspace} override`,
-    );
+    assert.ok(isFastUriPatched(manifest.overrides?.['fast-uri']), `${workspace} override`);
     assert.ok(isFastUriPatched(resolvedVersion(lockfile, 'fast-uri')), `${workspace} lockfile`);
   }
+});
+
+// brace-expansion 5.0.8 was vulnerable to CVE-2026-69152 (GHSA-rgw5-rvv9-x895),
+// patched in 5.0.9.
+test('brace-expansion is pinned to a patched release in app, ui, and e2e', () => {
+  for (const workspace of ['app', 'ui', 'e2e']) {
+    const manifest = readJson(`${workspace}/package.json`);
+    const lockfile = readJson(`${workspace}/package-lock.json`);
+
+    assert.ok(
+      compareSemver(manifest.overrides?.['brace-expansion'], '5.0.9') >= 0,
+      `${workspace} override`,
+    );
+    assert.ok(
+      compareSemver(resolvedVersion(lockfile, 'brace-expansion'), '5.0.9') >= 0,
+      `${workspace} lockfile`,
+    );
+  }
+});
+
+// ip-address 10.2.0 was vulnerable to CVE-2026-54272, CVE-2026-69192, and
+// CVE-2026-69198 (pulled in via express-rate-limit and mqtt -> socks in
+// app), patched in 10.3.1.
+test('ip-address is pinned to a patched release in app', () => {
+  const manifest = readJson('app/package.json');
+  const lockfile = readJson('app/package-lock.json');
+
+  assert.ok(compareSemver(manifest.overrides?.['ip-address'], '10.3.1') >= 0, 'app override');
+  assert.ok(compareSemver(resolvedVersion(lockfile, 'ip-address'), '10.3.1') >= 0, 'app lockfile');
 });
 
 test('fast-xml-parser is pinned to the patched release in app', () => {
