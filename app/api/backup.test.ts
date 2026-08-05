@@ -10,6 +10,7 @@ const {
   mockGetAllBackups,
   mockGetBackup,
   mockGetState,
+  mockGetAgent,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockGetContainer: vi.fn(),
@@ -17,6 +18,7 @@ const {
   mockGetAllBackups: vi.fn(),
   mockGetBackup: vi.fn(),
   mockGetState: vi.fn(),
+  mockGetAgent: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -38,6 +40,10 @@ vi.mock('../store/backup', () => ({
 
 vi.mock('../registry', () => ({
   getState: mockGetState,
+}));
+
+vi.mock('../agent/manager', () => ({
+  getAgent: mockGetAgent,
 }));
 
 const { mockBackupLog } = vi.hoisted(() => ({
@@ -260,6 +266,183 @@ describe('Backup Router', () => {
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
         error: expect.stringContaining('No docker trigger found'),
+      });
+    });
+
+    test('should return 404 when a capable agent has no docker trigger registered yet', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+      mockGetBackupsByName.mockReturnValue([
+        {
+          id: 'b1',
+          containerId: 'c1',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+        },
+      ]);
+      mockGetState.mockReturnValue({ trigger: {} });
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => true) });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
+    });
+
+    test('should return 404, not 501, when the agent is unknown or disconnected', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+      mockGetBackupsByName.mockReturnValue([
+        {
+          id: 'b1',
+          containerId: 'c1',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+        },
+      ]);
+      mockGetState.mockReturnValue({ trigger: {} });
+      mockGetAgent.mockReturnValue(undefined);
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
+    });
+
+    test('should return 501 when the agent-owned container agent lacks controller docker transport', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+      mockGetBackupsByName.mockReturnValue([
+        {
+          id: 'b1',
+          containerId: 'c1',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+        },
+      ]);
+      mockGetState.mockReturnValue({ trigger: {} });
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => false) });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(501);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining("container's agent connection"),
+      });
+    });
+
+    test('should return 501, not 500, when a legacy incapable AgentTrigger is registered for the container', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const legacyAgentTrigger = {
+        type: 'docker',
+        agent: 'edge-1',
+        getWatcher: vi.fn(() => {
+          throw new Error(
+            'AgentTrigger docker.edge-1 cannot provide local Docker capability getWatcher; the agent does not advertise controller Docker transport',
+          );
+        }),
+      };
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+      mockGetBackupsByName.mockReturnValue([
+        {
+          id: 'b1',
+          containerId: 'c1',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+        },
+      ]);
+      mockGetState.mockReturnValue({ trigger: { 'docker.edge-1': legacyAgentTrigger } });
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => false) });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(legacyAgentTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(501);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining("container's agent connection"),
+      });
+    });
+
+    test('should roll back an agent-owned container whose agent advertises controller docker transport', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+        image: { registry: { name: 'hub' } },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        imageName: 'library/nginx',
+        imageTag: '1.24',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => true) });
+
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        agent: 'edge-1',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.edge-1': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTrigger.pullImage).toHaveBeenCalled();
+      expect(mockTrigger.stopAndRemoveContainer).toHaveBeenCalled();
+      expect(mockTrigger.recreateContainer).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container rolled back successfully',
+        backup: latestBackup,
       });
     });
 

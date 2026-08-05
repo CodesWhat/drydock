@@ -1878,6 +1878,57 @@ test('model should use DD_UI_MATURITY_THRESHOLD_DAYS for hot/mature cutoff', asy
   }
 });
 
+test('model should use per-container updatePolicy.maturityMinAgeDays over DD_UI_MATURITY_THRESHOLD_DAYS for hot/mature cutoff', async () => {
+  const previousThreshold = process.env.DD_UI_MATURITY_THRESHOLD_DAYS;
+  vi.useFakeTimers();
+  try {
+    process.env.DD_UI_MATURITY_THRESHOLD_DAYS = '3';
+    const now = new Date('2026-03-15T12:00:00.000Z');
+    vi.setSystemTime(now);
+    const firstSeenAt = new Date(now.getTime() - daysToMs(10)).toISOString();
+
+    const containerValidated = container.validate({
+      id: 'container-123456789',
+      name: 'test',
+      watcher: 'test',
+      firstSeenAt,
+      updatePolicy: { maturityMinAgeDays: 30 },
+      image: {
+        id: 'image-123456789',
+        registry: {
+          name: 'hub',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: '1.0.0',
+          semver: true,
+        },
+        digest: {
+          watch: false,
+          repo: undefined,
+        },
+        architecture: 'arch',
+        os: 'os',
+        created: '2021-06-12T05:33:38.440Z',
+      },
+      result: {
+        tag: '1.0.1',
+      },
+    });
+
+    expect(containerValidated.updateAge).toBe(daysToMs(10));
+    expect(containerValidated.updateMaturityLevel).toBe('hot');
+  } finally {
+    vi.useRealTimers();
+    if (previousThreshold === undefined) {
+      delete process.env.DD_UI_MATURITY_THRESHOLD_DAYS;
+    } else {
+      process.env.DD_UI_MATURITY_THRESHOLD_DAYS = previousThreshold;
+    }
+  }
+});
+
 test('model should keep updateAvailable when remote tag changes past skipped value', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',

@@ -1,14 +1,23 @@
-var { mockGetState, mockGetActiveOperationByContainerId, mockGetActiveOperationByContainerName } =
-  vi.hoisted(() => {
-    return {
-      mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
-      mockGetActiveOperationByContainerId: vi.fn(() => undefined),
-      mockGetActiveOperationByContainerName: vi.fn(() => undefined),
-    };
-  });
+var {
+  mockGetState,
+  mockGetActiveOperationByContainerId,
+  mockGetActiveOperationByContainerName,
+  mockGetAgent,
+} = vi.hoisted(() => {
+  return {
+    mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
+    mockGetActiveOperationByContainerId: vi.fn(() => undefined),
+    mockGetActiveOperationByContainerName: vi.fn(() => undefined),
+    mockGetAgent: vi.fn(() => undefined),
+  };
+});
 
 vi.mock('../registry/index.js', () => ({
   getState: mockGetState,
+}));
+
+vi.mock('../agent/manager.js', () => ({
+  getAgent: mockGetAgent,
 }));
 
 vi.mock('../store/update-operation.js', () => ({
@@ -23,9 +32,11 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
     mockGetState.mockClear();
     mockGetActiveOperationByContainerId.mockClear();
     mockGetActiveOperationByContainerName.mockClear();
+    mockGetAgent.mockClear();
     mockGetState.mockReturnValue({ trigger: {}, watcher: {} });
     mockGetActiveOperationByContainerId.mockReturnValue(undefined);
     mockGetActiveOperationByContainerName.mockReturnValue(undefined);
+    mockGetAgent.mockReturnValue(undefined);
   });
 
   describe('malformed payload guard', () => {
@@ -334,6 +345,84 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
           (b: { reason: string }) => b.reason === 'active-operation',
         ),
       ).toBe(true);
+    });
+  });
+
+  describe('agent-mismatch severity during registration window (#605)', () => {
+    function mismatchedDockerTrigger() {
+      return {
+        type: 'docker',
+        agent: 'agent-a',
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+    }
+
+    const updatePayload = (): any => ({
+      id: 'c1',
+      name: 'mysql',
+      image: { tag: { value: '9.6.0' } },
+      result: { tag: '9.7.0' },
+    });
+
+    test('downgrades to soft when the container agent is still completing registration', () => {
+      mockGetState.mockReturnValueOnce({
+        trigger: { 'docker.update': mismatchedDockerTrigger() },
+        watcher: {},
+      });
+      mockGetAgent.mockReturnValueOnce({ isRegisteringComponents: true });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility({
+        ...updatePayload(),
+        agent: 'agent-b',
+      }) as any;
+
+      const blocker = result.updateEligibility.blockers.find(
+        (b: { reason: string }) => b.reason === 'agent-mismatch',
+      );
+      expect(blocker).toBeDefined();
+      expect(blocker.severity).toBe('soft');
+      expect(mockGetAgent).toHaveBeenCalledWith('agent-b');
+    });
+
+    test('stays hard when the agent is not pending registration', () => {
+      mockGetState.mockReturnValueOnce({
+        trigger: { 'docker.update': mismatchedDockerTrigger() },
+        watcher: {},
+      });
+      mockGetAgent.mockReturnValueOnce(undefined);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility({
+        ...updatePayload(),
+        agent: 'agent-b',
+      }) as any;
+
+      const blocker = result.updateEligibility.blockers.find(
+        (b: { reason: string }) => b.reason === 'agent-mismatch',
+      );
+      expect(blocker).toBeDefined();
+      expect(blocker.severity).toBe('hard');
+    });
+
+    test('falls back to an empty agent name when the container has no agent', () => {
+      mockGetState.mockReturnValueOnce({
+        trigger: { 'docker.update': mismatchedDockerTrigger() },
+        watcher: {},
+      });
+      mockGetAgent.mockReturnValueOnce(undefined);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      const blocker = result.updateEligibility.blockers.find(
+        (b: { reason: string }) => b.reason === 'agent-mismatch',
+      );
+      expect(blocker).toBeDefined();
+      expect(mockGetAgent).toHaveBeenCalledWith('');
     });
   });
 });

@@ -1,3 +1,4 @@
+import { getAgent } from '../agent/manager.js';
 import type { ContainerLifecycleEventPayload } from '../event/index.js';
 import type { Container } from '../model/container.js';
 import {
@@ -18,6 +19,8 @@ function buildEligibilityContext(container: Container): UpdateEligibilityContext
     triggers: registryState.trigger,
     isSelfUpdateAvailable: isSelfUpdateAvailable(container),
     maintenanceWindowOpen: getContainerMaintenanceWindowOpen(container, registryState.watcher),
+    isAgentPendingRegistration: (agentName) =>
+      getAgent(agentName ?? '')?.isRegisteringComponents === true,
     getActiveOperation: (c: Container) => {
       const byId = getActiveOperationByContainerId(c.id);
       // Scoped by agent+watcher so cross-agent same-named ops don't pollute enrichment (issue #411).

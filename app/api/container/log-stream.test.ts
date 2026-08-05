@@ -4,6 +4,7 @@ import * as configuration from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as rateLimitKey from '../rate-limit-key.js';
+import { createIdentityAwareUpgradeRateLimitKeyResolver } from '../ws-upgrade-utils.js';
 import {
   attachContainerLogStreamWebSocketServer,
   createContainerLogStreamGateway,
@@ -649,6 +650,159 @@ describe('api/container/log-stream', () => {
       expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
       expect(socket.destroy).toHaveBeenCalledTimes(1);
       expect(mockWebSocketServer.handleUpgrade).not.toHaveBeenCalled();
+    });
+
+    test('accepts passport-less upgrades when anonymous authentication is active', async () => {
+      const isAnonymousAuthenticationActiveSpy = vi
+        .spyOn(registry, 'isAnonymousAuthenticationActive')
+        .mockReturnValue(true);
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn(() => {
+        ws.emit('close');
+      });
+
+      const mockWebSocketServer = {
+        handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+          callback(ws),
+        ),
+      };
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => undefined),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: (_req: unknown, _res: unknown, next: (error?: unknown) => void) =>
+          next(),
+        webSocketServer: mockWebSocketServer,
+        isRateLimited: vi.fn(() => false),
+      });
+
+      const socket = createUpgradeSocket();
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+      expect(mockWebSocketServer.handleUpgrade).toHaveBeenCalled();
+      expect(ws.close).toHaveBeenCalledWith(4004, 'Container not found');
+
+      isAnonymousAuthenticationActiveSpy.mockRestore();
+    });
+
+    test('rejects unauthenticated upgrades when anonymous authentication is not active', async () => {
+      const isAnonymousAuthenticationActiveSpy = vi
+        .spyOn(registry, 'isAnonymousAuthenticationActive')
+        .mockReturnValue(false);
+      const mockWebSocketServer = {
+        handleUpgrade: vi.fn(),
+      };
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: (_req: unknown, _res: unknown, next: (error?: unknown) => void) =>
+          next(),
+        webSocketServer: mockWebSocketServer,
+        isRateLimited: vi.fn(() => false),
+      });
+
+      const socket = createUpgradeSocket();
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+      expect(mockWebSocketServer.handleUpgrade).not.toHaveBeenCalled();
+
+      isAnonymousAuthenticationActiveSpy.mockRestore();
+    });
+
+    test('keys rate limiting by IP for anonymous-authenticated upgrades, not by session', async () => {
+      const isAnonymousAuthenticationActiveSpy = vi
+        .spyOn(registry, 'isAnonymousAuthenticationActive')
+        .mockReturnValue(true);
+      const capturedRateLimitKeys: string[] = [];
+      const mockWebSocketServer = {
+        handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+          callback({ on: vi.fn(), off: vi.fn(), send: vi.fn(), close: vi.fn() }),
+        ),
+      };
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => undefined),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: (_req: unknown, _res: unknown, next: (error?: unknown) => void) =>
+          next(),
+        webSocketServer: mockWebSocketServer,
+        isRateLimited: (key: string) => {
+          capturedRateLimitKeys.push(key);
+          return false;
+        },
+        getRateLimitKey: createIdentityAwareUpgradeRateLimitKeyResolver({
+          ratelimit: { identitykeying: true },
+        }),
+      });
+
+      const socket = createUpgradeSocket();
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+      expect(capturedRateLimitKeys).toEqual(['ip:127.0.0.1']);
+
+      isAnonymousAuthenticationActiveSpy.mockRestore();
+    });
+
+    test('keeps session-keyed rate limiting for passport-authenticated upgrades', async () => {
+      const authenticatingMiddleware = (
+        req: any,
+        _res: unknown,
+        next: (error?: unknown) => void,
+      ) => {
+        req.session = { passport: { user: '{"username":"alice"}' } };
+        req.sessionID = 'session-1';
+        next();
+      };
+      const capturedRateLimitKeys: string[] = [];
+      const mockWebSocketServer = {
+        handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+          callback({ on: vi.fn(), off: vi.fn(), send: vi.fn(), close: vi.fn() }),
+        ),
+      };
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => undefined),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware: authenticatingMiddleware,
+        webSocketServer: mockWebSocketServer,
+        isRateLimited: (key: string) => {
+          capturedRateLimitKeys.push(key);
+          return false;
+        },
+        getRateLimitKey: createIdentityAwareUpgradeRateLimitKeyResolver({
+          ratelimit: { identitykeying: true },
+        }),
+      });
+
+      const socket = createUpgradeSocket();
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('401 Unauthorized'));
+      expect(capturedRateLimitKeys).toEqual(['session:session-1']);
     });
 
     test('closes websocket with 4004 when container is missing', async () => {

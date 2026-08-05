@@ -818,6 +818,7 @@ export const containerPaths = {
         200: jsonResponse('Rollback successful', {
           $ref: '#/components/schemas/ContainerRollbackResponse',
         }),
+        501: errorResponse("Lifecycle actions unsupported by this container's agent connection"),
         401: errorResponse('Authentication required'),
         428: errorResponse('Destructive confirmation header is required'),
         404: errorResponse('Container, backup, or trigger not found'),
@@ -830,18 +831,27 @@ export const containerPaths = {
     operationId: 'startContainer',
     successDescription: 'Container started',
     failureDescription: 'Container start failed',
+    additionalErrorResponses: {
+      501: errorResponse("Lifecycle actions unsupported by this container's agent connection"),
+    },
   }),
   '/api/v1/containers/{id}/stop': createRuntimeContainerActionPath({
     summary: 'Stop container',
     operationId: 'stopContainer',
     successDescription: 'Container stopped',
     failureDescription: 'Container stop failed',
+    additionalErrorResponses: {
+      501: errorResponse("Lifecycle actions unsupported by this container's agent connection"),
+    },
   }),
   '/api/v1/containers/{id}/restart': createRuntimeContainerActionPath({
     summary: 'Restart container',
     operationId: 'restartContainer',
     successDescription: 'Container restarted',
     failureDescription: 'Container restart failed',
+    additionalErrorResponses: {
+      501: errorResponse("Lifecycle actions unsupported by this container's agent connection"),
+    },
   }),
   '/api/v1/containers/{id}/update': createRuntimeContainerActionPath({
     summary: 'Update container to latest available image',

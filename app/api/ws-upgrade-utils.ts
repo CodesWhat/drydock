@@ -152,9 +152,17 @@ export async function applySessionMiddleware(
   });
 }
 
-export function isAuthenticatedSession(request: UpgradeRequest): boolean {
+export interface IsAuthenticatedSessionOptions {
+  anonymousAuthActive?: boolean;
+}
+
+export function isAuthenticatedSession(
+  request: UpgradeRequest,
+  options: IsAuthenticatedSessionOptions = {},
+): boolean {
+  const { anonymousAuthActive = false } = options;
   const passportSession = request.session?.passport;
-  return passportSession?.user !== undefined;
+  return passportSession?.user !== undefined || anonymousAuthActive;
 }
 
 export function getDefaultRateLimitKey(request: UpgradeRequest): string {

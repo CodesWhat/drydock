@@ -1085,7 +1085,7 @@ describe('Docker Watcher', () => {
       const result = await docker.findNewVersion(container, mockLogChild);
 
       expect(result).toEqual({ tag: '1.0.0' });
-      expect(mockLogChild.debug).toHaveBeenCalledWith(
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining('publish date lookup failed'),
       );
     });

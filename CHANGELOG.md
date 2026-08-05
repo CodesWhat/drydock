@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.12] — 2026-08-04
+
+### Changed
+
+- **Routine dependency maintenance across the root tooling, demo, UI, and website workspaces** ([#653](https://github.com/CodesWhat/drydock/pull/653), [#654](https://github.com/CodesWhat/drydock/pull/654), [#655](https://github.com/CodesWhat/drydock/pull/655), [#656](https://github.com/CodesWhat/drydock/pull/656)). The dependency-version guard's Next.js check became a 16.x floor instead of an exact pin so routine patch bumps stop tripping it ([#664](https://github.com/CodesWhat/drydock/pull/664)).
+- **Crowdin translation sync** ([#665](https://github.com/CodesWhat/drydock/pull/665)): one French container-component string corrected.
+
+### Fixed
+
+- **"Agent Mismatch" no longer appears in the container list/SSE display during the brief window an agent's docker/dockercompose trigger is still (re)registering** ([#605](https://github.com/CodesWhat/drydock/issues/605)). Eligibility is recomputed live on every read, and `AgentClient._doHandshake()` deregisters the agent's components before awaiting the `/api/triggers` fetch and re-register. A read in that window found zero triggers for the agent and `computeUpdateEligibility` raised a hard `agent-mismatch` blocker, disabling the Update button, even though nothing was actually misconfigured — the condition self-corrected once registration finished. `agent-mismatch` now downgrades to a soft blocker (button stays enabled) on display surfaces whenever the container's own agent is mid-registration, per the new `AgentClient.isRegisteringComponents` flag (true only for the deregister→re-register span, not the whole reconnect backoff). Update **admission** (`app/updates/request-update.ts`) is unaffected and stays hard/fail-closed throughout, so an update can never be enqueued through a wrong-agent trigger during that window.
+- **WebSocket log streams no longer reject anonymous-auth sessions** ([#636](https://github.com/CodesWhat/drydock/issues/636)). Both WS upgrade paths — the system log stream and the container log stream — gated on `isAuthenticatedSession()` requiring `session.passport.user`, which `passport-anonymous` never sets, so under `DD_ANONYMOUS_AUTH_CONFIRM=true` the log stream WebSocket always rejected the upgrade even though every REST endpoint worked. `isAuthenticatedSession` now also accepts the session when anonymous authentication is the registered mode.
+- **Maturity clock: swallowed auth errors surfaced, per-container threshold respected** ([#604](https://github.com/CodesWhat/drydock/issues/604)). `getImagePublishedAt` failures — including GHCR/LSCR 401/403 auth errors — now log at `warn` instead of `debug`, so the maturity gate's silent fallback from the registry `publishedAt` to `updateDetectedAt` is no longer invisible. `getRawUpdateMaturityLevel` (`app/model/container.ts`) and `getContainerMaturityLevel` (`app/api/container/maturity-filter.ts`) now resolve each container's own `updatePolicy.maturityMinAgeDays` before falling back to the global `DD_UI_MATURITY_THRESHOLD_DAYS`, matching the gate's own `isUpdateSuppressed`/`isMaturityGatePending` logic so the hot/mature badge can no longer disagree with the gate in the same API response.
+- **Container start/stop/restart/rollback return an explicit 501 instead of an ambiguous 404 for agent containers without lifecycle transport** ([#637](https://github.com/CodesWhat/drydock/issues/637)). `POST /:id/start|stop|restart` and `POST /:id/rollback` returned a bare 404 `No docker trigger found for this container` whenever the lookup missed, indistinguishable from "container not found" — for agent-owned containers this was the only signal the UI got. That lookup miss now returns 501 naming the likely cause (the agent's connection typically hasn't advertised `usesControllerDockerTransport`) when `container.agent` is set; non-agent containers still get the existing 404. This complements the native-transport support that shipped in rc.11 via [#651](https://github.com/CodesWhat/drydock/pull/651), which closed #637's core gap — this is the remaining explicit-error half.
+
+### Security
+
+- **`brace-expansion`, `ip-address`, and `fast-uri` overrides advanced to patched releases.** `brace-expansion` moved to 5.0.9 in `app/`, `ui/`, and `e2e/` (CVE-2026-69152, [GHSA-rgw5-rvv9-x895](https://github.com/advisories/GHSA-rgw5-rvv9-x895)); `ip-address` moved to 10.3.1 in `app/` (CVE-2026-54272, CVE-2026-69192, CVE-2026-69198), pulled in transitively via `express-rate-limit` and `mqtt` → `socks`; `fast-uri` advanced from 4.1.1 to 4.1.2 in `app/` and `ui/` (host confusion via backslash authority introducer, CVE-2026-18446, [GHSA-7p8r-x3mc-p8w7](https://github.com/advisories/GHSA-7p8r-x3mc-p8w7), superseding [#658](https://github.com/CodesWhat/drydock/pull/658)).
+
 ## [1.6.0-rc.11] — 2026-08-01
 
 ### Added
@@ -2308,7 +2326,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.11...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.12...HEAD
+[1.6.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.11...v1.6.0-rc.12
 [1.6.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.10...v1.6.0-rc.11
 [1.6.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.9...v1.6.0-rc.10
 [1.6.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.8...v1.6.0-rc.9

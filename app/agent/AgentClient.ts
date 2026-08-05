@@ -276,6 +276,20 @@ export class AgentClient {
   // Parsed once at construction when authmode is 'ed25519'; undefined in token mode.
   private readonly ed25519PrivateKey?: KeyObject;
   public isConnected: boolean;
+  /**
+   * True only while this agent's components are being replaced — the span
+   * inside `_doHandshake()` (and the equivalent edge-path
+   * `handleComponentSync()`) between deregistering and finishing the
+   * re-registration (watchers, then triggers).
+   * Eligibility display surfaces (container list, SSE enrichment)
+   * read this to soften `agent-mismatch` / `no-update-trigger-configured` to a
+   * soft blocker during that transient window — see issue #605. Always reset
+   * in a `finally` so a handshake failure, or a disconnect via
+   * `scheduleReconnect()`, reverts to the hard-blocker default. Admission
+   * (`app/updates/request-update.ts`) never reads this field and stays
+   * fail-closed throughout.
+   */
+  public isRegisteringComponents: boolean;
   public info: AgentClientRuntimeInfo;
   private reconnectTimer: NodeJS.Timeout | null;
   private reconnectAttempts: number;
@@ -310,6 +324,7 @@ export class AgentClient {
     }
 
     this.isConnected = false;
+    this.isRegisteringComponents = false;
     this.info = {};
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
@@ -329,6 +344,15 @@ export class AgentClient {
     watcherName: string,
   ): WatcherSnapshotCacheEntry | undefined {
     return this.watcherSnapshotCache.get(watcherSnapshotCacheKey(watcherType, watcherName));
+  }
+
+  /**
+   * Whether the given watcher on this agent advertises controller Docker
+   * transport, i.e. lifecycle actions (start/stop/restart/rollback) execute
+   * locally on the controller instead of being proxied to the agent.
+   */
+  hasControllerDockerTransport(watcherName: string): boolean {
+    return this.controllerDockerTransportWatchers.has(watcherName);
   }
 
   private parseBaseUrl(): URL {
@@ -936,53 +960,62 @@ export class AgentClient {
     const containers = response.data;
     this.log.info(`Handshake successful. Received ${containers.length} containers.`);
 
-    // Unregister existing components for this agent
-    await registry.deregisterAgentComponents(this.name);
-
-    // Fetch and register watchers
+    // isRegisteringComponents is true for the entire deregister → re-register
+    // span below, including the container-inventory apply that happens
+    // between watcher and trigger registration. The `finally` guarantees it
+    // reverts to false whether registration succeeds or this method throws.
+    this.isRegisteringComponents = true;
     try {
-      const responseWatchers = await axios.get<AgentComponentDescriptor[]>(
-        `${this.baseUrl}/api/watchers`,
-        this.buildRequestConfig('GET', '/api/watchers'),
-      );
-      await this.registerAgentWatchersTransactional(responseWatchers.data);
-      // Only transfer update-enrichment ownership after every controller-side
-      // watcher/delegate has registered successfully.
-      this.setControllerDockerTransportWatchers(responseWatchers.data);
-      this.seedWatcherSnapshotCacheFromHandshake(responseWatchers.data);
-    } catch (error: unknown) {
-      this.log.warn(`Failed to fetch/register watchers: ${getErrorMessage(error)}`);
-    }
+      // Unregister existing components for this agent
+      await registry.deregisterAgentComponents(this.name);
 
-    // Apply inventory only after watcher registration. Controller-transport
-    // descriptors change which fields are authoritative: Portwing owns live
-    // runtime state, while Drydock's native watcher owns update enrichment.
-    await this.processAuthoritativeContainers(containers);
-    // A zero-container handshake is ambiguous: it could mean the agent has
-    // no running containers, or its in-memory store is fresh-empty after a
-    // restart while docker still has running containers. Defer the prune
-    // until the first authoritative watcher snapshot arrives — that path is
-    // unambiguous because the snapshot is only emitted after a successful
-    // enumeration with no enrichment errors (#362, #386 / d02080ae).
-    // Pruning here would wipe last-known state for an agent that's about to
-    // re-populate it in seconds via its first watch cycle.
-    if (containers.length > 0) {
-      this.pruneOldContainers(containers);
-    } else if (this.hasConnectedOnce) {
-      this.log.warn(
-        'Handshake returned 0 containers; preserving last-known state until the first watch cycle completes',
-      );
-    }
+      // Fetch and register watchers
+      try {
+        const responseWatchers = await axios.get<AgentComponentDescriptor[]>(
+          `${this.baseUrl}/api/watchers`,
+          this.buildRequestConfig('GET', '/api/watchers'),
+        );
+        await this.registerAgentWatchersTransactional(responseWatchers.data);
+        // Only transfer update-enrichment ownership after every controller-side
+        // watcher/delegate has registered successfully.
+        this.setControllerDockerTransportWatchers(responseWatchers.data);
+        this.seedWatcherSnapshotCacheFromHandshake(responseWatchers.data);
+      } catch (error: unknown) {
+        this.log.warn(`Failed to fetch/register watchers: ${getErrorMessage(error)}`);
+      }
 
-    // Fetch and register triggers
-    try {
-      const responseTriggers = await axios.get<AgentComponentDescriptor[]>(
-        `${this.baseUrl}/api/triggers`,
-        this.buildRequestConfig('GET', '/api/triggers'),
-      );
-      await this.registerAgentComponents('trigger', responseTriggers.data);
-    } catch (error: unknown) {
-      this.log.warn(`Failed to fetch/register triggers: ${getErrorMessage(error)}`);
+      // Apply inventory only after watcher registration. Controller-transport
+      // descriptors change which fields are authoritative: Portwing owns live
+      // runtime state, while Drydock's native watcher owns update enrichment.
+      await this.processAuthoritativeContainers(containers);
+      // A zero-container handshake is ambiguous: it could mean the agent has
+      // no running containers, or its in-memory store is fresh-empty after a
+      // restart while docker still has running containers. Defer the prune
+      // until the first authoritative watcher snapshot arrives — that path is
+      // unambiguous because the snapshot is only emitted after a successful
+      // enumeration with no enrichment errors (#362, #386 / d02080ae).
+      // Pruning here would wipe last-known state for an agent that's about to
+      // re-populate it in seconds via its first watch cycle.
+      if (containers.length > 0) {
+        this.pruneOldContainers(containers);
+      } else if (this.hasConnectedOnce) {
+        this.log.warn(
+          'Handshake returned 0 containers; preserving last-known state until the first watch cycle completes',
+        );
+      }
+
+      // Fetch and register triggers
+      try {
+        const responseTriggers = await axios.get<AgentComponentDescriptor[]>(
+          `${this.baseUrl}/api/triggers`,
+          this.buildRequestConfig('GET', '/api/triggers'),
+        );
+        await this.registerAgentComponents('trigger', responseTriggers.data);
+      } catch (error: unknown) {
+        this.log.warn(`Failed to fetch/register triggers: ${getErrorMessage(error)}`);
+      }
+    } finally {
+      this.isRegisteringComponents = false;
     }
 
     this.isConnected = true;
@@ -1061,6 +1094,10 @@ export class AgentClient {
     const reconnectDelay = delay ?? this.getNextReconnectDelayMs();
     const wasConnected = this.isConnected;
     this.isConnected = false;
+    // A disconnect is never a "still registering" state — it's a hard loss of
+    // the agent. Reset unconditionally so a disconnect that races a still-running
+    // _doHandshake() cannot leave eligibility softened after the connection drops.
+    this.isRegisteringComponents = false;
     if (wasConnected) {
       void emitAgentDisconnected({
         agentName: this.name,
@@ -2148,12 +2185,19 @@ export class AgentClient {
     watchers: AgentComponentDescriptor[],
     triggers: AgentComponentDescriptor[],
   ): Promise<void> {
-    this.setControllerDockerTransportWatchers([]);
-    await registry.deregisterAgentComponents(this.name);
-    await this.registerAgentWatchersTransactional(watchers);
-    this.setControllerDockerTransportWatchers(watchers);
-    this.seedWatcherSnapshotCacheFromHandshake(watchers);
-    await this.registerAgentComponents('trigger', triggers);
+    // Same deregister → re-register window as _doHandshake(): keep transient
+    // eligibility blockers soft while components are being replaced.
+    this.isRegisteringComponents = true;
+    try {
+      this.setControllerDockerTransportWatchers([]);
+      await registry.deregisterAgentComponents(this.name);
+      await this.registerAgentWatchersTransactional(watchers);
+      this.setControllerDockerTransportWatchers(watchers);
+      this.seedWatcherSnapshotCacheFromHandshake(watchers);
+      await this.registerAgentComponents('trigger', triggers);
+    } finally {
+      this.isRegisteringComponents = false;
+    }
   }
 
   /**

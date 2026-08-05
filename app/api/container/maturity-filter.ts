@@ -28,13 +28,9 @@ function resolveUiMaturityThresholdDays(): number {
   );
 }
 
-function resolveUiMaturityThresholdMs(): number {
-  return maturityMinAgeDaysToMilliseconds(resolveUiMaturityThresholdDays());
-}
-
 function getContainerMaturityLevel(
   container: Container,
-  uiMaturityThresholdMs: number,
+  uiMaturityThresholdDays: number,
 ): ContainerMaturityFilter | undefined {
   const cachedLevel = container.updateMaturityLevel;
   if (cachedLevel === 'hot' || cachedLevel === 'mature' || cachedLevel === 'established') {
@@ -48,7 +44,11 @@ function getContainerMaturityLevel(
   if (updateAge >= maturityMinAgeDaysToMilliseconds(ESTABLISHED_UPDATE_AGE_DAYS)) {
     return 'established';
   }
-  return updateAge >= uiMaturityThresholdMs ? 'mature' : 'hot';
+  const maturityThresholdDays = resolveMaturityMinAgeDays(
+    container.updatePolicy?.maturityMinAgeDays,
+    uiMaturityThresholdDays,
+  );
+  return updateAge >= maturityMinAgeDaysToMilliseconds(maturityThresholdDays) ? 'mature' : 'hot';
 }
 
 export function applyContainerMaturityFilter(
@@ -59,8 +59,8 @@ export function applyContainerMaturityFilter(
     return containers;
   }
 
-  const uiMaturityThresholdMs = resolveUiMaturityThresholdMs();
+  const uiMaturityThresholdDays = resolveUiMaturityThresholdDays();
   return containers.filter(
-    (container) => getContainerMaturityLevel(container, uiMaturityThresholdMs) === maturityFilter,
+    (container) => getContainerMaturityLevel(container, uiMaturityThresholdDays) === maturityFilter,
   );
 }

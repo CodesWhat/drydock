@@ -8,6 +8,7 @@ const {
   mockUpdateContainer,
   mockMarkPendingFreshStateAfterManualUpdate,
   mockGetState,
+  mockGetAgent,
   mockInsertAudit,
   mockGetAuditCounter,
   mockGetContainerActionsCounter,
@@ -19,6 +20,7 @@ const {
   mockUpdateContainer: vi.fn((c) => c),
   mockMarkPendingFreshStateAfterManualUpdate: vi.fn(),
   mockGetState: vi.fn(),
+  mockGetAgent: vi.fn(),
   mockInsertAudit: vi.fn(),
   mockGetAuditCounter: vi.fn(),
   mockGetContainerActionsCounter: vi.fn(),
@@ -40,6 +42,10 @@ vi.mock('../store/container', () => ({
 
 vi.mock('../registry', () => ({
   getState: mockGetState,
+}));
+
+vi.mock('../agent/manager', () => ({
+  getAgent: mockGetAgent,
 }));
 
 vi.mock('../store/audit', () => ({
@@ -186,6 +192,126 @@ describe('Container Actions Router', () => {
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
         error: expect.stringContaining('No docker trigger found'),
+      });
+    });
+
+    test('should start an agent-owned container whose agent advertises controller docker transport', async () => {
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      };
+      mockGetContainer.mockReturnValue(container);
+      const { trigger, dockerContainer } = createDockerTrigger({ agent: 'edge-1' });
+      mockGetState.mockReturnValue({ trigger: { 'docker.edge-1': trigger } });
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => true) });
+
+      const handler = getHandler('post', '/:id/start');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(dockerContainer.start).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        message: 'Container started successfully',
+        result: expect.any(Object),
+      });
+    });
+
+    test('should return 404 when a capable agent has no docker trigger registered yet', async () => {
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+      mockGetState.mockReturnValue({ trigger: {} });
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => true) });
+
+      const handler = getHandler('post', '/:id/start');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
+    });
+
+    test('should return 404, not 501, when the agent is unknown or disconnected', async () => {
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+      mockGetState.mockReturnValue({ trigger: {} });
+      mockGetAgent.mockReturnValue(undefined);
+
+      const handler = getHandler('post', '/:id/start');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining('No docker trigger found'),
+      });
+    });
+
+    test('should return 501 when the agent-owned container agent lacks controller docker transport', async () => {
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+      mockGetState.mockReturnValue({ trigger: {} });
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => false) });
+
+      const handler = getHandler('post', '/:id/start');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(501);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining("container's agent connection"),
+      });
+    });
+
+    test('should return 501, not 500, when a legacy incapable AgentTrigger is registered for the container', async () => {
+      const legacyAgentTrigger = {
+        type: 'docker',
+        agent: 'edge-1',
+        getWatcher: vi.fn(() => {
+          throw new Error(
+            'AgentTrigger docker.edge-1 cannot provide local Docker capability getWatcher; the agent does not advertise controller Docker transport',
+          );
+        }),
+      };
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+      mockGetState.mockReturnValue({ trigger: { 'docker.edge-1': legacyAgentTrigger } });
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => false) });
+
+      const handler = getHandler('post', '/:id/start');
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(legacyAgentTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(501);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining("container's agent connection"),
       });
     });
 

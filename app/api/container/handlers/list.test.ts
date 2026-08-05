@@ -1587,6 +1587,79 @@ describe('buildEligibilityContext cross-agent scoping (issue #411)', () => {
       (result as any).updateEligibility.blockers.find((b: any) => b.reason === 'active-operation'),
     ).toBeDefined();
   });
+
+  describe('agent-mismatch severity during registration window (#605)', () => {
+    function mismatchedDockerTrigger() {
+      return {
+        type: 'docker',
+        agent: 'agent-a',
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+    }
+
+    test('downgrades to soft when the container agent is still completing registration', () => {
+      const container = createContainerWithUpdate({ agent: 'agent-b' });
+      const getAgent = vi.fn().mockReturnValue({ isRegisteringComponents: true });
+      const context: CrudHandlerContext = {
+        ...createMockContext(),
+        getTriggers: vi
+          .fn()
+          .mockReturnValue({ 'docker.update': mismatchedDockerTrigger() } as never),
+        getAgent,
+      };
+
+      const result = attachUpdateEligibility(context, container);
+
+      const blocker = (result as any).updateEligibility.blockers.find(
+        (b: any) => b.reason === 'agent-mismatch',
+      );
+      expect(blocker).toBeDefined();
+      expect(blocker.severity).toBe('soft');
+      expect(getAgent).toHaveBeenCalledWith('agent-b');
+    });
+
+    test('stays hard when the agent is not pending registration', () => {
+      const container = createContainerWithUpdate({ agent: 'agent-b' });
+      const context: CrudHandlerContext = {
+        ...createMockContext(),
+        getTriggers: vi
+          .fn()
+          .mockReturnValue({ 'docker.update': mismatchedDockerTrigger() } as never),
+        getAgent: vi.fn().mockReturnValue(undefined),
+      };
+
+      const result = attachUpdateEligibility(context, container);
+
+      const blocker = (result as any).updateEligibility.blockers.find(
+        (b: any) => b.reason === 'agent-mismatch',
+      );
+      expect(blocker).toBeDefined();
+      expect(blocker.severity).toBe('hard');
+    });
+
+    test('falls back to an empty agent name when the container has no agent', () => {
+      const container = createContainerWithUpdate();
+      const getAgent = vi.fn().mockReturnValue(undefined);
+      const context: CrudHandlerContext = {
+        ...createMockContext(),
+        getTriggers: vi
+          .fn()
+          .mockReturnValue({ 'docker.update': mismatchedDockerTrigger() } as never),
+        getAgent,
+      };
+
+      const result = attachUpdateEligibility(context, container);
+
+      const blocker = (result as any).updateEligibility.blockers.find(
+        (b: any) => b.reason === 'agent-mismatch',
+      );
+      expect(blocker).toBeDefined();
+      expect(getAgent).toHaveBeenCalledWith('');
+    });
+  });
 });
 
 describe('createGetContainersHandler', () => {
