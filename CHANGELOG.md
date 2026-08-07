@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Pinned `js-yaml` to 3.15.1 in the e2e workspace (override; transitive dependency) for [GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj) (CVE-2026-59870 backport gap: quadratic CPU consumption in `!!omap` resolution).
+
+### Fixed
+
+- **Digest-update comparison no longer anchors on an arbitrary `RepoDigests[0]` entry** ([#669](https://github.com/CodesWhat/drydock/issues/669)). A local Docker image can carry multiple `repo@digest` entries for one Image ID (pull/retag accumulation, no ordering guarantee); `getRepoDigest` blindly took index 0, so a stale or foreign-repo entry landing first anchored the whole digest-update pipeline to the wrong manifest and produced a persistent digest-update false positive that survived applying the update. `getOrderedRepoDigests` (`app/watchers/providers/docker/docker-helpers.ts`) now returns every RepoDigests entry whose repo component matches the container's own image reference, ordered, falling back to the full list only when nothing matches; the container model gained an optional `image.digest.repoDigests` field carrying that ordered list, re-derived from the live Docker image inspect on every discovery/refresh cycle. `handleDigestWatch` (`app/watchers/providers/docker/image-comparison.ts`) now walks that candidate list — a cheap raw-value check first, then a normalize-and-compare registry call per remaining candidate, skipping anchors whose manifest lookup fails — and re-anchors `digest.repo` to whichever candidate actually matched, so a store already poisoned with a stale `digest.repo` self-heals on its own. A genuine same-tag republish (no candidate matches) still flags an update exactly as before; if every candidate fails to normalize, the failure now propagates instead of being silently coerced into a false "no update".
+
 ## [1.6.0-rc.12] — 2026-08-04
 
 ### Changed

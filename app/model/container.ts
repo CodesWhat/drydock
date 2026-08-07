@@ -66,6 +66,13 @@ export interface ContainerImage {
     watch: boolean;
     value?: string;
     repo?: string;
+    // Ordered candidate digests whose repo component matches this container's
+    // own image reference, re-derived from the live Docker image inspect on
+    // every discovery/refresh cycle (#669). Optional/additive — old stored
+    // containers lack it and fall back to single-anchor comparison using
+    // `repo` alone. See `getOrderedRepoDigests` in docker-helpers.ts and
+    // `handleDigestWatch` in image-comparison.ts.
+    repoDigests?: string[];
   };
   // True when the live Docker image inspect had no RepoDigests (built locally
   // or `docker load`ed) — derived once at discovery/refresh time, independent
@@ -437,6 +444,7 @@ const schema = joi.object({
           watch: joi.boolean().default(false),
           value: joi.string(),
           repo: joi.string(),
+          repoDigests: joi.array().items(joi.string()),
         })
         .required(),
       isLocalImage: joi.boolean(),

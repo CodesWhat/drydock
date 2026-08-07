@@ -19,8 +19,10 @@ import {
   canonicalizeContainerName,
   getContainerDisplayName,
   getContainerName,
+  getImageReferenceCandidates,
+  getImageReferenceCandidatesFromParsedImage,
   getInspectValueByPath,
-  getRepoDigest,
+  getOrderedRepoDigests,
   getSemverTagFromInspectPath,
   isDigestToWatch,
   type ResolvedImgset,
@@ -150,6 +152,7 @@ interface ResolvedContainerImageState {
   tagPrecision: TagPrecision;
   watchDigest: boolean;
   repoDigest: string | undefined;
+  repoDigests: string[] | undefined;
 }
 
 interface DockerImageDetailsWatcher {
@@ -322,12 +325,23 @@ async function refreshStoredContainerImageFields(
 
   try {
     const currentImage = await watcher.dockerApi.getImage(container.Image).inspect();
-    const freshDigestRepo = getRepoDigest(currentImage);
+    const referenceCandidates = getImageReferenceCandidates(
+      containerInStore.image?.name,
+      extractRegistryDomainForMatching(containerInStore.image?.registry?.url),
+    );
+    const freshOrderedRepoDigests = getOrderedRepoDigests(currentImage, referenceCandidates);
+    const freshDigestRepo = freshOrderedRepoDigests?.[0];
     const freshImageId = currentImage.Id;
     // Keep isLocalImage in sync with the live Docker image inspect every
     // cycle — independent of shouldRepairStoredImageReference below, and
     // spread forward by the repair branch's `...containerInStore.image`.
     containerInStore.image.isLocalImage = freshDigestRepo === undefined;
+    // Re-derive the full ordered candidate list every cycle (not just when
+    // digest.repo/image id changed) so a store poisoned with a stale/wrong
+    // digest.repo self-heals: handleDigestWatch (image-comparison.ts) anchors
+    // on repoDigests when present, so a fresh list here lets it re-anchor even
+    // when the old digest.repo isn't among the freshly derived entries (#669).
+    containerInStore.image.digest.repoDigests = freshOrderedRepoDigests;
 
     if (shouldRepairStoredImageReference(containerInStore)) {
       const resolvedImageState = resolveContainerImageState({
@@ -364,6 +378,7 @@ async function refreshStoredContainerImageFields(
               ...containerInStore.image.digest,
               watch: resolvedImageState.watchDigest,
               repo: resolvedImageState.repoDigest,
+              repoDigests: resolvedImageState.repoDigests,
               value:
                 resolvedImageState.repoDigest !== undefined &&
                 resolvedImageState.repoDigest !== containerInStore.image.digest.repo
@@ -394,8 +409,16 @@ async function refreshStoredContainerImageFields(
     if (freshDigestRepo !== undefined && containerInStore.image.digest.value === undefined) {
       containerInStore.image.digest.value = freshDigestRepo;
     }
+    // A stored anchor that is still among the fresh candidates stays put even
+    // when it isn't first: handleDigestWatch re-anchors digest.repo to the
+    // candidate that actually matches the registry, and re-deriving it from
+    // index 0 here every cycle would undo that and ping-pong the anchor (#669).
+    const storedRepoStillValid =
+      containerInStore.image.digest.repo !== undefined &&
+      freshOrderedRepoDigests !== undefined &&
+      freshOrderedRepoDigests.includes(containerInStore.image.digest.repo);
     if (
-      freshDigestRepo !== containerInStore.image.digest.repo ||
+      (freshDigestRepo !== containerInStore.image.digest.repo && !storedRepoStillValid) ||
       freshImageId !== containerInStore.image.id
     ) {
       containerInStore.image.digest.repo = freshDigestRepo;
@@ -595,6 +618,10 @@ function resolveContainerImageState(
   const parsedTag = parseSemver(transformedTag);
   const isSemver = parsedTag != null;
   const tagPrecision = classifyTagPrecision(tagName, resolvedConfig.transformTags, parsedTag);
+  const repoDigests = getOrderedRepoDigests(
+    image,
+    getImageReferenceCandidatesFromParsedImage(parsedImage),
+  );
 
   return {
     parsedImage,
@@ -610,8 +637,29 @@ function resolveContainerImageState(
       tagName,
       container.Image,
     ),
-    repoDigest: getRepoDigest(image),
+    repoDigest: repoDigests?.[0],
+    repoDigests,
   };
+}
+
+/**
+ * Extract a bare domain from a stored `registry.url`, which may already be a
+ * canonicalized URL (e.g. `https://registry-1.docker.io/v2`, produced by
+ * `normalizeContainer`/`BaseRegistry.normalizeImageUrl`) rather than a plain
+ * domain. Falls back to treating the value as an already-bare domain.
+ */
+function extractRegistryDomainForMatching(url: string | undefined): string | undefined {
+  if (typeof url !== 'string' || url.trim() === '') {
+    return undefined;
+  }
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return undefined;
+    }
+  }
+  return url;
 }
 
 function shouldRepairStoredImageReference(containerInStore: Container) {
@@ -774,8 +822,16 @@ export async function addImageDetailsToContainerOrchestration(
     return undefined;
   }
 
-  const { parsedImage, resolvedConfig, tagName, isSemver, tagPrecision, watchDigest, repoDigest } =
-    resolvedImageState;
+  const {
+    parsedImage,
+    resolvedConfig,
+    tagName,
+    isSemver,
+    tagPrecision,
+    watchDigest,
+    repoDigest,
+    repoDigests,
+  } = resolvedImageState;
   const runtimeDetails = await resolveRuntimeDetailsForDiscoveredContainer(
     runtimeDetailsFromSummary,
     containerInspect,
@@ -827,6 +883,7 @@ export async function addImageDetailsToContainerOrchestration(
       digest: {
         watch: watchDigest,
         repo: repoDigest,
+        repoDigests,
         value: repoDigest,
       },
       // True when the live image inspect had no RepoDigests (built locally or

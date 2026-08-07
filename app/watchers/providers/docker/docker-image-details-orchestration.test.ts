@@ -613,6 +613,7 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.image.id).toBe('image-new');
     expect(containerInStore.image.digest).toEqual({
       repo: 'sha256:new',
+      repoDigests: ['sha256:new'],
       value: 'sha256:new',
     });
     expect(containerInStore.image.created).toBe('2026-03-01T00:00:00.000Z');
@@ -797,6 +798,7 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.image.tag.value).toBe('latest');
     expect(containerInStore.image.digest).toEqual({
       repo: 'sha256:new',
+      repoDigests: ['sha256:new'],
       value: 'sha256:new',
       watch: true,
     });
@@ -1119,6 +1121,7 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.image.tag.value).toBe('latest');
     expect(containerInStore.image.digest).toEqual({
       repo: 'sha256:new',
+      repoDigests: ['sha256:new'],
       value: 'sha256:new',
       watch: true,
     });
@@ -1185,6 +1188,7 @@ describe('docker image details orchestration module', () => {
     expect(containerInStore.image.id).toBe('image-new');
     expect(containerInStore.image.digest).toEqual({
       repo: 'sha256:new',
+      repoDigests: ['sha256:new'],
       value: 'sha256:new',
       watch: false,
     });
@@ -1514,6 +1518,202 @@ describe('docker image details orchestration module', () => {
       image: {
         isLocalImage: false,
       },
+    });
+  });
+
+  describe('repo-aware digest anchor selection (#669)', () => {
+    test('discovery: selects the matching-repo entry as digest anchor and populates repoDigests when a foreign-repo entry comes first', async () => {
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['unrelated/other-image@sha256:foreign', 'ghcr.io/acme/service@sha256:mine'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.image.digest).toMatchObject({
+        repo: 'sha256:mine',
+        repoDigests: ['sha256:mine'],
+        value: 'sha256:mine',
+      });
+    });
+
+    test('refresh (no-repair path): re-anchors digest.repo away from a foreign entry and refreshes repoDigests every cycle even when unchanged', async () => {
+      const containerInStore = {
+        id: 'container-1',
+        name: 'service',
+        error: undefined,
+        details: { ports: [], volumes: [], env: [] },
+        image: {
+          id: 'image-old',
+          name: 'acme/service',
+          registry: { name: 'ghcr', url: 'https://ghcr.io/v2' },
+          tag: { value: '1.0.0', semver: true },
+          digest: { repo: 'sha256:stale-foreign', value: 'sha256:stale-foreign', watch: true },
+          created: '2025-01-01T00:00:00.000Z',
+        },
+      };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-old',
+        RepoDigests: ['unrelated/other-image@sha256:foreign', 'ghcr.io/acme/service@sha256:mine'],
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      // Image id is unchanged, but the ordered candidate list is still
+      // re-derived (and the stale repo pointer corrected) every cycle rather
+      // than only when the digest.repo/image id merge check fires.
+      expect(containerInStore.image.digest.repoDigests).toEqual(['sha256:mine']);
+      expect(containerInStore.image.digest.repo).toBe('sha256:mine');
+    });
+
+    test('refresh: keeps a stored anchor that is not first but still among the fresh candidates (no ping-pong with handleDigestWatch re-anchoring)', async () => {
+      const containerInStore = {
+        id: 'container-1',
+        name: 'service',
+        error: undefined,
+        details: { ports: [], volumes: [], env: [] },
+        image: {
+          id: 'image-old',
+          name: 'acme/service',
+          registry: { name: 'ghcr', url: 'https://ghcr.io/v2' },
+          tag: { value: '1.0.0', semver: true },
+          // handleDigestWatch re-anchored to the second candidate last cycle.
+          digest: { repo: 'sha256:second', value: 'sha256:remote', watch: true },
+          created: '2025-01-01T00:00:00.000Z',
+        },
+      };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-old',
+        RepoDigests: ['ghcr.io/acme/service@sha256:first', 'ghcr.io/acme/service@sha256:second'],
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      // digest.repo must NOT snap back to index 0: the stored anchor is still
+      // a valid candidate, and re-deriving it here would undo the
+      // registry-verified re-anchor every cycle.
+      expect(containerInStore.image.digest.repo).toBe('sha256:second');
+      expect(containerInStore.image.digest.value).toBe('sha256:remote');
+      expect(containerInStore.image.digest.repoDigests).toEqual(['sha256:first', 'sha256:second']);
+    });
+
+    test('refresh: a malformed http(s) registry.url degrades to unmatched candidates instead of throwing', async () => {
+      const containerInStore = {
+        id: 'container-1',
+        name: 'service',
+        error: undefined,
+        details: { ports: [], volumes: [], env: [] },
+        image: {
+          id: 'image-old',
+          name: 'acme/service',
+          // No hostname — new URL() throws, exercising the catch fallback in
+          // extractRegistryDomainForMatching.
+          registry: { name: 'ghcr', url: 'https://' },
+          tag: { value: '1.0.0', semver: true },
+          digest: { repo: 'sha256:old', value: 'sha256:old', watch: true },
+          created: '2025-01-01T00:00:00.000Z',
+        },
+      };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-old',
+        RepoDigests: ['unrelated/other-image@sha256:foreign', 'ghcr.io/acme/service@sha256:mine'],
+        Created: '2026-02-01T00:00:00.000Z',
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        createHelpers() as any,
+      );
+
+      // No candidate matched (domain extraction failed), so the fallback is
+      // the full RepoDigests list in original order — index 0 wins, same as
+      // pre-#669 behavior when identity can't be determined.
+      expect(containerInStore.image.digest.repoDigests).toEqual(['sha256:foreign', 'sha256:mine']);
+      expect(containerInStore.image.digest.repo).toBe('sha256:foreign');
+    });
+
+    test('refresh (repair path): the reparsed reference selects the matching-repo entry, not index 0', async () => {
+      const containerInStore = {
+        id: 'container-1',
+        name: 'service',
+        displayName: 'service',
+        status: 'running',
+        error: undefined,
+        details: { ports: [], volumes: [], env: [] },
+        image: {
+          id: 'image-old',
+          name: 'acme/service',
+          registry: { name: 'unknown', url: '' },
+          tag: { value: 'unknown', semver: false },
+          digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+          architecture: 'amd64',
+          os: 'linux',
+          created: '2025-01-01T00:00:00.000Z',
+        },
+      };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore as any);
+
+      const { watcher, inspectContainer, inspectImage } = createWatcher();
+      inspectContainer.mockResolvedValue({
+        Config: { Image: 'ghcr.io/acme/service:latest' },
+      });
+      inspectImage.mockResolvedValue({
+        Id: 'image-new',
+        RepoDigests: ['unrelated/other-image@sha256:foreign', 'ghcr.io/acme/service@sha256:mine'],
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-03-01T00:00:00.000Z',
+      });
+      const helpers = createHelpers({
+        resolveImageName: vi.fn().mockReturnValue({ domain: 'ghcr.io', path: 'acme/service' }),
+        resolveTagName: vi.fn().mockReturnValue('latest'),
+      });
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer(),
+        {},
+        helpers as any,
+      );
+
+      expect(containerInStore.image.digest).toMatchObject({
+        repo: 'sha256:mine',
+        repoDigests: ['sha256:mine'],
+      });
     });
   });
 
