@@ -13,9 +13,12 @@ import {
 export const runtime = "nodejs";
 
 const PER_PAGE = 100;
-// 3,000 stars of headroom; past that the chart thins visually anyway and the
-// cap keeps a pathological pagination loop from burning the rate limit.
+// 3,000 stars of headroom; a run that would need more pages is treated as
+// incomplete and falls back rather than rendering a truncated total.
 const MAX_PAGES = 30;
+// One deadline for the whole pagination run, so a stalled GitHub request
+// can't hold the SVG response until the platform timeout.
+const FETCH_DEADLINE_MS = 10_000;
 const SUCCESS_CACHE = "public, s-maxage=21600, stale-while-revalidate=604800";
 const FAILURE_CACHE = "public, s-maxage=300";
 
@@ -30,25 +33,24 @@ async function fetchStarredTimestamps(): Promise<string[] | undefined> {
     headers.Authorization = `Bearer ${token}`;
   }
 
+  const signal = AbortSignal.timeout(FETCH_DEADLINE_MS);
   const starredAt: string[] = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
     let batch: unknown;
     try {
       const response = await fetch(
         `https://api.github.com/repos/${REPO_SLUG}/stargazers?per_page=${PER_PAGE}&page=${page}`,
-        { headers, next: { revalidate: 21600 } },
+        { headers, signal, next: { revalidate: 21600 } },
       );
       if (!response.ok) {
-        // A partial series still renders an honest chart shape; only a
-        // first-page failure means we have nothing to draw.
-        return page === 1 ? undefined : starredAt;
+        return undefined;
       }
       batch = await response.json();
     } catch {
-      return page === 1 ? undefined : starredAt;
+      return undefined;
     }
     if (!Array.isArray(batch)) {
-      return page === 1 ? undefined : starredAt;
+      return undefined;
     }
     for (const entry of batch) {
       const value = (entry as { starred_at?: unknown })?.starred_at;
@@ -57,10 +59,13 @@ async function fetchStarredTimestamps(): Promise<string[] | undefined> {
       }
     }
     if (batch.length < PER_PAGE) {
-      break;
+      // A short page is the end of the history — the only complete outcome.
+      return starredAt;
     }
   }
-  return starredAt;
+  // MAX_PAGES exhausted with a full final page: history may continue, so the
+  // series is incomplete. Fall back instead of caching a truncated total.
+  return undefined;
 }
 
 export async function GET(request: Request) {
