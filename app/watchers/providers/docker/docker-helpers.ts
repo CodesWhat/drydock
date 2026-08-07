@@ -429,7 +429,10 @@ export function getOrderedRepoDigests(
   const entries = repoDigests
     .map((fullDigest) => {
       const separatorIndex = fullDigest.indexOf('@');
-      if (separatorIndex === -1) {
+      // Reject malformed entries with a missing separator or an empty
+      // repo/digest component: an empty digest would pass the model's
+      // `!== undefined` guards and compare as a phantom "change".
+      if (separatorIndex <= 0 || separatorIndex === fullDigest.length - 1) {
         return undefined;
       }
       return {

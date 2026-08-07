@@ -360,6 +360,17 @@ describe('docker helper extraction module', () => {
     test('ignores malformed RepoDigests entries lacking an "@" separator', () => {
       expect(getOrderedRepoDigests({ RepoDigests: ['malformed-entry'] })).toBeUndefined();
     });
+
+    test('ignores entries with an empty repo or digest component', () => {
+      expect(getOrderedRepoDigests({ RepoDigests: ['acme/service@'] })).toBeUndefined();
+      expect(getOrderedRepoDigests({ RepoDigests: ['@sha256:orphan'] })).toBeUndefined();
+      // A well-formed entry still wins over malformed siblings.
+      expect(
+        getOrderedRepoDigests({
+          RepoDigests: ['acme/service@', '@sha256:orphan', 'acme/service@sha256:good'],
+        }),
+      ).toEqual(['sha256:good']);
+    });
   });
 
   test('digest watch defaults require a meaningful current tag', () => {
