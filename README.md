@@ -409,8 +409,11 @@ High-level themes only — see [CHANGELOG.md](CHANGELOG.md) for per-release deta
 <a id="star-history"></a>
 
 <div align="center">
-  <a href="https://star-history.com/#CodesWhat/drydock&Date">
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=Date" />
+  <a href="https://github.com/CodesWhat/drydock/stargazers">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
+      <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
+    </picture>
   </a>
 </div>
 

@@ -38,3 +38,10 @@ test("star history lazily loads only the active theme chart", () => {
   assert.match(starHistoryChartSource, /decoding="async"/u);
   assert.match(starHistoryChartSource, /fetchPriority="low"/u);
 });
+
+test("star history chart is self-hosted, with no third-party chart service left", () => {
+  assert.match(starHistoryChartSource, /\/api\/star-history\?theme=dark/u);
+  assert.match(starHistoryChartSource, /\/api\/star-history\?theme=light/u);
+  assert.equal(starHistoryChartSource.indexOf("star-history.com"), -1);
+  assert.equal(starHistoryChartSource.indexOf("starchart.cc"), -1);
+});
