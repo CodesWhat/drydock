@@ -824,6 +824,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.rollback.auto` | ⚪ | Automatically rollback the container if the health check fails after an update | Valid Boolean | `false` |
 | `dd.rollback.window` | ⚪ | Health monitoring window in milliseconds after an update (how long to watch for failures) | integer | `300000` |
 | `dd.rollback.interval` | ⚪ | Health polling interval in milliseconds during the rollback window | integer | `10000` |
+| `dd.depends_on` | ⚪ | Comma-separated list of container names this container depends on. Overrides compose-file `depends_on` detection entirely (no merge) — when set, drydock uses exactly this list. | CSV container names | Detected from the compose file's `depends_on` when the container is compose-managed; otherwise none |
+| `dd.depends_on.action` | ⚪ | What to do with this container's dependents when it updates | `update`, `restart` | `update` |
 | `dd.update.mode` | ⚪ | Update routing mode for infrastructure containers (socket proxies, etc.) | `infrastructure` | standard update path |
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |

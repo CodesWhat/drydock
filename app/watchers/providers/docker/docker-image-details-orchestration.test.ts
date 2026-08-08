@@ -2321,4 +2321,160 @@ describe('docker image details orchestration module', () => {
       false,
     );
   });
+
+  describe('dependsOn detection (#219)', () => {
+    test('discovery resolves dd.depends_on into dependsOn/dependsOnSource/dependsOnAction', async () => {
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Labels: { 'dd.depends_on': 'db, cache' } }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.dependsOn).toEqual(['db', 'cache']);
+      expect(result?.dependsOnSource).toBe('label');
+      expect(result?.dependsOnAction).toBe('update');
+    });
+
+    test('discovery honors dd.depends_on.action=restart alongside dd.depends_on', async () => {
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({
+          Labels: { 'dd.depends_on': 'db', 'dd.depends_on.action': 'restart' },
+        }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.dependsOnAction).toBe('restart');
+    });
+
+    test('discovery drops a self-referencing dd.depends_on entry and warns', async () => {
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({
+          Names: ['/service'],
+          Labels: { 'dd.depends_on': 'service,db' },
+        }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.dependsOn).toEqual(['db']);
+      expect(watcher.log.warn).toHaveBeenCalledWith(expect.stringContaining('self-reference'));
+    });
+
+    test('discovery leaves dependsOn unset when there is no label or compose signal', async () => {
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Labels: {} }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.dependsOn).toBeUndefined();
+      expect(result?.dependsOnSource).toBeUndefined();
+    });
+
+    test('discovery falls back to compose detection and warns when the compose file cannot be read', async () => {
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({
+          Labels: {
+            'com.docker.compose.service': 'service',
+            'com.docker.compose.project.config_files': '/nonexistent/compose.yml',
+          },
+        }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.dependsOn).toBeUndefined();
+      expect(result?.dependsOnSource).toBeUndefined();
+      expect(watcher.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to read compose file'),
+      );
+    });
+
+    test('already-stored containers re-derive dependsOn from labels every cycle', async () => {
+      const stored = {
+        id: 'container-1',
+        name: 'service',
+        displayName: 'service',
+        status: 'running',
+        dependsOn: ['old-target'],
+        dependsOnSource: 'label',
+        dependsOnAction: 'update',
+        details: { ports: [], volumes: [], env: [] },
+        image: {
+          id: 'image-old',
+          name: 'acme/service',
+          registry: { name: 'ghcr', url: 'ghcr.io' },
+          tag: { value: 'latest', semver: false },
+          digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+          created: '2025-01-01T00:00:00.000Z',
+        },
+      };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Labels: { 'dd.depends_on': 'new-target' } }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.dependsOn).toEqual(['new-target']);
+      expect(result?.dependsOnSource).toBe('label');
+    });
+
+    test('already-stored containers clear a stale label-sourced dependsOn once the label is removed', async () => {
+      const stored = {
+        id: 'container-1',
+        name: 'service',
+        displayName: 'service',
+        status: 'running',
+        dependsOn: ['old-target'],
+        dependsOnSource: 'label',
+        dependsOnAction: 'update',
+        details: { ports: [], volumes: [], env: [] },
+        image: {
+          id: 'image-old',
+          name: 'acme/service',
+          registry: { name: 'ghcr', url: 'ghcr.io' },
+          tag: { value: 'latest', semver: false },
+          digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+          created: '2025-01-01T00:00:00.000Z',
+        },
+      };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const { watcher } = createWatcher();
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Labels: {} }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.dependsOn).toBeUndefined();
+      expect(result?.dependsOnSource).toBeUndefined();
+    });
+  });
 });

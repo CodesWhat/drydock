@@ -1,3 +1,4 @@
+import { resolveComposeDependsOn as resolveComposeDependsOnDefault } from '../../../dependencies/compose-dependency-resolver.js';
 import log from '../../../log/index.js';
 import type { Container, TriggerCategory } from '../../../model/container.js';
 import { recordLegacyInput } from '../../../prometheus/compatibility.js';
@@ -21,6 +22,8 @@ import type { ContainerLabelOverrides } from './docker-image-details-orchestrati
 import {
   ddActionExclude,
   ddActionInclude,
+  ddDependsOn,
+  ddDependsOnAction,
   ddDisplayIcon,
   ddDisplayName,
   ddInspectTagPath,
@@ -843,6 +846,22 @@ export function applyDerivedLabelFieldsToContainer(
   container.notificationTriggerExclude = resolved.notificationTriggerExclude;
   container.triggerInclude = resolved.triggerInclude;
   container.triggerExclude = resolved.triggerExclude;
+  const dependsOnResolution = resolveDependsOnFromLabels(labels, container.name);
+  if (dependsOnResolution.dependsOn !== undefined) {
+    container.dependsOn = dependsOnResolution.dependsOn;
+    container.dependsOnSource = 'label';
+    // dependsOnAction is always resolved (never undefined) whenever dependsOn
+    // is — see resolveDependsOnFromLabels's return contract.
+    container.dependsOnAction = dependsOnResolution.dependsOnAction;
+  } else if (container.dependsOnSource === 'label') {
+    // The dd.depends_on label was removed. Clear the label-sourced edge so a
+    // stale dependency doesn't linger — compose detection (if any) re-applies
+    // on the next full watch cycle, which this lightweight event path can't
+    // run (it requires async file I/O).
+    container.dependsOn = undefined;
+    container.dependsOnSource = undefined;
+    container.dependsOnAction = dependsOnResolution.dependsOnAction;
+  }
   // The category-scope warning is deliberately NOT emitted here. `resolved` comes from
   // labels alone (no imgset pass, see above), so a container whose other-category filter
   // is supplied by a matching imgset looks falsely asymmetric on this path and would
@@ -916,6 +935,157 @@ export function applyEffectiveDockerConfigFromLabels(
 ) {
   applyEffectiveTagPolicyFromLabels(container, labels, configuration.tag, getMatchingImgset);
   applyDockerDeclarativeUpdatePolicy(container, labels, configuration, policyResolutionOptions);
+}
+
+const warnedDependsOnSelfReferences = new Set<string>();
+const warnedInvalidDependsOnActions = new Set<string>();
+
+export interface ResolvedDependsOn {
+  dependsOn?: string[];
+  dependsOnAction?: 'update' | 'restart';
+}
+
+export interface ContainerDependsOnResolution {
+  dependsOn?: string[];
+  dependsOnSource?: 'label' | 'compose';
+  dependsOnAction?: 'update' | 'restart';
+}
+
+interface ResolveDependsOnOptions {
+  warn?: (message: string) => void;
+  warnedSelfReferences?: Set<string>;
+  warnedInvalidActions?: Set<string>;
+}
+
+function parseDependsOnNames(rawValue: string): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const rawName of rawValue.split(',')) {
+    const name = rawName.trim();
+    if (name === '' || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    names.push(name);
+  }
+  return names;
+}
+
+/**
+ * Resolve `dd.depends_on` / `dd.depends_on.action` into typed Container
+ * fields, label-only.
+ *
+ * Compose-derived `depends_on` is resolved separately (see
+ * `app/dependencies/compose-dependency-resolver.ts`, wired in via
+ * `resolveContainerDependsOn` below) because it requires async file I/O this
+ * synchronous label pass cannot do. A present `dd.depends_on` label always
+ * wins over compose detection — no merge — signalled here by returning a
+ * `dependsOn` array (possibly empty) whenever the label key itself is set.
+ *
+ * Self-references are dropped here (cheap — only needs the container's own
+ * name) with a one-time-per-container warning, matching the "self-edge
+ * already filtered" precondition the graph engine relies on. Unknown targets
+ * and cross-agent edges are NOT validated here — target containers may not
+ * be discovered yet — that validation is deferred to `buildDependencyGraph`
+ * in the graph engine, which has the full fleet view.
+ */
+export function resolveDependsOnFromLabels(
+  labels: Record<string, string>,
+  containerName: string,
+  options: ResolveDependsOnOptions = {},
+): ResolvedDependsOn {
+  const warn = options.warn || ((message: string) => log.warn(message));
+  const warnedSelfReferences = options.warnedSelfReferences || warnedDependsOnSelfReferences;
+  const warnedInvalidActions = options.warnedInvalidActions || warnedInvalidDependsOnActions;
+
+  const rawAction = getLabel(labels, ddDependsOnAction);
+  let dependsOnAction: 'update' | 'restart' | undefined;
+  if (rawAction !== undefined) {
+    if (rawAction === 'update' || rawAction === 'restart') {
+      dependsOnAction = rawAction;
+    } else {
+      const warnKey = `${containerName}:${rawAction}`;
+      if (!warnedInvalidActions.has(warnKey)) {
+        warnedInvalidActions.add(warnKey);
+        warn(
+          `Container "${containerName}" sets "${ddDependsOnAction}" to an unrecognized value "${rawAction}" (expected "update" or "restart"). Falling back to "update".`,
+        );
+      }
+      dependsOnAction = 'update';
+    }
+  }
+
+  const rawDependsOn = getLabel(labels, ddDependsOn);
+  if (rawDependsOn === undefined) {
+    return { dependsOnAction };
+  }
+
+  const dependsOn = parseDependsOnNames(rawDependsOn).filter((name) => {
+    if (name !== containerName) {
+      return true;
+    }
+    if (!warnedSelfReferences.has(containerName)) {
+      warnedSelfReferences.add(containerName);
+      warn(
+        `Container "${containerName}" lists itself in "${ddDependsOn}" — self-reference dropped.`,
+      );
+    }
+    return false;
+  });
+
+  return { dependsOn, dependsOnAction: dependsOnAction ?? 'update' };
+}
+
+/**
+ * Combine label-based and compose-based dependency detection per the
+ * detection precedence in the design: label wins outright (no merge), else
+ * fall back to the compose service's own `depends_on` (read-only, via
+ * `resolveComposeDependsOn`), else no dependencies.
+ *
+ * Async because compose detection reads a file. Only called from the full
+ * discovery/refresh path (`docker-image-details-orchestration.ts`) — the
+ * lightweight Docker-event label-refresh path applies the label-only half
+ * (`resolveDependsOnFromLabels`) directly, matching the existing precedent
+ * for other compose/imgset-derived fields that aren't re-derived on events.
+ */
+export async function resolveContainerDependsOn(
+  labels: Record<string, string>,
+  containerName: string,
+  options: ResolveDependsOnOptions & {
+    resolveComposeDependsOn?: (container: {
+      labels?: Record<string, string>;
+    }) => Promise<{ dependsOn: string[]; warnings: string[] }>;
+  } = {},
+): Promise<ContainerDependsOnResolution> {
+  const labelResult = resolveDependsOnFromLabels(labels, containerName, options);
+  if (labelResult.dependsOn !== undefined) {
+    return {
+      dependsOn: labelResult.dependsOn,
+      dependsOnSource: 'label',
+      // Always resolved (never undefined) whenever dependsOn is — see
+      // resolveDependsOnFromLabels's return contract.
+      dependsOnAction: labelResult.dependsOnAction,
+    };
+  }
+
+  const resolveCompose = options.resolveComposeDependsOn || resolveComposeDependsOnDefault;
+  const composeResult = await resolveCompose({ labels });
+  if (composeResult.warnings.length > 0) {
+    const warn = options.warn || ((message: string) => log.warn(message));
+    for (const warning of composeResult.warnings) {
+      warn(warning);
+    }
+  }
+
+  if (composeResult.dependsOn.length === 0) {
+    return { dependsOnAction: labelResult.dependsOnAction };
+  }
+
+  return {
+    dependsOn: composeResult.dependsOn,
+    dependsOnSource: 'compose',
+    dependsOnAction: labelResult.dependsOnAction ?? 'update',
+  };
 }
 
 function resolveLookupImageFromContainerLabels(
