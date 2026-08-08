@@ -251,6 +251,23 @@ describe('resolveComposeDependsOn', () => {
     expect(result).toEqual({ dependsOn: [], warnings: [] });
   });
 
+  test('treats a parsed compose file with no services key as declaring no services', async () => {
+    const composeFileParser = makeParser({
+      '/opt/stack/empty.yml': {},
+      '/opt/stack/overlay.yml': { services: { web: { depends_on: ['db'] }, db: {} } },
+    });
+    const result = await resolveComposeDependsOn(
+      {
+        labels: {
+          'com.docker.compose.service': 'web',
+          'com.docker.compose.project.config_files': '/opt/stack/empty.yml,/opt/stack/overlay.yml',
+        },
+      },
+      { composeFileParser },
+    );
+    expect(result).toEqual({ dependsOn: ['db'], warnings: [] });
+  });
+
   test('resolves a depends_on target declared only in a later overlay file (multi-file compose merge)', async () => {
     const composeFileParser = makeParser({
       '/opt/stack/base.yml': { services: { web: { depends_on: ['db'] } } },
