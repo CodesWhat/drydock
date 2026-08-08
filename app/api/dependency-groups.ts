@@ -12,6 +12,7 @@ import {
   requestContainerUpdates,
 } from '../updates/request-update.js';
 import { resolveDependencyChain } from './container-dependencies.js';
+import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { sendErrorResponse } from './error-response.js';
 
 const log = logger.child({ component: 'dependency-groups' });
@@ -65,6 +66,43 @@ function annotateAcceptedWithWave(
   }));
 }
 
+type ExpectedContainerIdsParseResult =
+  | { kind: 'absent' }
+  | { kind: 'invalid' }
+  | { kind: 'valid'; ids: string[] };
+
+/**
+ * `expectedContainerIds` is an optional blast-radius binding: the UI passes
+ * back the exact container id set it previewed (previewUpdateChain's wave
+ * membership) so this endpoint can refuse to run against a chain that has
+ * since changed shape, rather than silently updating a different set of
+ * containers than the ones the user confirmed. Omitting the field entirely
+ * preserves the old unbound behavior for any other caller.
+ */
+function parseExpectedContainerIds(body: unknown): ExpectedContainerIdsParseResult {
+  if (!body || typeof body !== 'object') {
+    return { kind: 'absent' };
+  }
+  const raw = (body as Record<string, unknown>).expectedContainerIds;
+  if (raw === undefined) {
+    return { kind: 'absent' };
+  }
+  if (!Array.isArray(raw) || !raw.every((value) => typeof value === 'string')) {
+    return { kind: 'invalid' };
+  }
+  return { kind: 'valid', ids: raw };
+}
+
+/** Order-insensitive (and duplicate-count-sensitive) equality over id lists. */
+function sameContainerIdSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((id, index) => id === sortedB[index]);
+}
+
 /**
  * POST /:rootId/update — bulk-update every container in the dependency chain
  * rooted at :rootId (design §4). Mirrors the existing
@@ -74,6 +112,10 @@ function annotateAcceptedWithWave(
  * — restart-kind dependents are admitted by the dependsOnAction === 'restart'
  * exemption in request-update.ts's updateAvailable gate, not by a bespoke
  * bypass here.
+ *
+ * Destructive-confirmation-gated (dependency-group-update) at the route
+ * level, same as container-delete — this can update/restart an arbitrary
+ * number of containers in one call.
  */
 async function updateDependencyGroup(req: Request, res: Response) {
   const serverConfiguration = getServerConfiguration();
@@ -89,8 +131,26 @@ async function updateDependencyGroup(req: Request, res: Response) {
     return;
   }
 
+  const expectedContainerIds = parseExpectedContainerIds(req.body);
+  if (expectedContainerIds.kind === 'invalid') {
+    sendErrorResponse(res, 400, 'expectedContainerIds must be an array of container ids');
+    return;
+  }
+
   try {
     const { chainContainers } = resolveDependencyChain(rootId);
+
+    if (expectedContainerIds.kind === 'valid') {
+      const currentContainerIds = chainContainers.map((container) => container.id);
+      if (!sameContainerIdSet(currentContainerIds, expectedContainerIds.ids)) {
+        sendErrorResponse(res, 409, {
+          message: 'Dependency chain has changed since it was last previewed',
+          details: { currentContainerIds: [...currentContainerIds].sort() },
+        });
+        return;
+      }
+    }
+
     const result = await requestContainerUpdates(chainContainers);
 
     result.accepted.forEach(() => {
@@ -118,6 +178,10 @@ async function updateDependencyGroup(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.post('/:rootId/update', updateDependencyGroup);
+  router.post(
+    '/:rootId/update',
+    requireDestructiveActionConfirmation('dependency-group-update'),
+    updateDependencyGroup,
+  );
   return router;
 }
