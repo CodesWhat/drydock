@@ -214,6 +214,13 @@ export interface Container {
   triggerInclude?: string;
   /** @deprecated compat mirror. */
   triggerExclude?: string;
+  // Dependency-ordering fields (#219). Derived, not persisted independently —
+  // re-resolved from the container's labels/compose file every watch cycle,
+  // same pattern as actionTriggerInclude/includeTags above. See
+  // app/dependencies/dependency-graph.ts for how these are consumed.
+  dependsOn?: string[];
+  dependsOnSource?: 'label' | 'compose';
+  dependsOnAction?: 'update' | 'restart';
   tagPinned?: boolean;
   tagPinGated?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
@@ -355,6 +362,9 @@ const schema = joi.object({
   notificationTriggerExclude: joi.string(),
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
+  dependsOn: joi.array().items(joi.string()).optional(),
+  dependsOnSource: joi.string().valid('label', 'compose').optional(),
+  dependsOnAction: joi.string().valid('update', 'restart').optional(),
   tagPinned: joi.boolean(),
   tagPinGated: joi.boolean(),
   updatePolicy: joi.object({
