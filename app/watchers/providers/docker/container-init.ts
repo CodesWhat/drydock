@@ -1052,9 +1052,9 @@ export async function resolveContainerDependsOn(
   labels: Record<string, string>,
   containerName: string,
   options: ResolveDependsOnOptions & {
-    resolveComposeDependsOn?: (
-      container: { labels?: Record<string, string> },
-    ) => Promise<{ dependsOn: string[]; warnings: string[] }>;
+    resolveComposeDependsOn?: (container: {
+      labels?: Record<string, string>;
+    }) => Promise<{ dependsOn: string[]; warnings: string[] }>;
   } = {},
 ): Promise<ContainerDependsOnResolution> {
   const labelResult = resolveDependsOnFromLabels(labels, containerName, options);

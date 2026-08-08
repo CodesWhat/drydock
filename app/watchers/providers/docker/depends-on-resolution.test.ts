@@ -40,11 +40,10 @@ describe('resolveDependsOnFromLabels', () => {
     const warn = vi.fn();
     const warnedSelfReferences = new Set<string>();
 
-    const first = resolveDependsOnFromLabels(
-      { 'dd.depends_on': 'web,db' },
-      'web',
-      { warn, warnedSelfReferences },
-    );
+    const first = resolveDependsOnFromLabels({ 'dd.depends_on': 'web,db' }, 'web', {
+      warn,
+      warnedSelfReferences,
+    });
     expect(first.dependsOn).toEqual(['db']);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('self-reference'));
@@ -58,13 +57,19 @@ describe('resolveDependsOnFromLabels', () => {
 
   test('honors dd.depends_on.action=restart', () => {
     expect(
-      resolveDependsOnFromLabels({ 'dd.depends_on': 'db', 'dd.depends_on.action': 'restart' }, 'web'),
+      resolveDependsOnFromLabels(
+        { 'dd.depends_on': 'db', 'dd.depends_on.action': 'restart' },
+        'web',
+      ),
     ).toEqual({ dependsOn: ['db'], dependsOnAction: 'restart' });
   });
 
   test('honors dd.depends_on.action=update explicitly', () => {
     expect(
-      resolveDependsOnFromLabels({ 'dd.depends_on': 'db', 'dd.depends_on.action': 'update' }, 'web'),
+      resolveDependsOnFromLabels(
+        { 'dd.depends_on': 'db', 'dd.depends_on.action': 'update' },
+        'web',
+      ),
     ).toEqual({ dependsOn: ['db'], dependsOnAction: 'update' });
   });
 
@@ -72,11 +77,10 @@ describe('resolveDependsOnFromLabels', () => {
     const warn = vi.fn();
     const warnedInvalidActions = new Set<string>();
 
-    const first = resolveDependsOnFromLabels(
-      { 'dd.depends_on.action': 'bogus' },
-      'web',
-      { warn, warnedInvalidActions },
-    );
+    const first = resolveDependsOnFromLabels({ 'dd.depends_on.action': 'bogus' }, 'web', {
+      warn,
+      warnedInvalidActions,
+    });
     expect(first.dependsOnAction).toBe('update');
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('unrecognized value "bogus"'));
@@ -128,22 +132,22 @@ describe('resolveDependsOnFromLabels', () => {
 describe('resolveContainerDependsOn', () => {
   test('label wins outright and never calls the compose resolver', async () => {
     const resolveCompose = vi.fn();
-    const result = await resolveContainerDependsOn(
-      { 'dd.depends_on': 'db' },
-      'web',
-      { resolveComposeDependsOn: resolveCompose },
-    );
-    expect(result).toEqual({ dependsOn: ['db'], dependsOnSource: 'label', dependsOnAction: 'update' });
+    const result = await resolveContainerDependsOn({ 'dd.depends_on': 'db' }, 'web', {
+      resolveComposeDependsOn: resolveCompose,
+    });
+    expect(result).toEqual({
+      dependsOn: ['db'],
+      dependsOnSource: 'label',
+      dependsOnAction: 'update',
+    });
     expect(resolveCompose).not.toHaveBeenCalled();
   });
 
   test('falls back to compose detection when no label is present', async () => {
     const resolveCompose = vi.fn().mockResolvedValue({ dependsOn: ['db', 'cache'], warnings: [] });
-    const result = await resolveContainerDependsOn(
-      { 'com.docker.compose.service': 'web' },
-      'web',
-      { resolveComposeDependsOn: resolveCompose },
-    );
+    const result = await resolveContainerDependsOn({ 'com.docker.compose.service': 'web' }, 'web', {
+      resolveComposeDependsOn: resolveCompose,
+    });
     expect(result).toEqual({
       dependsOn: ['db', 'cache'],
       dependsOnSource: 'compose',
@@ -156,11 +160,9 @@ describe('resolveContainerDependsOn', () => {
 
   test('carries a dd.depends_on.action override into a compose-sourced result', async () => {
     const resolveCompose = vi.fn().mockResolvedValue({ dependsOn: ['db'], warnings: [] });
-    const result = await resolveContainerDependsOn(
-      { 'dd.depends_on.action': 'restart' },
-      'web',
-      { resolveComposeDependsOn: resolveCompose },
-    );
+    const result = await resolveContainerDependsOn({ 'dd.depends_on.action': 'restart' }, 'web', {
+      resolveComposeDependsOn: resolveCompose,
+    });
     expect(result.dependsOnAction).toBe('restart');
     expect(result.dependsOnSource).toBe('compose');
   });
