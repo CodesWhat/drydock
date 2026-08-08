@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Pinned `js-yaml` to 3.15.1 in the e2e workspace (override; transitive dependency) for [GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj) (CVE-2026-59870 backport gap: quadratic CPU consumption in `!!omap` resolution).
 - Pinned `nanoid` to 3.3.18 (override; transitive dependency of `postcss` in the root, app, apps/demo, apps/web, and ui workspaces, and of `artillery` in the e2e workspace) for [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8) (CVE-2026-67213) and, in the e2e workspace which was still on 3.3.12, also [GHSA-28wg-ghj8-5hjv](https://github.com/advisories/GHSA-28wg-ghj8-5hjv) (CVE-2026-67214).
+- Bumped the `node:24-alpine` base image pin to the current digest (Node 24.19.0), picking up Node's July 29 2026 security release fixes (3 HIGH + 5 MEDIUM CVEs) that landed in 24.18.1.
+- Bumped the vendored `aquasec/trivy` build-stage pin from 0.72.0 to the current 0.73.0 digest, resolving 4 HIGH / 6 MEDIUM CVEs in its vendored Go dependencies (go-git, x/text, grpc, oras-go, stdlib).
 
 ### Fixed
 
