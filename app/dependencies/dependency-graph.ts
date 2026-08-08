@@ -85,14 +85,45 @@ function normalizeAgent(agent: string | undefined): string {
   return agent ?? '';
 }
 
+/** Outer key -> inner key -> every container matching both. */
+type ContainerIndex = Map<string, Map<string, DependencyGraphContainer[]>>;
+
+function indexBy(
+  containers: DependencyGraphContainer[],
+  outerKeyOf: (container: DependencyGraphContainer) => string | undefined,
+  innerKeyOf: (container: DependencyGraphContainer) => string | undefined,
+): ContainerIndex {
+  const index: ContainerIndex = new Map();
+  for (const container of containers) {
+    const outerKey = outerKeyOf(container);
+    const innerKey = innerKeyOf(container);
+    if (outerKey === undefined || innerKey === undefined) {
+      continue;
+    }
+    let byInnerKey = index.get(outerKey);
+    if (!byInnerKey) {
+      byInnerKey = new Map();
+      index.set(outerKey, byInnerKey);
+    }
+    const list = byInnerKey.get(innerKey) ?? [];
+    list.push(container);
+    byInnerKey.set(innerKey, list);
+  }
+  return index;
+}
+
 /**
  * Compose-sourced target names are compose SERVICE names, unambiguous only
  * within the same compose project (design §1) — matched via the
  * `com.docker.compose.service` label of candidate containers, scoped to
  * containers sharing the source's own `com.docker.compose.project` label.
+ *
+ * `index` is `buildDependencyGraph`'s once-per-call compose-project/service
+ * index (see `indexBy`) rather than the full container list, so this is an
+ * O(1) map lookup instead of a full scan per `dependsOn` entry.
  */
 function findComposeCandidates(
-  containers: DependencyGraphContainer[],
+  index: ContainerIndex,
   source: DependencyGraphContainer,
   targetName: string,
 ): DependencyGraphContainer[] {
@@ -100,12 +131,8 @@ function findComposeCandidates(
   if (!sourceProject) {
     return [];
   }
-  return containers.filter(
-    (candidate) =>
-      candidate.id !== source.id &&
-      candidate.labels?.[COMPOSE_SERVICE_LABEL] === targetName &&
-      candidate.labels?.[COMPOSE_PROJECT_LABEL] === sourceProject,
-  );
+  const candidates = index.get(sourceProject)?.get(targetName) ?? [];
+  return candidates.filter((candidate) => candidate.id !== source.id);
 }
 
 /**
@@ -115,18 +142,18 @@ function findComposeCandidates(
  * same-named container can exist on multiple agents behind one watcher
  * name); it's applied afterward so a same-watcher/different-agent match can
  * be distinguished as `crossHostIgnored` rather than silently unresolved.
+ *
+ * `index` is `buildDependencyGraph`'s once-per-call watcher/name index (see
+ * `indexBy`) rather than the full container list, so this is an O(1) map
+ * lookup instead of a full scan per `dependsOn` entry.
  */
 function findLabelCandidates(
-  containers: DependencyGraphContainer[],
+  index: ContainerIndex,
   source: DependencyGraphContainer,
   targetName: string,
 ): DependencyGraphContainer[] {
-  return containers.filter(
-    (candidate) =>
-      candidate.id !== source.id &&
-      candidate.name === targetName &&
-      candidate.watcher === source.watcher,
-  );
+  const candidates = index.get(source.watcher)?.get(targetName) ?? [];
+  return candidates.filter((candidate) => candidate.id !== source.id);
 }
 
 /**
@@ -154,6 +181,19 @@ export function buildDependencyGraph(
   const unresolved: UnresolvedDependencyEdge[] = [];
   const crossHostIgnored: CrossHostIgnoredEdge[] = [];
 
+  // Built once per call rather than re-scanning `containers` for every
+  // `dependsOn` entry of every container.
+  const labelCandidateIndex = indexBy(
+    containers,
+    (container) => container.watcher,
+    (container) => container.name,
+  );
+  const composeCandidateIndex = indexBy(
+    containers,
+    (container) => container.labels?.[COMPOSE_PROJECT_LABEL],
+    (container) => container.labels?.[COMPOSE_SERVICE_LABEL],
+  );
+
   for (const container of containers) {
     const dependsOn = container.dependsOn;
     if (!dependsOn || dependsOn.length === 0) {
@@ -166,8 +206,8 @@ export function buildDependencyGraph(
     for (const targetName of dependsOn) {
       const candidates =
         source === 'compose'
-          ? findComposeCandidates(containers, container, targetName)
-          : findLabelCandidates(containers, container, targetName);
+          ? findComposeCandidates(composeCandidateIndex, container, targetName)
+          : findLabelCandidates(labelCandidateIndex, container, targetName);
 
       if (candidates.length === 0) {
         unresolved.push({ nodeId: container.id, missingTarget: targetName });
