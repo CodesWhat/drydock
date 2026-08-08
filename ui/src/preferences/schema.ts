@@ -107,7 +107,7 @@ export const CONTAINER_TABLE_COLUMN_KEYS = [
   'links',
 ] as const;
 
-export const CONTAINER_TABLE_OPT_IN_COLUMN_KEYS = ['uptime'] as const;
+export const CONTAINER_TABLE_OPT_IN_COLUMN_KEYS = ['uptime', 'ports'] as const;
 
 export const CONTAINER_TABLE_REQUIRED_COLUMN_KEYS = ['icon', 'name'] as const;
 

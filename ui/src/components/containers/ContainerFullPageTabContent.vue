@@ -10,6 +10,7 @@ import UpdateStatusPanel from './UpdateStatusPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
+import ContainerPortEntry from './ContainerPortEntry.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
@@ -24,6 +25,8 @@ import { useNow } from '../../composables/useNow';
 import { formatUptimeFromIso } from '../../utils/uptime';
 import { updateInsightColor } from '../../utils/display';
 import { findDryRunActionTrigger } from '../../views/containers/useContainerTriggers';
+import { enrichContainerPorts } from '../../utils/ports';
+import { useAgentHosts } from '../../composables/useAgentHosts';
 
 interface RevealEnvResponse {
   env?: Array<{ key: string; value: string }>;
@@ -168,6 +171,15 @@ const {
   updateMode,
 } = useContainersViewTemplateContext();
 
+const { resolveHost } = useAgentHosts();
+const enrichedPorts = computed(() =>
+  enrichContainerPorts(
+    selectedContainer.value.details.ports,
+    selectedContainer.value.portLabel,
+    resolveHost(selectedContainer.value.agent, window.location.hostname),
+  ),
+);
+
 const dryRunTrigger = computed(() => findDryRunActionTrigger(detailTriggers.value));
 const dryRunTriggerId = computed(() =>
   dryRunTrigger.value ? getTriggerKey(dryRunTrigger.value) : undefined,
@@ -227,11 +239,11 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
             </div>
             <div class="p-4">
               <div v-if="selectedContainer.details.ports.length > 0" class="space-y-1.5">
-                <div v-for="port in selectedContainer.details.ports" :key="port"
+                <div v-for="entry in enrichedPorts" :key="entry.raw"
                      class="flex items-center gap-2 px-3 py-2 dd-rounded text-xs font-mono"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <AppIcon name="network" :size="10" class="dd-text-muted" />
-                  <span class="dd-text">{{ port }}</span>
+                  <ContainerPortEntry :href="entry.href" :label="entry.label" />
                 </div>
               </div>
               <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageOverview.noPortsExposed') }}</p>

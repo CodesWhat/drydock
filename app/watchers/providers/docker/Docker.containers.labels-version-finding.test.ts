@@ -58,6 +58,25 @@ describe('Docker Watcher', () => {
       expect(result).toHaveLength(0);
     });
 
+    test('should pass dd.port.label through to the container as portLabel', async () => {
+      const containers = [
+        {
+          Id: 'dd-port-label-1',
+          Labels: { 'dd.watch': 'true', 'dd.port.label': '80=Web UI' },
+          Names: ['/dd-port-label-test'],
+        },
+      ];
+      mockDockerApi.listContainers.mockResolvedValue(containers);
+      docker.addImageDetailsToContainer = vi.fn().mockResolvedValue({ id: 'dd-port-label-1' });
+
+      await docker.register('watcher', 'docker', 'test', {
+        watchbydefault: false,
+      });
+      await docker.getContainers();
+
+      expect(docker.addImageDetailsToContainer.mock.calls[0][1].portLabel).toBe('80=Web UI');
+    });
+
     test('should prefer dd.tag.include over wud.tag.include label', async () => {
       const containers = [
         {

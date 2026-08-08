@@ -613,6 +613,20 @@ describe('container-mapper', () => {
       expect(c.newTag).toBeNull();
     });
 
+    it('maps agent and portLabel through unchanged (trimmed) when present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ agent: 'remote-agent-1', portLabel: '  80=Web UI,443/tcp=Admin  ' }),
+      );
+      expect(c.agent).toBe('remote-agent-1');
+      expect(c.portLabel).toBe('80=Web UI,443/tcp=Admin');
+    });
+
+    it('leaves agent and portLabel undefined when absent from the payload', () => {
+      const c = mapApiContainer(makeApiContainer({ agent: null }));
+      expect(c.agent).toBeUndefined();
+      expect(c.portLabel).toBeUndefined();
+    });
+
     it('maps stopped status', () => {
       const c = mapApiContainer(makeApiContainer({ status: 'exited' }));
       expect(c.status).toBe('stopped');

@@ -44,6 +44,7 @@ export interface ContainerLabelOverrides {
   tagFamily?: string;
   tagPinInfo?: string;
   linkTemplate?: string;
+  portLabel?: string;
   displayName?: string;
   displayIcon?: string;
   actionTriggerInclude?: string;
@@ -110,6 +111,7 @@ interface ResolvedContainerLabelOverrides {
   tagFamily?: string;
   tagPinInfo?: string;
   linkTemplate?: string;
+  portLabel?: string;
   displayName?: string;
   displayIcon?: string;
   actionTriggerInclude?: string;
@@ -130,6 +132,7 @@ interface ResolvedContainerConfig {
   tagFamily?: string;
   tagPinInfo?: boolean;
   linkTemplate?: string;
+  portLabel?: string;
   displayName?: string;
   displayIcon?: string;
   actionTriggerInclude?: string;
@@ -851,6 +854,7 @@ export async function addImageDetailsToContainerOrchestration(
     tagFamily: resolvedConfig.tagFamily,
     tagPinInfo: resolvedConfig.tagPinInfo,
     linkTemplate: resolvedConfig.linkTemplate,
+    portLabel: resolvedConfig.portLabel,
     displayName: getContainerDisplayName(
       dockerContainerName,
       parsedImage.path,

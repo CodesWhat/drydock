@@ -12,12 +12,12 @@ describe('useColumnVisibility', () => {
     return mod;
   }
 
-  it('should include all default columns by default (uptime is opt-in and hidden)', async () => {
+  it('should include all default columns by default (uptime and ports are opt-in and hidden)', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns, visibleColumns, hiddenColumnKeys } = useColumnVisibility();
-    // allColumns includes the opt-in uptime column; visible only includes default columns
-    expect(visibleColumns.value.size).toBe(allColumns.length - 1);
-    expect(hiddenColumnKeys.value).toEqual(['uptime']);
+    // allColumns includes the opt-in uptime and ports columns; visible only includes default columns
+    expect(visibleColumns.value.size).toBe(allColumns.length - 2);
+    expect(hiddenColumnKeys.value).toEqual(['uptime', 'ports']);
   });
 
   it('should expose correct column keys', async () => {
@@ -35,6 +35,7 @@ describe('useColumnVisibility', () => {
       'registry',
       'links',
       'uptime',
+      'ports',
     ]);
   });
 
@@ -176,8 +177,8 @@ describe('useColumnVisibility', () => {
     localStorage.setItem('dd-preferences', '{invalid json');
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns, visibleColumns } = useColumnVisibility();
-    // Default columns exclude the opt-in uptime column (allColumns.length - 1)
-    expect(visibleColumns.value.size).toBe(allColumns.length - 1);
+    // Default columns exclude the opt-in uptime and ports columns (allColumns.length - 2)
+    expect(visibleColumns.value.size).toBe(allColumns.length - 2);
     expect(visibleColumns.value.has('icon')).toBe(true);
     expect(visibleColumns.value.has('name')).toBe(true);
   });
@@ -250,6 +251,7 @@ describe('useColumnVisibility', () => {
       expect(byKey.softwareVersion).toBe(70);
       expect(byKey.registry).toBe(80);
       expect(byKey.uptime).toBe(90);
+      expect(byKey.ports).toBe(95);
     });
   });
 
@@ -281,7 +283,7 @@ describe('useColumnVisibility', () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(undefined);
       // uptime is opt-in / hidden by default; nothing else is auto-hidden
-      expect(hiddenColumnKeys.value).toEqual(['uptime']);
+      expect(hiddenColumnKeys.value).toEqual(['uptime', 'ports']);
       expect(autoHiddenColumns.value).toHaveLength(0);
     });
 
@@ -289,7 +291,7 @@ describe('useColumnVisibility', () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const width = ref(5000);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
-      expect(hiddenColumnKeys.value).toEqual(['uptime']);
+      expect(hiddenColumnKeys.value).toEqual(['uptime', 'ports']);
       expect(autoHiddenColumns.value).toHaveLength(0);
     });
 
@@ -412,7 +414,7 @@ describe('useColumnVisibility', () => {
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
 
       // uptime is opt-in / hidden by default
-      expect(hiddenColumnKeys.value).toEqual(['uptime']);
+      expect(hiddenColumnKeys.value).toEqual(['uptime', 'ports']);
       expect(autoHiddenColumns.value).toHaveLength(0);
 
       width.value = 1029;
@@ -427,7 +429,7 @@ describe('useColumnVisibility', () => {
 
       width.value = 5000;
       await nextTick();
-      expect(hiddenColumnKeys.value).toEqual(['uptime']);
+      expect(hiddenColumnKeys.value).toEqual(['uptime', 'ports']);
       expect(autoHiddenColumns.value).toHaveLength(0);
     });
 
@@ -438,7 +440,7 @@ describe('useColumnVisibility', () => {
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
 
       // uptime is opt-in / hidden by default
-      expect(hiddenColumnKeys.value).toEqual(['uptime']);
+      expect(hiddenColumnKeys.value).toEqual(['uptime', 'ports']);
       base.value = 1029;
       await nextTick();
       expect(hiddenColumnKeys.value).toContain('registry');
@@ -473,7 +475,7 @@ describe('useColumnVisibility', () => {
       const width = ref(5000);
       const { hiddenColumnKeys, toggleColumn } = useColumnVisibility(width);
       toggleColumn('registry');
-      expect(hiddenColumnKeys.value.sort()).toEqual(['registry', 'uptime'].sort());
+      expect(hiddenColumnKeys.value.sort()).toEqual(['registry', 'uptime', 'ports'].sort());
     });
 
     it('lists only auto-hidden columns when nothing is picker-hidden beyond the opt-in default', async () => {
@@ -485,9 +487,9 @@ describe('useColumnVisibility', () => {
         'softwareVersion',
         'kind',
       ]);
-      // hiddenColumnKeys is the union of responsive optional columns and opt-in uptime.
+      // hiddenColumnKeys is the union of responsive optional columns and the opt-in uptime/ports columns.
       expect(hiddenColumnKeys.value.sort()).toEqual(
-        ['kind', 'registry', 'softwareVersion', 'uptime'].sort(),
+        ['kind', 'registry', 'softwareVersion', 'uptime', 'ports'].sort(),
       );
     });
 
@@ -500,7 +502,7 @@ describe('useColumnVisibility', () => {
       const registryOccurrences = hiddenColumnKeys.value.filter((key) => key === 'registry');
       expect(registryOccurrences).toHaveLength(1);
       expect(hiddenColumnKeys.value.sort()).toEqual(
-        ['kind', 'registry', 'softwareVersion', 'uptime'].sort(),
+        ['kind', 'registry', 'softwareVersion', 'uptime', 'ports'].sort(),
       );
     });
 
@@ -533,6 +535,7 @@ describe('useColumnVisibility', () => {
             'registry',
             'links',
             'uptime',
+            'ports',
           ],
         },
       });
@@ -623,6 +626,62 @@ describe('useColumnVisibility', () => {
       const width = ref(1);
       const { autoHiddenColumns } = useColumnVisibility(width);
       expect(autoHiddenColumns.value.map((c) => c.key)).toContain('uptime');
+    });
+  });
+
+  describe('ports column (opt-in)', () => {
+    it('ports is in allColumns but not in default visible columns', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { allColumns, visibleColumns } = useColumnVisibility();
+      const portsInAll = allColumns.some((c) => c.key === 'ports');
+      expect(portsInAll).toBe(true);
+      expect(visibleColumns.value.has('ports')).toBe(false);
+    });
+
+    it('user can opt in to ports via toggleColumn', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { visibleColumns, hiddenColumnKeys, toggleColumn } = useColumnVisibility();
+      expect(visibleColumns.value.has('ports')).toBe(false);
+
+      toggleColumn('ports');
+      expect(visibleColumns.value.has('ports')).toBe(true);
+      expect(hiddenColumnKeys.value).not.toContain('ports');
+    });
+
+    it('ports column has correct sizing metadata', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { allColumns } = useColumnVisibility();
+      const portsCol = allColumns.find((c) => c.key === 'ports');
+      expect(portsCol).toBeDefined();
+      expect(typeof portsCol!.size).toBe('number');
+      expect(typeof portsCol!.minSize).toBe('number');
+      expect(portsCol!.required).toBe(false);
+    });
+
+    it('ports column is at least as auto-hidden as uptime at narrow widths when opted in', async () => {
+      setTestPreferences({
+        containers: {
+          columns: [
+            'icon',
+            'name',
+            'version',
+            'kind',
+            'status',
+            'server',
+            'registry',
+            'uptime',
+            'ports',
+          ],
+        },
+      });
+      const { useColumnVisibility } = await loadColumnVisibility();
+      // At a very narrow width ports should be among the first to be auto-hidden (priority 95).
+      const width = ref(1);
+      const { autoHiddenColumns } = useColumnVisibility(width);
+      const keys = autoHiddenColumns.value.map((c) => c.key);
+      expect(keys).toContain('ports');
+      // ports (priority 95) is droppable at least as eagerly as uptime (priority 90).
+      expect(keys.indexOf('ports')).toBeLessThanOrEqual(keys.indexOf('uptime'));
     });
   });
 });

@@ -1,13 +1,17 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import AppButton from '../AppButton.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
+import ContainerPortEntry from './ContainerPortEntry.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update-kind-labels';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import type { Container } from '../../types/container';
+import { enrichContainerPorts } from '../../utils/ports';
+import { useAgentHosts } from '../../composables/useAgentHosts';
 
 const { t } = useI18n();
 
@@ -47,6 +51,15 @@ const {
   registryLabel,
   updateKindColor,
 } = useContainersViewTemplateContext();
+
+const { resolveHost } = useAgentHosts();
+const enrichedPorts = computed(() =>
+  enrichContainerPorts(
+    selectedContainer.value.details.ports,
+    selectedContainer.value.portLabel,
+    resolveHost(selectedContainer.value.agent, window.location.hostname),
+  ),
+);
 </script>
 
 <template>
@@ -61,11 +74,11 @@ const {
       </div>
       <div class="p-4">
         <div v-if="selectedContainer.details.ports.length > 0" class="space-y-1.5">
-          <div v-for="port in selectedContainer.details.ports" :key="port"
+          <div v-for="entry in enrichedPorts" :key="entry.raw"
                 class="flex items-center gap-2 px-3 py-2 dd-rounded text-xs font-mono"
                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
             <AppIcon name="network" :size="10" class="dd-text-muted" />
-            <span class="dd-text">{{ port }}</span>
+            <ContainerPortEntry :href="entry.href" :label="entry.label" />
           </div>
         </div>
         <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageOverview.noPortsExposed') }}</p>
