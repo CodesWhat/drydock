@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Pinned `js-yaml` to 3.15.1 in the e2e workspace (override; transitive dependency) for [GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj) (CVE-2026-59870 backport gap: quadratic CPU consumption in `!!omap` resolution).
 - Pinned `nanoid` to 3.3.18 (override; transitive dependency of `postcss` in the root, app, apps/demo, apps/web, and ui workspaces, and of `artillery` in the e2e workspace) for [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8) (CVE-2026-67213) and, in the e2e workspace which was still on 3.3.12, also [GHSA-28wg-ghj8-5hjv](https://github.com/advisories/GHSA-28wg-ghj8-5hjv) (CVE-2026-67214).
+- **`node:24-alpine` base image bumped to Node 24.19.0 for v1.6.0 GA**, replacing the Node 24.18.0 image shipped in rc.12. Picks up Node's July 29 2026 security release, fixing 3 HIGH (CVE-2026-56846, CVE-2026-56848, CVE-2026-58043) + 5 MEDIUM CVEs that landed in 24.18.1.
+- **Vendored `aquasec/trivy` build-stage pin bumped from 0.72.0 to 0.73.0**, resolving 4 HIGH / 6 MEDIUM CVEs in its vendored Go dependencies: go-git ([CVE-2026-71556](https://github.com/advisories/CVE-2026-71556)), `x/text` ([CVE-2026-56852](https://github.com/advisories/CVE-2026-56852)), grpc ([GHSA-hrxh-6v49-42gf](https://github.com/advisories/GHSA-hrxh-6v49-42gf)), oras-go ([CVE-2026-50151](https://github.com/advisories/CVE-2026-50151), [CVE-2026-50163](https://github.com/advisories/CVE-2026-50163)), and the Go stdlib ([CVE-2026-39822](https://github.com/advisories/CVE-2026-39822)).
 
 ### Fixed
 
