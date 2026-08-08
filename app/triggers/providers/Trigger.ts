@@ -1,6 +1,6 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { getAgents } from '../../agent/manager.js';
-import { getServerName, usesLegacyTriggerPrefix } from '../../configuration/index.js';
+import { getServerName } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import {
   type Container,
@@ -3024,7 +3024,6 @@ class Trigger<
   getMetadata(): Record<string, unknown> {
     return {
       category: this.getCategory(),
-      usesLegacyPrefix: usesLegacyTriggerPrefix(this.type, this.name),
     };
   }
 

@@ -1,6 +1,5 @@
 import joi from 'joi';
 import mockCron from 'node-cron';
-import * as configuration from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';
 import { validate as validateContainer } from '../../model/container.js';
@@ -344,23 +343,16 @@ test('getMetadata should include trigger category for action types', () => {
 
   expect(trigger.getMetadata()).toEqual({
     category: 'action',
-    usesLegacyPrefix: false,
   });
 });
 
-test('getMetadata should include trigger category and legacy prefix usage for notification types', () => {
-  configuration.ddEnvVars.DD_TRIGGER_SLACK_NOTIFY_CHANNEL = 'ops';
-  configuration.getTriggerConfigurations();
-
+test('getMetadata should include trigger category for notification types', () => {
   trigger.type = 'slack';
   trigger.name = 'notify';
 
   expect(trigger.getMetadata()).toEqual({
     category: 'notification',
-    usesLegacyPrefix: true,
   });
-
-  delete configuration.ddEnvVars.DD_TRIGGER_SLACK_NOTIFY_CHANNEL;
 });
 
 test('init should register to container report when simple mode enabled', async () => {
