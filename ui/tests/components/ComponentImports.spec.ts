@@ -21,6 +21,7 @@ const GLOBAL_COMPONENTS = new Set([
   'DataViewLayout',
   'DetailPanel',
   'EmptyState',
+  'KeyboardShortcutsOverlay',
   'ThemeToggle',
   'ToggleSwitch',
   // Vue built-ins

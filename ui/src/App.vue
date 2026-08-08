@@ -7,5 +7,6 @@ useGlobalUpdateToast();
 <template>
   <router-view />
   <ConfirmDialog />
+  <KeyboardShortcutsOverlay />
   <AppToast />
 </template>

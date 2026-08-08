@@ -10,6 +10,7 @@ import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useDeprecationBanner } from '@/composables/useDeprecationBanner';
 import { useIcons } from '@/composables/useIcons';
+import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
 import { useStorageRef } from '@/composables/useStorageRef';
 import { loadRecentItems, saveRecentItems } from '@/layouts/recentStorage';
 import { preferences } from '@/preferences/store';
@@ -1007,10 +1008,16 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault();
     showSearch.value = !showSearch.value;
   }
-  if (e.key === 'Escape') {
-    showSearch.value = false;
-  }
 }
+
+useKeyboardShortcuts({
+  onFocusSearch: () => {
+    showSearch.value = true;
+  },
+  onEscapeSearch: () => {
+    showSearch.value = false;
+  },
+});
 
 watch(showSearch, async (val) => {
   if (val) {
@@ -1456,9 +1463,14 @@ onUnmounted(() => {
           <AppIcon name="search" :size="12" class="shrink-0" />
           <template v-if="!isCollapsed">
             <span class="sidebar-label">{{ t('appShell.layout.sidebar.searchButton') }}</span>
-            <kbd class="sidebar-label ml-auto px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-text-secondary" style="background: var(--dd-border);">
-              <span class="text-3xs">&#8984;</span>K
-            </kbd>
+            <span class="sidebar-label ml-auto flex items-center gap-1">
+              <kbd class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-text-secondary" style="background: var(--dd-border);">
+                <span class="text-3xs">&#8984;</span>K
+              </kbd>
+              <kbd class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-text-secondary" style="background: var(--dd-border);">
+                /
+              </kbd>
+            </span>
           </template>
         </AppButton>
       </div>
