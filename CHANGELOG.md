@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING: The legacy `DD_TRIGGER_*` environment variable prefix and `dd.trigger.include` / `dd.trigger.exclude` container labels are removed** (deprecated v1.5.0, warned at `error` level throughout v1.6.0, removed per the published v1.7.0 schedule in `DEPRECATIONS.md`). Any `DD_TRIGGER_*` environment variable now fails startup outright — the error lists every detected variable next to its exact `DD_ACTION_*` (docker/dockercompose/command) or `DD_NOTIFICATION_*` (every other provider) replacement, plus the `config migrate --source trigger` command and a link to the deprecations page, so a config can be fixed in one pass. `dd.trigger.include` / `dd.trigger.exclude` container labels no longer resolve to anything — only the scoped `dd.action.*` / `dd.notification.*` labels are read; a container still carrying either legacy label logs a one-time `error`-level warning and keeps incrementing the `dd_legacy_input_total{source="label"}` counter (surfaced in the existing deprecation banner) so unmigrated fleets stay visible even though the label is no longer honored. The `usesLegacyPrefix` trigger-metadata field, the now-always-empty legacy-prefix tracking in `app/configuration/index.ts`, and the superseded startup warning are removed along with it. The `drydock config migrate --source trigger` CLI is unaffected — it's a standalone, offline config-file rewriter and remains the recommended migration path.
+
 ### Security
 
 - Pinned `js-yaml` to 3.15.1 in the e2e workspace (override; transitive dependency) for [GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj) (CVE-2026-59870 backport gap: quadratic CPU consumption in `!!omap` resolution).

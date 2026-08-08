@@ -24,11 +24,11 @@ Three prefixes are supported for trigger configuration:
 | --- | --- | --- |
 | `DD_ACTION_*` | **Current** | `DD_ACTION_DOCKER_MYSERVER_PRUNE=true` |
 | `DD_NOTIFICATION_*` | **Current** | `DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com` |
-| `DD_TRIGGER_*` | **Deprecated** — accepted in v1.6 with an `error`-level warning for every detected input; removed in v1.7.0 | `DD_TRIGGER_SLACK_MYSLACK_URL=https://...` |
+| `DD_TRIGGER_*` | **Removed in v1.7.0** — accepted in v1.6 with an `error`-level warning for every detected input; any `DD_TRIGGER_*` variable now fails startup | `DD_TRIGGER_SLACK_MYSLACK_URL=https://...` |
 
-Use `DD_ACTION_*` for update-action providers (Docker, Docker Compose, Command) and `DD_NOTIFICATION_*` for messaging providers (Slack, SMTP, Discord, etc.). The legacy `DD_TRIGGER_*` prefix still maps to the same configuration during the v1.6 compatibility window, but its error-level migration signal is intentionally loud; migrate it before v1.7.
+Use `DD_ACTION_*` for update-action providers (Docker, Docker Compose, Command) and `DD_NOTIFICATION_*` for messaging providers (Slack, SMTP, Discord, etc.). The legacy `DD_TRIGGER_*` prefix no longer works as of v1.7.0 — drydock fails to start and lists every detected variable next to its exact replacement.
 
-When the same trigger property is set under multiple prefixes, the merge priority is `DD_NOTIFICATION_*` > `DD_ACTION_*` > `DD_TRIGGER_*` (highest wins).
+When the same trigger property is set under multiple prefixes, the merge priority is `DD_NOTIFICATION_*` > `DD_ACTION_*` (highest wins).
 
 <Callout type="info">A built-in migration CLI can rewrite your config files from `DD_TRIGGER_*` to `DD_ACTION_*` automatically: `node dist/index.js config migrate --source trigger`. Use `--dry-run` to preview changes before applying. Note that the CLI always emits `DD_ACTION_*` for every trigger type — if you use messaging providers (Slack, SMTP, Discord, ntfy, and others), you may prefer to rename those to `DD_NOTIFICATION_*` manually to match the canonical prefix for your provider category.</Callout>
 
