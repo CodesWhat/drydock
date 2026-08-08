@@ -164,3 +164,15 @@ export const ddRollbackWindow = 'dd.rollback.window';
  * Health polling interval in milliseconds (default: 10000 = 10s).
  */
 export const ddRollbackInterval = 'dd.rollback.interval';
+
+/**
+ * Comma-separated list of container names this container depends on.
+ * Overrides compose-derived `depends_on` detection entirely (no merge).
+ */
+export const ddDependsOn = 'dd.depends_on';
+
+/**
+ * Action to take on this container's dependents when it updates
+ * ('update' | 'restart', default: 'update').
+ */
+export const ddDependsOnAction = 'dd.depends_on.action';

@@ -13,6 +13,7 @@ import {
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
   isDockerWatcher,
+  resolveContainerDependsOn,
   warnTriggerCategoryScopeChangeIfNeeded,
 } from './container-init.js';
 import {
@@ -453,6 +454,29 @@ async function refreshStoredContainerImageFields(
   }
 }
 
+/**
+ * Re-derive `dependsOn`/`dependsOnSource`/`dependsOnAction` from the
+ * container's current labels/compose file. Called on every full discovery
+ * and refresh pass (#219) — unlike most other label-derived fields, this one
+ * self-heals every watch cycle rather than only on discovery/events, since a
+ * recreated container's compose membership can only be re-confirmed here
+ * (compose detection needs async file I/O the lightweight Docker-event path
+ * can't do).
+ */
+async function applyContainerDependsOn(
+  container: Container,
+  labels: Record<string, string>,
+  watcher: DockerImageDetailsWatcher,
+  dockerContainerName: string,
+): Promise<void> {
+  const resolution = await resolveContainerDependsOn(labels, dockerContainerName, {
+    warn: (message) => watcher.log.warn(message),
+  });
+  container.dependsOn = resolution.dependsOn;
+  container.dependsOnSource = resolution.dependsOnSource;
+  container.dependsOnAction = resolution.dependsOnAction;
+}
+
 async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyInStoreContext) {
   const {
     watcher,
@@ -473,6 +497,7 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     watcher.configuration,
     { logger: watcher.log, containerName: dockerContainerName },
   );
+  await applyContainerDependsOn(containerInStore, container.Labels || {}, watcher, dockerContainerName);
 
   // Health is read unconditionally (decoupled from shouldInspectContainer /
   // tag-repair gating) so the cron leg is an actual fallback for the
@@ -928,6 +953,7 @@ export async function addImageDetailsToContainerOrchestration(
     logger: watcher.log,
     containerName: dockerContainerName,
   });
+  await applyContainerDependsOn(containerToReturn, containerLabels, watcher, dockerContainerName);
   removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
 
   return containerToReturn;
