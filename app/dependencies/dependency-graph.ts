@@ -433,3 +433,40 @@ export function collectTransitiveDependents(
   }
   return dependents;
 }
+
+/**
+ * BFS over an UNDIRECTED view of `edges` to find every node id in the same
+ * weakly-connected component as `rootId` (v1.7 Phase 6.2, #219 — design §4):
+ * both the update-chain-preview endpoint and the dependency-group bulk
+ * update endpoint need "everything reachable from this root, dependencies
+ * and dependents alike" as a single subgraph to hand to
+ * `buildDependencyGraph`/`topologicalSort` — the exact same pure functions
+ * the real dispatcher uses, so a preview can never drift from what actually
+ * runs. `rootId` is always included, even with no edges at all (a trivial
+ * single-node component).
+ */
+export function getConnectedComponentIds(rootId: string, edges: DependencyEdge[]): Set<string> {
+  const undirected = new Map<string, string[]>();
+  const addEdge = (a: string, b: string) => {
+    const list = undirected.get(a) ?? [];
+    list.push(b);
+    undirected.set(a, list);
+  };
+  for (const edge of edges) {
+    addEdge(edge.from, edge.to);
+    addEdge(edge.to, edge.from);
+  }
+
+  const visited = new Set<string>([rootId]);
+  const queue = [rootId];
+  while (queue.length > 0) {
+    const current = queue.shift() as string;
+    for (const neighbor of undirected.get(current) ?? []) {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+  }
+  return visited;
+}

@@ -5,6 +5,7 @@ import {
   computeDependencyGraph,
   type DependencyEdge,
   type DependencyNode,
+  getConnectedComponentIds,
   topologicalSort,
 } from './dependency-graph.js';
 
@@ -445,6 +446,40 @@ describe('buildDependentsByDependency + collectTransitiveDependents', () => {
   test('returns an empty set for a node with no edges at all', () => {
     expect(collectTransitiveDependents('lonely', buildDependentsByDependency([]))).toEqual(
       new Set(),
+    );
+  });
+});
+
+describe('getConnectedComponentIds', () => {
+  test('walks both directions of a chain from a middle node (db <- api <- proxy)', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api', action: 'update', source: 'label' },
+    ];
+    expect(getConnectedComponentIds('api', edges)).toEqual(new Set(['api', 'db', 'proxy']));
+  });
+
+  test('always includes the root even with no edges at all', () => {
+    expect(getConnectedComponentIds('lonely', [])).toEqual(new Set(['lonely']));
+  });
+
+  test('does not pull in a disjoint component', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api', to: 'db', action: 'update', source: 'label' },
+      { from: 'worker', to: 'queue', action: 'update', source: 'label' },
+    ];
+    expect(getConnectedComponentIds('api', edges)).toEqual(new Set(['api', 'db']));
+  });
+
+  test('de-duplicates a diamond reached via two paths', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api1', to: 'db', action: 'update', source: 'label' },
+      { from: 'api2', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api1', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api2', action: 'update', source: 'label' },
+    ];
+    expect(getConnectedComponentIds('proxy', edges)).toEqual(
+      new Set(['proxy', 'api1', 'api2', 'db']),
     );
   });
 });
