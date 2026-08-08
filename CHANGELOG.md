@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pinned `nanoid` to 3.3.18 (override; transitive dependency of `postcss` in the root, app, apps/demo, apps/web, and ui workspaces, and of `artillery` in the e2e workspace) for [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8) (CVE-2026-67213) and, in the e2e workspace which was still on 3.3.12, also [GHSA-28wg-ghj8-5hjv](https://github.com/advisories/GHSA-28wg-ghj8-5hjv) (CVE-2026-67214).
 - Bumped the `node:24-alpine` base image pin to the current digest (Node 24.19.0), picking up Node's July 29 2026 security release fixes (3 HIGH + 5 MEDIUM CVEs) that landed in 24.18.1.
 - Bumped the vendored `aquasec/trivy` build-stage pin from 0.72.0 to the current 0.73.0 digest, resolving 4 HIGH / 6 MEDIUM CVEs in its vendored Go dependencies (go-git, x/text, grpc, oras-go, stdlib).
+- Added a root `.trivyignore.yaml` suppressing AVD-DS-0002 (Dockerfile missing `USER`) with the same rationale already documented for the Dockerfile's `checkov:skip=CKV_DOCKER_3` comment and the existing qlty `trivy:DS-0002` triage rule: the entrypoint drops privileges at runtime via `su-exec` (`Docker.entrypoint.sh`), so no static `USER` instruction is needed.
 
 ### Fixed
 
