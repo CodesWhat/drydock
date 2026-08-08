@@ -10,8 +10,10 @@ import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
+import * as containerDependenciesRouter from './container-dependencies.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import * as debugRouter from './debug.js';
+import * as dependencyGroupsRouter from './dependency-groups.js';
 import { sendErrorResponse } from './error-response.js';
 import * as groupRouter from './group.js';
 import { isIconProxyApiPath } from './icons/route.js';
@@ -150,6 +152,9 @@ export function init(): express.Router {
   // Mount backup router BEFORE container router (/:id would shadow /backups)
   router.use('/containers', backupRouter.init());
 
+  // Mount container dependencies router BEFORE container router (/:id would shadow /dependencies)
+  router.use('/containers', containerDependenciesRouter.init());
+
   // Mount container router
   router.use('/containers', containerRouter.init());
 
@@ -161,6 +166,9 @@ export function init(): express.Router {
 
   // Mount fleet-aggregate stats router (dashboard summary, sibling of /containers)
   router.use('/stats', statsRouter.init());
+
+  // Mount dependency groups router (bulk dependency-chain update, sibling of /containers)
+  router.use('/dependency-groups', dependencyGroupsRouter.init());
 
   // Mount update-operations router (single-operation lookup by id)
   router.use('/update-operations', updateOperationsRouter.init());

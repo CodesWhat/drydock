@@ -20,6 +20,7 @@ const {
   const mockRouter = {
     use: vi.fn(),
     get: vi.fn(),
+    post: vi.fn(),
   };
   return {
     mockApp: {
