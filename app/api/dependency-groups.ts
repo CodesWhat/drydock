@@ -1,7 +1,12 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
-import { buildDependencyGraph, topologicalSort } from '../dependencies/dependency-graph.js';
+import {
+  buildDependencyGraph,
+  collectContainerIdsWithResolvedDependsOn,
+  resolveDependencyActionKind,
+  topologicalSort,
+} from '../dependencies/dependency-graph.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
@@ -41,7 +46,10 @@ function serializeRejectedUpdateRequest(rejected: RejectedContainerUpdateRequest
  * dispatched in, using the exact same buildDependencyGraph/topologicalSort
  * pair runAcceptedContainerUpdates partitions with internally, over the same
  * accepted-container set — so `wave` here is never a second, potentially
- * divergent, computation of dispatch order (design §4).
+ * divergent, computation of dispatch order (design §4). `actionKind` uses
+ * the same `resolveDependencyActionKind` the dispatcher itself uses, so it
+ * can't drift from which entries are actually restarted vs. updated either
+ * (PR #681 review #2/#3).
  */
 function annotateAcceptedWithWave(
   accepted: AcceptedContainerUpdateRequest[],
@@ -54,6 +62,7 @@ function annotateAcceptedWithWave(
       waveIndexById.set(id, index);
     }
   });
+  const containerIdsWithResolvedDependsOn = collectContainerIdsWithResolvedDependsOn(edges);
 
   return accepted.map((entry) => ({
     containerId: entry.container.id,
@@ -62,7 +71,7 @@ function annotateAcceptedWithWave(
     /* v8 ignore next -- defensive only: waveIndexById is built from this same
        accepted[] set, so every entry.container.id always has a match. */
     wave: waveIndexById.get(entry.container.id) ?? 0,
-    actionKind: entry.container.dependsOnAction === 'restart' ? 'restart' : 'update',
+    actionKind: resolveDependencyActionKind(entry.container, containerIdsWithResolvedDependsOn),
   }));
 }
 

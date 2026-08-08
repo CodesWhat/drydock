@@ -941,6 +941,7 @@ describe('request-update', () => {
             dependsOn: ['db'],
             dependsOnSource: 'label',
             dependsOnAction: 'restart',
+            updateAvailable: false,
           }),
           trigger: { type: 'docker', trigger: triggerFn },
         },
@@ -961,6 +962,58 @@ describe('request-update', () => {
       });
     });
 
+    test('dependsOnAction=restart with no resolved dependsOn edge dispatches through the normal trigger instead (PR #681 review #2)', async () => {
+      const triggerFn = vi.fn().mockResolvedValue(undefined);
+
+      await runAcceptedContainerUpdates([
+        {
+          operationId: 'op-orphan',
+          container: createDependentContainer({
+            id: 'c-orphan',
+            name: 'orphan',
+            dependsOnAction: 'restart',
+            updateAvailable: false,
+          }),
+          trigger: { type: 'docker', trigger: triggerFn },
+        },
+      ]);
+
+      expect(triggerFn).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-orphan' }), {
+        operationId: 'op-orphan',
+      });
+      expect(mockRestartDependentContainer).not.toHaveBeenCalled();
+    });
+
+    test('dependsOnAction=restart with its own pending update dispatches through the normal trigger instead of restarting (PR #681 review #3)', async () => {
+      const dbTrigger = vi.fn().mockResolvedValue(undefined);
+      const tdarrTrigger = vi.fn().mockResolvedValue(undefined);
+
+      await runAcceptedContainerUpdates([
+        {
+          operationId: 'op-db',
+          container: createDependentContainer({ id: 'db', name: 'db' }),
+          trigger: { type: 'docker', trigger: dbTrigger },
+        },
+        {
+          operationId: 'op-tdarr',
+          container: createDependentContainer({
+            id: 'c-tdarr',
+            name: 'tdarr-node',
+            dependsOn: ['db'],
+            dependsOnSource: 'label',
+            dependsOnAction: 'restart',
+            updateAvailable: true,
+          }),
+          trigger: { type: 'docker', trigger: tdarrTrigger },
+        },
+      ]);
+
+      expect(tdarrTrigger).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-tdarr' }), {
+        operationId: 'op-tdarr',
+      });
+      expect(mockRestartDependentContainer).not.toHaveBeenCalled();
+    });
+
     test('a failed restart is classified through the normal failure path and still cascades to its dependents', async () => {
       mockGetOperationById.mockImplementation((id: string) => ({
         id,
@@ -973,11 +1026,19 @@ describe('request-update', () => {
       await expect(
         runAcceptedContainerUpdates([
           {
+            operationId: 'op-db',
+            container: createDependentContainer({ id: 'db', name: 'db' }),
+            trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+          },
+          {
             operationId: 'op-tdarr',
             container: createDependentContainer({
               id: 'c-tdarr',
               name: 'tdarr-node',
+              dependsOn: ['db'],
+              dependsOnSource: 'label',
               dependsOnAction: 'restart',
+              updateAvailable: false,
             }),
             trigger: { type: 'docker', trigger: vi.fn() },
           },

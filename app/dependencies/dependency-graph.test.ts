@@ -1,11 +1,13 @@
 import {
   buildDependencyGraph,
   buildDependentsByDependency,
+  collectContainerIdsWithResolvedDependsOn,
   collectTransitiveDependents,
   computeDependencyGraph,
   type DependencyEdge,
   type DependencyNode,
   getConnectedComponentIds,
+  resolveDependencyActionKind,
   topologicalSort,
 } from './dependency-graph.js';
 
@@ -526,5 +528,67 @@ describe('getConnectedComponentIds', () => {
     expect(getConnectedComponentIds('proxy', edges)).toEqual(
       new Set(['proxy', 'api1', 'api2', 'db']),
     );
+  });
+});
+
+describe('collectContainerIdsWithResolvedDependsOn', () => {
+  test('collects the "from" side of every edge', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api', action: 'restart', source: 'label' },
+    ];
+    expect(collectContainerIdsWithResolvedDependsOn(edges)).toEqual(new Set(['api', 'proxy']));
+  });
+
+  test('is empty for an edgeless graph', () => {
+    expect(collectContainerIdsWithResolvedDependsOn([])).toEqual(new Set());
+  });
+});
+
+describe('resolveDependencyActionKind (PR #681 review #2/#3)', () => {
+  test('returns "update" when dependsOnAction is not "restart"', () => {
+    const ids = new Set(['c1']);
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: 'update', updateAvailable: false },
+        ids,
+      ),
+    ).toBe('update');
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: undefined, updateAvailable: false },
+        ids,
+      ),
+    ).toBe('update');
+  });
+
+  test('returns "restart" when the label is restart, the container has a resolved dependsOn edge, and no update of its own', () => {
+    const ids = new Set(['c1']);
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: 'restart', updateAvailable: false },
+        ids,
+      ),
+    ).toBe('restart');
+  });
+
+  test('returns "update" when dependsOnAction=restart but the container has no resolved dependsOn edge (#2)', () => {
+    const ids = new Set<string>();
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: 'restart', updateAvailable: false },
+        ids,
+      ),
+    ).toBe('update');
+  });
+
+  test('returns "update" when dependsOnAction=restart and has an edge, but the container has its own pending update (#3)', () => {
+    const ids = new Set(['c1']);
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: 'restart', updateAvailable: true },
+        ids,
+      ),
+    ).toBe('update');
   });
 });

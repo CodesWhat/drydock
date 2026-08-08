@@ -6,7 +6,9 @@ import {
 import {
   buildDependencyGraph,
   buildDependentsByDependency,
+  collectContainerIdsWithResolvedDependsOn,
   collectTransitiveDependents,
+  resolveDependencyActionKind,
   topologicalSort,
 } from '../dependencies/dependency-graph.js';
 import logger from '../log/index.js';
@@ -288,11 +290,14 @@ function prepareContainerUpdateRequest(
   // enforcement below. Reject only when there is genuinely no candidate.
   //
   // dd.depends_on.action=restart entries are exempt: a restart-kind dependent
-  // never carries its own image update by design (design §3) — it's admitted
-  // here so it gets a real operation record and passes through the same
-  // dedup/mode/hard-blocker gates as any other request, then the wave
-  // dispatcher (runAcceptedContainerUpdates) routes it to
-  // restartDependentContainer() instead of the normal trigger at dispatch time.
+  // is designed to never carry its own image update (design §3) — it's
+  // admitted here so it gets a real operation record and passes through the
+  // same dedup/mode/hard-blocker gates as any other request. Admission alone
+  // does not decide restart-vs-update dispatch: if this container turns out
+  // to have its own update anyway, or never resolved a dependsOn edge at
+  // all, the wave dispatcher's resolveDependencyActionKind (dependency-graph.ts)
+  // routes it through the normal trigger instead of
+  // restartDependentContainer() (PR #681 review #2/#3).
   if (
     !container.updateAvailable &&
     !(options.allowSoftPolicyOverride === true && hasRawUpdate(container)) &&
@@ -465,7 +470,11 @@ function markEntrySkippedDependency(
  * Entries whose `dependsOnAction` label resolves to `restart` are dispatched
  * via the dependency-chain restart primitive instead of the trigger's normal
  * pull/update lifecycle (no pull, no SecurityGate, no rollback monitor — a
- * same-image restart isn't an update).
+ * same-image restart isn't an update) — but only when genuinely restart-only:
+ * `resolveDependencyActionKind` requires a resolved `dependsOn` edge for this
+ * entry in this batch's graph AND no update of its own. A `restart` label
+ * with no resolved edge, or one whose own update is available, dispatches
+ * through the normal trigger instead (PR #681 review #2/#3).
  *
  * If an entry fails, its transitive dependents (via the resolved graph) are
  * never dispatched — they are terminalised as `skipped-dependency` instead,
@@ -492,6 +501,7 @@ export async function runAcceptedContainerUpdates(
   );
   const { waves } = topologicalSort(nodes, edges);
   const dependentsByDependency = buildDependentsByDependency(edges);
+  const containerIdsWithResolvedDependsOn = collectContainerIdsWithResolvedDependsOn(edges);
 
   if (unresolved.length > 0 || crossHostIgnored.length > 0) {
     log.warn(
@@ -531,7 +541,10 @@ export async function runAcceptedContainerUpdates(
       while (nextIndex < waveEntries.length) {
         const entry = waveEntries[nextIndex];
         nextIndex++;
-        const actionKind = entry.container.dependsOnAction === 'restart' ? 'restart' : 'update';
+        const actionKind = resolveDependencyActionKind(
+          entry.container,
+          containerIdsWithResolvedDependsOn,
+        );
         try {
           if (actionKind === 'restart') {
             await restartDependentContainer(entry.container);

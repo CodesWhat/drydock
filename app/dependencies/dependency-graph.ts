@@ -589,3 +589,43 @@ export function getConnectedComponentIds(rootId: string, edges: DependencyEdge[]
   }
   return visited;
 }
+
+/**
+ * Ids of containers that carry at least one resolved (successfully matched)
+ * outgoing `dependsOn` edge in this graph — i.e. containers that are
+ * genuinely a dependent of something, as opposed to merely carrying a
+ * `dependsOnAction` label with no `dependsOn` at all, or a `dependsOn` that
+ * failed to resolve to any candidate (PR #681 review #2).
+ */
+export function collectContainerIdsWithResolvedDependsOn(edges: DependencyEdge[]): Set<string> {
+  return new Set(edges.map((edge) => edge.from));
+}
+
+/**
+ * Whether a container should be dispatched via the restart-only primitive
+ * rather than its normal update trigger (design §3; PR #681 review #2/#3).
+ * `dependsOnAction: 'restart'` alone is not sufficient:
+ * - it must have a resolved outgoing `dependsOn` edge in THIS graph — a
+ *   `dependsOnAction=restart` label with no (or no resolved) `dependsOn`
+ *   never designates an actual dependent, so it must not be silently turned
+ *   into a no-op restart of a container that was never part of any chain;
+ * - it must carry no update of its own — a restart-only dependent is
+ *   designed to never have its own pending image update, but if one is
+ *   present anyway (e.g. a new tag was pushed for it too), that update
+ *   takes priority over the restart-only shortcut rather than being
+ *   silently skipped.
+ * Any other `dependsOnAction: 'restart'` container falls back to a normal
+ * update — this is the single source of truth shared by the real dispatcher
+ * (`runAcceptedContainerUpdates`) and every preview/annotation surface, so
+ * none of them can drift from what actually runs.
+ */
+export function resolveDependencyActionKind(
+  container: Pick<Container, 'id' | 'dependsOnAction' | 'updateAvailable'>,
+  containerIdsWithResolvedDependsOn: ReadonlySet<string>,
+): 'update' | 'restart' {
+  return container.dependsOnAction === 'restart' &&
+    !container.updateAvailable &&
+    containerIdsWithResolvedDependsOn.has(container.id)
+    ? 'restart'
+    : 'update';
+}

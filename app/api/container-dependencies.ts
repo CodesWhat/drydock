@@ -2,7 +2,9 @@ import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import {
   buildDependencyGraph,
+  collectContainerIdsWithResolvedDependsOn,
   getConnectedComponentIds,
+  resolveDependencyActionKind,
   topologicalSort,
 } from '../dependencies/dependency-graph.js';
 import type { Container } from '../model/container.js';
@@ -86,6 +88,7 @@ function previewUpdateChain(req: Request, res: Response) {
   );
   const { nodes, edges } = buildDependencyGraph(chainContainers);
   const { waves } = topologicalSort(nodes, edges);
+  const containerIdsWithResolvedDependsOn = collectContainerIdsWithResolvedDependsOn(edges);
 
   res.status(200).json({
     waves: waves.map((wave, index) => ({
@@ -95,7 +98,12 @@ function previewUpdateChain(req: Request, res: Response) {
         return {
           id: containerId,
           name: container?.name,
-          actionKind: container?.dependsOnAction === 'restart' ? 'restart' : 'update',
+          /* v8 ignore next -- defensive only: containerById is built from the
+             same chainContainers set buildDependencyGraph/topologicalSort ran
+             over, so every wave containerId always has a match. */
+          actionKind: container
+            ? resolveDependencyActionKind(container, containerIdsWithResolvedDependsOn)
+            : 'update',
         };
       }),
     })),
