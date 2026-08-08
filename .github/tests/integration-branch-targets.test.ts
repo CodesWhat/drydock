@@ -11,6 +11,7 @@ import { loadWorkflow, type WorkflowStep } from './workflow-test-utils';
 const crowdinPath = fileURLToPath(new URL('../workflows/i18n-crowdin.yml', import.meta.url));
 const playwrightPath = fileURLToPath(new URL('../workflows/e2e-playwright.yml', import.meta.url));
 const releaseCutPath = fileURLToPath(new URL('../workflows/release-cut.yml', import.meta.url));
+const grypePath = fileURLToPath(new URL('../workflows/security-grype.yml', import.meta.url));
 const renovatePath = fileURLToPath(new URL('../../renovate.json', import.meta.url));
 
 function releaseSteps(): WorkflowStep[] {
@@ -94,6 +95,15 @@ test('Crowdin uploads source strings from the integration branch', () => {
 
   expect(branches).toContain('dev/**');
   expect(branches).toContain('main');
+});
+
+test('Grype scans pull requests into the integration branch, not just main', () => {
+  const pr = triggers(grypePath).pull_request as (BranchFilter & { paths?: string[] }) | undefined;
+
+  // main-only left every dev/vX.Y dependency or Dockerfile PR unscanned until
+  // the pre-cut sync — the scan has to run where the change actually lands.
+  expect(pr?.branches).toStrictEqual(['main', 'dev/**']);
+  expect(pr?.paths).toContain('Dockerfile');
 });
 
 test('Playwright gates pull requests into the integration branch, not just main', () => {

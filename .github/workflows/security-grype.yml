@@ -9,7 +9,10 @@ run-name: >-
 on:
   workflow_dispatch:
   pull_request:
-    branches: [main]
+    # dev/** so dependency/image-surface PRs are scanned on the integration
+    # branch they actually land on — main-only would leave every dev/vX.Y PR
+    # unscanned until the pre-cut sync.
+    branches: [main, 'dev/**']
     # Grype matches lockfile-resolved versions, so only dependency / image
     # surface changes can move its findings — scope PR runs to those so
     # source- or doc-only PRs stay fast. Source SAST is CodeQL's job

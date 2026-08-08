@@ -1,10 +1,10 @@
 # checkov:skip=CKV_DOCKER_3: entrypoint uses su-exec for runtime privilege drop
 # Trivy publishes a multi-arch image and installs its binary at this path.
 # Pin the image index so every target architecture resolves reproducibly.
-FROM aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f AS trivy-bin
+FROM aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c AS trivy-bin
 
 # Common Stage
-FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS base
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS base
 WORKDIR /home/node/app
 
 LABEL maintainer="CodesWhat"
