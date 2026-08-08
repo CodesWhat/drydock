@@ -1,12 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useFocusTrap } from '../composables/useFocusTrap';
 import { useShortcutsOverlay } from '../composables/useShortcutsOverlay';
 
 const { t } = useI18n();
 
 const { visible, close } = useShortcutsOverlay();
 const dialogTitleId = 'keyboard-shortcuts-title';
+const dialogRef = ref<HTMLElement | null>(null);
+
+useFocusTrap(dialogRef, visible);
 
 const shortcuts = computed(() => [
   { keys: ['/'], description: t('appShell.layout.shortcuts.focusSearch') },
@@ -22,9 +26,11 @@ const shortcuts = computed(() => [
       <div v-if="visible"
            class="fixed inset-0 z-overlay bg-black/50 backdrop-blur-sm flex items-start justify-center pt-[20vh]"
            @pointerdown.self="close">
-        <div class="relative w-full max-w-[var(--dd-layout-dialog-max-width)] min-w-[var(--dd-layout-dialog-min-width)] mx-4 dd-rounded-lg overflow-hidden"
+        <div ref="dialogRef"
+             class="relative w-full max-w-[var(--dd-layout-dialog-max-width)] min-w-[var(--dd-layout-dialog-min-width)] mx-4 dd-rounded-lg overflow-hidden"
              data-test="keyboard-shortcuts-overlay"
              role="dialog"
+             tabindex="-1"
              aria-modal="true"
              :aria-labelledby="dialogTitleId"
              :style="{

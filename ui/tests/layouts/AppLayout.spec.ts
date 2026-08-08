@@ -928,6 +928,21 @@ describe('AppLayout', () => {
       expect((wrapper.vm as unknown as { showSearch: boolean }).showSearch).toBe(true);
     });
 
+    it('pressing "/" closes an open mobile menu before opening search, matching the sidebar search button', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      (wrapper.vm as unknown as { isMobileMenuOpen: boolean }).isMobileMenuOpen = true;
+      await flushPromises();
+
+      globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: '/' }));
+      await flushPromises();
+
+      expect((wrapper.vm as unknown as { isMobileMenuOpen: boolean }).isMobileMenuOpen).toBe(false);
+      expect((wrapper.vm as unknown as { showSearch: boolean }).showSearch).toBe(true);
+    });
+
     it('pressing Escape closes the search overlay via the shortcuts composable', async () => {
       const wrapper = mountLayout();
       mountedWrappers.push(wrapper);

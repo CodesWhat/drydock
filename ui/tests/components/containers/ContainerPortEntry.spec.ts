@@ -17,6 +17,16 @@ describe('ContainerPortEntry', () => {
     expect(wrapper.find('[data-test="container-port-text"]').exists()).toBe(false);
   });
 
+  it('applies min-w-0 to the link so long labels ellipsize instead of overflowing the flex row', () => {
+    const wrapper = mountWithPlugins(ContainerPortEntry, {
+      props: { href: 'http://example.test:8080', label: '8080->80/tcp' },
+    });
+
+    const link = wrapper.get('[data-test="container-port-link"]');
+    expect(link.classes()).toContain('min-w-0');
+    expect(link.classes()).toContain('truncate');
+  });
+
   it('renders a span with the label text and no anchor when href is absent', () => {
     const wrapper = mountWithPlugins(ContainerPortEntry, {
       props: { label: '443/tcp' },
@@ -26,6 +36,16 @@ describe('ContainerPortEntry', () => {
     expect(text.element.tagName).toBe('SPAN');
     expect(text.text()).toBe('443/tcp');
     expect(wrapper.find('[data-test="container-port-link"]').exists()).toBe(false);
+  });
+
+  it('applies min-w-0 to the fallback span so long labels ellipsize instead of overflowing the flex row', () => {
+    const wrapper = mountWithPlugins(ContainerPortEntry, {
+      props: { label: '443/tcp' },
+    });
+
+    const text = wrapper.get('[data-test="container-port-text"]');
+    expect(text.classes()).toContain('min-w-0');
+    expect(text.classes()).toContain('truncate');
   });
 
   it('stops click propagation on the link so it does not activate a clickable parent row', async () => {

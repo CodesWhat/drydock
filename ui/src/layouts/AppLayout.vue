@@ -1012,6 +1012,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 useKeyboardShortcuts({
   onFocusSearch: () => {
+    isMobileMenuOpen.value = false;
     showSearch.value = true;
   },
   onEscapeSearch: () => {
