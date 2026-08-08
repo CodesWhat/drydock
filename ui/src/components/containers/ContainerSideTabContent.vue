@@ -9,6 +9,7 @@ import UpdateStatusPanel from './UpdateStatusPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
+import ContainerPortEntry from './ContainerPortEntry.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
@@ -21,6 +22,8 @@ import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
 import { updateInsightColor } from '../../utils/display';
 import { findDryRunActionTrigger } from '../../views/containers/useContainerTriggers';
+import { enrichContainerPorts } from '../../utils/ports';
+import { useAgentHosts } from '../../composables/useAgentHosts';
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
@@ -162,6 +165,15 @@ const {
   updateMode,
 } = useContainersViewTemplateContext();
 
+const { resolveHost } = useAgentHosts();
+const enrichedPorts = computed(() =>
+  enrichContainerPorts(
+    selectedContainer.value.details.ports,
+    selectedContainer.value.portLabel,
+    resolveHost(selectedContainer.value.agent, window.location.hostname),
+  ),
+);
+
 const dryRunTrigger = computed(() => findDryRunActionTrigger(detailTriggers.value));
 const dryRunTriggerId = computed(() =>
   dryRunTrigger.value ? getTriggerKey(dryRunTrigger.value) : undefined,
@@ -208,11 +220,11 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
             <div v-if="selectedContainer.details.ports.length > 0">
               <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageOverview.ports') }}</div>
               <div class="space-y-1">
-                <div v-for="port in selectedContainer.details.ports" :key="port"
+                <div v-for="entry in enrichedPorts" :key="entry.raw"
                      class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus font-mono"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <AppIcon name="network" :size="11" class="dd-text-muted" />
-                  <span class="dd-text">{{ port }}</span>
+                  <ContainerPortEntry :href="entry.href" :label="entry.label" />
                 </div>
               </div>
             </div>
