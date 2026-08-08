@@ -157,6 +157,7 @@ export interface ApiContainerInput {
   status?: unknown;
   watcher?: unknown;
   agent?: unknown;
+  portLabel?: unknown;
   image?: ApiContainerImage | null;
   result?: ApiContainerResult | null;
   updateAvailable?: unknown;
@@ -932,6 +933,8 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     softwareVersion: asNonEmptyString(apiContainer.image?.softwareVersion),
     imageCreated: deriveImageCreated(apiContainer),
     server: deriveServer(apiContainer),
+    agent: asNonEmptyString(apiContainer.agent),
+    portLabel: asNonEmptyString(apiContainer.portLabel),
     includeTags: asNonEmptyString(apiContainer.includeTags),
     excludeTags: asNonEmptyString(apiContainer.excludeTags),
     transformTags: asNonEmptyString(apiContainer.transformTags),

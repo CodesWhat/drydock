@@ -171,6 +171,8 @@ export interface Container {
   softwareVersion?: string;
   imageCreated?: string;
   server: string;
+  agent?: string;
+  portLabel?: string;
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;

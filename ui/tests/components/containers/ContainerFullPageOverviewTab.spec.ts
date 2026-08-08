@@ -181,4 +181,36 @@ describe('ContainerFullPageOverviewTab', () => {
 
     expect(wrapper.text()).toContain('Up to date');
   });
+
+  it('renders a published port with no dd.port.label as a link with the raw port string as text', () => {
+    selectedContainer.value = makeContainer({
+      details: { ports: ['8080->80/tcp'], volumes: [], env: [], labels: [] },
+    });
+
+    const wrapper = mountComponent();
+    const link = wrapper.get('[data-test="container-port-link"]');
+    expect(link.text()).toBe('8080->80/tcp');
+  });
+
+  it('renders a published port with a matching dd.port.label as a link with the override label as text', () => {
+    selectedContainer.value = makeContainer({
+      portLabel: '80=Web UI',
+      details: { ports: ['8080->80/tcp'], volumes: [], env: [], labels: [] },
+    });
+
+    const wrapper = mountComponent();
+    const link = wrapper.get('[data-test="container-port-link"]');
+    expect(link.text()).toBe('Web UI');
+  });
+
+  it('renders an unpublished/internal-only port as plain text with no link', () => {
+    selectedContainer.value = makeContainer({
+      details: { ports: ['443/tcp'], volumes: [], env: [], labels: [] },
+    });
+
+    const wrapper = mountComponent();
+    expect(wrapper.find('[data-test="container-port-link"]').exists()).toBe(false);
+    const text = wrapper.get('[data-test="container-port-text"]');
+    expect(text.text()).toBe('443/tcp');
+  });
 });
