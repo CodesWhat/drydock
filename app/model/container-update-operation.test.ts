@@ -9,6 +9,7 @@ import {
   isContainerUpdateOperationPhase,
   isContainerUpdateOperationStatus,
   isExpiredContainerUpdateOperationPhase,
+  isSkippedDependencyContainerUpdateOperationPhase,
   isTerminalContainerUpdateOperationPhase,
   isTerminalContainerUpdateOperationPhaseForStatus,
   isTerminalContainerUpdateOperationStatus,
@@ -128,5 +129,55 @@ describe('container update operation guards', () => {
 
   test('isTerminalContainerUpdateOperationStatus accepts expired', () => {
     expect(isTerminalContainerUpdateOperationStatus('expired')).toBe(true);
+  });
+
+  test('isSkippedDependencyContainerUpdateOperationPhase identifies skipped-dependency phases', () => {
+    expect(isSkippedDependencyContainerUpdateOperationPhase('skipped-dependency')).toBe(true);
+    expect(isSkippedDependencyContainerUpdateOperationPhase('failed')).toBe(false);
+    expect(isSkippedDependencyContainerUpdateOperationPhase('queued')).toBe(false);
+    expect(isSkippedDependencyContainerUpdateOperationPhase(123)).toBe(false);
+    expect(isSkippedDependencyContainerUpdateOperationPhase(undefined)).toBe(false);
+  });
+
+  test('isTerminalContainerUpdateOperationPhase accepts skipped-dependency', () => {
+    expect(isTerminalContainerUpdateOperationPhase('skipped-dependency')).toBe(true);
+  });
+
+  test('isTerminalContainerUpdateOperationPhaseForStatus handles skipped-dependency status', () => {
+    expect(
+      isTerminalContainerUpdateOperationPhaseForStatus('skipped-dependency', 'skipped-dependency'),
+    ).toBe(true);
+    expect(isTerminalContainerUpdateOperationPhaseForStatus('skipped-dependency', 'failed')).toBe(
+      false,
+    );
+  });
+
+  test('getDefaultTerminalContainerUpdateOperationPhase returns skipped-dependency for skipped-dependency status', () => {
+    expect(getDefaultTerminalContainerUpdateOperationPhase('skipped-dependency')).toBe(
+      'skipped-dependency',
+    );
+  });
+
+  test('resolveTerminalContainerUpdateOperationPhase handles skipped-dependency status', () => {
+    expect(resolveTerminalContainerUpdateOperationPhase('skipped-dependency', undefined)).toBe(
+      'skipped-dependency',
+    );
+    expect(
+      resolveTerminalContainerUpdateOperationPhase('skipped-dependency', 'skipped-dependency'),
+    ).toBe('skipped-dependency');
+  });
+
+  test('CONTAINER_UPDATE_OPERATION_PHASES includes skipped-dependency', () => {
+    expect(
+      (CONTAINER_UPDATE_OPERATION_PHASES as readonly string[]).includes('skipped-dependency'),
+    ).toBe(true);
+  });
+
+  test('isContainerUpdateOperationStatus accepts skipped-dependency', () => {
+    expect(isContainerUpdateOperationStatus('skipped-dependency')).toBe(true);
+  });
+
+  test('isTerminalContainerUpdateOperationStatus accepts skipped-dependency', () => {
+    expect(isTerminalContainerUpdateOperationStatus('skipped-dependency')).toBe(true);
   });
 });

@@ -1179,7 +1179,15 @@ export const openApiSchemas = {
       id: { type: 'string' },
       status: {
         type: 'string',
-        enum: ['queued', 'in-progress', 'succeeded', 'failed', 'rolled-back', 'expired'],
+        enum: [
+          'queued',
+          'in-progress',
+          'succeeded',
+          'failed',
+          'rolled-back',
+          'expired',
+          'skipped-dependency',
+        ],
       },
       phase: { type: 'string' },
       kind: { type: 'string' },

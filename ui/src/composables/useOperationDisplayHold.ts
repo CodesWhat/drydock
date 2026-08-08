@@ -667,7 +667,12 @@ export function applyUpdateOperationSseToHold(
     // The terminal-event consumers only attach a failure reason for `failed` /
     // `rolled-back`, so an expired op clears silently with no failure styling and
     // no toast (the backend emits no update-failed event for it). See issue #410.
-    terminalStatus === 'expired'
+    terminalStatus === 'expired' ||
+    // `skipped-dependency` is terminal too (v1.7 Phase 6.1, #219): a
+    // dependency-ordered wave dispatch never attempted this container because
+    // an upstream dependency in its chain failed or was deferred, so it also
+    // clears silently with no failure styling and no toast.
+    terminalStatus === 'skipped-dependency'
   ) {
     const toastName =
       (typeof container?.name === 'string' && container.name.length > 0
