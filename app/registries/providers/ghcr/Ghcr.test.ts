@@ -256,7 +256,7 @@ describe('GitHub Container Registry', () => {
 
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
-      url: 'https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100&page=1',
+      url: 'https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100',
       headers: {
         Accept: 'application/vnd.github+json',
         Authorization: 'Bearer testtoken',
@@ -286,7 +286,7 @@ describe('GitHub Container Registry', () => {
 
     expect(axios).toHaveBeenNthCalledWith(1, {
       method: 'GET',
-      url: 'https://api.github.com/orgs/octocat/packages/container/demo/versions?per_page=100&page=1',
+      url: 'https://api.github.com/orgs/octocat/packages/container/demo/versions?per_page=100',
       headers: {
         Accept: 'application/vnd.github+json',
         Authorization: 'Bearer testtoken',
@@ -294,7 +294,7 @@ describe('GitHub Container Registry', () => {
     });
     expect(axios).toHaveBeenNthCalledWith(2, {
       method: 'GET',
-      url: 'https://api.github.com/users/octocat/packages/container/demo/versions?per_page=100&page=1',
+      url: 'https://api.github.com/users/octocat/packages/container/demo/versions?per_page=100',
       headers: {
         Accept: 'application/vnd.github+json',
         Authorization: 'Bearer testtoken',
@@ -487,8 +487,8 @@ describe('GitHub Container Registry', () => {
     expect(ghcr.publishedAtIsPushDate).toBe(true);
   });
 
-  test('should paginate and return a tag found on page 2 of org endpoint', async () => {
-    const fullPage = Array.from({ length: 100 }, (_, i) => ({
+  test('should paginate via the Link header and return a tag found on page 2 of org endpoint', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({
       updated_at: '2026-01-01T00:00:00.000Z',
       metadata: { container: { tags: [`v0.${i}.0`] } },
     }));
@@ -498,8 +498,15 @@ describe('GitHub Container Registry', () => {
         metadata: { container: { tags: ['target-tag'] } },
       },
     ];
+    const page2Url =
+      'https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100&page=2';
 
-    axios.mockResolvedValueOnce({ data: fullPage }).mockResolvedValueOnce({ data: page2 });
+    axios
+      .mockResolvedValueOnce({
+        data: page1,
+        headers: { link: `<${page2Url}>; rel="next", <${page2Url}>; rel="last"` },
+      })
+      .mockResolvedValueOnce({ data: page2, headers: {} });
 
     const publishedAt = await ghcr.getImagePublishedAt({
       name: 'acme/widgets',
@@ -510,23 +517,57 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledTimes(2);
     expect(axios).toHaveBeenNthCalledWith(1, {
       method: 'GET',
-      url: 'https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100&page=1',
+      url: 'https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100',
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
     });
+    // Follows the literal Link: rel="next" URL, not a reconstructed page=N query param.
     expect(axios).toHaveBeenNthCalledWith(2, {
       method: 'GET',
-      url: 'https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100&page=2',
+      url: page2Url,
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
     });
   });
 
-  test('should stop paginating at a short page and return undefined when tag is never found', async () => {
-    const shortPage = Array.from({ length: 50 }, (_, i) => ({
-      updated_at: '2026-01-01T00:00:00.000Z',
-      metadata: { container: { tags: [`v0.${i}.0`] } },
-    }));
+  test('should follow Link-header pagination past the old 10-page cap and find a tag on page 15', async () => {
+    const buildPage = (n: number, tags: string[]) => [
+      { updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags } } },
+    ];
+    for (let page = 1; page <= 14; page++) {
+      const nextUrl = `https://api.github.com/orgs/acme/packages/container/big-package/versions?per_page=100&page=${page + 1}`;
+      axios.mockResolvedValueOnce({
+        data: buildPage(page, [`not-it-${page}`]),
+        headers: { link: `<${nextUrl}>; rel="next"` },
+      });
+    }
+    axios.mockResolvedValueOnce({
+      data: [
+        {
+          updated_at: '2026-07-01T00:00:00.000Z',
+          metadata: { container: { tags: ['deep-page-tag'] } },
+        },
+      ],
+      headers: {},
+    });
 
-    axios.mockResolvedValueOnce({ data: shortPage });
+    const publishedAt = await ghcr.getImagePublishedAt({
+      name: 'acme/big-package',
+      tag: { value: 'deep-page-tag' },
+    });
+
+    expect(publishedAt).toBe('2026-07-01T00:00:00.000Z');
+    expect(axios).toHaveBeenCalledTimes(15);
+  });
+
+  test('treats a Link header with only rel="last" (no rel="next") as the natural end of the list', async () => {
+    axios.mockResolvedValueOnce({
+      data: [
+        { updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['v1'] } } },
+      ],
+      headers: {
+        link: '<https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100&page=1>; rel="last"',
+      },
+    });
+    const warnSpy = vi.spyOn(ghcr.log, 'warn');
 
     const publishedAt = await ghcr.getImagePublishedAt({
       name: 'acme/widgets',
@@ -534,42 +575,88 @@ describe('GitHub Container Registry', () => {
     });
 
     expect(publishedAt).toBeUndefined();
-    // Only one page fetched — short page stops the loop, page 2 never requested
     expect(axios).toHaveBeenCalledTimes(1);
-    expect(axios).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: 'https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100&page=1',
-      }),
-    );
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
-  test('should stop pagination at the 10-page cap and return undefined', async () => {
-    const fullPage = Array.from({ length: 100 }, (_, i) => ({
-      updated_at: '2026-01-01T00:00:00.000Z',
-      metadata: { container: { tags: [`v${i}.0.0`] } },
-    }));
-
-    for (let i = 0; i < 10; i++) {
-      axios.mockResolvedValueOnce({ data: fullPage });
-    }
+  test('reaches the natural end of the list (no Link header) with the tag never found — no warning', async () => {
+    axios.mockResolvedValueOnce({
+      data: [
+        { updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['v1'] } } },
+      ],
+      headers: {},
+    });
+    const warnSpy = vi.spyOn(ghcr.log, 'warn');
 
     const publishedAt = await ghcr.getImagePublishedAt({
-      name: 'acme/big-package',
+      name: 'acme/widgets',
       tag: { value: 'not-here' },
     });
 
     expect(publishedAt).toBeUndefined();
-    // Exactly 10 pages fetched — page 11 must never be called
-    expect(axios).toHaveBeenCalledTimes(10);
-    expect(axios).toHaveBeenLastCalledWith({
-      method: 'GET',
-      url: 'https://api.github.com/orgs/acme/packages/container/big-package/versions?per_page=100&page=10',
-      headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
-    });
+    // No Link: rel="next" header — the list ended naturally, so only one page is fetched.
+    expect(axios).toHaveBeenCalledTimes(1);
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  test('stops at the configurable safety cap when Link: rel="next" is present indefinitely, logs a warning', async () => {
+    vi.resetModules();
+    process.env.DD_GHCR_VERSIONS_MAX_PAGES = '5';
+    try {
+      const { default: FreshGhcr } = await import('./Ghcr.js');
+      const freshAxios = (await import('axios')).default as unknown as ReturnType<typeof vi.fn>;
+      (freshAxios as any).mockReset();
+      (freshAxios as any).isAxiosError = (err: unknown): boolean =>
+        err != null &&
+        typeof err === 'object' &&
+        (err as { isAxiosError?: boolean }).isAxiosError === true;
+
+      const freshGhcr = new FreshGhcr();
+      await freshGhcr.register('registry', 'ghcr', 'test', {
+        username: 'testuser',
+        token: 'testtoken',
+      });
+      const warnSpy = vi.spyOn(freshGhcr.log, 'warn');
+
+      const nextUrl =
+        'https://api.github.com/orgs/acme/packages/container/endless/versions?per_page=100&page=next';
+      (freshAxios as any).mockResolvedValue({
+        data: [
+          { updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['nope'] } } },
+        ],
+        headers: { link: `<${nextUrl}>; rel="next"` },
+      });
+
+      const publishedAt = await freshGhcr.getImagePublishedAt({
+        name: 'acme/endless',
+        tag: { value: 'never-found' },
+      });
+
+      expect(publishedAt).toBeUndefined();
+      // The org lookup never 404s, so only the org branch runs; it stops exactly
+      // at the 5-page cap even though a Link: rel="next" header keeps offering more.
+      expect(freshAxios).toHaveBeenCalledTimes(5);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('exceeded 5 pages'));
+    } finally {
+      delete process.env.DD_GHCR_VERSIONS_MAX_PAGES;
+      vi.resetModules();
+    }
+  });
+
+  test('DD_GHCR_VERSIONS_MAX_PAGES env override is respected', async () => {
+    vi.resetModules();
+    process.env.DD_GHCR_VERSIONS_MAX_PAGES = '3';
+    try {
+      const fresh = await import('./Ghcr.js');
+      expect(fresh.GHCR_VERSIONS_MAX_PAGES).toBe(3);
+    } finally {
+      delete process.env.DD_GHCR_VERSIONS_MAX_PAGES;
+      vi.resetModules();
+    }
   });
 
   test('should paginate the user endpoint after org 404 and return a tag found on page 2', async () => {
-    const fullPage = Array.from({ length: 100 }, (_, i) => ({
+    const page1 = Array.from({ length: 100 }, (_, i) => ({
       updated_at: '2026-01-01T00:00:00.000Z',
       metadata: { container: { tags: [`v0.${i}.0`] } },
     }));
@@ -579,11 +666,16 @@ describe('GitHub Container Registry', () => {
         metadata: { container: { tags: ['user-page2-tag'] } },
       },
     ];
+    const page2Url =
+      'https://api.github.com/users/octocat/packages/container/demo/versions?per_page=100&page=2';
 
     axios
       .mockRejectedValueOnce(makeAxiosError(404)) // org 404
-      .mockResolvedValueOnce({ data: fullPage }) // user page 1: no match
-      .mockResolvedValueOnce({ data: page2 }); // user page 2: match
+      .mockResolvedValueOnce({
+        data: page1,
+        headers: { link: `<${page2Url}>; rel="next"` },
+      }) // user page 1: no match
+      .mockResolvedValueOnce({ data: page2, headers: {} }); // user page 2: match
 
     const publishedAt = await ghcr.getImagePublishedAt({
       name: 'octocat/demo',
@@ -594,12 +686,12 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledTimes(3);
     expect(axios).toHaveBeenNthCalledWith(2, {
       method: 'GET',
-      url: 'https://api.github.com/users/octocat/packages/container/demo/versions?per_page=100&page=1',
+      url: 'https://api.github.com/users/octocat/packages/container/demo/versions?per_page=100',
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
     });
     expect(axios).toHaveBeenNthCalledWith(3, {
       method: 'GET',
-      url: 'https://api.github.com/users/octocat/packages/container/demo/versions?per_page=100&page=2',
+      url: page2Url,
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
     });
   });
