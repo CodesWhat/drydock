@@ -31,6 +31,7 @@ import {
   getUpdatePolicyOverrides,
 } from '../model/update-policy.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
+import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import { initCollection } from './util.js';
 
 let containers: ReturnType<typeof initCollection> | undefined;
@@ -1081,6 +1082,7 @@ export function insertContainer(container) {
     if (lifecycleEntry) {
       if (lifecycleEntry.expiresAt <= Date.now()) {
         updateLifecycleCache.delete(lifecycleCacheKey);
+        updateLifecycleCacheStore.deleteRecord(lifecycleCacheKey);
       } else if (getResultSignature(container) === lifecycleEntry.resultSignature) {
         if (hasRawUpdate(container)) {
           if (
@@ -1108,8 +1110,10 @@ export function insertContainer(container) {
           }
         }
         updateLifecycleCache.delete(lifecycleCacheKey);
+        updateLifecycleCacheStore.deleteRecord(lifecycleCacheKey);
       } else {
         updateLifecycleCache.delete(lifecycleCacheKey);
+        updateLifecycleCacheStore.deleteRecord(lifecycleCacheKey);
       }
     }
   }
@@ -1523,7 +1527,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
     ) {
       const lifecycleCacheKey = toCacheKey(containerRaw.watcher, containerRaw.name);
       updateLifecycleCache.delete(lifecycleCacheKey);
-      updateLifecycleCache.set(lifecycleCacheKey, {
+      const lifecycleEntry: UpdateLifecycleCacheEntry = {
         updateDetectedAt: containerRaw.updateDetectedAt,
         firstSeenAt:
           typeof containerRaw.firstSeenAt === 'string' && containerRaw.firstSeenAt.length > 0
@@ -1536,12 +1540,19 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
             : undefined,
         resultSignature: getResultSignature(containerRaw),
         expiresAt: Date.now() + UPDATE_LIFECYCLE_CACHE_TTL_MS,
-      });
+      };
+      updateLifecycleCache.set(lifecycleCacheKey, lifecycleEntry);
+      // #556: write-through to the durable store so this stash survives the
+      // cross-process recreation that IS drydock's own self-update (recreate
+      // action -> SIGTERM -> shutdown()'s store.save() -> new process ->
+      // rehydrateUpdateLifecycleCacheFromStore()).
+      updateLifecycleCacheStore.upsertRecord({ cacheKey: lifecycleCacheKey, ...lifecycleEntry });
       if (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
         const nowMs = Date.now();
         for (const [expiredKey, expiredEntry] of updateLifecycleCache.entries()) {
           if (expiredEntry.expiresAt <= nowMs) {
             updateLifecycleCache.delete(expiredKey);
+            updateLifecycleCacheStore.deleteRecord(expiredKey);
           }
         }
       }
@@ -1552,6 +1563,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
           break;
         }
         updateLifecycleCache.delete(oldestLifecycleKey);
+        updateLifecycleCacheStore.deleteRecord(oldestLifecycleKey);
       }
     }
     if (!isRollbackContainerName(container.name)) {
@@ -1560,6 +1572,29 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
         replacementExpected: options.replacementExpected,
       });
     }
+  }
+}
+
+/**
+ * Repopulate the in-memory updateLifecycleCache Map from its durable store
+ * counterpart. Called once at startup (see store/index.ts's createCollections())
+ * after both the containers collection and the update-lifecycle-cache collection
+ * have been created. Drops any record whose TTL already lapsed while the process
+ * was down rather than resurrecting a stale stash (#556).
+ */
+export function rehydrateUpdateLifecycleCacheFromStore(): void {
+  const nowMs = Date.now();
+  for (const record of updateLifecycleCacheStore.listRecords()) {
+    if (record.expiresAt <= nowMs) {
+      continue;
+    }
+    updateLifecycleCache.set(record.cacheKey, {
+      updateDetectedAt: record.updateDetectedAt,
+      firstSeenAt: record.firstSeenAt,
+      maturityGatePendingSince: record.maturityGatePendingSince,
+      resultSignature: record.resultSignature,
+      expiresAt: record.expiresAt,
+    });
   }
 }
 

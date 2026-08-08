@@ -5,6 +5,7 @@ import { createContainerFixture } from '../test/helpers.js';
 import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
 import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
 import * as container from './container.js';
+import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 
 vi.mock('./migrate');
 vi.mock('../event');
@@ -5293,6 +5294,264 @@ describe('updateLifecycleCache carry-forward', () => {
     const inserted = container.insertContainer(newFixture);
     // firstSeenAt must not be overwritten by cached value
     expect(inserted.firstSeenAt).toBe(incomingFirstSeenAt);
+  });
+});
+
+// #556: updateLifecycleCache (see the "updateLifecycleCache carry-forward" describe block
+// above) previously lived only in a bare process-memory Map, invisible to store.save()'s
+// SIGTERM flush. These tests wire up the real update-lifecycle-cache.ts module alongside a
+// fake in-memory "collection" that stands in for the on-disk dd.json across a simulated
+// process restart, and assert the write-through/delete-through/rehydration contract.
+describe('updateLifecycleCache store persistence (#556)', () => {
+  function makeDigestUpdateFixture(overrides: Record<string, unknown> = {}) {
+    const base = createContainerFixture();
+    return {
+      ...base,
+      watcher: 'local',
+      name: 'myapp',
+      image: {
+        ...base.image,
+        digest: { watch: true, value: 'sha256:old', repo: undefined },
+      },
+      result: { tag: 'version', digest: 'sha256:new' },
+      ...overrides,
+    };
+  }
+
+  function createLifecycleStoreCollection(
+    initialDocs: updateLifecycleCacheStore.UpdateLifecycleCacheRecord[] = [],
+  ) {
+    const docs = [...initialDocs];
+    return {
+      docs,
+      findOne: vi.fn(
+        (
+          query: Record<string, unknown>,
+        ): updateLifecycleCacheStore.UpdateLifecycleCacheRecord | null => {
+          const match = docs.find((doc) =>
+            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
+          );
+          return match ?? null;
+        },
+      ),
+      find: vi.fn(
+        (
+          query?: Record<string, unknown>,
+        ): updateLifecycleCacheStore.UpdateLifecycleCacheRecord[] => {
+          if (!query || Object.keys(query).length === 0) {
+            return [...docs];
+          }
+          return docs.filter((doc) =>
+            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
+          );
+        },
+      ),
+      insert: vi.fn((doc: updateLifecycleCacheStore.UpdateLifecycleCacheRecord) => {
+        docs.push(doc);
+      }),
+      update: vi.fn(),
+      remove: vi.fn((doc: updateLifecycleCacheStore.UpdateLifecycleCacheRecord) => {
+        const index = docs.indexOf(doc);
+        if (index !== -1) {
+          docs.splice(index, 1);
+        }
+      }),
+    };
+  }
+
+  function mountLifecycleStore(
+    initialDocs: updateLifecycleCacheStore.UpdateLifecycleCacheRecord[] = [],
+  ) {
+    const collection = createLifecycleStoreCollection(initialDocs);
+    updateLifecycleCacheStore.createCollections({
+      getCollection: () => collection,
+      addCollection: () => collection,
+    });
+    return collection;
+  }
+
+  beforeEach(() => {
+    updateLifecycleCacheStore.clearCollectionForTesting();
+  });
+
+  test('deleteContainer write-throughs the stash to the durable store', () => {
+    mountLifecycleStore();
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-persist-old-1',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+    container.deleteContainer('lifecycle-persist-old-1', { replacementExpected: true });
+
+    const [record] = updateLifecycleCacheStore.listRecords();
+    expect(record).toMatchObject({
+      cacheKey: 'local::myapp',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+  });
+
+  test('insertContainer deletes the persisted record on a consumed cache hit', () => {
+    mountLifecycleStore();
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-persist-old-2',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    container.deleteContainer('lifecycle-persist-old-2', { replacementExpected: true });
+    expect(updateLifecycleCacheStore.listRecords()).toHaveLength(1);
+
+    container.insertContainer(makeDigestUpdateFixture({ id: 'lifecycle-persist-new-2' }));
+
+    expect(updateLifecycleCacheStore.listRecords()).toEqual([]);
+  });
+
+  test('insertContainer deletes the persisted record when the entry has expired', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-06-01T00:00:00.000Z'));
+      mountLifecycleStore();
+      const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+      const oldFixture = makeDigestUpdateFixture({
+        id: 'lifecycle-persist-old-3',
+        updateDetectedAt: twelveHoursAgo,
+        firstSeenAt: twelveHoursAgo,
+      });
+      const collection = createFilterableCollection([{ data: oldFixture }]);
+      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+      container.deleteContainer('lifecycle-persist-old-3', { replacementExpected: true });
+      expect(updateLifecycleCacheStore.listRecords()).toHaveLength(1);
+      vi.advanceTimersByTime(container.UPDATE_LIFECYCLE_CACHE_TTL_MS + 1);
+
+      container.insertContainer(makeDigestUpdateFixture({ id: 'lifecycle-persist-new-3' }));
+
+      expect(updateLifecycleCacheStore.listRecords()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('insertContainer deletes the persisted record when the result signature no longer matches', () => {
+    mountLifecycleStore();
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-persist-old-4',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+      result: { tag: 'version', digest: 'sha256:new' },
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    container.deleteContainer('lifecycle-persist-old-4', { replacementExpected: true });
+    expect(updateLifecycleCacheStore.listRecords()).toHaveLength(1);
+
+    container.insertContainer(
+      makeDigestUpdateFixture({
+        id: 'lifecycle-persist-new-4',
+        result: { tag: 'other-version', digest: 'sha256:mismatch' },
+      }),
+    );
+
+    expect(updateLifecycleCacheStore.listRecords()).toEqual([]);
+  });
+
+  test('evicting the oldest lifecycle cache entry also deletes its persisted record', () => {
+    mountLifecycleStore();
+    const maxEntries = container.UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES;
+    const oldTimestamp = new Date(Date.now() - 1000).toISOString();
+    const fixtures = [];
+    for (let i = 0; i <= maxEntries; i++) {
+      fixtures.push({
+        data: makeDigestUpdateFixture({
+          id: `lifecycle-persist-evict-${i}`,
+          name: `persist-evict-app-${i}`,
+          updateDetectedAt: oldTimestamp,
+          firstSeenAt: oldTimestamp,
+        }),
+      });
+    }
+    const collection = createFilterableCollection(fixtures);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+    for (let i = 0; i <= maxEntries; i++) {
+      container.deleteContainer(`lifecycle-persist-evict-${i}`, { replacementExpected: true });
+    }
+
+    const persisted = updateLifecycleCacheStore.listRecords();
+    expect(persisted.length).toBeLessThanOrEqual(maxEntries);
+    expect(persisted.some((record) => record.cacheKey === 'local::persist-evict-app-0')).toBe(
+      false,
+    );
+  });
+
+  test('rehydrateUpdateLifecycleCacheFromStore repopulates the in-memory Map from non-expired persisted records only', () => {
+    const nowMs = Date.now();
+    mountLifecycleStore([
+      {
+        cacheKey: 'local::live-app',
+        updateDetectedAt: '2026-01-01T00:00:00.000Z',
+        firstSeenAt: '2025-12-01T00:00:00.000Z',
+        resultSignature: '{"tag":"live"}',
+        expiresAt: nowMs + 60_000,
+      },
+      {
+        cacheKey: 'local::expired-app',
+        updateDetectedAt: '2025-01-01T00:00:00.000Z',
+        resultSignature: '{"tag":"expired"}',
+        expiresAt: nowMs - 1,
+      },
+    ]);
+
+    container.rehydrateUpdateLifecycleCacheFromStore();
+
+    const lifecycleCache = container._getUpdateLifecycleCacheForTests();
+    expect(lifecycleCache.has('local::live-app')).toBe(true);
+    expect(lifecycleCache.get('local::live-app')?.updateDetectedAt).toBe(
+      '2026-01-01T00:00:00.000Z',
+    );
+    expect(lifecycleCache.has('local::expired-app')).toBe(false);
+  });
+
+  test('end-to-end: a simulated process restart still carries updateDetectedAt/firstSeenAt forward', () => {
+    mountLifecycleStore();
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-persist-restart-old',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+    // 1. Self-update fires: the old container is torn down and its lifecycle entry is
+    //    stashed into both the in-memory Map and (write-through) the durable store.
+    container.deleteContainer('lifecycle-persist-restart-old', { replacementExpected: true });
+    expect(updateLifecycleCacheStore.listRecords()).toHaveLength(1);
+
+    // 2. SIGTERM: simulate the old process exiting — the in-memory Map is gone, but the
+    //    durable store (our stand-in for the persisted dd.json) survives untouched.
+    container._resetContainerStoreStateForTests();
+    expect(container._getUpdateLifecycleCacheForTests().size).toBe(0);
+
+    // 3. New process boots: store/index.ts's createCollections() would call
+    //    rehydrateUpdateLifecycleCacheFromStore() right after re-creating the collections.
+    container.rehydrateUpdateLifecycleCacheFromStore();
+    expect(container._getUpdateLifecycleCacheForTests().has('local::myapp')).toBe(true);
+
+    // 4. The watcher discovers the replacement container under the same watcher+name —
+    //    insertContainer's Map lookup now hits even though it's a brand-new process.
+    const inserted = container.insertContainer(
+      makeDigestUpdateFixture({ id: 'lifecycle-persist-restart-new' }),
+    );
+    expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
+    expect(inserted.firstSeenAt).toBe(twelveHoursAgo);
   });
 });
 
