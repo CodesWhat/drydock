@@ -560,9 +560,7 @@ describe('GitHub Container Registry', () => {
 
   test('treats a Link header with only rel="last" (no rel="next") as the natural end of the list', async () => {
     axios.mockResolvedValueOnce({
-      data: [
-        { updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['v1'] } } },
-      ],
+      data: [{ updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['v1'] } } }],
       headers: {
         link: '<https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100&page=1>; rel="last"',
       },
@@ -581,9 +579,7 @@ describe('GitHub Container Registry', () => {
 
   test('reaches the natural end of the list (no Link header) with the tag never found — no warning', async () => {
     axios.mockResolvedValueOnce({
-      data: [
-        { updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['v1'] } } },
-      ],
+      data: [{ updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['v1'] } } }],
       headers: {},
     });
     const warnSpy = vi.spyOn(ghcr.log, 'warn');
