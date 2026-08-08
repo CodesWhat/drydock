@@ -717,6 +717,54 @@ describe('container-init coverage', () => {
       // displayName is intentionally NOT updated by applyDerivedLabelFieldsToContainer
       expect(container.displayName).toBe('My Custom App');
     });
+
+    describe('dependsOn (#219)', () => {
+      test('sets dependsOn/dependsOnSource/dependsOnAction from dd.depends_on', () => {
+        const container = makeContainer();
+        applyDerivedLabelFieldsToContainer(container, { 'dd.depends_on': 'db,cache' });
+        expect(container.dependsOn).toEqual(['db', 'cache']);
+        expect(container.dependsOnSource).toBe('label');
+        expect(container.dependsOnAction).toBe('update');
+      });
+
+      test('honors dd.depends_on.action=restart', () => {
+        const container = makeContainer();
+        applyDerivedLabelFieldsToContainer(container, {
+          'dd.depends_on': 'db',
+          'dd.depends_on.action': 'restart',
+        });
+        expect(container.dependsOnAction).toBe('restart');
+      });
+
+      test('clears a previously label-sourced dependsOn once the label is removed', () => {
+        const container = makeContainer({
+          dependsOn: ['db'],
+          dependsOnSource: 'label',
+          dependsOnAction: 'update',
+        });
+        applyDerivedLabelFieldsToContainer(container, {});
+        expect(container.dependsOn).toBeUndefined();
+        expect(container.dependsOnSource).toBeUndefined();
+      });
+
+      test('leaves a previously compose-sourced dependsOn untouched (event path cannot re-derive compose)', () => {
+        const container = makeContainer({
+          dependsOn: ['db'],
+          dependsOnSource: 'compose',
+          dependsOnAction: 'update',
+        });
+        applyDerivedLabelFieldsToContainer(container, {});
+        expect(container.dependsOn).toEqual(['db']);
+        expect(container.dependsOnSource).toBe('compose');
+      });
+
+      test('leaves dependsOn unset when there is no dd.depends_on label and none was previously set', () => {
+        const container = makeContainer();
+        applyDerivedLabelFieldsToContainer(container, {});
+        expect(container.dependsOn).toBeUndefined();
+        expect(container.dependsOnSource).toBeUndefined();
+      });
+    });
   });
 
   describe('tag policy precedence (#498)', () => {
