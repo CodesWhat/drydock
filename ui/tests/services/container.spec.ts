@@ -1,6 +1,7 @@
 import {
   deleteContainer,
   getAllContainers,
+  getContainerDependencies,
   getContainerIntermediateReleaseNotes,
   getContainerLogs,
   getContainerRecentStatus,
@@ -12,6 +13,7 @@ import {
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
   getUpdateOperationById,
+  previewUpdateChain,
   refreshAllContainers,
   refreshContainer,
   revealContainerEnv,
@@ -19,6 +21,7 @@ import {
   scanAllContainersApi,
   scanContainer,
   updateContainerPolicy,
+  updateDependencyGroup,
 } from '@/services/container';
 import { ApiError } from '@/utils/error';
 
@@ -1249,6 +1252,114 @@ describe('Container Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/v1/update-operations/op%2F1', {
         credentials: 'include',
       });
+    });
+  });
+
+  describe('getContainerDependencies', () => {
+    it('fetches the resolved dependency graph successfully', async () => {
+      const mockGraph = {
+        nodes: [{ id: 'c1', name: 'db', displayName: 'db', watcher: 'local' }],
+        edges: [{ from: 'c1', to: 'c2', action: 'update', source: 'label' }],
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockGraph,
+      } as any);
+
+      const result = await getContainerDependencies();
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/dependencies', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockGraph);
+    });
+
+    it('throws when the dependency graph response is not ok', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Internal Server Error',
+      } as any);
+
+      await expect(getContainerDependencies()).rejects.toThrow(
+        'Failed to get container dependencies: Internal Server Error',
+      );
+    });
+  });
+
+  describe('previewUpdateChain', () => {
+    it('fetches the update-chain preview successfully', async () => {
+      const mockPreview = {
+        waves: [{ index: 0, containers: [{ id: 'c1', name: 'db', actionKind: 'update' }] }],
+        warnings: { cycles: [], unresolved: [] },
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockPreview,
+      } as any);
+
+      const result = await previewUpdateChain('c1');
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/c1/update-chain-preview', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      expect(result).toEqual(mockPreview);
+    });
+
+    it('throws when the update-chain preview response is not ok', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+      } as any);
+
+      await expect(previewUpdateChain('c1')).rejects.toThrow(
+        'Failed to preview update chain for container c1: Not Found',
+      );
+    });
+  });
+
+  describe('updateDependencyGroup', () => {
+    it('posts the bulk dependency-group update successfully', async () => {
+      const mockResult = {
+        message: 'Dependency group update requests processed',
+        accepted: [
+          {
+            containerId: 'c1',
+            containerName: 'db',
+            operationId: 'op-1',
+            wave: 0,
+            actionKind: 'update',
+          },
+        ],
+        rejected: [],
+      };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResult,
+      } as any);
+
+      const result = await updateDependencyGroup('c1');
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/dependency-groups/c1/update', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(result).toEqual(mockResult);
+    });
+
+    it('throws when the dependency-group update response is not ok', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Forbidden',
+      } as any);
+
+      await expect(updateDependencyGroup('c1')).rejects.toThrow(
+        'Failed to update dependency group c1: Forbidden',
+      );
     });
   });
 });

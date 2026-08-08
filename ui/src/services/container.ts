@@ -1,4 +1,5 @@
 import type { ApiContainerUpdateOperation } from '../types/api';
+import type { DependencyGraph, UpdateChainPreview } from '../types/container';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
 import { normalizeReleaseNotes } from '../utils/container-mapper';
@@ -328,6 +329,76 @@ async function getContainerGroups(): Promise<ContainerGroup[]> {
   return extractCollectionData<ContainerGroup>(payload);
 }
 
+/**
+ * GET /api/v1/containers/dependencies — full resolved dependency graph over
+ * every known container (#219). Backs the cycle-detected badge and any
+ * future dependency-graph visualization; the badge counts themselves ride
+ * along on the regular container list payload (dependencyCount/dependentCount).
+ */
+async function getContainerDependencies(): Promise<DependencyGraph> {
+  const response = await fetch('/api/v1/containers/dependencies', { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(`Failed to get container dependencies: ${response.statusText}`);
+  }
+  return readJsonResponse<DependencyGraph>(response, 'Container dependencies API');
+}
+
+/**
+ * POST /api/v1/containers/:id/update-chain-preview — dry-run wave preview
+ * for the dependency chain rooted at containerId (#219). Calls the exact
+ * same pure graph functions the real dispatch and the bulk update endpoint
+ * use, so this can never drift from what an accepted update actually runs.
+ */
+async function previewUpdateChain(containerId: string): Promise<UpdateChainPreview> {
+  const response = await fetch(`/api/v1/containers/${containerId}/update-chain-preview`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to preview update chain for container ${containerId}: ${response.statusText}`,
+    );
+  }
+  return readJsonResponse<UpdateChainPreview>(response, 'Container update-chain preview API');
+}
+
+interface DependencyGroupUpdateAccepted {
+  containerId: string;
+  containerName: string;
+  operationId: string;
+  wave: number;
+  actionKind: 'update' | 'restart';
+}
+
+interface DependencyGroupUpdateRejected {
+  containerId: string;
+  containerName: string;
+  statusCode: number;
+  message: string;
+}
+
+interface DependencyGroupUpdateResult {
+  message: string;
+  accepted: DependencyGroupUpdateAccepted[];
+  rejected: DependencyGroupUpdateRejected[];
+}
+
+/**
+ * POST /api/v1/dependency-groups/:rootId/update — bulk-update every
+ * container in the dependency chain rooted at rootId (#219).
+ */
+async function updateDependencyGroup(rootId: string): Promise<DependencyGroupUpdateResult> {
+  const response = await fetch(`/api/v1/dependency-groups/${rootId}/update`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to update dependency group ${rootId}: ${response.statusText}`);
+  }
+  return readJsonResponse<DependencyGroupUpdateResult>(response, 'Dependency group update API');
+}
+
 interface BulkScanResponse {
   cycleId: string;
   scheduledCount: number;
@@ -447,10 +518,11 @@ async function revealContainerEnv(containerId: string) {
   return readJsonResponse(response, 'Container env API');
 }
 
-export type { ContainerGroup };
+export type { ContainerGroup, DependencyGroupUpdateResult };
 export {
   deleteContainer,
   getAllContainers,
+  getContainerDependencies,
   getContainerGroups,
   getContainerIntermediateReleaseNotes,
   getContainerLogs,
@@ -463,6 +535,7 @@ export {
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,
   getUpdateOperationById,
+  previewUpdateChain,
   refreshAllContainers,
   refreshContainer,
   revealContainerEnv,
@@ -470,4 +543,5 @@ export {
   scanAllContainersApi,
   scanContainer,
   updateContainerPolicy,
+  updateDependencyGroup,
 };
