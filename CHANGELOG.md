@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Pinned `js-yaml` to 3.15.1 in the e2e workspace (override; transitive dependency) for [GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj) (CVE-2026-59870 backport gap: quadratic CPU consumption in `!!omap` resolution).
+- Pinned `nanoid` to 3.3.18 (override; transitive dependency of `postcss` in the root, app, apps/demo, apps/web, and ui workspaces, and of `artillery` in the e2e workspace) for [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8) (CVE-2026-67213) and, in the e2e workspace which was still on 3.3.12, also [GHSA-28wg-ghj8-5hjv](https://github.com/advisories/GHSA-28wg-ghj8-5hjv) (CVE-2026-67214).
 
 ### Fixed
 
