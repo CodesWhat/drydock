@@ -68,7 +68,14 @@ export interface BuildDependencyGraphResult {
 
 type DependencyGraphContainer = Pick<
   Container,
-  'id' | 'name' | 'watcher' | 'agent' | 'labels' | 'dependsOn' | 'dependsOnSource' | 'dependsOnAction'
+  | 'id'
+  | 'name'
+  | 'watcher'
+  | 'agent'
+  | 'labels'
+  | 'dependsOn'
+  | 'dependsOnSource'
+  | 'dependsOnAction'
 >;
 
 const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
@@ -115,7 +122,10 @@ function findLabelCandidates(
   targetName: string,
 ): DependencyGraphContainer[] {
   return containers.filter(
-    (candidate) => candidate.id !== source.id && candidate.name === targetName && candidate.watcher === source.watcher,
+    (candidate) =>
+      candidate.id !== source.id &&
+      candidate.name === targetName &&
+      candidate.watcher === source.watcher,
   );
 }
 

@@ -497,7 +497,12 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     watcher.configuration,
     { logger: watcher.log, containerName: dockerContainerName },
   );
-  await applyContainerDependsOn(containerInStore, container.Labels || {}, watcher, dockerContainerName);
+  await applyContainerDependsOn(
+    containerInStore,
+    container.Labels || {},
+    watcher,
+    dockerContainerName,
+  );
 
   // Health is read unconditionally (decoupled from shouldInspectContainer /
   // tag-repair gating) so the cron leg is an actual fallback for the

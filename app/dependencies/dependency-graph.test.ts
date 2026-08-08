@@ -276,10 +276,7 @@ describe('topologicalSort', () => {
     const nodes = [node('c'), node('b'), node('a')];
     const edges = [edge('a', 'b'), edge('b', 'a'), edge('c', 'a')];
     const result = topologicalSort(nodes, edges);
-    expect(result.waves).toEqual([
-      ['a', 'b'],
-      ['c'],
-    ]);
+    expect(result.waves).toEqual([['a', 'b'], ['c']]);
     expect(result.cycles).toEqual([['a', 'b']]);
   });
 
@@ -290,10 +287,7 @@ describe('topologicalSort', () => {
     const nodes = [node('a'), node('b'), node('d')];
     const edges = [edge('a', 'b'), edge('b', 'a'), edge('d', 'a')];
     const result = topologicalSort(nodes, edges);
-    expect(result.waves).toEqual([
-      ['a', 'b'],
-      ['d'],
-    ]);
+    expect(result.waves).toEqual([['a', 'b'], ['d']]);
     expect(result.cycles).toEqual([['a', 'b']]);
   });
 
