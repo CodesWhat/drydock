@@ -179,5 +179,60 @@ export interface Container {
   triggerInclude?: string;
   triggerExclude?: string;
   updateEligibility?: UpdateEligibility;
+  /** Cheap dependency-ordering badge counts (#219); full graph detail comes from getContainerDependencies(). */
+  dependencyCount?: number;
+  dependentCount?: number;
   details: ContainerDetails;
+}
+
+export interface DependencyGraphNode {
+  id: string;
+  name: string;
+  displayName: string;
+  watcher?: string;
+  agent?: string;
+}
+
+export interface DependencyGraphEdge {
+  from: string;
+  to: string;
+  action: 'update' | 'restart';
+  source: 'label' | 'compose';
+}
+
+export interface DependencyGraphUnresolvedEdge {
+  nodeId: string;
+  missingTarget: string;
+}
+
+export interface DependencyGraphCrossHostIgnoredEdge {
+  from: string;
+  to: string;
+}
+
+export interface DependencyGraph {
+  nodes: DependencyGraphNode[];
+  edges: DependencyGraphEdge[];
+  cycles: string[][];
+  unresolved: DependencyGraphUnresolvedEdge[];
+  crossHostIgnored: DependencyGraphCrossHostIgnoredEdge[];
+}
+
+export interface UpdateChainPreviewWaveContainer {
+  id: string;
+  name: string;
+  actionKind: 'update' | 'restart';
+}
+
+export interface UpdateChainPreviewWave {
+  index: number;
+  containers: UpdateChainPreviewWaveContainer[];
+}
+
+export interface UpdateChainPreview {
+  waves: UpdateChainPreviewWave[];
+  warnings: {
+    cycles: string[][];
+    unresolved: DependencyGraphUnresolvedEdge[];
+  };
 }
