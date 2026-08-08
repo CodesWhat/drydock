@@ -174,12 +174,13 @@ export function buildDependencyGraph(
         continue;
       }
 
-      const sameAgentCandidate = candidates.find(
+      const orderedCandidates = [...candidates].sort((a, b) => a.id.localeCompare(b.id));
+      const sameAgentCandidate = orderedCandidates.find(
         (candidate) => normalizeAgent(candidate.agent) === normalizeAgent(container.agent),
       );
 
       if (!sameAgentCandidate) {
-        crossHostIgnored.push({ from: container.id, to: candidates[0].id });
+        crossHostIgnored.push({ from: container.id, to: orderedCandidates[0].id });
         continue;
       }
 
@@ -363,7 +364,9 @@ export function topologicalSort(
         continue;
       }
       readyNodeIds.push(...component);
-      if (component.length > 1) {
+      const isSelfLoop =
+        component.length === 1 && (adjacency.get(component[0]) ?? []).includes(component[0]);
+      if (component.length > 1 || isSelfLoop) {
         cycles.push([...component].sort(byName));
       }
     }

@@ -251,6 +251,96 @@ describe('resolveComposeDependsOn', () => {
     expect(result).toEqual({ dependsOn: [], warnings: [] });
   });
 
+  test('resolves a depends_on target declared only in a later overlay file (multi-file compose merge)', async () => {
+    const composeFileParser = makeParser({
+      '/opt/stack/base.yml': { services: { web: { depends_on: ['db'] } } },
+      '/opt/stack/overlay.yml': { services: { db: {} } },
+    });
+    const result = await resolveComposeDependsOn(
+      {
+        labels: {
+          'com.docker.compose.service': 'web',
+          'com.docker.compose.project.config_files': '/opt/stack/base.yml,/opt/stack/overlay.yml',
+        },
+      },
+      { composeFileParser },
+    );
+    expect(result).toEqual({ dependsOn: ['db'], warnings: [] });
+  });
+
+  test('picks up a depends_on entry added to the service by a later overlay file', async () => {
+    const composeFileParser = makeParser({
+      '/opt/stack/base.yml': { services: { web: {}, db: {} } },
+      '/opt/stack/overlay.yml': { services: { web: { depends_on: ['db'] } } },
+    });
+    const result = await resolveComposeDependsOn(
+      {
+        labels: {
+          'com.docker.compose.service': 'web',
+          'com.docker.compose.project.config_files': '/opt/stack/base.yml,/opt/stack/overlay.yml',
+        },
+      },
+      { composeFileParser },
+    );
+    expect(result).toEqual({ dependsOn: ['db'], warnings: [] });
+  });
+
+  test('unions depends_on entries when both base and overlay declare them for the same service', async () => {
+    const composeFileParser = makeParser({
+      '/opt/stack/base.yml': { services: { web: { depends_on: ['db'] }, db: {} } },
+      '/opt/stack/overlay.yml': { services: { web: { depends_on: ['cache'] }, cache: {} } },
+    });
+    const result = await resolveComposeDependsOn(
+      {
+        labels: {
+          'com.docker.compose.service': 'web',
+          'com.docker.compose.project.config_files': '/opt/stack/base.yml,/opt/stack/overlay.yml',
+        },
+      },
+      { composeFileParser },
+    );
+    expect(result).toEqual({ dependsOn: ['db', 'cache'], warnings: [] });
+  });
+
+  test('does not duplicate a depends_on target repeated across files', async () => {
+    const composeFileParser = makeParser({
+      '/opt/stack/base.yml': { services: { web: { depends_on: ['db'] }, db: {} } },
+      '/opt/stack/overlay.yml': { services: { web: { depends_on: ['db'] } } },
+    });
+    const result = await resolveComposeDependsOn(
+      {
+        labels: {
+          'com.docker.compose.service': 'web',
+          'com.docker.compose.project.config_files': '/opt/stack/base.yml,/opt/stack/overlay.yml',
+        },
+      },
+      { composeFileParser },
+    );
+    expect(result).toEqual({ dependsOn: ['db'], warnings: [] });
+  });
+
+  test('an unreadable middle config file still warns but does not prevent merging the surrounding files', async () => {
+    const composeFileParser = makeParser({
+      '/opt/stack/base.yml': { services: { web: { depends_on: ['db'] }, db: {} } },
+      '/opt/stack/broken.yml': new Error('boom'),
+      '/opt/stack/overlay.yml': { services: { web: { depends_on: ['cache'] }, cache: {} } },
+    });
+    const result = await resolveComposeDependsOn(
+      {
+        labels: {
+          'com.docker.compose.service': 'web',
+          'com.docker.compose.project.config_files':
+            '/opt/stack/base.yml,/opt/stack/broken.yml,/opt/stack/overlay.yml',
+        },
+      },
+      { composeFileParser },
+    );
+    expect(result.dependsOn).toEqual(['db', 'cache']);
+    expect(result.warnings).toEqual([
+      'Unable to read compose file "/opt/stack/broken.yml" for dependency detection of service "web"',
+    ]);
+  });
+
   test('uses the default ComposeFileParser instance when none is injected', async () => {
     const result = await resolveComposeDependsOn({
       labels: {

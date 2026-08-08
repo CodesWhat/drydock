@@ -152,6 +152,40 @@ describe('buildDependencyGraph', () => {
     expect(result.crossHostIgnored).toEqual([]);
   });
 
+  test('deterministically picks the alphabetically-first candidate id for crossHostIgnored regardless of input order', () => {
+    const containersOrderA = [
+      makeContainer({ name: 'web', agent: 'agent-a', dependsOn: ['db'] }),
+      makeContainer({ id: 'db-z', name: 'db', agent: 'agent-z' }),
+      makeContainer({ id: 'db-y', name: 'db', agent: 'agent-y' }),
+    ];
+    const containersOrderB = [
+      makeContainer({ name: 'web', agent: 'agent-a', dependsOn: ['db'] }),
+      makeContainer({ id: 'db-y', name: 'db', agent: 'agent-y' }),
+      makeContainer({ id: 'db-z', name: 'db', agent: 'agent-z' }),
+    ];
+    const resultA = buildDependencyGraph(containersOrderA);
+    const resultB = buildDependencyGraph(containersOrderB);
+    expect(resultA.crossHostIgnored).toEqual([{ from: 'web', to: 'db-y' }]);
+    expect(resultB.crossHostIgnored).toEqual(resultA.crossHostIgnored);
+  });
+
+  test('deterministically picks the alphabetically-first candidate id when multiple same-agent candidates share a name', () => {
+    const containersOrderA = [
+      makeContainer({ name: 'web', agent: 'agent-a', dependsOn: ['db'] }),
+      makeContainer({ id: 'db-2', name: 'db', agent: 'agent-a' }),
+      makeContainer({ id: 'db-1', name: 'db', agent: 'agent-a' }),
+    ];
+    const containersOrderB = [
+      makeContainer({ name: 'web', agent: 'agent-a', dependsOn: ['db'] }),
+      makeContainer({ id: 'db-1', name: 'db', agent: 'agent-a' }),
+      makeContainer({ id: 'db-2', name: 'db', agent: 'agent-a' }),
+    ];
+    const resultA = buildDependencyGraph(containersOrderA);
+    const resultB = buildDependencyGraph(containersOrderB);
+    expect(resultA.edges).toEqual([{ from: 'web', to: 'db-1', action: 'update', source: 'label' }]);
+    expect(resultB.edges).toEqual(resultA.edges);
+  });
+
   test('treats a container with no agent and a container with an explicit agent as different scopes', () => {
     const containers = [
       makeContainer({ name: 'web', dependsOn: ['db'] }),
@@ -315,6 +349,14 @@ describe('topologicalSort', () => {
     const nodes = [node('b'), node('a')];
     const edges = [edge('b', 'a'), edge('b', 'a')];
     expect(topologicalSort(nodes, edges)).toEqual({ waves: [['a'], ['b']], cycles: [] });
+  });
+
+  test('a hand-built self-loop edge is scheduled and reported as a cycle', () => {
+    const nodes = [node('a')];
+    const edges = [edge('a', 'a')];
+    const result = topologicalSort(nodes, edges);
+    expect(result.waves).toEqual([['a']]);
+    expect(result.cycles).toEqual([['a']]);
   });
 
   test('ignores an edge referencing a node id that is not in the node list', () => {

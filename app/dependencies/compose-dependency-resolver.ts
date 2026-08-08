@@ -105,6 +105,19 @@ export async function resolveComposeDependsOn(
   const composeFileParser = options.composeFileParser || defaultComposeFileParser;
   const warnings: string[] = [];
 
+  // `docker compose -f a.yml -f b.yml` merges every file in config_files
+  // into one project. Per compose merge semantics, `depends_on` is a mapping
+  // (short-form arrays are normalized to it too), so entries declared for
+  // the same service across multiple files are UNIONED, not overridden by
+  // the last file. Read every file (keeping the read-failure warning +
+  // continue), union `knownServiceNames` across all of them, and union the
+  // normalized depends_on targets from every file that declares the service.
+  const knownServiceNames = new Set<string>();
+  const readFilePaths: string[] = [];
+  const rawNames: string[] = [];
+  const seenRawNames = new Set<string>();
+  let serviceFound = false;
+
   for (const composeFilePath of composeFilePaths) {
     let compose: ParsedComposeFile;
     try {
@@ -119,38 +132,46 @@ export async function resolveComposeDependsOn(
       continue;
     }
 
+    readFilePaths.push(composeFilePath);
+    for (const name of Object.keys(compose?.services ?? {})) {
+      knownServiceNames.add(name);
+    }
+
     const service = compose?.services?.[serviceName];
     if (!service) {
       continue;
     }
+    serviceFound = true;
 
-    const rawNames = flattenDependsOn(service.depends_on);
-    if (rawNames.length === 0) {
-      return { dependsOn: [], warnings };
-    }
-
-    // compose.services is guaranteed defined here — `service` was already
-    // read from it above.
-    const knownServiceNames = new Set(Object.keys(compose.services as Record<string, unknown>));
-    const dependsOn: string[] = [];
-    for (const targetName of rawNames) {
-      if (targetName === serviceName) {
-        warnings.push(
-          `Compose service "${serviceName}" lists itself in "depends_on" (${composeFilePath}) — self-reference dropped.`,
-        );
-        continue;
+    for (const targetName of flattenDependsOn(service.depends_on)) {
+      if (!seenRawNames.has(targetName)) {
+        seenRawNames.add(targetName);
+        rawNames.push(targetName);
       }
-      if (!knownServiceNames.has(targetName)) {
-        warnings.push(
-          `Compose service "${serviceName}" depends on unknown service "${targetName}" not defined in ${composeFilePath} — edge dropped.`,
-        );
-        continue;
-      }
-      dependsOn.push(targetName);
     }
-
-    return { dependsOn, warnings };
   }
 
-  return { dependsOn: [], warnings };
+  if (!serviceFound || rawNames.length === 0) {
+    return { dependsOn: [], warnings };
+  }
+
+  const fileList = readFilePaths.join(', ');
+  const dependsOn: string[] = [];
+  for (const targetName of rawNames) {
+    if (targetName === serviceName) {
+      warnings.push(
+        `Compose service "${serviceName}" lists itself in "depends_on" (${fileList}) — self-reference dropped.`,
+      );
+      continue;
+    }
+    if (!knownServiceNames.has(targetName)) {
+      warnings.push(
+        `Compose service "${serviceName}" depends on unknown service "${targetName}" not defined in ${fileList} — edge dropped.`,
+      );
+      continue;
+    }
+    dependsOn.push(targetName);
+  }
+
+  return { dependsOn, warnings };
 }
