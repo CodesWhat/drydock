@@ -43,6 +43,12 @@ describe('AnnouncementBanner', () => {
     expect(wrapper.attributes('style')).not.toContain('var(--dd-warning)');
   });
 
+  it('uses info styling when tone is info', () => {
+    const wrapper = factory({ tone: 'info' });
+    expect(wrapper.attributes('style')).toContain('var(--dd-info)');
+    expect(wrapper.attributes('style')).not.toContain('var(--dd-warning)');
+  });
+
   it('renders only the session dismiss button by default', () => {
     const wrapper = factory();
     const buttons = wrapper.findAll('button');
@@ -126,5 +132,23 @@ describe('AnnouncementBanner', () => {
     expect(wrapper.find('[data-testid="announcement-dismiss-session"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="announcement-dismiss-forever"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="announcement-link"]').exists()).toBe(true);
+  });
+
+  it('does not render an action button when actionLabel is not provided', () => {
+    const wrapper = factory();
+    const buttons = wrapper.findAll('button');
+
+    expect(buttons.map((button) => button.text())).not.toContain('Install');
+  });
+
+  it('renders an action button and emits action when clicked', async () => {
+    const wrapper = factory({ actionLabel: 'Install' }, { 'data-testid': 'announcement' });
+
+    const actionButton = wrapper.get('[data-testid="announcement-action"]');
+    expect(actionButton.text()).toBe('Install');
+
+    await actionButton.trigger('click');
+
+    expect(wrapper.emitted('action')).toHaveLength(1);
   });
 });
