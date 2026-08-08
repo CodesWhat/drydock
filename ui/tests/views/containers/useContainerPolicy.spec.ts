@@ -217,6 +217,67 @@ describe('useContainerPolicy', () => {
     harness.wrapper.unmount();
   });
 
+  it('local fallback uses a trusted publishedAt to clear the maturity gate even when updateDetectedAt is recent (#556)', () => {
+    // No updateEligibility payload, so this exercises the local fallback branch.
+    // updateDetectedAt alone (1 day ago) would still be gated at a 7-day minimum;
+    // a trusted publishedAt from 10 days ago must be honored instead.
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        tagged: {
+          updateAvailable: false,
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
+          updateKind: { kind: 'tag' },
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          result: {
+            publishedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+            publishedAtTrusted: true,
+          },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('tagged');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: false,
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      }),
+    );
+
+    harness.wrapper.unmount();
+  });
+
+  it('local fallback ignores an untrusted publishedAt and stays blocked on a recent updateDetectedAt (#556)', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        tagged: {
+          updateAvailable: false,
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
+          updateKind: { kind: 'tag' },
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          result: {
+            publishedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+            // No publishedAtTrusted flag — must be ignored, not used to clear the gate.
+          },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('tagged');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: true,
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      }),
+    );
+
+    harness.wrapper.unmount();
+  });
+
   it('prefers a backend maturity-not-reached verdict over an unblocked legacy computation (#display-honesty)', () => {
     // maturityMode 'all' can never legacy-block (the local formula only fires for
     // 'mature'), so a blocked result here can only come from the backend verdict.

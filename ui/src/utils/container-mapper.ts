@@ -37,6 +37,7 @@ import { buildContainerIdentityKey } from './container-action-key';
 import {
   maturityMinAgeDaysToMilliseconds,
   normalizeMaturityMode,
+  resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from './maturity-policy';
 import { findBackendMaturityBlocked } from './update-eligibility';
@@ -80,6 +81,8 @@ interface ApiContainerResult {
   digest?: unknown;
   link?: unknown;
   noUpdateReason?: unknown;
+  publishedAt?: unknown;
+  publishedAtTrusted?: unknown;
   releaseNotes?: ApiContainerReleaseNotes | null;
   updateInsight?: ApiContainerUpdateInsight | null;
 }
@@ -515,6 +518,24 @@ function isSkippedByDigestPolicy(
   );
 }
 
+/**
+ * Resolve the trust-aware maturity clock for an API container payload, via
+ * the ported `resolveMaturityClock` mirror. Shared by `isMaturityBlocked`'s
+ * fallback branch (no backend eligibility payload to read the resolved clock
+ * off of) and the tooltip's age computation in `mapApiContainer` — both used
+ * to hand-roll their own independent, updateDetectedAt-only heuristic that
+ * ignored a trusted result.publishedAt (#556).
+ */
+function resolveContainerMaturityClock(apiContainer: ApiContainerInput) {
+  return resolveMaturityClock({
+    updateDetectedAt: deriveUpdateDetectedAt(apiContainer),
+    result: {
+      publishedAt: asNonEmptyString(apiContainer.result?.publishedAt),
+      publishedAtTrusted: apiContainer.result?.publishedAtTrusted === true,
+    },
+  });
+}
+
 function isMaturityBlocked(
   apiContainer: ApiContainerInput,
   updatePolicy: ApiContainerUpdatePolicy,
@@ -529,10 +550,9 @@ function isMaturityBlocked(
   }
 
   const minAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
-  const updateDetectedAt = deriveUpdateDetectedAt(apiContainer);
-  const detectedAtMs = Date.parse(updateDetectedAt || '');
+  const { startMs } = resolveContainerMaturityClock(apiContainer);
   const minAgeMs = maturityMinAgeDaysToMilliseconds(minAgeDays);
-  return !Number.isFinite(detectedAtMs) || Date.now() - detectedAtMs < minAgeMs;
+  return startMs === undefined || Date.now() - startMs < minAgeMs;
 }
 
 function deriveUpdatePolicyState(apiContainer: ApiContainerInput): Container['updatePolicyState'] {
@@ -853,6 +873,9 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
   const currentSummary = deriveSecuritySummary(apiContainer);
   const updateSummary = deriveUpdateSecuritySummary(apiContainer);
   const detectedAt = deriveUpdateDetectedAt(apiContainer);
+  const maturityClockStartMs = resolveContainerMaturityClock(apiContainer).startMs;
+  const updateAgeMs =
+    maturityClockStartMs === undefined ? undefined : Math.max(0, Date.now() - maturityClockStartMs);
 
   return {
     id,
@@ -876,12 +899,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     releaseLink: deriveReleaseLink(apiContainer),
     updateDetectedAt: detectedAt,
     updateOperation: deriveUpdateOperation(apiContainer),
-    updateMaturityTooltip: formatUpdateAge(
-      detectedAt,
-      !!apiContainer.updateAvailable,
-      Date.now(),
-      t,
-    ),
+    updateMaturityTooltip: formatUpdateAge(updateAgeMs, !!apiContainer.updateAvailable, t),
     updateEligibility: deriveUpdateEligibility(apiContainer),
     updatePolicyState,
     suppressedUpdateTag: deriveSuppressedUpdateTag(apiContainer, updatePolicyState),

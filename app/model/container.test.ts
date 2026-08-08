@@ -461,11 +461,12 @@ test('testable_isUpdateSuppressed should ignore skip lists without matching kind
   ).toBe(false);
 });
 
-test('testable_getRawUpdateAge should use the earliest known timestamp and ignore missing update state', () => {
+test('testable_getRawUpdateAge should resolve the trust-aware clock and ignore missing update state', () => {
   const now = Date.now();
   const firstSeenAt = new Date(now - daysToMs(3)).toISOString();
   const publishedAt = new Date(now - daysToMs(1)).toISOString();
 
+  // publishedAt has no publishedAtTrusted flag — ignored, falls back to firstSeenAt.
   expect(
     container.testable_getRawUpdateAge({
       updateAvailable: true,
@@ -485,6 +486,23 @@ test('testable_getRawUpdateAge should use the earliest known timestamp and ignor
       },
     }),
   ).toBeUndefined();
+});
+
+test('testable_getRawUpdateAge uses a trusted publishedAt earlier than firstSeenAt', () => {
+  const now = Date.now();
+  const firstSeenAt = new Date(now - daysToMs(1)).toISOString();
+  const publishedAt = new Date(now - daysToMs(6)).toISOString();
+
+  expect(
+    container.testable_getRawUpdateAge({
+      updateAvailable: true,
+      firstSeenAt,
+      result: {
+        publishedAt,
+        publishedAtTrusted: true,
+      },
+    }),
+  ).toBeGreaterThanOrEqual(daysToMs(6) - 5_000);
 });
 
 test('testable_resultChangedFunction should compare created timestamps and handle missing comparators', () => {
@@ -1740,7 +1758,54 @@ test('model should allow mature updates when maturity threshold has elapsed', as
   expect(containerValidated.updateAvailable).toBeTruthy();
 });
 
-test('model should compute updateAge from the earlier of firstSeenAt and publishedAt', async () => {
+test('model ignores an untrusted publishedAt even when earlier than firstSeenAt (#556)', async () => {
+  vi.useFakeTimers();
+  try {
+    const now = new Date('2026-03-15T12:00:00.000Z');
+    vi.setSystemTime(now);
+    const firstSeenAt = new Date(now.getTime() - daysToMs(2)).toISOString();
+    // Earlier than firstSeenAt but carries no publishedAtTrusted flag — must be
+    // ignored entirely, not Math.min'd in, or the update looks artificially older.
+    const publishedAt = new Date(now.getTime() - daysToMs(5)).toISOString();
+
+    const containerValidated = container.validate({
+      id: 'container-123456789',
+      name: 'test',
+      watcher: 'test',
+      firstSeenAt,
+      image: {
+        id: 'image-123456789',
+        registry: {
+          name: 'hub',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: '1.0.0',
+          semver: true,
+        },
+        digest: {
+          watch: false,
+          repo: undefined,
+        },
+        architecture: 'arch',
+        os: 'os',
+        created: '2021-06-12T05:33:38.440Z',
+      },
+      result: {
+        tag: '1.0.1',
+        publishedAt,
+      },
+    });
+
+    expect(containerValidated.updateAge).toBe(daysToMs(2));
+    expect(containerValidated.updateMaturityLevel).toBe('hot');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('model uses a trusted publishedAt when earlier than firstSeenAt', async () => {
   vi.useFakeTimers();
   try {
     const now = new Date('2026-03-15T12:00:00.000Z');
@@ -1775,10 +1840,56 @@ test('model should compute updateAge from the earlier of firstSeenAt and publish
       result: {
         tag: '1.0.1',
         publishedAt,
+        publishedAtTrusted: true,
       },
     });
 
     expect(containerValidated.updateAge).toBe(daysToMs(5));
+    expect(containerValidated.updateMaturityLevel).toBe('hot');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('model regression: untrusted publishedAt 45 days back no longer shrinks a 2-day-old update into "established" (#556)', async () => {
+  vi.useFakeTimers();
+  try {
+    const now = new Date('2026-03-15T12:00:00.000Z');
+    vi.setSystemTime(now);
+    const firstSeenAt = new Date(now.getTime() - daysToMs(2)).toISOString();
+    const publishedAt = new Date(now.getTime() - daysToMs(45)).toISOString();
+
+    const containerValidated = container.validate({
+      id: 'container-123456789',
+      name: 'test',
+      watcher: 'test',
+      firstSeenAt,
+      image: {
+        id: 'image-123456789',
+        registry: {
+          name: 'hub',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: '1.0.0',
+          semver: true,
+        },
+        digest: {
+          watch: false,
+          repo: undefined,
+        },
+        architecture: 'arch',
+        os: 'os',
+        created: '2021-06-12T05:33:38.440Z',
+      },
+      result: {
+        tag: '1.0.1',
+        publishedAt,
+      },
+    });
+
+    expect(containerValidated.updateAge).toBe(daysToMs(2));
     expect(containerValidated.updateMaturityLevel).toBe('hot');
   } finally {
     vi.useRealTimers();

@@ -872,6 +872,43 @@ describe('container-mapper', () => {
       expect((c as any).suppressedUpdateTag).toBeUndefined();
     });
 
+    it('fallback isMaturityBlocked uses a trusted publishedAt to clear the gate despite a recent updateDetectedAt (#556)', () => {
+      // No updateEligibility payload, so this exercises the local fallback. A
+      // recent updateDetectedAt alone would still be gated at the 7-day minimum;
+      // a trusted publishedAt from 10 days ago must be honored instead.
+      const freshDate = new Date(Date.now() - daysToMs(2)).toISOString();
+      const publishedAt = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          result: { tag: '1.26', publishedAt, publishedAtTrusted: true },
+          updateDetectedAt: freshDate,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('fallback isMaturityBlocked ignores an untrusted publishedAt and stays blocked on a recent updateDetectedAt (#556)', () => {
+      const freshDate = new Date(Date.now() - daysToMs(2)).toISOString();
+      const publishedAt = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          // publishedAtTrusted omitted — must not be used to clear the gate.
+          result: { tag: '1.26', publishedAt },
+          updateDetectedAt: freshDate,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+    });
+
     it('prefers a backend maturity-not-reached verdict over a met legacy threshold (#display-honesty)', () => {
       // Legacy computation alone (old detection date, threshold met) would NOT mark this
       // maturity-blocked; a backend eligibility payload saying otherwise must win.
@@ -1079,6 +1116,34 @@ describe('container-mapper', () => {
     it('leaves updateMaturityTooltip undefined when no update available', () => {
       const c = mapApiContainer(makeApiContainer());
       expect(c.updateMaturityTooltip).toBeUndefined();
+    });
+
+    it('updateMaturityTooltip duration comes from a trusted publishedAt when earlier than updateDetectedAt (#556)', () => {
+      const recentDate = new Date(Date.now() - 2 * 86_400_000).toISOString();
+      const publishedAt = new Date(Date.now() - 10 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0', publishedAt, publishedAtTrusted: true },
+          updateDetectedAt: recentDate,
+        }),
+      );
+      expect(c.updateMaturityTooltip).toMatch(/^Detected 10 days? ago$/);
+    });
+
+    it('updateMaturityTooltip ignores an untrusted publishedAt even when earlier than updateDetectedAt (#556)', () => {
+      const recentDate = new Date(Date.now() - 2 * 86_400_000).toISOString();
+      const publishedAt = new Date(Date.now() - 10 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0', publishedAt },
+          updateDetectedAt: recentDate,
+        }),
+      );
+      expect(c.updateMaturityTooltip).toMatch(/^Detected 2 days? ago$/);
     });
 
     it('extracts labels from object', () => {

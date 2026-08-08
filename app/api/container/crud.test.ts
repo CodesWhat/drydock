@@ -1313,7 +1313,7 @@ describe('api/container/crud', () => {
       expect(resFromNonStringArray.status).toHaveBeenCalledWith(200);
     });
 
-    test('computes update age fallback from firstSeenAt, publishedAt, and updateDetectedAt', () => {
+    test('computes update age via the trust-aware clock (firstSeenAt/updateDetectedAt fallback, trusted publishedAt, untrusted publishedAt ignored) (#556)', () => {
       vi.useFakeTimers();
       const now = new Date('2026-03-15T00:00:00.000Z').getTime();
       vi.setSystemTime(now);
@@ -1324,6 +1324,9 @@ describe('api/container/crud', () => {
             createContainer({
               id: 'c-min',
               updateAvailable: true,
+              // Untrusted result.publishedAt (Mar 12) is ignored entirely; age comes
+              // from firstSeenAt (Mar 5) alone. Coincidentally the same numeric answer
+              // the old Math.min blend gave here, since firstSeenAt was already earlier.
               firstSeenAt: '2026-03-05T00:00:00.000Z',
               result: { publishedAt: '2026-03-12T00:00:00.000Z' },
             }),
@@ -1333,14 +1336,21 @@ describe('api/container/crud', () => {
               firstSeenAt: '2026-03-07T00:00:00.000Z',
             }),
             createContainer({
-              id: 'c-published',
+              id: 'c-published-trusted',
               updateAvailable: true,
-              result: { publishedAt: '2026-03-09T00:00:00.000Z' },
+              result: { publishedAt: '2026-03-09T00:00:00.000Z', publishedAtTrusted: true },
             }),
             createContainer({
               id: 'c-detected',
               updateAvailable: true,
               updateDetectedAt: '2026-03-11T00:00:00.000Z',
+            }),
+            createContainer({
+              id: 'c-published-untrusted',
+              updateAvailable: true,
+              // Untrusted publishedAt with no firstSeenAt/updateDetectedAt fallback (#556):
+              // resolves to no age at all, unlike the old blend which fell back to it.
+              result: { publishedAt: '2026-03-13T00:00:00.000Z' },
             }),
             createContainer({
               id: 'c-none',
@@ -1354,9 +1364,11 @@ describe('api/container/crud', () => {
         expect(payload.data.map((container: { id: string }) => container.id)).toEqual([
           'c-min',
           'c-first',
-          'c-published',
+          'c-published-trusted',
           'c-detected',
+          // Both have no resolvable age; tiebreak falls back to name ordering.
           'c-none',
+          'c-published-untrusted',
         ]);
       } finally {
         vi.useRealTimers();
@@ -1381,7 +1393,10 @@ describe('api/container/crud', () => {
             createContainer({
               id: 'c-mature',
               updateAvailable: true,
-              result: { publishedAt: '2026-03-07T00:00:00.000Z' },
+              // publishedAtTrusted required (#556): an untrusted publishedAt alone,
+              // with no updateDetectedAt/firstSeenAt fallback, no longer resolves to
+              // any age at all.
+              result: { publishedAt: '2026-03-07T00:00:00.000Z', publishedAtTrusted: true },
             }),
             createContainer({
               id: 'c-established',

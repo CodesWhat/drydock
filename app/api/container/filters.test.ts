@@ -49,7 +49,11 @@ describe('api/container/filters', () => {
 
     try {
       sortContainers(containers as any, 'age');
-      expect(parseSpy).toHaveBeenCalledTimes(containers.length * 3);
+      // The trust-aware resolver (#556) parses updateDetectedAt and its firstSeenAt
+      // fallback unconditionally, but only parses result.publishedAt when
+      // result.publishedAtTrusted === true — none of these fixtures have a result at
+      // all, so that third parse never happens. 2 parses/container, not 3.
+      expect(parseSpy).toHaveBeenCalledTimes(containers.length * 2);
     } finally {
       parseSpy.mockRestore();
     }

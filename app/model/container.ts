@@ -16,6 +16,7 @@ import type {
 } from './container-update-operation.js';
 import {
   getMaturityStartMs,
+  getUpdateAgeMs,
   MATURITY_MIN_AGE_DAYS_MAX,
   MATURITY_MIN_AGE_DAYS_MIN,
   maturityMinAgeDaysToMilliseconds,
@@ -710,11 +711,6 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
   return false;
 }
 
-function parseDateMs(value: string | undefined): number | undefined {
-  const timestampMs = Date.parse(value || '');
-  return Number.isFinite(timestampMs) ? timestampMs : undefined;
-}
-
 function resolveUiMaturityThresholdDays(): number {
   return resolveMaturityMinAgeDays(
     process.env[UI_MATURITY_THRESHOLD_DAYS_ENV],
@@ -722,26 +718,20 @@ function resolveUiMaturityThresholdDays(): number {
   );
 }
 
+/**
+ * Trust-aware "how old is this update" — delegates to the same resolved
+ * clock the eligibility gate (isUpdateSuppressed/computeUpdateEligibility)
+ * measures against, via getUpdateAgeMs. Previously blended firstSeenAt and
+ * result.publishedAt with a bare Math.min and no publishedAtTrusted check,
+ * so an untrusted early publishedAt (e.g. Docker Hub's `created` date) could
+ * make an update look older/more mature than it actually is (#556).
+ */
 function getRawUpdateAge(container: Container): number | undefined {
   if (!container.updateAvailable) {
     return undefined;
   }
 
-  const firstSeenAtMs = parseDateMs(container.firstSeenAt);
-  const publishedAtMs = parseDateMs(container.result?.publishedAt);
-  let startedAtMs: number | undefined;
-
-  if (firstSeenAtMs !== undefined && publishedAtMs !== undefined) {
-    startedAtMs = Math.min(firstSeenAtMs, publishedAtMs);
-  } else {
-    startedAtMs = firstSeenAtMs ?? publishedAtMs;
-  }
-
-  if (startedAtMs === undefined) {
-    return undefined;
-  }
-
-  return Math.max(0, Date.now() - startedAtMs);
+  return getUpdateAgeMs(container);
 }
 
 function getRawUpdateMaturityLevel(
