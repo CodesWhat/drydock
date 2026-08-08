@@ -286,9 +286,17 @@ function prepareContainerUpdateRequest(
   // gates suppress the public updateAvailable getter, but the raw candidate is
   // still present in image/result and remains safe to pass through hard-blocker
   // enforcement below. Reject only when there is genuinely no candidate.
+  //
+  // dd.depends_on.action=restart entries are exempt: a restart-kind dependent
+  // never carries its own image update by design (design §3) — it's admitted
+  // here so it gets a real operation record and passes through the same
+  // dedup/mode/hard-blocker gates as any other request, then the wave
+  // dispatcher (runAcceptedContainerUpdates) routes it to
+  // restartDependentContainer() instead of the normal trigger at dispatch time.
   if (
     !container.updateAvailable &&
-    !(options.allowSoftPolicyOverride === true && hasRawUpdate(container))
+    !(options.allowSoftPolicyOverride === true && hasRawUpdate(container)) &&
+    container.dependsOnAction !== 'restart'
   ) {
     throw new UpdateRequestError(400, 'No update available for this container');
   }
