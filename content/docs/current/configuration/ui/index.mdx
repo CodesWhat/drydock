@@ -7,6 +7,18 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 All UI preferences are configured in **Config > Appearance** and persisted in the browser's localStorage by default. No server-side environment variables are needed. Signed-in users can optionally turn on cross-device sync — see [Sync across devices](#sync-across-devices) below.
 
+## Installable App (PWA)
+
+Drydock is an installable Progressive Web App. Browsers that support installation (Chromium-based desktop and Android browsers, and Safari on iOS/iPadOS via "Add to Home Screen") can add Drydock as a standalone app with its own icon, launching in its own window without browser chrome.
+
+On supported desktop and Android browsers, a dismissible install banner appears automatically once the browser signals the app is installable. Dismissing it is remembered in the browser's localStorage and the banner won't reappear. You can also trigger installation manually from the browser's own UI (for example, the install icon in Chrome's address bar) at any time, banner or not. iOS/iPadOS has no `beforeinstallprompt` event, so there the banner never appears — use Safari's Share menu → **Add to Home Screen** instead.
+
+### Offline behavior
+
+The installed app (and the regular browser tab) is backed by a service worker that precaches the SPA shell — the HTML, JS, and CSS needed to boot Drydock — so the dashboard still loads without a network connection. The service worker updates itself automatically in the background and takes over immediately on the next load; there's no "update available" prompt to act on and no way to get stuck on a stale shell.
+
+<Callout type="info">All `/api/*` requests are always network-only and are never served from the service worker's cache, offline or not. Drydock is a live dashboard — showing stale container/update state would be worse than a request failing outright, so API calls always hit the live server and surface a normal connection error when it's unreachable.</Callout>
+
 ## Themes
 
 Drydock ships with 6 color themes, each available in dark and light variants:
