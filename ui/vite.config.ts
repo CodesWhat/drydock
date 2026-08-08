@@ -2,6 +2,7 @@ import { fileURLToPath, URL } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -14,6 +15,65 @@ export default defineConfig({
       },
     }),
     tailwindcss(),
+    VitePWA({
+      // Never let a stale precached shell pin users to an old UI: the new
+      // service worker takes over and reloads open tabs automatically
+      // instead of waiting on a manual "update available" prompt.
+      registerType: 'autoUpdate',
+      manifestFilename: 'site.webmanifest',
+      includeAssets: ['favicon.ico', 'favicon-96x96.png', 'apple-touch-icon.png'],
+      manifest: {
+        name: 'Drydock',
+        short_name: 'Drydock',
+        description: 'Docker container update manager',
+        display: 'standalone',
+        // Matches --dd-bg from the One Dark default theme (src/theme/tokens.css).
+        theme_color: '#282c34',
+        background_color: '#282c34',
+        icons: [
+          {
+            src: '/web-app-manifest-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/web-app-manifest-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/maskable-icon-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+          {
+            src: '/maskable-icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
+      },
+      workbox: {
+        // Drydock is a live dashboard — stale API data is worse than a
+        // request failing outright, so /api is never handled by the SW,
+        // neither for navigations nor for runtime fetches.
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: /^\/api\//,
+            handler: 'NetworkOnly',
+          },
+        ],
+        // The main app chunk sits close to the default 2 MiB precache
+        // cutoff; give it headroom so it doesn't silently drop out of the
+        // precache manifest as the app grows.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+      },
+    }),
   ],
 
   resolve: {

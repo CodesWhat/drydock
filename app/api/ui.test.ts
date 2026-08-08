@@ -133,4 +133,14 @@ describe('UI Router', () => {
 
     expect(res.setHeader).not.toHaveBeenCalled();
   });
+
+  test('should disable caching for the service worker script so updates are never masked by a stale sw.js', () => {
+    uiRouter.init();
+    const setHeaders = vi.mocked(express.static).mock.calls[0][1]?.setHeaders;
+    const res = { setHeader: vi.fn() };
+
+    setHeaders?.(res as never, '/app/ui/sw.js');
+
+    expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
+  });
 });

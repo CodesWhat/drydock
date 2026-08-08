@@ -2,7 +2,7 @@
 import { computed, ref, useAttrs } from 'vue';
 import { useI18n } from 'vue-i18n';
 
-type BannerTone = 'warning' | 'error';
+type BannerTone = 'warning' | 'error' | 'info';
 
 const props = withDefaults(
   defineProps<{
@@ -13,6 +13,7 @@ const props = withDefaults(
     permanentDismissLabel?: string;
     linkHref?: string;
     linkLabel?: string;
+    actionLabel?: string;
   }>(),
   {
     tone: 'warning',
@@ -22,6 +23,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   dismiss: [];
   'dismiss-permanent': [];
+  action: [];
 }>();
 
 const { t } = useI18n();
@@ -39,7 +41,8 @@ function handleDismiss() {
 }
 
 const toneStyles = computed(() => {
-  const cssVar = props.tone === 'error' ? '--dd-danger' : '--dd-warning';
+  const cssVar =
+    props.tone === 'error' ? '--dd-danger' : props.tone === 'info' ? '--dd-info' : '--dd-warning';
   return {
     backgroundColor: `color-mix(in srgb, var(${cssVar}) 25%, var(--dd-bg-card))`,
     borderColor: `var(${cssVar})`,
@@ -90,6 +93,17 @@ const toneStyles = computed(() => {
         {{ linkLabel ?? t('appShell.announcementBanner.defaultLinkLabel') }}
         <AppIcon name="external-link" :size="10" />
       </a>
+      <AppButton v-if="actionLabel" size="none" variant="plain" weight="none"
+        :data-testid="testIdPrefix ? `${testIdPrefix}-action` : undefined"
+        class="text-2xs-plus px-2.5 py-1.5 dd-rounded transition-colors w-full text-center"
+        :style="{
+          border: `1px solid ${toneStyles.buttonBorderColor}`,
+          color: toneStyles.buttonTextColor,
+          backgroundColor: toneStyles.buttonBackgroundColor,
+        }"
+        @click="emit('action')">
+        {{ actionLabel }}
+      </AppButton>
       <AppButton size="none" variant="plain" weight="none"
         :data-testid="testIdPrefix ? `${testIdPrefix}-dismiss-session` : undefined"
         class="text-2xs-plus px-2.5 py-1.5 dd-rounded transition-colors w-full text-center"

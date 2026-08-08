@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png?inline';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
+import InstallBanner from '@/components/InstallBanner.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import { useDeprecationBanner } from '@/composables/useDeprecationBanner';
@@ -713,13 +714,6 @@ const legacyApiPathBannerTitle = computed(() => {
     ? t('appShell.banners.legacyApiPathTitlePlural', { total })
     : t('appShell.banners.legacyApiPathTitleSingular', { total });
 });
-const hasVisibleAnnouncementBanners = computed(
-  () =>
-    showLegacyConfigDeprecationBanner.value ||
-    showLegacyApiPathDeprecationBanner.value ||
-    showCurlHealthcheckDeprecationBanner.value,
-);
-
 async function refreshLegacyInputSummary() {
   const serverData = await getServer().catch(() => null);
   const summary = normalizeLegacyInputSummary(serverData?.compatibility?.legacyInputs);
@@ -1568,9 +1562,10 @@ onUnmounted(() => {
       </header>
 
       <div
-        v-if="hasVisibleAnnouncementBanners"
         class="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl flex flex-col gap-2"
       >
+        <InstallBanner />
+
         <AnnouncementBanner
           v-if="showLegacyConfigDeprecationBanner"
           data-testid="legacy-config-deprecation-banner"
