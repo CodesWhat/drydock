@@ -214,6 +214,10 @@ interface TarjanFrame {
  * once every one of its neighbors has been examined — so the traversal
  * order, and therefore the resulting SCC partition and component order,
  * are identical to the recursive version for the same input.
+ *
+ * Precondition: `adjacency` must have an entry (possibly `[]`) for every id
+ * in `nodeIds` — the sole caller pre-seeds it that way, so neighbor lookups
+ * below are asserted rather than defaulted.
  */
 function stronglyConnectedComponents(
   nodeIds: string[],
@@ -232,7 +236,7 @@ function stronglyConnectedComponents(
     }
 
     const workStack: TarjanFrame[] = [
-      { nodeId: rootNodeId, neighbors: adjacency.get(rootNodeId) ?? [], neighborIndex: 0 },
+      { nodeId: rootNodeId, neighbors: adjacency.get(rootNodeId) as string[], neighborIndex: 0 },
     ];
     indices.set(rootNodeId, nextIndex);
     lowlink.set(rootNodeId, nextIndex);
@@ -253,7 +257,7 @@ function stronglyConnectedComponents(
           nextIndex += 1;
           stack.push(w);
           onStack.add(w);
-          workStack.push({ nodeId: w, neighbors: adjacency.get(w) ?? [], neighborIndex: 0 });
+          workStack.push({ nodeId: w, neighbors: adjacency.get(w) as string[], neighborIndex: 0 });
         } else if (onStack.has(w)) {
           lowlink.set(
             frame.nodeId,
@@ -376,16 +380,24 @@ export function topologicalSort(
   }
 
   const cycles: string[][] = [];
-  let remaining = [...nodeIds].filter((id) => !processed.has(id));
+  const remaining = [...nodeIds].filter((id) => !processed.has(id));
 
-  while (remaining.length > 0) {
+  if (remaining.length > 0) {
+    // Built once, over the full remaining set — not rebuilt/shrunk per
+    // round. Pre-seeded to `[]` for every remaining id (mirroring the
+    // inDegree pre-seeding above) so stronglyConnectedComponents' neighbor
+    // lookups are always defined: a node only ever ends up in `remaining`
+    // because it has at least one dependency edge to another remaining node
+    // (otherwise the clean Kahn's pass above would already have resolved
+    // it), so this map, once built, never needs an empty-fallback default.
     const remainingSet = new Set(remaining);
     const adjacency = new Map<string, string[]>();
+    for (const id of remaining) {
+      adjacency.set(id, []);
+    }
     for (const edge of validEdges) {
       if (remainingSet.has(edge.from) && remainingSet.has(edge.to)) {
-        const list = adjacency.get(edge.from) ?? [];
-        list.push(edge.to);
-        adjacency.set(edge.from, list);
+        (adjacency.get(edge.from) as string[]).push(edge.to);
       }
     }
 
@@ -397,35 +409,52 @@ export function topologicalSort(
       }
     });
 
-    // A component is "ready" this round when none of its members point (via
-    // a within-`remaining` edge) at a DIFFERENT still-remaining component —
-    // i.e. every dependency it has outside itself has already been
-    // scheduled in an earlier wave. Condensing any graph into its SCCs
-    // always yields a DAG, so at least one component is ready every round —
-    // this loop always makes progress and terminates.
-    const readyNodeIds: string[] = [];
-    for (const [componentIndex, component] of components.entries()) {
-      const isReady = component.every((nodeId) =>
-        (adjacency.get(nodeId) ?? []).every(
-          (target) => componentIdByNode.get(target) === componentIndex,
-        ),
-      );
-      if (!isReady) {
-        continue;
-      }
-      readyNodeIds.push(...component);
-      const isSelfLoop =
-        component.length === 1 && (adjacency.get(component[0]) ?? []).includes(component[0]);
-      if (component.length > 1 || isSelfLoop) {
-        cycles.push([...component].sort(byName));
-      }
-    }
+    // Tarjan closes a component only once every node it can reach has
+    // itself closed, so `components` already comes out in a valid
+    // topological order of the SCC condensation: whenever component A has
+    // an edge to a different component B, B appears — and therefore has its
+    // `componentLayer` already computed — at a lower index than A. That
+    // lets each component's wave ("layer") number be computed in a single
+    // forward pass instead of repeatedly recomputing readiness by rebuilding
+    // the subgraph every round: a component's layer is one past the highest
+    // layer among the (distinct) other components it depends on, or 0 if it
+    // depends on none. Bucketing by layer as they're computed — rather than
+    // processing components in layer order directly — preserves both the
+    // cross-layer wave order and, within a layer, the same relative
+    // ordering a fresh per-round computation would have produced.
+    const componentLayer: number[] = new Array(components.length).fill(0);
+    const layerBuckets: { nodeIds: string[]; cycleEntries: string[][] }[] = [];
 
-    waves.push([...readyNodeIds].sort(byName));
-    for (const id of readyNodeIds) {
-      processed.add(id);
+    components.forEach((component, componentIndex) => {
+      let maxDependencyLayer = -1;
+      let isSelfLoop = false;
+      for (const nodeId of component) {
+        for (const target of adjacency.get(nodeId) as string[]) {
+          const targetComponentIndex = componentIdByNode.get(target) as number;
+          if (targetComponentIndex === componentIndex) {
+            if (target === nodeId) {
+              isSelfLoop = true;
+            }
+            continue;
+          }
+          maxDependencyLayer = Math.max(maxDependencyLayer, componentLayer[targetComponentIndex]);
+        }
+      }
+
+      const layer = maxDependencyLayer + 1;
+      componentLayer[componentIndex] = layer;
+
+      const bucket = (layerBuckets[layer] ??= { nodeIds: [], cycleEntries: [] });
+      bucket.nodeIds.push(...component);
+      if (component.length > 1 || isSelfLoop) {
+        bucket.cycleEntries.push([...component].sort(byName));
+      }
+    });
+
+    for (const bucket of layerBuckets) {
+      waves.push([...bucket.nodeIds].sort(byName));
+      cycles.push(...bucket.cycleEntries);
     }
-    remaining = remaining.filter((id) => !processed.has(id));
   }
 
   return { waves, cycles };
