@@ -96,6 +96,7 @@ const DataTableStub = defineComponent({
             <slot name="cell-server" :row="row" />
             <slot name="cell-registry" :row="row" />
             <slot name="cell-uptime" :row="row" />
+            <slot name="cell-ports" :row="row" />
             <div class="links-cell-stub"><slot name="cell-links" :row="row" /></div>
             <slot name="actions" :row="row" />
           </div>
@@ -3321,6 +3322,222 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     const row = rowByName(wrapper, 'alpha');
     expect(row.text()).toContain('Up ');
+  });
+
+  it('shows the exact startedAt timestamp as a tooltip on the uptime cell', async () => {
+    const startedAt = new Date(Date.now() - 30_000).toISOString();
+    const container = makeContainer({
+      id: 'c-uptime-tooltip',
+      name: 'alpha',
+      status: 'running',
+      details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+    });
+    const { context } = makeContext();
+    context.filteredContainers.value = [container];
+    context.displayContainers.value = [container];
+    context.renderGroups.value = [
+      {
+        key: 'g',
+        name: 'g',
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+    expect(row.find('.font-mono.dd-text-secondary').attributes('title')).toBe(startedAt);
+  });
+
+  describe('ports cell', () => {
+    function mountWithPorts(ports: string[], overrides: Partial<Container> = {}) {
+      const container = makeContainer({
+        id: 'c-ports',
+        name: 'alpha',
+        status: 'running',
+        details: { ports, volumes: [], env: [], labels: [] },
+        ...overrides,
+      });
+      const { context } = makeContext();
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: 'g',
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+      return mountSubject();
+    }
+
+    it('renders a link for a published port with no dd.port.label', () => {
+      const wrapper = mountWithPorts(['8080->80/tcp']);
+      const row = rowByName(wrapper, 'alpha');
+      const link = row.get('[data-test="container-port-link"]');
+      expect(link.text()).toBe('8080->80/tcp');
+    });
+
+    it('renders a link with the dd.port.label override text when one matches', () => {
+      const wrapper = mountWithPorts(['8080->80/tcp'], { portLabel: '80=Web UI' } as any);
+      const row = rowByName(wrapper, 'alpha');
+      const link = row.get('[data-test="container-port-link"]');
+      expect(link.text()).toBe('Web UI');
+    });
+
+    it('renders plain text (no link) for an unpublished port', () => {
+      const wrapper = mountWithPorts(['443/tcp']);
+      const row = rowByName(wrapper, 'alpha');
+      expect(row.find('[data-test="container-port-link"]').exists()).toBe(false);
+      expect(row.get('[data-test="container-port-text"]').text()).toBe('443/tcp');
+    });
+
+    it('shows only the first two ports plus an overflow indicator for more than two', () => {
+      const wrapper = mountWithPorts(['80/tcp', '443/tcp', '8080->80/tcp']);
+      const row = rowByName(wrapper, 'alpha');
+      const entries = row.findAll(
+        '[data-test="container-port-link"], [data-test="container-port-text"]',
+      );
+      expect(entries).toHaveLength(2);
+      expect(row.text()).toContain('+1');
+    });
+
+    it('renders a dash placeholder when the container has no ports', () => {
+      const wrapper = mountWithPorts([]);
+      const row = rowByName(wrapper, 'alpha');
+      expect(row.find('[data-test="container-port-link"]').exists()).toBe(false);
+      expect(row.find('[data-test="container-port-text"]').exists()).toBe(false);
+      expect(row.text()).toContain('—');
+    });
+  });
+
+  describe('card view ports and uptime', () => {
+    it('shows a ports row on the card for containers with ports', async () => {
+      const container = makeContainer({
+        id: 'c-card-ports',
+        name: 'alpha',
+        status: 'running',
+        details: { ports: ['8080->80/tcp'], volumes: [], env: [], labels: [] },
+      });
+
+      const { wrapper } = await mountCardsWithContainers([container]);
+      const card = cardByName(wrapper, 'alpha');
+      expect(card.get('[data-test="container-port-link"]').text()).toBe('8080->80/tcp');
+    });
+
+    it('caps card ports at three plus an overflow indicator', async () => {
+      const container = makeContainer({
+        id: 'c-card-ports-overflow',
+        name: 'alpha',
+        status: 'running',
+        details: {
+          ports: ['80/tcp', '443/tcp', '8080->80/tcp', '9090->90/tcp'],
+          volumes: [],
+          env: [],
+          labels: [],
+        },
+      });
+
+      const { wrapper } = await mountCardsWithContainers([container]);
+      const card = cardByName(wrapper, 'alpha');
+      const entries = card.findAll(
+        '[data-test="container-port-link"], [data-test="container-port-text"]',
+      );
+      expect(entries).toHaveLength(3);
+      expect(card.text()).toContain('+1');
+    });
+
+    it('hides the ports row on the card when there are no ports', async () => {
+      const container = makeContainer({
+        id: 'c-card-no-ports',
+        name: 'alpha',
+        status: 'running',
+        details: { ports: [], volumes: [], env: [], labels: [] },
+      });
+
+      const { wrapper } = await mountCardsWithContainers([container]);
+      const card = cardByName(wrapper, 'alpha');
+      expect(card.find('[data-test="container-port-link"]').exists()).toBe(false);
+      expect(card.find('[data-test="container-port-text"]').exists()).toBe(false);
+    });
+
+    it('shows uptime text on the card footer for a running container with startedAt', async () => {
+      const startedAt = new Date(Date.now() - 60_000).toISOString();
+      const container = makeContainer({
+        id: 'c-card-uptime',
+        name: 'alpha',
+        status: 'running',
+        details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+      });
+
+      const { wrapper } = await mountCardsWithContainers([container]);
+      const card = cardByName(wrapper, 'alpha');
+      const uptime = card.get('[data-test="container-card-uptime"]');
+      expect(uptime.text()).toContain('Up ');
+      expect(uptime.attributes('title')).toBe(startedAt);
+    });
+
+    it('hides card uptime for a stopped container', async () => {
+      const startedAt = new Date(Date.now() - 60_000).toISOString();
+      const container = makeContainer({
+        id: 'c-card-uptime-stopped',
+        name: 'alpha',
+        status: 'stopped',
+        details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+      });
+
+      const { wrapper } = await mountCardsWithContainers([container]);
+      const card = cardByName(wrapper, 'alpha');
+      expect(card.find('[data-test="container-card-uptime"]').exists()).toBe(false);
+    });
+
+    it('hides card uptime when startedAt is absent', async () => {
+      const container = makeContainer({
+        id: 'c-card-uptime-missing',
+        name: 'alpha',
+        status: 'running',
+        details: { ports: [], volumes: [], env: [], labels: [] },
+      });
+
+      const { wrapper } = await mountCardsWithContainers([container]);
+      const card = cardByName(wrapper, 'alpha');
+      expect(card.find('[data-test="container-card-uptime"]').exists()).toBe(false);
+    });
+
+    it('refreshes card uptime live as the shared nowMs timer ticks', async () => {
+      vi.useFakeTimers();
+      try {
+        const startedAt = new Date(Date.now() - 1_000).toISOString();
+        const container = makeContainer({
+          id: 'c-card-uptime-live',
+          name: 'alpha',
+          status: 'running',
+          details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+        });
+
+        const { wrapper } = await mountCardsWithContainers([container]);
+        const before = cardByName(wrapper, 'alpha')
+          .get('[data-test="container-card-uptime"]')
+          .text();
+
+        await vi.advanceTimersByTimeAsync(30_000);
+        await nextTick();
+
+        const after = cardByName(wrapper, 'alpha')
+          .get('[data-test="container-card-uptime"]')
+          .text();
+        expect(after).not.toBe(before);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('calls recheckContainer when Recheck for updates menu action is clicked', async () => {

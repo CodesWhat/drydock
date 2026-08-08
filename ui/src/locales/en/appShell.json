@@ -148,6 +148,14 @@
         "restartingMessage": "Drydock is restarting after a self-update{opId}. Reconnecting when the service is back...",
         "reconnecting": "Reconnecting",
         "restartingService": "Restarting service"
+      },
+      "shortcuts": {
+        "title": "Keyboard shortcuts",
+        "close": "Close",
+        "focusSearch": "Focus search",
+        "closeSearch": "Close search or dismiss dialogs",
+        "showHelp": "Show this help",
+        "toggleSearch": "Toggle search"
       }
     },
     "announcementBanner": {

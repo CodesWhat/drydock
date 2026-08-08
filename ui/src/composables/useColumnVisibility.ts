@@ -142,6 +142,17 @@ const allColumns: ColumnDef[] = [
     priority: 90,
     required: false,
   },
+  {
+    key: 'ports',
+    label: 'Ports',
+    labelKey: 'containersView.columns.ports',
+    px: 'px-3',
+    size: 180,
+    minSize: 130,
+    maxSize: 280,
+    priority: 95,
+    required: false,
+  },
 ];
 // Containers no longer carries per-column `cardPriority` annotations: this view ships a
 // hand-authored `#card` template (ContainersGroupedViews.vue) instead of DataTable's generic
