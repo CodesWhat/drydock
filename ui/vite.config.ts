@@ -4,6 +4,13 @@ import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
+// workbox-routing tests a RegExpRoute's urlPattern against the FULL url.href
+// (which always starts with "http://" or "https://"), never against the
+// pathname alone — so a `^`-anchored pathname regex like /^\/api\// can never
+// match and silently falls through to the next route. Use a match callback
+// against url.pathname instead so this rule actually engages.
+export const isApiRequest = ({ url }: { url: URL }): boolean => url.pathname.startsWith('/api/');
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -64,7 +71,7 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
           {
-            urlPattern: /^\/api\//,
+            urlPattern: isApiRequest,
             handler: 'NetworkOnly',
           },
         ],

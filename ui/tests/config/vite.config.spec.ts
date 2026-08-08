@@ -1,5 +1,5 @@
 // @vitest-environment node
-import viteConfig from '../../vite.config';
+import viteConfig, { isApiRequest } from '../../vite.config';
 
 type CodeSplittingGroup = { name: string; test: RegExp };
 
@@ -54,5 +54,18 @@ describe('vite build configuration', () => {
     expect(groups[1]?.name).toBe('i18n');
     expect(groups[2]?.name).toBe('icons');
     expect(groups[3]?.name).toBe('vendor');
+  });
+});
+
+describe('service-worker /api runtime-caching rule', () => {
+  it('matches request pathnames under /api/', () => {
+    expect(isApiRequest({ url: new URL('http://x/api/containers') })).toBe(true);
+    expect(isApiRequest({ url: new URL('https://drydock.example.com/api/') })).toBe(true);
+  });
+
+  it('does not match non-/api paths, including URLs that merely contain /api/ later', () => {
+    expect(isApiRequest({ url: new URL('http://x/assets/app.js') })).toBe(false);
+    expect(isApiRequest({ url: new URL('http://x/') })).toBe(false);
+    expect(isApiRequest({ url: new URL('http://x/assets/api/decoy.js') })).toBe(false);
   });
 });
