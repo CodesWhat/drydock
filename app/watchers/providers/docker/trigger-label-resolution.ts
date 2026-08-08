@@ -3,8 +3,6 @@ import {
   ddActionInclude,
   ddNotificationExclude,
   ddNotificationInclude,
-  ddTriggerExclude,
-  ddTriggerInclude,
 } from './label.js';
 
 export type TriggerLabelDirection = 'include' | 'exclude';
@@ -12,7 +10,7 @@ export type TriggerLabelDirection = 'include' | 'exclude';
 export interface ResolvedTriggerLabelValues {
   action?: string;
   notification?: string;
-  /** Compat mirror: first scoped value, then the deprecated dd.trigger.* fallback. */
+  /** Compat mirror: the scoped value, for old API/agent consumers. */
   mirror?: string;
 }
 
@@ -35,14 +33,16 @@ function getDdNotificationKey(direction: TriggerLabelDirection): string {
   return direction === 'include' ? ddNotificationInclude : ddNotificationExclude;
 }
 
-function getDdLegacyKey(direction: TriggerLabelDirection): string {
-  return direction === 'include' ? ddTriggerInclude : ddTriggerExclude;
-}
-
 /**
  * Pure (no warn/telemetry side effects) resolution of one direction of the
  * trigger labels into category-scoped values plus the deprecated compat
  * mirror.
+ *
+ * The legacy `dd.trigger.<dir>` fallback was removed in v1.7.0 — only
+ * `dd.action.<dir>` / `dd.notification.<dir>` are read here. Callers that
+ * still need to detect (and warn about) a `dd.trigger.<dir>` label present
+ * on a container do so separately; it is no longer consulted for value
+ * resolution.
  *
  * Kept dependency-free (only imports the label key constants, which have no
  * imports of their own) so it can be shared by the live label-resolution path
@@ -60,16 +60,15 @@ export function resolveTriggerLabelValuesPure(
 ): ResolvedTriggerLabelValues {
   const actionValue = labels[getDdActionKey(direction)];
   const notificationValue = labels[getDdNotificationKey(direction)];
-  const legacyValue = labels[getDdLegacyKey(direction)];
 
-  if (actionValue === undefined && notificationValue === undefined && legacyValue === undefined) {
+  if (actionValue === undefined && notificationValue === undefined) {
     return {};
   }
 
   return {
-    action: actionValue ?? legacyValue,
-    notification: notificationValue ?? legacyValue,
-    mirror: actionValue ?? notificationValue ?? legacyValue,
+    action: actionValue,
+    notification: notificationValue,
+    mirror: actionValue ?? notificationValue,
   };
 }
 
