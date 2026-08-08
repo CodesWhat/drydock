@@ -1322,7 +1322,7 @@ describe('Container Service', () => {
   });
 
   describe('updateDependencyGroup', () => {
-    it('posts the bulk dependency-group update successfully', async () => {
+    it('posts the bulk dependency-group update with the confirmation header and no expectedContainerIds', async () => {
       const mockResult = {
         message: 'Dependency group update requests processed',
         accepted: [
@@ -1346,20 +1346,81 @@ describe('Container Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/v1/dependency-groups/c1/update', {
         method: 'POST',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-DD-Confirm-Action': 'dependency-group-update',
+        },
+        body: JSON.stringify({}),
       });
       expect(result).toEqual(mockResult);
     });
 
-    it('throws when the dependency-group update response is not ok', async () => {
+    it('includes expectedContainerIds in the request body when provided', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: 'ok', accepted: [], rejected: [] }),
+      } as any);
+
+      await updateDependencyGroup('c1', ['c1', 'c2']);
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/dependency-groups/c1/update',
+        expect.objectContaining({
+          body: JSON.stringify({ expectedContainerIds: ['c1', 'c2'] }),
+        }),
+      );
+    });
+
+    it('throws an ApiError with the response status when the update response is not ok', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 403,
         statusText: 'Forbidden',
+        json: async () => ({}),
+      } as any);
+
+      const thrown = await updateDependencyGroup('c1').catch((e) => e);
+
+      expect(thrown).toBeInstanceOf(ApiError);
+      expect(thrown.status).toBe(403);
+      expect(thrown.message).toBe('Failed to update dependency group c1: Forbidden');
+    });
+
+    it('throws ApiError with status 409 and the chain-divergence detail on a stale preview', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: 'Conflict',
+        json: async () => ({ error: 'Dependency chain has changed since it was last previewed' }),
+      } as any);
+
+      const thrown = await updateDependencyGroup('c1', ['c1']).catch((e) => e);
+
+      expect(thrown).toBeInstanceOf(ApiError);
+      expect(thrown.status).toBe(409);
+      expect(thrown.message).toBe(
+        'Failed to update dependency group c1: Conflict (Dependency chain has changed since it was last previewed)',
+      );
+    });
+
+    it('throws without detail when the error response body cannot be parsed', async () => {
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => {
+          throw new SyntaxError('bad json');
+        },
       } as any);
 
       await expect(updateDependencyGroup('c1')).rejects.toThrow(
-        'Failed to update dependency group c1: Forbidden',
+        'Failed to update dependency group c1: Internal Server Error',
       );
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to parse dependency group update response payload'),
+      );
+      debugSpy.mockRestore();
     });
   });
 });

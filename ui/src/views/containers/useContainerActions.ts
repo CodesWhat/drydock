@@ -40,7 +40,7 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
   type TranslateFn,
 } from '../../utils/container-update';
-import { errorMessage } from '../../utils/error';
+import { ApiError, errorMessage } from '../../utils/error';
 import {
   getPrimaryHardBlocker,
   getSoftBlockers,
@@ -468,16 +468,23 @@ async function deleteContainerState(args: {
  * chain-preview confirm dialog (#219). Kept as a standalone function (rather
  * than inline in the confirm handler) so it can be unit tested directly like
  * updateAllInGroupState/deleteContainerState.
+ *
+ * `expectedContainerIds` is the exact container id set the confirm dialog
+ * previewed — forwarded so the backend can refuse (409) to run against a
+ * chain that changed shape between preview and confirm, rather than
+ * silently updating a different set of containers than the ones the user
+ * saw and accepted.
  */
 async function runDependencyGroupUpdateState(args: {
   rootId: string;
   name: string;
+  expectedContainerIds: string[];
   loadContainers: () => Promise<void>;
   t: TranslateFn;
 }) {
+  const toast = useToast();
   try {
-    await apiUpdateDependencyGroup(args.rootId);
-    const toast = useToast();
+    await apiUpdateDependencyGroup(args.rootId, args.expectedContainerIds);
     toast.success(
       args.t('containerComponents.confirmDialogs.dependencyGroup.successMessage', {
         name: args.name,
@@ -485,13 +492,21 @@ async function runDependencyGroupUpdateState(args: {
     );
     await args.loadContainers();
   } catch (e: unknown) {
+    if (e instanceof ApiError && e.status === 409) {
+      toast.error(
+        args.t('containerComponents.confirmDialogs.dependencyGroup.staleChainTitle'),
+        args.t('containerComponents.confirmDialogs.dependencyGroup.staleChainDetail', {
+          name: args.name,
+        }),
+      );
+      return;
+    }
     const msg = errorMessage(
       e,
       args.t('containerComponents.confirmDialogs.dependencyGroup.failedDetail', {
         name: args.name,
       }),
     );
-    const toast = useToast();
     toast.error(args.t('containerComponents.confirmDialogs.dependencyGroup.failedTitle'), msg);
   }
 }
@@ -527,8 +542,17 @@ async function confirmDependencyGroupUpdateState(args: {
   try {
     const preview = await apiPreviewUpdateChain(containerId);
     const totalContainers = preview.waves.reduce((sum, wave) => sum + wave.containers.length, 0);
+    // The exact container id set being previewed, forwarded as
+    // expectedContainerIds so the backend can bind the eventual update to
+    // this same chain rather than whatever it happens to be at accept time.
+    const expectedContainerIds = preview.waves.flatMap((wave) => wave.containers.map((c) => c.id));
     const waveList = preview.waves
-      .map((wave, index) => `${index + 1}. ${wave.containers.map((c) => c.name).join(', ')}`)
+      .map((wave, index) => {
+        const names = wave.containers
+          .map((c) => (c.actionKind === 'restart' ? `${c.name} (restart)` : c.name))
+          .join(', ');
+        return `${index + 1}. ${names}`;
+      })
       .join('\n');
 
     let message =
@@ -562,6 +586,7 @@ async function confirmDependencyGroupUpdateState(args: {
         runDependencyGroupUpdateState({
           rootId: containerId,
           name,
+          expectedContainerIds,
           loadContainers: args.loadContainers,
           t: args.t,
         }),

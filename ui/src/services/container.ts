@@ -385,16 +385,40 @@ interface DependencyGroupUpdateResult {
 
 /**
  * POST /api/v1/dependency-groups/:rootId/update — bulk-update every
- * container in the dependency chain rooted at rootId (#219).
+ * container in the dependency chain rooted at rootId (#219). Destructive-
+ * confirmation-gated, same as deleteContainer. `expectedContainerIds` binds
+ * the request to the exact chain the caller last previewed (previewUpdateChain)
+ * — the backend rejects with 409 (surfaced as an ApiError with status 409)
+ * if the live chain no longer matches.
  */
-async function updateDependencyGroup(rootId: string): Promise<DependencyGroupUpdateResult> {
+async function updateDependencyGroup(
+  rootId: string,
+  expectedContainerIds?: string[],
+): Promise<DependencyGroupUpdateResult> {
   const response = await fetch(`/api/v1/dependency-groups/${rootId}/update`, {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-DD-Confirm-Action': 'dependency-group-update',
+    },
+    body: JSON.stringify(expectedContainerIds !== undefined ? { expectedContainerIds } : {}),
   });
   if (!response.ok) {
-    throw new Error(`Failed to update dependency group ${rootId}: ${response.statusText}`);
+    let details = '';
+    try {
+      const body = await readJsonResponse<{ error?: unknown }>(
+        response,
+        'Dependency group update API',
+      );
+      details = body?.error ? ` (${body.error})` : '';
+    } catch (e: unknown) {
+      console.debug(`Unable to parse dependency group update response payload: ${errorMessage(e)}`);
+    }
+    throw new ApiError(
+      `Failed to update dependency group ${rootId}: ${response.statusText}${details}`,
+      response.status,
+    );
   }
   return readJsonResponse<DependencyGroupUpdateResult>(response, 'Dependency group update API');
 }

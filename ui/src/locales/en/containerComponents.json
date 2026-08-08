@@ -493,7 +493,9 @@
         "previewFailedDetail": "Failed to load the dependency chain preview for {name}.",
         "successMessage": "Dependency chain update started: {name}",
         "failedTitle": "Dependency chain update failed",
-        "failedDetail": "Failed to update the dependency chain for {name}."
+        "failedDetail": "Failed to update the dependency chain for {name}.",
+        "staleChainTitle": "Dependency chain has changed",
+        "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
       }
     },
     "actionToasts": {
