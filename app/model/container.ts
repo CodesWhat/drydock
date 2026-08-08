@@ -205,6 +205,7 @@ export interface Container {
   tagFamily?: string;
   tagPinInfo?: boolean;
   linkTemplate?: string;
+  portLabel?: string;
   link?: string;
   actionTriggerInclude?: string;
   actionTriggerExclude?: string;
@@ -348,6 +349,7 @@ const schema = joi.object({
   tagFamily: joi.string(),
   tagPinInfo: joi.boolean(),
   linkTemplate: joi.string(),
+  portLabel: joi.string(),
   link: joi.string(),
   actionTriggerInclude: joi.string(),
   actionTriggerExclude: joi.string(),

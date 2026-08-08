@@ -77,6 +77,13 @@ export const ddDisplayName = 'dd.display.name';
 export const ddDisplayIcon = 'dd.display.icon';
 
 /**
+ * Optional custom label for a specific published port, shown in the UI's
+ * clickable port links. Comma-separated `<port>=<label>` pairs, e.g.
+ * `80=Web UI,443/tcp=Admin Console`. Bare port numbers default to /tcp.
+ */
+export const ddPortLabel = 'dd.port.label';
+
+/**
  * Optional list of triggers to include
  */
 export const ddActionInclude = 'dd.action.include';

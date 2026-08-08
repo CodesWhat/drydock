@@ -666,6 +666,14 @@ describe('container-init coverage', () => {
       expect(container.linkTemplate).toBe('https://example.com/${major}');
     });
 
+    test('derives portLabel from dd.port.label label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, {
+        'dd.port.label': '80=Web UI,443/tcp=Admin Console',
+      });
+      expect(container.portLabel).toBe('80=Web UI,443/tcp=Admin Console');
+    });
+
     test('derives triggerInclude from dd.action.include label', () => {
       const container = makeContainer();
       applyDerivedLabelFieldsToContainer(container, { 'dd.action.include': 'my-action' });

@@ -28,6 +28,7 @@ import {
   ddLinkTemplate,
   ddNotificationExclude,
   ddNotificationInclude,
+  ddPortLabel,
   ddRegistryLookupImage,
   ddRegistryLookupUrl,
   ddTagExclude,
@@ -67,6 +68,7 @@ interface ResolvedContainerLabelOverrides {
   inspectTagPath?: string;
   inspectTagVersionOnly?: string;
   linkTemplate?: string;
+  portLabel?: string;
   displayName?: string;
   displayIcon?: string;
   actionTriggerInclude?: string;
@@ -177,6 +179,11 @@ const containerLabelOverrideMappings = [
     key: 'linkTemplate',
     ddKey: ddLinkTemplate,
     overrideKey: 'linkTemplate',
+  },
+  {
+    key: 'portLabel',
+    ddKey: ddPortLabel,
+    overrideKey: 'portLabel',
   },
   { key: 'displayName', ddKey: ddDisplayName, overrideKey: 'displayName' },
   { key: 'displayIcon', ddKey: ddDisplayIcon, overrideKey: 'displayIcon' },
@@ -837,6 +844,7 @@ export function applyDerivedLabelFieldsToContainer(
   const tagPinInfo = getContainerConfigBooleanValue(resolved.tagPinInfo);
   container.tagPinInfo = tagPinInfo ?? tagPolicyFallbacks.tagPinInfo;
   container.linkTemplate = resolved.linkTemplate;
+  container.portLabel = resolved.portLabel;
   container.actionTriggerInclude = resolved.actionTriggerInclude;
   container.actionTriggerExclude = resolved.actionTriggerExclude;
   container.notificationTriggerInclude = resolved.notificationTriggerInclude;
@@ -995,6 +1003,7 @@ export function mergeConfigWithImgset(
       matchingImgset?.inspectTagPath,
     ),
     inspectTagVersionOnly: labelOverrides.inspectTagVersionOnly,
+    portLabel: labelOverrides.portLabel,
     watchDigest: getContainerConfigValue(
       getLabel(containerLabels, ddWatchDigest),
       matchingImgset?.watchDigest,
