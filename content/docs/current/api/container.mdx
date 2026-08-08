@@ -52,9 +52,9 @@ The display badge labels each pending update as `hot`, `mature`, or `established
 | --- | :---: | --- | --- | --- |
 | `DD_UI_MATURITY_THRESHOLD_DAYS` | ⚪ | Age threshold (days) that separates `hot` updates from `mature` updates. Updates younger than this value are classified `hot`; updates at or older than this value (up to 30 days) are classified `mature`; updates older than 30 days are always `established`. | integer (`1` to `365`) | `7` |
 
-Display age is computed as `now − min(firstSeenAt, result.publishedAt)`. For Docker Hub and GHCR registries `publishedAt` is the real push date, so an image that shipped days ago can arrive already-`mature`. For all other registries `publishedAt` is the OCI image build date (see the table below), which may be older or pinned to an epoch date, meaning the badge can read older than the actual push date.
+Display age is computed by the same trust-aware clock the policy gate uses (see below): if the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), age is measured from the earlier of that date and `updateDetectedAt`/`firstSeenAt`; otherwise it is measured from `updateDetectedAt` (or `firstSeenAt` as a fallback) alone. An untrusted `publishedAt` — the OCI image build date on registries other than Docker Hub and GHCR, which may be older or pinned to an epoch date — is never consulted, so it can no longer make the badge read older than the image's actual push/detection date.
 
-> **Note:** The badge and the policy gate measure age differently. The badge uses `min(firstSeenAt, result.publishedAt)`; the gate uses the trusted publish date (or `updateDetectedAt`). For untrusted registries the badge can therefore read older than the gate, because it relies on the OCI build date. The badge only labels updates that are currently surfaced: while the policy gate is suppressing an update in `mature` mode the update is not shown, so no badge appears either. The `Maturing` eligibility pill indicates that state instead.
+> **Note:** The badge and the policy gate now measure age identically — both resolve the same clock (trusted publish date when available, else `updateDetectedAt`/`firstSeenAt`). The badge only labels updates that are currently surfaced: while the policy gate is suppressing an update in `mature` mode the update is not shown, so no badge appears either. The `Maturing` eligibility pill indicates that state instead.
 
 #### Policy gate (holds updates)
 
@@ -67,9 +67,9 @@ The policy gate suppresses an update until the image has aged past a minimum thr
 
 The gate clock starts from the **earliest point** at which the update is known to have existed:
 
-- If the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), the clock starts from the earlier of that date and `updateDetectedAt`. An image that has already been public longer than `maturityMinAgeDays` is immediately mature, regardless of when this Drydock instance first noticed it.
-- Otherwise, the clock starts from `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update.
-- If the trusted publish date fails to parse or lies in the future (clock-skew protection), it is discarded and the gate falls back to `updateDetectedAt`.
+- If the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), the clock starts from the earlier of that date and `updateDetectedAt` (or `firstSeenAt` as a fallback — see below). An image that has already been public longer than `maturityMinAgeDays` is immediately mature, regardless of when this Drydock instance first noticed it.
+- Otherwise, the clock starts from `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update — falling back to `firstSeenAt` when `updateDetectedAt` is missing or fails to parse (a legacy/partial-record case; in steady state the two are stamped together).
+- If the trusted publish date fails to parse or lies in the future (clock-skew protection), it is discarded and the gate falls back to `updateDetectedAt`/`firstSeenAt` the same way.
 
 The gate clock survives container recreation. A Portainer stack redeploy or `docker compose down && up` gives the container a new Docker ID, but Drydock carries the maturity clock forward via the container's stable identity as long as the same update is still pending. If a different pending tag or digest appears while the previous candidate is still soaking, the clock resets for the new candidate.
 
@@ -98,7 +98,7 @@ Quay.io has a push-date API but Drydock does not yet read it; Quay is treated as
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `result.publishedAtTrusted` | boolean | `true` when `result.publishedAt` came from a trusted registry push-date source (Docker Hub or GHCR). Absent or `false` for all other registries. When `true`, the policy gate uses `publishedAt` as the start of the maturity clock; when `false` or absent, the gate falls back to `updateDetectedAt`. |
+| `result.publishedAtTrusted` | boolean | `true` when `result.publishedAt` came from a trusted registry push-date source (Docker Hub or GHCR). Absent or `false` for all other registries. When `true`, the policy gate uses `publishedAt` as the start of the maturity clock; when `false` or absent, the gate falls back to `updateDetectedAt` (or `firstSeenAt` when `updateDetectedAt` is missing or fails to parse). |
 
 ## Get container summary
 

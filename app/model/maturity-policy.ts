@@ -63,16 +63,28 @@ export interface MaturityClock {
  * useContainerPolicy.ts using only updateDetectedAt, drifting from this
  * server-side truth; both now consume the resolved clock via
  * updateEligibility blocker details instead (#display-honesty item 4).
+ *
+ * `firstSeenAt` is a fallback for `updateDetectedAt`, not a second source:
+ * store/container.ts stamps both from the same getUpdateLifecycleTimestamp()
+ * helper at the same call sites, so in steady state they carry the same
+ * value. The fallback only matters for legacy/partial records where one of
+ * the two fields is populated and the other isn't (#556).
  */
 export function resolveMaturityClock(
   container: {
     updateDetectedAt?: string;
+    firstSeenAt?: string;
     result?: { publishedAt?: string; publishedAtTrusted?: boolean };
   },
   nowMs: number = Date.now(),
 ): MaturityClock {
   const detectedMs = Date.parse(container.updateDetectedAt || '');
-  const detectedFinite = Number.isFinite(detectedMs) ? detectedMs : undefined;
+  const firstSeenMs = Date.parse(container.firstSeenAt || '');
+  const detectedFinite = Number.isFinite(detectedMs)
+    ? detectedMs
+    : Number.isFinite(firstSeenMs)
+      ? firstSeenMs
+      : undefined;
   if (container.result?.publishedAtTrusted === true) {
     const publishedMs = Date.parse(container.result.publishedAt || '');
     if (Number.isFinite(publishedMs) && publishedMs <= nowMs) {
@@ -91,11 +103,33 @@ export function resolveMaturityClock(
 export function getMaturityStartMs(
   container: {
     updateDetectedAt?: string;
+    firstSeenAt?: string;
     result?: { publishedAt?: string; publishedAtTrusted?: boolean };
   },
   nowMs: number = Date.now(),
 ): number | undefined {
   return resolveMaturityClock(container, nowMs).startMs;
+}
+
+/**
+ * Trust-aware "how old is this update" in milliseconds — the one addition
+ * call sites actually need beyond resolveMaturityClock/getMaturityStartMs.
+ * Thin wrapper: resolves the same clock the eligibility gate measures
+ * against and returns its age, clamped to >= 0 against clock skew. Replaces
+ * the divergent, untrusted `Math.min(firstSeenAt, publishedAt)` blends that
+ * used to live in app/model/container.ts's getRawUpdateAge and
+ * app/api/container/update-age.ts's own three-way blend (#556).
+ */
+export function getUpdateAgeMs(
+  container: {
+    updateDetectedAt?: string;
+    firstSeenAt?: string;
+    result?: { publishedAt?: string; publishedAtTrusted?: boolean };
+  },
+  nowMs: number = Date.now(),
+): number | undefined {
+  const { startMs } = resolveMaturityClock(container, nowMs);
+  return startMs === undefined ? undefined : Math.max(0, nowMs - startMs);
 }
 
 /**

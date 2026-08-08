@@ -11,6 +11,7 @@ import {
   maturityMinAgeDaysToMilliseconds,
   normalizeMaturityMode,
   parseMaturityMinAgeDays,
+  resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from '../../utils/maturity-policy';
 import { findBackendMaturityBlocked } from '../../utils/update-eligibility';
@@ -114,6 +115,17 @@ function normalizeUpdateDetectedAt(value: unknown): string | undefined {
   return new Date(parsed).toISOString();
 }
 
+function normalizeFirstSeenAt(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+  return new Date(parsed).toISOString();
+}
+
 function resolveContainerPolicyTargetKey(target: ContainerPolicyTarget): string {
   if (typeof target === 'string') {
     return target;
@@ -150,6 +162,27 @@ function hasSuppressedUpdateCandidate(metaRecord: Record<string, unknown>): bool
   return isSuppressedUpdateKind(updateKind?.kind);
 }
 
+/**
+ * Fallback maturity clock start when there's no backend eligibility payload to
+ * read the resolved clock off of (#556): resolve it locally via the
+ * trust-aware mirror instead of the old updateDetectedAt-only heuristic,
+ * which ignored a trusted result.publishedAt.
+ */
+function resolveFallbackMaturityClockStartMs(
+  metaRecord: Record<string, unknown>,
+  updateDetectedAt: string | undefined,
+): number | undefined {
+  const result = asRecord(metaRecord.result);
+  return resolveMaturityClock({
+    updateDetectedAt,
+    firstSeenAt: normalizeFirstSeenAt(metaRecord.firstSeenAt),
+    result: {
+      publishedAt: typeof result?.publishedAt === 'string' ? result.publishedAt : undefined,
+      publishedAtTrusted: result?.publishedAtTrusted === true,
+    },
+  }).startMs;
+}
+
 function buildContainerListPolicyStateFromPolicy(
   metaRecord: Record<string, unknown>,
   policy: Record<string, unknown>,
@@ -160,18 +193,19 @@ function buildContainerListPolicyStateFromPolicy(
   const maturityMode = normalizeMaturityMode(policy.maturityMode);
   const maturityMinAgeDays = resolveMaturityMinAgeDays(policy.maturityMinAgeDays);
   const updateDetectedAt = normalizeUpdateDetectedAt(metaRecord.updateDetectedAt);
-  const updateDetectedAtMs = updateDetectedAt ? Date.parse(updateDetectedAt) : Number.NaN;
   const rawSnoozeUntil = typeof policy.snoozeUntil === 'string' ? policy.snoozeUntil : undefined;
   const snoozeUntilMs = rawSnoozeUntil ? new Date(rawSnoozeUntil).getTime() : Number.NaN;
   const snoozed = Number.isFinite(snoozeUntilMs) && snoozeUntilMs > Date.now();
   const backendMaturityBlocked = findBackendMaturityBlocked(metaRecord);
+  const fallbackMaturityStartMs = resolveFallbackMaturityClockStartMs(metaRecord, updateDetectedAt);
   const maturityBlocked =
     backendMaturityBlocked !== undefined
       ? backendMaturityBlocked
       : maturityMode === 'mature' &&
         hasSuppressedUpdateCandidate(metaRecord) &&
-        (!Number.isFinite(updateDetectedAtMs) ||
-          Date.now() - updateDetectedAtMs < maturityMinAgeDaysToMilliseconds(maturityMinAgeDays));
+        (fallbackMaturityStartMs === undefined ||
+          Date.now() - fallbackMaturityStartMs <
+            maturityMinAgeDaysToMilliseconds(maturityMinAgeDays));
 
   if (!snoozed && skipCount === 0 && !maturityMode) {
     return EMPTY_CONTAINER_POLICY_STATE;

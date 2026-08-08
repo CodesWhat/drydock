@@ -23,6 +23,7 @@ import * as notificationOutbox from './notification-outbox.js';
 import * as secrets from './secrets.js';
 import * as settings from './settings.js';
 import * as uiPreferences from './ui-preferences.js';
+import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updateOperation from './update-operation.js';
 
 // Store Configuration Schema
@@ -64,6 +65,10 @@ function createCollections() {
   audit.createCollections(db);
   backup.createCollections(db);
   container.createCollections(db);
+  // #556: the update-lifecycle-cache collection must exist before rehydration
+  // repopulates container.ts's in-memory Map from it.
+  updateLifecycleCacheStore.createCollections(db);
+  container.rehydrateUpdateLifecycleCacheFromStore();
   nameBindings.createCollections(db);
   notification.createCollections(db);
   notificationHistory.createCollections(db);

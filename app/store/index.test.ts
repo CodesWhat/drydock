@@ -55,6 +55,7 @@ const {
       ...createCollectionsMock(),
       getContainersRaw: vi.fn(() => []),
       updateContainer: vi.fn(),
+      rehydrateUpdateLifecycleCacheFromStore: vi.fn(),
       ...overrides,
     };
   }
@@ -112,6 +113,7 @@ const {
     vi.doMock('./secrets', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
     vi.doMock('./ui-preferences', createCollectionsMock);
+    vi.doMock('./update-lifecycle-cache', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
     vi.doMock('../log', createLogMock);
   }
@@ -149,6 +151,7 @@ vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
 vi.mock('./ui-preferences', createCollectionsMock);
+vi.mock('./update-lifecycle-cache', createCollectionsMock);
 vi.mock('./update-operation', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
@@ -182,6 +185,7 @@ describe('Store Module', () => {
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
     const uiPreferences = await import('./ui-preferences.js');
+    const updateLifecycleCache = await import('./update-lifecycle-cache.js');
     const updateOperation = await import('./update-operation.js');
 
     expect(app.createCollections).toHaveBeenCalled();
@@ -189,11 +193,25 @@ describe('Store Module', () => {
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
     expect(uiPreferences.createCollections).toHaveBeenCalled();
+    expect(updateLifecycleCache.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
     expect(app.completeStartupInitialization).toHaveBeenCalled();
     expect(container.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
       app.completeStartupInitialization.mock.invocationCallOrder[0],
     );
+
+    // #556: the update-lifecycle-cache collection must exist, and container's in-memory
+    // Map must be rehydrated from it, before startup is considered complete — and the
+    // collection has to come into being before rehydration reads from it.
+    expect(container.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      updateLifecycleCache.createCollections.mock.invocationCallOrder[0],
+    );
+    expect(updateLifecycleCache.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      container.rehydrateUpdateLifecycleCacheFromStore.mock.invocationCallOrder[0],
+    );
+    expect(
+      container.rehydrateUpdateLifecycleCacheFromStore.mock.invocationCallOrder[0],
+    ).toBeLessThan(app.completeStartupInitialization.mock.invocationCallOrder[0]);
   });
 
   test('should create directory if it does not exist', async () => {
@@ -775,6 +793,7 @@ describe('Store Module', () => {
     vi.doMock('./notification-outbox', createCollectionsMock);
     vi.doMock('./secrets', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
+    vi.doMock('./update-lifecycle-cache', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
     vi.doMock('../log', () => ({
       default: { child: vi.fn(() => ({ info: vi.fn(), warn: mockWarn })) },

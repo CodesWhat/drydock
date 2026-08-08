@@ -5,6 +5,7 @@ import {
   maturityMinAgeDaysToMilliseconds,
   normalizeMaturityMode,
   parseMaturityMinAgeDays,
+  resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from '@/utils/maturity-policy';
 
@@ -43,5 +44,161 @@ describe('maturity-policy utils', () => {
   it('converts days to milliseconds consistently', () => {
     expect(daysToMs(2)).toBe(2 * MS_PER_DAY);
     expect(maturityMinAgeDaysToMilliseconds(3)).toBe(3 * MS_PER_DAY);
+  });
+});
+
+describe('resolveMaturityClock', () => {
+  const NOW = new Date('2026-04-23T12:00:00.000Z').getTime();
+
+  it('returns startMs=undefined and source=undefined when nothing resolves', () => {
+    expect(resolveMaturityClock({})).toEqual({ startMs: undefined, source: undefined });
+    expect(resolveMaturityClock({ result: {} })).toEqual({
+      startMs: undefined,
+      source: undefined,
+    });
+  });
+
+  it('prefers a trusted publishedAt over a later detectedAt', () => {
+    const publishedAt = new Date(NOW - daysToMs(10)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock(
+        { updateDetectedAt: detectedAt, result: { publishedAt, publishedAtTrusted: true } },
+        NOW,
+      ),
+    ).toEqual({ startMs: Date.parse(publishedAt), source: 'publishedAt' });
+  });
+
+  it('lets detectedAt win the tie-break when earlier than a trusted publishedAt', () => {
+    const publishedAt = new Date(NOW - daysToMs(3)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock(
+        { updateDetectedAt: detectedAt, result: { publishedAt, publishedAtTrusted: true } },
+        NOW,
+      ),
+    ).toEqual({ startMs: Date.parse(detectedAt), source: 'detectedAt' });
+  });
+
+  it('ignores an untrusted publishedAt in favor of detectedAt', () => {
+    const publishedAt = new Date(NOW - daysToMs(10)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock(
+        { updateDetectedAt: detectedAt, result: { publishedAt, publishedAtTrusted: false } },
+        NOW,
+      ),
+    ).toEqual({ startMs: Date.parse(detectedAt), source: 'detectedAt' });
+    expect(
+      resolveMaturityClock({ updateDetectedAt: detectedAt, result: { publishedAt } }, NOW),
+    ).toEqual({ startMs: Date.parse(detectedAt), source: 'detectedAt' });
+  });
+
+  it('treats a trusted-but-absent publishedAt as unresolved', () => {
+    expect(resolveMaturityClock({ result: { publishedAtTrusted: true } }, NOW)).toEqual({
+      startMs: undefined,
+      source: undefined,
+    });
+  });
+
+  it('falls back to detectedAt when a trusted publishedAt fails to parse', () => {
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock(
+        {
+          updateDetectedAt: detectedAt,
+          result: { publishedAt: 'not-a-date', publishedAtTrusted: true },
+        },
+        NOW,
+      ),
+    ).toEqual({ startMs: Date.parse(detectedAt), source: 'detectedAt' });
+  });
+
+  it('rejects a future publishedAt even when trusted, falling back to detectedAt', () => {
+    const futurePublishedAt = new Date(NOW + daysToMs(1)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock(
+        {
+          updateDetectedAt: detectedAt,
+          result: { publishedAt: futurePublishedAt, publishedAtTrusted: true },
+        },
+        NOW,
+      ),
+    ).toEqual({ startMs: Date.parse(detectedAt), source: 'detectedAt' });
+  });
+
+  it('resolves to nothing when a future publishedAt has no detectedAt to fall back to', () => {
+    const futurePublishedAt = new Date(NOW + daysToMs(1)).toISOString();
+    expect(
+      resolveMaturityClock(
+        { result: { publishedAt: futurePublishedAt, publishedAtTrusted: true } },
+        NOW,
+      ),
+    ).toEqual({ startMs: undefined, source: undefined });
+  });
+
+  it('resolves a trusted publishedAt alone when detectedAt is missing', () => {
+    const publishedAt = new Date(NOW - daysToMs(10)).toISOString();
+    expect(
+      resolveMaturityClock({ result: { publishedAt, publishedAtTrusted: true } }, NOW),
+    ).toEqual({ startMs: Date.parse(publishedAt), source: 'publishedAt' });
+  });
+
+  it('defaults nowMs to Date.now() when omitted', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+      expect(resolveMaturityClock({ updateDetectedAt: detectedAt })).toEqual({
+        startMs: Date.parse(detectedAt),
+        source: 'detectedAt',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // #678: mirrors app/model/maturity-policy.ts's firstSeenAt fallback exactly —
+  // this resolver diverging from the backend on legacy/partial records (only one
+  // of updateDetectedAt/firstSeenAt populated) is the drift #556 set out to fix.
+  it('falls back to firstSeenAt when updateDetectedAt is absent', () => {
+    const firstSeenAt = new Date(NOW - daysToMs(4)).toISOString();
+    expect(resolveMaturityClock({ firstSeenAt }, NOW)).toEqual({
+      startMs: Date.parse(firstSeenAt),
+      source: 'detectedAt',
+    });
+  });
+
+  it('falls back to firstSeenAt when updateDetectedAt fails to parse', () => {
+    const firstSeenAt = new Date(NOW - daysToMs(4)).toISOString();
+    expect(resolveMaturityClock({ updateDetectedAt: 'not-a-date', firstSeenAt }, NOW)).toEqual({
+      startMs: Date.parse(firstSeenAt),
+      source: 'detectedAt',
+    });
+  });
+
+  it('prefers updateDetectedAt over firstSeenAt when both are present', () => {
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    const firstSeenAt = new Date(NOW - daysToMs(9)).toISOString();
+    expect(resolveMaturityClock({ updateDetectedAt: detectedAt, firstSeenAt }, NOW)).toEqual({
+      startMs: Date.parse(detectedAt),
+      source: 'detectedAt',
+    });
+  });
+
+  it('firstSeenAt fallback also participates in the trusted-publishedAt tie-break', () => {
+    const publishedAt = new Date(NOW - daysToMs(3)).toISOString();
+    const firstSeenAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock({ firstSeenAt, result: { publishedAt, publishedAtTrusted: true } }, NOW),
+    ).toEqual({ startMs: Date.parse(firstSeenAt), source: 'detectedAt' });
+  });
+
+  it('returns undefined when neither updateDetectedAt, firstSeenAt, nor a trusted publishedAt resolve', () => {
+    expect(resolveMaturityClock({}, NOW)).toEqual({ startMs: undefined, source: undefined });
+    expect(
+      resolveMaturityClock({ result: { publishedAt: 'bogus', publishedAtTrusted: true } }, NOW),
+    ).toEqual({ startMs: undefined, source: undefined });
   });
 });
