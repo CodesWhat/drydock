@@ -115,6 +115,17 @@ function normalizeUpdateDetectedAt(value: unknown): string | undefined {
   return new Date(parsed).toISOString();
 }
 
+function normalizeFirstSeenAt(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+  return new Date(parsed).toISOString();
+}
+
 function resolveContainerPolicyTargetKey(target: ContainerPolicyTarget): string {
   if (typeof target === 'string') {
     return target;
@@ -164,6 +175,7 @@ function resolveFallbackMaturityClockStartMs(
   const result = asRecord(metaRecord.result);
   return resolveMaturityClock({
     updateDetectedAt,
+    firstSeenAt: normalizeFirstSeenAt(metaRecord.firstSeenAt),
     result: {
       publishedAt: typeof result?.publishedAt === 'string' ? result.publishedAt : undefined,
       publishedAtTrusted: result?.publishedAtTrusted === true,

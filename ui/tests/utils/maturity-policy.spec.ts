@@ -158,4 +158,47 @@ describe('resolveMaturityClock', () => {
       vi.useRealTimers();
     }
   });
+
+  // #678: mirrors app/model/maturity-policy.ts's firstSeenAt fallback exactly —
+  // this resolver diverging from the backend on legacy/partial records (only one
+  // of updateDetectedAt/firstSeenAt populated) is the drift #556 set out to fix.
+  it('falls back to firstSeenAt when updateDetectedAt is absent', () => {
+    const firstSeenAt = new Date(NOW - daysToMs(4)).toISOString();
+    expect(resolveMaturityClock({ firstSeenAt }, NOW)).toEqual({
+      startMs: Date.parse(firstSeenAt),
+      source: 'detectedAt',
+    });
+  });
+
+  it('falls back to firstSeenAt when updateDetectedAt fails to parse', () => {
+    const firstSeenAt = new Date(NOW - daysToMs(4)).toISOString();
+    expect(resolveMaturityClock({ updateDetectedAt: 'not-a-date', firstSeenAt }, NOW)).toEqual({
+      startMs: Date.parse(firstSeenAt),
+      source: 'detectedAt',
+    });
+  });
+
+  it('prefers updateDetectedAt over firstSeenAt when both are present', () => {
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    const firstSeenAt = new Date(NOW - daysToMs(9)).toISOString();
+    expect(resolveMaturityClock({ updateDetectedAt: detectedAt, firstSeenAt }, NOW)).toEqual({
+      startMs: Date.parse(detectedAt),
+      source: 'detectedAt',
+    });
+  });
+
+  it('firstSeenAt fallback also participates in the trusted-publishedAt tie-break', () => {
+    const publishedAt = new Date(NOW - daysToMs(3)).toISOString();
+    const firstSeenAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock({ firstSeenAt, result: { publishedAt, publishedAtTrusted: true } }, NOW),
+    ).toEqual({ startMs: Date.parse(firstSeenAt), source: 'detectedAt' });
+  });
+
+  it('returns undefined when neither updateDetectedAt, firstSeenAt, nor a trusted publishedAt resolve', () => {
+    expect(resolveMaturityClock({}, NOW)).toEqual({ startMs: undefined, source: undefined });
+    expect(
+      resolveMaturityClock({ result: { publishedAt: 'bogus', publishedAtTrusted: true } }, NOW),
+    ).toEqual({ startMs: undefined, source: undefined });
+  });
 });

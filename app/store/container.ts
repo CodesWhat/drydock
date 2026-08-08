@@ -1586,6 +1586,10 @@ export function rehydrateUpdateLifecycleCacheFromStore(): void {
   const nowMs = Date.now();
   for (const record of updateLifecycleCacheStore.listRecords()) {
     if (record.expiresAt <= nowMs) {
+      // Prune expired records from the durable store too, not just skip them —
+      // otherwise a long-stopped process leaves dead rows in the collection
+      // forever (it only ever grows via the write-through path elsewhere).
+      updateLifecycleCacheStore.deleteRecord(record.cacheKey);
       continue;
     }
     updateLifecycleCache.set(record.cacheKey, {

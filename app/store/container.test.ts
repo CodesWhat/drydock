@@ -5519,6 +5519,32 @@ describe('updateLifecycleCache store persistence (#556)', () => {
     expect(lifecycleCache.has('local::expired-app')).toBe(false);
   });
 
+  test('rehydrateUpdateLifecycleCacheFromStore prunes expired records from the durable store, not just the in-memory Map (#678)', () => {
+    const nowMs = Date.now();
+    mountLifecycleStore([
+      {
+        cacheKey: 'local::live-app-2',
+        updateDetectedAt: '2026-01-01T00:00:00.000Z',
+        resultSignature: '{"tag":"live"}',
+        expiresAt: nowMs + 60_000,
+      },
+      {
+        cacheKey: 'local::expired-app-2',
+        updateDetectedAt: '2025-01-01T00:00:00.000Z',
+        resultSignature: '{"tag":"expired"}',
+        expiresAt: nowMs - 1,
+      },
+    ]);
+
+    container.rehydrateUpdateLifecycleCacheFromStore();
+
+    // The expired record must not just be skipped in-memory — it must be deleted
+    // from the durable collection too, or it accumulates as a dead row forever
+    // (the collection only ever grows via the write-through path otherwise).
+    const persistedKeys = updateLifecycleCacheStore.listRecords().map((record) => record.cacheKey);
+    expect(persistedKeys).toEqual(['local::live-app-2']);
+  });
+
   test('end-to-end: a simulated process restart still carries updateDetectedAt/firstSeenAt forward', () => {
     mountLifecycleStore();
     const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();

@@ -909,6 +909,40 @@ describe('container-mapper', () => {
       expect((c as any).updatePolicyState).toBe('maturity-blocked');
     });
 
+    it('fallback isMaturityBlocked falls back to firstSeenAt when updateDetectedAt is absent and clears the gate (#678)', () => {
+      // No updateDetectedAt at all — only firstSeenAt, old enough to clear the
+      // 7-day gate. Mirrors the app-side resolver's firstSeenAt fallback; the
+      // UI must resolve the same clock or it drifts from the backend (#556/#678).
+      const firstSeenAt = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          result: { tag: '1.26' },
+          firstSeenAt,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('fallback isMaturityBlocked stays blocked on a recent firstSeenAt when updateDetectedAt is absent (#678)', () => {
+      const firstSeenAt = new Date(Date.now() - daysToMs(2)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          result: { tag: '1.26' },
+          firstSeenAt,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+    });
+
     it('prefers a backend maturity-not-reached verdict over a met legacy threshold (#display-honesty)', () => {
       // Legacy computation alone (old detection date, threshold met) would NOT mark this
       // maturity-blocked; a backend eligibility payload saying otherwise must win.
@@ -1064,6 +1098,21 @@ describe('container-mapper', () => {
       expect(c.updateDetectedAt).toBeUndefined();
     });
 
+    it('fallback isMaturityBlocked ignores an invalid firstSeenAt value, not resolving a clock from it (#678)', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          result: { tag: '1.26' },
+          firstSeenAt: 'not-a-date',
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+      // No resolvable clock at all (no updateDetectedAt, malformed firstSeenAt) —
+      // hasSuppressedUpdateCandidate + undefined start still means "gated".
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+    });
+
     it('maps imageCreated from api image.created when valid', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -1144,6 +1193,19 @@ describe('container-mapper', () => {
         }),
       );
       expect(c.updateMaturityTooltip).toMatch(/^Detected 2 days? ago$/);
+    });
+
+    it('updateMaturityTooltip duration falls back to firstSeenAt when updateDetectedAt is absent (#678)', () => {
+      const firstSeenAt = new Date(Date.now() - 14 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0' },
+          firstSeenAt,
+        }),
+      );
+      expect(c.updateMaturityTooltip).toMatch(/^Detected 14 days ago$/);
     });
 
     it('extracts labels from object', () => {

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getRegistryRequestTimeoutMs } from '../../configuration.js';
 import Ghcr from './Ghcr.js';
 
 vi.mock('axios');
@@ -261,6 +262,7 @@ describe('GitHub Container Registry', () => {
         Accept: 'application/vnd.github+json',
         Authorization: 'Bearer testtoken',
       },
+      timeout: getRegistryRequestTimeoutMs(),
     });
     expect(publishedAt).toBe('2026-03-02T09:30:00.000Z');
   });
@@ -291,6 +293,7 @@ describe('GitHub Container Registry', () => {
         Accept: 'application/vnd.github+json',
         Authorization: 'Bearer testtoken',
       },
+      timeout: getRegistryRequestTimeoutMs(),
     });
     expect(axios).toHaveBeenNthCalledWith(2, {
       method: 'GET',
@@ -299,6 +302,7 @@ describe('GitHub Container Registry', () => {
         Accept: 'application/vnd.github+json',
         Authorization: 'Bearer testtoken',
       },
+      timeout: getRegistryRequestTimeoutMs(),
     });
     expect(publishedAt).toBe('2026-03-05T10:00:00.000Z');
   });
@@ -519,13 +523,66 @@ describe('GitHub Container Registry', () => {
       method: 'GET',
       url: 'https://api.github.com/orgs/acme/packages/container/widgets/versions?per_page=100',
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
+      timeout: getRegistryRequestTimeoutMs(),
     });
     // Follows the literal Link: rel="next" URL, not a reconstructed page=N query param.
     expect(axios).toHaveBeenNthCalledWith(2, {
       method: 'GET',
       url: page2Url,
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
+      timeout: getRegistryRequestTimeoutMs(),
     });
+  });
+
+  test('sends the shared registry request timeout on every paged request (#678)', async () => {
+    axios.mockResolvedValueOnce({
+      data: [{ updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['v1'] } } }],
+      headers: {},
+    });
+
+    await ghcr.getImagePublishedAt({ name: 'acme/widgets', tag: { value: 'not-here' } });
+
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({ timeout: getRegistryRequestTimeoutMs() }),
+    );
+  });
+
+  test('does not follow a Link: rel="next" URL whose origin differs from the API base — stops pagination and warns (token exfiltration guard, #678)', async () => {
+    const evilUrl = 'https://evil.example.com/steal-the-token';
+    axios.mockResolvedValueOnce({
+      data: [{ updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['v1'] } } }],
+      headers: { link: `<${evilUrl}>; rel="next"` },
+    });
+    const warnSpy = vi.spyOn(ghcr.log, 'warn');
+
+    const publishedAt = await ghcr.getImagePublishedAt({
+      name: 'acme/widgets',
+      tag: { value: 'not-here' },
+    });
+
+    expect(publishedAt).toBeUndefined();
+    // Only the first (same-origin) request is made — the off-origin next URL is
+    // never sent to axios, so the Authorization header can never reach evil.example.com.
+    expect(axios).toHaveBeenCalledTimes(1);
+    expect(axios).not.toHaveBeenCalledWith(expect.objectContaining({ url: evilUrl }));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('outside the expected origin'));
+  });
+
+  test('treats a malformed Link: rel="next" URL as cross-origin and stops pagination (#678)', async () => {
+    axios.mockResolvedValueOnce({
+      data: [{ updated_at: '2026-01-01T00:00:00.000Z', metadata: { container: { tags: ['v1'] } } }],
+      headers: { link: '<not a valid url>; rel="next"' },
+    });
+    const warnSpy = vi.spyOn(ghcr.log, 'warn');
+
+    const publishedAt = await ghcr.getImagePublishedAt({
+      name: 'acme/widgets',
+      tag: { value: 'not-here' },
+    });
+
+    expect(publishedAt).toBeUndefined();
+    expect(axios).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('outside the expected origin'));
   });
 
   test('should follow Link-header pagination past the old 10-page cap and find a tag on page 15', async () => {
@@ -684,11 +741,13 @@ describe('GitHub Container Registry', () => {
       method: 'GET',
       url: 'https://api.github.com/users/octocat/packages/container/demo/versions?per_page=100',
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
+      timeout: getRegistryRequestTimeoutMs(),
     });
     expect(axios).toHaveBeenNthCalledWith(3, {
       method: 'GET',
       url: page2Url,
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
+      timeout: getRegistryRequestTimeoutMs(),
     });
   });
 });

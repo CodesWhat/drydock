@@ -168,6 +168,7 @@ export interface ApiContainerInput {
   labels?: Record<string, unknown> | null;
   displayIcon?: unknown;
   updateDetectedAt?: unknown;
+  firstSeenAt?: unknown;
   updateOperation?: ApiContainerUpdateOperation | null;
   updatePolicy?: ApiContainerUpdatePolicy | null;
   updateEligibility?: ApiContainerUpdateEligibility | null;
@@ -476,6 +477,14 @@ function deriveUpdateDetectedAt(apiContainer: ApiContainerInput): string | undef
   return new Date(parsedAt).toISOString();
 }
 
+function deriveFirstSeenAt(apiContainer: ApiContainerInput): string | undefined {
+  const value = asNonEmptyString(apiContainer.firstSeenAt);
+  if (!value) return undefined;
+  const parsedAt = Date.parse(value);
+  if (Number.isNaN(parsedAt)) return undefined;
+  return new Date(parsedAt).toISOString();
+}
+
 function hasPolicyRelevantUpdateKind(
   updateKind: ApiContainerUpdateKind | null | undefined,
 ): boolean {
@@ -529,6 +538,7 @@ function isSkippedByDigestPolicy(
 function resolveContainerMaturityClock(apiContainer: ApiContainerInput) {
   return resolveMaturityClock({
     updateDetectedAt: deriveUpdateDetectedAt(apiContainer),
+    firstSeenAt: deriveFirstSeenAt(apiContainer),
     result: {
       publishedAt: asNonEmptyString(apiContainer.result?.publishedAt),
       publishedAtTrusted: apiContainer.result?.publishedAtTrusted === true,

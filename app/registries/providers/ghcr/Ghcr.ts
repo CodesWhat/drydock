@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { toPositiveInteger } from '../../../util/parse.js';
 import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
+import { getRegistryRequestTimeoutMs } from '../../configuration.js';
 
 interface GhcrRegistryConfiguration extends BaseRegistryConfiguration {
   username?: string;
@@ -136,16 +137,37 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
     return undefined;
   }
 
+  /**
+   * Whether candidateUrl shares expectedOrigin. A hostile or compromised Link
+   * response header must never be able to redirect our Authorization-bearing
+   * follow-up request to another host — that would exfiltrate the GHCR token
+   * to whatever origin the header names. A malformed candidate URL is treated
+   * as cross-origin (fails closed).
+   */
+  private isSameOrigin(candidateUrl: string, expectedOrigin: string): boolean {
+    try {
+      return new URL(candidateUrl).origin === expectedOrigin;
+    } catch {
+      return false;
+    }
+  }
+
   private async fetchVersionsPagedForOwner(
     baseUrl: string,
     tagToLookup: string,
   ): Promise<string | undefined> {
     const headers = this.getGithubApiHeaders();
+    const expectedOrigin = new URL(baseUrl).origin;
     let url: string | undefined = `${baseUrl}?per_page=100`;
     let pagesFetched = 0;
 
     while (url && pagesFetched < GHCR_VERSIONS_MAX_PAGES) {
-      const response = await axios({ method: 'GET', url, headers });
+      const response = await axios({
+        method: 'GET',
+        url,
+        headers,
+        timeout: getRegistryRequestTimeoutMs(),
+      });
       pagesFetched += 1;
 
       const result = this.getVersionUpdatedAt(response?.data, tagToLookup);
@@ -153,7 +175,19 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
         return result;
       }
 
-      url = this.parseNextLink(response?.headers?.link);
+      const nextUrl = this.parseNextLink(response?.headers?.link);
+      url = nextUrl && this.isSameOrigin(nextUrl, expectedOrigin) ? nextUrl : undefined;
+      if (nextUrl !== undefined && url === undefined) {
+        // A next page was advertised but pointed off-origin — never follow it with
+        // the Authorization header attached. Treat exactly like truncation: warn,
+        // stop, and let the caller's existing "no trusted publishedAt" fallback
+        // handle it (fail-closed, same as the safety-cap case below).
+        this.log.warn(
+          `GHCR versions pagination for ${baseUrl} received a Link: rel="next" URL ` +
+            `outside the expected origin (${expectedOrigin}); refusing to follow it. ` +
+            'publishedAt left untrusted for this candidate',
+        );
+      }
     }
 
     if (url !== undefined) {
