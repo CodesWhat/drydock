@@ -393,3 +393,43 @@ export function computeDependencyGraph(
   const { waves, cycles } = topologicalSort(nodes, edges);
   return { waves, cycles, unresolved, crossHostIgnored };
 }
+
+/**
+ * Reverse adjacency (dependency id -> dependent ids), built once per dispatch
+ * and reused across every `collectTransitiveDependents` lookup within it
+ * (execution integration, v1.7 Phase 6.1, #219 — design §3): a wave-dispatch
+ * failure, or a maintenance-window deferral, needs to find every downstream
+ * container that (transitively) depends on the blocked one.
+ */
+export function buildDependentsByDependency(edges: DependencyEdge[]): Map<string, string[]> {
+  const dependentsByDependency = new Map<string, string[]>();
+  for (const edge of edges) {
+    const list = dependentsByDependency.get(edge.to) ?? [];
+    list.push(edge.from);
+    dependentsByDependency.set(edge.to, list);
+  }
+  return dependentsByDependency;
+}
+
+/**
+ * BFS over a `buildDependentsByDependency` map to find every transitive
+ * dependent of `nodeId` — used to skip a whole downstream chain when its
+ * root dependency fails or is deferred, rather than only its immediate
+ * dependents.
+ */
+export function collectTransitiveDependents(
+  nodeId: string,
+  dependentsByDependency: Map<string, string[]>,
+): Set<string> {
+  const dependents = new Set<string>();
+  const queue = [...(dependentsByDependency.get(nodeId) ?? [])];
+  while (queue.length > 0) {
+    const current = queue.shift() as string;
+    if (dependents.has(current)) {
+      continue;
+    }
+    dependents.add(current);
+    queue.push(...(dependentsByDependency.get(current) ?? []));
+  }
+  return dependents;
+}

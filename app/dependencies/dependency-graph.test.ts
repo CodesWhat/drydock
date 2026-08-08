@@ -1,5 +1,7 @@
 import {
   buildDependencyGraph,
+  buildDependentsByDependency,
+  collectTransitiveDependents,
   computeDependencyGraph,
   type DependencyEdge,
   type DependencyNode,
@@ -410,5 +412,39 @@ describe('computeDependencyGraph', () => {
       unresolved: [],
       crossHostIgnored: [],
     });
+  });
+});
+
+describe('buildDependentsByDependency + collectTransitiveDependents', () => {
+  test('finds direct and transitive dependents of a node (db -> api -> proxy)', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api', action: 'update', source: 'label' },
+    ];
+    const dependentsByDependency = buildDependentsByDependency(edges);
+    expect(collectTransitiveDependents('db', dependentsByDependency)).toEqual(
+      new Set(['api', 'proxy']),
+    );
+    expect(collectTransitiveDependents('api', dependentsByDependency)).toEqual(new Set(['proxy']));
+    expect(collectTransitiveDependents('proxy', dependentsByDependency)).toEqual(new Set());
+  });
+
+  test('de-duplicates a diamond-shaped chain reached via two paths', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api1', to: 'db', action: 'update', source: 'label' },
+      { from: 'api2', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api1', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api2', action: 'update', source: 'label' },
+    ];
+    const dependentsByDependency = buildDependentsByDependency(edges);
+    expect(collectTransitiveDependents('db', dependentsByDependency)).toEqual(
+      new Set(['api1', 'api2', 'proxy']),
+    );
+  });
+
+  test('returns an empty set for a node with no edges at all', () => {
+    expect(collectTransitiveDependents('lonely', buildDependentsByDependency([]))).toEqual(
+      new Set(),
+    );
   });
 });
