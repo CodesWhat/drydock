@@ -1330,6 +1330,76 @@ describe('container-mapper', () => {
       expect(c.tagPinGated).toBeUndefined();
     });
 
+    it('maps dependencyCount and dependentCount when present in API response', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: 2,
+          dependentCount: 3,
+        }),
+      );
+      expect(c.dependencyCount).toBe(2);
+      expect(c.dependentCount).toBe(3);
+    });
+
+    it('maps dependencyCount/dependentCount of zero (a legitimate value, not absence)', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: 0,
+          dependentCount: 0,
+        }),
+      );
+      expect(c.dependencyCount).toBe(0);
+      expect(c.dependentCount).toBe(0);
+    });
+
+    it('leaves dependencyCount/dependentCount undefined when absent from the API response', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.dependencyCount).toBeUndefined();
+      expect(c.dependentCount).toBeUndefined();
+    });
+
+    it('leaves dependencyCount/dependentCount undefined when negative', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: -1,
+          dependentCount: -1,
+        }),
+      );
+      expect(c.dependencyCount).toBeUndefined();
+      expect(c.dependentCount).toBeUndefined();
+    });
+
+    it('leaves dependencyCount/dependentCount undefined when not an integer', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: 1.5,
+          dependentCount: 'two',
+        }),
+      );
+      expect(c.dependencyCount).toBeUndefined();
+      expect(c.dependentCount).toBeUndefined();
+    });
+
+    it('parses numeric-string dependencyCount/dependentCount', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: '4',
+          dependentCount: '0',
+        }),
+      );
+      expect(c.dependencyCount).toBe(4);
+      expect(c.dependentCount).toBe(0);
+    });
+
+    it('leaves dependencyCount undefined when the numeric string overflows a safe integer', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: '99999999999999999999',
+        }),
+      );
+      expect(c.dependencyCount).toBeUndefined();
+    });
+
     it('maps tagPrecision as specific when set', () => {
       const c = mapApiContainer(
         makeApiContainer({
