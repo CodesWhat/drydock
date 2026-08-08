@@ -195,7 +195,7 @@ The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backwa
 
 ### Manual updates bypass `dd.action.include` / `dd.action.exclude` {#action-include-exclude-soft-blocker}
 
-In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons are **soft** blockers: the UI shows a *Trigger filtered* / *Trigger excluded* pill, but clicking the per-row Update button still queues the update after a confirmation step. In v1.7.0 these reasons become **hard** blockers and the Update button is locked when the labels filter out the action trigger.
+In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons are **soft** blockers: the UI shows a *Trigger filtered* / *Trigger excluded* pill, but clicking the per-row Update button still queues the update after a confirmation step. These reasons are scheduled to become **hard** blockers later in the v1.7 cycle, shipping together with the per-action execution policy; until that lands they remain soft and a confirmed manual update still works. Once hard, the Update button is locked when the labels filter out the action trigger.
 
 | | |
 | --- | --- |
