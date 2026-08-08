@@ -355,6 +355,72 @@ curl -X POST http://drydock:3000/api/v1/containers/update \
 
 Returns 200 with `accepted` and `rejected` arrays, 400 when `containerIds` is missing or empty, 403 if container actions are disabled, or 500 if the update requests cannot be accepted.
 
+## Get the dependency graph
+
+Returns the fully resolved `dd.depends_on` graph over every known container: nodes, edges, detected cycles, unresolved targets (a label references a container name that couldn't be found), and cross-host edges that were dropped (dependencies don't cross agents/watchers). See [dependency labels](/docs/configuration/watchers#labels) for how `dd.depends_on`/`dd.depends_on.action` drive dispatch order.
+
+```bash
+curl http://drydock:3000/api/v1/containers/dependencies
+```
+
+```json
+{
+  "nodes": [{ "id": "c1", "name": "db", "displayName": "db", "watcher": "local" }],
+  "edges": [{ "from": "web", "to": "db", "action": "update", "source": "label" }],
+  "cycles": [],
+  "unresolved": [],
+  "crossHostIgnored": []
+}
+```
+
+Returns 200 with the graph.
+
+## Preview an update chain
+
+Dry-runs the topological "waves" that would run if you bulk-updated the dependency chain rooted at this container — every container in the same weakly-connected component, both dependencies and dependents. Nothing is dispatched; this is a read-only preview. Calls the exact same graph functions the real dispatch uses, so the wave order shown here always matches what an actual chain update would run.
+
+```bash
+curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-chain-preview
+```
+
+```json
+{
+  "waves": [
+    { "index": 0, "containers": [{ "id": "c1", "name": "db", "actionKind": "update" }] },
+    { "index": 1, "containers": [{ "id": "c2", "name": "web", "actionKind": "restart" }] }
+  ],
+  "warnings": { "cycles": [], "unresolved": [] }
+}
+```
+
+Returns 200 with the wave preview, or 404 if the container is not found.
+
+## Bulk update a dependency chain
+
+Bulk-accepts every container in the dependency chain rooted at `:rootId` (the same set `update-chain-preview` reports on) and dispatches them wave-by-wave via [Bulk update containers](#bulk-update-containers)' underlying admission path. Each accepted entry is annotated with the `wave` index it will actually run in and its `actionKind` (`update` or `restart`, per that container's `dd.depends_on.action`).
+
+```bash
+curl -X POST http://drydock:3000/api/v1/dependency-groups/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update
+```
+
+```json
+{
+  "message": "Dependency group update requests processed",
+  "accepted": [
+    {
+      "containerId": "c1",
+      "containerName": "db",
+      "operationId": "ea7c33a4-c1e3-4f34-9b95-9662cc7a40d6",
+      "wave": 0,
+      "actionKind": "update"
+    }
+  ],
+  "rejected": []
+}
+```
+
+Returns 200 with `accepted` and `rejected` arrays, 403 if container actions are disabled, 404 if the root container is not found, or 500 if the update requests cannot be accepted.
+
 ## Update container update policy
 
 This operation controls the UI/API override tier of per-container update policy. Effective fields resolve independently as built-in → watcher environment → container label → UI/API override. Responses expose `updatePolicy` (effective), `updatePolicyDeclarative.env`, `updatePolicyDeclarative.label`, `updatePolicyOverrides`, and `updatePolicySources` (`env`, `label`, or `override`).

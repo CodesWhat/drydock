@@ -833,6 +833,14 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 `dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
 
+<Callout type="info" title="Dependency-ordered updates">
+
+`dd.depends_on` and `dd.depends_on.action` don't just record a relationship — they change dispatch order. Any bulk update (a manual multi-select, a group update, a maintenance-window batch) is partitioned into topological "waves" before dispatch: a container never starts updating until every container it depends on has finished. Dependents configured with `dd.depends_on.action=restart` are restarted (not re-pulled) once their dependency's update completes; if an earlier wave fails outright, dependents that never got a chance to run land in a `skipped-dependency` status rather than silently vanishing from the operations list. A dependency cycle is never a deadlock — cycle members are grouped into one unordered wave and dispatched together.
+
+Inspect the resolved graph with `GET /api/v1/containers/dependencies`, dry-run the wave order for one container's chain with `POST /api/v1/containers/{id}/update-chain-preview`, or bulk-accept that whole chain with `POST /api/v1/dependency-groups/{rootId}/update`. In the UI, the "Update dependency chain" action previews the same wave order — including any cycle or unresolved-target warnings — before you confirm.
+
+</Callout>
+
 <Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. By default the extracted value overwrites the image tag (enabling update detection against the embedded semver) and is also written to `image.softwareVersion` (shown in the Version column). Add `dd.inspect.tag.version-only=true` when you want the Version column populated without changing how drydock matches updates. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
 
 <Callout type="warn" title="dd.tag.transform is validated at startup">`dd.tag.transform` regex patterns are validated at config time. A malformed or oversized regex pattern causes drydock to throw at startup with a descriptive error rather than silently producing broken tag transformations that could generate false positive update detections.</Callout>
