@@ -18,6 +18,7 @@ const stackedBannerInlineStyle = {
   left: 'auto',
   translate: 'none',
   width: '100%',
+  maxWidth: 'none',
 };
 
 const { t } = useI18n();
