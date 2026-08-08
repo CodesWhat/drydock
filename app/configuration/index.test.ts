@@ -325,38 +325,60 @@ test('getWatcherConfiguration should create watcher entry for lowercase alias ke
 });
 
 test('getTriggerConfigurations should return empty object by default', async () => {
-  delete configuration.ddEnvVars.DD_TRIGGER_TRIGGER1_X;
-  delete configuration.ddEnvVars.DD_TRIGGER_TRIGGER1_Y;
-  delete configuration.ddEnvVars.DD_TRIGGER_TRIGGER2_X;
-  delete configuration.ddEnvVars.DD_TRIGGER_TRIGGER2_Y;
+  delete configuration.ddEnvVars.DD_ACTION_TRIGGER1_X;
+  delete configuration.ddEnvVars.DD_ACTION_TRIGGER1_Y;
+  delete configuration.ddEnvVars.DD_NOTIFICATION_TRIGGER2_X;
+  delete configuration.ddEnvVars.DD_NOTIFICATION_TRIGGER2_Y;
   expect(configuration.getTriggerConfigurations()).toStrictEqual({});
 });
 
 test('getTriggerConfigurations should return configured triggers when overridden', async () => {
-  configuration.ddEnvVars.DD_TRIGGER_TRIGGER1_X = 'x';
-  configuration.ddEnvVars.DD_TRIGGER_TRIGGER1_Y = 'y';
-  configuration.ddEnvVars.DD_TRIGGER_TRIGGER2_X = 'x';
-  configuration.ddEnvVars.DD_TRIGGER_TRIGGER2_Y = 'y';
+  configuration.ddEnvVars.DD_ACTION_TRIGGER1_X = 'x';
+  configuration.ddEnvVars.DD_ACTION_TRIGGER1_Y = 'y';
+  configuration.ddEnvVars.DD_NOTIFICATION_TRIGGER2_X = 'x';
+  configuration.ddEnvVars.DD_NOTIFICATION_TRIGGER2_Y = 'y';
   expect(configuration.getTriggerConfigurations()).toStrictEqual({
     trigger1: { x: 'x', y: 'y' },
     trigger2: { x: 'x', y: 'y' },
   });
+  delete configuration.ddEnvVars.DD_ACTION_TRIGGER1_X;
+  delete configuration.ddEnvVars.DD_ACTION_TRIGGER1_Y;
+  delete configuration.ddEnvVars.DD_NOTIFICATION_TRIGGER2_X;
+  delete configuration.ddEnvVars.DD_NOTIFICATION_TRIGGER2_Y;
 });
 
-test('getTriggerConfigurations logs every legacy DD_TRIGGER key at error level', () => {
-  const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => log);
-  const legacyKey = 'DD_TRIGGER_PHASE3ERROR_UNIQUE_ENABLED';
-  configuration.ddEnvVars[legacyKey] = 'true';
+test('getTriggerConfigurations throws listing every legacy DD_TRIGGER key with its replacement', () => {
+  const actionKey = 'DD_TRIGGER_DOCKER_LOCAL_PRUNE';
+  const notificationKey = 'DD_TRIGGER_SLACK_MYSLACK_URL';
+  configuration.ddEnvVars[actionKey] = 'true';
+  configuration.ddEnvVars[notificationKey] = 'https://hooks.slack.com/test';
 
   try {
-    configuration.getTriggerConfigurations();
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`Legacy trigger environment variable "${legacyKey}"`),
+    expect(() => configuration.getTriggerConfigurations()).toThrowError(
+      /DD_TRIGGER_\* environment variable prefix was removed in v1\.7\.0/,
     );
+    try {
+      configuration.getTriggerConfigurations();
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain(`${actionKey} → DD_ACTION_DOCKER_LOCAL_PRUNE`);
+      expect(message).toContain(`${notificationKey} → DD_NOTIFICATION_SLACK_MYSLACK_URL`);
+      expect(message).toContain('node dist/index.js config migrate --source trigger');
+      expect(message).toContain('https://getdrydock.com/docs/deprecations#legacy-trigger-prefix');
+    }
   } finally {
-    delete configuration.ddEnvVars[legacyKey];
-    errorSpy.mockRestore();
+    delete configuration.ddEnvVars[actionKey];
+    delete configuration.ddEnvVars[notificationKey];
   }
+});
+
+test('getTriggerConfigurations does not throw once legacy DD_TRIGGER keys are removed', () => {
+  const legacyKey = 'DD_TRIGGER_PHASE4REMOVED_UNIQUE_ENABLED';
+  configuration.ddEnvVars[legacyKey] = 'true';
+  expect(() => configuration.getTriggerConfigurations()).toThrow();
+
+  delete configuration.ddEnvVars[legacyKey];
+  expect(() => configuration.getTriggerConfigurations()).not.toThrow();
 });
 
 test('getRegistryConfigurations should return empty object by default', async () => {
@@ -1680,9 +1702,8 @@ describe('trigger env aliases', () => {
     return import('./index.js');
   }
 
-  test('should merge DD_ACTION and DD_NOTIFICATION aliases with DD_TRIGGER legacy env vars', async () => {
+  test('should merge DD_ACTION and DD_NOTIFICATION env vars', async () => {
     const freshConfiguration = await importFreshConfiguration();
-    freshConfiguration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
     freshConfiguration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
     freshConfiguration.ddEnvVars.DD_NOTIFICATION_SMTP_ALERT_ENABLED = 'false';
 
@@ -1700,10 +1721,10 @@ describe('trigger env aliases', () => {
     });
   });
 
-  test('should prefer alias values over DD_TRIGGER legacy values for the same setting', async () => {
+  test('DD_NOTIFICATION values win over DD_ACTION values for the same setting', async () => {
     const freshConfiguration = await importFreshConfiguration();
-    freshConfiguration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
-    freshConfiguration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
+    freshConfiguration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'major';
+    freshConfiguration.ddEnvVars.DD_NOTIFICATION_DOCKER_UPDATE_THRESHOLD = 'minor';
 
     expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
       docker: {
@@ -1713,76 +1734,80 @@ describe('trigger env aliases', () => {
       },
     });
   });
-
-  test('should log one error per legacy DD_TRIGGER key and record legacy env usage', async () => {
-    const freshConfiguration = await importFreshConfiguration();
-    const freshLegacyInput = await import('../prometheus/compatibility.js');
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const legacyKey = 'DD_TRIGGER_DISCORD_NOTIFY_URL';
-    freshConfiguration.ddEnvVars[legacyKey] = 'https://example.invalid/webhook';
-    freshConfiguration.ddEnvVars.DD_NOTIFICATION_DISCORD_NOTIFY_ENABLED = 'true';
-
-    const summaryBefore = freshLegacyInput.getLegacyInputSummary().env.total;
-
-    freshConfiguration.getTriggerConfigurations();
-    freshConfiguration.getTriggerConfigurations();
-
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Legacy trigger environment variable'),
-    );
-    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('v1.7.0'));
-    expect(freshLegacyInput.getLegacyInputSummary().env.total).toBeGreaterThan(summaryBefore);
-    expect(freshLegacyInput.getLegacyInputSummary().env.keys).toContain(legacyKey);
-
-    errorSpy.mockRestore();
-  });
 });
 
-describe('legacy trigger prefix tracking guards', () => {
-  const nonLegacyTriggerKey = 'DD_ACTION_DOCKER_UPDATE_THRESHOLD';
-  const tooFewSegmentsKey = 'DD_TRIGGER_DOCKER';
-  const undefinedValueKey = 'DD_TRIGGER_DOCKER_UPDATE_THRESHOLD';
-
+describe('legacy DD_TRIGGER_* startup failure', () => {
   async function importFreshConfiguration() {
     vi.resetModules();
     return import('./index.js');
   }
 
-  test('should ignore non-DD_TRIGGER keys when tracking legacy prefixes', async () => {
+  test('does not fail startup when only DD_ACTION_*/DD_NOTIFICATION_* keys are set', async () => {
     const freshConfiguration = await importFreshConfiguration();
-    freshConfiguration.ddEnvVars[nonLegacyTriggerKey] = 'major';
+    freshConfiguration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'major';
 
-    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
-      docker: {
-        update: {
-          threshold: 'major',
-        },
-      },
-    });
-    expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
+    expect(() => freshConfiguration.getTriggerConfigurations()).not.toThrow();
   });
 
-  test('should ignore DD_TRIGGER keys with too few path segments when tracking legacy prefixes', async () => {
+  test('ignores a DD_TRIGGER_* key with an undefined value', async () => {
     const freshConfiguration = await importFreshConfiguration();
-    freshConfiguration.ddEnvVars[tooFewSegmentsKey] = 'ignored';
+    freshConfiguration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = undefined;
 
-    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
-      docker: 'ignored',
-    });
-    expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
+    expect(() => freshConfiguration.getTriggerConfigurations()).not.toThrow();
   });
 
-  test('should ignore DD_TRIGGER keys with undefined values when tracking legacy prefixes', async () => {
+  test('fails startup even for a DD_TRIGGER_* key with too few path segments to classify', async () => {
     const freshConfiguration = await importFreshConfiguration();
-    freshConfiguration.ddEnvVars[undefinedValueKey] = undefined;
+    freshConfiguration.ddEnvVars.DD_TRIGGER_SLACK = 'ignored';
 
-    expect(freshConfiguration.getTriggerConfigurations()).toStrictEqual({
-      docker: {
-        update: {},
-      },
-    });
-    expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
+    expect(() => freshConfiguration.getTriggerConfigurations()).toThrowError(
+      /DD_TRIGGER_SLACK → DD_NOTIFICATION_SLACK/,
+    );
+  });
+
+  test('suggests DD_ACTION_* for action trigger types (docker, dockercompose, command)', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars.DD_TRIGGER_DOCKERCOMPOSE_LOCAL_PRUNE = 'true';
+    freshConfiguration.ddEnvVars.DD_TRIGGER_COMMAND_LOCAL_SCRIPT = './deploy.sh';
+
+    try {
+      freshConfiguration.getTriggerConfigurations();
+      throw new Error('expected getTriggerConfigurations to throw');
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toContain(
+        'DD_TRIGGER_DOCKERCOMPOSE_LOCAL_PRUNE → DD_ACTION_DOCKERCOMPOSE_LOCAL_PRUNE',
+      );
+      expect(message).toContain('DD_TRIGGER_COMMAND_LOCAL_SCRIPT → DD_ACTION_COMMAND_LOCAL_SCRIPT');
+    }
+  });
+
+  test('suggests DD_NOTIFICATION_* for messaging trigger types', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars.DD_TRIGGER_SLACK_MYSLACK_TOKEN = 'xoxb-test';
+
+    expect(() => freshConfiguration.getTriggerConfigurations()).toThrowError(
+      /DD_TRIGGER_SLACK_MYSLACK_TOKEN → DD_NOTIFICATION_SLACK_MYSLACK_TOKEN/,
+    );
+  });
+
+  test('deduplicates case-insensitive duplicates and lists keys sorted', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    freshConfiguration.ddEnvVars.DD_TRIGGER_ZULU_LOCAL_URL = 'z';
+    freshConfiguration.ddEnvVars.dd_trigger_zulu_local_url = 'z-lower';
+    freshConfiguration.ddEnvVars.DD_TRIGGER_ALPHA_LOCAL_URL = 'a';
+
+    try {
+      freshConfiguration.getTriggerConfigurations();
+      throw new Error('expected getTriggerConfigurations to throw');
+    } catch (error) {
+      const message = (error as Error).message;
+      const alphaIndex = message.indexOf('DD_TRIGGER_ALPHA_LOCAL_URL');
+      const zuluIndex = message.indexOf('DD_TRIGGER_ZULU_LOCAL_URL');
+      expect(alphaIndex).toBeGreaterThan(-1);
+      expect(zuluIndex).toBeGreaterThan(alphaIndex);
+      expect(message.match(/DD_TRIGGER_ZULU_LOCAL_URL/g)).toHaveLength(1);
+    }
   });
 });
 
@@ -2829,64 +2854,64 @@ describe('parseSafePublicUrlCandidate – detailed coverage', () => {
 });
 
 describe('isRecord and mergeRecords mutation coverage', () => {
-  test('getTriggerConfigurations merges DD_TRIGGER legacy with DD_ACTION correctly', () => {
+  test('getTriggerConfigurations merges DD_ACTION with DD_NOTIFICATION correctly', () => {
     // Exercises mergeRecords (lines 234-249) and isRecord (lines 230-232)
-    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
-    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_LEVEL = 'patch';
+    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'major';
+    configuration.ddEnvVars.DD_NOTIFICATION_DOCKER_UPDATE_LEVEL = 'patch';
     const result = configuration.getTriggerConfigurations();
     expect(result.docker).toBeDefined();
     expect((result.docker as Record<string, unknown>).update).toBeDefined();
-    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
-    delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_LEVEL;
+    delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD;
+    delete configuration.ddEnvVars.DD_NOTIFICATION_DOCKER_UPDATE_LEVEL;
   });
 
   test('mergeRecords deep-merges nested objects', () => {
     // Kills 231:10 [ConditionalExpression] false/true, 231:28/57 EqualityOperator/BooleanLiteral
-    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
-    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_LEVEL = 'image';
-    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
+    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'major';
+    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_LEVEL = 'image';
+    configuration.ddEnvVars.DD_NOTIFICATION_DOCKER_UPDATE_THRESHOLD = 'minor';
     const result = configuration.getTriggerConfigurations();
-    // Both trigger and action contribute keys to docker.update object
+    // Both action and notification contribute keys to docker.update object
     const dockerUpdate = (result.docker as Record<string, Record<string, unknown>>).update;
-    expect(dockerUpdate.threshold).toBe('minor'); // action overrides trigger
-    expect(dockerUpdate.level).toBe('image'); // preserved from trigger
-    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
-    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_LEVEL;
+    expect(dockerUpdate.threshold).toBe('minor'); // notification overrides action
+    expect(dockerUpdate.level).toBe('image'); // preserved from action
     delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD;
+    delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_LEVEL;
+    delete configuration.ddEnvVars.DD_NOTIFICATION_DOCKER_UPDATE_THRESHOLD;
   });
 
   test('mergeRecords with non-object override replaces base value', () => {
     // When overrideValue is not a record, it replaces baseValue entirely
-    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
-    configuration.ddEnvVars.DD_ACTION_DOCKER = 'scalar'; // scalar override for 'docker'
+    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'major';
+    configuration.ddEnvVars.DD_NOTIFICATION_DOCKER = 'scalar'; // scalar override for 'docker'
     const result = configuration.getTriggerConfigurations();
-    // action.docker = 'scalar' should override trigger.docker (which is an object)
+    // notification.docker = 'scalar' should override action.docker (which is an object)
     expect(result.docker).toBe('scalar');
-    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
-    delete configuration.ddEnvVars.DD_ACTION_DOCKER;
+    delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD;
+    delete configuration.ddEnvVars.DD_NOTIFICATION_DOCKER;
   });
 
   test('isRecord returns false for null values during merge', () => {
     // Kills 231:10 [ConditionalExpression] true + 231:10 [EqualityOperator] value === null
     // Make one side null to test null exclusion from isRecord
-    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
-    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
+    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'major';
+    configuration.ddEnvVars.DD_NOTIFICATION_DOCKER_UPDATE_THRESHOLD = 'minor';
     // Both sides are strings (not objects) – merge uses simple override
     const result = configuration.getTriggerConfigurations();
     expect((result.docker as Record<string, Record<string, string>>).update.threshold).toBe(
       'minor',
     );
-    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
     delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD;
+    delete configuration.ddEnvVars.DD_NOTIFICATION_DOCKER_UPDATE_THRESHOLD;
   });
 
   test('isRecord returns false for arrays during merge (does not deep merge arrays)', () => {
     // Kills 231:57 [BooleanLiteral] Array.isArray(value)
-    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
-    // Can only test via trigger/action merge paths
+    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'major';
+    // Can only test via action/notification merge paths
     const result = configuration.getTriggerConfigurations();
     expect(result).toHaveProperty('docker');
-    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
+    delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD;
   });
 });
 
@@ -2950,106 +2975,6 @@ describe('normalizeWatcherMaintenanceEnvAliases – missing-value path', () => {
     expect(watcherConfigurations.tzsuffix.maintenancewindowtz).toBe('America/Chicago');
     expect(watcherConfigurations.tzsuffix.maintenancewindow).toBeUndefined();
     delete configuration.ddEnvVars.DD_WATCHER_TZSUFFIX_MAINTENANCE_WINDOW_TZ;
-  });
-});
-
-describe('getLegacyTriggerIdFromEnvKey path coverage', () => {
-  test('usesLegacyTriggerPrefix returns true when DD_TRIGGER key has 3 segments (type.name.field)', () => {
-    // Kills 261:7 [ConditionalExpression] false / 261:31 [BlockStatement] {}
-    configuration.ddEnvVars.DD_TRIGGER_SLACK_MYSLACK_URL = 'https://hooks.slack.com/test';
-    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
-    configuration.getTriggerConfigurations();
-    expect(configuration.usesLegacyTriggerPrefix('slack', 'myslack')).toBe(true);
-    delete configuration.ddEnvVars.DD_TRIGGER_SLACK_MYSLACK_URL;
-    warnSpy.mockRestore();
-  });
-
-  test('usesLegacyTriggerPrefix returns true for exactly 2-segment DD_TRIGGER key (type.name)', () => {
-    // Kills 261:7 [EqualityOperator] triggerPath.length <= 2 (should be < 2)
-    // DD_TRIGGER_X_Y has exactly 2 segments [x, y] – should return id 'x.y'
-    configuration.ddEnvVars.DD_TRIGGER_GOTIFY_MYNOTIF = 'value';
-    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
-    configuration.getTriggerConfigurations();
-    // 2 segments → valid ID (triggerPath.length === 2, NOT < 2)
-    expect(configuration.usesLegacyTriggerPrefix('gotify', 'mynotif')).toBe(true);
-    delete configuration.ddEnvVars.DD_TRIGGER_GOTIFY_MYNOTIF;
-    warnSpy.mockRestore();
-  });
-
-  test('usesLegacyTriggerPrefix returns false when DD_TRIGGER key has only 1 segment', () => {
-    // Kills 261:7 [EqualityOperator] triggerPath.length <= 2 (should be < 2)
-    configuration.ddEnvVars.DD_TRIGGER_DOCKER = 'value';
-    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
-    configuration.getTriggerConfigurations();
-    expect(configuration.usesLegacyTriggerPrefix('docker', '')).toBe(false);
-    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER;
-    warnSpy.mockRestore();
-  });
-
-  test('trigger path parsing converts to lowercase before storing legacyId', () => {
-    // Note: usesLegacyTriggerPrefix itself lowercases the lookup key, so this mutant
-    // (258:20 [MethodExpression] part – removing toLowerCase in getLegacyTriggerIdFromEnvKey)
-    // is equivalent – the Set lookup will match regardless of case stored in the set.
-    // Verify the basic functionality works correctly.
-    configuration.ddEnvVars.DD_TRIGGER_DISCORD_MYBOT_URL = 'https://discord.com/api/webhooks/test';
-    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
-    configuration.getTriggerConfigurations();
-    expect(configuration.usesLegacyTriggerPrefix('discord', 'mybot')).toBe(true);
-    delete configuration.ddEnvVars.DD_TRIGGER_DISCORD_MYBOT_URL;
-    warnSpy.mockRestore();
-  });
-
-  test('trigger path parsing filters out empty segments', () => {
-    // Kills 259:23 [EqualityOperator] part.length >= 0 (replacing > 0)
-    // DD_TRIGGER_A__B has an empty segment between A and B (double underscore → empty part after split)
-    // With >= 0 filter, empty '' is kept: path = ['a', '', 'b'], id = 'a.'
-    // With > 0 filter, empty '' is excluded: path = ['a', 'b'], id = 'a.b'
-    configuration.ddEnvVars.DD_TRIGGER_MYTYPE__MYNAME_FIELD = 'value';
-    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
-    configuration.getTriggerConfigurations();
-    // With correct filter, empty string is excluded and we get 'mytype.myname' not 'mytype.'
-    expect(configuration.usesLegacyTriggerPrefix('mytype', 'myname')).toBe(true);
-    expect(configuration.usesLegacyTriggerPrefix('mytype', '')).toBe(false);
-    delete configuration.ddEnvVars.DD_TRIGGER_MYTYPE__MYNAME_FIELD;
-    warnSpy.mockRestore();
-  });
-
-  test('envKeyUpper is uppercased before getLegacyTriggerIdFromEnvKey call', () => {
-    // Kills 252:23 [MethodExpression] envKey.toLowerCase()
-    // The envKey.toUpperCase() ensures case-insensitive detection
-    configuration.ddEnvVars.DD_TRIGGER_MATRIX_MYROOM_URL = 'https://matrix.example.com';
-    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
-    configuration.getTriggerConfigurations();
-    // The trigger ID should be stored as lowercase 'matrix.myroom'
-    expect(configuration.usesLegacyTriggerPrefix('matrix', 'myroom')).toBe(true);
-    delete configuration.ddEnvVars.DD_TRIGGER_MATRIX_MYROOM_URL;
-    warnSpy.mockRestore();
-  });
-
-  test('collectLegacyTriggerUsage tracks first two path segments as type.name', () => {
-    // Kills 281:11 [ConditionalExpression] true
-    configuration.ddEnvVars.DD_TRIGGER_TEAMS_MYTEAMS_URL = 'https://outlook.office.com/webhook/';
-    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
-    configuration.getTriggerConfigurations();
-    // The legacy ID should be teams.myteams (first two segments)
-    expect(configuration.usesLegacyTriggerPrefix('teams', 'myteams')).toBe(true);
-    // Not a three-segment id
-    expect(configuration.usesLegacyTriggerPrefix('teams', 'myteams.url')).toBe(false);
-    delete configuration.ddEnvVars.DD_TRIGGER_TEAMS_MYTEAMS_URL;
-    warnSpy.mockRestore();
-  });
-
-  test('getLegacyTriggerIdFromEnvKey with 255:23 – slice from prefix.length correctly', () => {
-    // Kills 255:23 [MethodExpression] – replaces slice+split with just the method chain
-    // If slice(prefix.length) is wrong, the prefix 'DD_TRIGGER_' remains in the path
-    configuration.ddEnvVars.DD_TRIGGER_NTFY_MYNTFY_TOPIC = 'value';
-    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
-    configuration.getTriggerConfigurations();
-    // Should correctly extract 'ntfy.myntfy' (not 'dd_trigger_ntfy.myntfy')
-    expect(configuration.usesLegacyTriggerPrefix('ntfy', 'myntfy')).toBe(true);
-    expect(configuration.usesLegacyTriggerPrefix('dd_trigger_ntfy', 'myntfy')).toBe(false);
-    delete configuration.ddEnvVars.DD_TRIGGER_NTFY_MYNTFY_TOPIC;
-    warnSpy.mockRestore();
   });
 });
 

@@ -81,7 +81,11 @@ export const ddDisplayIcon = 'dd.display.icon';
  */
 export const ddActionInclude = 'dd.action.include';
 export const ddNotificationInclude = 'dd.notification.include';
-/** @deprecated Removed in v1.7.0 — use ddActionInclude or ddNotificationInclude */
+/**
+ * Removed in v1.7.0 — no longer resolved into action/notification trigger
+ * filtering. Still detected so a container carrying it gets a migration
+ * warning; use ddActionInclude or ddNotificationInclude instead.
+ */
 export const ddTriggerInclude = 'dd.trigger.include';
 
 /**
@@ -89,7 +93,11 @@ export const ddTriggerInclude = 'dd.trigger.include';
  */
 export const ddActionExclude = 'dd.action.exclude';
 export const ddNotificationExclude = 'dd.notification.exclude';
-/** @deprecated Removed in v1.7.0 — use ddActionExclude or ddNotificationExclude */
+/**
+ * Removed in v1.7.0 — no longer resolved into action/notification trigger
+ * filtering. Still detected so a container carrying it gets a migration
+ * warning; use ddActionExclude or ddNotificationExclude instead.
+ */
 export const ddTriggerExclude = 'dd.trigger.exclude';
 
 /**

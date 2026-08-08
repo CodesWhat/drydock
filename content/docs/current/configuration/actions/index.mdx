@@ -33,21 +33,21 @@ Container actions can be individually toggled with environment variables:
 
 ## Trigger configuration aliases
 
-Container updates are executed by the Docker and Docker Compose action triggers. The Command trigger is also classified as an action trigger for configuration taxonomy and defaults, but it runs an operator-defined command and does not enter Drydock's Docker update lifecycle queue. These triggers can be configured with three environment variable prefixes that are treated identically:
+Container updates are executed by the Docker and Docker Compose action triggers. The Command trigger is also classified as an action trigger for configuration taxonomy and defaults, but it runs an operator-defined command and does not enter Drydock's Docker update lifecycle queue. These triggers can be configured with two environment variable prefixes that are treated identically:
 
 | Prefix | Status |
 | --- | --- |
 | `DD_ACTION_*` | Current — recommended for action triggers |
 | `DD_NOTIFICATION_*` | Current — recommended for notification triggers |
-| `DD_TRIGGER_*` | Deprecated — removal in v1.7.0 |
+| `DD_TRIGGER_*` | Removed in v1.7.0 |
 
-When the same trigger is defined under multiple prefixes, the merge priority is: `DD_NOTIFICATION_*` > `DD_ACTION_*` > `DD_TRIGGER_*`.
+When the same trigger is defined under multiple prefixes, the merge priority is: `DD_NOTIFICATION_*` > `DD_ACTION_*`.
 
-Container labels follow the same pattern: `dd.action.include` / `dd.action.exclude` replace the deprecated `dd.trigger.include` / `dd.trigger.exclude`.
+Container labels follow the same pattern: `dd.action.include` / `dd.action.exclude` replaced the removed `dd.trigger.include` / `dd.trigger.exclude`.
 
 <Callout type="info">Action triggers (Docker, Docker Compose, Command) default to `AUTO=oninclude`, meaning they only auto-update containers that have an explicit `dd.action.include` label matching the trigger name. Notification triggers default to `AUTO=true`.</Callout>
 
-<Callout type="warn">**v1.5.x soft-blocker / v1.7.0 hard-blocker change-ahead:** In v1.5.x, `dd.action.include` / `dd.action.exclude` (and legacy `dd.trigger.include` / `dd.trigger.exclude`) are **soft blockers** — they suppress auto-updates but still allow manual updates (UI button, API). In v1.7.0 these labels will become **hard blockers** — containers with a non-matching include or an active exclude label will also reject manual-update requests. Migrate your labels to `dd.action.include` / `dd.action.exclude` before upgrading to v1.7.0.</Callout>
+<Callout type="warn">**Soft-blocker / hard-blocker change-ahead:** `dd.action.include` / `dd.action.exclude` are currently **soft blockers** — they suppress auto-updates but still allow manual updates (UI button, API) after confirmation. Later in the v1.7 cycle, shipping together with the per-action execution policy, these labels are scheduled to become **hard blockers** — containers with a non-matching include or an active exclude label will then also reject manual-update requests. Migrate your labels to `dd.action.include` / `dd.action.exclude` now so the flip can't lock you out.</Callout>
 
 See [Triggers](/docs/configuration/triggers) for full trigger configuration reference and the [migration CLI](/docs/configuration/triggers#environment-variable-prefixes) for automated prefix rewriting.
 

@@ -213,7 +213,7 @@ dd.action.exclude=update
 dd.notification.exclude=update
 ```
 
-The legacy labels `dd.trigger.include` / `dd.trigger.exclude` still work as aliases until v1.7.0, and apply to both categories — but only for a category whose own scoped label is absent.
+The legacy labels `dd.trigger.include` / `dd.trigger.exclude` were removed in v1.7.0 and no longer resolve to anything; only the scoped `dd.action.*` / `dd.notification.*` labels are read.
 
 #### 3. Shared threshold by trigger name
 

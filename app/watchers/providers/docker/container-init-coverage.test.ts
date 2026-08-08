@@ -269,14 +269,14 @@ describe('container-init coverage', () => {
       expect(resolved.triggerInclude).toBe('docker');
     });
 
-    test('the deprecated label fills only the categories without a scoped label, warns once, and records the legacy input once per resolution', () => {
+    test('the removed deprecated label is detected/warned once but no longer fills any category (v1.7.0)', () => {
       const warn = vi.fn();
       const warnedLegacyTriggerLabels = new Set<string>();
       const labels = { 'dd.action.include': 'docker', 'dd.trigger.include': 'both' };
 
       const first = resolveTriggerLabelOverrides(labels, {}, { warn, warnedLegacyTriggerLabels });
       expect(first.actionTriggerInclude).toBe('docker');
-      expect(first.notificationTriggerInclude).toBe('both');
+      expect(first.notificationTriggerInclude).toBeUndefined();
       expect(first.triggerInclude).toBe('docker');
 
       // One legacy label, one direction, one metric increment — not one per category.
@@ -287,6 +287,7 @@ describe('container-init coverage', () => {
 
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('dd.trigger.include');
+      expect(warn.mock.calls[0][0]).toContain('removed in v1.7.0');
     });
 
     test('records a legacy input per direction when both deprecated labels are present', () => {
@@ -306,12 +307,22 @@ describe('container-init coverage', () => {
       const labels = { 'dd.trigger.include': 'both', 'dd.trigger.exclude': 'both' };
 
       // Docker.ts resolves these labels once to build the override bag; resolveLabelsFromContainer
-      // then resolves the same labels again. The second pass must not re-fire the side effects.
+      // then resolves the same labels again. The second pass must not re-fire the side effects,
+      // even though the removed dd.trigger.<dir> label resolves every field to undefined here —
+      // the short-circuit is presence-based, not truthiness-based (see resolveTriggerLabelDirection).
       const overrides = resolveTriggerLabelOverrides(
         labels,
         {},
         { warn, warnedLegacyTriggerLabels: new Set() },
       );
+      expect(overrides).toEqual({
+        actionTriggerInclude: undefined,
+        actionTriggerExclude: undefined,
+        notificationTriggerInclude: undefined,
+        notificationTriggerExclude: undefined,
+        triggerInclude: undefined,
+        triggerExclude: undefined,
+      });
       expect(recordLegacyInput).toHaveBeenCalledTimes(2);
 
       const second = resolveTriggerLabelOverrides(labels, overrides, {
@@ -332,7 +343,7 @@ describe('container-init coverage', () => {
       expect(resolved.notificationTriggerInclude).toBe('slack');
     });
 
-    test('warns naming the exclude aliases for a deprecated dd.trigger.exclude label', () => {
+    test('warns naming the exclude aliases for a deprecated dd.trigger.exclude label, without filling either category (v1.7.0)', () => {
       const warn = vi.fn();
 
       const resolved = resolveTriggerLabelOverrides(
@@ -341,8 +352,8 @@ describe('container-init coverage', () => {
         { warn, warnedLegacyTriggerLabels: new Set() },
       );
 
-      expect(resolved.actionTriggerExclude).toBe('both');
-      expect(resolved.notificationTriggerExclude).toBe('both');
+      expect(resolved.actionTriggerExclude).toBeUndefined();
+      expect(resolved.notificationTriggerExclude).toBeUndefined();
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('dd.action.exclude');
       expect(warn.mock.calls[0][0]).toContain('dd.notification.exclude');

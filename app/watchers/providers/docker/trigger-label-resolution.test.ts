@@ -32,27 +32,23 @@ describe('resolveTriggerLabelValuesPure', () => {
       ).toEqual({ action: 'docker', notification: 'slack', mirror: 'docker' });
     });
 
-    test('deprecated label alone applies to both categories', () => {
-      expect(resolveTriggerLabelValuesPure({ [deprecated]: 'both' }, direction)).toEqual({
-        action: 'both',
-        notification: 'both',
-        mirror: 'both',
-      });
+    test('removed dd.trigger.* label alone resolves to nothing (v1.7.0 removal)', () => {
+      expect(resolveTriggerLabelValuesPure({ [deprecated]: 'both' }, direction)).toEqual({});
     });
 
-    test('deprecated label is a per-category fallback under an action label', () => {
+    test('removed dd.trigger.* label is never consulted as a fallback under an action label', () => {
       expect(
         resolveTriggerLabelValuesPure({ [action]: 'docker', [deprecated]: 'both' }, direction),
-      ).toEqual({ action: 'docker', notification: 'both', mirror: 'docker' });
+      ).toEqual({ action: 'docker', notification: undefined, mirror: 'docker' });
     });
 
-    test('deprecated label is a per-category fallback under a notification label', () => {
+    test('removed dd.trigger.* label is never consulted as a fallback under a notification label', () => {
       expect(
         resolveTriggerLabelValuesPure({ [notification]: 'slack', [deprecated]: 'both' }, direction),
-      ).toEqual({ action: 'both', notification: 'slack', mirror: 'slack' });
+      ).toEqual({ action: undefined, notification: 'slack', mirror: 'slack' });
     });
 
-    test('both scoped labels fully shadow the deprecated label', () => {
+    test('both scoped labels resolve independently regardless of the removed dd.trigger.* label', () => {
       expect(
         resolveTriggerLabelValuesPure(
           { [action]: 'docker', [notification]: 'slack', [deprecated]: 'both' },
@@ -80,9 +76,11 @@ describe('resolveTriggerLabelValuesPure', () => {
     });
 
     test('an empty scoped label value is preserved rather than treated as absent', () => {
-      expect(
-        resolveTriggerLabelValuesPure({ [action]: '', [deprecated]: 'both' }, direction),
-      ).toEqual({ action: '', notification: 'both', mirror: '' });
+      expect(resolveTriggerLabelValuesPure({ [action]: '' }, direction)).toEqual({
+        action: '',
+        notification: undefined,
+        mirror: '',
+      });
     });
   });
 

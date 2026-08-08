@@ -666,25 +666,25 @@ export const openApiSchemas = {
         type: 'string',
         example: 'dockercompose.local:minor',
         description:
-          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label, falling back to the deprecated dd.trigger.include. Applies only to action triggers (docker, dockercompose, command).',
+          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label. The legacy dd.trigger.include fallback was removed in v1.7.0. Applies only to action triggers (docker, dockercompose, command).',
       },
       actionTriggerExclude: {
         type: 'string',
         example: 'docker.local',
         description:
-          'Comma-separated action trigger ids or names that must not fire for this container. From the dd.action.exclude label, falling back to the deprecated dd.trigger.exclude. Applies only to action triggers.',
+          'Comma-separated action trigger ids or names that must not fire for this container. From the dd.action.exclude label. The legacy dd.trigger.exclude fallback was removed in v1.7.0. Applies only to action triggers.',
       },
       notificationTriggerInclude: {
         type: 'string',
         example: 'smtp.gmail,slack.alerts:major',
         description:
-          'Comma-separated notification trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.notification.include label, falling back to the deprecated dd.trigger.include. Applies only to notification triggers.',
+          'Comma-separated notification trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.notification.include label. The legacy dd.trigger.include fallback was removed in v1.7.0. Applies only to notification triggers.',
       },
       notificationTriggerExclude: {
         type: 'string',
         example: 'pushover.mobile',
         description:
-          'Comma-separated notification trigger ids or names that must not fire for this container. From the dd.notification.exclude label, falling back to the deprecated dd.trigger.exclude. Applies only to notification triggers.',
+          'Comma-separated notification trigger ids or names that must not fire for this container. From the dd.notification.exclude label. The legacy dd.trigger.exclude fallback was removed in v1.7.0. Applies only to notification triggers.',
       },
       triggerInclude: {
         type: 'string',

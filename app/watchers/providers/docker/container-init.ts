@@ -207,7 +207,7 @@ function warnLegacyTriggerLabel(
   const aliasKeySuffix = ddKey === ddTriggerInclude ? 'include' : 'exclude';
 
   warn(
-    `Legacy Docker label "${ddKey}" is deprecated. Please migrate to "dd.action.${aliasKeySuffix}" or "dd.notification.${aliasKeySuffix}" before removal in v1.7.0.`,
+    `Legacy Docker label "${ddKey}" was removed in v1.7.0 and no longer affects trigger routing. Set "dd.action.${aliasKeySuffix}" or "dd.notification.${aliasKeySuffix}" instead.`,
   );
 }
 
@@ -215,13 +215,13 @@ function warnLegacyTriggerLabel(
  * Resolve one direction (include or exclude) of the trigger labels into its
  * category-scoped values plus the deprecated compat mirror.
  *
- * `dd.trigger.<dir>` is a per-category fallback: it only fills in a category
- * whose own scoped label (`dd.action.<dir>` / `dd.notification.<dir>`) is
- * absent — it never overrides a scoped label that is present.
- *
- * The numeric resolution itself is delegated to the dependency-free
- * `resolveTriggerLabelValuesPure()` — this wrapper only adds the
- * warn/telemetry side effects for the legacy `dd.trigger.<dir>` label.
+ * `dd.trigger.<dir>` support was removed in v1.7.0: it is no longer read for
+ * value resolution (delegated entirely to the dependency-free
+ * `resolveTriggerLabelValuesPure()`, which only looks at
+ * `dd.action.<dir>` / `dd.notification.<dir>`). It is still *detected* here
+ * so operators who haven't migrated yet get a loud, per-key warning (and a
+ * `dd_legacy_input_total` / deprecation-banner data point) rather than a
+ * silently-ignored label.
  */
 function resolveTriggerLabelValues(
   labels: Record<string, string>,
@@ -229,17 +229,10 @@ function resolveTriggerLabelValues(
   options: GetLabelOptions,
 ): ResolvedTriggerLabelValues {
   const ddLegacyKey = direction === 'include' ? ddTriggerInclude : ddTriggerExclude;
-  const actionValue = labels[direction === 'include' ? ddActionInclude : ddActionExclude];
-  const notificationValue =
-    labels[direction === 'include' ? ddNotificationInclude : ddNotificationExclude];
   const legacyValue = labels[ddLegacyKey];
-  const warn = options.warn || ((message) => log.error(message));
-
-  if (actionValue === undefined && notificationValue === undefined && legacyValue === undefined) {
-    return {};
-  }
 
   if (legacyValue !== undefined) {
+    const warn = options.warn || ((message) => log.error(message));
     const warnedLegacyTriggerLabels =
       options.warnedLegacyTriggerLabels || warnedLegacyTriggerLabelFallbacks;
     recordLegacyInput('label', ddLegacyKey);
@@ -251,15 +244,27 @@ function resolveTriggerLabelValues(
 
 /**
  * Resolve one direction, reusing already-resolved `overrides` rather than
- * re-reading the labels when every value for that direction is present.
+ * re-reading the labels when every value for that direction has already been
+ * resolved once.
  *
  * The skip is load-bearing, not an optimization. A newly-discovered container is
  * resolved twice over the same labels — once in Docker.ts to build the override
  * bag, then again here via resolveLabelsFromContainer — and resolveTriggerLabelValues
  * has side effects (recordLegacyInput, deprecation warn). Without the short-circuit
  * a deprecated dd.trigger.* label increments the legacy-input metric twice per
- * container. The old per-key `override || getLabel(...)` loop skipped the second
- * read for exactly this reason.
+ * container.
+ *
+ * "Already resolved" is judged by property *presence* (`Object.hasOwn`), not
+ * truthiness. `resolveTriggerLabelOverrides` always returns an object with all
+ * six fields present, even when a field legitimately resolves to `undefined`
+ * (e.g. only `dd.action.<dir>` is set, so the notification field never
+ * resolves) — that undefined-but-present value is what gets spread into the
+ * `overrides` bag passed back in on the second pass. A truthiness check would
+ * never short-circuit for a direction driven only by the (removed in v1.7.0,
+ * detection-only) `dd.trigger.<dir>` label, since that label no longer fills
+ * any field — which would double-fire recordLegacyInput/warn on every such
+ * container. Presence-checking treats "resolved to undefined" and "resolved
+ * to a value" identically, so the short-circuit still applies.
  */
 function resolveTriggerLabelDirection(
   containerLabels: Record<string, string>,
@@ -267,20 +272,20 @@ function resolveTriggerLabelDirection(
   overrides: ContainerLabelOverrides,
   options: GetLabelOptions,
 ): ResolvedTriggerLabelValues {
-  const [actionOverride, notificationOverride, mirrorOverride] =
+  const [actionKey, notificationKey, mirrorKey] =
     direction === 'include'
-      ? [
-          overrides.actionTriggerInclude,
-          overrides.notificationTriggerInclude,
-          overrides.triggerInclude,
-        ]
-      : [
-          overrides.actionTriggerExclude,
-          overrides.notificationTriggerExclude,
-          overrides.triggerExclude,
-        ];
+      ? (['actionTriggerInclude', 'notificationTriggerInclude', 'triggerInclude'] as const)
+      : (['actionTriggerExclude', 'notificationTriggerExclude', 'triggerExclude'] as const);
 
-  if (actionOverride && notificationOverride && mirrorOverride) {
+  const actionOverride = overrides[actionKey];
+  const notificationOverride = overrides[notificationKey];
+  const mirrorOverride = overrides[mirrorKey];
+
+  if (
+    Object.hasOwn(overrides, actionKey) &&
+    Object.hasOwn(overrides, notificationKey) &&
+    Object.hasOwn(overrides, mirrorKey)
+  ) {
     return { action: actionOverride, notification: notificationOverride, mirror: mirrorOverride };
   }
 
