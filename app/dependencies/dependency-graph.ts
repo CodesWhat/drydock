@@ -191,7 +191,30 @@ export function buildDependencyGraph(
   return { nodes, edges, unresolved, crossHostIgnored };
 }
 
-/** Tarjan's strongly-connected-components over an adjacency-list subgraph. */
+/**
+ * A single explicit-stack frame standing in for one level of `strongConnect`
+ * recursion: `neighbors` is that node's adjacency list and `neighborIndex`
+ * is how far through it this frame has iterated so far.
+ */
+interface TarjanFrame {
+  nodeId: string;
+  neighbors: string[];
+  neighborIndex: number;
+}
+
+/**
+ * Tarjan's strongly-connected-components over an adjacency-list subgraph.
+ *
+ * Iterative (explicit work-stack) rather than recursive: a recursive
+ * `strongConnect` blows the call stack on a single long dependency chain or
+ * cycle around ~5-10k nodes (JS engines cap recursion depth well under
+ * that), and a fleet's `dependsOn` graph has no such size bound. Each work
+ * frame mirrors one `strongConnect(v)` call — pushed when a fresh node is
+ * first visited, popped (and its lowlink propagated to its caller frame)
+ * once every one of its neighbors has been examined — so the traversal
+ * order, and therefore the resulting SCC partition and component order,
+ * are identical to the recursive version for the same input.
+ */
 function stronglyConnectedComponents(
   nodeIds: string[],
   adjacency: Map<string, string[]>,
@@ -203,37 +226,64 @@ function stronglyConnectedComponents(
   const stack: string[] = [];
   const components: string[][] = [];
 
-  function strongConnect(v: string): void {
-    indices.set(v, nextIndex);
-    lowlink.set(v, nextIndex);
+  for (const rootNodeId of nodeIds) {
+    if (indices.has(rootNodeId)) {
+      continue;
+    }
+
+    const workStack: TarjanFrame[] = [
+      { nodeId: rootNodeId, neighbors: adjacency.get(rootNodeId) ?? [], neighborIndex: 0 },
+    ];
+    indices.set(rootNodeId, nextIndex);
+    lowlink.set(rootNodeId, nextIndex);
     nextIndex += 1;
-    stack.push(v);
-    onStack.add(v);
+    stack.push(rootNodeId);
+    onStack.add(rootNodeId);
 
-    for (const w of adjacency.get(v) ?? []) {
-      if (!indices.has(w)) {
-        strongConnect(w);
-        lowlink.set(v, Math.min(lowlink.get(v) as number, lowlink.get(w) as number));
-      } else if (onStack.has(w)) {
-        lowlink.set(v, Math.min(lowlink.get(v) as number, indices.get(w) as number));
+    while (workStack.length > 0) {
+      const frame = workStack[workStack.length - 1];
+
+      if (frame.neighborIndex < frame.neighbors.length) {
+        const w = frame.neighbors[frame.neighborIndex];
+        frame.neighborIndex += 1;
+
+        if (!indices.has(w)) {
+          indices.set(w, nextIndex);
+          lowlink.set(w, nextIndex);
+          nextIndex += 1;
+          stack.push(w);
+          onStack.add(w);
+          workStack.push({ nodeId: w, neighbors: adjacency.get(w) ?? [], neighborIndex: 0 });
+        } else if (onStack.has(w)) {
+          lowlink.set(
+            frame.nodeId,
+            Math.min(lowlink.get(frame.nodeId) as number, indices.get(w) as number),
+          );
+        }
+        continue;
       }
-    }
 
-    if (lowlink.get(v) === indices.get(v)) {
-      const component: string[] = [];
-      let w: string;
-      do {
-        w = stack.pop() as string;
-        onStack.delete(w);
-        component.push(w);
-      } while (w !== v);
-      components.push(component);
-    }
-  }
+      // Every neighbor of frame.nodeId has been examined — equivalent to
+      // `strongConnect(frame.nodeId)` returning.
+      workStack.pop();
+      if (workStack.length > 0) {
+        const parent = workStack[workStack.length - 1];
+        lowlink.set(
+          parent.nodeId,
+          Math.min(lowlink.get(parent.nodeId) as number, lowlink.get(frame.nodeId) as number),
+        );
+      }
 
-  for (const nodeId of nodeIds) {
-    if (!indices.has(nodeId)) {
-      strongConnect(nodeId);
+      if (lowlink.get(frame.nodeId) === indices.get(frame.nodeId)) {
+        const component: string[] = [];
+        let w: string;
+        do {
+          w = stack.pop() as string;
+          onStack.delete(w);
+          component.push(w);
+        } while (w !== frame.nodeId);
+        components.push(component);
+      }
     }
   }
 

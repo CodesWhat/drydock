@@ -389,6 +389,40 @@ describe('topologicalSort', () => {
       expect(topologicalSort([...shuffledNodes], [...shuffledEdges])).toEqual(expected);
     }
   });
+
+  test('a 6000-node single cycle completes without a stack-overflow RangeError', () => {
+    // Guards against a recursive strongConnect: a JS engine's default call
+    // stack blows well under this size on one long chain/cycle, and a
+    // fleet's dependsOn graph has no such bound. Zero-padded ids keep
+    // alphabetical (name) sort order equal to numeric id order.
+    const nodeCount = 6000;
+    const ids = Array.from({ length: nodeCount }, (_, index) => String(index).padStart(5, '0'));
+    const nodes = ids.map((id) => node(id));
+    const edges = ids.map((id, index) => edge(id, ids[(index + 1) % nodeCount]));
+
+    let result: ReturnType<typeof topologicalSort> | undefined;
+    expect(() => {
+      result = topologicalSort(nodes, edges);
+    }).not.toThrow();
+
+    expect(result?.waves).toEqual([ids]);
+    expect(result?.cycles).toEqual([ids]);
+  });
+
+  test('a non-cycle node reached only through another non-cycle node still resolves after the cycle it feeds into', () => {
+    // v -> w -> (a <-> b). After round 1 resolves {a, b}, round 2 rebuilds
+    // adjacency restricted to the still-remaining {v, w}: w's only edge (to
+    // the now-removed a) is filtered out, so w is discovered as a CHILD of v
+    // (not as the round's sole/root node) with no adjacency entry of its
+    // own — exercising the neighbor-lookup fallback at child-frame push time,
+    // as distinct from the root-frame fallback already covered by the
+    // "cross edge into an already-closed SCC" case above.
+    const nodes = [node('v'), node('w'), node('a'), node('b')];
+    const edges = [edge('v', 'w'), edge('w', 'a'), edge('a', 'b'), edge('b', 'a')];
+    const result = topologicalSort(nodes, edges);
+    expect(result.waves).toEqual([['a', 'b'], ['w'], ['v']]);
+    expect(result.cycles).toEqual([['a', 'b']]);
+  });
 });
 
 describe('computeDependencyGraph', () => {
