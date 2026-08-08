@@ -244,6 +244,11 @@ export interface Container {
   updateMaturityLevel?: 'hot' | 'mature' | 'established';
   updateOperation?: ContainerUpdateOperationState;
   updateEligibility?: import('./update-eligibility.js').UpdateEligibility;
+  // List-view badge counts (#219, design §4) — attached only by the container
+  // list handler, derived from buildDependencyGraph over the whole fleet, not
+  // persisted. Full graph detail lives behind GET /containers/dependencies.
+  dependencyCount?: number;
+  dependentCount?: number;
   labels?: Record<string, string>;
   sourceRepo?: string;
   currentReleaseNotes?: ContainerReleaseNotes;
