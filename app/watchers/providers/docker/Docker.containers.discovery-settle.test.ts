@@ -40,6 +40,9 @@ describe('Docker Watcher discovery settling (#156)', () => {
       watchevents: false,
     });
     clearTimeout(docker.watchCronTimeout);
+    // Not under test here: keep the settle-deadline follow-up watch from
+    // racing this test's own getContainers() passes.
+    vi.spyOn(docker, 'watchFromCron').mockResolvedValue([]);
 
     const firstPass = await docker.getContainers();
     expect(firstPass).toHaveLength(0);
@@ -64,6 +67,7 @@ describe('Docker Watcher discovery settling (#156)', () => {
       watchevents: false,
     });
     clearTimeout(docker.watchCronTimeout);
+    vi.spyOn(docker, 'watchFromCron').mockResolvedValue([]);
     await docker.getContainers();
     expect(docker.pendingDiscoveries.get('rename-me')?.name).toBe('transient-alias-name');
 
@@ -148,6 +152,7 @@ describe('Docker Watcher discovery settling (#156)', () => {
       watchevents: false,
     });
     clearTimeout(docker.watchCronTimeout);
+    vi.spyOn(docker, 'watchFromCron').mockResolvedValue([]);
     await docker.getContainers();
 
     vi.advanceTimersByTime(6_000);
@@ -188,6 +193,36 @@ describe('Docker Watcher discovery settling (#156)', () => {
     vi.advanceTimersByTime(30_000);
     expect(docker.watchCronDebounced).toHaveBeenCalledOnce();
     expect(docker.pendingDiscoverySettleTimeout).toBeUndefined();
+  });
+
+  test('starts the watch directly at the settle deadline when watchevents is disabled (#691 review)', async () => {
+    mockDockerApi.listContainers.mockResolvedValue([
+      { Id: 'no-events', Labels: { 'dd.watch': 'true' }, Names: ['/no-events'] },
+    ]);
+
+    await docker.register('watcher', 'docker', 'test', {
+      discoverysettlems: 30_000,
+      watchevents: false,
+    });
+    clearTimeout(docker.watchCronTimeout);
+    // watchevents: false means init() never created watchCronDebounced — the
+    // settle timer must fall back to watchFromCron() itself.
+    expect(docker.watchCronDebounced).toBeUndefined();
+    const watchFromCronSpy = vi.spyOn(docker, 'watchFromCron');
+
+    await docker.getContainers();
+    expect(docker.pendingDiscoveries.has('no-events')).toBe(true);
+    expect(watchFromCronSpy).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(30_000);
+    expect(watchFromCronSpy).toHaveBeenCalledOnce();
+    await watchFromCronSpy.mock.results[0].value;
+
+    expect(docker.pendingDiscoveries.has('no-events')).toBe(false);
+    expect(docker.addImageDetailsToContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ Id: 'no-events' }),
+      expect.anything(),
+    );
   });
 
   test('keeps a single deduplicated settle timer anchored to the earliest pending deadline', async () => {

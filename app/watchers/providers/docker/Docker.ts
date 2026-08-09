@@ -842,7 +842,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     }
     this.pendingDiscoverySettleTimeout = setTimeout(() => {
       delete this.pendingDiscoverySettleTimeout;
-      this.watchCronDebounced?.();
+      // watchCronDebounced only exists when watchevents is on — else watch directly.
+      const watch = this.watchCronDebounced ?? (() => this.watchFromCron().catch(() => undefined));
+      watch();
     }, delayMs);
   }
 
