@@ -763,7 +763,7 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     lucide: 'lucide:layers',
     tabler: 'tabler:stack-2',
     heroicons: 'heroicons:square-3-stack-3d',
-    iconoir: 'iconoir:cube',
+    iconoir: 'iconoir:multiple-pages',
   },
   microsoft: {
     'fa6-solid': 'fa6-brands:microsoft',

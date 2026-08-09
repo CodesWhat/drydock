@@ -23,6 +23,27 @@ for (const match of iconsTs.matchAll(/'([a-z0-9-]+:[a-z0-9-]+)'/g)) {
 
 console.log(`Found ${iconRefs.size} icon references across all libraries`);
 
+// Collections rename icons between releases by demoting the old name to an
+// alias (lucide 1.2.121 did this to `history`), so a plain icons[] lookup
+// silently drops icons the app still references. Follow the alias chain to
+// the real icon. Aliases carrying transforms (rotate/flip) can't be expressed
+// in this body-only bundle, so refuse those instead of shipping a wrong glyph.
+function resolveIcon(collection, name, depth = 0) {
+  if (depth > 5) return undefined;
+  const icon = collection.icons[name];
+  if (icon) return icon;
+  const alias = collection.aliases?.[name];
+  if (!alias) return undefined;
+  if (alias.rotate || alias.hFlip || alias.vFlip) {
+    console.warn(`  WARNING: alias ${name} needs a transform this bundle cannot represent`);
+    return undefined;
+  }
+  const parent = resolveIcon(collection, alias.parent, depth + 1);
+  if (!parent) return undefined;
+  const { parent: _ignored, ...overrides } = alias;
+  return { ...parent, ...overrides };
+}
+
 // Group by prefix
 const byPrefix = {};
 for (const ref of iconRefs) {
@@ -49,7 +70,7 @@ for (const [prefix, names] of Object.entries(byPrefix)) {
   let missing = 0;
 
   for (const name of names) {
-    const iconData = collection.icons[name];
+    const iconData = resolveIcon(collection, name);
     if (!iconData) {
       console.warn(`  WARNING: ${prefix}:${name} not found in ${pkgName}`);
       missing++;
