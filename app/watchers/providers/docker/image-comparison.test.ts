@@ -532,6 +532,212 @@ describe('image-comparison', () => {
     expect(result.digest).toBe('sha256:def456');
   });
 
+  describe('multi-anchor digest comparison (#669)', () => {
+    function createMultiAnchorContainer(overrides: Record<string, unknown> = {}) {
+      return {
+        image: {
+          id: 'image-1',
+          registry: { name: 'hub' },
+          name: 'library/postgres',
+          tag: { value: '16-alpine', semver: true, tagPrecision: 'floating' },
+          digest: {
+            watch: true,
+            repo: 'sha256:anchor-a',
+            repoDigests: ['sha256:anchor-a', 'sha256:anchor-b'],
+          },
+        },
+        tagFamily: 'strict',
+        ...overrides,
+      };
+    }
+
+    function mockRegistry(getImageManifestDigest: ReturnType<typeof vi.fn>) {
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockResolvedValue(['16-alpine']),
+            getImageManifestDigest,
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+    }
+
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    test('(b) raw match on a non-first anchor short-circuits with no normalization call and re-anchors digest.repo', async () => {
+      const getImageManifestDigest = vi.fn().mockResolvedValueOnce({
+        digest: 'sha256:anchor-b',
+        created: '2026-04-01T00:00:00.000Z',
+        version: 2,
+      });
+      mockRegistry(getImageManifestDigest);
+      const container = createMultiAnchorContainer();
+
+      await findNewVersion(container as never, log);
+
+      // Only the initial remote-digest lookup happened — the raw match at
+      // step 2 skips the normalize-and-compare registry call entirely.
+      expect(getImageManifestDigest).toHaveBeenCalledTimes(1);
+      expect(container.image.digest.value).toBe('sha256:anchor-b');
+      expect(container.image.digest.repo).toBe('sha256:anchor-b');
+    });
+
+    test('(c) match only after normalizing a non-first anchor (e.g. manifest-list digest) re-anchors digest.repo', async () => {
+      const getImageManifestDigest = vi
+        .fn()
+        .mockResolvedValueOnce({
+          digest: 'sha256:platform-digest',
+          created: '2026-04-01T00:00:00.000Z',
+          version: 2,
+        })
+        .mockResolvedValueOnce({ digest: 'sha256:normalized-a' })
+        .mockResolvedValueOnce({ digest: 'sha256:platform-digest' });
+      mockRegistry(getImageManifestDigest);
+      const container = createMultiAnchorContainer();
+
+      await findNewVersion(container as never, log);
+
+      expect(getImageManifestDigest).toHaveBeenCalledTimes(3);
+      expect(getImageManifestDigest.mock.calls[1][1]).toBe('sha256:anchor-a');
+      expect(getImageManifestDigest.mock.calls[2][1]).toBe('sha256:anchor-b');
+      expect(container.image.digest.value).toBe('sha256:platform-digest');
+      expect(container.image.digest.repo).toBe('sha256:anchor-b');
+    });
+
+    test('(d) genuine republish: no anchor matches, update still flagged using the first anchor normalized value', async () => {
+      const getImageManifestDigest = vi
+        .fn()
+        .mockResolvedValueOnce({
+          digest: 'sha256:new-republish',
+          created: '2026-04-01T00:00:00.000Z',
+          version: 2,
+        })
+        .mockResolvedValueOnce({ digest: 'sha256:normalized-a' })
+        .mockResolvedValueOnce({ digest: 'sha256:normalized-b' });
+      mockRegistry(getImageManifestDigest);
+      const container = createMultiAnchorContainer();
+
+      await findNewVersion(container as never, log);
+
+      expect(getImageManifestDigest).toHaveBeenCalledTimes(3);
+      expect(container.image.digest.value).toBe('sha256:normalized-a');
+      // digest.repo is left untouched — no anchor matched, so no re-anchoring.
+      expect(container.image.digest.repo).toBe('sha256:anchor-a');
+    });
+
+    test('(e) one anchor fails to normalize, a later anchor matches — comparison still succeeds', async () => {
+      const getImageManifestDigest = vi
+        .fn()
+        .mockResolvedValueOnce({
+          digest: 'sha256:target',
+          created: '2026-04-01T00:00:00.000Z',
+          version: 2,
+        })
+        .mockRejectedValueOnce(new Error('manifest unknown (404)'))
+        .mockResolvedValueOnce({ digest: 'sha256:target' });
+      mockRegistry(getImageManifestDigest);
+      const container = createMultiAnchorContainer();
+
+      const result = await findNewVersion(container as never, log);
+
+      expect(getImageManifestDigest).toHaveBeenCalledTimes(3);
+      expect(result.digest).toBe('sha256:target');
+      expect(container.image.digest.value).toBe('sha256:target');
+      expect(container.image.digest.repo).toBe('sha256:anchor-b');
+    });
+
+    test('(f) every anchor fails to normalize — findNewVersion rejects instead of reporting no update', async () => {
+      const getImageManifestDigest = vi
+        .fn()
+        .mockResolvedValueOnce({
+          digest: 'sha256:target',
+          created: '2026-04-01T00:00:00.000Z',
+          version: 2,
+        })
+        .mockRejectedValueOnce(new Error('anchor-a manifest unknown'))
+        .mockRejectedValueOnce(new Error('anchor-b manifest unknown'));
+      mockRegistry(getImageManifestDigest);
+      const container = createMultiAnchorContainer();
+
+      await expect(findNewVersion(container as never, log)).rejects.toThrow(
+        'anchor-b manifest unknown',
+      );
+    });
+
+    test('(g) legacy container with no repoDigests field falls back to single-anchor comparison unchanged', async () => {
+      const getImageManifestDigest = vi
+        .fn()
+        .mockResolvedValueOnce({
+          digest: 'sha256:new-manifest',
+          created: '2026-04-01T00:00:00.000Z',
+          version: 2,
+        })
+        .mockResolvedValueOnce({ digest: 'sha256:normalized-legacy' });
+      mockRegistry(getImageManifestDigest);
+      const container = createMultiAnchorContainer({
+        image: {
+          id: 'image-1',
+          registry: { name: 'hub' },
+          name: 'library/postgres',
+          tag: { value: '16-alpine', semver: true, tagPrecision: 'floating' },
+          digest: { watch: true, repo: 'sha256:legacy-anchor' },
+        },
+      });
+
+      await findNewVersion(container as never, log);
+
+      expect(getImageManifestDigest).toHaveBeenCalledTimes(2);
+      expect(getImageManifestDigest.mock.calls[1][1]).toBe('sha256:legacy-anchor');
+      expect(container.image.digest.value).toBe('sha256:normalized-legacy');
+      expect(container.image.digest.repo).toBe('sha256:legacy-anchor');
+    });
+
+    test('(i) self-heal: a stale digest.repo absent from the fresh repoDigests list is replaced by the matching entry', async () => {
+      const getImageManifestDigest = vi.fn().mockResolvedValueOnce({
+        digest: 'sha256:anchor-b',
+        created: '2026-04-01T00:00:00.000Z',
+        version: 2,
+      });
+      mockRegistry(getImageManifestDigest);
+      const container = createMultiAnchorContainer({
+        image: {
+          id: 'image-1',
+          registry: { name: 'hub' },
+          name: 'library/postgres',
+          tag: { value: '16-alpine', semver: true, tagPrecision: 'floating' },
+          digest: {
+            watch: true,
+            // Poisoned: not present anywhere in the freshly derived list below.
+            repo: 'sha256:very-stale-and-foreign',
+            repoDigests: ['sha256:anchor-a', 'sha256:anchor-b'],
+          },
+        },
+      });
+
+      await findNewVersion(container as never, log);
+
+      expect(container.image.digest.repo).toBe('sha256:anchor-b');
+      expect(container.image.digest.value).toBe('sha256:anchor-b');
+    });
+
+    test('(j) version !== 2 fallback is unchanged: digest.value takes digest.repo verbatim, repoDigests is not consulted', async () => {
+      const getImageManifestDigest = vi.fn().mockResolvedValueOnce({
+        digest: 'sha256:anchor-b',
+        created: '2026-04-01T00:00:00.000Z',
+        version: 1,
+      });
+      mockRegistry(getImageManifestDigest);
+      const container = createMultiAnchorContainer();
+
+      await findNewVersion(container as never, log);
+
+      expect(getImageManifestDigest).toHaveBeenCalledTimes(1);
+      expect(container.image.digest.value).toBe('sha256:anchor-a');
+      expect(container.image.digest.repo).toBe('sha256:anchor-a');
+    });
+  });
+
   test('sets noUpdateReason from getTagCandidates when tag is pinned-specific and digest watch is off', async () => {
     mockGetState.mockReturnValue({
       registry: {

@@ -12,10 +12,12 @@ import {
   getFirstConfigNumber,
   getFirstConfigString,
   getImageForRegistryLookup,
+  getImageReferenceCandidates,
   getImageReferenceCandidatesFromPattern,
   getImgsetSpecificity,
   getInspectValueByPath,
   getOldContainers,
+  getOrderedRepoDigests,
   getRawContainerName,
   getRepoDigest,
   getResolvedImgsetConfiguration,
@@ -296,6 +298,79 @@ describe('docker helper extraction module', () => {
     expect(getRepoDigest({ RepoDigests: ['repo@sha256:abc123'] })).toBe('sha256:abc123');
     expect(isContainerToWatch('true', false)).toBe(true);
     expect(isContainerToWatch('', true)).toBe(true);
+  });
+
+  describe('getOrderedRepoDigests (#669)', () => {
+    test('returns undefined when RepoDigests is empty or undefined', () => {
+      expect(getOrderedRepoDigests({ RepoDigests: [] })).toBeUndefined();
+      expect(getOrderedRepoDigests({} as any)).toBeUndefined();
+    });
+
+    test('returns the full list, in order, when no reference candidates are supplied', () => {
+      expect(
+        getOrderedRepoDigests({
+          RepoDigests: ['acme/service@sha256:one', 'other/service@sha256:two'],
+        }),
+      ).toEqual(['sha256:one', 'sha256:two']);
+    });
+
+    test('prefers the entry matching the container repo when a foreign-repo entry comes first (#669)', () => {
+      const referenceCandidates = getImageReferenceCandidates('acme/service', 'ghcr.io');
+
+      const result = getOrderedRepoDigests(
+        {
+          RepoDigests: ['unrelated/other-image@sha256:foreign', 'ghcr.io/acme/service@sha256:mine'],
+        },
+        referenceCandidates,
+      );
+
+      expect(result).toEqual(['sha256:mine']);
+    });
+
+    test('returns every matching entry in original order when several entries match', () => {
+      const referenceCandidates = getImageReferenceCandidates('acme/service', 'ghcr.io');
+
+      const result = getOrderedRepoDigests(
+        {
+          RepoDigests: [
+            'ghcr.io/acme/service@sha256:first',
+            'unrelated/other-image@sha256:foreign',
+            'ghcr.io/acme/service@sha256:second',
+          ],
+        },
+        referenceCandidates,
+      );
+
+      expect(result).toEqual(['sha256:first', 'sha256:second']);
+    });
+
+    test('falls back to the full list, in original order, when no entry matches any candidate', () => {
+      const referenceCandidates = getImageReferenceCandidates('acme/service', 'ghcr.io');
+
+      const result = getOrderedRepoDigests(
+        {
+          RepoDigests: ['unrelated/other-image@sha256:foreign', 'another/one@sha256:also-foreign'],
+        },
+        referenceCandidates,
+      );
+
+      expect(result).toEqual(['sha256:foreign', 'sha256:also-foreign']);
+    });
+
+    test('ignores malformed RepoDigests entries lacking an "@" separator', () => {
+      expect(getOrderedRepoDigests({ RepoDigests: ['malformed-entry'] })).toBeUndefined();
+    });
+
+    test('ignores entries with an empty repo or digest component', () => {
+      expect(getOrderedRepoDigests({ RepoDigests: ['acme/service@'] })).toBeUndefined();
+      expect(getOrderedRepoDigests({ RepoDigests: ['@sha256:orphan'] })).toBeUndefined();
+      // A well-formed entry still wins over malformed siblings.
+      expect(
+        getOrderedRepoDigests({
+          RepoDigests: ['acme/service@', '@sha256:orphan', 'acme/service@sha256:good'],
+        }),
+      ).toEqual(['sha256:good']);
+    });
   });
 
   test('digest watch defaults require a meaningful current tag', () => {

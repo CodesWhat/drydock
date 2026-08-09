@@ -245,7 +245,7 @@ export function getContainerConfigBooleanValue(...values: unknown[]) {
   return undefined;
 }
 
-function getImageReferenceCandidates(path?: string, domain?: string) {
+export function getImageReferenceCandidates(path?: string, domain?: string) {
   const pathNormalized = normalizeConfigStringValue(path)?.toLowerCase();
   if (!pathNormalized) {
     return [];
@@ -286,7 +286,7 @@ export function getImageReferenceCandidatesFromPattern(pattern: string) {
   }
 }
 
-function getImageReferenceCandidatesFromParsedImage(parsedImage: ParsedImageLike) {
+export function getImageReferenceCandidatesFromParsedImage(parsedImage: ParsedImageLike) {
   return getImageReferenceCandidates(parsedImage?.path, parsedImage?.domain);
 }
 
@@ -396,17 +396,77 @@ export function getFirstConfigNumber(value: unknown, paths: string[]) {
 }
 
 /**
- * Get image repo digest.
+ * Return the ordered list of digest values from a Docker image's RepoDigests,
+ * preferring entries whose repo component matches the container's own image
+ * reference over entries pulled/retagged from a foreign repo (#669).
+ *
+ * A local Docker image object can carry multiple `repo@digest` entries for a
+ * single Image ID with no ordering guarantee (pull/retag accumulation), so
+ * blindly trusting index 0 can anchor digest-update detection to the wrong
+ * manifest. `referenceCandidates` should be built via
+ * `getImageReferenceCandidates`/`getImageReferenceCandidatesFromParsedImage`
+ * so Docker Hub aliasing (`docker.io`/`registry-1.docker.io`/`library/`
+ * prefix) is handled the same way as imgset matching.
+ *
+ * When one or more entries match a candidate, only the matching entries are
+ * returned (in their original RepoDigests order). When none match — or no
+ * candidates were supplied — every entry is returned, in original order, so
+ * callers never regress to `undefined` just because identity was unknown or
+ * unmatched. Only an empty/undefined RepoDigests list returns `undefined`.
+ * @param containerImage
+ * @param referenceCandidates
+ * @returns {string[]|undefined} ordered digest values
+ */
+export function getOrderedRepoDigests(
+  containerImage: ImageWithRepoDigests,
+  referenceCandidates: string[] = [],
+): string[] | undefined {
+  const repoDigests = containerImage.RepoDigests;
+  if (!repoDigests || repoDigests.length === 0) {
+    return undefined;
+  }
+
+  const entries = repoDigests
+    .map((fullDigest) => {
+      const separatorIndex = fullDigest.indexOf('@');
+      // Reject malformed entries with a missing separator or an empty
+      // repo/digest component: an empty digest would pass the model's
+      // `!== undefined` guards and compare as a phantom "change".
+      if (separatorIndex <= 0 || separatorIndex === fullDigest.length - 1) {
+        return undefined;
+      }
+      return {
+        repo: fullDigest.substring(0, separatorIndex).toLowerCase(),
+        digest: fullDigest.substring(separatorIndex + 1),
+      };
+    })
+    .filter((entry): entry is { repo: string; digest: string } => entry !== undefined);
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  if (referenceCandidates.length > 0) {
+    const candidateSet = new Set(referenceCandidates);
+    const matchingDigests = entries
+      .filter((entry) => candidateSet.has(entry.repo))
+      .map((entry) => entry.digest);
+    if (matchingDigests.length > 0) {
+      return matchingDigests;
+    }
+  }
+
+  return entries.map((entry) => entry.digest);
+}
+
+/**
+ * Get image repo digest (first candidate from `getOrderedRepoDigests`).
+ * Kept for callers with no container identity to match against.
  * @param containerImage
  * @returns {*} digest
  */
 export function getRepoDigest(containerImage: ImageWithRepoDigests) {
-  if (!containerImage.RepoDigests || containerImage.RepoDigests.length === 0) {
-    return undefined;
-  }
-  const fullDigest = containerImage.RepoDigests[0];
-  const digestSplit = fullDigest.split('@');
-  return digestSplit[1];
+  return getOrderedRepoDigests(containerImage)?.[0];
 }
 
 /**

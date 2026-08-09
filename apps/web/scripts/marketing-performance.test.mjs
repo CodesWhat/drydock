@@ -11,6 +11,10 @@ const starHistoryChartSource = readFileSync(
   new URL("../src/components/star-history-chart.tsx", import.meta.url),
   "utf8",
 );
+const starHistoryRouteSource = readFileSync(
+  new URL("../src/app/api/star-history/route.ts", import.meta.url),
+  "utf8",
+);
 
 test("aurora drift is finite and does not retain a permanent compositor hint", () => {
   const motionRule = globalsSource.match(
@@ -37,4 +41,25 @@ test("star history lazily loads only the active theme chart", () => {
   assert.match(starHistoryChartSource, /loading="lazy"/u);
   assert.match(starHistoryChartSource, /decoding="async"/u);
   assert.match(starHistoryChartSource, /fetchPriority="low"/u);
+});
+
+test("star history chart is self-hosted, with no third-party chart service left", () => {
+  assert.match(starHistoryChartSource, /\/api\/star-history\?theme=dark/u);
+  assert.match(starHistoryChartSource, /\/api\/star-history\?theme=light/u);
+  assert.equal(starHistoryChartSource.indexOf("star-history.com"), -1);
+  assert.equal(starHistoryChartSource.indexOf("starchart.cc"), -1);
+});
+
+test("star history route never renders partial stargazer data and bounds its fetches", () => {
+  // Every incomplete outcome (failed page, non-array body, MAX_PAGES exhausted)
+  // must fall back, not render a truncated series as the repo total.
+  assert.doesNotMatch(starHistoryRouteSource, /page === 1 \? undefined : starredAt/u);
+  const undefinedReturns = starHistoryRouteSource.match(/return undefined;/gu) ?? [];
+  assert.ok(undefinedReturns.length >= 4, "expected each incomplete outcome to return undefined");
+  // The series is only returned from the short-page branch — the one complete outcome.
+  assert.equal((starHistoryRouteSource.match(/return starredAt;/gu) ?? []).length, 1);
+  assert.match(starHistoryRouteSource, /batch\.length < PER_PAGE\) \{\n[^}]*return starredAt;/u);
+  // One shared deadline across the whole pagination run.
+  assert.match(starHistoryRouteSource, /AbortSignal\.timeout\(FETCH_DEADLINE_MS\)/u);
+  assert.match(starHistoryRouteSource, /\{ headers, signal, next:/u);
 });

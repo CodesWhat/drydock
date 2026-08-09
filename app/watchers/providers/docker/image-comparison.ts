@@ -238,6 +238,18 @@ function getRegistry(registryName: string): Registry {
 /**
  * Resolve remote digest information when digest watching is enabled.
  * Updates `container.image.digest.value` and populates digest/created on `result`.
+ *
+ * When the remote manifest is a v2 (manifest-list-capable) reference, a
+ * single local anchor (`container.image.digest.repo`) is not always the
+ * right one to normalize against: a local Docker image can carry several
+ * `repo@digest` RepoDigests entries for one Image ID (pull/retag
+ * accumulation), and `container.image.digest.repoDigests` — populated in
+ * `docker-image-details-orchestration.ts` via `getOrderedRepoDigests` — holds
+ * the full ordered candidate list (#669). This compares every candidate in
+ * order (cheap raw match first, then a normalize-and-compare registry call
+ * per remaining candidate) instead of trusting a single anchor, and
+ * re-anchors `container.image.digest.repo` to whichever candidate actually
+ * matched so a store poisoned with a stale/wrong anchor self-heals.
  */
 async function handleDigestWatch(
   container: Container,
@@ -264,16 +276,68 @@ async function handleDigestWatch(
   result.digest = remoteDigest.digest;
   result.created = remoteDigest.created;
 
-  if (remoteDigest.version === 2) {
-    const digestV2 = await registryProvider.getImageManifestDigest(
-      queryImage,
-      container.image.digest.repo,
-      lookupOptions,
-    );
-    container.image.digest.value = digestV2.digest;
-  } else {
+  if (remoteDigest.version !== 2) {
     container.image.digest.value = container.image.digest.repo;
+    return;
   }
+
+  const { repoDigests } = container.image.digest;
+  const anchors: string[] =
+    repoDigests && repoDigests.length > 0
+      ? repoDigests
+      : // findNewVersion only calls handleDigestWatch when digest.repo is
+        // truthy (`container.image.digest.watch && container.image.digest.repo`),
+        // so this legacy fallback always has exactly one entry.
+        [container.image.digest.repo as string];
+
+  // Cheap path: a raw anchor already equal to the remote digest needs no
+  // registry call at all — this also covers today's single-anchor case with
+  // no behavior change beyond skipping one now-redundant lookup.
+  const rawMatch = anchors.find((anchor) => anchor === result.digest);
+  if (rawMatch !== undefined) {
+    container.image.digest.value = result.digest;
+    container.image.digest.repo = rawMatch;
+    return;
+  }
+
+  let firstNormalizedValue: string | undefined;
+  let hasNormalizedValue = false;
+  let lastError: unknown;
+
+  for (const anchor of anchors) {
+    try {
+      const normalized = await registryProvider.getImageManifestDigest(
+        queryImage,
+        anchor,
+        lookupOptions,
+      );
+      if (!hasNormalizedValue) {
+        firstNormalizedValue = normalized.digest;
+        hasNormalizedValue = true;
+      }
+      if (normalized.digest === result.digest) {
+        container.image.digest.value = result.digest;
+        container.image.digest.repo = anchor;
+        return;
+      }
+    } catch (error: unknown) {
+      // A GC'd/unreachable manifest for this anchor is itself evidence the
+      // anchor is stale — skip it and keep trying the remaining candidates.
+      lastError = error;
+    }
+  }
+
+  if (!hasNormalizedValue) {
+    // Every candidate failed to normalize — propagate the failure so
+    // findNewVersion rejects and watchContainer keeps the previous cycle's
+    // verdict, rather than silently coercing a total failure into "no update".
+    throw lastError;
+  }
+
+  // No anchor matched: preserve today's semantics for a genuine same-tag
+  // republish by flagging an update against the first anchor's normalized
+  // value.
+  container.image.digest.value = firstNormalizedValue;
 }
 
 export interface FindNewVersionOptions {

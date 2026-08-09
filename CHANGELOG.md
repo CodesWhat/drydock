@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0-rc.13] — 2026-08-08
+
+### Security
+
+- Pinned `js-yaml` to 3.15.1 in the e2e workspace (override; transitive dependency) for [GHSA-5p4m-2wfm-xmqj](https://github.com/advisories/GHSA-5p4m-2wfm-xmqj) (CVE-2026-59870 backport gap: quadratic CPU consumption in `!!omap` resolution).
+- Pinned `nanoid` to 3.3.18 (override; transitive dependency of `postcss` in the root, app, apps/demo, apps/web, and ui workspaces, and of `artillery` in the e2e workspace) for [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8) (CVE-2026-67213) and, in the e2e workspace which was still on 3.3.12, also [GHSA-28wg-ghj8-5hjv](https://github.com/advisories/GHSA-28wg-ghj8-5hjv) (CVE-2026-67214).
+- **`node:24-alpine` base image bumped to Node 24.19.0**, replacing the Node 24.18.0 image shipped in rc.12. Picks up Node's July 29 2026 security release, fixing 3 HIGH (CVE-2026-56846, CVE-2026-56848, CVE-2026-58043) + 5 MEDIUM CVEs that landed in 24.18.1 ([#682](https://github.com/CodesWhat/drydock/pull/682)).
+- **Vendored `aquasec/trivy` build-stage pin bumped from 0.72.0 to 0.73.0**, resolving 4 HIGH / 6 MEDIUM CVEs in its vendored Go dependencies: go-git ([CVE-2026-71556](https://github.com/advisories/CVE-2026-71556)), `x/text` ([CVE-2026-56852](https://github.com/advisories/CVE-2026-56852)), grpc ([GHSA-hrxh-6v49-42gf](https://github.com/advisories/GHSA-hrxh-6v49-42gf)), oras-go ([CVE-2026-50151](https://github.com/advisories/CVE-2026-50151), [CVE-2026-50163](https://github.com/advisories/CVE-2026-50163)), and the Go stdlib ([CVE-2026-39822](https://github.com/advisories/CVE-2026-39822)) ([#682](https://github.com/CodesWhat/drydock/pull/682)).
+
+### Fixed
+
+- **Icon bundle no longer silently drops referenced icons at image build time** ([#683](https://github.com/CodesWhat/drydock/pull/683)). The bundle is regenerated from the locked `@iconify-json` packages during every Docker image build, but the extractor only looked up plain icon entries — `lucide:history` (the Audit navigation icon in the Lucide icon theme) became an alias in lucide 1.2.121 and vanished from shipped images, rendering blank. The extractor now resolves alias chains, and references that never existed in the locked collections are fixed: `iconoir:history` → `iconoir:clock-rotate-right`, `iconoir:gitlab` → `iconoir:gitlab-full`, `iconoir:stack` → `iconoir:multiple-pages`, and the Font Awesome brand glyphs (GitHub/GitLab/Google/Microsoft registry icons) gained the previously missing `@iconify-json/fa6-brands` package. A new test asserts every icon referenced in `icons.ts` exists in the committed bundle.
+- **Star History chart is now self-hosted** ([#671](https://github.com/CodesWhat/drydock/issues/671)). The homepage card and README embed rendered a broken image after api.star-history.com's global outage (their GitHub tokens rate-limited; starchart.cc also failing). A new `/api/star-history` route on the website fetches stargazer timestamps from the GitHub API server-side (optional `GITHUB_TOKEN`, edge-cached six hours with stale-while-revalidate, short-lived fallback SVG on fetch failure) and renders the chart in the site's own palette for both themes; the README uses a `<picture>` element with theme-matched variants. No third-party chart service remains in the path, and `api.star-history.com` is dropped from the site's CSP `img-src`.
+- **Digest-update comparison no longer anchors on an arbitrary `RepoDigests[0]` entry** ([#669](https://github.com/CodesWhat/drydock/issues/669)). A local Docker image can carry multiple `repo@digest` entries for one Image ID (pull/retag accumulation, no ordering guarantee); `getRepoDigest` blindly took index 0, so a stale or foreign-repo entry landing first anchored the whole digest-update pipeline to the wrong manifest and produced a persistent digest-update false positive that survived applying the update. `getOrderedRepoDigests` (`app/watchers/providers/docker/docker-helpers.ts`) now returns every RepoDigests entry whose repo component matches the container's own image reference, ordered, falling back to the full list only when nothing matches; the container model gained an optional `image.digest.repoDigests` field carrying that ordered list, re-derived from the live Docker image inspect on every discovery/refresh cycle. `handleDigestWatch` (`app/watchers/providers/docker/image-comparison.ts`) now walks that candidate list — a cheap raw-value check first, then a normalize-and-compare registry call per remaining candidate, skipping anchors whose manifest lookup fails — and re-anchors `digest.repo` to whichever candidate actually matched, so a store already poisoned with a stale `digest.repo` self-heals on its own. A genuine same-tag republish (no candidate matches) still flags an update exactly as before; if every candidate fails to normalize, the failure now propagates instead of being silently coerced into a false "no update".
+
 ## [1.6.0-rc.12] — 2026-08-04
 
 ### Changed
@@ -2326,7 +2341,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.12...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.13...HEAD
+[1.6.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.12...v1.6.0-rc.13
 [1.6.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.11...v1.6.0-rc.12
 [1.6.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.10...v1.6.0-rc.11
 [1.6.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.9...v1.6.0-rc.10

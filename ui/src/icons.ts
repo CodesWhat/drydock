@@ -61,7 +61,7 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     lucide: 'lucide:history',
     tabler: 'tabler:history',
     heroicons: 'heroicons:clock',
-    iconoir: 'iconoir:history',
+    iconoir: 'iconoir:clock-rotate-right',
   },
   logs: {
     'fa6-solid': 'fa6-solid:scroll',
@@ -718,7 +718,7 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     lucide: 'lucide:gitlab',
     tabler: 'tabler:brand-gitlab',
     heroicons: 'heroicons:code-bracket-square',
-    iconoir: 'iconoir:gitlab',
+    iconoir: 'iconoir:gitlab-full',
   },
   google: {
     'fa6-solid': 'fa6-brands:google',
@@ -763,7 +763,7 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     lucide: 'lucide:layers',
     tabler: 'tabler:stack-2',
     heroicons: 'heroicons:square-3-stack-3d',
-    iconoir: 'iconoir:stack',
+    iconoir: 'iconoir:multiple-pages',
   },
   microsoft: {
     'fa6-solid': 'fa6-brands:microsoft',

@@ -56,7 +56,8 @@ test('every linked changelog heading has exactly one link definition', () => {
 test('v1.6 RC and v1.5.2 GA have a complete chronological comparison-link chain', () => {
   const definitions = new Map(getLinkDefinitions(changelog).map(({ label, url }) => [label, url]));
   const expected = new Map([
-    ['Unreleased', `${repositoryUrl}/compare/v1.6.0-rc.12...HEAD`],
+    ['Unreleased', `${repositoryUrl}/compare/v1.6.0-rc.13...HEAD`],
+    ['1.6.0-rc.13', `${repositoryUrl}/compare/v1.6.0-rc.12...v1.6.0-rc.13`],
     ['1.6.0-rc.12', `${repositoryUrl}/compare/v1.6.0-rc.11...v1.6.0-rc.12`],
     ['1.6.0-rc.11', `${repositoryUrl}/compare/v1.6.0-rc.10...v1.6.0-rc.11`],
     ['1.6.0-rc.10', `${repositoryUrl}/compare/v1.6.0-rc.9...v1.6.0-rc.10`],

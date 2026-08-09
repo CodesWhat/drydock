@@ -7,11 +7,19 @@ describe('Dockerfile release defaults', () => {
     expect(dockerfile).toMatch(/FROM base AS release\s+ENV DD_LOG_FORMAT=text/u);
   });
 
+  test('release image builds from the digest-pinned Node base image', () => {
+    const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
+
+    expect(dockerfile).toContain(
+      'FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS base',
+    );
+  });
+
   test('release image copies Trivy from the digest-pinned multi-arch image', () => {
     const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
 
     expect(dockerfile).toContain(
-      'FROM aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f AS trivy-bin',
+      'FROM aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c AS trivy-bin',
     );
     expect(dockerfile).toContain('COPY --from=trivy-bin /usr/local/bin/trivy /usr/local/bin/trivy');
     expect(dockerfile).not.toContain('alpine/edge/testing');

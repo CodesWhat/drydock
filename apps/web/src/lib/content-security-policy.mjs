@@ -17,7 +17,7 @@ export function buildContentSecurityPolicy(nonce, isDevelopment) {
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://img.shields.io https://github.com https://qlty.sh https://api.star-history.com",
+    "img-src 'self' data: https://img.shields.io https://github.com https://qlty.sh",
     "font-src 'self' data:",
     "connect-src 'self' https://va.vercel-scripts.com",
     "frame-src https://demo.getdrydock.com",
