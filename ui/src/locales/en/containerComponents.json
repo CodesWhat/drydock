@@ -483,7 +483,7 @@
       },
       "dependencyGroup": {
         "header": "Update Dependency Chain",
-        "message": "Update {name} and its dependency chain? This will update {count} other container(s) in dependency order.",
+        "message": "Update {name} and its dependency chain? This will update {count} other container in dependency order. | Update {name} and its dependency chain? This will update {count} other containers in dependency order.",
         "messageSingle": "Update {name}? No other containers depend on it, so only {name} will be updated.",
         "waveList": "\n\nUpdate order:\n{list}",
         "cycleWarning": "\n\nWarning: a dependency cycle was detected ({cycles}). Containers in the cycle may update in an arbitrary order.",

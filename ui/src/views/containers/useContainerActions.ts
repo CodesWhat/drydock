@@ -484,12 +484,30 @@ async function runDependencyGroupUpdateState(args: {
 }) {
   const toast = useToast();
   try {
-    await apiUpdateDependencyGroup(args.rootId, args.expectedContainerIds);
-    toast.success(
-      args.t('containerComponents.confirmDialogs.dependencyGroup.successMessage', {
-        name: args.name,
-      }),
-    );
+    const response = await apiUpdateDependencyGroup(args.rootId, args.expectedContainerIds);
+    // Mirrors updateAllInGroupState's rejected-entry handling for the same
+    // {accepted, rejected} shape (PR #681 review #8): a 200 response can
+    // still carry per-container rejections (e.g. one chain member's own
+    // update raced and is no longer available), so success is never assumed
+    // just because the HTTP call resolved.
+    for (const rejected of response.rejected) {
+      if (isStaleContainerUpdateError(rejected.message)) {
+        continue;
+      }
+      toast.error(
+        args.t('containerComponents.actionToasts.groupUpdateRejected', {
+          name: rejected.containerName,
+          message: rejected.message,
+        }),
+      );
+    }
+    if (response.accepted.length > 0) {
+      toast.success(
+        args.t('containerComponents.confirmDialogs.dependencyGroup.successMessage', {
+          name: args.name,
+        }),
+      );
+    }
     await args.loadContainers();
   } catch (e: unknown) {
     if (e instanceof ApiError && e.status === 409) {
