@@ -981,6 +981,31 @@ export function getSettledContainersToWatch<T extends DockerContainerSummaryLike
   }).containersToWatch;
 }
 
+/**
+ * Delay in ms until the earliest currently-pending discovery finishes settling,
+ * or undefined when nothing is pending (or settling is disabled) so no
+ * follow-up watch needs scheduling (#156).
+ */
+export function getPendingDiscoverySettleDelayMs(
+  watcher: DiscoverySettlingWatcher,
+  nowMs: number = Date.now(),
+): number | undefined {
+  const settleMs = watcher.configuration.discoverysettlems ?? DEFAULT_DISCOVERY_SETTLE_MS;
+  if (!(settleMs > 0)) {
+    return undefined;
+  }
+  let earliestFirstSeenAtMs: number | undefined;
+  for (const entry of watcher.pendingDiscoveries.values()) {
+    if (earliestFirstSeenAtMs === undefined || entry.firstSeenAtMs < earliestFirstSeenAtMs) {
+      earliestFirstSeenAtMs = entry.firstSeenAtMs;
+    }
+  }
+  if (earliestFirstSeenAtMs === undefined) {
+    return undefined;
+  }
+  return Math.max(earliestFirstSeenAtMs + settleMs - nowMs, 0);
+}
+
 export function resolveLabelsFromContainer(
   containerLabels: Record<string, string>,
   overrides: ContainerLabelOverrides = {},

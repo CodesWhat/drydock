@@ -42,6 +42,7 @@ import {
   getDockerWatcherSourceKey,
   getLabel,
   getMatchingImgsetConfiguration as getMatchingImgsetConfigurationState,
+  getPendingDiscoverySettleDelayMs,
   getSettledContainersToWatch,
   isDockerWatcher,
   mergeConfigWithImgset,
@@ -334,6 +335,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
   public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();
+  public pendingDiscoverySettleTimeout?: NodeJS.Timeout;
   public unregisterContainerUpdateApplied?: () => void;
   #cachedTimeMatcher: { cron: string; matcher: CronTaskWithNextMatch['timeMatcher'] } | undefined;
 
@@ -829,6 +831,21 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     });
   }
 
+  private schedulePendingDiscoverySettleWatch(): void {
+    if (this.pendingDiscoverySettleTimeout) {
+      clearTimeout(this.pendingDiscoverySettleTimeout);
+      delete this.pendingDiscoverySettleTimeout;
+    }
+    const delayMs = getPendingDiscoverySettleDelayMs(this);
+    if (delayMs === undefined || this.isWatcherDeregistered) {
+      return;
+    }
+    this.pendingDiscoverySettleTimeout = setTimeout(() => {
+      delete this.pendingDiscoverySettleTimeout;
+      this.watchCronDebounced?.();
+    }, delayMs);
+  }
+
   getRecentDockerEvents(options: { sinceMs?: number; limit?: number } = {}): DockerRecentEvent[] {
     const { sinceMs, limit = RECENT_DOCKER_EVENT_LIMIT } = options;
     return filterAndSliceTimestampedHistory(this.recentDockerEvents, sinceMs, limit);
@@ -874,6 +891,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       delete this.dockerEventsReconnectTimeout;
     }
     this.cleanupDockerEventsStream(true);
+    this.schedulePendingDiscoverySettleWatch(); // clears the timer; never reschedules once deregistered
     delete this.watchCronDebounced;
     this.unregisterContainerUpdateApplied?.();
     this.unregisterContainerUpdateApplied = undefined;
@@ -1261,6 +1279,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     );
     this.recordAliasFilterDecisions(decisions);
     const settled = getSettledContainersToWatch(containersToWatch, containersFromTheStore, this);
+    this.schedulePendingDiscoverySettleWatch();
     const enrichmentResults = await mapWithDockerWatchConcurrency(settled, (container) =>
       this.addImageDetailsToContainer(container, {
         includeTags: getLabel(container.Labels, ddTagInclude),

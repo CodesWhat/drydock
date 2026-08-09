@@ -168,4 +168,88 @@ describe('Docker Watcher discovery settling (#156)', () => {
     expect(docker.pendingDiscoveries.has('multi-a')).toBe(false);
     expect(docker.pendingDiscoveries.has('multi-b')).toBe(true);
   });
+
+  test('schedules a follow-up watch so a pending container registers without another Docker event (#691 review)', async () => {
+    mockDockerApi.listContainers.mockResolvedValue([
+      { Id: 'event-only', Labels: { 'dd.watch': 'true' }, Names: ['/event-only'] },
+    ]);
+
+    await docker.register('watcher', 'docker', 'test', {
+      discoverysettlems: 30_000,
+      watchevents: false,
+    });
+    clearTimeout(docker.watchCronTimeout);
+    docker.watchCronDebounced = vi.fn();
+
+    await docker.getContainers();
+    expect(docker.pendingDiscoverySettleTimeout).toBeDefined();
+    expect(docker.watchCronDebounced).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(30_000);
+    expect(docker.watchCronDebounced).toHaveBeenCalledOnce();
+    expect(docker.pendingDiscoverySettleTimeout).toBeUndefined();
+  });
+
+  test('keeps a single deduplicated settle timer anchored to the earliest pending deadline', async () => {
+    mockDockerApi.listContainers.mockResolvedValue([
+      { Id: 'first-pending', Labels: { 'dd.watch': 'true' }, Names: ['/first-pending'] },
+    ]);
+
+    await docker.register('watcher', 'docker', 'test', {
+      discoverysettlems: 30_000,
+      watchevents: false,
+    });
+    clearTimeout(docker.watchCronTimeout);
+    docker.watchCronDebounced = vi.fn();
+
+    await docker.getContainers();
+
+    vi.advanceTimersByTime(10_000);
+    mockDockerApi.listContainers.mockResolvedValue([
+      { Id: 'first-pending', Labels: { 'dd.watch': 'true' }, Names: ['/first-pending'] },
+      { Id: 'second-pending', Labels: { 'dd.watch': 'true' }, Names: ['/second-pending'] },
+    ]);
+    await docker.getContainers();
+    expect(docker.watchCronDebounced).not.toHaveBeenCalled();
+
+    // fires at first-pending's deadline (20s away), not second-pending's (30s away)
+    vi.advanceTimersByTime(20_000);
+    expect(docker.watchCronDebounced).toHaveBeenCalledOnce();
+  });
+
+  test('does not schedule a settle timer when nothing is pending', async () => {
+    mockDockerApi.listContainers.mockResolvedValue([]);
+
+    await docker.register('watcher', 'docker', 'test', {
+      discoverysettlems: 30_000,
+      watchevents: false,
+    });
+    clearTimeout(docker.watchCronTimeout);
+
+    await docker.getContainers();
+    expect(docker.pendingDiscoverySettleTimeout).toBeUndefined();
+  });
+
+  test('deregisterComponent clears the pending settle timer', async () => {
+    mockDockerApi.listContainers.mockResolvedValue([
+      { Id: 'pending-at-teardown', Labels: { 'dd.watch': 'true' }, Names: ['/pending'] },
+    ]);
+
+    await docker.register('watcher', 'docker', 'test', {
+      discoverysettlems: 30_000,
+      watchevents: false,
+    });
+    clearTimeout(docker.watchCronTimeout);
+    const watchSpy = vi.fn();
+    docker.watchCronDebounced = watchSpy;
+
+    await docker.getContainers();
+    expect(docker.pendingDiscoverySettleTimeout).toBeDefined();
+
+    await docker.deregisterComponent();
+    expect(docker.pendingDiscoverySettleTimeout).toBeUndefined();
+
+    vi.advanceTimersByTime(60_000);
+    expect(watchSpy).not.toHaveBeenCalled();
+  });
 });

@@ -3,6 +3,7 @@ import type { Container } from '../../../model/container.js';
 import {
   DEFAULT_DISCOVERY_SETTLE_MS,
   filterPendingDiscoveries,
+  getPendingDiscoverySettleDelayMs,
   getSettledContainersToWatch,
 } from './container-init.js';
 
@@ -401,5 +402,60 @@ describe('getSettledContainersToWatch (#156)', () => {
     };
 
     expect(getSettledContainersToWatch([container], [], watcher)).toEqual([container]);
+  });
+});
+
+describe('getPendingDiscoverySettleDelayMs (#156)', () => {
+  function createWatcher(overrides: Record<string, unknown> = {}) {
+    return {
+      configuration: { cron: '0 */6 * * *' },
+      pendingDiscoveries: new Map(),
+      log: { debug: vi.fn() },
+      ...overrides,
+    };
+  }
+
+  test('returns undefined when nothing is pending', () => {
+    expect(getPendingDiscoverySettleDelayMs(createWatcher(), 1_000)).toBeUndefined();
+  });
+
+  test('returns undefined when settling is disabled, even with pending entries', () => {
+    const watcher = createWatcher({
+      configuration: { cron: '0 */6 * * *', discoverysettlems: 0 },
+      pendingDiscoveries: new Map([['id-1', { firstSeenAtMs: 1_000, name: 'app' }]]),
+    });
+
+    expect(getPendingDiscoverySettleDelayMs(watcher, 2_000)).toBeUndefined();
+  });
+
+  test('computes the delay from the earliest pending entry', () => {
+    const watcher = createWatcher({
+      pendingDiscoveries: new Map([
+        ['late', { firstSeenAtMs: 50_000, name: 'late' }],
+        ['early', { firstSeenAtMs: 10_000, name: 'early' }],
+        ['middle', { firstSeenAtMs: 20_000, name: 'middle' }],
+      ]),
+    });
+
+    expect(getPendingDiscoverySettleDelayMs(watcher, 15_000)).toBe(
+      10_000 + DEFAULT_DISCOVERY_SETTLE_MS - 15_000,
+    );
+  });
+
+  test('honors an explicitly configured discoverysettlems', () => {
+    const watcher = createWatcher({
+      configuration: { cron: '0 */6 * * *', discoverysettlems: 5_000 },
+      pendingDiscoveries: new Map([['id-1', { firstSeenAtMs: 1_000, name: 'app' }]]),
+    });
+
+    expect(getPendingDiscoverySettleDelayMs(watcher, 2_000)).toBe(4_000);
+  });
+
+  test('clamps overdue deadlines to 0', () => {
+    const watcher = createWatcher({
+      pendingDiscoveries: new Map([['id-1', { firstSeenAtMs: 0, name: 'app' }]]),
+    });
+
+    expect(getPendingDiscoverySettleDelayMs(watcher, DEFAULT_DISCOVERY_SETTLE_MS * 10)).toBe(0);
   });
 });
