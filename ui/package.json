@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "5.3.0",
+    "@iconify-json/fa6-brands": "1.2.6",
     "iconify-icon": "3.0.2",
     "pinia": "3.0.4",
     "tailwindcss": "4.3.3",
