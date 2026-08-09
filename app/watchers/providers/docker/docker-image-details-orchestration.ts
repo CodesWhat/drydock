@@ -81,6 +81,13 @@ interface DockerContainerInspectPayload {
     };
     [key: string]: unknown;
   };
+  // Structurally satisfies `DockerApiBindMountInspector` (see
+  // `ComposePathBindMounts.ts`) so `watcher.dockerApi` can be forwarded
+  // straight into compose-based dependency detection for self-container
+  // bind-mount path translation.
+  HostConfig?: {
+    Binds?: string[];
+  };
   [key: string]: unknown;
 }
 
@@ -471,6 +478,7 @@ async function applyContainerDependsOn(
 ): Promise<void> {
   const resolution = await resolveContainerDependsOn(labels, dockerContainerName, {
     warn: (message) => watcher.log.warn(message),
+    dockerApi: watcher.dockerApi,
   });
   container.dependsOn = resolution.dependsOn;
   container.dependsOnSource = resolution.dependsOnSource;

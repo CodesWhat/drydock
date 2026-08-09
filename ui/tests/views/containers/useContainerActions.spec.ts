@@ -9,6 +9,7 @@ import { _resetScanLifecycleStateForTests } from '@/composables/useScanLifecycle
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { ApiContainerTrigger, ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
+import { ApiError } from '@/utils/error';
 import { daysToMs } from '@/utils/maturity-policy';
 import {
   ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS,
@@ -42,6 +43,8 @@ const mocks = vi.hoisted(() => ({
   updateContainers: vi.fn(),
   cancelUpdateOperation: vi.fn(),
   previewContainer: vi.fn(),
+  previewUpdateChain: vi.fn(),
+  updateDependencyGroup: vi.fn(),
   containerActionsEnabled: { value: true },
   loadServerFeatures: vi.fn().mockResolvedValue(undefined),
 }));
@@ -64,6 +67,8 @@ vi.mock('@/services/container', () => ({
   getContainerTriggers: mocks.getContainerTriggers,
   runTrigger: mocks.runTrigger,
   updateContainerPolicy: mocks.updateContainerPolicy,
+  previewUpdateChain: mocks.previewUpdateChain,
+  updateDependencyGroup: mocks.updateDependencyGroup,
 }));
 
 vi.mock('@/services/container-actions', () => ({
@@ -4369,6 +4374,393 @@ describe('useContainerActions', () => {
         now: Date.now(),
       });
       expect(heldOperations.value.get('op-hold-ik')?.identityKey).toBe('keep-this-ik');
+    });
+  });
+
+  describe('confirmDependencyGroupUpdate (#219)', () => {
+    it('previews the update chain and opens a confirm dialog listing the resolved waves', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [
+          { index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] },
+          { index: 1, containers: [{ id: 'web-1', name: 'web', actionKind: 'update' }] },
+        ],
+        warnings: { cycles: [], unresolved: [] },
+      });
+
+      await composable.confirmDependencyGroupUpdate({
+        id: 'db-1',
+        identityKey: container.identityKey,
+        name: 'db',
+      });
+
+      expect(mocks.previewUpdateChain).toHaveBeenCalledWith('db-1');
+      expect(mocks.confirmRequire).toHaveBeenCalledTimes(1);
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        header: string;
+        message: string;
+        acceptLabel: string;
+        severity: string;
+        accept?: () => Promise<unknown>;
+      };
+      expect(confirmCall.header).toBe('Update Dependency Chain');
+      expect(confirmCall.message).toContain('db and its dependency chain');
+      // Singular plural form (vue-i18n `count` pluralization, PR #681 review #6):
+      // 2 total containers in the chain means 1 OTHER container besides the root.
+      expect(confirmCall.message).toContain(
+        'This will update 1 other container in dependency order.',
+      );
+      expect(confirmCall.message).toContain('1. db');
+      expect(confirmCall.message).toContain('2. web');
+      expect(confirmCall.acceptLabel).toBe('Update chain');
+      expect(confirmCall.severity).toBe('warn');
+      expect(composable.dependencyGroupPreviewLoading.value).toBe(false);
+    });
+
+    it('uses the plural form when more than one other container is in the chain (PR #681 review #6)', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [
+          { index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] },
+          { index: 1, containers: [{ id: 'web-1', name: 'web', actionKind: 'update' }] },
+          { index: 2, containers: [{ id: 'proxy-1', name: 'proxy', actionKind: 'update' }] },
+        ],
+        warnings: { cycles: [], unresolved: [] },
+      });
+
+      await composable.confirmDependencyGroupUpdate('db');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(confirmCall.message).toContain(
+        'This will update 2 other containers in dependency order.',
+      );
+    });
+
+    it('uses the single-container message when no other containers are in the chain', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [{ index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] }],
+        warnings: { cycles: [], unresolved: [] },
+      });
+
+      await composable.confirmDependencyGroupUpdate('db');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(confirmCall.message).toContain('No other containers depend on it');
+    });
+
+    it('appends cycle and unresolved warnings to the confirm message', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [{ index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] }],
+        warnings: {
+          cycles: [['db-1', 'web-1', 'db-1']],
+          unresolved: [{ nodeId: 'db-1', missingTarget: 'ghost' }],
+        },
+      });
+
+      await composable.confirmDependencyGroupUpdate('db');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(confirmCall.message).toContain('dependency cycle was detected');
+      expect(confirmCall.message).toContain('db-1 → web-1 → db-1');
+      expect(confirmCall.message).toContain('could not be found');
+    });
+
+    it('accepting the dialog updates the dependency group and reloads containers', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable, loadContainers } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [{ index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] }],
+        warnings: { cycles: [], unresolved: [] },
+      });
+      mocks.updateDependencyGroup.mockResolvedValueOnce({
+        message: 'ok',
+        accepted: [
+          {
+            containerId: 'db-1',
+            containerName: 'db',
+            operationId: 'op-1',
+            wave: 0,
+            actionKind: 'update',
+          },
+        ],
+        rejected: [],
+      });
+
+      await composable.confirmDependencyGroupUpdate('db');
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        accept?: () => Promise<unknown>;
+      };
+      await confirmCall.accept?.();
+
+      expect(mocks.updateDependencyGroup).toHaveBeenCalledWith('db-1', ['db-1']);
+      expect(mocks.toastSuccess).toHaveBeenCalledWith('Dependency chain update started: db');
+      expect(loadContainers).toHaveBeenCalled();
+    });
+
+    it('toasts a per-container error and skips the success toast when every chain member is rejected (PR #681 review #8)', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable, loadContainers } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [{ index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] }],
+        warnings: { cycles: [], unresolved: [] },
+      });
+      mocks.updateDependencyGroup.mockResolvedValueOnce({
+        message: 'ok',
+        accepted: [],
+        rejected: [
+          {
+            containerId: 'db-1',
+            containerName: 'db',
+            statusCode: 409,
+            message: 'Container update already queued',
+          },
+        ],
+      });
+
+      await composable.confirmDependencyGroupUpdate('db');
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        accept?: () => Promise<unknown>;
+      };
+      await confirmCall.accept?.();
+
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        'Failed to update db: Container update already queued',
+      );
+      expect(mocks.toastSuccess).not.toHaveBeenCalled();
+      expect(loadContainers).toHaveBeenCalled();
+    });
+
+    it('toasts both success and a per-container error on a partial rejection', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [
+          { index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] },
+          { index: 1, containers: [{ id: 'web-1', name: 'web', actionKind: 'update' }] },
+        ],
+        warnings: { cycles: [], unresolved: [] },
+      });
+      mocks.updateDependencyGroup.mockResolvedValueOnce({
+        message: 'ok',
+        accepted: [
+          {
+            containerId: 'db-1',
+            containerName: 'db',
+            operationId: 'op-1',
+            wave: 0,
+            actionKind: 'update',
+          },
+        ],
+        rejected: [
+          {
+            containerId: 'web-1',
+            containerName: 'web',
+            statusCode: 409,
+            message: 'Container update already queued',
+          },
+        ],
+      });
+
+      await composable.confirmDependencyGroupUpdate('db');
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        accept?: () => Promise<unknown>;
+      };
+      await confirmCall.accept?.();
+
+      expect(mocks.toastSuccess).toHaveBeenCalledWith('Dependency chain update started: db');
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        'Failed to update web: Container update already queued',
+      );
+    });
+
+    it('suppresses the rejection toast for a stale no-update-available rejection', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [{ index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] }],
+        warnings: { cycles: [], unresolved: [] },
+      });
+      mocks.updateDependencyGroup.mockResolvedValueOnce({
+        message: 'ok',
+        accepted: [],
+        rejected: [
+          {
+            containerId: 'db-1',
+            containerName: 'db',
+            statusCode: 400,
+            message: 'No update available for this container',
+          },
+        ],
+      });
+
+      await composable.confirmDependencyGroupUpdate('db');
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        accept?: () => Promise<unknown>;
+      };
+      await confirmCall.accept?.();
+
+      expect(mocks.toastError).not.toHaveBeenCalled();
+      expect(mocks.toastSuccess).not.toHaveBeenCalled();
+    });
+
+    it('forwards every previewed container id (across all waves) as expectedContainerIds', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [
+          { index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] },
+          {
+            index: 1,
+            containers: [
+              { id: 'web-1', name: 'web', actionKind: 'update' },
+              { id: 'sidecar-1', name: 'sidecar', actionKind: 'restart' },
+            ],
+          },
+        ],
+        warnings: { cycles: [], unresolved: [] },
+      });
+      mocks.updateDependencyGroup.mockResolvedValueOnce({
+        message: 'ok',
+        accepted: [],
+        rejected: [],
+      });
+
+      await composable.confirmDependencyGroupUpdate('db');
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        accept?: () => Promise<unknown>;
+      };
+      expect(confirmCall.message).toContain('2. web, sidecar (restart)');
+      await confirmCall.accept?.();
+
+      expect(mocks.updateDependencyGroup).toHaveBeenCalledWith('db-1', [
+        'db-1',
+        'web-1',
+        'sidecar-1',
+      ]);
+    });
+
+    it('toasts an error when the bulk dependency-group update request fails', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [{ index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] }],
+        warnings: { cycles: [], unresolved: [] },
+      });
+      mocks.updateDependencyGroup.mockRejectedValueOnce(new Error('boom'));
+
+      await composable.confirmDependencyGroupUpdate('db');
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        accept?: () => Promise<unknown>;
+      };
+      await confirmCall.accept?.();
+
+      expect(mocks.toastError).toHaveBeenCalledWith('Dependency chain update failed', 'boom');
+    });
+
+    it('toasts a stale-chain message (without reloading) when the update is rejected as diverged (409)', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable, loadContainers } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [{ index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] }],
+        warnings: { cycles: [], unresolved: [] },
+      });
+      mocks.updateDependencyGroup.mockRejectedValueOnce(
+        new ApiError('Failed to update dependency group db-1: Conflict', 409),
+      );
+
+      await composable.confirmDependencyGroupUpdate('db');
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        accept?: () => Promise<unknown>;
+      };
+      await confirmCall.accept?.();
+
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        'Dependency chain has changed',
+        'The dependency chain for db changed since it was last previewed. Re-open the update dialog to review the current chain before confirming.',
+      );
+      expect(loadContainers).not.toHaveBeenCalled();
+    });
+
+    it('toasts an error and skips opening the dialog when the preview request fails', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockRejectedValueOnce(new Error('preview boom'));
+
+      await composable.confirmDependencyGroupUpdate('db');
+
+      expect(mocks.confirmRequire).not.toHaveBeenCalled();
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        'Unable to preview update chain',
+        'preview boom',
+      );
+      expect(composable.dependencyGroupPreviewLoading.value).toBe(false);
+    });
+
+    it('does nothing when container actions are disabled', async () => {
+      mocks.containerActionsEnabled.value = false;
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable, error } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+
+      await composable.confirmDependencyGroupUpdate('db');
+
+      expect(mocks.previewUpdateChain).not.toHaveBeenCalled();
+      expect(error.value).toBe('Container actions disabled by server configuration');
+      mocks.containerActionsEnabled.value = true;
+    });
+
+    it('does nothing when the target cannot be resolved to a container id', async () => {
+      const { composable } = await mountActionsHarness({});
+
+      await composable.confirmDependencyGroupUpdate('unknown-name');
+
+      expect(mocks.previewUpdateChain).not.toHaveBeenCalled();
+      expect(mocks.confirmRequire).not.toHaveBeenCalled();
     });
   });
 });

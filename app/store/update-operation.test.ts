@@ -416,7 +416,15 @@ describe('Update Operation Store', () => {
 
     // Active statuses from startup repair + terminal statuses from the startup prune call
     expect(new Set(statusQueries.map((query) => query['data.status']))).toEqual(
-      new Set(['queued', 'in-progress', 'succeeded', 'rolled-back', 'failed', 'expired']),
+      new Set([
+        'queued',
+        'in-progress',
+        'succeeded',
+        'rolled-back',
+        'failed',
+        'expired',
+        'skipped-dependency',
+      ]),
     );
   });
 

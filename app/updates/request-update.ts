@@ -3,6 +3,14 @@ import {
   findDockerTriggerForContainer,
   NO_DOCKER_TRIGGER_FOUND_ERROR,
 } from '../api/docker-trigger.js';
+import {
+  buildDependencyGraph,
+  buildDependentsByDependency,
+  collectContainerIdsWithResolvedDependsOn,
+  collectTransitiveDependents,
+  resolveDependencyActionKind,
+  topologicalSort,
+} from '../dependencies/dependency-graph.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { type Container, hasRawUpdate } from '../model/container.js';
@@ -17,6 +25,7 @@ import { getUpdateMode } from '../store/settings.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 import { getErrorMessage } from '../util/error.js';
+import { restartDependentContainer } from './dependency-restart.js';
 import {
   classifyDuplicateOpTerminalStatus,
   isDuplicateStyleError,
@@ -279,9 +288,20 @@ function prepareContainerUpdateRequest(
   // gates suppress the public updateAvailable getter, but the raw candidate is
   // still present in image/result and remains safe to pass through hard-blocker
   // enforcement below. Reject only when there is genuinely no candidate.
+  //
+  // dd.depends_on.action=restart entries are exempt: a restart-kind dependent
+  // is designed to never carry its own image update (design §3) — it's
+  // admitted here so it gets a real operation record and passes through the
+  // same dedup/mode/hard-blocker gates as any other request. Admission alone
+  // does not decide restart-vs-update dispatch: if this container turns out
+  // to have its own update anyway, or never resolved a dependsOn edge at
+  // all, the wave dispatcher's resolveDependencyActionKind (dependency-graph.ts)
+  // routes it through the normal trigger instead of
+  // restartDependentContainer() (PR #681 review #2/#3).
   if (
     !container.updateAvailable &&
-    !(options.allowSoftPolicyOverride === true && hasRawUpdate(container))
+    !(options.allowSoftPolicyOverride === true && hasRawUpdate(container)) &&
+    container.dependsOnAction !== 'restart'
   ) {
     throw new UpdateRequestError(400, 'No update available for this container');
   }
@@ -420,6 +440,48 @@ export async function enqueueContainerUpdates(
   };
 }
 
+interface SkipDependencyInfo {
+  reason: 'upstream-failed';
+  blockingContainerId: string;
+  blockingOperationId: string;
+}
+
+function markEntrySkippedDependency(
+  entry: AcceptedContainerUpdateRequest,
+  skipInfo: SkipDependencyInfo,
+): void {
+  updateOperationStore.markOperationTerminal(entry.operationId, {
+    status: 'skipped-dependency',
+    phase: 'skipped-dependency',
+    skippedDependencyReason: skipInfo.reason,
+    blockingContainerId: skipInfo.blockingContainerId,
+    blockingOperationId: skipInfo.blockingOperationId,
+    lastError: `Skipped: upstream dependency ${sanitizeLogParam(skipInfo.blockingContainerId)} failed (operation ${sanitizeLogParam(skipInfo.blockingOperationId)})`,
+  });
+}
+
+/**
+ * Dispatch already-accepted update requests wave by wave, ordered by the
+ * dependency graph resolved over this batch's own containers (v1.7 Phase 6.1,
+ * #219 — design §3). A batch with no `dd.depends_on` edges resolves to a
+ * single wave containing every entry, which is dispatched exactly as before
+ * this feature existed — this is a strict no-op for the common case.
+ *
+ * Entries whose `dependsOnAction` label resolves to `restart` are dispatched
+ * via the dependency-chain restart primitive instead of the trigger's normal
+ * pull/update lifecycle (no pull, no SecurityGate, no rollback monitor — a
+ * same-image restart isn't an update) — but only when genuinely restart-only:
+ * `resolveDependencyActionKind` requires a resolved `dependsOn` edge for this
+ * entry in this batch's graph AND no update of its own. A `restart` label
+ * with no resolved edge, or one whose own update is available, dispatches
+ * through the normal trigger instead (PR #681 review #2/#3).
+ *
+ * If an entry fails, its transitive dependents (via the resolved graph) are
+ * never dispatched — they are terminalised as `skipped-dependency` instead,
+ * recording which upstream container/operation blocked them. Entries outside
+ * the failed chain are unaffected: they occupy their own wave slot and run
+ * exactly as they would have without this feature.
+ */
 export async function runAcceptedContainerUpdates(
   accepted: AcceptedContainerUpdateRequest[],
   options: AcceptedUpdateDispatchOptions = {},
@@ -433,28 +495,97 @@ export async function runAcceptedContainerUpdates(
     throw new Error(`Accepted update dispatch concurrency must be a positive integer`);
   }
 
-  let firstError: unknown;
-  let nextIndex = 0;
+  const entryById = new Map(accepted.map((entry) => [entry.container.id, entry]));
+  const { nodes, edges, unresolved, crossHostIgnored } = buildDependencyGraph(
+    accepted.map((entry) => entry.container),
+  );
+  const { waves } = topologicalSort(nodes, edges);
+  const dependentsByDependency = buildDependentsByDependency(edges);
+  const containerIdsWithResolvedDependsOn = collectContainerIdsWithResolvedDependsOn(edges);
 
-  async function runNextAcceptedUpdate(): Promise<void> {
-    while (nextIndex < accepted.length) {
-      const entry = accepted[nextIndex];
-      nextIndex++;
-      try {
-        await entry.trigger.trigger(entry.container, { operationId: entry.operationId });
-      } catch (error: unknown) {
-        markAcceptedQueuedOperationFailed(entry.operationId, error);
-        firstError ??= error;
+  if (unresolved.length > 0 || crossHostIgnored.length > 0) {
+    log.warn(
+      `Dependency graph for this update batch has ${unresolved.length} unresolved target(s) and ${crossHostIgnored.length} cross-host edge(s) ignored; affected containers dispatch unordered relative to those targets`,
+    );
+  }
+
+  let firstError: unknown;
+  const toSkip = new Map<string, SkipDependencyInfo>();
+
+  for (const wave of waves) {
+    const waveEntries: AcceptedContainerUpdateRequest[] = [];
+    for (const id of wave) {
+      const entry = entryById.get(id);
+      /* v8 ignore next 3 -- defensive only: every wave id originates from
+         buildDependencyGraph(accepted.map(...)), so entryById (keyed the same
+         way) always has a match. */
+      if (!entry) {
+        continue;
+      }
+      const skipInfo = toSkip.get(id);
+      if (skipInfo) {
+        markEntrySkippedDependency(entry, skipInfo);
+        continue;
+      }
+      waveEntries.push(entry);
+    }
+
+    if (waveEntries.length === 0) {
+      continue;
+    }
+
+    const failedEntriesThisWave: AcceptedContainerUpdateRequest[] = [];
+    let nextIndex = 0;
+
+    async function runNextWaveEntry(): Promise<void> {
+      while (nextIndex < waveEntries.length) {
+        const entry = waveEntries[nextIndex];
+        nextIndex++;
+        const actionKind = resolveDependencyActionKind(
+          entry.container,
+          containerIdsWithResolvedDependsOn,
+        );
+        try {
+          if (actionKind === 'restart') {
+            await restartDependentContainer(entry.container);
+            updateOperationStore.markOperationTerminal(entry.operationId, {
+              status: 'succeeded',
+              phase: 'succeeded',
+            });
+          } else {
+            await entry.trigger.trigger(entry.container, { operationId: entry.operationId });
+          }
+        } catch (error: unknown) {
+          markAcceptedQueuedOperationFailed(entry.operationId, error);
+          failedEntriesThisWave.push(entry);
+          firstError ??= error;
+        }
+      }
+    }
+
+    const workerCount = Math.min(concurrency, waveEntries.length);
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        await runNextWaveEntry();
+      }),
+    );
+
+    for (const failedEntry of failedEntriesThisWave) {
+      const descendants = collectTransitiveDependents(
+        failedEntry.container.id,
+        dependentsByDependency,
+      );
+      for (const descendantId of descendants) {
+        if (!toSkip.has(descendantId)) {
+          toSkip.set(descendantId, {
+            reason: 'upstream-failed',
+            blockingContainerId: failedEntry.container.id,
+            blockingOperationId: failedEntry.operationId,
+          });
+        }
       }
     }
   }
-
-  const workerCount = Math.min(concurrency, accepted.length);
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      await runNextAcceptedUpdate();
-    }),
-  );
 
   if (firstError) {
     throw firstError;

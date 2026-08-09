@@ -17,6 +17,7 @@ export const CONTAINER_UPDATE_OPERATION_STATUSES = [
   'rolled-back',
   'failed',
   'expired',
+  'skipped-dependency',
 ] as const;
 
 export type ContainerUpdateOperationStatus = (typeof CONTAINER_UPDATE_OPERATION_STATUSES)[number];
@@ -30,11 +31,18 @@ export type ActiveContainerUpdateOperationStatus =
 // sweep / startup-orphan reconciliation terminalises a stuck operation without
 // emitting an update-failed event, so the UI clears the "Updating" badge with no
 // failure styling and no toast. See issue #410.
+//
+// `skipped-dependency` is likewise non-notifying: a dependency-ordered wave
+// dispatch (v1.7 Phase 6.1, #219) never attempted this container because an
+// upstream dependency in its chain failed or was deferred by its own
+// maintenance window this cycle — no "update failed" toast is warranted for
+// work that was never attempted.
 export const TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES = [
   'succeeded',
   'rolled-back',
   'failed',
   'expired',
+  'skipped-dependency',
 ] as const;
 
 export type TerminalContainerUpdateOperationStatus =
@@ -66,6 +74,7 @@ export const CONTAINER_UPDATE_OPERATION_PHASES = [
   'rollback-deferred',
   'rollback-failed',
   'expired',
+  'skipped-dependency',
 ] as const;
 
 export type ContainerUpdateOperationPhase = (typeof CONTAINER_UPDATE_OPERATION_PHASES)[number];

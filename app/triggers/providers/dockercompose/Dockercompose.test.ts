@@ -4205,6 +4205,97 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('runRuntimeUpdatesForComposeMappings dispatches in dependency order rather than discovery order (#219)', async () => {
+    // api depends on db via dd.depends_on, but is listed FIRST in the mapping
+    // array (discovery order) — the lifecycle orchestrator must still be
+    // invoked for db before api.
+    const apiContainer = makeContainer({
+      name: 'api',
+      labels: { 'com.docker.compose.service': 'api' },
+      dependsOn: ['db'],
+      dependsOnSource: 'label',
+    });
+    const dbContainer = makeContainer({
+      name: 'db',
+      labels: { 'com.docker.compose.service': 'db' },
+    });
+    const callOrder: string[] = [];
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockImplementation(async (_c, ctx: any) => {
+      callOrder.push(ctx.service);
+    });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({
+        api: { image: 'api:1.0.0' },
+        db: { image: 'db:1.0.0' },
+      }),
+      [
+        { container: apiContainer, service: 'api' },
+        { container: dbContainer, service: 'db' },
+      ],
+      undefined,
+    );
+
+    expect(callOrder).toEqual(['db', 'api']);
+  });
+
+  test('runRuntimeUpdatesForComposeMappings falls back to the service name when a mapping container has no name', async () => {
+    const namelessContainer = makeContainer({
+      labels: { 'com.docker.compose.service': 'api' },
+    });
+    delete (namelessContainer as Record<string, unknown>).name;
+    const dbContainer = makeContainer({
+      name: 'db',
+      labels: { 'com.docker.compose.service': 'db' },
+    });
+    const callOrder: string[] = [];
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockImplementation(async (_c, ctx: any) => {
+      callOrder.push(ctx.service);
+    });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({
+        api: { image: 'api:1.0.0' },
+        db: { image: 'db:1.0.0' },
+      }),
+      [
+        { container: namelessContainer, service: 'api' },
+        { container: dbContainer, service: 'db' },
+      ],
+      undefined,
+    );
+
+    expect(callOrder).toEqual(['api', 'db']);
+  });
+
+  test('runRuntimeUpdatesForComposeMappings leaves a single-mapping list unchanged (no-op regression guard)', async () => {
+    const container = makeContainer({
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const runContainerUpdateLifecycleSpy = vi
+      .spyOn(trigger, 'runContainerUpdateLifecycle')
+      .mockResolvedValue();
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({
+        nginx: { image: 'nginx:1.0.0' },
+      }),
+      [{ container, service: 'nginx' }],
+      undefined,
+    );
+
+    expect(runContainerUpdateLifecycleSpy).toHaveBeenCalledWith(
+      container,
+      expect.objectContaining({ service: 'nginx' }),
+    );
+  });
+
   test('processComposeFile should pre-pull distinct services and skip per-service pull in compose-file-once mode', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;

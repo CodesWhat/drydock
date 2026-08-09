@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { buildDependencyGraph } from '../../../dependencies/dependency-graph.js';
 import type { Container, ContainerUpdateOperationState } from '../../../model/container.js';
 import {
   isActiveContainerUpdateOperationPhaseForStatus,
@@ -256,6 +257,38 @@ export function attachUpdateEligibility(
   return createProjectionView(container, [['updateEligibility', updateEligibility]]);
 }
 
+interface DependencyCounts {
+  dependencyCountById: Map<string, number>;
+  dependentCountById: Map<string, number>;
+}
+
+// Cheap badge counts for the flat list view (design §4) — the full graph
+// detail (nodes/edges/cycles/unresolved) lives behind the dedicated
+// GET /containers/dependencies endpoint. Computed over the whole fleet (not
+// just this page) since a dependent may live outside the current page/filter.
+// Uses getContainersRawFromStore (unpaginated, query-only) rather than
+// getContainersFromStore so this extra lookup can never shift the paginated
+// getContainersFromStore call sequence the rest of this handler (and its
+// tests) rely on.
+function buildDependencyCounts(context: CrudHandlerContext): DependencyCounts {
+  const allContainers = context.getContainersRawFromStore({ excludeRollbackContainers: true });
+  const { edges } = buildDependencyGraph(allContainers);
+  const dependencyCountById = new Map<string, number>();
+  const dependentCountById = new Map<string, number>();
+  for (const edge of edges) {
+    dependencyCountById.set(edge.from, (dependencyCountById.get(edge.from) ?? 0) + 1);
+    dependentCountById.set(edge.to, (dependentCountById.get(edge.to) ?? 0) + 1);
+  }
+  return { dependencyCountById, dependentCountById };
+}
+
+function attachDependencyCounts(counts: DependencyCounts, container: Container): Container {
+  return createProjectionView(container, [
+    ['dependencyCount', counts.dependencyCountById.get(container.id) ?? 0],
+    ['dependentCount', counts.dependentCountById.get(container.id) ?? 0],
+  ]);
+}
+
 interface PreloadedActiveOperationLookup {
   byContainerId: Map<string, ContainerUpdateOperationState>;
   byScopedContainerName: Map<string, ContainerUpdateOperationState>;
@@ -500,11 +533,18 @@ export function buildContainerListResponse(
   );
   const eligibilityContext = buildEligibilityContext(context);
   const watchers = context.getWatchers();
+  const dependencyCounts = buildDependencyCounts(context);
   const data = strippedContainers.map((container) => {
     const withOperation = preloadedActiveOperationLookup
       ? attachPreloadedActiveUpdateOperation(preloadedActiveOperationLookup, container)
       : attachInProgressUpdateOperation(context, container);
-    return attachUpdateEligibility(context, withOperation, eligibilityContext, watchers);
+    const withEligibility = attachUpdateEligibility(
+      context,
+      withOperation,
+      eligibilityContext,
+      watchers,
+    );
+    return attachDependencyCounts(dependencyCounts, withEligibility);
   });
   const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
   const links = buildPaginationLinks({

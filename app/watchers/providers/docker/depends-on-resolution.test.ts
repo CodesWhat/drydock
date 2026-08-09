@@ -153,9 +153,24 @@ describe('resolveContainerDependsOn', () => {
       dependsOnSource: 'compose',
       dependsOnAction: 'update',
     });
-    expect(resolveCompose).toHaveBeenCalledWith({
-      labels: { 'com.docker.compose.service': 'web' },
+    expect(resolveCompose).toHaveBeenCalledWith(
+      { labels: { 'com.docker.compose.service': 'web' } },
+      { dockerApi: undefined },
+    );
+  });
+
+  test('forwards the watcher dockerApi to the compose resolver for host-path bind-mount translation', async () => {
+    const resolveCompose = vi.fn().mockResolvedValue({ dependsOn: ['db'], warnings: [] });
+    const dockerApi = { getContainer: vi.fn() };
+    const result = await resolveContainerDependsOn({ 'com.docker.compose.service': 'web' }, 'web', {
+      resolveComposeDependsOn: resolveCompose,
+      dockerApi,
     });
+    expect(result.dependsOn).toEqual(['db']);
+    expect(resolveCompose).toHaveBeenCalledWith(
+      { labels: { 'com.docker.compose.service': 'web' } },
+      { dockerApi },
+    );
   });
 
   test('carries a dd.depends_on.action override into a compose-sourced result', async () => {

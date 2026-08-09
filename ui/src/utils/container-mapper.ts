@@ -189,6 +189,8 @@ export interface ApiContainerInput {
   volumes?: unknown;
   env?: unknown;
   startedAt?: unknown;
+  dependencyCount?: unknown;
+  dependentCount?: unknown;
 }
 
 const DOCKERHUB_REGISTRY_HOSTS = new Set(['docker.io', 'registry-1.docker.io', 'index.docker.io']);
@@ -216,6 +218,20 @@ function asPositiveInteger(value: unknown): number | undefined {
 
 function asOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
+}
+
+/** Like asPositiveInteger, but accepts 0 — dependency/dependent counts are legitimately zero. */
+function asNonNegativeInteger(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+  }
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  // The \d+ match above already guarantees a non-negative parse.
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
 /** Derive a human-readable server/host name from watcher + agent fields. */
@@ -943,6 +959,8 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     currentDigest: deriveCurrentDigest(apiContainer),
     newDigest: deriveNewDigest(apiContainer, updatePolicyState),
     isDigestPinned: deriveIsDigestPinned(apiContainer),
+    dependencyCount: asNonNegativeInteger(apiContainer.dependencyCount),
+    dependentCount: asNonNegativeInteger(apiContainer.dependentCount),
     details: {
       ports: runtimeDetails.ports,
       volumes: runtimeDetails.volumes,

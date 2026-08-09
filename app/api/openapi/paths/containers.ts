@@ -82,6 +82,38 @@ function createRuntimeContainerActionPath({
 }
 
 export const containerPaths = {
+  '/api/v1/containers/dependencies': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get the full resolved dependency graph',
+      description:
+        'Thin serializer over the pure dependency graph engine — nodes, edges, cycles, unresolved dependsOn targets, and cross-host edges ignored by design. Powers the dependency hierarchy view in one call.',
+      operationId: 'getContainerDependencies',
+      responses: {
+        200: jsonResponse('Dependency graph', {
+          $ref: '#/components/schemas/DependencyGraphResponse',
+        }),
+        401: errorResponse('Authentication required'),
+      },
+    },
+  },
+  '/api/v1/containers/{id}/update-chain-preview': {
+    post: {
+      tags: ['Containers', 'Actions'],
+      summary: 'Preview the dependency-ordered wave dispatch for this container',
+      description:
+        'Dry run; returns the ordered wave list that would execute if this container dependency chain were updated now. Calls the exact same graph-partition function used at dispatch time, so the preview always matches what actually runs.',
+      operationId: 'previewUpdateChain',
+      parameters: [containerIdPathParam],
+      responses: {
+        200: jsonResponse('Update chain preview', {
+          $ref: '#/components/schemas/UpdateChainPreviewResponse',
+        }),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Container not found'),
+      },
+    },
+  },
   '/api/v1/containers/groups': {
     get: {
       tags: ['Containers'],

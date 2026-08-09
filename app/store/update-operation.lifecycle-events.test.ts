@@ -282,6 +282,39 @@ describe('update operation lifecycle events', () => {
     );
   });
 
+  test('markOperationTerminal emits no lifecycle events when terminalised as skipped-dependency (#219)', async () => {
+    // Dependency-ordered wave dispatch (v1.7 Phase 6.1) never attempts a
+    // container whose upstream dependency failed or was window-deferred this
+    // cycle. Like `expired`, this must never emit update-applied or
+    // update-failed — the work was never attempted, so "update failed" would
+    // be a false notification.
+    const inserted = updateOperation.insertOperation({
+      id: 'op-skipped-dependency',
+      containerId: 'container-dependent',
+      containerName: 'api',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    updateOperation.markOperationTerminal(inserted.id, {
+      status: 'skipped-dependency',
+      skippedDependencyReason: 'upstream-failed',
+      blockingContainerId: 'container-db',
+      blockingOperationId: 'op-db-1',
+      lastError: 'Skipped: upstream dependency container-db failed (operation op-db-1)',
+    });
+    await flushAsyncLifecycleEvents();
+
+    expect(mockEmitContainerUpdateApplied).not.toHaveBeenCalled();
+    expect(mockEmitContainerUpdateFailed).not.toHaveBeenCalled();
+    expect(mockEmitUpdateOperationChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: 'op-skipped-dependency',
+        status: 'skipped-dependency',
+      }),
+    );
+  });
+
   test('emitUpdateOperationChanged includes lastError and rollbackReason in the SSE payload', async () => {
     const inserted = updateOperation.insertOperation({
       id: 'op-sse-payload',

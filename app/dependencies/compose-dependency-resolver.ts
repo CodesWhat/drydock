@@ -1,5 +1,11 @@
 import path from 'node:path';
 import ComposeFileParser from '../triggers/providers/dockercompose/ComposeFileParser.js';
+import {
+  type DockerApiBindMountInspector,
+  getSelfContainerBindMounts,
+  type HostToContainerBindMount,
+  mapComposePathToContainerBindMount,
+} from '../triggers/providers/dockercompose/ComposePathBindMounts.js';
 
 /**
  * Read-only compose `depends_on` detection (#219, Phase 6.1).
@@ -18,6 +24,17 @@ import ComposeFileParser from '../triggers/providers/dockercompose/ComposeFilePa
  * single-default-file fallback that `Dockercompose.ts` supports are
  * trigger-configuration concerns that don't apply outside a configured
  * trigger, so they're intentionally not replicated here.
+ *
+ * Host-path translation: the compose project labels always hold the HOST's
+ * view of the compose file path, set by `docker compose` itself — when
+ * drydock runs containerized, that path doesn't exist inside drydock's own
+ * filesystem unless it's also bind-mounted in. This reuses the same
+ * self-container bind-mount inspection `Dockercompose.ts` uses
+ * (`getSelfContainerBindMounts` / `mapComposePathToContainerBindMount` from
+ * `ComposePathBindMounts.ts`) to translate each label path to its
+ * in-container equivalent before reading, so detection doesn't silently
+ * no-op behind an ENOENT. A path with no matching bind mount is left
+ * untouched (graceful degradation, same as the trigger's own behavior).
  */
 
 const COMPOSE_PROJECT_CONFIG_FILES_LABEL = 'com.docker.compose.project.config_files';
@@ -40,6 +57,32 @@ interface ParsedComposeFile {
 const defaultComposeFileParser = new ComposeFileParser({
   resolveComposeFilePath: (file: string) => path.resolve(file),
 });
+
+// The self (drydock) container's own bind mounts never change for the life
+// of the process, so — same as `Dockercompose.ts`'s instance-level cache —
+// they're fetched at most once per `dockerApi` instance rather than on every
+// container's dependency resolution. Cached by dockerApi identity (via
+// WeakMap) so injected fakes in tests never share state across cases, and a
+// failed inspect caches to `[]` rather than retrying every call.
+const selfContainerBindMountsByDockerApi = new WeakMap<
+  DockerApiBindMountInspector,
+  Promise<HostToContainerBindMount[]>
+>();
+
+function loadSelfContainerBindMounts(
+  dockerApi: DockerApiBindMountInspector | undefined,
+): Promise<HostToContainerBindMount[]> {
+  if (!dockerApi) {
+    return Promise.resolve([]);
+  }
+  const cached = selfContainerBindMountsByDockerApi.get(dockerApi);
+  if (cached) {
+    return cached;
+  }
+  const bindMountsPromise = getSelfContainerBindMounts(dockerApi).catch(() => []);
+  selfContainerBindMountsByDockerApi.set(dockerApi, bindMountsPromise);
+  return bindMountsPromise;
+}
 
 function getComposeFilePathsForContainer(labels: Record<string, string> | undefined): string[] {
   const configFilesLabel = labels?.[COMPOSE_PROJECT_CONFIG_FILES_LABEL];
@@ -89,7 +132,10 @@ function flattenDependsOn(rawDependsOn: unknown): string[] {
  */
 export async function resolveComposeDependsOn(
   container: { labels?: Record<string, string> },
-  options: { composeFileParser?: Pick<ComposeFileParser, 'getComposeFileAsObject'> } = {},
+  options: {
+    composeFileParser?: Pick<ComposeFileParser, 'getComposeFileAsObject'>;
+    dockerApi?: DockerApiBindMountInspector;
+  } = {},
 ): Promise<ComposeDependsOnResult> {
   const labels = container.labels;
   const serviceName = labels?.[COMPOSE_SERVICE_LABEL];
@@ -97,10 +143,15 @@ export async function resolveComposeDependsOn(
     return { dependsOn: [], warnings: [] };
   }
 
-  const composeFilePaths = getComposeFilePathsForContainer(labels);
-  if (composeFilePaths.length === 0) {
+  const labelComposeFilePaths = getComposeFilePathsForContainer(labels);
+  if (labelComposeFilePaths.length === 0) {
     return { dependsOn: [], warnings: [] };
   }
+
+  const selfContainerBindMounts = await loadSelfContainerBindMounts(options.dockerApi);
+  const composeFilePaths = labelComposeFilePaths.map((filePath) =>
+    mapComposePathToContainerBindMount(filePath, selfContainerBindMounts),
+  );
 
   const composeFileParser = options.composeFileParser || defaultComposeFileParser;
   const warnings: string[] = [];
@@ -149,6 +200,18 @@ export async function resolveComposeDependsOn(
         rawNames.push(targetName);
       }
     }
+  }
+
+  if (readFilePaths.length === 0) {
+    // Every configured compose file was unreadable — depends_on detection is
+    // fully disabled for this container. The per-file warnings above are
+    // easy to lose in the noise, so add one explicit summary naming every
+    // path tried; this is the most common signal of an untranslated
+    // host-path bind mount when drydock runs containerized.
+    warnings.push(
+      `Compose dependency detection for service "${serviceName}" is disabled: none of the configured compose files could be read (tried: ${composeFilePaths.join(', ')}). If drydock is running in a container, verify the compose file's host path is bind-mounted into it.`,
+    );
+    return { dependsOn: [], warnings };
   }
 
   if (!serviceFound || rawNames.length === 0) {

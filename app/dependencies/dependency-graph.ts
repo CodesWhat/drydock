@@ -85,14 +85,45 @@ function normalizeAgent(agent: string | undefined): string {
   return agent ?? '';
 }
 
+/** Outer key -> inner key -> every container matching both. */
+type ContainerIndex = Map<string, Map<string, DependencyGraphContainer[]>>;
+
+function indexBy(
+  containers: DependencyGraphContainer[],
+  outerKeyOf: (container: DependencyGraphContainer) => string | undefined,
+  innerKeyOf: (container: DependencyGraphContainer) => string | undefined,
+): ContainerIndex {
+  const index: ContainerIndex = new Map();
+  for (const container of containers) {
+    const outerKey = outerKeyOf(container);
+    const innerKey = innerKeyOf(container);
+    if (outerKey === undefined || innerKey === undefined) {
+      continue;
+    }
+    let byInnerKey = index.get(outerKey);
+    if (!byInnerKey) {
+      byInnerKey = new Map();
+      index.set(outerKey, byInnerKey);
+    }
+    const list = byInnerKey.get(innerKey) ?? [];
+    list.push(container);
+    byInnerKey.set(innerKey, list);
+  }
+  return index;
+}
+
 /**
  * Compose-sourced target names are compose SERVICE names, unambiguous only
  * within the same compose project (design §1) — matched via the
  * `com.docker.compose.service` label of candidate containers, scoped to
  * containers sharing the source's own `com.docker.compose.project` label.
+ *
+ * `index` is `buildDependencyGraph`'s once-per-call compose-project/service
+ * index (see `indexBy`) rather than the full container list, so this is an
+ * O(1) map lookup instead of a full scan per `dependsOn` entry.
  */
 function findComposeCandidates(
-  containers: DependencyGraphContainer[],
+  index: ContainerIndex,
   source: DependencyGraphContainer,
   targetName: string,
 ): DependencyGraphContainer[] {
@@ -100,12 +131,8 @@ function findComposeCandidates(
   if (!sourceProject) {
     return [];
   }
-  return containers.filter(
-    (candidate) =>
-      candidate.id !== source.id &&
-      candidate.labels?.[COMPOSE_SERVICE_LABEL] === targetName &&
-      candidate.labels?.[COMPOSE_PROJECT_LABEL] === sourceProject,
-  );
+  const candidates = index.get(sourceProject)?.get(targetName) ?? [];
+  return candidates.filter((candidate) => candidate.id !== source.id);
 }
 
 /**
@@ -115,18 +142,18 @@ function findComposeCandidates(
  * same-named container can exist on multiple agents behind one watcher
  * name); it's applied afterward so a same-watcher/different-agent match can
  * be distinguished as `crossHostIgnored` rather than silently unresolved.
+ *
+ * `index` is `buildDependencyGraph`'s once-per-call watcher/name index (see
+ * `indexBy`) rather than the full container list, so this is an O(1) map
+ * lookup instead of a full scan per `dependsOn` entry.
  */
 function findLabelCandidates(
-  containers: DependencyGraphContainer[],
+  index: ContainerIndex,
   source: DependencyGraphContainer,
   targetName: string,
 ): DependencyGraphContainer[] {
-  return containers.filter(
-    (candidate) =>
-      candidate.id !== source.id &&
-      candidate.name === targetName &&
-      candidate.watcher === source.watcher,
-  );
+  const candidates = index.get(source.watcher)?.get(targetName) ?? [];
+  return candidates.filter((candidate) => candidate.id !== source.id);
 }
 
 /**
@@ -154,6 +181,19 @@ export function buildDependencyGraph(
   const unresolved: UnresolvedDependencyEdge[] = [];
   const crossHostIgnored: CrossHostIgnoredEdge[] = [];
 
+  // Built once per call rather than re-scanning `containers` for every
+  // `dependsOn` entry of every container.
+  const labelCandidateIndex = indexBy(
+    containers,
+    (container) => container.watcher,
+    (container) => container.name,
+  );
+  const composeCandidateIndex = indexBy(
+    containers,
+    (container) => container.labels?.[COMPOSE_PROJECT_LABEL],
+    (container) => container.labels?.[COMPOSE_SERVICE_LABEL],
+  );
+
   for (const container of containers) {
     const dependsOn = container.dependsOn;
     if (!dependsOn || dependsOn.length === 0) {
@@ -166,8 +206,8 @@ export function buildDependencyGraph(
     for (const targetName of dependsOn) {
       const candidates =
         source === 'compose'
-          ? findComposeCandidates(containers, container, targetName)
-          : findLabelCandidates(containers, container, targetName);
+          ? findComposeCandidates(composeCandidateIndex, container, targetName)
+          : findLabelCandidates(labelCandidateIndex, container, targetName);
 
       if (candidates.length === 0) {
         unresolved.push({ nodeId: container.id, missingTarget: targetName });
@@ -191,7 +231,34 @@ export function buildDependencyGraph(
   return { nodes, edges, unresolved, crossHostIgnored };
 }
 
-/** Tarjan's strongly-connected-components over an adjacency-list subgraph. */
+/**
+ * A single explicit-stack frame standing in for one level of `strongConnect`
+ * recursion: `neighbors` is that node's adjacency list and `neighborIndex`
+ * is how far through it this frame has iterated so far.
+ */
+interface TarjanFrame {
+  nodeId: string;
+  neighbors: string[];
+  neighborIndex: number;
+}
+
+/**
+ * Tarjan's strongly-connected-components over an adjacency-list subgraph.
+ *
+ * Iterative (explicit work-stack) rather than recursive: a recursive
+ * `strongConnect` blows the call stack on a single long dependency chain or
+ * cycle around ~5-10k nodes (JS engines cap recursion depth well under
+ * that), and a fleet's `dependsOn` graph has no such size bound. Each work
+ * frame mirrors one `strongConnect(v)` call — pushed when a fresh node is
+ * first visited, popped (and its lowlink propagated to its caller frame)
+ * once every one of its neighbors has been examined — so the traversal
+ * order, and therefore the resulting SCC partition and component order,
+ * are identical to the recursive version for the same input.
+ *
+ * Precondition: `adjacency` must have an entry (possibly `[]`) for every id
+ * in `nodeIds` — the sole caller pre-seeds it that way, so neighbor lookups
+ * below are asserted rather than defaulted.
+ */
 function stronglyConnectedComponents(
   nodeIds: string[],
   adjacency: Map<string, string[]>,
@@ -203,37 +270,64 @@ function stronglyConnectedComponents(
   const stack: string[] = [];
   const components: string[][] = [];
 
-  function strongConnect(v: string): void {
-    indices.set(v, nextIndex);
-    lowlink.set(v, nextIndex);
+  for (const rootNodeId of nodeIds) {
+    if (indices.has(rootNodeId)) {
+      continue;
+    }
+
+    const workStack: TarjanFrame[] = [
+      { nodeId: rootNodeId, neighbors: adjacency.get(rootNodeId) as string[], neighborIndex: 0 },
+    ];
+    indices.set(rootNodeId, nextIndex);
+    lowlink.set(rootNodeId, nextIndex);
     nextIndex += 1;
-    stack.push(v);
-    onStack.add(v);
+    stack.push(rootNodeId);
+    onStack.add(rootNodeId);
 
-    for (const w of adjacency.get(v) ?? []) {
-      if (!indices.has(w)) {
-        strongConnect(w);
-        lowlink.set(v, Math.min(lowlink.get(v) as number, lowlink.get(w) as number));
-      } else if (onStack.has(w)) {
-        lowlink.set(v, Math.min(lowlink.get(v) as number, indices.get(w) as number));
+    while (workStack.length > 0) {
+      const frame = workStack[workStack.length - 1];
+
+      if (frame.neighborIndex < frame.neighbors.length) {
+        const w = frame.neighbors[frame.neighborIndex];
+        frame.neighborIndex += 1;
+
+        if (!indices.has(w)) {
+          indices.set(w, nextIndex);
+          lowlink.set(w, nextIndex);
+          nextIndex += 1;
+          stack.push(w);
+          onStack.add(w);
+          workStack.push({ nodeId: w, neighbors: adjacency.get(w) as string[], neighborIndex: 0 });
+        } else if (onStack.has(w)) {
+          lowlink.set(
+            frame.nodeId,
+            Math.min(lowlink.get(frame.nodeId) as number, indices.get(w) as number),
+          );
+        }
+        continue;
       }
-    }
 
-    if (lowlink.get(v) === indices.get(v)) {
-      const component: string[] = [];
-      let w: string;
-      do {
-        w = stack.pop() as string;
-        onStack.delete(w);
-        component.push(w);
-      } while (w !== v);
-      components.push(component);
-    }
-  }
+      // Every neighbor of frame.nodeId has been examined — equivalent to
+      // `strongConnect(frame.nodeId)` returning.
+      workStack.pop();
+      if (workStack.length > 0) {
+        const parent = workStack[workStack.length - 1];
+        lowlink.set(
+          parent.nodeId,
+          Math.min(lowlink.get(parent.nodeId) as number, lowlink.get(frame.nodeId) as number),
+        );
+      }
 
-  for (const nodeId of nodeIds) {
-    if (!indices.has(nodeId)) {
-      strongConnect(nodeId);
+      if (lowlink.get(frame.nodeId) === indices.get(frame.nodeId)) {
+        const component: string[] = [];
+        let w: string;
+        do {
+          w = stack.pop() as string;
+          onStack.delete(w);
+          component.push(w);
+        } while (w !== frame.nodeId);
+        components.push(component);
+      }
     }
   }
 
@@ -326,16 +420,24 @@ export function topologicalSort(
   }
 
   const cycles: string[][] = [];
-  let remaining = [...nodeIds].filter((id) => !processed.has(id));
+  const remaining = [...nodeIds].filter((id) => !processed.has(id));
 
-  while (remaining.length > 0) {
+  if (remaining.length > 0) {
+    // Built once, over the full remaining set — not rebuilt/shrunk per
+    // round. Pre-seeded to `[]` for every remaining id (mirroring the
+    // inDegree pre-seeding above) so stronglyConnectedComponents' neighbor
+    // lookups are always defined: a node only ever ends up in `remaining`
+    // because it has at least one dependency edge to another remaining node
+    // (otherwise the clean Kahn's pass above would already have resolved
+    // it), so this map, once built, never needs an empty-fallback default.
     const remainingSet = new Set(remaining);
     const adjacency = new Map<string, string[]>();
+    for (const id of remaining) {
+      adjacency.set(id, []);
+    }
     for (const edge of validEdges) {
       if (remainingSet.has(edge.from) && remainingSet.has(edge.to)) {
-        const list = adjacency.get(edge.from) ?? [];
-        list.push(edge.to);
-        adjacency.set(edge.from, list);
+        (adjacency.get(edge.from) as string[]).push(edge.to);
       }
     }
 
@@ -347,35 +449,52 @@ export function topologicalSort(
       }
     });
 
-    // A component is "ready" this round when none of its members point (via
-    // a within-`remaining` edge) at a DIFFERENT still-remaining component —
-    // i.e. every dependency it has outside itself has already been
-    // scheduled in an earlier wave. Condensing any graph into its SCCs
-    // always yields a DAG, so at least one component is ready every round —
-    // this loop always makes progress and terminates.
-    const readyNodeIds: string[] = [];
-    for (const [componentIndex, component] of components.entries()) {
-      const isReady = component.every((nodeId) =>
-        (adjacency.get(nodeId) ?? []).every(
-          (target) => componentIdByNode.get(target) === componentIndex,
-        ),
-      );
-      if (!isReady) {
-        continue;
-      }
-      readyNodeIds.push(...component);
-      const isSelfLoop =
-        component.length === 1 && (adjacency.get(component[0]) ?? []).includes(component[0]);
-      if (component.length > 1 || isSelfLoop) {
-        cycles.push([...component].sort(byName));
-      }
-    }
+    // Tarjan closes a component only once every node it can reach has
+    // itself closed, so `components` already comes out in a valid
+    // topological order of the SCC condensation: whenever component A has
+    // an edge to a different component B, B appears — and therefore has its
+    // `componentLayer` already computed — at a lower index than A. That
+    // lets each component's wave ("layer") number be computed in a single
+    // forward pass instead of repeatedly recomputing readiness by rebuilding
+    // the subgraph every round: a component's layer is one past the highest
+    // layer among the (distinct) other components it depends on, or 0 if it
+    // depends on none. Bucketing by layer as they're computed — rather than
+    // processing components in layer order directly — preserves both the
+    // cross-layer wave order and, within a layer, the same relative
+    // ordering a fresh per-round computation would have produced.
+    const componentLayer: number[] = new Array(components.length).fill(0);
+    const layerBuckets: { nodeIds: string[]; cycleEntries: string[][] }[] = [];
 
-    waves.push([...readyNodeIds].sort(byName));
-    for (const id of readyNodeIds) {
-      processed.add(id);
+    components.forEach((component, componentIndex) => {
+      let maxDependencyLayer = -1;
+      let isSelfLoop = false;
+      for (const nodeId of component) {
+        for (const target of adjacency.get(nodeId) as string[]) {
+          const targetComponentIndex = componentIdByNode.get(target) as number;
+          if (targetComponentIndex === componentIndex) {
+            if (target === nodeId) {
+              isSelfLoop = true;
+            }
+            continue;
+          }
+          maxDependencyLayer = Math.max(maxDependencyLayer, componentLayer[targetComponentIndex]);
+        }
+      }
+
+      const layer = maxDependencyLayer + 1;
+      componentLayer[componentIndex] = layer;
+
+      const bucket = (layerBuckets[layer] ??= { nodeIds: [], cycleEntries: [] });
+      bucket.nodeIds.push(...component);
+      if (component.length > 1 || isSelfLoop) {
+        bucket.cycleEntries.push([...component].sort(byName));
+      }
+    });
+
+    for (const bucket of layerBuckets) {
+      waves.push([...bucket.nodeIds].sort(byName));
+      cycles.push(...bucket.cycleEntries);
     }
-    remaining = remaining.filter((id) => !processed.has(id));
   }
 
   return { waves, cycles };
@@ -392,4 +511,121 @@ export function computeDependencyGraph(
   const { nodes, edges, unresolved, crossHostIgnored } = buildDependencyGraph(containers);
   const { waves, cycles } = topologicalSort(nodes, edges);
   return { waves, cycles, unresolved, crossHostIgnored };
+}
+
+/**
+ * Reverse adjacency (dependency id -> dependent ids), built once per dispatch
+ * and reused across every `collectTransitiveDependents` lookup within it
+ * (execution integration, v1.7 Phase 6.1, #219 — design §3): a wave-dispatch
+ * failure, or a maintenance-window deferral, needs to find every downstream
+ * container that (transitively) depends on the blocked one.
+ */
+export function buildDependentsByDependency(edges: DependencyEdge[]): Map<string, string[]> {
+  const dependentsByDependency = new Map<string, string[]>();
+  for (const edge of edges) {
+    const list = dependentsByDependency.get(edge.to) ?? [];
+    list.push(edge.from);
+    dependentsByDependency.set(edge.to, list);
+  }
+  return dependentsByDependency;
+}
+
+/**
+ * BFS over a `buildDependentsByDependency` map to find every transitive
+ * dependent of `nodeId` — used to skip a whole downstream chain when its
+ * root dependency fails or is deferred, rather than only its immediate
+ * dependents.
+ */
+export function collectTransitiveDependents(
+  nodeId: string,
+  dependentsByDependency: Map<string, string[]>,
+): Set<string> {
+  const dependents = new Set<string>();
+  const queue = [...(dependentsByDependency.get(nodeId) ?? [])];
+  while (queue.length > 0) {
+    const current = queue.shift() as string;
+    if (dependents.has(current)) {
+      continue;
+    }
+    dependents.add(current);
+    queue.push(...(dependentsByDependency.get(current) ?? []));
+  }
+  return dependents;
+}
+
+/**
+ * BFS over an UNDIRECTED view of `edges` to find every node id in the same
+ * weakly-connected component as `rootId` (v1.7 Phase 6.2, #219 — design §4):
+ * both the update-chain-preview endpoint and the dependency-group bulk
+ * update endpoint need "everything reachable from this root, dependencies
+ * and dependents alike" as a single subgraph to hand to
+ * `buildDependencyGraph`/`topologicalSort` — the exact same pure functions
+ * the real dispatcher uses, so a preview can never drift from what actually
+ * runs. `rootId` is always included, even with no edges at all (a trivial
+ * single-node component).
+ */
+export function getConnectedComponentIds(rootId: string, edges: DependencyEdge[]): Set<string> {
+  const undirected = new Map<string, string[]>();
+  const addEdge = (a: string, b: string) => {
+    const list = undirected.get(a) ?? [];
+    list.push(b);
+    undirected.set(a, list);
+  };
+  for (const edge of edges) {
+    addEdge(edge.from, edge.to);
+    addEdge(edge.to, edge.from);
+  }
+
+  const visited = new Set<string>([rootId]);
+  const queue = [rootId];
+  while (queue.length > 0) {
+    const current = queue.shift() as string;
+    for (const neighbor of undirected.get(current) ?? []) {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+  }
+  return visited;
+}
+
+/**
+ * Ids of containers that carry at least one resolved (successfully matched)
+ * outgoing `dependsOn` edge in this graph — i.e. containers that are
+ * genuinely a dependent of something, as opposed to merely carrying a
+ * `dependsOnAction` label with no `dependsOn` at all, or a `dependsOn` that
+ * failed to resolve to any candidate (PR #681 review #2).
+ */
+export function collectContainerIdsWithResolvedDependsOn(edges: DependencyEdge[]): Set<string> {
+  return new Set(edges.map((edge) => edge.from));
+}
+
+/**
+ * Whether a container should be dispatched via the restart-only primitive
+ * rather than its normal update trigger (design §3; PR #681 review #2/#3).
+ * `dependsOnAction: 'restart'` alone is not sufficient:
+ * - it must have a resolved outgoing `dependsOn` edge in THIS graph — a
+ *   `dependsOnAction=restart` label with no (or no resolved) `dependsOn`
+ *   never designates an actual dependent, so it must not be silently turned
+ *   into a no-op restart of a container that was never part of any chain;
+ * - it must carry no update of its own — a restart-only dependent is
+ *   designed to never have its own pending image update, but if one is
+ *   present anyway (e.g. a new tag was pushed for it too), that update
+ *   takes priority over the restart-only shortcut rather than being
+ *   silently skipped.
+ * Any other `dependsOnAction: 'restart'` container falls back to a normal
+ * update — this is the single source of truth shared by the real dispatcher
+ * (`runAcceptedContainerUpdates`) and every preview/annotation surface, so
+ * none of them can drift from what actually runs.
+ */
+export function resolveDependencyActionKind(
+  container: Pick<Container, 'id' | 'dependsOnAction' | 'updateAvailable'>,
+  containerIdsWithResolvedDependsOn: ReadonlySet<string>,
+): 'update' | 'restart' {
+  return container.dependsOnAction === 'restart' &&
+    !container.updateAvailable &&
+    containerIdsWithResolvedDependsOn.has(container.id)
+    ? 'restart'
+    : 'update';
 }

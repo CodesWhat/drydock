@@ -4,6 +4,7 @@ import type { Container, TriggerCategory } from '../../../model/container.js';
 import { recordLegacyInput } from '../../../prometheus/compatibility.js';
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
+import type { DockerApiBindMountInspector } from '../../../triggers/providers/dockercompose/ComposePathBindMounts.js';
 import { getTriggerCategoryForType } from '../../../triggers/trigger-category.js';
 import type Watcher from '../../Watcher.js';
 import {
@@ -1060,9 +1061,18 @@ export async function resolveContainerDependsOn(
   labels: Record<string, string>,
   containerName: string,
   options: ResolveDependsOnOptions & {
-    resolveComposeDependsOn?: (container: {
-      labels?: Record<string, string>;
-    }) => Promise<{ dependsOn: string[]; warnings: string[] }>;
+    resolveComposeDependsOn?: (
+      container: { labels?: Record<string, string> },
+      composeOptions?: { dockerApi?: DockerApiBindMountInspector },
+    ) => Promise<{ dependsOn: string[]; warnings: string[] }>;
+    /**
+     * The watched watcher's own Docker API, forwarded to compose-based
+     * detection so it can translate the compose project labels' HOST-side
+     * paths into drydock's own in-container view via its bind mounts (see
+     * `compose-dependency-resolver.ts`) — without it, compose detection
+     * silently no-ops whenever drydock itself runs containerized.
+     */
+    dockerApi?: DockerApiBindMountInspector;
   } = {},
 ): Promise<ContainerDependsOnResolution> {
   const labelResult = resolveDependsOnFromLabels(labels, containerName, options);
@@ -1077,7 +1087,7 @@ export async function resolveContainerDependsOn(
   }
 
   const resolveCompose = options.resolveComposeDependsOn || resolveComposeDependsOnDefault;
-  const composeResult = await resolveCompose({ labels });
+  const composeResult = await resolveCompose({ labels }, { dockerApi: options.dockerApi });
   if (composeResult.warnings.length > 0) {
     const warn = options.warn || ((message: string) => log.warn(message));
     for (const warning of composeResult.warnings) {

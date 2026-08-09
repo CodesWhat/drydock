@@ -2,6 +2,7 @@ import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
+import { buildDependencyGraph, topologicalSort } from '../../../dependencies/dependency-graph.js';
 import type { ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
@@ -113,6 +114,14 @@ type ComposeContainerReference = {
   name?: string;
   labels?: Record<string, string>;
   watcher?: string;
+  // Optional dependency-ordering fields (v1.7 Phase 6.1, #219). Not declared
+  // by every caller of this narrowed reference type, but the underlying
+  // watcher-discovered Container objects always carry them (resolved by
+  // container-init.ts / compose-dependency-resolver.ts) — declaring them
+  // here is a type-level-only change, see sortMappingsByDependencyOrder.
+  dependsOn?: string[];
+  dependsOnSource?: 'label' | 'compose';
+  dependsOnAction?: 'update' | 'restart';
 };
 
 type RuntimeUpdateContainerReference = {
@@ -184,6 +193,60 @@ type ComposeRollbackError = Error & {
 
 function hasDefinedComposeRuntimeContextValue(runtimeContext: ComposeRuntimeContext): boolean {
   return Object.values(runtimeContext).some((value) => value !== undefined);
+}
+
+/**
+ * Re-order `mappingsNeedingRuntimeUpdate` into dependency-graph topological
+ * order before `runRuntimeUpdatesForComposeMappings`'s sequential loop
+ * (v1.7 Phase 6.1, #219 — design §3): this loop was already the easiest
+ * dependency-ordering integration point in the codebase since it's a plain
+ * `for...of` with no concurrency to restructure — just swap "discovery
+ * order" for "topological order". `buildDependencyGraph`'s own compose-edge
+ * resolution matches candidates by compose project/service LABEL, not by the
+ * node id supplied here, so a synthetic per-index id is used as the node id
+ * — service names are not reliably unique across mappings (e.g. `docker
+ * compose up --scale`, which produces multiple containers for one service).
+ * A mapping list with no `depends_on` edges resolves to a single wave and is
+ * returned unchanged.
+ */
+function sortMappingsByDependencyOrder(
+  mappings: ComposeRuntimeUpdateMapping[],
+): ComposeRuntimeUpdateMapping[] {
+  if (mappings.length <= 1) {
+    return mappings;
+  }
+
+  const mappingById = new Map<string, ComposeRuntimeUpdateMapping>();
+  const graphContainers = mappings.map((mapping, index) => {
+    const id = `mapping-${index}`;
+    mappingById.set(id, mapping);
+    return {
+      id,
+      name: mapping.container.name ?? mapping.service,
+      watcher: mapping.container.watcher,
+      labels: mapping.container.labels,
+      dependsOn: mapping.container.dependsOn,
+      dependsOnSource: mapping.container.dependsOnSource,
+      dependsOnAction: mapping.container.dependsOnAction,
+    };
+  });
+  const { nodes, edges } = buildDependencyGraph(graphContainers);
+  const { waves } = topologicalSort(nodes, edges);
+
+  const ordered: ComposeRuntimeUpdateMapping[] = [];
+  for (const wave of waves) {
+    for (const id of wave) {
+      const mapping = mappingById.get(id);
+      /* v8 ignore next 3 -- defensive only: every wave id originates from
+         graphContainers built from this same mappings array, so mappingById
+         (keyed the same way) always has a match. */
+      if (!mapping) {
+        continue;
+      }
+      ordered.push(mapping);
+    }
+  }
+  return ordered;
 }
 
 type ValidateComposeConfigurationOptions = {
@@ -1880,8 +1943,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       : new Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>();
 
     // Refresh all containers requiring a runtime update via the shared
-    // lifecycle orchestrator (security gate, hooks, prune/backup, events).
-    for (const { container, service } of mappingsNeedingRuntimeUpdate) {
+    // lifecycle orchestrator (security gate, hooks, prune/backup, events), in
+    // dependency-graph order (v1.7 Phase 6.1, #219) rather than discovery order.
+    for (const { container, service } of sortMappingsByDependencyOrder(
+      mappingsNeedingRuntimeUpdate,
+    )) {
       const composeFileOnceApplied =
         composeFileOnceEnabled && composeFileOnceHandledServices.has(service);
       const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);

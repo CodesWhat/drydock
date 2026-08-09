@@ -1,8 +1,13 @@
 import {
   buildDependencyGraph,
+  buildDependentsByDependency,
+  collectContainerIdsWithResolvedDependsOn,
+  collectTransitiveDependents,
   computeDependencyGraph,
   type DependencyEdge,
   type DependencyNode,
+  getConnectedComponentIds,
+  resolveDependencyActionKind,
   topologicalSort,
 } from './dependency-graph.js';
 
@@ -386,6 +391,51 @@ describe('topologicalSort', () => {
       expect(topologicalSort([...shuffledNodes], [...shuffledEdges])).toEqual(expected);
     }
   });
+
+  test('a 6000-node single cycle completes without a stack-overflow RangeError', () => {
+    // Guards against a recursive strongConnect: a JS engine's default call
+    // stack blows well under this size on one long chain/cycle, and a
+    // fleet's dependsOn graph has no such bound. Zero-padded ids keep
+    // alphabetical (name) sort order equal to numeric id order.
+    const nodeCount = 6000;
+    const ids = Array.from({ length: nodeCount }, (_, index) => String(index).padStart(5, '0'));
+    const nodes = ids.map((id) => node(id));
+    const edges = ids.map((id, index) => edge(id, ids[(index + 1) % nodeCount]));
+
+    let result: ReturnType<typeof topologicalSort> | undefined;
+    expect(() => {
+      result = topologicalSort(nodes, edges);
+    }).not.toThrow();
+
+    expect(result?.waves).toEqual([ids]);
+    expect(result?.cycles).toEqual([ids]);
+  });
+
+  test('a non-cycle node reached only through another non-cycle node still resolves after the cycle it feeds into', () => {
+    // v -> w -> (a <-> b): a two-hop chain feeding into a cycle. w is
+    // discovered as a CHILD of v during the single Tarjan pass (rather than
+    // as its own root), giving both its wave (one past the cycle's) and the
+    // final wave order a non-trivial multi-layer shape to verify.
+    const nodes = [node('v'), node('w'), node('a'), node('b')];
+    const edges = [edge('v', 'w'), edge('w', 'a'), edge('a', 'b'), edge('b', 'a')];
+    const result = topologicalSort(nodes, edges);
+    expect(result.waves).toEqual([['a', 'b'], ['w'], ['v']]);
+    expect(result.cycles).toEqual([['a', 'b']]);
+  });
+
+  test('an edge from a still-cyclic node to a node already resolved by the clean Kahn prefix is excluded from the cycle subgraph', () => {
+    // x has no dependents blocking it (resolves in the initial clean-prefix
+    // pass, wave 0); a <-> b is an unrelated cycle where a additionally
+    // depends on x. The once-built adjacency for the cyclic remainder must
+    // still filter out edges pointing outside the remaining set, exactly as
+    // the old per-round rebuild did — just computed once up front instead of
+    // every round.
+    const nodes = [node('a'), node('b'), node('x')];
+    const edges = [edge('a', 'b'), edge('b', 'a'), edge('a', 'x')];
+    const result = topologicalSort(nodes, edges);
+    expect(result.waves).toEqual([['x'], ['a', 'b']]);
+    expect(result.cycles).toEqual([['a', 'b']]);
+  });
 });
 
 describe('computeDependencyGraph', () => {
@@ -410,5 +460,135 @@ describe('computeDependencyGraph', () => {
       unresolved: [],
       crossHostIgnored: [],
     });
+  });
+});
+
+describe('buildDependentsByDependency + collectTransitiveDependents', () => {
+  test('finds direct and transitive dependents of a node (db -> api -> proxy)', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api', action: 'update', source: 'label' },
+    ];
+    const dependentsByDependency = buildDependentsByDependency(edges);
+    expect(collectTransitiveDependents('db', dependentsByDependency)).toEqual(
+      new Set(['api', 'proxy']),
+    );
+    expect(collectTransitiveDependents('api', dependentsByDependency)).toEqual(new Set(['proxy']));
+    expect(collectTransitiveDependents('proxy', dependentsByDependency)).toEqual(new Set());
+  });
+
+  test('de-duplicates a diamond-shaped chain reached via two paths', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api1', to: 'db', action: 'update', source: 'label' },
+      { from: 'api2', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api1', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api2', action: 'update', source: 'label' },
+    ];
+    const dependentsByDependency = buildDependentsByDependency(edges);
+    expect(collectTransitiveDependents('db', dependentsByDependency)).toEqual(
+      new Set(['api1', 'api2', 'proxy']),
+    );
+  });
+
+  test('returns an empty set for a node with no edges at all', () => {
+    expect(collectTransitiveDependents('lonely', buildDependentsByDependency([]))).toEqual(
+      new Set(),
+    );
+  });
+});
+
+describe('getConnectedComponentIds', () => {
+  test('walks both directions of a chain from a middle node (db <- api <- proxy)', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api', action: 'update', source: 'label' },
+    ];
+    expect(getConnectedComponentIds('api', edges)).toEqual(new Set(['api', 'db', 'proxy']));
+  });
+
+  test('always includes the root even with no edges at all', () => {
+    expect(getConnectedComponentIds('lonely', [])).toEqual(new Set(['lonely']));
+  });
+
+  test('does not pull in a disjoint component', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api', to: 'db', action: 'update', source: 'label' },
+      { from: 'worker', to: 'queue', action: 'update', source: 'label' },
+    ];
+    expect(getConnectedComponentIds('api', edges)).toEqual(new Set(['api', 'db']));
+  });
+
+  test('de-duplicates a diamond reached via two paths', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api1', to: 'db', action: 'update', source: 'label' },
+      { from: 'api2', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api1', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api2', action: 'update', source: 'label' },
+    ];
+    expect(getConnectedComponentIds('proxy', edges)).toEqual(
+      new Set(['proxy', 'api1', 'api2', 'db']),
+    );
+  });
+});
+
+describe('collectContainerIdsWithResolvedDependsOn', () => {
+  test('collects the "from" side of every edge', () => {
+    const edges: DependencyEdge[] = [
+      { from: 'api', to: 'db', action: 'update', source: 'label' },
+      { from: 'proxy', to: 'api', action: 'restart', source: 'label' },
+    ];
+    expect(collectContainerIdsWithResolvedDependsOn(edges)).toEqual(new Set(['api', 'proxy']));
+  });
+
+  test('is empty for an edgeless graph', () => {
+    expect(collectContainerIdsWithResolvedDependsOn([])).toEqual(new Set());
+  });
+});
+
+describe('resolveDependencyActionKind (PR #681 review #2/#3)', () => {
+  test('returns "update" when dependsOnAction is not "restart"', () => {
+    const ids = new Set(['c1']);
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: 'update', updateAvailable: false },
+        ids,
+      ),
+    ).toBe('update');
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: undefined, updateAvailable: false },
+        ids,
+      ),
+    ).toBe('update');
+  });
+
+  test('returns "restart" when the label is restart, the container has a resolved dependsOn edge, and no update of its own', () => {
+    const ids = new Set(['c1']);
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: 'restart', updateAvailable: false },
+        ids,
+      ),
+    ).toBe('restart');
+  });
+
+  test('returns "update" when dependsOnAction=restart but the container has no resolved dependsOn edge (#2)', () => {
+    const ids = new Set<string>();
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: 'restart', updateAvailable: false },
+        ids,
+      ),
+    ).toBe('update');
+  });
+
+  test('returns "update" when dependsOnAction=restart and has an edge, but the container has its own pending update (#3)', () => {
+    const ids = new Set(['c1']);
+    expect(
+      resolveDependencyActionKind(
+        { id: 'c1', dependsOnAction: 'restart', updateAvailable: true },
+        ids,
+      ),
+    ).toBe('update');
   });
 });
