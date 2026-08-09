@@ -428,6 +428,39 @@ describe('Docker Watcher', () => {
       ).toThrow();
     });
 
+    test('defaults discoverysettlems to 30000ms when unset (#156)', () => {
+      const validated = docker.validateConfiguration({
+        socket: '/var/run/docker.sock',
+      });
+
+      expect(validated.discoverysettlems).toBe(30_000);
+    });
+
+    test('accepts a configured discoverysettlems override, including 0 to disable settling (#156)', () => {
+      expect(
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          discoverysettlems: 45_000,
+        }).discoverysettlems,
+      ).toBe(45_000);
+
+      expect(
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          discoverysettlems: 0,
+        }).discoverysettlems,
+      ).toBe(0);
+    });
+
+    test('rejects a negative discoverysettlems (#156)', () => {
+      expect(() =>
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          discoverysettlems: -1,
+        }),
+      ).toThrow();
+    });
+
     test('should validate configuration with oidc remote auth', async () => {
       const config = createOidcConfig(
         {

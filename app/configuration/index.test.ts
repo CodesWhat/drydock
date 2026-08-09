@@ -282,6 +282,37 @@ test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases regardless o
   delete configuration.ddEnvVars.DD_WATCHER_REVERSE_MAINTENANCE_WINDOW_TZ;
 });
 
+test('getWatcherConfiguration should normalize DISCOVERY_SETTLE_MS to the watcher runtime key (#156)', () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_DISCOVERY_SETTLE_MS = '45000';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.local.discoverysettlems).toBe('45000');
+  expect(watcherConfigurations.local.discovery).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_DISCOVERY_SETTLE_MS;
+});
+
+test('getWatcherConfiguration should not apply DISCOVERY_SETTLE_MS alias without a watcher name', () => {
+  configuration.ddEnvVars.DD_WATCHER__DISCOVERY_SETTLE_MS = '0';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+
+  expect(watcherConfigurations['']).toEqual({});
+  delete configuration.ddEnvVars.DD_WATCHER__DISCOVERY_SETTLE_MS;
+});
+
+test('getWatcherConfiguration should map DISCOVERY_SETTLE_MS for multiple watchers independently', () => {
+  configuration.ddEnvVars.DD_WATCHER_ONE_DISCOVERY_SETTLE_MS = '0';
+  configuration.ddEnvVars.DD_WATCHER_TWO_DISCOVERY_SETTLE_MS = '60000';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.one.discoverysettlems).toBe('0');
+  expect(watcherConfigurations.two.discoverysettlems).toBe('60000');
+
+  delete configuration.ddEnvVars.DD_WATCHER_ONE_DISCOVERY_SETTLE_MS;
+  delete configuration.ddEnvVars.DD_WATCHER_TWO_DISCOVERY_SETTLE_MS;
+});
+
 test('getWatcherConfiguration should preserve MAINTENANCEWINDOW legacy env vars', async () => {
   configuration.ddEnvVars.DD_WATCHER_LEGACY_MAINTENANCEWINDOW = '15 3 * * *';
   configuration.ddEnvVars.DD_WATCHER_LEGACY_MAINTENANCEWINDOWTZ = 'America/New_York';

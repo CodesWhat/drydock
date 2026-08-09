@@ -42,6 +42,7 @@ import {
   getDockerWatcherSourceKey,
   getLabel,
   getMatchingImgsetConfiguration as getMatchingImgsetConfigurationState,
+  getSettledContainersToWatch,
   isDockerWatcher,
   mergeConfigWithImgset,
   pruneOldContainers,
@@ -347,6 +348,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public isCronWatchInProgress: boolean = false;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
+  public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();
   public unregisterContainerUpdateApplied?: () => void;
   #cachedTimeMatcher: { cron: string; matcher: CronTaskWithNextMatch['timeMatcher'] } | undefined;
 
@@ -402,6 +404,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       maintenancewindowtz: this.joi.string().default('UTC'),
       maturitymode: this.joi.string().valid('all', 'mature'),
       maturityminagedays: this.joi.number().integer().min(1).max(365),
+      discoverysettlems: this.joi.number().integer().min(0).default(30_000), // sync w/ DEFAULT_DISCOVERY_SETTLE_MS
       tag: this.joi.object({
         family: this.joi.string().valid('strict', 'loose').default('strict'),
         pin: this.joi.object({
@@ -1280,8 +1283,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       containersFromTheStore,
     );
     this.recordAliasFilterDecisions(decisions);
-
-    const enrichmentResults = await mapWithDockerWatchConcurrency(containersToWatch, (container) =>
+    const settled = getSettledContainersToWatch(containersToWatch, containersFromTheStore, this);
+    const enrichmentResults = await mapWithDockerWatchConcurrency(settled, (container) =>
       this.addImageDetailsToContainer(container, {
         includeTags: getLabel(container.Labels, ddTagInclude),
         excludeTags: getLabel(container.Labels, ddTagExclude),

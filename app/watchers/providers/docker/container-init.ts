@@ -58,6 +58,15 @@ const warnedTriggerCategoryScopeChanges = new Set<string>();
 const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
 const RECREATED_CONTAINER_ALIAS_TRANSIENT_WINDOW_MS = 30 * 1000;
 
+/**
+ * Default discovery settling window (#156), configurable per-watcher via
+ * `DD_WATCHER_{name}_DISCOVERY_SETTLE_MS`. Deliberately the same magnitude as
+ * `RECREATED_CONTAINER_ALIAS_TRANSIENT_WINDOW_MS` above — both windows exist
+ * to ride out the same class of Docker recreate/rename race, just from two
+ * different angles (name-shape heuristic vs. store-identity based).
+ */
+export const DEFAULT_DISCOVERY_SETTLE_MS = 30 * 1000;
+
 type ContainerLabelOverrideKey = Exclude<
   keyof ContainerLabelOverrides,
   'registryLookupImage' | 'registryLookupUrl'
@@ -803,6 +812,173 @@ export function filterRecreatedContainerAliases<T extends DockerContainerSummary
   }
 
   return { containersToWatch, skippedContainerIds, decisions };
+}
+
+/**
+ * Per-watcher-instance bookkeeping for a container that has been observed but
+ * not yet settled. `name` tracks the most recently observed name so that a
+ * mid-window rename (transient alias -> canonical name) registers under the
+ * FINAL name rather than the name it happened to have on first sight.
+ */
+export interface PendingDiscoveryEntry {
+  firstSeenAtMs: number;
+  name: string;
+}
+
+export interface PendingDiscoveryFilterResult<T> {
+  containersToWatch: T[];
+  pendingContainerIds: Set<string>;
+}
+
+interface FilterPendingDiscoveriesOptions {
+  /** Settling window in ms. `0` disables settling entirely (#156). */
+  settleMs: number;
+  /**
+   * Mutable per-watcher-instance map of container id -> pending entry. Owned
+   * by the caller (DockerWatcher instance) so state persists across watch
+   * cycles; this function only reads/writes it.
+   */
+  pendingDiscoveries: Map<string, PendingDiscoveryEntry>;
+  nowMs?: number;
+  debug?: (message: string) => void;
+}
+
+/**
+ * Hold first-seen containers in a "pending" state for a configurable
+ * settling window before they are allowed through to the store/triggers/UI
+ * (#156). This complements — does not replace — `filterRecreatedContainerAliases`
+ * above: that function suppresses containers whose *name* looks like a
+ * transient `<hex>_<name>` recreate alias; this function gates ALL first-seen
+ * containers regardless of name shape, keyed by Docker container id (the
+ * store's identity key, stable across renames — see `store/container.ts`
+ * `getContainer(id)`).
+ *
+ * "First-seen" is defined relative to the STORE, not this function's own
+ * pending map: a container whose id is already present in
+ * `containersFromTheStore` bypasses settling immediately and is never
+ * tracked here, so a same-name/same-id recreation that the store already
+ * knows about is never blocked from updating.
+ *
+ * - New container id -> starts a pending entry, excluded from the result.
+ * - Still-pending id within the window -> stays excluded; its tracked name is
+ *   refreshed so a rename mid-window registers under the final name.
+ * - Still-pending id whose window has elapsed -> included in the result
+ *   (using its current, i.e. final, name) and removed from the pending map.
+ * - A pending id no longer present in the live `containers` list (container
+ *   disappeared mid-window) is discarded from the pending map, debug-logged
+ *   only, and never surfaces anywhere else.
+ */
+export function filterPendingDiscoveries<T extends DockerContainerSummaryLike>(
+  containers: T[],
+  containersFromTheStore: Container[],
+  options: FilterPendingDiscoveriesOptions,
+): PendingDiscoveryFilterResult<T> {
+  const { settleMs, pendingDiscoveries, debug } = options;
+  const pendingContainerIds = new Set<string>();
+
+  if (!(settleMs > 0)) {
+    return { containersToWatch: containers, pendingContainerIds };
+  }
+
+  const nowMs = options.nowMs ?? Date.now();
+  const storeContainerIds = new Set(
+    containersFromTheStore
+      .filter((container) => typeof container.id === 'string' && container.id !== '')
+      .map((container) => container.id),
+  );
+
+  const containersToWatch: T[] = [];
+  const liveContainerIds = new Set<string>();
+
+  for (const container of containers) {
+    const containerId = getDockerContainerId(container);
+    const containerName = getContainerName(container);
+
+    if (containerId === '') {
+      // No id to track pending state against — pass through unmodified,
+      // matching filterRecreatedContainerAliases's handling of the same case.
+      containersToWatch.push(container);
+      continue;
+    }
+
+    liveContainerIds.add(containerId);
+
+    if (storeContainerIds.has(containerId)) {
+      // Already known to the store: settling only applies to first-seen
+      // containers, so this one bypasses it and updates immediately. Drop
+      // any stray pending entry defensively (e.g. inserted via another path
+      // while this one was mid-window).
+      pendingDiscoveries.delete(containerId);
+      containersToWatch.push(container);
+      continue;
+    }
+
+    const displayName = containerName || containerId.substring(0, 12);
+    const existingEntry = pendingDiscoveries.get(containerId);
+
+    if (!existingEntry) {
+      pendingDiscoveries.set(containerId, { firstSeenAtMs: nowMs, name: containerName });
+      pendingContainerIds.add(containerId);
+      debug?.(
+        `${displayName} - New container discovered; entering ${settleMs}ms discovery settling window before registration (#156)`,
+      );
+      continue;
+    }
+
+    if (existingEntry.name !== containerName) {
+      debug?.(
+        `${containerId.substring(0, 12)} - Container renamed during discovery settling window (${existingEntry.name || '(unknown)'} -> ${containerName || '(unknown)'})`,
+      );
+      existingEntry.name = containerName;
+    }
+
+    const ageMs = nowMs - existingEntry.firstSeenAtMs;
+    if (ageMs < settleMs) {
+      pendingContainerIds.add(containerId);
+      debug?.(
+        `${displayName} - Still within discovery settling window (${ageMs}ms/${settleMs}ms elapsed)`,
+      );
+      continue;
+    }
+
+    pendingDiscoveries.delete(containerId);
+    containersToWatch.push(container);
+    debug?.(`${displayName} - Discovery settling window elapsed; registering`);
+  }
+
+  for (const [pendingId, pendingEntry] of pendingDiscoveries) {
+    if (liveContainerIds.has(pendingId)) {
+      continue;
+    }
+    pendingDiscoveries.delete(pendingId);
+    debug?.(
+      `${pendingEntry.name || pendingId.substring(0, 12)} - Container disappeared during discovery settling window; discarding`,
+    );
+  }
+
+  return { containersToWatch, pendingContainerIds };
+}
+
+interface DiscoverySettlingWatcher {
+  // `cron` is required so this shares a property with DockerWatcherConfiguration,
+  // which keeps TS's weak-type check from demanding `discoverysettlems` be
+  // declared there too — it's set via the Joi schema/env vars, not statically.
+  configuration: { cron: string; discoverysettlems?: number };
+  pendingDiscoveries: Map<string, PendingDiscoveryEntry>;
+  log: { debug: (message: string) => void };
+}
+
+/** Thin `filterPendingDiscoveries` wrapper bound to a DockerWatcher instance (#156). */
+export function getSettledContainersToWatch<T extends DockerContainerSummaryLike>(
+  containers: T[],
+  containersFromTheStore: Container[],
+  watcher: DiscoverySettlingWatcher,
+): T[] {
+  return filterPendingDiscoveries(containers, containersFromTheStore, {
+    settleMs: watcher.configuration.discoverysettlems ?? DEFAULT_DISCOVERY_SETTLE_MS,
+    pendingDiscoveries: watcher.pendingDiscoveries,
+    debug: (message) => watcher.log.debug(message),
+  }).containersToWatch;
 }
 
 export function resolveLabelsFromContainer(

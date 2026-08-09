@@ -438,6 +438,27 @@ export function setupDockerWatcherContainerSuite(
     }));
 
     docker = new Docker();
+    // Default discovery settling off for this suite's tests (#156): most of
+    // them assert that a freshly-discovered container is enriched/returned
+    // synchronously within a single getContainers() call, which predates the
+    // settling window and never advances fake timers. Tests exercising the
+    // settling behavior itself pass discoverysettlems explicitly and win,
+    // since that overrides this default.
+    const originalRegister = docker.register.bind(docker);
+    docker.register = ((
+      kind: string,
+      type: string,
+      name: string,
+      configuration: Record<string, unknown> = {},
+      agent?: string,
+    ) =>
+      originalRegister(
+        kind,
+        type,
+        name,
+        { discoverysettlems: 0, ...configuration },
+        agent,
+      )) as typeof docker.register;
     assignState({
       docker,
       mockDockerApi,
