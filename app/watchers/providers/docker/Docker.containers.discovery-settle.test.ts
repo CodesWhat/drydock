@@ -225,6 +225,30 @@ describe('Docker Watcher discovery settling (#156)', () => {
     );
   });
 
+  test('swallows a watchFromCron failure from the settle-deadline fallback', async () => {
+    mockDockerApi.listContainers.mockResolvedValue([
+      { Id: 'flaky-watch', Labels: { 'dd.watch': 'true' }, Names: ['/flaky-watch'] },
+    ]);
+
+    await docker.register('watcher', 'docker', 'test', {
+      discoverysettlems: 30_000,
+      watchevents: false,
+    });
+    clearTimeout(docker.watchCronTimeout);
+    const watchFromCronSpy = vi
+      .spyOn(docker, 'watchFromCron')
+      .mockRejectedValue(new Error('watch failed'));
+
+    await docker.getContainers();
+    vi.advanceTimersByTime(30_000);
+    expect(watchFromCronSpy).toHaveBeenCalledOnce();
+
+    // Flush the rejection through the fallback's catch — an unhandled
+    // rejection would fail this test.
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
   test('keeps a single deduplicated settle timer anchored to the earliest pending deadline', async () => {
     mockDockerApi.listContainers.mockResolvedValue([
       { Id: 'first-pending', Labels: { 'dd.watch': 'true' }, Names: ['/first-pending'] },
