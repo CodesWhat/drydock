@@ -90,6 +90,12 @@ import {
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
 import {
+  appendBoundedHistoryEntry,
+  filterAndSliceTimestampedHistory,
+  RECENT_ALIAS_FILTER_DECISION_LIMIT,
+  RECENT_DOCKER_EVENT_LIMIT,
+} from './docker-history.js';
+import {
   addImageDetailsToContainerOrchestration,
   type ContainerLabelOverrides,
 } from './docker-image-details-orchestration.js';
@@ -169,8 +175,6 @@ const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
-const RECENT_DOCKER_EVENT_LIMIT = 1000;
-const RECENT_ALIAS_FILTER_DECISION_LIMIT = 1000;
 const DOCKER_WATCH_CONCURRENCY = 10;
 
 function mapWithDockerWatchConcurrency<T, R>(
@@ -187,25 +191,6 @@ function allSettledWithDockerWatchConcurrency<T, R>(
 ) {
   const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
   return Promise.allSettled(items.map((item, index) => limit(() => mapper(item, index))));
-}
-
-function filterAndSliceTimestampedHistory<T extends { timestamp: string }>(
-  history: T[],
-  sinceMs: number | undefined,
-  limit: number,
-): T[] {
-  const filtered = history.filter((entry) => {
-    if (sinceMs === undefined) {
-      return true;
-    }
-    const timestampMs = Date.parse(entry.timestamp);
-    return Number.isNaN(timestampMs) ? false : timestampMs >= sinceMs;
-  });
-
-  if (!Number.isFinite(limit) || limit <= 0) {
-    return filtered;
-  }
-  return filtered.slice(-Math.trunc(limit));
 }
 
 interface DockerEventsStream {
@@ -783,14 +768,6 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     return sleep(ms);
   }
 
-  private appendBoundedHistoryEntry<T>(history: T[], entry: T, maxEntries: number): void {
-    history.push(entry);
-    if (history.length <= maxEntries * 2) {
-      return;
-    }
-    history.splice(0, history.length - maxEntries);
-  }
-
   private toEventTimestamp(rawDockerEvent: Record<string, unknown>): string {
     const rawTimeNano = rawDockerEvent.timeNano;
     if (typeof rawTimeNano === 'number' && Number.isFinite(rawTimeNano) && rawTimeNano > 0) {
@@ -839,12 +816,12 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       actorId,
     };
 
-    this.appendBoundedHistoryEntry(this.recentDockerEvents, recentEvent, RECENT_DOCKER_EVENT_LIMIT);
+    appendBoundedHistoryEntry(this.recentDockerEvents, recentEvent, RECENT_DOCKER_EVENT_LIMIT);
   }
 
   private recordAliasFilterDecisions(decisions: AliasFilterDecision[]): void {
     decisions.forEach((decision) => {
-      this.appendBoundedHistoryEntry(
+      appendBoundedHistoryEntry(
         this.recentAliasFilterDecisions,
         decision,
         RECENT_ALIAS_FILTER_DECISION_LIMIT,
