@@ -320,6 +320,31 @@ function normalizeWatcherMaturityEnvAliases(
   });
 }
 
+function normalizeWatcherDiscoveryEnvAliases(
+  watcherConfigurations: Record<string, Record<string, unknown>>,
+) {
+  const aliases = [['_DISCOVERY_SETTLE_MS', 'discoverysettlems']] as const;
+  Object.entries(ddEnvVars).forEach(([envKey, envValue]) => {
+    const envKeyUpper = envKey.toUpperCase();
+    if (!envKeyUpper.startsWith('DD_WATCHER_') || envValue === undefined) {
+      return;
+    }
+    const alias = aliases.find(([suffix]) => envKeyUpper.endsWith(suffix));
+    if (!alias) {
+      return;
+    }
+    const watcherName = envKeyUpper.slice('DD_WATCHER_'.length, -alias[0].length).toLowerCase();
+    if (!watcherName) {
+      return;
+    }
+    watcherConfigurations[watcherName] ??= {};
+    watcherConfigurations[watcherName][alias[1]] = envValue;
+  });
+  Object.values(watcherConfigurations).forEach((configuration) => {
+    delete configuration.discovery;
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -415,6 +440,7 @@ export function getWatcherConfigurations() {
   >;
   normalizeWatcherMaintenanceEnvAliases(watcherConfigurations);
   normalizeWatcherMaturityEnvAliases(watcherConfigurations);
+  normalizeWatcherDiscoveryEnvAliases(watcherConfigurations);
   return watcherConfigurations;
 }
 

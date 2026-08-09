@@ -205,6 +205,25 @@ describe('Docker Watcher', () => {
     fullName.mockReturnValue('test_container');
 
     docker = new Docker();
+    // Default discovery settling off for this suite (#156): these tests
+    // assert getContainers()/watchFromCron() enrich/return freshly-discovered
+    // containers synchronously within a single call and predate the settling
+    // window.
+    const originalRegister = docker.register.bind(docker);
+    docker.register = ((
+      kind: string,
+      type: string,
+      name: string,
+      configuration: Record<string, unknown> = {},
+      agent?: string,
+    ) =>
+      originalRegister(
+        kind,
+        type,
+        name,
+        { discoverysettlems: 0, ...configuration },
+        agent,
+      )) as typeof docker.register;
   });
 
   afterEach(async () => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import Docker from './Docker.js';
+import { appendBoundedHistoryEntry } from './docker-history.js';
 
 const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
 const mockLogger = vi.hoisted(() => ({
@@ -130,18 +131,17 @@ describe('Docker recent-event helpers', () => {
   });
 
   test('amortizes history pruning until exceeding twice the configured max', () => {
-    const docker = createDocker();
     const history = [{ value: 1 }, { value: 2 }];
     const spliceSpy = vi.spyOn(history, 'splice');
 
-    (docker as any).appendBoundedHistoryEntry(history, { value: 3 }, 2);
+    appendBoundedHistoryEntry(history, { value: 3 }, 2);
     expect(history).toEqual([{ value: 1 }, { value: 2 }, { value: 3 }]);
 
-    (docker as any).appendBoundedHistoryEntry(history, { value: 4 }, 2);
+    appendBoundedHistoryEntry(history, { value: 4 }, 2);
     expect(history).toEqual([{ value: 1 }, { value: 2 }, { value: 3 }, { value: 4 }]);
     expect(spliceSpy).not.toHaveBeenCalled();
 
-    (docker as any).appendBoundedHistoryEntry(history, { value: 5 }, 2);
+    appendBoundedHistoryEntry(history, { value: 5 }, 2);
 
     expect(spliceSpy).toHaveBeenCalledOnce();
     expect(spliceSpy).toHaveBeenCalledWith(0, 3);
