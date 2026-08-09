@@ -17,6 +17,7 @@
   },
   "overrides": {
     "vite": "8.2.0",
-    "postcss": "8.5.25"
+    "postcss": "8.5.25",
+    "nanoid": "3.3.18"
   }
 }

@@ -40,7 +40,8 @@
   "overrides": {
     "postcss": "8.5.25",
     "yaml": "2.9.0",
-    "esbuild": "0.28.1"
+    "esbuild": "0.28.1",
+    "nanoid": "3.3.18"
   },
   "msw": {
     "workerDirectory": [
