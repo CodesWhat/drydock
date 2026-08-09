@@ -365,8 +365,11 @@ curl http://drydock:3000/api/v1/containers/dependencies
 
 ```json
 {
-  "nodes": [{ "id": "c1", "name": "db", "displayName": "db", "watcher": "local" }],
-  "edges": [{ "from": "web", "to": "db", "action": "update", "source": "label" }],
+  "nodes": [
+    { "id": "c1", "name": "db", "displayName": "db", "watcher": "local" },
+    { "id": "c2", "name": "web", "displayName": "web", "watcher": "local" }
+  ],
+  "edges": [{ "from": "c2", "to": "c1", "action": "update", "source": "label" }],
   "cycles": [],
   "unresolved": [],
   "crossHostIgnored": []
@@ -399,8 +402,13 @@ Returns 200 with the wave preview, or 404 if the container is not found.
 
 Bulk-accepts every container in the dependency chain rooted at `:rootId` (the same set `update-chain-preview` reports on) and dispatches them wave-by-wave via [Bulk update containers](#bulk-update-containers)' underlying admission path. Each accepted entry is annotated with the `wave` index it will actually run in and its `actionKind` (`update` or `restart`, per that container's `dd.depends_on.action`).
 
+This operation is destructive (it can update or restart an arbitrary number of containers in one call) and requires explicit confirmation via `X-DD-Confirm-Action: dependency-group-update`. The optional `expectedContainerIds` body field binds the request to a previously previewed chain (e.g. from `update-chain-preview`) — if the live chain no longer matches that set exactly, the request is rejected with `409` instead of running against containers the caller never saw.
+
 ```bash
-curl -X POST http://drydock:3000/api/v1/dependency-groups/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update
+curl -X POST http://drydock:3000/api/v1/dependency-groups/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update \
+  -H 'X-DD-Confirm-Action: dependency-group-update' \
+  -H 'Content-Type: application/json' \
+  -d '{"expectedContainerIds": ["c1"]}'
 ```
 
 ```json
@@ -419,7 +427,7 @@ curl -X POST http://drydock:3000/api/v1/dependency-groups/31a61a8305ef1fc9a71fa4
 }
 ```
 
-Returns 200 with `accepted` and `rejected` arrays, 403 if container actions are disabled, 404 if the root container is not found, or 500 if the update requests cannot be accepted.
+Returns 200 with `accepted` and `rejected` arrays, 400 if `expectedContainerIds` is present but not an array of strings, 403 if container actions are disabled, 404 if the root container is not found, 409 if `expectedContainerIds` no longer matches the live chain, 428 if confirmation is missing, or 500 if the update requests cannot be accepted.
 
 ## Update container update policy
 
