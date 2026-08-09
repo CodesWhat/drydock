@@ -350,10 +350,13 @@ async function getContainerDependencies(): Promise<DependencyGraph> {
  * use, so this can never drift from what an accepted update actually runs.
  */
 async function previewUpdateChain(containerId: string): Promise<UpdateChainPreview> {
-  const response = await fetch(`/api/v1/containers/${containerId}/update-chain-preview`, {
-    method: 'POST',
-    credentials: 'include',
-  });
+  const response = await fetch(
+    `/api/v1/containers/${encodeURIComponent(containerId)}/update-chain-preview`,
+    {
+      method: 'POST',
+      credentials: 'include',
+    },
+  );
   if (!response.ok) {
     throw new Error(
       `Failed to preview update chain for container ${containerId}: ${response.statusText}`,
@@ -395,7 +398,7 @@ async function updateDependencyGroup(
   rootId: string,
   expectedContainerIds?: string[],
 ): Promise<DependencyGroupUpdateResult> {
-  const response = await fetch(`/api/v1/dependency-groups/${rootId}/update`, {
+  const response = await fetch(`/api/v1/dependency-groups/${encodeURIComponent(rootId)}/update`, {
     method: 'POST',
     credentials: 'include',
     headers: {

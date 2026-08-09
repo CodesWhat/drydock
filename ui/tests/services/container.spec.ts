@@ -1319,6 +1319,20 @@ describe('Container Service', () => {
         'Failed to preview update chain for container c1: Not Found',
       );
     });
+
+    it('URL-encodes the container id path segment (PR #681 review #7)', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ waves: [], warnings: { cycles: [], unresolved: [] } }),
+      } as any);
+
+      await previewUpdateChain('c1/../evil');
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/containers/c1%2F..%2Fevil/update-chain-preview', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    });
   });
 
   describe('updateDependencyGroup', () => {
@@ -1368,6 +1382,20 @@ describe('Container Service', () => {
         expect.objectContaining({
           body: JSON.stringify({ expectedContainerIds: ['c1', 'c2'] }),
         }),
+      );
+    });
+
+    it('URL-encodes the rootId path segment (PR #681 review #7)', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: 'ok', accepted: [], rejected: [] }),
+      } as any);
+
+      await updateDependencyGroup('c1/../evil');
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/dependency-groups/c1%2F..%2Fevil/update',
+        expect.objectContaining({ method: 'POST' }),
       );
     });
 
