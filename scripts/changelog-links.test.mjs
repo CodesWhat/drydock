@@ -131,7 +131,13 @@ test('real changelog exposes nonempty v1.6.0 GA release notes', () => {
   assert.match(entry, /^### Changed$/mu);
   assert.match(entry, /^### Fixed$/mu);
   assert.match(entry, /^### Security$/mu);
+  // Two halves, and the first is nearly free: extractChangelogEntry stops at
+  // the next top-level heading, so on its own it proves almost nothing. The
+  // one that carries weight is the second, because the rc sections are kept
+  // below the GA entry on purpose and a rollup that deleted them would still
+  // satisfy every other assertion here.
   assert.doesNotMatch(entry, /^## \[1\.6\.0-rc\.13\]/mu);
+  assert.match(changelog, /^## \[1\.6\.0-rc\.13\]/mu);
 
   // v1.6.0 rolls up thirteen release candidates by theme rather than
   // concatenating every rc bullet verbatim (unlike the v1.5.2 GA entry
