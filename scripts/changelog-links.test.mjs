@@ -53,10 +53,11 @@ test('every linked changelog heading has exactly one link definition', () => {
   );
 });
 
-test('v1.6 RC and v1.5.2 GA have a complete chronological comparison-link chain', () => {
+test('v1.6.0 GA and v1.5.2 GA have a complete chronological comparison-link chain', () => {
   const definitions = new Map(getLinkDefinitions(changelog).map(({ label, url }) => [label, url]));
   const expected = new Map([
-    ['Unreleased', `${repositoryUrl}/compare/v1.6.0-rc.13...HEAD`],
+    ['Unreleased', `${repositoryUrl}/compare/v1.6.0...HEAD`],
+    ['1.6.0', `${repositoryUrl}/compare/v1.6.0-rc.13...v1.6.0`],
     ['1.6.0-rc.13', `${repositoryUrl}/compare/v1.6.0-rc.12...v1.6.0-rc.13`],
     ['1.6.0-rc.12', `${repositoryUrl}/compare/v1.6.0-rc.11...v1.6.0-rc.12`],
     ['1.6.0-rc.11', `${repositoryUrl}/compare/v1.6.0-rc.10...v1.6.0-rc.11`],
@@ -119,4 +120,31 @@ test('real changelog exposes nonempty v1.5.2 GA release notes', () => {
     prereleaseBullets,
     'GA notes must contain every rc.1–rc.5 bullet exactly once',
   );
+});
+
+test('real changelog exposes nonempty v1.6.0 GA release notes', () => {
+  const entry = extractChangelogEntry(changelog, 'v1.6.0');
+
+  assert.match(entry, /^## \[1\.6\.0\] [–—-] \d{4}-\d{2}-\d{2}$/mu);
+  assert.match(entry, /Consolidates the `1\.6\.0-rc\.1` … `1\.6\.0-rc\.13` prereleases\./u);
+  assert.match(entry, /^### Added$/mu);
+  assert.match(entry, /^### Changed$/mu);
+  assert.match(entry, /^### Fixed$/mu);
+  assert.match(entry, /^### Security$/mu);
+  assert.doesNotMatch(entry, /^## \[1\.6\.0-rc\.13\]/mu);
+
+  // v1.6.0 rolls up thirteen release candidates by theme rather than
+  // concatenating every rc bullet verbatim (unlike the v1.5.2 GA entry
+  // above, which consolidated a five-candidate series bullet-for-bullet).
+  // These markers pin the major themes the GA notes must still cover.
+  for (const marker of [
+    'Portwing edge and agent integration',
+    'maturity stabilization gate',
+    'Per-rule notification templates',
+    'Every major list view is responsive',
+    'Unversioned `/api/*` and `WS /api/log/stream` aliases are gone',
+    'Anonymous access fails closed',
+  ]) {
+    assert.ok(entry.includes(marker), `v1.6.0 GA notes must include: ${marker}`);
+  }
 });
