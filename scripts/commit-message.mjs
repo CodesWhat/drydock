@@ -14,8 +14,11 @@ const COMMIT_TYPES = {
 
 const typeAlternation = Object.keys(COMMIT_TYPES).join('|');
 
+// Exactly one literal space after the colon, and the description must start
+// with a non-space character — otherwise `feat:  Add x` slips a leading space
+// into the description and dodges the lowercase-start check.
 const subjectRegex = new RegExp(
-  `^(?<type>${typeAlternation})(?:\\((?<scope>[a-z0-9][a-z0-9._/-]*)\\))?(?<breaking>!)?:\\s(?<description>.+)$`,
+  `^(?<type>${typeAlternation})(?:\\((?<scope>[a-z0-9][a-z0-9._/-]*)\\))?(?<breaking>!)?: (?<description>\\S.*)$`,
   'u',
 );
 
@@ -47,8 +50,14 @@ export function validateCommitMessage(rawMessage) {
   }
 
   if (!match?.groups) {
+    const strictPrefix = `^(?:${typeAlternation})(?:\\([a-z0-9][a-z0-9._/-]*\\))?!?:`;
     if (!new RegExp(`^(${typeAlternation})(\\(|!|:)`, 'u').test(subject)) {
       errors.push('Missing or unsupported commit type.');
+    } else if (
+      new RegExp(`${strictPrefix}\\s`, 'u').test(subject) &&
+      !new RegExp(`${strictPrefix} \\S`, 'u').test(subject)
+    ) {
+      errors.push('Exactly one space after the colon.');
     }
     errors.push('Subject does not match required format.');
 

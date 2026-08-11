@@ -140,3 +140,21 @@ test('failure formatter lists the allowed type list with no emoji', () => {
   assert.match(formatted, /ci: CI\/CD configuration change/);
   assert.doesNotMatch(formatted, /✨|🐛|📝|🎨|💄|🔄|♻️|⚡|🧪|✅|🔧|🔒|📦|⬆️|🗑️/u);
 });
+
+test('rejects a double space after the colon (leading space would dodge the lowercase check)', () => {
+  const result = validateCommitMessage('feat:  Add endpoint');
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join(' '), /exactly one space after the colon/i);
+});
+
+test('rejects a tab after the colon', () => {
+  const result = validateCommitMessage('feat:\tadd endpoint');
+  assert.equal(result.valid, false);
+  assert.match(result.errors.join(' '), /exactly one space after the colon/i);
+});
+
+test('does not blame spacing when the scope is what is invalid', () => {
+  const result = validateCommitMessage('feat(BadScope): add endpoint');
+  assert.equal(result.valid, false);
+  assert.doesNotMatch(result.errors.join(' '), /exactly one space/i);
+});
