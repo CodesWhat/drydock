@@ -1,28 +1,28 @@
 const COMMIT_TYPES = {
-  feat: { emoji: '✨', aliases: [], purpose: 'new feature' },
-  fix: { emoji: '🐛', aliases: [], purpose: 'bug fix' },
-  docs: { emoji: '📝', aliases: [], purpose: 'documentation change' },
-  style: { emoji: '🎨', aliases: ['💄'], purpose: 'style/cosmetic change' },
-  refactor: { emoji: '🔄', aliases: ['♻️'], purpose: 'refactor without behavior change' },
-  perf: { emoji: '⚡', aliases: [], purpose: 'performance improvement' },
-  test: { emoji: '🧪', aliases: ['✅'], purpose: 'test change' },
-  chore: { emoji: '🔧', aliases: [], purpose: 'tooling/config change' },
-  security: { emoji: '🔒', aliases: [], purpose: 'security fix' },
-  deps: { emoji: '📦', aliases: ['⬆️'], purpose: 'dependency change' },
-  remove: { emoji: '🗑️', aliases: [], purpose: 'code removal' },
-  revert: { emoji: '🗑️', aliases: [], purpose: 'intentional revert' },
+  feat: { purpose: 'new feature' },
+  fix: { purpose: 'bug fix' },
+  docs: { purpose: 'documentation change' },
+  style: { purpose: 'style/cosmetic change' },
+  refactor: { purpose: 'refactor without behavior change' },
+  perf: { purpose: 'performance improvement' },
+  test: { purpose: 'test change' },
+  build: { purpose: 'build system or dependency change' },
+  ci: { purpose: 'CI/CD configuration change' },
+  chore: { purpose: 'tooling/misc change' },
+  revert: { purpose: 'intentional revert' },
 };
 
-function getAcceptedEmojis(type) {
-  const meta = COMMIT_TYPES[type];
-  if (!meta) {
-    return [];
-  }
-  return [meta.emoji, ...meta.aliases];
-}
+const typeAlternation = Object.keys(COMMIT_TYPES).join('|');
 
-const subjectRegex =
-  /^(?<emoji>✨|🐛|📝|🎨|💄|🔄|♻️|⚡|🧪|✅|🔧|🔒|📦|⬆️|🗑️)\s(?<type>feat|fix|docs|style|refactor|perf|test|chore|security|deps|remove|revert)(?:\((?<scope>[a-z0-9][a-z0-9._/-]*)\))?:\s(?<description>.+)$/u;
+const subjectRegex = new RegExp(
+  `^(?<type>${typeAlternation})(?:\\((?<scope>[a-z0-9][a-z0-9._/-]*)\\))?(?<breaking>!)?:\\s(?<description>.+)$`,
+  'u',
+);
+
+// Fixup/squash autosquash commits are meant to be folded away by `git rebase
+// --autosquash` before they ever reach history, so they're exempt from
+// format checks the same way merge/revert commits are.
+const autosquashRegex = /^(fixup|squash)!\s/u;
 
 export function validateCommitMessage(rawMessage) {
   const message = (rawMessage ?? '').trim();
@@ -35,19 +35,19 @@ export function validateCommitMessage(rawMessage) {
   if (subject.startsWith('Revert "')) {
     return { valid: true, errors: [] };
   }
+  if (autosquashRegex.test(subject)) {
+    return { valid: true, errors: [] };
+  }
 
   const errors = [];
   const match = subject.match(subjectRegex);
 
+  if (/^\p{Emoji}/u.test(subject)) {
+    errors.push('No emoji prefix — this repo uses plain Conventional Commits, not gitmoji.');
+  }
+
   if (!match?.groups) {
-    if (!/^\p{Emoji}/u.test(subject)) {
-      errors.push('Missing required emoji (gitmoji) prefix.');
-    }
-    if (
-      !/\s(feat|fix|docs|style|refactor|perf|test|chore|security|deps|remove|revert)(\(|:)/u.test(
-        subject,
-      )
-    ) {
+    if (!new RegExp(`^(${typeAlternation})(\\(|!|:)`, 'u').test(subject)) {
       errors.push('Missing or unsupported commit type.');
     }
     errors.push('Subject does not match required format.');
@@ -55,12 +55,7 @@ export function validateCommitMessage(rawMessage) {
     return { valid: false, errors };
   }
 
-  const { emoji, type, description } = match.groups;
-  const acceptedEmojis = getAcceptedEmojis(type);
-  if (acceptedEmojis.length > 0 && !acceptedEmojis.includes(emoji)) {
-    const expected = acceptedEmojis.map((value) => `"${value} ${type}"`).join(' or ');
-    errors.push(`Invalid emoji/type pair. Expected ${expected} but got "${emoji} ${type}".`);
-  }
+  const { description } = match.groups;
 
   if (/^[A-Z]/u.test(description)) {
     errors.push('Description must be imperative and lowercase at the start.');
@@ -81,14 +76,8 @@ export function formatValidationFailure(rawMessage, errors) {
   const message = (rawMessage ?? '').trim();
   const subject = message.split(/\r?\n/u, 1)[0] ?? '';
 
-  const allowedPairs = Object.entries(COMMIT_TYPES)
-    .map(([type, meta]) => {
-      const alternates =
-        meta.aliases.length > 0
-          ? ` (or ${meta.aliases.map((a) => `${a} ${type}`).join(', ')})`
-          : '';
-      return `  ${meta.emoji} ${type}: ${meta.purpose}${alternates}`;
-    })
+  const allowedTypes = Object.entries(COMMIT_TYPES)
+    .map(([type, meta]) => `  ${type}: ${meta.purpose}`)
     .join('\n');
 
   const formattedErrors = errors.map((error) => `  - ${error}`).join('\n');
@@ -99,22 +88,25 @@ export function formatValidationFailure(rawMessage, errors) {
     `Current subject: ${subject || '<empty>'}`,
     '',
     'Required subject format:',
-    '  <emoji> <type>(<scope>): <description>',
+    '  <type>(<scope>): <description>',
+    '',
+    'Use "!" before the colon for a breaking change, e.g. feat(api)!: drop v1 tokens',
+    '(or add a "BREAKING CHANGE:" footer). No emoji — plain Conventional Commits only.',
     '',
     'Valid examples:',
-    '  ✨ feat(docker): add health check endpoint',
-    '  🐛 fix: resolve socket EACCES (#38)',
-    '  ♻️ refactor(store): simplify collection init',
+    '  feat(docker): add health check endpoint',
+    '  fix: resolve socket EACCES (#38)',
+    '  refactor(store): simplify collection init',
     '',
-    'Allowed emoji/type pairs:',
-    allowedPairs,
+    'Allowed types:',
+    allowedTypes,
     '',
     'Validation errors:',
     formattedErrors,
     '',
     'AI_ACTION_REQUIRED: rewrite the commit subject to match the required format exactly.',
     'Fix command:',
-    '  git commit --amend -m "✨ feat(scope): concise imperative description"',
+    '  git commit --amend -m "feat(scope): concise imperative description"',
     '',
   ].join('\n');
 }
