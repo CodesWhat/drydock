@@ -5,6 +5,24 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.0 Highlights — August 11, 2026
+
+Consolidates the `1.6.0-rc.1` … `1.6.0-rc.13` prereleases into one GA release. The
+biggest themes: Portwing edge/agent transport maturing into a first-class citizen,
+a declarative three-tier update policy with a maturity stabilization gate,
+per-rule notification templates and a new health-status event, every major list
+view going responsive with a consistent table/card toggle, `/api/v1` parity with
+the unversioned `/api/*` alias removed, and fail-closed security hardening
+throughout. See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#160--2026-08-11)
+for the full release notes.
+
+## v1.6.0-rc.13 Highlights — August 8, 2026
+
+- **Digest comparison anchors on repo-matched candidates** — `getOrderedRepoDigests` (`app/watchers/providers/docker/docker-helpers.ts`) filters a container's `RepoDigests` entries to the ones whose repo component matches its own image reference before comparing, instead of trusting an arbitrary `RepoDigests[0]`; a store already poisoned with a stale digest anchor self-heals on the next cycle ([#670](https://github.com/CodesWhat/drydock/pull/670)).
+- **`nanoid` pinned to 3.3.18** across the root, app, apps/demo, apps/web, ui, and e2e workspaces (transitive override of `postcss`/`artillery`) for [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8) (CVE-2026-67213) and, in e2e, [GHSA-28wg-ghj8-5hjv](https://github.com/advisories/GHSA-28wg-ghj8-5hjv) (CVE-2026-67214) ([#673](https://github.com/CodesWhat/drydock/pull/673)).
+- **Star History chart is now self-hosted** — a new same-origin `GET /api/star-history` route on the website replaces the third-party embed that went down in a global outage, edge-cached six hours with stale-while-revalidate and a short-lived fallback SVG on fetch failure ([#672](https://github.com/CodesWhat/drydock/pull/672)).
+- **Base-image CVE sweep** — `node:24-alpine` bumped to Node 24.19.0 (clearing 3 HIGH + 5 MEDIUM CVEs from Node's July 29 2026 security release) and the vendored `aquasec/trivy` build-stage pin bumped from 0.72.0 to 0.73.0 (clearing 4 HIGH / 6 MEDIUM CVEs in its vendored Go dependencies) ([#682](https://github.com/CodesWhat/drydock/pull/682)).
+
 ## v1.6.0-rc.12 Highlights — August 4, 2026
 
 - **Security dependency refresh** — `brace-expansion` advanced to 5.0.9 across the app, UI, and e2e workspaces (CVE-2026-69152), `ip-address` to 10.3.1 in the app runtime (CVE-2026-54272, CVE-2026-69192, CVE-2026-69198), and `fast-uri` to 4.1.2 in app and UI (backslash-authority host confusion, CVE-2026-18446) ([#659](https://github.com/CodesWhat/drydock/pull/659)).
