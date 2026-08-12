@@ -21,6 +21,7 @@
   <br>
   <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
+  <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/test_coverage.svg" alt="Code Coverage"></a>
   <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
   <br>
@@ -370,7 +371,8 @@ Drydock v1.6 no longer loads `WUD_*` environment variables or `wud.*` labels at 
 <details>
 <summary><strong>Version themes & highlights</strong></summary>
 
-High-level themes only — see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
+This direction covers at least the next twelve months, through August 2027.
+High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
@@ -401,6 +403,10 @@ High-level themes only — see [CHANGELOG.md](CHANGELOG.md) for per-release deta
 | Deprecations | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
 | Roadmap | See [Roadmap](#roadmap) section above |
 | Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Code of Conduct | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
+| Governance | [`GOVERNANCE.md`](GOVERNANCE.md) |
+| Security Assurance | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md) |
+| Security Policy | [`SECURITY.md`](SECURITY.md) |
 | Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
 | Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
 
