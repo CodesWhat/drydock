@@ -88,25 +88,29 @@ async function fetchStarredTimestamps(): Promise<string[] | undefined> {
     const body = payload as { data?: { repository?: { stargazers?: StargazerPage } } };
     const stargazers = body?.data?.repository?.stargazers;
     const edges = stargazers?.edges;
-    if (!Array.isArray(edges)) {
-      // Missing data means an error payload or a shape change; either way the
-      // series would be incomplete.
+    const pageInfo = stargazers?.pageInfo;
+    // An error payload or a shape change would otherwise read as "no more
+    // pages" and cache a truncated chart as the repo total for six hours.
+    if (!Array.isArray(edges) || typeof pageInfo?.hasNextPage !== "boolean") {
       return undefined;
     }
 
     for (const edge of edges) {
       const value = (edge as { starredAt?: unknown })?.starredAt;
-      if (typeof value === "string") {
-        starredAt.push(value);
+      if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) {
+        // Dropping an unparseable timestamp would undercount the series, so
+        // the whole run is incomplete.
+        return undefined;
       }
+      starredAt.push(value);
     }
 
-    if (stargazers?.pageInfo?.hasNextPage !== true) {
+    if (pageInfo.hasNextPage === false) {
       // The last page is the only complete outcome.
       return starredAt;
     }
 
-    const cursor = stargazers.pageInfo.endCursor;
+    const cursor = pageInfo.endCursor;
     if (typeof cursor !== "string") {
       return undefined;
     }

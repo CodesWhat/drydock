@@ -61,8 +61,12 @@ test("star history route never renders partial stargazer data and bounds its fet
   assert.equal((starHistoryRouteSource.match(/return starredAt;/gu) ?? []).length, 1);
   assert.match(
     starHistoryRouteSource,
-    /pageInfo\?\.hasNextPage !== true\) \{\n[^}]*return starredAt;/u,
+    /pageInfo\.hasNextPage === false\) \{\n[^}]*return starredAt;/u,
   );
+  // Malformed pagination metadata must not read as "no more pages".
+  assert.match(starHistoryRouteSource, /typeof pageInfo\?\.hasNextPage !== "boolean"/u);
+  // An unparseable timestamp would undercount the series, so it fails the run.
+  assert.match(starHistoryRouteSource, /!Number\.isFinite\(Date\.parse\(value\)\)/u);
   // One shared deadline across the whole pagination run.
   assert.match(starHistoryRouteSource, /AbortSignal\.timeout\(FETCH_DEADLINE_MS\)/u);
   assert.match(starHistoryRouteSource, /\n\s+signal,\n\s+next: \{ revalidate:/u);
