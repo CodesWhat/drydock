@@ -51,15 +51,36 @@ test("star history chart is self-hosted, with no third-party chart service left"
 });
 
 test("star history route never renders partial stargazer data and bounds its fetches", () => {
-  // Every incomplete outcome (failed page, non-array body, MAX_PAGES exhausted)
-  // must fall back, not render a truncated series as the repo total.
+  // Every incomplete outcome (missing token, failed page, non-array edges,
+  // MAX_PAGES exhausted) must fall back, not render a truncated series as the
+  // repo total.
   assert.doesNotMatch(starHistoryRouteSource, /page === 1 \? undefined : starredAt/u);
   const undefinedReturns = starHistoryRouteSource.match(/return undefined;/gu) ?? [];
   assert.ok(undefinedReturns.length >= 4, "expected each incomplete outcome to return undefined");
-  // The series is only returned from the short-page branch — the one complete outcome.
+  // The series is only returned from the last-page branch — the one complete outcome.
   assert.equal((starHistoryRouteSource.match(/return starredAt;/gu) ?? []).length, 1);
-  assert.match(starHistoryRouteSource, /batch\.length < PER_PAGE\) \{\n[^}]*return starredAt;/u);
+  assert.match(
+    starHistoryRouteSource,
+    /pageInfo\.hasNextPage === false\) \{\n[^}]*return starredAt;/u,
+  );
+  // Malformed pagination metadata must not read as "no more pages".
+  assert.match(starHistoryRouteSource, /typeof pageInfo\?\.hasNextPage !== "boolean"/u);
+  // An unparseable timestamp would undercount the series, so it fails the run.
+  assert.match(starHistoryRouteSource, /!Number\.isFinite\(Date\.parse\(value\)\)/u);
   // One shared deadline across the whole pagination run.
   assert.match(starHistoryRouteSource, /AbortSignal\.timeout\(FETCH_DEADLINE_MS\)/u);
-  assert.match(starHistoryRouteSource, /\{ headers, signal, next:/u);
+  assert.match(starHistoryRouteSource, /\n\s+signal,\n\s+next: \{ revalidate:/u);
+});
+
+test("star history route reads stars through GraphQL, not the REST stargazers endpoint", () => {
+  // REST /stargazers now 401s anonymously and demands contents=write from a
+  // fine-grained token; the GraphQL connection needs only metadata=read.
+  // A substring check, not a regex: an unanchored URL pattern reads as host
+  // matching to CodeQL, and this only asserts the endpoint appears in source.
+  assert.ok(starHistoryRouteSource.includes('"https://api.github.com/graphql"'));
+  assert.equal(starHistoryRouteSource.indexOf("/stargazers?per_page="), -1);
+  assert.match(starHistoryRouteSource, /orderBy:\{field:STARRED_AT,direction:ASC\}/u);
+  // No token means no data at all, so the route must fall back rather than
+  // render an empty chart.
+  assert.match(starHistoryRouteSource, /if \(!token\) \{\n[^}]*return undefined;/u);
 });

@@ -22,48 +22,102 @@ const FETCH_DEADLINE_MS = 10_000;
 const SUCCESS_CACHE = "public, s-maxage=21600, stale-while-revalidate=604800";
 const FAILURE_CACHE = "public, s-maxage=300";
 
-async function fetchStarredTimestamps(): Promise<string[] | undefined> {
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github.star+json",
-    "User-Agent": "drydock-website-star-history",
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
-  const token = process.env.GITHUB_TOKEN;
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+// GraphQL rather than REST /stargazers: that endpoint now 401s without a token
+// and, for a fine-grained token, demands `contents=write` — far more than a
+// public star chart should hold. The GraphQL connection needs only
+// `metadata=read`, and returns starredAt directly.
+const STARGAZERS_QUERY = `query($owner:String!,$name:String!,$first:Int!,$after:String){
+  repository(owner:$owner,name:$name){
+    stargazers(first:$first,after:$after,orderBy:{field:STARRED_AT,direction:ASC}){
+      pageInfo{hasNextPage endCursor}
+      edges{starredAt}
+    }
   }
+}`;
+
+type StargazerPage = {
+  pageInfo?: { hasNextPage?: unknown; endCursor?: unknown };
+  edges?: unknown;
+};
+
+async function fetchStarredTimestamps(): Promise<string[] | undefined> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    // The GraphQL API has no anonymous mode, so an unconfigured deployment
+    // falls back rather than silently rendering an empty chart.
+    return undefined;
+  }
+
+  const [owner, name] = REPO_SLUG.split("/");
+  if (!owner || !name) {
+    return undefined;
+  }
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    "User-Agent": "drydock-website-star-history",
+  };
 
   const signal = AbortSignal.timeout(FETCH_DEADLINE_MS);
   const starredAt: string[] = [];
+  let after: string | null = null;
+
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    let batch: unknown;
+    let payload: unknown;
     try {
-      const response = await fetch(
-        `https://api.github.com/repos/${REPO_SLUG}/stargazers?per_page=${PER_PAGE}&page=${page}`,
-        { headers, signal, next: { revalidate: 21600 } },
-      );
+      const response = await fetch("https://api.github.com/graphql", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          query: STARGAZERS_QUERY,
+          variables: { owner, name, first: PER_PAGE, after },
+        }),
+        signal,
+        next: { revalidate: 21600 },
+      });
       if (!response.ok) {
         return undefined;
       }
-      batch = await response.json();
+      payload = await response.json();
     } catch {
       return undefined;
     }
-    if (!Array.isArray(batch)) {
+
+    const body = payload as { data?: { repository?: { stargazers?: StargazerPage } } };
+    const stargazers = body?.data?.repository?.stargazers;
+    const edges = stargazers?.edges;
+    const pageInfo = stargazers?.pageInfo;
+    // An error payload or a shape change would otherwise read as "no more
+    // pages" and cache a truncated chart as the repo total for six hours.
+    if (!Array.isArray(edges) || typeof pageInfo?.hasNextPage !== "boolean") {
       return undefined;
     }
-    for (const entry of batch) {
-      const value = (entry as { starred_at?: unknown })?.starred_at;
-      if (typeof value === "string") {
-        starredAt.push(value);
+
+    for (const edge of edges) {
+      const value = (edge as { starredAt?: unknown })?.starredAt;
+      if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) {
+        // Dropping an unparseable timestamp would undercount the series, so
+        // the whole run is incomplete.
+        return undefined;
       }
+      starredAt.push(value);
     }
-    if (batch.length < PER_PAGE) {
-      // A short page is the end of the history — the only complete outcome.
+
+    if (pageInfo.hasNextPage === false) {
+      // The last page is the only complete outcome.
       return starredAt;
     }
+
+    const cursor = pageInfo.endCursor;
+    if (typeof cursor !== "string") {
+      return undefined;
+    }
+    after = cursor;
   }
-  // MAX_PAGES exhausted with a full final page: history may continue, so the
+
+  // MAX_PAGES exhausted with hasNextPage still true: history continues, so the
   // series is incomplete. Fall back instead of caching a truncated total.
   return undefined;
 }
