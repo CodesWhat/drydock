@@ -246,7 +246,9 @@ test('a real soak_override_reason bypasses the age gate with an auditable warnin
   expect(result.stdout).toContain('::warning::');
   expect(result.stdout).toContain(CANDIDATE_TAG);
   expect(result.stdout).toContain(`${ageSeconds}s`);
-  expect(result.stdout).toContain(reason);
+  // The reason stays out of the workflow command; the summary and the release
+  // notes are where it is recorded.
+  expect(result.stdout).not.toContain(reason);
 
   expect(result.output.soak_override_used).toBe('true');
   expect(result.output.soak_override_age_seconds).toBe(String(ageSeconds));
@@ -256,6 +258,30 @@ test('a real soak_override_reason bypasses the age gate with an auditable warnin
   expect(result.summary).toContain('Seven-day soak overridden');
   expect(result.summary).toContain(CANDIDATE_TAG);
   expect(result.summary).toContain(reason);
+});
+
+test('a multiline soak_override_reason cannot smuggle a second workflow command', () => {
+  // The runner treats any stdout line starting with :: as a workflow command,
+  // so a reason echoed into ::warning:: would let the caller run one of their
+  // own. The reason must never reach stdout.
+  const reason = [
+    'rc.13 fleet soak passed; owner approved early GA ship.',
+    '::add-mask::v1.6.0',
+    '::error::injected failure',
+  ].join('\n');
+  const result = runSourceStep({
+    isPrerelease: false,
+    ageSeconds: THREE_DAYS + 3600,
+    soakOverrideReason: reason,
+  });
+
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('::warning::');
+  expect(result.stdout).not.toContain('::add-mask::');
+  expect(result.stdout).not.toContain('::error::');
+  // Still recorded in full where it is inert.
+  expect(result.reasonFileContent).toBe(reason);
+  expect(result.summary).toContain('::add-mask::v1.6.0');
 });
 
 test('a candidate that already cleared seven days needs no reason at all', () => {

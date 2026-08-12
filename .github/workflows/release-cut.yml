@@ -305,7 +305,10 @@ jobs:
               fi
 
               age_days="$(awk -v s="${age_seconds}" 'BEGIN { printf "%.1f", s / 86400 }')"
-              echo "::warning::Candidate ${CANDIDATE_TAG} is only ${age_seconds}s (${age_days} days) old, short of the seven-day (604800s) soak requirement. Soak overridden: ${trimmed_reason}"
+              # The reason is free text and may be multiline, so it never goes
+              # into a workflow command: a line starting with :: would be parsed
+              # as a second command. The job summary and release notes carry it.
+              echo "::warning::Candidate ${CANDIDATE_TAG} is only ${age_seconds}s (${age_days} days) old, short of the seven-day (604800s) soak requirement. Soak overridden; the justification is in the job summary and release notes."
 
               {
                 echo "### :warning: Seven-day soak overridden for GA promotion"
