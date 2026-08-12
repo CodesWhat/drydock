@@ -71,7 +71,9 @@ test("star history route never renders partial stargazer data and bounds its fet
 test("star history route reads stars through GraphQL, not the REST stargazers endpoint", () => {
   // REST /stargazers now 401s anonymously and demands contents=write from a
   // fine-grained token; the GraphQL connection needs only metadata=read.
-  assert.match(starHistoryRouteSource, /https:\/\/api\.github\.com\/graphql/u);
+  // A substring check, not a regex: an unanchored URL pattern reads as host
+  // matching to CodeQL, and this only asserts the endpoint appears in source.
+  assert.ok(starHistoryRouteSource.includes('"https://api.github.com/graphql"'));
   assert.equal(starHistoryRouteSource.indexOf("/stargazers?per_page="), -1);
   assert.match(starHistoryRouteSource, /orderBy:\{field:STARRED_AT,direction:ASC\}/u);
   // No token means no data at all, so the route must fall back rather than
