@@ -207,6 +207,11 @@ test('release-cut requires an exact, seven-day-old RC candidate for GA promotion
       required: false,
       type: 'string',
     },
+    soak_override_reason: {
+      required: false,
+      type: 'string',
+      default: '',
+    },
   });
   expect(sourceStep?.id).toBe('source');
   expect(sourceStep?.run).toContain('publishedAt');
@@ -216,6 +221,23 @@ test('release-cut requires an exact, seven-day-old RC candidate for GA promotion
   expect(sourceStep?.run).toContain('^sha256:[0-9a-f]{64}$');
   expect(sourceStep?.run).toContain('source_sha=');
   expect(sourceStep?.run).toContain('image_digest=');
+  expect(sourceStep?.run).toContain('soak_override_used=');
+});
+
+test('release-cut never interpolates soak_override_reason directly into a run: script body', () => {
+  const releaseSteps = loadReleaseSteps();
+  const stepsReferencingReason = releaseSteps.filter((step) =>
+    JSON.stringify(step).includes('soak_override_reason'),
+  );
+
+  expect(stepsReferencingReason.length).toBeGreaterThan(0);
+  for (const step of stepsReferencingReason) {
+    // The raw input must only ever appear on the right-hand side of an `env:`
+    // mapping (e.g. `SOAK_OVERRIDE_REASON: ${{ inputs.soak_override_reason }}`),
+    // never templated straight into `run:`, which is how a candidate_tag-style
+    // template-injection finding would happen.
+    expect(step.run ?? '').not.toContain('inputs.soak_override_reason');
+  }
 });
 
 test('release-cut validates the promoted digest in every registry', () => {
