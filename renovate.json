@@ -8,7 +8,7 @@
     "Rotate this at each branch cut. It cannot go stale unnoticed — release-cut.yml checks it against the dev branch derived from the release tag and fails the cut if they disagree.",
     "skipInstalls is off because the default fast path silently produced package.json bumps with an untouched lockfile. In July 2026 it left ui/ and apps/web/ that way while app/, e2e/ and apps/demo/ came out fine, and npm ci then rejected those branches with EUSAGE before a single test ran — one broken lockfile surfacing as four unrelated CI failures. A full install is slower per run and correct every run. scripts/lockfile-sync.test.mjs is the backstop that does not depend on this being right."
   ],
-  "baseBranchPatterns": ["dev/v1.6"],
+  "baseBranchPatterns": ["dev/v1.7"],
   "skipInstalls": false,
   "packageRules": [
     {
