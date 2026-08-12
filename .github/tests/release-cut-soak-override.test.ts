@@ -45,6 +45,31 @@ echo "stub date: unsupported invocation: $*" >&2
 exit 127
 `;
 
+// Git hooks (this repo's own pre-commit/pre-push included) invoke their
+// commands with GIT_DIR/GIT_WORK_TREE/etc. set so the hook script's git
+// commands land on the real repo regardless of its own cwd tricks. Those
+// vars are inherited by any child process that doesn't override them — so
+// when this test's setup runs *under* a git hook (e.g. this very test suite
+// running inside the pre-push gate), an unguarded `git init` in a temp
+// directory would silently operate on the real repository instead. Strip
+// them so every git command below is genuinely confined to `workdir`.
+function isolatedGitEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of [
+    'GIT_DIR',
+    'GIT_WORK_TREE',
+    'GIT_INDEX_FILE',
+    'GIT_COMMON_DIR',
+    'GIT_OBJECT_DIRECTORY',
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+    'GIT_CEILING_DIRECTORIES',
+    'GIT_PREFIX',
+  ]) {
+    delete env[key];
+  }
+  return env;
+}
+
 function loadSourceStepRunBlock(): string {
   const workflow = loadWorkflow(workflowPath);
   const step = workflow.jobs?.release?.steps?.find((candidate) => candidate.id === 'source');
@@ -78,9 +103,11 @@ function runSourceStep(options: {
   const workdir = mkdtempSync(join(tmpdir(), 'release-cut-soak-override-'));
   try {
     // A real git repo so `git rev-parse --verify refs/tags/...^{commit}`
-    // behaves exactly as it does against the real checkout.
+    // behaves exactly as it does against the real checkout. `env` is
+    // explicit and GIT_DIR-stripped (see isolatedGitEnv) so this can never
+    // touch the actual repository this test itself lives in.
     const run = (cmd: string, args: string[]) =>
-      execFileSync(cmd, args, { cwd: workdir, encoding: 'utf8' });
+      execFileSync(cmd, args, { cwd: workdir, encoding: 'utf8', env: isolatedGitEnv() });
     run('git', ['init', '--quiet']);
     run('git', ['config', 'user.email', 'test@example.com']);
     run('git', ['config', 'user.name', 'Test']);
@@ -113,6 +140,12 @@ function runSourceStep(options: {
     const nowEpoch = 2_000_000_000;
     const publishedEpoch = nowEpoch - options.ageSeconds;
 
+    // Deliberately NOT `...process.env`: the source-step script under test
+    // also runs `git` (rev-parse, etc.), and this object is passed as-is to
+    // execFileSync below, which replaces rather than merges the child's
+    // environment when `env` is set explicitly. Keep it that way — spreading
+    // process.env here would reintroduce the same GIT_DIR leak isolatedGitEnv
+    // exists to prevent.
     const env: NodeJS.ProcessEnv = {
       PATH: `${stubDir}:${process.env.PATH ?? ''}`,
       CANDIDATE_DIGEST: options.candidateDigest ?? CANDIDATE_DIGEST,
