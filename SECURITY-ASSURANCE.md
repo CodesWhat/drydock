@@ -57,11 +57,16 @@ The principal trust boundaries are:
 
 ### Fail-safe defaults and complete mediation
 
-Authentication configuration fails closed. Anonymous mode must be explicitly
-confirmed, and protected routes share the authentication middleware rather than
-opting in route by route. Docker updates flow through the same policy and
-operation tracking used by the API and UI. Regression tests cover authentication
-failure, authorization, rate limiting, update admission, and agent boundaries.
+Authentication configuration fails closed at the request boundary rather than by
+terminating the process. With no authentication configured and anonymous access
+not confirmed, no Passport strategy is registered: protected requests are
+rejected and `/health` reports `503 auth strategies not yet registered` instead
+of serving traffic unauthenticated. Anonymous mode must be explicitly confirmed
+via `DD_ANONYMOUS_AUTH_CONFIRM`, and protected routes share the authentication
+middleware rather than opting in route by route. Docker updates flow through the
+same policy and operation tracking used by the API and UI. Regression tests cover
+authentication failure, authorization, rate limiting, update admission, and agent
+boundaries.
 
 Evidence: [`app/authentications/`](app/authentications),
 [`app/api/`](app/api), [`app/updates/`](app/updates), and the tests adjacent to
@@ -80,12 +85,26 @@ Evidence: [`Dockerfile`](Dockerfile), [`app/debug/`](app/debug),
 
 ### Untrusted input, injection, and outbound-request controls
 
-Inputs are parsed into typed configuration and request models. Registry auth,
-release-note, icon, webhook, and notification HTTP paths constrain protocols,
-redirects, DNS targets, and response sizes where credentials or server-side
-network access are involved. Shell-like update and hook surfaces use explicit
-argument handling and validation. Tests include malformed input, redirect,
-metadata-address, traversal, injection, and resource-limit cases.
+Inputs are parsed into typed configuration and request models. Outbound HTTP
+controls are applied per path rather than uniformly, so this section states them
+individually rather than claiming a blanket policy:
+
+| Path | Timeout | Redirects refused | Response size capped | Metadata/link-local address refused |
+| --- | --- | --- | --- | --- |
+| Registry auth and manifests (`app/registries/`) | yes | yes | no | no |
+| HTTP trigger (`app/triggers/providers/http/`) | yes | yes | no | yes |
+| Agent Docker proxy (`app/agent/`) | yes | yes | yes | no |
+| Icon fetch (`app/api/icons/`) | yes | no | yes | no |
+| Release notes (`app/release-notes/`) | yes | no | no | no |
+
+Shell-like update and hook surfaces use explicit argument handling and
+validation. Tests include malformed input, redirect, metadata-address,
+traversal, injection, and resource-limit cases.
+
+The gaps in that table are real and deliberate to state: only the HTTP trigger,
+which takes an operator-supplied URL, resolves and refuses cloud metadata and
+link-local addresses. Release notes and icons follow redirects, and release notes
+applies no response-size cap.
 
 Evidence: [`app/configuration/`](app/configuration),
 [`app/registries/`](app/registries), [`app/release-notes/`](app/release-notes),
