@@ -97,7 +97,7 @@ individually rather than claiming a blanket policy:
 | Icon fetch (`app/api/icons/`) | yes | no | yes | no |
 | Release notes (`app/release-notes/`) | yes | no | no | no |
 | Notification providers calling axios directly (Apprise, Discord, Google Chat, Matrix, Mattermost, ntfy, Rocket.Chat, Teams, Telegram) | yes | no | no | no |
-| IFTTT notification provider (`app/triggers/providers/ifttt/`) | no | no | no | no |
+| IFTTT notification provider (`app/triggers/providers/ifttt/`) | yes | no | no | no |
 | Notification providers wrapping a vendor SDK (Gotify, Kafka, Pushover, Slack, SMTP) | vendor default | vendor default | vendor default | vendor default |
 
 Shell-like update and hook surfaces use explicit argument handling and
@@ -108,12 +108,9 @@ The gaps in that table are real and deliberate to state. Only the HTTP trigger,
 which takes an operator-supplied URL, resolves and refuses cloud metadata and
 link-local addresses; several notification providers are self-hostable and so
 also take an operator-supplied host, without that check. Release notes and icons
-follow redirects, and release notes applies no response-size cap. IFTTT is the
-one path with no timeout at all: it calls axios without the shared
-`getOutboundHttpTimeoutMs()` value its nine sibling providers pass, tracked as
-[#704](https://github.com/CodesWhat/drydock/issues/704). Providers built on a
-vendor SDK inherit whatever controls that dependency applies; Drydock does not
-establish them and does not claim them here.
+follow redirects, and release notes applies no response-size cap. Providers
+built on a vendor SDK inherit whatever controls that dependency applies;
+Drydock does not establish them and does not claim them here.
 
 Evidence: [`app/configuration/`](app/configuration),
 [`app/registries/`](app/registries), [`app/release-notes/`](app/release-notes),

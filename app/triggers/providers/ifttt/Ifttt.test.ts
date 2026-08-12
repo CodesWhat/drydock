@@ -86,6 +86,7 @@ test('trigger should send http request to IFTTT', async () => {
     },
     method: 'POST',
 
+    timeout: 30000,
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
 });
@@ -112,6 +113,7 @@ test('trigger should not throw when container result is missing', async () => {
       'Content-Type': 'application/json',
     },
     method: 'POST',
+    timeout: 30000,
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
 });
@@ -132,6 +134,7 @@ test('triggerBatch should send http request with containers json', async () => {
       'Content-Type': 'application/json',
     },
     method: 'POST',
+    timeout: 30000,
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
 });
@@ -157,6 +160,7 @@ test('triggerBatch should use runtimeContext.title as value1 and empty value2 wh
       'Content-Type': 'application/json',
     },
     method: 'POST',
+    timeout: 30000,
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
 });
@@ -179,6 +183,7 @@ test('triggerBatch should use runtimeContext.body as value2 and empty value1 whe
       'Content-Type': 'application/json',
     },
     method: 'POST',
+    timeout: 30000,
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
 });
@@ -205,6 +210,7 @@ test('triggerBatch should use both runtimeContext title and body when both are s
       'Content-Type': 'application/json',
     },
     method: 'POST',
+    timeout: 30000,
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
 });
