@@ -1,6 +1,6 @@
 # Drydock Security Assurance Case
 
-Last reviewed: 2026-08-11
+Last reviewed: 2026-08-12
 
 This document states Drydock's security requirements, threat boundaries, and
 the public evidence supporting its security claims. It is a living assurance
@@ -132,6 +132,13 @@ the selected revision, creates an SBOM, signs images and archives with Sigstore,
 attests provenance through GitHub, verifies those records, and only then
 publishes tags and release assets. General-availability releases promote the
 previously tested release-candidate digest instead of rebuilding it.
+
+A GA promotion normally requires the candidate to have soaked for seven days,
+measured from its release publication time. That floor can be overridden by
+dispatch, and the override is deliberately noisy rather than silent: it requires
+a justification of at least 20 characters, emits a workflow warning naming the
+actual candidate age, and records the justification in both the run summary and
+the published release notes. v1.6.0 was promoted this way, at three days.
 
 Evidence: [`.github/workflows/release-cut.yml`](.github/workflows/release-cut.yml)
 and the public [release history](https://github.com/CodesWhat/drydock/releases).
