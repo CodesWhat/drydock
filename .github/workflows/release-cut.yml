@@ -31,6 +31,11 @@ on:
         description: "GA only: exact sha256 digest published by candidate_tag in GHCR, Docker Hub, and Quay."
         required: false
         type: string
+      soak_override_reason:
+        description: "GA only: reason for shortening the seven-day soak on candidate_tag. Leave blank to enforce the full seven-day soak — this is the default and expected path. A non-empty value is permanently recorded in the run summary and in the published release notes."
+        required: false
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -239,16 +244,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          SOAK_OVERRIDE_REASON: ${{ inputs.soak_override_reason }}
           TARGET_SHA: ${{ steps.target.outputs.sha }}
         run: |
           set -euo pipefail
 
           source_sha="${TARGET_SHA}"
           image_digest=""
+          soak_override_used="false"
+          soak_override_age_seconds=""
+          soak_override_age_days=""
+          soak_override_reason_path=""
 
           if [ "${IS_PRERELEASE}" = "true" ]; then
             if [ -n "${CANDIDATE_TAG}" ] || [ -n "${CANDIDATE_DIGEST}" ]; then
               echo "::error::candidate_tag and candidate_digest are GA-only inputs. Leave both empty for ${RELEASE_TAG}."
+              exit 1
+            fi
+            if [ -n "${SOAK_OVERRIDE_REASON}" ]; then
+              echo "::error::soak_override_reason is a GA-only input. Leave it empty for ${RELEASE_TAG}."
               exit 1
             fi
           else
@@ -278,8 +292,39 @@ jobs:
             published_epoch="$(date -u -d "${published_at}" +%s)"
             age_seconds="$(( $(date -u +%s) - published_epoch ))"
             if [ "${age_seconds}" -lt 604800 ]; then
-              echo "::error::Candidate ${CANDIDATE_TAG} is only ${age_seconds}s old; GA promotion requires seven full days (604800s)."
-              exit 1
+              # Trim leading/trailing whitespace so a lone space (or a string
+              # that is only whitespace) cannot pass as a reason.
+              trimmed_reason="$(printf '%s' "${SOAK_OVERRIDE_REASON}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+              if [ -z "${trimmed_reason}" ]; then
+                echo "::error::Candidate ${CANDIDATE_TAG} is only ${age_seconds}s old; GA promotion requires seven full days (604800s)."
+                exit 1
+              fi
+              if [ "${#trimmed_reason}" -lt 20 ]; then
+                echo "::error::soak_override_reason must be at least 20 characters of real justification to bypass the seven-day soak; got ${#trimmed_reason} after trimming whitespace."
+                exit 1
+              fi
+
+              age_days="$(awk -v s="${age_seconds}" 'BEGIN { printf "%.1f", s / 86400 }')"
+              echo "::warning::Candidate ${CANDIDATE_TAG} is only ${age_seconds}s (${age_days} days) old, short of the seven-day (604800s) soak requirement. Soak overridden: ${trimmed_reason}"
+
+              {
+                echo "### :warning: Seven-day soak overridden for GA promotion"
+                echo "- Candidate: \`${CANDIDATE_TAG}\`"
+                echo "- Age at promotion: ${age_seconds}s (~${age_days} days) — short of the 604800s (7-day) requirement"
+                echo "- Reason: ${trimmed_reason}"
+              } >> "${GITHUB_STEP_SUMMARY}"
+
+              # The reason is free text from a workflow_dispatch input (any repo
+              # collaborator can supply it), so it is carried to later steps as
+              # a file path rather than inlined into GITHUB_OUTPUT: appending
+              # arbitrary multi-line content directly as `key=value` risks
+              # output injection if it ever contains its own newlines or an
+              # `EOF`-style delimiter.
+              soak_override_used="true"
+              soak_override_age_seconds="${age_seconds}"
+              soak_override_age_days="${age_days}"
+              soak_override_reason_path="${RUNNER_TEMP}/soak-override-reason.txt"
+              printf '%s' "${trimmed_reason}" > "${soak_override_reason_path}"
             fi
 
             source_sha="$(git rev-parse "${CANDIDATE_TAG}^{commit}")"
@@ -297,6 +342,10 @@ jobs:
           {
             echo "source_sha=${source_sha}"
             echo "image_digest=${image_digest}"
+            echo "soak_override_used=${soak_override_used}"
+            echo "soak_override_age_seconds=${soak_override_age_seconds}"
+            echo "soak_override_age_days=${soak_override_age_days}"
+            echo "soak_override_reason_path=${soak_override_reason_path}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout exact release source
@@ -1027,6 +1076,10 @@ jobs:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
+          SOAK_OVERRIDE_USED: ${{ steps.source.outputs.soak_override_used }}
+          SOAK_OVERRIDE_AGE_SECONDS: ${{ steps.source.outputs.soak_override_age_seconds }}
+          SOAK_OVERRIDE_AGE_DAYS: ${{ steps.source.outputs.soak_override_age_days }}
+          SOAK_OVERRIDE_REASON_PATH: ${{ steps.source.outputs.soak_override_reason_path }}
         run: |
           set -euo pipefail
           notes_path="dist/release-notes-${RELEASE_TAG}.md"
@@ -1076,6 +1129,22 @@ jobs:
             --notes "${notes_path}" \
             --version "${RELEASE_TAG}" \
             --file UPGRADE-NOTES.md
+
+          # GA-only: the seven-day soak was shortened via soak_override_reason
+          # on the "Resolve release source" step. Record it in the published
+          # release body too, not just the run summary, so anyone reading the
+          # release later can see the soak was cut short and why.
+          if [ "${SOAK_OVERRIDE_USED:-false}" = "true" ]; then
+            override_reason="$(cat "${SOAK_OVERRIDE_REASON_PATH}")"
+            {
+              echo ""
+              echo "---"
+              echo ""
+              echo "**Note:** the standard seven-day release-candidate soak was shortened for this release."
+              echo "- Candidate age at promotion: ${SOAK_OVERRIDE_AGE_SECONDS}s (~${SOAK_OVERRIDE_AGE_DAYS} days), short of the usual 7 days (604800s)."
+              echo "- Reason: ${override_reason}"
+            } >> "${notes_path}"
+          fi
 
           echo "path=${notes_path}" >> "$GITHUB_OUTPUT"
 
