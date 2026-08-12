@@ -1,5 +1,6 @@
 import axios from 'axios';
 
+import { getOutboundHttpTimeoutMs } from '../../../configuration/runtime-defaults.js';
 import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '../Trigger.js';
 
 interface IftttConfiguration extends TriggerConfiguration {
@@ -80,6 +81,7 @@ class Ifttt extends Trigger<IftttConfiguration> {
         'Content-Type': 'application/json',
       },
       data: body,
+      timeout: getOutboundHttpTimeoutMs(),
     };
     const response = await axios(options);
     return response.data;
