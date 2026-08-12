@@ -5,6 +5,17 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.0 Highlights — August 11, 2026
+
+Consolidates the `1.6.0-rc.1` … `1.6.0-rc.13` prereleases into one GA release. The
+biggest themes: Portwing edge/agent transport maturing into a first-class citizen,
+a declarative three-tier update policy with a maturity stabilization gate,
+per-rule notification templates and a new health-status event, every major list
+view going responsive with a consistent table/card toggle, `/api/v1` parity with
+the unversioned `/api/*` alias removed, and fail-closed security hardening
+throughout. See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#160--2026-08-11)
+for the full release notes.
+
 ## v1.6.0-rc.13 Highlights — August 8, 2026
 
 - **Digest comparison anchors on repo-matched candidates** — `getOrderedRepoDigests` (`app/watchers/providers/docker/docker-helpers.ts`) filters a container's `RepoDigests` entries to the ones whose repo component matches its own image reference before comparing, instead of trusting an arbitrary `RepoDigests[0]`; a store already poisoned with a stale digest anchor self-heals on the next cycle ([#670](https://github.com/CodesWhat/drydock/pull/670)).
