@@ -51,6 +51,9 @@ interface LogHandlerDependencies {
 
 const log = logger.child({ component: 'api-container-logs' });
 const CONTAINER_LOG_ERROR_MESSAGE = 'Unable to fetch container logs';
+const MAX_CONTAINER_LOG_DOWNLOAD_LINES = 10_000;
+const MAX_CONTAINER_LOG_DOWNLOAD_BYTES = 16 * 1024 * 1024;
+const CONTAINER_LOG_TOO_LARGE_MESSAGE = 'Container log download exceeds 16 MiB';
 
 export function isLocalDockerWatcherApi(value: unknown): value is LocalDockerWatcherApi {
   if (!value || typeof value !== 'object') {
@@ -104,13 +107,18 @@ function parseSinceQueryParam(rawValue: unknown, fallback: number): number {
 }
 
 export function parseContainerLogDownloadQuery(query: Request['query']): ParsedContainerLogQuery {
+  const requestedTail = parseIntegerQueryParam(query.tail, 1000);
   return {
     stdout: parseBooleanQueryParam(query.stdout, true),
     stderr: parseBooleanQueryParam(query.stderr, true),
-    tail: parseIntegerQueryParam(query.tail, 1000),
+    tail: Math.min(MAX_CONTAINER_LOG_DOWNLOAD_LINES, Math.max(0, requestedTail)),
     since: parseSinceQueryParam(query.since, 0),
     timestamps: parseBooleanQueryParam(query.timestamps, true),
   };
+}
+
+function isLogPayloadTooLarge(payload: Buffer | string | Uint8Array): boolean {
+  return Buffer.byteLength(payload) > MAX_CONTAINER_LOG_DOWNLOAD_BYTES;
 }
 
 function buildLocalDockerLogsOptions(query: ParsedContainerLogQuery): LocalDockerLogsOptions {
@@ -220,11 +228,16 @@ async function handleAgentContainerLogs({
       since: query.since,
       timestamps: query.timestamps,
     });
+    const logs = getAgentLogPayload(result);
+    if (isLogPayloadTooLarge(logs)) {
+      sendErrorResponse(res, 413, CONTAINER_LOG_TOO_LARGE_MESSAGE);
+      return true;
+    }
     sendLogDownloadResponse({
       req,
       res,
       container,
-      logs: getAgentLogPayload(result),
+      logs,
     });
   } catch (error: unknown) {
     log.warn(`Error fetching logs from agent (${sanitizeLogParam(getErrorMessage(error), 500)})`);
@@ -260,6 +273,10 @@ async function handleLocalContainerLogs({
     const logsBuffer = await watcher.dockerApi
       .getContainer(container.name)
       .logs(buildLocalDockerLogsOptions(query));
+    if (isLogPayloadTooLarge(logsBuffer)) {
+      sendErrorResponse(res, 413, CONTAINER_LOG_TOO_LARGE_MESSAGE);
+      return;
+    }
     const logs = demuxDockerStream(logsBuffer);
     sendLogDownloadResponse({ req, res, container, logs });
   } catch (error: unknown) {

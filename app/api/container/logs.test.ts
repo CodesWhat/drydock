@@ -106,6 +106,11 @@ describe('api/container/logs', () => {
         timestamps: true,
       });
     });
+
+    test('bounds tail to prevent unbounded log downloads', () => {
+      expect(parseContainerLogDownloadQuery({ tail: '-1' } as any).tail).toBe(0);
+      expect(parseContainerLogDownloadQuery({ tail: '999999999' } as any).tail).toBe(10_000);
+    });
   });
 
   describe('demuxDockerStream', () => {
@@ -268,6 +273,44 @@ describe('api/container/logs', () => {
       );
       expect(res.setHeader).toHaveBeenCalledWith('Content-Encoding', 'gzip');
       expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
+    });
+
+    test('rejects a local Docker response above the download byte limit before compression', async () => {
+      const handlers = createLogHandlers({
+        storeContainer: {
+          getContainer: vi.fn(() => ({
+            id: 'c1',
+            name: 'noisy',
+            watcher: 'local',
+            status: 'running',
+          })),
+        },
+        getAgent: vi.fn(() => undefined),
+        getWatchers: vi.fn(() => ({
+          'docker.local': {
+            dockerApi: {
+              getContainer: vi.fn(() => ({
+                logs: vi.fn().mockResolvedValue(Buffer.alloc(16 * 1024 * 1024 + 1)),
+              })),
+            },
+          },
+        })),
+        getErrorMessage: vi.fn(() => 'error'),
+      } as any);
+      const res = createMockResponse();
+
+      await handlers.getContainerLogs(
+        {
+          params: { id: 'c1' },
+          query: {},
+          headers: { 'accept-encoding': 'gzip' },
+        } as any,
+        res as any,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(413);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container log download exceeds 16 MiB' });
+      expect(res.send).not.toHaveBeenCalled();
     });
   });
 });

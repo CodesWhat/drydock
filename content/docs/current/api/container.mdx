@@ -592,7 +592,7 @@ curl "http://drydock:3000/api/v1/containers/{id}/logs?tail=1000&stdout=true&stde
 | --- | --- | --- | --- |
 | `stdout` | boolean | `true` | Include stdout output |
 | `stderr` | boolean | `true` | Include stderr output |
-| `tail` | integer | `1000` | Number of lines to return from the end of the log |
+| `tail` | integer | `1000` | Number of lines to return from the end of the log (`0` to `10000`) |
 | `since` | string | `0` | Unix timestamp (seconds) or ISO 8601 string — only return logs after this time |
 | `timestamps` | boolean | `true` | Include timestamps in output |
 

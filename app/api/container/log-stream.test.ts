@@ -115,6 +115,11 @@ describe('api/container/log-stream', () => {
         follow: true,
       });
     });
+
+    test('bounds the requested tail for initial stream history', () => {
+      const query = parseContainerLogStreamQuery(new URLSearchParams({ tail: '999999999' }));
+      expect(query.tail).toBe(10_000);
+    });
   });
 
   describe('docker stream decoding', () => {
@@ -1210,6 +1215,55 @@ describe('api/container/log-stream', () => {
       dockerStream.emit('data', dockerFrame('2026-01-01T00:00:03.000000000Z after-cleanup\n', 1));
 
       expect(ws.send).toHaveBeenCalledTimes(2);
+      expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
+    });
+
+    test('evicts a slow local viewer before sending more Docker log data', async () => {
+      const dockerStream = new EventEmitter() as EventEmitter & {
+        destroy: ReturnType<typeof vi.fn>;
+      };
+      dockerStream.destroy = vi.fn();
+      const ws = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: 2 * 1024 * 1024,
+      });
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => ({
+          id: 'c1',
+          name: 'my-container',
+          watcher: 'local',
+          status: 'running',
+        })),
+        getWatchers: vi.fn(() => ({
+          'docker.local': {
+            dockerApi: {
+              getContainer: vi.fn(() => ({ logs: vi.fn().mockResolvedValue(dockerStream) })),
+            },
+          },
+        })),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-1';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      dockerStream.emit('data', dockerFrame('2026-01-01T00:00:00.000000000Z too slow\n'));
+
+      expect(ws.close).toHaveBeenCalledWith(1013, 'Log viewer is too slow');
+      expect(ws.send).not.toHaveBeenCalled();
       expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
     });
 
