@@ -503,6 +503,7 @@ class Registry<
       headers,
       responseType: 'json',
       timeout: getRegistryRequestTimeoutMs(),
+      maxRedirects: 0,
     };
 
     const axiosOptionsWithAuth = await this.authenticate(image, axiosOptions);

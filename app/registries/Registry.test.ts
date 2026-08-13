@@ -1991,6 +1991,20 @@ describe('callRegistry', () => {
     );
   });
 
+  test('should refuse redirects for registry data requests', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    const registryMocked = createMockedRegistry();
+
+    await registryMocked.callRegistry({
+      image: {},
+      url: 'https://registry.example/v2/image/manifests/latest',
+      method: 'get',
+    });
+
+    expect(axios).toHaveBeenCalledWith(expect.objectContaining({ maxRedirects: 0 }));
+  });
+
   test('should use centralized outbound timeout when env override is set', async () => {
     const previousTimeout = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
     process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '2345';
