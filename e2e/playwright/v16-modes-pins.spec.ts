@@ -4,6 +4,7 @@ import {
   escapeRegExp,
   registerServerAvailabilityCheck,
 } from './helpers/test-helpers';
+import { showTooltipFor } from './helpers/tooltip-target.mjs';
 
 registerServerAvailabilityCheck(test);
 
@@ -315,7 +316,7 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
     const tableState = row.locator('[data-test="container-update-state"]');
     await expect(tableState).toHaveText('Image update');
     await expect(tableState).not.toContainText('Digest update');
-    await tableState.locator(':scope > span').first().hover();
+    await showTooltipFor(tableState.locator(':scope > span').first());
     await expect(page.getByRole('tooltip')).toHaveText(
       'The tag 28.5.1 now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.',
     );
