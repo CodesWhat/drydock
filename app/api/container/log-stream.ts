@@ -329,18 +329,20 @@ function streamEdgeAgentLogsToWebSocket({
         ) {
           continue;
         }
-        if ((webSocket.bufferedAmount ?? 0) > MAX_VIEWER_BUFFER_BYTES) {
+        const payload = JSON.stringify({
+          ...message,
+          displayTs: formatLogDisplayTimestamp(message.ts),
+        });
+        if (
+          (webSocket.bufferedAmount ?? 0) + Buffer.byteLength(payload, 'utf8') >
+          MAX_VIEWER_BUFFER_BYTES
+        ) {
           webSocket.close(1013, 'Log viewer is too slow');
           cleanup(true);
           return false;
         }
         try {
-          webSocket.send(
-            JSON.stringify({
-              ...message,
-              displayTs: formatLogDisplayTimestamp(message.ts),
-            }),
-          );
+          webSocket.send(payload);
         } catch {
           cleanup(true);
           return false;
@@ -474,17 +476,19 @@ async function streamContainerLogsToWebSocket({
 
   const emitMessages = (messages: DockerLogMessage[]): boolean => {
     for (const message of messages) {
-      if ((webSocket.bufferedAmount ?? 0) > MAX_VIEWER_BUFFER_BYTES) {
+      const payload = JSON.stringify({
+        ...message,
+        displayTs: formatLogDisplayTimestamp(message.ts),
+      });
+      if (
+        (webSocket.bufferedAmount ?? 0) + Buffer.byteLength(payload, 'utf8') >
+        MAX_VIEWER_BUFFER_BYTES
+      ) {
         webSocket.close(1013, 'Log viewer is too slow');
         return false;
       }
       try {
-        webSocket.send(
-          JSON.stringify({
-            ...message,
-            displayTs: formatLogDisplayTimestamp(message.ts),
-          }),
-        );
+        webSocket.send(payload);
       } catch {
         return false;
       }

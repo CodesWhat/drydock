@@ -516,9 +516,13 @@ class Registry<
     /** Execute a single registry request and return the envelope. */
     const executeRequest = async (requestOptions: RegistryRequestOptions) => {
       await acquireToken(getBucketForUrl(url));
+      const redirectSafeRequestOptions = {
+        ...requestOptions,
+        maxRedirects: 0,
+      };
       return withRetry<T>(
         () =>
-          axios<T>(requestOptions).then((r) => ({
+          axios<T>(redirectSafeRequestOptions).then((r) => ({
             status: r.status,
             headers: r.headers as Record<string, string | undefined>,
             data: r.data,

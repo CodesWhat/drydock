@@ -1267,6 +1267,55 @@ describe('api/container/log-stream', () => {
       expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
     });
 
+    test('evicts a local viewer before sending a single oversized serialized message', async () => {
+      const dockerStream = Object.assign(new EventEmitter(), { destroy: vi.fn() });
+      const ws = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: 0,
+      });
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => ({
+          id: 'c1',
+          name: 'my-container',
+          watcher: 'local',
+          status: 'running',
+        })),
+        getWatchers: vi.fn(() => ({
+          'docker.local': {
+            dockerApi: {
+              getContainer: vi.fn(() => ({ logs: vi.fn().mockResolvedValue(dockerStream) })),
+            },
+          },
+        })),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-1';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      dockerStream.emit(
+        'data',
+        dockerFrame(`2026-01-01T00:00:00.000000000Z ${'x'.repeat(1024 * 1024)}\n`),
+      );
+
+      expect(ws.close).toHaveBeenCalledWith(1013, 'Log viewer is too slow');
+      expect(ws.send).not.toHaveBeenCalled();
+      expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
+    });
+
     test('does not throw when close fails during stream end', async () => {
       const dockerStream = new EventEmitter() as EventEmitter & {
         destroy: ReturnType<typeof vi.fn>;
@@ -1779,6 +1828,44 @@ describe('api/container/log-stream', () => {
       await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
 
       handlers?.onChunk({ stream: 'stdout', logs: 'too slow\n' });
+      await handling;
+
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(viewer.close).toHaveBeenCalledWith(1013, 'Log viewer is too slow');
+      expect(viewer.send).not.toHaveBeenCalled();
+    });
+
+    test('evicts an edge viewer before sending a single oversized serialized message', async () => {
+      let handlers:
+        | {
+            onChunk: (chunk: { stream: 'stdout' | 'stderr'; logs: string }) => void;
+          }
+        | undefined;
+      const cancel = vi.fn();
+      const streamContainerLogs = vi.fn(
+        (
+          _containerId: string,
+          _options: Record<string, unknown>,
+          nextHandlers: NonNullable<typeof handlers>,
+        ) => {
+          handlers = nextHandlers;
+          return { cancel };
+        },
+      );
+      const viewer = Object.assign(new EventEmitter(), {
+        send: vi.fn(),
+        close: vi.fn(),
+        bufferedAmount: 0,
+      });
+      const gateway = createAuthenticatedEdgeGateway(streamContainerLogs, viewer);
+      const handling = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/edge-container/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      await vi.waitFor(() => expect(streamContainerLogs).toHaveBeenCalledTimes(1));
+
+      handlers?.onChunk({ stream: 'stdout', logs: `${'x'.repeat(1024 * 1024)}\n` });
       await handling;
 
       expect(cancel).toHaveBeenCalledTimes(1);

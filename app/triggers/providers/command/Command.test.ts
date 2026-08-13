@@ -170,6 +170,26 @@ test('should log stderr when present', async () => {
   expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('stderr'));
 });
 
+test('should not include child-process stdout or stderr in execution logs', async () => {
+  const outputSecret = 'configured-output-token';
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+  const infoSpy = vi.spyOn(cmd.log, 'info');
+  const warnSpy = vi.spyOn(cmd.log, 'warn');
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    stdout: `stdout ${outputSecret}`,
+    stderr: `stderr ${outputSecret}`,
+  });
+
+  await cmd.trigger({ name: 'test' });
+
+  expect(JSON.stringify([...infoSpy.mock.calls, ...warnSpy.mock.calls])).not.toContain(
+    outputSecret,
+  );
+  expect(infoSpy).toHaveBeenCalledWith('Command completed with stdout');
+  expect(warnSpy).toHaveBeenCalledWith('Command completed with stderr');
+});
+
 test('should not include the configured command in execution logs', async () => {
   const secretCommand = 'curl https://hooks.example.com/secret-token';
   const cmd = new Command();

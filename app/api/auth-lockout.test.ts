@@ -26,11 +26,18 @@ const {
   };
 });
 const LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS = 5;
-const { previousMaxTrackedLockoutIdentities } = vi.hoisted(() => {
-  const previous = process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
-  process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = '5';
-  return { previousMaxTrackedLockoutIdentities: previous };
-});
+const { previousMaxTrackedLockoutIdentities, previousAccountLockoutMaxAttempts } = vi.hoisted(
+  () => {
+    const previous = process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
+    const previousAccountAttempts = process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS;
+    process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = '5';
+    process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = '3workers';
+    return {
+      previousMaxTrackedLockoutIdentities: previous,
+      previousAccountLockoutMaxAttempts: previousAccountAttempts,
+    };
+  },
+);
 
 const lockoutStateFiles = new Map<string, string>();
 const LOCKOUT_STATE_PATH = '/test/store/db.json.auth-lockouts.json';
@@ -112,10 +119,14 @@ describe('auth-lockout', () => {
   afterAll(() => {
     if (previousMaxTrackedLockoutIdentities === undefined) {
       delete process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
-      return;
+    } else {
+      process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = previousMaxTrackedLockoutIdentities;
     }
-
-    process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = previousMaxTrackedLockoutIdentities;
+    if (previousAccountLockoutMaxAttempts === undefined) {
+      delete process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS;
+    } else {
+      process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = previousAccountLockoutMaxAttempts;
+    }
   });
 
   beforeEach(() => {
@@ -182,6 +193,31 @@ describe('auth-lockout', () => {
 
     expect(next).toHaveBeenCalledWith(error);
     expect(mockSendErrorResponse).not.toHaveBeenCalled();
+  });
+
+  test('releases login verification capacity when passport middleware throws synchronously', () => {
+    const passportError = new Error('passport middleware failed');
+    mockPassportAuthenticate.mockImplementationOnce(() => () => {
+      throw passportError;
+    });
+    const next = vi.fn();
+
+    expect(() =>
+      authenticateLogin(
+        { body: { username: 'alice' }, ip: '203.0.113.11' } as any,
+        createResponse() as any,
+        next,
+      ),
+    ).not.toThrow();
+
+    expect(next).toHaveBeenCalledWith(passportError);
+    makePassportInvalidCredentials();
+    authenticateLogin(
+      { body: { username: 'bob' }, ip: '203.0.113.12' } as any,
+      createResponse() as any,
+      vi.fn(),
+    );
+    expect(mockPassportAuthenticate).toHaveBeenCalledTimes(2);
   });
 
   test('rejects excess concurrent login verifications before passport runs', () => {
@@ -1854,20 +1890,8 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('parsePositiveIntegerEnv returns fallback when env value is invalid (block not empty)', () => {
-    // Line 92:48 BlockStatement {} mutant — if empty, always returns parsed (even invalid)
-    const previous = process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS;
-    process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = 'invalid';
-
-    // We can only test this at module load time via testable_accountLockoutPolicy
-    // The policy was loaded at import — and we checked it was set with default
-    expect(testable_accountLockoutPolicy.maxAttempts).toBeGreaterThan(0);
-
-    if (previous === undefined) {
-      delete process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS;
-    } else {
-      process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = previous;
-    }
+  test('parsePositiveIntegerEnv rejects a partially numeric env value', () => {
+    expect(testable_accountLockoutPolicy.maxAttempts).toBe(5);
   });
 
   test('isLoginLockoutEntry returns false for non-object (candidate is object string not {})', () => {

@@ -1297,6 +1297,30 @@ describe('AgentClient', () => {
       await vi.waitFor(() => expect(handleSpy).toHaveBeenCalledWith('dd:ack', { version: '1.0' }));
     });
 
+    test('should bound queued SSE chunks while an event handler is blocked', async () => {
+      const stream = new EventEmitter();
+      const destroy = vi.fn();
+      Object.assign(stream, { destroy });
+      axios.mockResolvedValue({ data: stream });
+      const reconnectSpy = vi.spyOn(client, 'scheduleReconnect').mockImplementation(() => {});
+      let releaseHandler: () => void = () => {};
+      const blockedHandler = new Promise<void>((resolve) => {
+        releaseHandler = resolve;
+      });
+      vi.spyOn(client, 'handleEvent').mockReturnValue(blockedHandler);
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      stream.emit('data', Buffer.from('data: {"type":"dd:ack","data":{"version":"1.0"}}\n\n'));
+      await vi.waitFor(() => expect(client.handleEvent).toHaveBeenCalledOnce());
+
+      stream.emit('data', Buffer.alloc(16 * 1024 * 1024, 0x61));
+
+      await vi.waitFor(() => expect(destroy).toHaveBeenCalledOnce());
+      expect(reconnectSpy).toHaveBeenCalledOnce();
+      releaseHandler();
+    });
+
     test('should destroy and reconnect when an unterminated SSE event exceeds the buffer limit', async () => {
       const stream = new EventEmitter();
       const destroy = vi.fn();
@@ -3521,6 +3545,15 @@ describe('AgentClient', () => {
       await client.runRemoteTrigger(container, 'smtp', 'notify');
       const [, postedPayload] = axios.post.mock.calls[0];
       expect(postedPayload).toBe(container);
+      expect(axios.post.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: 65_000 }));
+    });
+
+    test('should preserve the 30-second timeout for accepted update triggers', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+
+      await client.runRemoteTrigger({ id: 'c1', name: 'web' }, 'docker', 'update');
+
+      expect(axios.post.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: 30_000 }));
     });
 
     test('should throw on failure', async () => {
@@ -3683,7 +3716,7 @@ describe('AgentClient', () => {
       expect(axios.post).toHaveBeenCalledWith(
         expect.stringContaining('/api/triggers/docker/update/batch'),
         containers,
-        expect.any(Object),
+        expect.objectContaining({ timeout: 30_000 }),
       );
     });
 
@@ -3701,6 +3734,7 @@ describe('AgentClient', () => {
       });
 
       await client.runRemoteTriggerBatch([{ id: 'c1' }], 'mock', 'notify');
+      expect(axios.post.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: 65_000 }));
       await client.handleEvent('dd:container-updated', {
         id: 'c1',
         name: 'test',

@@ -596,7 +596,7 @@ curl "http://drydock:3000/api/v1/containers/{id}/logs?tail=1000&stdout=true&stde
 | `since` | string | `0` | Unix timestamp (seconds) or ISO 8601 string — only return logs after this time |
 | `timestamps` | boolean | `true` | Include timestamps in output |
 
-Returns 200 with the log text (Content-Disposition: attachment), 404 if the container is not found, or 500 on failure.
+Returns 200 with the log text (Content-Disposition: attachment), 404 if the container is not found, 413 if the log payload exceeds 16 MiB, or 500 on failure.
 
 ## Stream container logs (WebSocket)
 
