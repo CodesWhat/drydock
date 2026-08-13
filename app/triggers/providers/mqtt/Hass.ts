@@ -231,7 +231,9 @@ class Hass {
 
   private aggregateSensorSync: Promise<void> = Promise.resolve();
 
-  private acceptingContainerSync = true;
+  private acceptingProviderWork = true;
+
+  private providerWork = new Set<Promise<void>>();
 
   private unregisterContainerAdded?: () => void;
   private unregisterContainerUpdated?: () => void;
@@ -297,7 +299,7 @@ class Hass {
   }
 
   async deregister(): Promise<void> {
-    this.acceptingContainerSync = false;
+    this.acceptingProviderWork = false;
 
     this.unregisterContainerAdded?.();
     this.unregisterContainerAdded = undefined;
@@ -314,8 +316,8 @@ class Hass {
     this.unregisterWatcherStop?.();
     this.unregisterWatcherStop = undefined;
 
-    while (this.containerSyncQueueByKey.size > 0) {
-      await Promise.allSettled(this.containerSyncQueueByKey.values());
+    while (this.providerWork.size > 0) {
+      await Promise.allSettled(this.providerWork);
     }
 
     // #210 — unwind the command subscription, if one was ever established
@@ -751,7 +753,7 @@ class Hass {
     const nextSync = previousSync
       .catch(() => undefined)
       .then(() => {
-        if (!this.acceptingContainerSync) {
+        if (!this.acceptingProviderWork) {
           return;
         }
         return sync();
@@ -770,11 +772,13 @@ class Hass {
     container: Container | ContainerLifecycleEventPayload,
     sync: () => Promise<void> | void,
   ): Promise<void> {
-    return this.enqueueContainerSync(container, sync).catch((error: unknown) => {
-      this.log.warn(
-        `Failed to sync hass discovery for container [${container.name}] (${getErrorMessage(error)})`,
-      );
-    });
+    return this.trackProviderWork(() =>
+      this.enqueueContainerSync(container, sync).catch((error: unknown) => {
+        this.log.warn(
+          `Failed to sync hass discovery for container [${container.name}] (${getErrorMessage(error)})`,
+        );
+      }),
+    );
   }
 
   /**
@@ -1155,11 +1159,23 @@ class Hass {
   }
 
   private isolateWatcherSync(watcher, isRunning: boolean): Promise<void> {
-    return this.updateWatcherSensors({ watcher, isRunning }).catch((error: unknown) => {
-      this.log.warn(
-        `Failed to sync hass discovery for watcher [${watcher.name}] (${getErrorMessage(error)})`,
-      );
-    });
+    return this.trackProviderWork(() =>
+      this.updateWatcherSensors({ watcher, isRunning }).catch((error: unknown) => {
+        this.log.warn(
+          `Failed to sync hass discovery for watcher [${watcher.name}] (${getErrorMessage(error)})`,
+        );
+      }),
+    );
+  }
+
+  private trackProviderWork(start: () => Promise<void>): Promise<void> {
+    if (!this.acceptingProviderWork) {
+      return Promise.resolve();
+    }
+    const work = start();
+    this.providerWork.add(work);
+    void work.finally(() => this.providerWork.delete(work));
+    return work;
   }
 
   /**

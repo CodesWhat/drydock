@@ -3166,6 +3166,68 @@ describe('hass install commands (#210)', () => {
       );
     });
 
+    test('deregister retires and drains all registered container and watcher work', async () => {
+      let releaseWatcherPublish!: () => void;
+      let markWatcherPublishStarted!: () => void;
+      const watcherPublishStarted = new Promise<void>((resolve) => {
+        markWatcherPublishStarted = resolve;
+      });
+      const watcherPublishGate = new Promise<void>((resolve) => {
+        releaseWatcherPublish = resolve;
+      });
+      const clientMock = {
+        publish: vi.fn((topic: string) => {
+          if (topic === 'topic/local/running') {
+            markWatcherPublishStarted();
+            return watcherPublishGate;
+          }
+          return undefined;
+        }),
+      };
+      const h = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: false, prefix: 'homeassistant', commands: false },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+      const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+      const containerRemovedCb = registerContainerRemoved.mock.calls.at(-1)[0];
+      const watcherStartCb = registerWatcherStart.mock.calls.at(-1)[0];
+      const watcherStopCb = registerWatcherStop.mock.calls.at(-1)[0];
+      const activeWatcherSync = watcherStartCb({ name: 'local' });
+      await watcherPublishStarted;
+
+      let deregisterResolved = false;
+      const deregisterPromise = h.deregister().then(() => {
+        deregisterResolved = true;
+      });
+      const retiredContainer = {
+        id: 'retired-container',
+        name: 'retired-container',
+        watcher: 'local',
+      };
+      const retiredWork = [
+        containerAddedCb(retiredContainer),
+        containerUpdatedCb(retiredContainer),
+        containerRemovedCb(retiredContainer),
+        watcherStartCb({ name: 'retired-watcher' }),
+        watcherStopCb({ name: 'retired-watcher' }),
+      ];
+      await flushMicrotasks();
+
+      expect(deregisterResolved).toBe(false);
+      expect(clientMock.publish).toHaveBeenCalledTimes(1);
+
+      releaseWatcherPublish();
+      await Promise.all([activeWatcherSync, ...retiredWork, deregisterPromise]);
+      expect(deregisterResolved).toBe(true);
+      expect(clientMock.publish).toHaveBeenCalledTimes(1);
+    });
+
     test('deregister drains active discovery sync and drops stale queued work', async () => {
       let releasePublish!: () => void;
       let markPublishStarted!: () => void;
