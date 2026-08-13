@@ -1535,6 +1535,118 @@ describe('hass discovery startup resync (#708)', () => {
     });
   });
 
+  test('retains a live update emitted before its stale startup snapshot is processed', async () => {
+    let releaseFirstSnapshot!: () => void;
+    let markFirstSnapshotStarted!: () => void;
+    const firstSnapshotStarted = new Promise<void>((resolve) => {
+      markFirstSnapshotStarted = resolve;
+    });
+    const firstSnapshotGate = new Promise<void>((resolve) => {
+      releaseFirstSnapshot = resolve;
+    });
+    const orderingClient = {
+      publish: vi.fn((topic: string) => {
+        if (topic === 'homeassistant/update/topic_local_first/config') {
+          markFirstSnapshotStarted();
+          return firstSnapshotGate;
+        }
+        return undefined;
+      }),
+    };
+    const orderingHass = new Hass({
+      client: orderingClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const firstSnapshot = {
+      id: 'ctr-first',
+      name: 'first',
+      watcher: 'local',
+      displayName: 'First snapshot',
+    };
+    const staleSecondSnapshot = {
+      id: 'ctr-second',
+      name: 'second',
+      watcher: 'local',
+      displayName: 'Stale snapshot',
+    };
+    const liveSecondUpdate = {
+      ...staleSecondSnapshot,
+      displayName: 'Live update',
+    };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+      firstSnapshot,
+      staleSecondSnapshot,
+    ] as any);
+    vi.spyOn(orderingHass, 'updateContainerSensors').mockResolvedValue(undefined);
+    const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+
+    const resync = getResyncDiscovery(orderingHass)();
+    await firstSnapshotStarted;
+    const liveUpdate = containerUpdatedCb(liveSecondUpdate);
+    await flushMicrotasks();
+    releaseFirstSnapshot();
+    await Promise.all([resync, liveUpdate]);
+
+    const secondDiscoveryPayloads = orderingClient.publish.mock.calls
+      .filter(([topic]) => topic === 'homeassistant/update/topic_local_second/config')
+      .map(([, payload]) => JSON.parse(payload));
+    expect(secondDiscoveryPayloads).toHaveLength(2);
+    expect(secondDiscoveryPayloads.at(-1)).toMatchObject({ name: 'Live update' });
+  });
+
+  test('continues a queued container sync after the preceding publish fails', async () => {
+    let rejectFirstPublish!: (error: Error) => void;
+    let markFirstPublishStarted!: () => void;
+    const firstPublishStarted = new Promise<void>((resolve) => {
+      markFirstPublishStarted = resolve;
+    });
+    const firstPublish = new Promise<void>((_resolve, reject) => {
+      rejectFirstPublish = reject;
+    });
+    let publishCount = 0;
+    const resilientClient = {
+      publish: vi.fn(() => {
+        publishCount += 1;
+        if (publishCount === 1) {
+          markFirstPublishStarted();
+          return firstPublish;
+        }
+        return undefined;
+      }),
+    };
+    new Hass({
+      client: resilientClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-queued', name: 'queued', watcher: 'local' };
+
+    const failedUpdate = containerUpdatedCb({ ...container, displayName: 'Failed update' });
+    await firstPublishStarted;
+    const laterUpdate = containerUpdatedCb({ ...container, displayName: 'Later update' });
+    rejectFirstPublish(new Error('broker publish failed'));
+
+    await expect(failedUpdate).rejects.toThrow('broker publish failed');
+    await expect(laterUpdate).resolves.toBeUndefined();
+    const discoveryCalls = resilientClient.publish.mock.calls.filter(
+      ([topic]) => topic === 'homeassistant/update/topic_local_queued/config',
+    );
+    expect(discoveryCalls).toHaveLength(2);
+    expect(JSON.parse(discoveryCalls.at(-1)[1])).toMatchObject({
+      name: 'Later update',
+    });
+  });
+
   test('cleans retained discovery for stored containers excluded by this trigger', async () => {
     const container = { id: 'ctr-excluded', name: 'redis', watcher: 'local' };
     vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);

@@ -3,6 +3,7 @@ import { recordAuditEvent } from '../../../api/audit-events.js';
 import { providers as iconProviders, normalizeSlug } from '../../../api/icons/providers.js';
 import { getVersion } from '../../../configuration/index.js';
 import {
+  type ContainerLifecycleEventPayload,
   registerContainerAdded,
   registerContainerRemoved,
   registerContainerUpdated,
@@ -226,6 +227,8 @@ class Hass {
   // re-exclusion cleans again.
   private cleanedExcludedContainerKeys = new Set<string>();
 
+  private containerSyncQueueByKey = new Map<string, Promise<void>>();
+
   private unregisterContainerAdded?: () => void;
   private unregisterContainerUpdated?: () => void;
   private unregisterContainerRemoved?: () => void;
@@ -266,17 +269,19 @@ class Hass {
 
     // Subscribe to container events to sync HA
     this.unregisterContainerAdded = registerContainerAdded((container) =>
-      this.syncContainerSensor(container),
+      this.enqueueContainerSync(container, () => this.syncContainerSensor(container)),
     );
     this.unregisterContainerUpdated = registerContainerUpdated((container) =>
-      this.syncContainerSensor(container),
+      this.enqueueContainerSync(container, () => this.syncContainerSensor(container)),
     );
-    this.unregisterContainerRemoved = registerContainerRemoved((container) => {
-      // #491 — a re-included container starts clean again, so drop its key
-      // here too (not just on re-inclusion in syncContainerSensor).
-      this.cleanedExcludedContainerKeys.delete(this.getContainerSyncKey(container));
-      return this.removeContainerSensor(container);
-    });
+    this.unregisterContainerRemoved = registerContainerRemoved((container) =>
+      this.enqueueContainerSync(container, () => {
+        // #491 — a re-included container starts clean again, so drop its key
+        // here too (not just on re-inclusion in syncContainerSensor).
+        this.cleanedExcludedContainerKeys.delete(this.getContainerSyncKey(container));
+        return this.removeContainerSensor(container);
+      }),
+    );
 
     // Subscribe to watcher events to sync HA
     this.unregisterWatcherStart = registerWatcherStart((watcher) =>
@@ -385,15 +390,23 @@ class Hass {
       return;
     }
 
-    for (const container of containers) {
-      try {
+    let previousSnapshot = Promise.resolve();
+    const snapshotSyncs = containers.map((container) => {
+      const waitForPreviousSnapshot = previousSnapshot;
+      const queuedSync = this.enqueueContainerSync(container, async () => {
+        await waitForPreviousSnapshot;
         await this.syncContainerSensor(container);
-      } catch (error: unknown) {
+      });
+      const isolatedSync = queuedSync.catch((error: unknown) => {
         this.log.warn(
           `Failed to resync hass discovery for container [${container.name}] (${getErrorMessage(error)})`,
         );
-      }
-    }
+      });
+      previousSnapshot = isolatedSync;
+      return isolatedSync;
+    });
+
+    await Promise.all(snapshotSyncs);
   }
 
   /**
@@ -717,6 +730,23 @@ class Hass {
     this.log.warn(
       `Multiple agents share watcher name "${watcherName}" but the Home Assistant MQTT topic layout has no agent segment, so their topics/sensors will collide. Set DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true to opt into the corrected layout before it becomes the default in v1.7.0.`,
     );
+  }
+
+  private enqueueContainerSync(
+    container: Container | ContainerLifecycleEventPayload,
+    sync: () => Promise<void> | void,
+  ): Promise<void> {
+    const containerKey = this.getContainerSyncKey(container);
+    const previousSync = this.containerSyncQueueByKey.get(containerKey) ?? Promise.resolve();
+    const nextSync = previousSync.catch(() => undefined).then(sync);
+    let trackedSync: Promise<void>;
+    trackedSync = nextSync.finally(() => {
+      if (this.containerSyncQueueByKey.get(containerKey) === trackedSync) {
+        this.containerSyncQueueByKey.delete(containerKey);
+      }
+    });
+    this.containerSyncQueueByKey.set(containerKey, trackedSync);
+    return trackedSync;
   }
 
   /**
