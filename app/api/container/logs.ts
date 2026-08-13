@@ -172,6 +172,22 @@ async function getBoundedLocalDockerLogs(
   }
 
   return new Promise<Buffer>((resolve, reject) => {
+    let settled = false;
+    let stream: LocalDockerLogStream | undefined;
+    const settle = (action: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutHandle);
+      action();
+    };
+    const handleTimeout = () => {
+      settle(() => reject(new Error('Docker log stream timed out')));
+      stream?.destroy?.();
+    };
+    const timeoutHandle = setTimeout(handleTimeout, getOutboundHttpTimeoutMs());
+
     modem.dial(
       {
         path: `/containers/${encodeURIComponent(containerId)}/logs?`,
@@ -185,32 +201,24 @@ async function getBoundedLocalDockerLogs(
         options,
       },
       (error, value) => {
+        if (settled) {
+          if (isLocalDockerLogStream(value)) {
+            value.destroy?.();
+          }
+          return;
+        }
         if (error) {
-          reject(error);
+          settle(() => reject(error));
           return;
         }
         if (!isLocalDockerLogStream(value)) {
-          reject(new Error('Docker log response is not a readable stream'));
+          settle(() => reject(new Error('Docker log response is not a readable stream')));
           return;
         }
 
+        stream = value;
         const chunks: Buffer[] = [];
         let totalBytes = 0;
-        let settled = false;
-        let timeoutHandle: ReturnType<typeof setTimeout>;
-        const settle = (action: () => void) => {
-          if (settled) {
-            return;
-          }
-          settled = true;
-          clearTimeout(timeoutHandle);
-          action();
-        };
-        const handleTimeout = () => {
-          settle(() => reject(new Error('Docker log stream timed out')));
-          value.destroy?.();
-        };
-        timeoutHandle = setTimeout(handleTimeout, getOutboundHttpTimeoutMs());
 
         value.on('data', (chunk) => {
           if (settled) {

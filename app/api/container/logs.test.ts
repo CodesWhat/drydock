@@ -513,6 +513,38 @@ describe('api/container/logs', () => {
       }
     });
 
+    test('rejects a stalled Docker modem dial and destroys a late stream', async () => {
+      vi.useFakeTimers();
+      const previousTimeout = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+      process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '100';
+      try {
+        let dialCallback: ((error: Error | null, value?: unknown) => void) | undefined;
+        const dial = vi.fn((_options, callback) => {
+          dialCallback = callback;
+        });
+        const { handle, response } = createStreamingLogHandler(dial);
+
+        const handling = handle();
+        await vi.waitFor(() => expect(dial).toHaveBeenCalledTimes(1));
+        await vi.advanceTimersByTimeAsync(100);
+
+        expect(response.status).toHaveBeenCalledWith(500);
+        await handling;
+
+        dialCallback?.(new Error('late dial error'));
+        const lateStream = Object.assign(new EventEmitter(), { destroy: vi.fn() });
+        dialCallback?.(null, lateStream);
+        expect(lateStream.destroy).toHaveBeenCalledOnce();
+      } finally {
+        if (previousTimeout === undefined) {
+          delete process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+        } else {
+          process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = previousTimeout;
+        }
+        vi.useRealTimers();
+      }
+    });
+
     test('handles a Docker modem dial error', async () => {
       const { handle, response } = createStreamingLogHandler(
         vi.fn((_options, callback) => callback(new Error('dial failed'))),
