@@ -183,7 +183,7 @@ docker run -d \
 
 - **Portwing Edge/代理传输趋于成熟**：Portwing 0.9.0+ 支持由控制器执行原生 Docker 检查和更新、连续 Edge 日志、Ed25519 v2 请求签名，以及与签名密钥绑定的代理显示名称。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637))
 - **带成熟度稳定门的声明式更新策略**：三级 `dd.updatePolicy.*` 优先级、候选解锁倒计时和专用 `maturity-cleared` 通知。([讨论 #307](https://github.com/CodesWhat/drydock/discussions/307)、[讨论 #406](https://github.com/CodesWhat/drydock/discussions/406))
-- **每条规则的通知模板、铃铛偏好和新 `container-unhealthy` 事件**，以及双向 Home Assistant MQTT。([讨论 #205](https://github.com/CodesWhat/drydock/discussions/205)、[讨论 #198](https://github.com/CodesWhat/drydock/discussions/198))
+- **每条规则的通知模板、铃铛偏好和新 `container-unhealthy` 事件**，以及双向 Home Assistant MQTT，其“安装”按钮会触发实际更新。([讨论 #205](https://github.com/CodesWhat/drydock/discussions/205)、[讨论 #198](https://github.com/CodesWhat/drydock/discussions/198))
 - **所有主要列表视图均支持响应式布局**，使用共享 `DataTable` 和持久化的表格/卡片切换。([#498](https://github.com/CodesWhat/drydock/issues/498))
 - **完成 `/api/v1` 对等功能**：移除 `/api/*` 和 `WS /api/log/stream`（`410 Gone`），可选 `DD_COMPAT_WUDCARD` 兼容 wud-card/Homepage。([讨论 #469](https://github.com/CodesWhat/drydock/discussions/469))
 - **安全强化**：升级时匿名访问也会故障关闭，HTTP 触发器具备 SSRF 防护，WebSocket 检查完整来源，会话 cookie 更名为 `drydock.sid`。
@@ -217,7 +217,7 @@ docker run -d \
 <details>
 <summary><strong>v1.6.0-rc.11 亮点</strong></summary>
 
-- **Portwing 传输**：`transport=docker-api`、`execution=controller`、`events=portwing` 标记启用经过身份验证的 Standard HTTP 或 Edge，以承载由控制器执行的检查、更新、生命周期操作、预览和回滚。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637)、[Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
+- **Portwing 传输**：`transport=docker-api`、`execution=controller`、`events=portwing` 标记启用经过身份验证的 Standard HTTP 或 Edge，以承载由控制器执行的检查、更新、生命周期操作、预览和回滚。Portwing 仍是生命周期事件源，原始清单无法抹除控制器增强的更新结果。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637)、[Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
 
 - **通知** — 每个规则/每个提供商的标题和正文模板，带有实时预览，加上审计支持的应用内响铃类别和更新严重性阈值。
 - **仪表板** — 零依赖 CSS 网格替换为鼠标/触摸重新排序、有界调整大小、响应式布局、小部件可见性、重置和可选的跨设备首选项同步。

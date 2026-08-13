@@ -11,6 +11,44 @@ const translatedReadmes = [
   'README.zh-CN.md',
 ];
 const allReadmes = ['README.md', ...translatedReadmes];
+const localizedBehaviorFragments: Record<
+  string,
+  { homeAssistantUpdate: string; portwingEventSource: string; rawInventoryAuthority: string }
+> = {
+  'README.de.md': {
+    homeAssistantUpdate: 'Installieren-Schaltfläche ein echtes Update auslöst',
+    portwingEventSource: 'Portwing bleibt Ereignisquelle',
+    rawInventoryAuthority: 'Rohinventar kann Controller-Ergebnisse nicht löschen',
+  },
+  'README.es.md': {
+    homeAssistantUpdate: 'botón Instalar ejecuta una actualización real',
+    portwingEventSource: 'Portwing sigue siendo la fuente de eventos',
+    rawInventoryAuthority: 'inventario sin procesar no puede borrar resultados del controlador',
+  },
+  'README.fr.md': {
+    homeAssistantUpdate: 'bouton Installer déclenche une véritable mise à jour',
+    portwingEventSource: 'Portwing reste la source des événements de cycle de vie',
+    rawInventoryAuthority:
+      'inventaire brut ne peut pas effacer les résultats de mise à jour enrichis par le contrôleur',
+  },
+  'README.pl.md': {
+    homeAssistantUpdate: 'przycisk Instaluj uruchamia rzeczywistą aktualizację',
+    portwingEventSource: 'Portwing pozostaje źródłem zdarzeń cyklu życia',
+    rawInventoryAuthority:
+      'surowy spis nie może usunąć wyników aktualizacji wzbogaconych przez kontroler',
+  },
+  'README.pt-BR.md': {
+    homeAssistantUpdate: 'botão Instalar aciona uma atualização real',
+    portwingEventSource: 'Portwing continua sendo a fonte de eventos de ciclo de vida',
+    rawInventoryAuthority:
+      'inventário bruto não pode apagar resultados de atualização enriquecidos pelo controlador',
+  },
+  'README.zh-CN.md': {
+    homeAssistantUpdate: '“安装”按钮会触发实际更新',
+    portwingEventSource: 'Portwing 仍是生命周期事件源',
+    rawInventoryAuthority: '原始清单无法抹除控制器增强的更新结果',
+  },
+};
 
 const requiredFragments = [
   'version-1.6.0-blue',
@@ -55,6 +93,13 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(content).not.toContain('version-1.6.0--rc.2-blue');
     expect(content).not.toContain('https://api.star-history.com/svg');
     expect(content).not.toContain('https://star-history.com/#');
+  });
+
+  test('preserves Home Assistant update and Portwing result-authority behavior', () => {
+    const behavior = localizedBehaviorFragments[readme];
+    expect(content).toContain(behavior.homeAssistantUpdate);
+    expect(content).toContain(behavior.portwingEventSource);
+    expect(content).toContain(behavior.rawInventoryAuthority);
   });
 });
 

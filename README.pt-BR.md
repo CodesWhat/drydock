@@ -183,7 +183,7 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 
 - **O transporte Edge/agente do Portwing amadurece** com verificações e atualizações nativas do Docker controladas pelo controlador para Portwing 0.9.0+, logs Edge contínuos, assinatura Ed25519 v2 e nomes de exibição vinculados à chave do agente. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637))
 - **Política declarativa de atualização com estabilização de maturidade**: precedência `dd.updatePolicy.*` em três níveis, contagem regressiva e notificação `maturity-cleared`. ([Discussão #307](https://github.com/CodesWhat/drydock/discussions/307), [Discussão #406](https://github.com/CodesWhat/drydock/discussions/406))
-- **Modelos por regra, preferências do sino e evento `container-unhealthy`**, além de MQTT bidirecional do Home Assistant. ([Discussão #205](https://github.com/CodesWhat/drydock/discussions/205), [Discussão #198](https://github.com/CodesWhat/drydock/discussions/198))
+- **Modelos por regra, preferências do sino e evento `container-unhealthy`**, além de MQTT bidirecional do Home Assistant, cujo botão Instalar aciona uma atualização real. ([Discussão #205](https://github.com/CodesWhat/drydock/discussions/205), [Discussão #198](https://github.com/CodesWhat/drydock/discussions/198))
 - **Todas as principais listas são responsivas** com uma `DataTable` compartilhada e alternância persistente entre tabela e cartões. ([#498](https://github.com/CodesWhat/drydock/issues/498))
 - **Paridade `/api/v1` concluída**: `/api/*` e `WS /api/log/stream` foram removidos (`410 Gone`), com o shim opcional `DD_COMPAT_WUDCARD`. ([Discussão #469](https://github.com/CodesWhat/drydock/discussions/469))
 - **Reforço de segurança**: acesso anônimo fecha em atualizações, gatilhos HTTP são protegidos contra SSRF, WebSocket valida a origem completa e o cookie passa a `drydock.sid`.
@@ -217,7 +217,7 @@ Notas completas em [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11).
 <details>
 <summary><strong>Destaques da v1.6.0-rc.11</strong></summary>
 
-- **Transporte Portwing**: os marcadores `transport=docker-api`, `execution=controller`, `events=portwing` ativam Standard HTTP ou Edge autenticado para verificações, atualizações, ações de ciclo de vida, prévias e restaurações controladas pelo controlador. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
+- **Transporte Portwing**: os marcadores `transport=docker-api`, `execution=controller`, `events=portwing` ativam Standard HTTP ou Edge autenticado para verificações, atualizações, ações de ciclo de vida, prévias e restaurações controladas pelo controlador. O Portwing continua sendo a fonte de eventos de ciclo de vida, e o inventário bruto não pode apagar resultados de atualização enriquecidos pelo controlador. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
 
 - **Notificações** — Título e modelos de corpo por regra/por provedor com visualização ao vivo, além de categorias de sino no aplicativo apoiadas por auditoria e limites de gravidade de atualização.
 - **Painel** — Substituição de grade CSS de dependência zero com reordenação de mouse/toque, redimensionamento limitado, layouts responsivos, visibilidade de widget, redefinição e sincronização opcional de preferências entre dispositivos.
