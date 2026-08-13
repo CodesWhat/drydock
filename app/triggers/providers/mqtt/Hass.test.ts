@@ -1353,10 +1353,14 @@ describe('hass sensor sync gating by isContainerAllowed (#491)', () => {
     const container = { id: 'ctr-removal-retry', name: 'nginx', watcher: 'local' };
     const internalSet = (gatedHass as unknown as { cleanedExcludedContainerKeys: Set<string> })
       .cleanedExcludedContainerKeys;
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
 
     // First excluded event: the removal publish rejects.
     mqttClientGatedMock.publish.mockRejectedValueOnce(new Error('mqtt publish failed'));
-    await expect(containerAddedCb(container)).rejects.toThrow('mqtt publish failed');
+    await expect(containerAddedCb(container)).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to sync hass discovery for container [nginx] (mqtt publish failed)',
+    );
     // A failed removal must not be marked cleaned — the key must not stick.
     expect(internalSet.size).toBe(0);
 
@@ -1608,18 +1612,21 @@ describe('hass discovery startup resync (#708)', () => {
     const firstPublish = new Promise<void>((_resolve, reject) => {
       rejectFirstPublish = reject;
     });
-    let publishCount = 0;
+    let queuedDiscoveryPublishCount = 0;
     const resilientClient = {
-      publish: vi.fn(() => {
-        publishCount += 1;
-        if (publishCount === 1) {
+      publish: vi.fn((topic: string) => {
+        if (
+          topic === 'homeassistant/update/topic_local_queued/config' &&
+          queuedDiscoveryPublishCount === 0
+        ) {
+          queuedDiscoveryPublishCount += 1;
           markFirstPublishStarted();
           return firstPublish;
         }
         return undefined;
       }),
     };
-    new Hass({
+    const resilientHass = new Hass({
       client: resilientClient,
       configuration: {
         topic: 'topic',
@@ -1628,6 +1635,8 @@ describe('hass discovery startup resync (#708)', () => {
       log,
       isContainerAllowed: () => true,
     });
+    vi.spyOn(resilientHass, 'updateContainerSensors').mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
     const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
     const container = { id: 'ctr-queued', name: 'queued', watcher: 'local' };
 
@@ -1636,8 +1645,11 @@ describe('hass discovery startup resync (#708)', () => {
     const laterUpdate = containerUpdatedCb({ ...container, displayName: 'Later update' });
     rejectFirstPublish(new Error('broker publish failed'));
 
-    await expect(failedUpdate).rejects.toThrow('broker publish failed');
+    await expect(failedUpdate).resolves.toBeUndefined();
     await expect(laterUpdate).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to sync hass discovery for container [queued] (broker publish failed)',
+    );
     const discoveryCalls = resilientClient.publish.mock.calls.filter(
       ([topic]) => topic === 'homeassistant/update/topic_local_queued/config',
     );

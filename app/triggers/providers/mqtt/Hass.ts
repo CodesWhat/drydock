@@ -269,13 +269,13 @@ class Hass {
 
     // Subscribe to container events to sync HA
     this.unregisterContainerAdded = registerContainerAdded((container) =>
-      this.enqueueContainerSync(container, () => this.syncContainerSensor(container)),
+      this.isolateContainerSync(container, () => this.syncContainerSensor(container)),
     );
     this.unregisterContainerUpdated = registerContainerUpdated((container) =>
-      this.enqueueContainerSync(container, () => this.syncContainerSensor(container)),
+      this.isolateContainerSync(container, () => this.syncContainerSensor(container)),
     );
     this.unregisterContainerRemoved = registerContainerRemoved((container) =>
-      this.enqueueContainerSync(container, () => {
+      this.isolateContainerSync(container, () => {
         // #491 — a re-included container starts clean again, so drop its key
         // here too (not just on re-inclusion in syncContainerSensor).
         this.cleanedExcludedContainerKeys.delete(this.getContainerSyncKey(container));
@@ -747,6 +747,17 @@ class Hass {
     });
     this.containerSyncQueueByKey.set(containerKey, trackedSync);
     return trackedSync;
+  }
+
+  private isolateContainerSync(
+    container: Container | ContainerLifecycleEventPayload,
+    sync: () => Promise<void> | void,
+  ): Promise<void> {
+    return this.enqueueContainerSync(container, sync).catch((error: unknown) => {
+      this.log.warn(
+        `Failed to sync hass discovery for container [${container.name}] (${getErrorMessage(error)})`,
+      );
+    });
   }
 
   /**
