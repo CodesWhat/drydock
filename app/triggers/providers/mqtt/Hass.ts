@@ -229,6 +229,8 @@ class Hass {
 
   private containerSyncQueueByKey = new Map<string, Promise<void>>();
 
+  private acceptingContainerSync = true;
+
   private unregisterContainerAdded?: () => void;
   private unregisterContainerUpdated?: () => void;
   private unregisterContainerRemoved?: () => void;
@@ -293,6 +295,8 @@ class Hass {
   }
 
   async deregister(): Promise<void> {
+    this.acceptingContainerSync = false;
+
     this.unregisterContainerAdded?.();
     this.unregisterContainerAdded = undefined;
 
@@ -307,6 +311,10 @@ class Hass {
 
     this.unregisterWatcherStop?.();
     this.unregisterWatcherStop = undefined;
+
+    while (this.containerSyncQueueByKey.size > 0) {
+      await Promise.allSettled(this.containerSyncQueueByKey.values());
+    }
 
     // #210 — unwind the command subscription, if one was ever established
     if (this.commandMessageHandler && hasHassCommandCapableClient(this.client)) {
@@ -738,7 +746,14 @@ class Hass {
   ): Promise<void> {
     const containerKey = this.getContainerSyncKey(container);
     const previousSync = this.containerSyncQueueByKey.get(containerKey) ?? Promise.resolve();
-    const nextSync = previousSync.catch(() => undefined).then(sync);
+    const nextSync = previousSync
+      .catch(() => undefined)
+      .then(() => {
+        if (!this.acceptingContainerSync) {
+          return;
+        }
+        return sync();
+      });
     let trackedSync: Promise<void>;
     trackedSync = nextSync.finally(() => {
       if (this.containerSyncQueueByKey.get(containerKey) === trackedSync) {

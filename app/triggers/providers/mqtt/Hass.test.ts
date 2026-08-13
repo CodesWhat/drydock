@@ -3095,6 +3095,62 @@ describe('hass install commands (#210)', () => {
   });
 
   describe('deregister / lifecycle', () => {
+    test('deregister drains active discovery sync and drops stale queued work', async () => {
+      let releasePublish!: () => void;
+      let markPublishStarted!: () => void;
+      const publishStarted = new Promise<void>((resolve) => {
+        markPublishStarted = resolve;
+      });
+      const publishGate = new Promise<void>((resolve) => {
+        releasePublish = resolve;
+      });
+      const clientMock = {
+        publish: vi.fn((topic: string) => {
+          if (topic === 'homeassistant/update/topic_local_queued/config') {
+            markPublishStarted();
+            return publishGate;
+          }
+          return undefined;
+        }),
+      };
+      const h = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: false },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      vi.spyOn(h, 'updateContainerSensors').mockResolvedValue(undefined);
+      const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+      const queuedSync = containerUpdatedCb({ id: 'ctr-queued', name: 'queued', watcher: 'local' });
+      await publishStarted;
+      const staleQueuedSync = containerUpdatedCb({
+        id: 'ctr-queued',
+        name: 'queued',
+        watcher: 'local',
+        displayName: 'Stale queued update',
+      });
+
+      let deregisterResolved = false;
+      const deregisterPromise = h.deregister().then(() => {
+        deregisterResolved = true;
+      });
+      await flushMicrotasks();
+
+      expect(deregisterResolved).toBe(false);
+
+      releasePublish();
+      await Promise.all([queuedSync, staleQueuedSync, deregisterPromise]);
+      expect(deregisterResolved).toBe(true);
+      expect(
+        clientMock.publish.mock.calls.filter(
+          ([topic]) => topic === 'homeassistant/update/topic_local_queued/config',
+        ),
+      ).toHaveLength(1);
+    });
+
     test('deregister unsubscribes exact filters, removes the exact listener, and clears the rate limiter', async () => {
       const clientMock = makeCapableClientMock();
       const h = new Hass({
