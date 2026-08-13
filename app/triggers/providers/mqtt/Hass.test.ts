@@ -702,6 +702,55 @@ test('updateContainerSensors should use container count queries instead of full 
   expect(getContainersSpy).not.toHaveBeenCalled();
 });
 
+test('updateContainerSensors serializes retained aggregate snapshots across containers', async () => {
+  let releaseFirstPublish!: () => void;
+  let markFirstPublishStarted!: () => void;
+  const firstPublishStarted = new Promise<void>((resolve) => {
+    markFirstPublishStarted = resolve;
+  });
+  const firstPublishGate = new Promise<void>((resolve) => {
+    releaseFirstPublish = resolve;
+  });
+  const retainedTotalCounts: number[] = [];
+  let firstTotalCountPublish = true;
+  mqttClientMock.publish.mockImplementation(async (topic: string, value: string) => {
+    if (topic !== 'topic/total_count') {
+      return;
+    }
+    if (firstTotalCountPublish) {
+      firstTotalCountPublish = false;
+      markFirstPublishStarted();
+      await firstPublishGate;
+    }
+    retainedTotalCounts.push(Number(value));
+  });
+  let containerCount = 1;
+  vi.spyOn(containerStore, 'getContainerCount').mockImplementation(() => containerCount);
+
+  const firstUpdate = hass.updateContainerSensors({ name: 'first', watcher: 'local' });
+  await firstPublishStarted;
+  containerCount = 2;
+  const secondUpdate = hass.updateContainerSensors({ name: 'second', watcher: 'local' });
+  await flushMicrotasks();
+  releaseFirstPublish();
+  await Promise.all([firstUpdate, secondUpdate]);
+
+  expect(retainedTotalCounts).toEqual([1, 2]);
+});
+
+test('updateContainerSensors continues after a preceding aggregate update fails', async () => {
+  mqttClientMock.publish
+    .mockRejectedValueOnce(new Error('aggregate publish failed'))
+    .mockResolvedValue(undefined);
+
+  await expect(hass.updateContainerSensors({ name: 'first', watcher: 'local' })).rejects.toThrow(
+    'aggregate publish failed',
+  );
+  await expect(
+    hass.updateContainerSensors({ name: 'second', watcher: 'local' }),
+  ).resolves.toBeUndefined();
+});
+
 test.each(containerData)(
   'removeContainerSensor must publish all sensor removal messages expected by HA',
   async ({ containerName, data }) => {
@@ -1353,10 +1402,14 @@ describe('hass sensor sync gating by isContainerAllowed (#491)', () => {
     const container = { id: 'ctr-removal-retry', name: 'nginx', watcher: 'local' };
     const internalSet = (gatedHass as unknown as { cleanedExcludedContainerKeys: Set<string> })
       .cleanedExcludedContainerKeys;
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
 
     // First excluded event: the removal publish rejects.
     mqttClientGatedMock.publish.mockRejectedValueOnce(new Error('mqtt publish failed'));
-    await expect(containerAddedCb(container)).rejects.toThrow('mqtt publish failed');
+    await expect(containerAddedCb(container)).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to sync hass discovery for container [nginx] (mqtt publish failed)',
+    );
     // A failed removal must not be marked cleaned — the key must not stick.
     expect(internalSet.size).toBe(0);
 
@@ -1490,6 +1543,265 @@ describe('hass sensor sync gating by isContainerAllowed (#491)', () => {
     expect(warnSpy).toHaveBeenCalledWith(
       'Ignoring hass install command for [nginx]: container is excluded from this trigger',
     );
+  });
+});
+
+describe('hass discovery startup resync (#708)', () => {
+  function getResyncDiscovery(hassInstance: Hass): () => Promise<void> {
+    const resyncDiscovery = (hassInstance as unknown as { resyncDiscovery?: () => Promise<void> })
+      .resyncDiscovery;
+    expect(resyncDiscovery).toEqual(expect.any(Function));
+    return resyncDiscovery!.bind(hassInstance);
+  }
+
+  test('republishes stored container discovery after the command subscription is active', async () => {
+    const capableClient = makeCapableClientMock();
+    const commandsHass = new Hass({
+      client: capableClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant', commands: true },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const container = {
+      id: 'ctr-existing',
+      name: 'nginx',
+      watcher: 'local',
+      displayIcon: 'mdi:docker',
+    };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    vi.spyOn(commandsHass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await commandsHass.initCommandSubscription();
+    await getResyncDiscovery(commandsHass)();
+
+    expect(containerStore.getContainers).toHaveBeenCalledWith({});
+    const discoveryCall = capableClient.publish.mock.calls.find(
+      ([topic]) => topic === 'homeassistant/update/topic_local_nginx/config',
+    );
+    expect(discoveryCall).toBeDefined();
+    expect(JSON.parse(discoveryCall![1])).toMatchObject({
+      command_topic: 'topic/local/nginx/cmd',
+      payload_install: 'install',
+    });
+  });
+
+  test('retains a live update emitted before its stale startup snapshot is processed', async () => {
+    let releaseFirstSnapshot!: () => void;
+    let markFirstSnapshotStarted!: () => void;
+    const firstSnapshotStarted = new Promise<void>((resolve) => {
+      markFirstSnapshotStarted = resolve;
+    });
+    const firstSnapshotGate = new Promise<void>((resolve) => {
+      releaseFirstSnapshot = resolve;
+    });
+    const orderingClient = {
+      publish: vi.fn((topic: string) => {
+        if (topic === 'homeassistant/update/topic_local_first/config') {
+          markFirstSnapshotStarted();
+          return firstSnapshotGate;
+        }
+        return undefined;
+      }),
+    };
+    const orderingHass = new Hass({
+      client: orderingClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const firstSnapshot = {
+      id: 'ctr-first',
+      name: 'first',
+      watcher: 'local',
+      displayName: 'First snapshot',
+    };
+    const staleSecondSnapshot = {
+      id: 'ctr-second',
+      name: 'second',
+      watcher: 'local',
+      displayName: 'Stale snapshot',
+    };
+    const liveSecondUpdate = {
+      ...staleSecondSnapshot,
+      displayName: 'Live update',
+    };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+      firstSnapshot,
+      staleSecondSnapshot,
+    ] as any);
+    vi.spyOn(orderingHass, 'updateContainerSensors').mockResolvedValue(undefined);
+    const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+
+    const resync = getResyncDiscovery(orderingHass)();
+    await firstSnapshotStarted;
+    const liveUpdate = containerUpdatedCb(liveSecondUpdate);
+    await flushMicrotasks();
+    releaseFirstSnapshot();
+    await Promise.all([resync, liveUpdate]);
+
+    const secondDiscoveryPayloads = orderingClient.publish.mock.calls
+      .filter(([topic]) => topic === 'homeassistant/update/topic_local_second/config')
+      .map(([, payload]) => JSON.parse(payload));
+    expect(secondDiscoveryPayloads).toHaveLength(2);
+    expect(secondDiscoveryPayloads.at(-1)).toMatchObject({ name: 'Live update' });
+  });
+
+  test('continues a queued container sync after the preceding publish fails', async () => {
+    let rejectFirstPublish!: (error: Error) => void;
+    let markFirstPublishStarted!: () => void;
+    const firstPublishStarted = new Promise<void>((resolve) => {
+      markFirstPublishStarted = resolve;
+    });
+    const firstPublish = new Promise<void>((_resolve, reject) => {
+      rejectFirstPublish = reject;
+    });
+    let queuedDiscoveryPublishCount = 0;
+    const resilientClient = {
+      publish: vi.fn((topic: string) => {
+        if (
+          topic === 'homeassistant/update/topic_local_queued/config' &&
+          queuedDiscoveryPublishCount === 0
+        ) {
+          queuedDiscoveryPublishCount += 1;
+          markFirstPublishStarted();
+          return firstPublish;
+        }
+        return undefined;
+      }),
+    };
+    const resilientHass = new Hass({
+      client: resilientClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    vi.spyOn(resilientHass, 'updateContainerSensors').mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-queued', name: 'queued', watcher: 'local' };
+
+    const failedUpdate = containerUpdatedCb({ ...container, displayName: 'Failed update' });
+    await firstPublishStarted;
+    const laterUpdate = containerUpdatedCb({ ...container, displayName: 'Later update' });
+    rejectFirstPublish(new Error('broker publish failed'));
+
+    await expect(failedUpdate).resolves.toBeUndefined();
+    await expect(laterUpdate).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to sync hass discovery for container [queued] (broker publish failed)',
+    );
+    const discoveryCalls = resilientClient.publish.mock.calls.filter(
+      ([topic]) => topic === 'homeassistant/update/topic_local_queued/config',
+    );
+    expect(discoveryCalls).toHaveLength(2);
+    expect(JSON.parse(discoveryCalls.at(-1)[1])).toMatchObject({
+      name: 'Later update',
+    });
+  });
+
+  test('cleans retained discovery for stored containers excluded by this trigger', async () => {
+    const container = { id: 'ctr-excluded', name: 'redis', watcher: 'local' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    const excludedHass = new Hass({
+      client: mqttClientMock,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => false,
+    });
+
+    await getResyncDiscovery(excludedHass)();
+
+    expect(mqttClientMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_redis/config',
+      '',
+      { retain: true },
+    );
+  });
+
+  test('omits command topics when broker subscription fails before resync', async () => {
+    const capableClient = makeCapableClientMock();
+    capableClient.subscribeAsync.mockRejectedValue(new Error('ACL denied'));
+    const commandsHass = new Hass({
+      client: capableClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant', commands: true },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const container = { id: 'ctr-existing', name: 'nginx', watcher: 'local' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    vi.spyOn(commandsHass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await commandsHass.initCommandSubscription();
+    await getResyncDiscovery(commandsHass)();
+
+    const discoveryCall = capableClient.publish.mock.calls.find(
+      ([topic]) => topic === 'homeassistant/update/topic_local_nginx/config',
+    );
+    expect(discoveryCall).toBeDefined();
+    const discoveryPayload = JSON.parse(discoveryCall![1]);
+    expect(discoveryPayload).not.toHaveProperty('command_topic');
+    expect(discoveryPayload).not.toHaveProperty('payload_install');
+  });
+
+  test('logs a failed container publish and continues resyncing the remaining store', async () => {
+    const capableClient = makeCapableClientMock();
+    capableClient.publish
+      .mockRejectedValueOnce(new Error('broker publish failed'))
+      .mockResolvedValue(undefined);
+    const resilientHass = new Hass({
+      client: capableClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const first = { id: 'ctr-first', name: 'first', watcher: 'local' };
+    const second = { id: 'ctr-second', name: 'second', watcher: 'local' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([first, second] as any);
+    vi.spyOn(resilientHass, 'updateContainerSensors').mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+    await expect(getResyncDiscovery(resilientHass)()).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to resync hass discovery for container [first] (broker publish failed)',
+    );
+    expect(capableClient.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_second/config',
+      expect.any(String),
+      { retain: true },
+    );
+  });
+
+  test('logs a store read failure and leaves startup resync successful', async () => {
+    vi.spyOn(containerStore, 'getContainers').mockImplementation(() => {
+      throw new Error('store unavailable');
+    });
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+    await expect(getResyncDiscovery(hass)()).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to load containers for hass discovery resync (store unavailable)',
+    );
+    expect(mqttClientMock.publish).not.toHaveBeenCalled();
   });
 });
 
@@ -2832,6 +3144,146 @@ describe('hass install commands (#210)', () => {
   });
 
   describe('deregister / lifecycle', () => {
+    test('watcher lifecycle callbacks isolate publish failures', async () => {
+      const clientMock = {
+        publish: vi.fn().mockRejectedValue(new Error('watcher publish failed')),
+      };
+      new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: false },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      const watcherStartCb = registerWatcherStart.mock.calls.at(-1)[0];
+
+      await expect(watcherStartCb({ name: 'local' })).resolves.toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to sync hass discovery for watcher [local] (watcher publish failed)',
+      );
+    });
+
+    test('deregister retires and drains all registered container and watcher work', async () => {
+      let releaseWatcherPublish!: () => void;
+      let markWatcherPublishStarted!: () => void;
+      const watcherPublishStarted = new Promise<void>((resolve) => {
+        markWatcherPublishStarted = resolve;
+      });
+      const watcherPublishGate = new Promise<void>((resolve) => {
+        releaseWatcherPublish = resolve;
+      });
+      const clientMock = {
+        publish: vi.fn((topic: string) => {
+          if (topic === 'topic/local/running') {
+            markWatcherPublishStarted();
+            return watcherPublishGate;
+          }
+          return undefined;
+        }),
+      };
+      const h = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: false, prefix: 'homeassistant', commands: false },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+      const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+      const containerRemovedCb = registerContainerRemoved.mock.calls.at(-1)[0];
+      const watcherStartCb = registerWatcherStart.mock.calls.at(-1)[0];
+      const watcherStopCb = registerWatcherStop.mock.calls.at(-1)[0];
+      const activeWatcherSync = watcherStartCb({ name: 'local' });
+      await watcherPublishStarted;
+
+      let deregisterResolved = false;
+      const deregisterPromise = h.deregister().then(() => {
+        deregisterResolved = true;
+      });
+      const retiredContainer = {
+        id: 'retired-container',
+        name: 'retired-container',
+        watcher: 'local',
+      };
+      const retiredWork = [
+        containerAddedCb(retiredContainer),
+        containerUpdatedCb(retiredContainer),
+        containerRemovedCb(retiredContainer),
+        watcherStartCb({ name: 'retired-watcher' }),
+        watcherStopCb({ name: 'retired-watcher' }),
+      ];
+      await flushMicrotasks();
+
+      expect(deregisterResolved).toBe(false);
+      expect(clientMock.publish).toHaveBeenCalledTimes(1);
+
+      releaseWatcherPublish();
+      await Promise.all([activeWatcherSync, ...retiredWork, deregisterPromise]);
+      expect(deregisterResolved).toBe(true);
+      expect(clientMock.publish).toHaveBeenCalledTimes(1);
+    });
+
+    test('deregister drains active discovery sync and drops stale queued work', async () => {
+      let releasePublish!: () => void;
+      let markPublishStarted!: () => void;
+      const publishStarted = new Promise<void>((resolve) => {
+        markPublishStarted = resolve;
+      });
+      const publishGate = new Promise<void>((resolve) => {
+        releasePublish = resolve;
+      });
+      const clientMock = {
+        publish: vi.fn((topic: string) => {
+          if (topic === 'homeassistant/update/topic_local_queued/config') {
+            markPublishStarted();
+            return publishGate;
+          }
+          return undefined;
+        }),
+      };
+      const h = new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: false },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      vi.spyOn(h, 'updateContainerSensors').mockResolvedValue(undefined);
+      const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+      const queuedSync = containerUpdatedCb({ id: 'ctr-queued', name: 'queued', watcher: 'local' });
+      await publishStarted;
+      const staleQueuedSync = containerUpdatedCb({
+        id: 'ctr-queued',
+        name: 'queued',
+        watcher: 'local',
+        displayName: 'Stale queued update',
+      });
+
+      let deregisterResolved = false;
+      const deregisterPromise = h.deregister().then(() => {
+        deregisterResolved = true;
+      });
+      await flushMicrotasks();
+
+      expect(deregisterResolved).toBe(false);
+
+      releasePublish();
+      await Promise.all([queuedSync, staleQueuedSync, deregisterPromise]);
+      expect(deregisterResolved).toBe(true);
+      expect(
+        clientMock.publish.mock.calls.filter(
+          ([topic]) => topic === 'homeassistant/update/topic_local_queued/config',
+        ),
+      ).toHaveLength(1);
+    });
+
     test('deregister unsubscribes exact filters, removes the exact listener, and clears the rate limiter', async () => {
       const clientMock = makeCapableClientMock();
       const h = new Hass({

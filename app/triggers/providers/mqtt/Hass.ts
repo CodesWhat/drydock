@@ -3,6 +3,7 @@ import { recordAuditEvent } from '../../../api/audit-events.js';
 import { providers as iconProviders, normalizeSlug } from '../../../api/icons/providers.js';
 import { getVersion } from '../../../configuration/index.js';
 import {
+  type ContainerLifecycleEventPayload,
   registerContainerAdded,
   registerContainerRemoved,
   registerContainerUpdated,
@@ -12,6 +13,7 @@ import {
 import type { Container } from '../../../model/container.js';
 import * as containerStore from '../../../store/container.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../../updates/request-update.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { HassCommandRateLimiter } from './hass-command-rate-limiter.js';
 import {
   getHassCommandTopicFilters,
@@ -225,6 +227,14 @@ class Hass {
   // re-exclusion cleans again.
   private cleanedExcludedContainerKeys = new Set<string>();
 
+  private containerSyncQueueByKey = new Map<string, Promise<void>>();
+
+  private aggregateSensorSync: Promise<void> = Promise.resolve();
+
+  private acceptingProviderWork = true;
+
+  private providerWork = new Set<Promise<void>>();
+
   private unregisterContainerAdded?: () => void;
   private unregisterContainerUpdated?: () => void;
   private unregisterContainerRemoved?: () => void;
@@ -265,28 +275,32 @@ class Hass {
 
     // Subscribe to container events to sync HA
     this.unregisterContainerAdded = registerContainerAdded((container) =>
-      this.syncContainerSensor(container),
+      this.isolateContainerSync(container, () => this.syncContainerSensor(container)),
     );
     this.unregisterContainerUpdated = registerContainerUpdated((container) =>
-      this.syncContainerSensor(container),
+      this.isolateContainerSync(container, () => this.syncContainerSensor(container)),
     );
-    this.unregisterContainerRemoved = registerContainerRemoved((container) => {
-      // #491 — a re-included container starts clean again, so drop its key
-      // here too (not just on re-inclusion in syncContainerSensor).
-      this.cleanedExcludedContainerKeys.delete(this.getContainerSyncKey(container));
-      return this.removeContainerSensor(container);
-    });
+    this.unregisterContainerRemoved = registerContainerRemoved((container) =>
+      this.isolateContainerSync(container, () => {
+        // #491 — a re-included container starts clean again, so drop its key
+        // here too (not just on re-inclusion in syncContainerSensor).
+        this.cleanedExcludedContainerKeys.delete(this.getContainerSyncKey(container));
+        return this.removeContainerSensor(container);
+      }),
+    );
 
     // Subscribe to watcher events to sync HA
     this.unregisterWatcherStart = registerWatcherStart((watcher) =>
-      this.updateWatcherSensors({ watcher, isRunning: true }),
+      this.isolateWatcherSync(watcher, true),
     );
     this.unregisterWatcherStop = registerWatcherStop((watcher) =>
-      this.updateWatcherSensors({ watcher, isRunning: false }),
+      this.isolateWatcherSync(watcher, false),
     );
   }
 
   async deregister(): Promise<void> {
+    this.acceptingProviderWork = false;
+
     this.unregisterContainerAdded?.();
     this.unregisterContainerAdded = undefined;
 
@@ -301,6 +315,10 @@ class Hass {
 
     this.unregisterWatcherStop?.();
     this.unregisterWatcherStop = undefined;
+
+    while (this.providerWork.size > 0) {
+      await Promise.allSettled(this.providerWork);
+    }
 
     // #210 — unwind the command subscription, if one was ever established
     if (this.commandMessageHandler && hasHassCommandCapableClient(this.client)) {
@@ -366,6 +384,41 @@ class Hass {
       this.commandMessageHandler = undefined;
       this.commandSubscriptionActive = false;
     }
+  }
+
+  /**
+   * Reconcile retained Home Assistant discovery with every container already
+   * loaded from the durable store. Container-level failures are isolated so a
+   * broker publish failure cannot abort MQTT trigger startup.
+   */
+  async resyncDiscovery(): Promise<void> {
+    let containers: Container[];
+    try {
+      containers = containerStore.getContainers({}) as Container[];
+    } catch (error: unknown) {
+      this.log.warn(
+        `Failed to load containers for hass discovery resync (${getErrorMessage(error)})`,
+      );
+      return;
+    }
+
+    let previousSnapshot = Promise.resolve();
+    const snapshotSyncs = containers.map((container) => {
+      const waitForPreviousSnapshot = previousSnapshot;
+      const queuedSync = this.enqueueContainerSync(container, async () => {
+        await waitForPreviousSnapshot;
+        await this.syncContainerSensor(container);
+      });
+      const isolatedSync = queuedSync.catch((error: unknown) => {
+        this.log.warn(
+          `Failed to resync hass discovery for container [${container.name}] (${getErrorMessage(error)})`,
+        );
+      });
+      previousSnapshot = isolatedSync;
+      return isolatedSync;
+    });
+
+    await Promise.all(snapshotSyncs);
   }
 
   /**
@@ -691,6 +744,43 @@ class Hass {
     );
   }
 
+  private enqueueContainerSync(
+    container: Container | ContainerLifecycleEventPayload,
+    sync: () => Promise<void> | void,
+  ): Promise<void> {
+    const containerKey = this.getContainerSyncKey(container);
+    const previousSync = this.containerSyncQueueByKey.get(containerKey) ?? Promise.resolve();
+    const nextSync = previousSync
+      .catch(() => undefined)
+      .then(() => {
+        if (!this.acceptingProviderWork) {
+          return;
+        }
+        return sync();
+      });
+    let trackedSync: Promise<void>;
+    trackedSync = nextSync.finally(() => {
+      if (this.containerSyncQueueByKey.get(containerKey) === trackedSync) {
+        this.containerSyncQueueByKey.delete(containerKey);
+      }
+    });
+    this.containerSyncQueueByKey.set(containerKey, trackedSync);
+    return trackedSync;
+  }
+
+  private isolateContainerSync(
+    container: Container | ContainerLifecycleEventPayload,
+    sync: () => Promise<void> | void,
+  ): Promise<void> {
+    return this.trackProviderWork(() =>
+      this.enqueueContainerSync(container, sync).catch((error: unknown) => {
+        this.log.warn(
+          `Failed to sync hass discovery for container [${container.name}] (${getErrorMessage(error)})`,
+        );
+      }),
+    );
+  }
+
   /**
    * Sync a container's hass sensor with this trigger's mustTrigger gating
    * (rollback/agent scoping plus dd.notification.include/exclude). A
@@ -853,6 +943,14 @@ class Hass {
   }
 
   async updateContainerSensors(container) {
+    const nextSync = this.aggregateSensorSync
+      .catch(() => undefined)
+      .then(() => this.updateContainerSensorsNow(container));
+    this.aggregateSensorSync = nextSync;
+    return nextSync;
+  }
+
+  private async updateContainerSensorsNow(container) {
     const containerAgentName = normalizeAgentValue(container?.agent);
     const watcherSensorPrefix = this.getWatcherTopicPrefix({
       watcherName: container.watcher,
@@ -1058,6 +1156,26 @@ class Hass {
       topic: watcherStatusSensor.topic,
       value: isRunning,
     });
+  }
+
+  private isolateWatcherSync(watcher, isRunning: boolean): Promise<void> {
+    return this.trackProviderWork(() =>
+      this.updateWatcherSensors({ watcher, isRunning }).catch((error: unknown) => {
+        this.log.warn(
+          `Failed to sync hass discovery for watcher [${watcher.name}] (${getErrorMessage(error)})`,
+        );
+      }),
+    );
+  }
+
+  private trackProviderWork(start: () => Promise<void>): Promise<void> {
+    if (!this.acceptingProviderWork) {
+      return Promise.resolve();
+    }
+    const work = start();
+    this.providerWork.add(work);
+    void work.finally(() => this.providerWork.delete(work));
+    return work;
   }
 
   /**

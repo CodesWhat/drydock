@@ -250,6 +250,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
         isContainerAllowed: (container) => this.mustTrigger(container),
       });
       await this.hass.initCommandSubscription(); // #210
+      await this.hass.resyncDiscovery();
     }
     this.unregisterContainerAdded = registerContainerAdded((container) =>
       this.handleContainerEvent(container),
