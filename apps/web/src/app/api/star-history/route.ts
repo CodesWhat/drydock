@@ -1,14 +1,13 @@
-import { REPO_SLUG } from "@/lib/site-config";
+import { resolveStarHistoryRequest } from "@/lib/star-history-request.mjs";
 import {
   buildCumulativeSeries,
   renderStarHistoryFallbackSvg,
   renderStarHistorySvg,
-  resolveTheme,
 } from "@/lib/star-history-svg.mjs";
 
 // Self-hosted replacement for the api.star-history.com embed (#671): fetches
 // stargazer timestamps server-side and renders the SVG from our own origin,
-// so the homepage card and the README no longer depend on a third party.
+// so CodesWhat's product surfaces no longer depend on a third party.
 
 export const runtime = "nodejs";
 
@@ -40,7 +39,7 @@ type StargazerPage = {
   edges?: unknown;
 };
 
-async function fetchStarredTimestamps(): Promise<string[] | undefined> {
+async function fetchStarredTimestamps(repoSlug: string): Promise<string[] | undefined> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
     // The GraphQL API has no anonymous mode, so an unconfigured deployment
@@ -48,7 +47,7 @@ async function fetchStarredTimestamps(): Promise<string[] | undefined> {
     return undefined;
   }
 
-  const [owner, name] = REPO_SLUG.split("/");
+  const [owner, name] = repoSlug.split("/");
   if (!owner || !name) {
     return undefined;
   }
@@ -91,7 +90,11 @@ async function fetchStarredTimestamps(): Promise<string[] | undefined> {
     const pageInfo = stargazers?.pageInfo;
     // An error payload or a shape change would otherwise read as "no more
     // pages" and cache a truncated chart as the repo total for six hours.
-    if (!Array.isArray(edges) || typeof pageInfo?.hasNextPage !== "boolean") {
+    if (
+      !Array.isArray(edges) ||
+      edges.length > PER_PAGE ||
+      typeof pageInfo?.hasNextPage !== "boolean"
+    ) {
       return undefined;
     }
 
@@ -123,25 +126,39 @@ async function fetchStarredTimestamps(): Promise<string[] | undefined> {
 }
 
 export async function GET(request: Request) {
-  const theme = resolveTheme(new URL(request.url).searchParams.get("theme"));
-  const starredAt = await fetchStarredTimestamps();
+  const requestConfig = resolveStarHistoryRequest(new URL(request.url).searchParams);
+  if (!requestConfig) {
+    return new Response("Invalid star history request", {
+      status: 400,
+      headers: {
+        "Cache-Control": "no-store",
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+
+  const { repoSlug, theme } = requestConfig;
+  const starredAt = await fetchStarredTimestamps(repoSlug);
 
   if (starredAt === undefined) {
-    return new Response(renderStarHistoryFallbackSvg({ theme, repoSlug: REPO_SLUG }), {
+    return new Response(renderStarHistoryFallbackSvg({ theme, repoSlug }), {
       status: 200,
       headers: {
         "Content-Type": "image/svg+xml; charset=utf-8",
         "Cache-Control": FAILURE_CACHE,
+        "X-Content-Type-Options": "nosniff",
       },
     });
   }
 
   const series = buildCumulativeSeries(starredAt, Date.now());
-  return new Response(renderStarHistorySvg({ series, theme, repoSlug: REPO_SLUG }), {
+  return new Response(renderStarHistorySvg({ series, theme, repoSlug }), {
     status: 200,
     headers: {
       "Content-Type": "image/svg+xml; charset=utf-8",
       "Cache-Control": SUCCESS_CACHE,
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }

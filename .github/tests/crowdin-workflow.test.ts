@@ -7,6 +7,9 @@ import { loadWorkflow, type WorkflowStep } from './workflow-test-utils';
 
 interface CrowdinConfig {
   files?: Array<{
+    source?: string;
+    translation?: string;
+    excluded_target_languages?: string[];
     languages_mapping?: {
       locale?: Record<string, string>;
     };
@@ -78,4 +81,29 @@ test('Crowdin workflow lets crowdin.yml own the target language list', () => {
   expect(mappedLanguages).toContain('es-ES');
   expect(mappedLanguages).toContain('zh-TW');
   expect(step.with?.download_translations_args).toBeUndefined();
+});
+
+test('Crowdin sync manages the six translated READMEs independently of UI catalogs', () => {
+  const workflow = loadWorkflow(workflowPath);
+  const config = yaml.parse(readFileSync(crowdinConfigPath, 'utf8')) as CrowdinConfig;
+  const readmeFileSet = config.files?.find((file) => file.source === '/README.md');
+
+  expect(readmeFileSet).toEqual({
+    source: '/README.md',
+    translation: '/README.%locale%.md',
+    languages_mapping: {
+      locale: {
+        de: 'de',
+        'es-ES': 'es',
+        fr: 'fr',
+        pl: 'pl',
+        'pt-BR': 'pt-BR',
+        'zh-CN': 'zh-CN',
+      },
+    },
+    excluded_target_languages: ['ar', 'it', 'ja', 'ko', 'nl', 'ru', 'tr', 'uk', 'vi', 'zh-TW'],
+    update_option: 'update_as_unapproved',
+  });
+  expect(workflow.on?.push?.paths).toContain('README.md');
+  expect(workflow.on?.push?.paths).not.toContain('README.*.md');
 });

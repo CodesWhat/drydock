@@ -67,9 +67,20 @@ test("star history route never renders partial stargazer data and bounds its fet
   assert.match(starHistoryRouteSource, /typeof pageInfo\?\.hasNextPage !== "boolean"/u);
   // An unparseable timestamp would undercount the series, so it fails the run.
   assert.match(starHistoryRouteSource, /!Number\.isFinite\(Date\.parse\(value\)\)/u);
+  // GitHub is asked for at most PER_PAGE edges, and an oversized response is
+  // rejected before it can grow the accumulated series past MAX_PAGES * PER_PAGE.
+  assert.match(starHistoryRouteSource, /edges\.length > PER_PAGE/u);
   // One shared deadline across the whole pagination run.
   assert.match(starHistoryRouteSource, /AbortSignal\.timeout\(FETCH_DEADLINE_MS\)/u);
   assert.match(starHistoryRouteSource, /\n\s+signal,\n\s+next: \{ revalidate:/u);
+});
+
+test("star history route resolves an allowlisted repository before fetching", () => {
+  assert.match(starHistoryRouteSource, /resolveStarHistoryRequest/u);
+  assert.match(starHistoryRouteSource, /fetchStarredTimestamps\(repoSlug\)/u);
+  assert.doesNotMatch(starHistoryRouteSource, /REPO_SLUG\.split/u);
+  assert.match(starHistoryRouteSource, /status: 400/u);
+  assert.match(starHistoryRouteSource, /"Cache-Control": "no-store"/u);
 });
 
 test("star history route reads stars through GraphQL, not the REST stargazers endpoint", () => {

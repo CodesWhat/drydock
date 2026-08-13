@@ -34,3 +34,25 @@ files:
         zh-CN: zh-CN
         zh-TW: zh-TW
     update_option: update_as_unapproved
+  - source: /README.md
+    translation: /README.%locale%.md
+    languages_mapping:
+      locale:
+        de: de
+        es-ES: es
+        fr: fr
+        pl: pl
+        pt-BR: pt-BR
+        zh-CN: zh-CN
+    excluded_target_languages:
+      - ar
+      - it
+      - ja
+      - ko
+      - nl
+      - ru
+      - tr
+      - uk
+      - vi
+      - zh-TW
+    update_option: update_as_unapproved
