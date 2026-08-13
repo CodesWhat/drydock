@@ -116,6 +116,9 @@ export interface DockerApiProxyResponse {
 
 const MAX_DOCKER_PROXY_RESPONSE_BYTES = 100 * 1024 * 1024;
 const PORTWING_DOCKER_PROXY_INACTIVITY_TIMEOUT_MS = 30_000;
+const AGENT_REQUEST_TIMEOUT_MS = 30_000;
+const MAX_AGENT_JSON_BYTES = 16 * 1024 * 1024;
+const MAX_SSE_EVENT_BUFFER_BYTES = 16 * 1024 * 1024;
 
 function isStreamingDockerTarget(target: string): boolean {
   const path = target.split('?', 1)[0];
@@ -396,7 +399,7 @@ export class AgentClient {
   }
 
   private buildAxiosOptions(): AxiosRequestConfig {
-    const options: AxiosRequestConfig = {};
+    const options: AxiosRequestConfig = { maxRedirects: 0 };
 
     // Token mode (default): static X-Dd-Agent-Secret header, unchanged from
     // pre-ed25519 behavior. Ed25519 mode signs each request individually (see
@@ -461,9 +464,23 @@ export class AgentClient {
    * `path` is the exact origin-form request target placed on the wire:
    * escaped path plus the unmodified raw query string. Portwing signature v2
    * verifies those bytes verbatim, including query ordering and escaping.
-   * In token mode this just returns the static axiosOptions, unchanged.
+   * In token mode this uses the static authentication options. Ordinary JSON
+   * requests also receive finite transport and body limits.
    */
   private buildRequestConfig(method: string, path: string, data?: unknown): AxiosRequestConfig {
+    return {
+      ...this.buildAuthenticatedRequestConfig(method, path, data),
+      timeout: AGENT_REQUEST_TIMEOUT_MS,
+      maxContentLength: MAX_AGENT_JSON_BYTES,
+      maxBodyLength: MAX_AGENT_JSON_BYTES,
+    };
+  }
+
+  private buildAuthenticatedRequestConfig(
+    method: string,
+    path: string,
+    data?: unknown,
+  ): AxiosRequestConfig {
     if (!this.ed25519PrivateKey || !this.config.signingkeyid) {
       return this.axiosOptions;
     }
@@ -1145,7 +1162,7 @@ export class AgentClient {
     return remainder;
   }
 
-  private attachStreamHandlers(stream: NodeJS.EventEmitter) {
+  private attachStreamHandlers(stream: NodeJS.EventEmitter & { destroy?: () => void }) {
     const decoder = new StringDecoder('utf8');
     let buffer = '';
     let sseProcessing = Promise.resolve();
@@ -1166,6 +1183,15 @@ export class AgentClient {
           }
           buffer += decodedChunk;
           buffer = await this.processSseBuffer(buffer);
+          if (Buffer.byteLength(buffer, 'utf8') > MAX_SSE_EVENT_BUFFER_BYTES) {
+            buffer = '';
+            this.activeSseStream = undefined;
+            stream.destroy?.();
+            this.log.error(
+              `SSE event buffer exceeded the ${MAX_SSE_EVENT_BUFFER_BYTES}-byte limit. Reconnecting...`,
+            );
+            this.scheduleReconnect();
+          }
         })
         .catch((error: unknown) => {
           this.log.error(`SSE data processing failed: ${getErrorMessage(error)}`);
@@ -1201,7 +1227,7 @@ export class AgentClient {
       method: 'get',
       url: `${this.baseUrl}/api/events`,
       responseType: 'stream',
-      ...this.buildRequestConfig('GET', '/api/events'),
+      ...this.buildAuthenticatedRequestConfig('GET', '/api/events'),
     })
       .then((response) => {
         if (this.stopped) {
