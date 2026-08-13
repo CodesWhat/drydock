@@ -14,8 +14,7 @@
 
 </div>
 
-<p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0-blue" alt="Version"></a>
+<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -97,8 +96,7 @@ services:
     restart: unless-stopped
 ```
 
-<details>
-<summary>Alternativa:<a href="https://github.com/CodesWhat/sockguard">sockguard</a>proxy de socket</summary>
+<details><summary>Alternativa:<a href="https://github.com/CodesWhat/sockguard">sockguard</a>proxy de socket</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) es un filtro de socket Docker de denegación predeterminado del mismo ecosistema CodesWhat, con un ajuste preestablecido creado para drydock:
 
@@ -137,8 +135,7 @@ Consulte el ajuste preestablecido [`app/configs/portwing.yaml`](https://github.c
 
 </details>
 
-<details>
-<summary>Alternativa: inicio rápido con montaje directo en enchufe</summary>
+<details><summary>Alternativa: inicio rápido con montaje directo en enchufe</summary>
 
 ```bash
 docker run -d \
@@ -178,8 +175,7 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 
 <h2 align="center" id="recent-updates">🆕 Actualizaciones recientes</h2>
 
-<details open>
-<summary><strong>Aspectos destacados de v1.6.0</strong></summary>
+<details open><summary><strong>Aspectos destacados de v1.6.0</strong></summary>
 
 - **El transporte de agentes/Edge de Portwing madura**: comprobaciones y actualizaciones nativas de Docker controladas por el controlador para Portwing 0.9.0+, transmisión continua de registros Edge, firma de solicitudes Ed25519 (v2) y nombres visibles propiedad del agente vinculados a su clave. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637))
 - **Política de actualización declarativa con estabilización de madurez**: precedencia `dd.updatePolicy.*` de tres niveles, cuenta atrás en vivo hasta liberar un candidato retenido y una notificación `maturity-cleared` dedicada. ([Discusión #307](https://github.com/CodesWhat/drydock/discussions/307), [Discusión #406](https://github.com/CodesWhat/drydock/discussions/406))
@@ -192,8 +188,7 @@ Notas completas en [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11).
 
 </details>
 
-<details>
-<summary><strong>Aspectos destacados de v1.6.0-rc.13</strong></summary>
+<details><summary><strong>Aspectos destacados de v1.6.0-rc.13</strong></summary>
 
 - **La comparación de digest parte de candidatos del mismo repositorio**: `getOrderedRepoDigests` filtra `RepoDigests` por el repositorio de la imagen en vez de confiar en el primer elemento; un ancla obsoleta ya guardada se repara sola. ([#670](https://github.com/CodesWhat/drydock/pull/670))
 - **`nanoid` fijado en 3.3.18** en todos los espacios de trabajo para CVE-2026-67213 y, en e2e, CVE-2026-67214. ([#673](https://github.com/CodesWhat/drydock/pull/673))
@@ -203,8 +198,7 @@ Notas completas en [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11).
 
 </details>
 
-<details>
-<summary><strong>Aspectos destacados de v1.6.0-rc.12</strong></summary>
+<details><summary><strong>Aspectos destacados de v1.6.0-rc.12</strong></summary>
 
 - **Renovación de dependencias de seguridad**: `brace-expansion` 5.0.9, `ip-address` 10.3.1 y `fast-uri` 4.1.2 corrigen sus CVE asociadas. ([#659](https://github.com/CodesWhat/drydock/pull/659))
 - **Reloj de madurez**: el distintivo hot/mature resuelve primero `updatePolicy.maturityMinAgeDays` por contenedor y luego el umbral global, igual que el bloqueo; los fallos de fecha de publicación se registran con `warn` en vez de `debug`. ([#604](https://github.com/CodesWhat/drydock/issues/604))
@@ -214,8 +208,7 @@ Notas completas en [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11).
 
 </details>
 
-<details>
-<summary><strong>Aspectos destacados de v1.6.0-rc.11</strong></summary>
+<details><summary><strong>Aspectos destacados de v1.6.0-rc.11</strong></summary>
 
 - **Transporte Portwing**: las marcas exactas `transport=docker-api`, `execution=controller`, `events=portwing` de Portwing 0.9.0 enrutan comprobaciones nativas, actualizaciones individuales/por lotes, acciones de ciclo de vida, vistas previas y restauraciones mediante Standard HTTP autenticado o Edge. Portwing sigue siendo la fuente de eventos y el inventario sin procesar no puede borrar resultados del controlador. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
 - **Notificaciones**: plantillas de cuerpo y título por regla/por proveedor con vista previa en vivo, además de categorías de campana en la aplicación respaldadas por auditorías y umbrales de gravedad de actualización.
@@ -229,8 +222,7 @@ Guía completa de migración en [DEPRECATIONS.md](./DEPRECATIONS.md).
 
 </details>
 
-<details>
-<summary><strong>v1.5.2 aspectos destacados</strong></summary>
+<details><summary><strong>v1.5.2 aspectos destacados</strong></summary>
 
 - **Política de actualización segura para la recreación**: las puertas de madurez, las etiquetas/resúmenes omitidos y las posposiciones ahora sobreviven a la recreación de contenedores para cargas de trabajo de agentes locales y remotos.
 - **Confiabilidad de etiquetas fijadas**: las etiquetas completamente fijadas detectan reconstrucciones de resúmenes de la misma etiqueta nuevamente, mientras que la interfaz de usuario puede mostrar una etiqueta de la misma familia más nueva y no procesable sin cambiar el comportamiento de actualización o activación.
@@ -253,7 +245,7 @@ Historial completo en [CHANGELOG.md](./CHANGELOG.md).
 <p align="center"><em>Detecte una actualización, vea exactamente qué cambios y aplíquela. Se manejan copias de seguridad, verificación de estado y reversión.</em></p>
 
 <table>
-<tr>
+<tbody><tr>
 <td width="50%" align="center"><strong>Luz</strong></td>
 <td width="50%" align="center"><strong>oscuro</strong></td>
 </tr>
@@ -261,7 +253,7 @@ Historial completo en [CHANGELOG.md](./CHANGELOG.md).
 <td><img src="docs/assets/drydock-dashboard-light.png" alt="Dashboard Light"></td>
 <td><img src="docs/assets/drydock-dashboard-dark.png" alt="Dashboard Dark"></td>
 </tr>
-</table>
+</tbody></table>
 
 <div align="center">
 
@@ -285,23 +277,23 @@ La mayoría de las herramientas obligan a hacer concesiones. Los actualizadores 
 
 <h2 align="center" id="features">✨ Características</h2>
 
-| | Característica | Descripción |
-|---|---|---|
-| 🔭 | **Monitorizar primero la detección** | Observa cada contenedor en ejecución y clasifica cada actualización disponible como principal, menor, parche o resumen antes de que suceda algo. Nada cambia hasta que tú lo digas. |
-| 📦 | **23 proveedores de registro** | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbour, Artifactory, Nexus y 12 más. Público y privado, en la nube y autohospedado, con autenticación y TLS por registro. |
-| 🔔 | **20 activadores** | 17 canales de notificación (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy y más) además de acciones de Docker, Docker Compose y Command, con plantillas por evento/proveedor, vista previa en vivo, filtrado de umbral y modo por lotes. |
-| 🥊 | **Update Bouncer** | El escaneo de vulnerabilidades Trivy/Grype bloquea las actualizaciones no seguras antes de que se implementen, con verificación de firma conjunta y generación de SBOM (CycloneDX y SPDX). |
-| ↩️ | **Copia de seguridad de imágenes y reversión automática** | Instantáneas de imágenes previas a la actualización con retención configurable, reversión automática en caso de falla en la verificación de estado y reversión manual con un solo clic desde la interfaz de usuario. |
-| 🪝 | **Ganchos de ciclo de vida** | Comandos de shell previos y posteriores a la actualización a través de etiquetas de contenedor, con tiempos de espera por gancho y control de cancelación en caso de falla. |
-| 🗂️ | **Actualizaciones Docker Compose** | Extraiga y vuelva a crear servicios de Compose a través de la API Docker Engine con parches de imágenes que preservan YAML. |
-| 🎛️ | **Política por contenedor** | Las reglas de etiquetas Regex y el enrutamiento de activación utilizan etiquetas `dd.*`; Las puertas de madurez, saltar/posponer/fijar y las ventanas de mantenimiento se almacenan a través de UI/API o la configuración del observador. |
-| 🛰️ | **Agentes distribuidos** | Supervise hosts Docker remotos mediante SSE. Los agentes Portwing 0.9.0+ funcionan por Standard HTTP entrante o transporte WebSocket Edge saliente; Drydock 1.6.0-rc.11+ puede ejecutar en el controlador comprobaciones nativas de registros y actualizaciones Docker individuales o por lotes a través de cualquiera de las rutas autenticadas. Edge también transporta registros continuos sin puerto de entrada; `DD_EXPERIMENTAL_PORTWING=false` sigue siendo la desactivación de emergencia. |
-| 🖥️ | **Panel web** | Interfaz de usuario de Vue 3 con una cuadrícula de widgets personalizable sin dependencia, vistas de tablas/tarjetas responsivas, actualizaciones SSE en vivo, controles de campana de notificación y detalles, registros y estadísticas por contenedor. |
-| 🔗 | **API REST y webhooks** | Puntos finales autenticados por token para activación de actualizaciones y vigilancia de CI/CD, además de ingesta de webhooks de registro firmados para eventos push. |
-| 🔐 | **Autenticación OIDC** | Asegure el tablero con OpenID Connect (Authelia, Auth0, Authentik). Todos los flujos de autenticación fallan al cerrarse de forma predeterminada. |
-| 📈 | **Métricas Prometheus** | Punto final `/metrics` incorporado con omisión de autenticación opcional para pilas de monitoreo Prometheus y Grafana. |
-| 🌍 | **17 configuraciones regionales de UI** | Sistema de traducción completamente cableado con inglés completo y 16 configuraciones regionales mantenidas por la comunidad sincronizadas a través de Crowdin, conmutables en Config. |
-| 🔒 | **Expresión regular inmune a ReDoS** | Cada patrón de etiquetas proporcionado por el usuario se compila a través de re2js (un puerto RE2 JS puro) para una coincidencia de tiempo lineal que no puede detenerse por un patrón de retroceso catastrófico. |
+|     | Feature                                                   | Descripción                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🔭  | **Monitorizar primero la detección**                      | Observa cada contenedor en ejecución y clasifica cada actualización disponible como principal, menor, parche o resumen antes de que suceda algo. Nada cambia hasta que tú lo digas.                                                                                                                                                                                                                                                                                                                                                                                                                |
+| 📦  | **23 proveedores de registro**                            | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbour, Artifactory, Nexus y 12 más. Público y privado, en la nube y autohospedado, con autenticación y TLS por registro.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 🔔  | **20 activadores**                                        | 17 canales de notificación (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy y más) además de acciones de Docker, Docker Compose y Command, con plantillas por evento/proveedor, vista previa en vivo, filtrado de umbral y modo por lotes.                                                                                                                                                                                                                                                                                                                                                    |
+| 🥊  | **Update Bouncer**                                        | El escaneo de vulnerabilidades Trivy/Grype bloquea las actualizaciones no seguras antes de que se implementen, con verificación de firma conjunta y generación de SBOM (CycloneDX y SPDX).                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ↩️  | **Copia de seguridad de imágenes y reversión automática** | Instantáneas de imágenes previas a la actualización con retención configurable, reversión automática en caso de falla en la verificación de estado y reversión manual con un solo clic desde la interfaz de usuario.                                                                                                                                                                                                                                                                                                                                                                                               |
+| 🪝  | **Ganchos de ciclo de vida**                              | Comandos de shell previos y posteriores a la actualización a través de etiquetas de contenedor, con tiempos de espera por gancho y control de cancelación en caso de falla.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 🗂️ | **Actualizaciones Docker Compose**                        | Extraiga y vuelva a crear servicios de Compose a través de la API Docker Engine con parches de imágenes que preservan YAML.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 🎛️ | **Política por contenedor**                               | Las reglas de etiquetas Regex y el enrutamiento de activación utilizan etiquetas `dd.*`; Las puertas de madurez, saltar/posponer/fijar y las ventanas de mantenimiento se almacenan a través de UI/API o la configuración del observador.                                                                                                                                                                                                                                                                                                                                                                          |
+| 🛰️ | **Agentes distribuidos**                                  | Supervise hosts Docker remotos mediante SSE. Los agentes Portwing 0.9.0+ funcionan por Standard HTTP entrante o transporte WebSocket Edge saliente; Drydock 1.6.0-rc.11+ puede ejecutar en el controlador comprobaciones nativas de registros y actualizaciones Docker individuales o por lotes a través de cualquiera de las rutas autenticadas. Edge también transporta registros continuos sin puerto de entrada; `DD_EXPERIMENTAL_PORTWING=false` sigue siendo la desactivación de emergencia. |
+| 🖥️ | **Panel web**                                             | Interfaz de usuario de Vue 3 con una cuadrícula de widgets personalizable sin dependencia, vistas de tablas/tarjetas responsivas, actualizaciones SSE en vivo, controles de campana de notificación y detalles, registros y estadísticas por contenedor.                                                                                                                                                                                                                                                                                                                                                           |
+| 🔗  | **API REST y webhooks**                                   | Puntos finales autenticados por token para activación de actualizaciones y vigilancia de CI/CD, además de ingesta de webhooks de registro firmados para eventos push.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 🔐  | **Autenticación OIDC**                                    | Asegure el tablero con OpenID Connect (Authelia, Auth0, Authentik). Todos los flujos de autenticación fallan al cerrarse de forma predeterminada.                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 📈  | **Métricas Prometheus**                                   | Punto final `/metrics` incorporado con omisión de autenticación opcional para pilas de monitoreo Prometheus y Grafana.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 🌍  | **17 configuraciones regionales de UI**                   | Sistema de traducción completamente cableado con inglés completo y 16 configuraciones regionales mantenidas por la comunidad sincronizadas a través de Crowdin, conmutables en Config.                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 🔒  | **Expresión regular inmune a ReDoS**                      | Cada patrón de etiquetas proporcionado por el usuario se compila a través de re2js (un puerto RE2 JS puro) para una coincidencia de tiempo lineal que no puede detenerse por un patrón de retroceso catastrófico.                                                                                                                                                                                                                                                                                                                                                                               |
 
 <hr>
 
@@ -331,35 +323,46 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 
 <h2 align="center" id="feature-comparison">⚖️ Comparación de funciones</h2>
 
-<details>
-<summary><strong>¿Cómo se compara drydock con otras herramientas de actualización de contenedores?</strong></summary>
+<details><summary><strong>¿Cómo se compara drydock con otras herramientas de actualización de contenedores?</strong></summary>
 
 > ✅ = compatible &nbsp; ❌ = no compatible &nbsp; ⚠️ = parcial/limitado &nbsp; † = archivado, ya no se mantiene
 
-| Feature | drydock | WUD | Diun | *Watchtower †* | *Ouroboros †* |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Interfaz web / panel | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Actualización automática de contenedores | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Actualizaciones de Docker Compose | ✅ | ✅ | ❌ | ⚠️ | ❌ |
-| Canales de activación / notificación | 20 | 16 | 17 | ~19 | ~6 |
-| Proveedores de registro | 23 | 13 | ⚠️ | ⚠️ | ⚠️ |
-| Autenticación OIDC / SSO | ✅ | ✅ | ❌ | ❌ | ❌ |
-| API REST | ✅ | ✅ | ⚠️ | ⚠️ | ❌ |
-| Métricas de Prometheus | ✅ | ✅ | ❌ | ✅ | ✅ |
-| MQTT / Home Assistant | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Copia y reversión de imágenes | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Agrupación de contenedores / stacks | ✅ | ✅ | ❌ | ⚠️ | ❌ |
-| Hooks del ciclo de vida (antes/después) | ✅ | ❌ | ❌ | ✅ | ❌ |
-| API de webhooks para CI/CD | ✅ | ❌ | ❌ | ✅ | ❌ |
-| Iniciar/detener/reiniciar/actualizar contenedores | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Agentes distribuidos (remotos) | ✅ | ❌ | ✅ | ⚠️ | ❌ |
-| Registro de auditoría | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Análisis de seguridad (Trivy/Grype) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Actualizaciones compatibles con SemVer | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Vigilancia de resúmenes | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Multi-arquitectura (amd64/arm64) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Visor de registros del contenedor | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Mantenimiento activo | ✅ | ✅ | ✅ | ❌ | ❌ |
+<table>
+<thead>
+<tr>
+<th width="28%">Feature</th>
+<th width="15%" align="center">drydock</th>
+<th width="15%" align="center">WUD</th>
+<th width="15%" align="center">Diun</th>
+<th width="13%" align="center">*Watchtower †*</th>
+<th width="14%" align="center">*Ouroboros †*</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Interfaz web / panel</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Actualización automática de contenedores</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Actualizaciones de Docker Compose</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Canales de activación / notificación</td><td align="center">20</td><td align="center">16</td><td align="center">17</td><td align="center">~19</td><td align="center">~6</td></tr>
+<tr><td>Proveedores de registro</td><td align="center">23</td><td align="center">13</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Autenticación OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>API REST</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Métricas de Prometheus</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Copia y reversión de imágenes</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Agrupación de contenedores / stacks</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Hooks del ciclo de vida (antes/después)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>API de webhooks para CI/CD</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Iniciar/detener/reiniciar/actualizar contenedores</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Agentes distribuidos (remotos)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Registro de auditoría</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Análisis de seguridad (Trivy/Grype)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Actualizaciones compatibles con SemVer</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Multi-arquitectura (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Visor de registros del contenedor</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Mantenimiento activo</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+</tbody>
+</table>
 
 > Datos basados en documentación disponible públicamente a marzo de 2026.
 > Se aceptan contribuciones si alguna información es inexacta.
@@ -370,8 +373,7 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 
 <h2 align="center" id="migration">🔄 Migración</h2>
 
-<details>
-<summary><strong>Migrando desde WUD (¿Qué pasa Docker?)</strong></summary>
+<details><summary><strong>Migrando desde WUD (¿Qué pasa Docker?)</strong></summary>
 
 Drydock v1.6 ya no carga variables de entorno `WUD_*` o etiquetas `wud.*` en tiempo de ejecución. Vuelva a escribirlos antes de iniciar el servicio actualizado; El estado persistente aún migra automáticamente. Utilice `docker exec -it drydock node dist/index.js config migrate --dry-run` para obtener una vista previa y luego `docker exec -it drydock node dist/index.js config migrate --file .env --file compose.yaml` para reescribir la configuración con los nombres `DD_*` y `dd.*`.
 
@@ -381,23 +383,22 @@ Drydock v1.6 ya no carga variables de entorno `WUD_*` o etiquetas `wud.*` en tie
 
 <h2 align="center" id="roadmap">🗺️ Hoja de ruta</h2>
 
-<details>
-<summary><strong>Temas y aspectos destacados de la versión</strong></summary>
+<details><summary><strong>Temas y aspectos destacados de la versión</strong></summary>
 
 Esta dirección cubre al menos los próximos doce meses, hasta agosto de 2027.
 Solo temas generales; consulte [CHANGELOG.md](CHANGELOG.md) para conocer el detalle de cada versión.
 
-| Versión | Tema | Aspectos destacados |
-| --- | --- | --- |
-| **v1.3.x** ✅ | Seguridad y Estabilidad | Escaneo Trivy, Update Bouncer, SBOM, 7 nuevos registros, 4 nuevos activadores, motor re2js regex |
-| **v1.4.x** ✅ | Modernización y refuerzo de la interfaz de usuario | Tailwind 4 + componentes personalizados, 6 temas, paleta Cmd/K, OpenAPI 3.1, actualizaciones YAML nativas de redacción, escaneo de doble ranura, refuerzo OIDC |
-| **v1.5.0** ✅ | Observabilidad e i18n | división de taxonomía de activación (`DD_ACTION_*`/`DD_NOTIFICATION_*`), visor de registros WebSocket, personalización del panel, monitoreo de recursos, bandeja de salida de notificaciones + DLQ, resumen de escaneo de seguridad, 17 configuraciones regionales, reproducción de ID del último evento SSE, acceso telefónico al agente perimetral con autenticación Ed25519 (experimental, `DD_EXPERIMENTAL_PORTWING=true`) |
-| **v1.5.1** ✅ | Seguridad y mantenimiento | Corrección de autenticación de extracción GCR/GAR, finalización de TLS de registro (M-2), refuerzo de inyección de env-var de gancho, compatibilidad con `DD_SESSION_SECRET__FILE`, redacción de credenciales de volcado de depuración, verificación de permisos de archivos secretos, corrección de bloqueo de puerta de madurez, traducibilidad completa de la interfaz de usuario + traducciones de la comunidad, puerta de aplicación automática de ventana de mantenimiento, visualización del tiempo de actividad del contenedor, versión de software de superficie dividida de columna Etiqueta/Versión (etiqueta OCI, con escritura dual `dd.inspect.tag.path` + opción de enrutamiento `dd.inspect.tag.version-only`), opción de coincidencia de prefijo de montaje de composición, var de plantilla `${currentReleaseNotes}` |
-| **v1.5.2** ✅ | Política y confiabilidad de etiquetas fijadas | Retención de política de madurez/omisión/posposición segura para recreación, detección de reconstrucción de resumen de etiquetas fijadas e información informativa de la misma familia, limpieza de candidatos de reversión, prevención de cascada de reversión, preservación de MAC explícito y comportamiento de omisión de registro de imágenes locales |
-| **v1.6.0** | Notificaciones, políticas y comunicados Intel | Plantillas de notificación por regla/por activador con vista previa en vivo, preferencias de campana de notificación, sincronización de preferencias entre dispositivos, cuadrícula de panel personalizado sin dependencia ([#281](https://github.com/CodesWhat/drydock/issues/281)), política de actualización declarativa ([#320](https://github.com/CodesWhat/drydock/issues/320)), cuenta regresiva de estabilización de madurez + visibilidad inmediata del candidato + anulación manual ([#406](https://github.com/CodesWhat/drydock/discussions/406)), panel de estado de actualización procesable y global Modo de actualización `notify` / `manual` / `auto` ([#325](https://github.com/CodesWhat/drydock/discussions/325)), herencia de políticas de etiquetas de observador/imgset/contenedor más actual apilada → visibilidad de etiquetas fijadas más nuevas ([#498](https://github.com/CodesWhat/drydock/issues/498)), fuente estandarizada de 44 px/notas de la versión/acciones de recursos de registro en tablas, tarjetas y detalles ([#295](https://github.com/CodesWhat/drydock/discussions/295)), notificaciones de eventos de estado de salud ([#198](https://github.com/CodesWhat/drydock/discussions/198)), Home Assistant MQTT bidireccional, vistas responsivas de tablas/listas de tarjetas, Trivy/Grype/análisis a través de comandos o backends de Docker-worker anclados, controles activos/de extracción de activos del escáner, deduplicación fuera del montón Almacenamiento SBOM, corrección de escaneo largo de Trivy ([#490](https://github.com/CodesWhat/drydock/issues/490)), advertencias de migración de taxonomía de activación, eliminaciones de compatibilidad v1.6, higiene de documentos/API y finalización de migración de `/api` → `/api/v1` con una cuña de compatibilidad de página de inicio/tarjeta wud opcional (`DD_COMPAT_WUDCARD`). |
-| **v1.7.0** | Actualizaciones inteligentes y UX | Ordenamiento consciente de la dependencia ([#219](https://github.com/CodesWhat/drydock/discussions/219)), actualizaciones masivas selectivas ([#232](https://github.com/CodesWhat/drydock/discussions/232)), política de actualización por acción ([#511](https://github.com/CodesWhat/drydock/discussions/511)), eliminación de imágenes, monitoreo de imágenes estáticas, indicador de madurez de la imagen, reloj unificado de madurez/antigüedad de actualizaciones, enlaces de puertos en los que se puede hacer clic, atajos de teclado, PWA, eliminación de `DD_TRIGGER_*` (fin de la ventana de obsolescencia de v1.5.0), curl eliminado de la imagen |
-| **v1.8.0** | Gestión de flotas y configuración en vivo | Configuración YAML, configuración de UI en vivo, navegador de volúmenes, actualizaciones paralelas, migración de la tienda SQLite |
-| **v2.0+** | Expansión de plataforma y más allá | Vigilantes de enjambre/Kubernetes, GitOps, puertas de estado, implementaciones canary, terminal web, RBAC, claves API giratorias con alcance (tokens de portador estáticos para integraciones de HA/panel, [#469](https://github.com/CodesWhat/drydock/discussions/469)), LDAP/AD, proveedor nativo de Podman más allá de la API compatible con Docker, CLI, imagen reforzada de Wolfi, proxy de socket |
+| Version                                      | Tema                                               | Aspectos destacados                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **v1.3.x** ✅ | Seguridad y Estabilidad                            | Escaneo Trivy, Update Bouncer, SBOM, 7 nuevos registros, 4 nuevos activadores, motor re2js regex                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **v1.4.x** ✅ | Modernización y refuerzo de la interfaz de usuario | Tailwind 4 + componentes personalizados, 6 temas, paleta Cmd/K, OpenAPI 3.1, actualizaciones YAML nativas de redacción, escaneo de doble ranura, refuerzo OIDC                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **v1.5.0** ✅ | Observabilidad e i18n                              | división de taxonomía de activación (`DD_ACTION_*`/`DD_NOTIFICATION_*`), visor de registros WebSocket, personalización del panel, monitoreo de recursos, bandeja de salida de notificaciones + DLQ, resumen de escaneo de seguridad, 17 configuraciones regionales, reproducción de ID del último evento SSE, acceso telefónico al agente perimetral con autenticación Ed25519 (experimental, `DD_EXPERIMENTAL_PORTWING=true`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **v1.5.1** ✅ | Seguridad y mantenimiento                          | Corrección de autenticación de extracción GCR/GAR, finalización de TLS de registro (M-2), refuerzo de inyección de env-var de gancho, compatibilidad con `DD_SESSION_SECRET__FILE`, redacción de credenciales de volcado de depuración, verificación de permisos de archivos secretos, corrección de bloqueo de puerta de madurez, traducibilidad completa de la interfaz de usuario + traducciones de la comunidad, puerta de aplicación automática de ventana de mantenimiento, visualización del tiempo de actividad del contenedor, versión de software de superficie dividida de columna Etiqueta/Versión (etiqueta OCI, con escritura dual `dd.inspect.tag.path` + opción de enrutamiento `dd.inspect.tag.version-only`), opción de coincidencia de prefijo de montaje de composición, var de plantilla `${currentReleaseNotes}`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **v1.5.2** ✅ | Política y confiabilidad de etiquetas fijadas      | Retención de política de madurez/omisión/posposición segura para recreación, detección de reconstrucción de resumen de etiquetas fijadas e información informativa de la misma familia, limpieza de candidatos de reversión, prevención de cascada de reversión, preservación de MAC explícito y comportamiento de omisión de registro de imágenes locales                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **v1.6.0**   | Notificaciones, políticas y comunicados Intel      | Plantillas de notificación por regla/por activador con vista previa en vivo, preferencias de campana de notificación, sincronización de preferencias entre dispositivos, cuadrícula de panel personalizado sin dependencia ([#281](https://github.com/CodesWhat/drydock/issues/281)), política de actualización declarativa ([#320](https://github.com/CodesWhat/drydock/issues/320)), cuenta regresiva de estabilización de madurez + visibilidad inmediata del candidato + anulación manual ([#406](https://github.com/CodesWhat/drydock/discussions/406)), panel de estado de actualización procesable y global Modo de actualización `notify` / `manual` / `auto` ([#325](https://github.com/CodesWhat/drydock/discussions/325)), herencia de políticas de etiquetas de observador/imgset/contenedor más actual apilada → visibilidad de etiquetas fijadas más nuevas ([#498](https://github.com/CodesWhat/drydock/issues/498)), fuente estandarizada de 44 px/notas de la versión/acciones de recursos de registro en tablas, tarjetas y detalles ([#295](https://github.com/CodesWhat/drydock/discussions/295)), notificaciones de eventos de estado de salud ([#198](https://github.com/CodesWhat/drydock/discussions/198)), Home Assistant MQTT bidireccional, vistas responsivas de tablas/listas de tarjetas, Trivy/Grype/análisis a través de comandos o backends de Docker-worker anclados, controles activos/de extracción de activos del escáner, deduplicación fuera del montón Almacenamiento SBOM, corrección de escaneo largo de Trivy ([#490](https://github.com/CodesWhat/drydock/issues/490)), advertencias de migración de taxonomía de activación, eliminaciones de compatibilidad v1.6, higiene de documentos/API y finalización de migración de `/api` → `/api/v1` con una cuña de compatibilidad de página de inicio/tarjeta wud opcional (`DD_COMPAT_WUDCARD`). |
+| **v1.7.0**   | Actualizaciones inteligentes y UX                  | Ordenamiento consciente de la dependencia ([#219](https://github.com/CodesWhat/drydock/discussions/219)), actualizaciones masivas selectivas ([#232](https://github.com/CodesWhat/drydock/discussions/232)), política de actualización por acción ([#511](https://github.com/CodesWhat/drydock/discussions/511)), eliminación de imágenes, monitoreo de imágenes estáticas, indicador de madurez de la imagen, reloj unificado de madurez/antigüedad de actualizaciones, enlaces de puertos en los que se puede hacer clic, atajos de teclado, PWA, eliminación de `DD_TRIGGER_*` (fin de la ventana de obsolescencia de v1.5.0), curl eliminado de la imagen                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **v1.8.0**   | Gestión de flotas y configuración en vivo          | Configuración YAML, configuración de UI en vivo, navegador de volúmenes, actualizaciones paralelas, migración de la tienda SQLite                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **v2.0+**                    | Expansión de plataforma y más allá                 | Vigilantes de enjambre/Kubernetes, GitOps, puertas de estado, implementaciones canary, terminal web, RBAC, claves API giratorias con alcance (tokens de portador estáticos para integraciones de HA/panel, [#469](https://github.com/CodesWhat/drydock/discussions/469)), LDAP/AD, proveedor nativo de Podman más allá de la API compatible con Docker, CLI, imagen reforzada de Wolfi, proxy de socket                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 </details>
 
@@ -405,30 +406,29 @@ Solo temas generales; consulte [CHANGELOG.md](CHANGELOG.md) para conocer el deta
 
 <h2 align="center" id="documentation">📖 Documentación</h2>
 
-| Recurso | Enlace |
-| --- | --- |
-| Sitio web | [obtenerdrydock.com](https://getdrydock.com/) |
-| Demostración en vivo | [demo.getdrydock.com](https://demo.getdrydock.com) |
-| Documentos | [getdrydock.com/docs](https://getdrydock.com/docs) |
-| Configuración | [Configuración](https://getdrydock.com/docs/configuration) |
-| Inicio rápido | [Inicio rápido](https://getdrydock.com/docs/quickstart) |
-| Registro de cambios | [`CHANGELOG.md`](CHANGELOG.md) |
-| Depreciaciones | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
-| Hoja de ruta | Consulte la sección [Hoja de ruta](#roadmap) más arriba |
-| Contribuyendo | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
-| Código de conducta | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
-| Gobernanza | [`GOVERNANCE.md`](GOVERNANCE.md) |
-| Garantía de seguridad | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md) |
-| Política de seguridad | [`SECURITY.md`](SECURITY.md) |
-| Problemas | [Problemas de GitHub](https://github.com/CodesWhat/drydock/issues) |
-| Discusiones | [Discusiones de GitHub](https://github.com/CodesWhat/drydock/discussions): se aceptan solicitudes de funciones e ideas |
+| Recurso               | Enlace                                                                                                                                 |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Sitio web             | [obtenerdrydock.com](https://getdrydock.com/)                                                                          |
+| Demostración en vivo  | [demo.getdrydock.com](https://demo.getdrydock.com)                                                     |
+| Documentos            | [getdrydock.com/docs](https://getdrydock.com/docs)                                                                     |
+| Configuración         | [Configuración](https://getdrydock.com/docs/configuration)                                                                             |
+| Inicio rápido         | [Inicio rápido](https://getdrydock.com/docs/quickstart)                                                                                |
+| Registro de cambios   | [`CHANGELOG.md`](CHANGELOG.md)                                                                                                         |
+| Deprecations          | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                                                                                   |
+| Hoja de ruta          | Consulte la sección [Hoja de ruta](#roadmap) más arriba                                                                                |
+| Contribuyendo         | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                                                   |
+| Código de conducta    | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                                             |
+| Governance            | [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                                       |
+| Garantía de seguridad | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)                                                                                       |
+| Política de seguridad | [`SECURITY.md`](SECURITY.md)                                                                                                           |
+| Problemas             | [Problemas de GitHub](https://github.com/CodesWhat/drydock/issues)                                                                     |
+| Discusiones           | [Discusiones de GitHub](https://github.com/CodesWhat/drydock/discussions): se aceptan solicitudes de funciones e ideas |
 
 <hr>
 
 <a id="star-history"></a>
 
-<div align="center">
-  <a href="https://github.com/CodesWhat/drydock/stargazers">
+<div align="center"><a href="https://github.com/CodesWhat/drydock/stargazers">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
       <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
@@ -461,7 +461,7 @@ Preguntas, comentarios y soporte temprano: **[CodesWhat Discord](https://discord
 
 Presente errores concretos y solicitudes de funciones en **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)** para que no se pierdan en el chat.
 
-### Control de calidad de la comunidad
+### Community QA
 
 Gracias a los usuarios que ayudaron a probar las versiones candidatas v1.4.0 y v1.5.0 y reportaron errores:
 
@@ -470,11 +470,11 @@ Gracias a los usuarios que ayudaron a probar las versiones candidatas v1.4.0 y v
 ### Parte del ecosistema CodesWhat
 
 <table>
-  <tr><th>Herramienta</th><th>Rol</th></tr>
+  <tbody><tr><th>Herramienta</th><th>Rol</th></tr>
   <tr><td><b>drydock</b></td><td>Monitoreo de actualizaciones de contenedores: interfaz de usuario web y motor de notificaciones</td></tr>
   <tr><td><a href="https://github.com/CodesWhat/portwing"><b>portwing</b></a></td><td>Agente Docker remoto: acceso seguro a nivel de socket desde Drydock o de forma independiente</td></tr>
   <tr><td><a href="https://github.com/CodesWhat/sockguard"><b>sockguard</b></a></td><td>Proxy de socket de Docker: filtro de lista permitida de denegación predeterminada que protege el socket</td></tr>
-</table>
+</tbody></table>
 
 Estas tres herramientas están diseñadas para capas: sockguard filtra el socket, portwing lo expone de forma remota y drydock monitorea y actúa sobre el estado del contenedor.
 

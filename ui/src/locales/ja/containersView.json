@@ -42,7 +42,8 @@
       "host": "ホスト",
       "registry": "レジストリ",
       "resources": "リソース",
-      "uptime": "Uptime"
+      "uptime": "Uptime",
+      "ports": "Ports"
     },
     "status": {
       "running": "稼働中",

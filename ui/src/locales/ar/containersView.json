@@ -42,7 +42,8 @@
       "host": "المضيف",
       "registry": "السجل",
       "resources": "الموارد",
-      "uptime": "Uptime"
+      "uptime": "Uptime",
+      "ports": "Ports"
     },
     "status": {
       "running": "تعمل",

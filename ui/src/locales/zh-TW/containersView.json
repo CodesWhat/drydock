@@ -42,7 +42,8 @@
       "host": "主機",
       "registry": "倉庫",
       "resources": "資源",
-      "uptime": "Uptime"
+      "uptime": "Uptime",
+      "ports": "Ports"
     },
     "status": {
       "running": "執行中",
