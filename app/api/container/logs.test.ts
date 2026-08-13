@@ -393,7 +393,7 @@ describe('api/container/logs', () => {
         storeContainer: {
           getContainer: vi.fn(() => ({
             id: 'c1',
-            name: 'noisy',
+            name: 'noisy/name',
             watcher: 'local',
             status: 'running',
           })),
@@ -418,7 +418,7 @@ describe('api/container/logs', () => {
         { params: { id: 'c1' }, query: {}, headers: {} } as any,
         res as any,
       );
-      await Promise.resolve();
+      await vi.waitFor(() => expect(dial).toHaveBeenCalledTimes(1));
       dockerStream.emit('data', Buffer.alloc(8 * 1024 * 1024));
       dockerStream.emit('data', Buffer.alloc(8 * 1024 * 1024));
       dockerStream.emit('data', Buffer.alloc(1));
@@ -429,7 +429,7 @@ describe('api/container/logs', () => {
 
       expect(dial).toHaveBeenCalledWith(
         expect.objectContaining({
-          path: '/containers/noisy/logs?',
+          path: '/containers/noisy%2Fname/logs?',
           method: 'GET',
           isStream: true,
           options: expect.objectContaining({ follow: false }),
@@ -444,17 +444,17 @@ describe('api/container/logs', () => {
 
     test('downloads a completed bounded local Docker stream', async () => {
       const dockerStream = new EventEmitter();
-      const { handle, response } = createStreamingLogHandler(
-        vi.fn((_options, callback) => callback(null, dockerStream)),
-      );
+      const dial = vi.fn((_options, callback) => callback(null, dockerStream));
+      const { handle, response } = createStreamingLogHandler(dial);
 
       const handling = handle();
-      await Promise.resolve();
+      await vi.waitFor(() => expect(dial).toHaveBeenCalledTimes(1));
       dockerStream.emit(
         'data',
         new Uint8Array(createDockerLogFrame(Buffer.from('streamed line\n', 'utf8'))),
       );
       dockerStream.emit('end');
+      dockerStream.emit('close');
       await handling;
 
       expect(response.status).toHaveBeenCalledWith(200);
@@ -463,16 +463,54 @@ describe('api/container/logs', () => {
 
     test('handles an error from a bounded local Docker stream', async () => {
       const dockerStream = new EventEmitter();
-      const { handle, response } = createStreamingLogHandler(
-        vi.fn((_options, callback) => callback(null, dockerStream)),
-      );
+      const dial = vi.fn((_options, callback) => callback(null, dockerStream));
+      const { handle, response } = createStreamingLogHandler(dial);
 
       const handling = handle();
-      await Promise.resolve();
+      await vi.waitFor(() => expect(dial).toHaveBeenCalledTimes(1));
       dockerStream.emit('error', new Error('stream failed'));
       await handling;
 
       expect(response.status).toHaveBeenCalledWith(500);
+    });
+
+    test('rejects when a bounded local Docker stream closes before completion', async () => {
+      const dockerStream = new EventEmitter();
+      const dial = vi.fn((_options, callback) => callback(null, dockerStream));
+      const { handle, response } = createStreamingLogHandler(dial);
+
+      const handling = handle();
+      await vi.waitFor(() => expect(dial).toHaveBeenCalledTimes(1));
+      dockerStream.emit('close');
+
+      await vi.waitFor(() => expect(response.status).toHaveBeenCalledWith(500), { timeout: 100 });
+      await handling;
+    });
+
+    test('destroys and rejects a stalled bounded local Docker stream', async () => {
+      vi.useFakeTimers();
+      const previousTimeout = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+      process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '100';
+      try {
+        const dockerStream = Object.assign(new EventEmitter(), { destroy: vi.fn() });
+        const dial = vi.fn((_options, callback) => callback(null, dockerStream));
+        const { handle, response } = createStreamingLogHandler(dial);
+
+        const handling = handle();
+        await vi.waitFor(() => expect(dial).toHaveBeenCalledTimes(1));
+        await vi.advanceTimersByTimeAsync(100);
+
+        expect(dockerStream.destroy).toHaveBeenCalledOnce();
+        expect(response.status).toHaveBeenCalledWith(500);
+        await handling;
+      } finally {
+        if (previousTimeout === undefined) {
+          delete process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+        } else {
+          process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = previousTimeout;
+        }
+        vi.useRealTimers();
+      }
     });
 
     test('handles a Docker modem dial error', async () => {

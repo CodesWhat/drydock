@@ -26,18 +26,23 @@ const {
   };
 });
 const LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS = 5;
-const { previousMaxTrackedLockoutIdentities, previousAccountLockoutMaxAttempts } = vi.hoisted(
-  () => {
-    const previous = process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
-    const previousAccountAttempts = process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS;
-    process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = '5';
-    process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = '3workers';
-    return {
-      previousMaxTrackedLockoutIdentities: previous,
-      previousAccountLockoutMaxAttempts: previousAccountAttempts,
-    };
-  },
-);
+const {
+  previousMaxTrackedLockoutIdentities,
+  previousAccountLockoutMaxAttempts,
+  previousMaxConcurrentLoginAttempts,
+} = vi.hoisted(() => {
+  const previous = process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
+  const previousAccountAttempts = process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS;
+  const previousConcurrentAttempts = process.env.DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS;
+  process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = '5';
+  process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = '3workers';
+  process.env.DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS = '2';
+  return {
+    previousMaxTrackedLockoutIdentities: previous,
+    previousAccountLockoutMaxAttempts: previousAccountAttempts,
+    previousMaxConcurrentLoginAttempts: previousConcurrentAttempts,
+  };
+});
 
 const lockoutStateFiles = new Map<string, string>();
 const LOCKOUT_STATE_PATH = '/test/store/db.json.auth-lockouts.json';
@@ -126,6 +131,11 @@ describe('auth-lockout', () => {
       delete process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS;
     } else {
       process.env.DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS = previousAccountLockoutMaxAttempts;
+    }
+    if (previousMaxConcurrentLoginAttempts === undefined) {
+      delete process.env.DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS;
+    } else {
+      process.env.DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS = previousMaxConcurrentLoginAttempts;
     }
   });
 

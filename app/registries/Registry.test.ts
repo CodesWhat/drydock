@@ -2008,10 +2008,12 @@ describe('callRegistry', () => {
   test('should restore redirect refusal after authentication replaces request options', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });
+    axios.mockClear();
     const registryMocked = createMockedRegistry();
     vi.spyOn(registryMocked, 'authenticate').mockResolvedValue({
       url: 'https://registry.example/v2/image/manifests/latest',
       method: 'get',
+      maxRedirects: 5,
     });
 
     await registryMocked.callRegistry({
@@ -2020,7 +2022,8 @@ describe('callRegistry', () => {
       method: 'get',
     });
 
-    expect(axios).toHaveBeenCalledWith(expect.objectContaining({ maxRedirects: 0 }));
+    expect(axios).toHaveBeenCalledTimes(1);
+    expect(axios.mock.calls[0][0]).toEqual(expect.objectContaining({ maxRedirects: 0 }));
   });
 
   test('should use centralized outbound timeout when env override is set', async () => {

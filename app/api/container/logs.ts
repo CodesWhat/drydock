@@ -1,6 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
+import { getOutboundHttpTimeoutMs } from '../../configuration/runtime-defaults.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
 import type { Container } from '../../model/container.js';
@@ -35,6 +36,7 @@ interface LocalDockerLogStream {
   destroy?: () => void;
   on(event: 'data', listener: (chunk: Buffer | string | Uint8Array) => void): this;
   on(event: 'end', listener: () => void): this;
+  on(event: 'close', listener: () => void): this;
   on(event: 'error', listener: (error: Error) => void): this;
 }
 
@@ -172,7 +174,7 @@ async function getBoundedLocalDockerLogs(
   return new Promise<Buffer>((resolve, reject) => {
     modem.dial(
       {
-        path: `/containers/${containerId}/logs?`,
+        path: `/containers/${encodeURIComponent(containerId)}/logs?`,
         method: 'GET',
         isStream: true,
         statusCodes: {
@@ -195,6 +197,21 @@ async function getBoundedLocalDockerLogs(
         const chunks: Buffer[] = [];
         let totalBytes = 0;
         let settled = false;
+        let timeoutHandle: ReturnType<typeof setTimeout>;
+        const settle = (action: () => void) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeoutHandle);
+          action();
+        };
+        const handleTimeout = () => {
+          settle(() => reject(new Error('Docker log stream timed out')));
+          value.destroy?.();
+        };
+        timeoutHandle = setTimeout(handleTimeout, getOutboundHttpTimeoutMs());
+
         value.on('data', (chunk) => {
           if (settled) {
             return;
@@ -202,24 +219,21 @@ async function getBoundedLocalDockerLogs(
           const normalizedChunk = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
           totalBytes += normalizedChunk.length;
           if (totalBytes > MAX_CONTAINER_LOG_DOWNLOAD_BYTES) {
-            settled = true;
+            settle(() => reject(new ContainerLogPayloadTooLargeError()));
             value.destroy?.();
-            reject(new ContainerLogPayloadTooLargeError());
             return;
           }
           chunks.push(normalizedChunk);
+          timeoutHandle.refresh();
         });
         value.on('error', (streamError) => {
-          if (!settled) {
-            settled = true;
-            reject(streamError);
-          }
+          settle(() => reject(streamError));
         });
         value.on('end', () => {
-          if (!settled) {
-            settled = true;
-            resolve(Buffer.concat(chunks, totalBytes));
-          }
+          settle(() => resolve(Buffer.concat(chunks, totalBytes)));
+        });
+        value.on('close', () => {
+          settle(() => reject(new Error('Docker log stream closed before completion')));
         });
       },
     );
