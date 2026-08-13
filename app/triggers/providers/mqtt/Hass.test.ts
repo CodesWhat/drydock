@@ -738,6 +738,19 @@ test('updateContainerSensors serializes retained aggregate snapshots across cont
   expect(retainedTotalCounts).toEqual([1, 2]);
 });
 
+test('updateContainerSensors continues after a preceding aggregate update fails', async () => {
+  mqttClientMock.publish
+    .mockRejectedValueOnce(new Error('aggregate publish failed'))
+    .mockResolvedValue(undefined);
+
+  await expect(hass.updateContainerSensors({ name: 'first', watcher: 'local' })).rejects.toThrow(
+    'aggregate publish failed',
+  );
+  await expect(
+    hass.updateContainerSensors({ name: 'second', watcher: 'local' }),
+  ).resolves.toBeUndefined();
+});
+
 test.each(containerData)(
   'removeContainerSensor must publish all sensor removal messages expected by HA',
   async ({ containerName, data }) => {
