@@ -229,6 +229,8 @@ class Hass {
 
   private containerSyncQueueByKey = new Map<string, Promise<void>>();
 
+  private aggregateSensorSync: Promise<void> = Promise.resolve();
+
   private acceptingContainerSync = true;
 
   private unregisterContainerAdded?: () => void;
@@ -287,10 +289,10 @@ class Hass {
 
     // Subscribe to watcher events to sync HA
     this.unregisterWatcherStart = registerWatcherStart((watcher) =>
-      this.updateWatcherSensors({ watcher, isRunning: true }),
+      this.isolateWatcherSync(watcher, true),
     );
     this.unregisterWatcherStop = registerWatcherStop((watcher) =>
-      this.updateWatcherSensors({ watcher, isRunning: false }),
+      this.isolateWatcherSync(watcher, false),
     );
   }
 
@@ -937,6 +939,14 @@ class Hass {
   }
 
   async updateContainerSensors(container) {
+    const nextSync = this.aggregateSensorSync
+      .catch(() => undefined)
+      .then(() => this.updateContainerSensorsNow(container));
+    this.aggregateSensorSync = nextSync;
+    return nextSync;
+  }
+
+  private async updateContainerSensorsNow(container) {
     const containerAgentName = normalizeAgentValue(container?.agent);
     const watcherSensorPrefix = this.getWatcherTopicPrefix({
       watcherName: container.watcher,
@@ -1141,6 +1151,14 @@ class Hass {
     await this.updateSensor({
       topic: watcherStatusSensor.topic,
       value: isRunning,
+    });
+  }
+
+  private isolateWatcherSync(watcher, isRunning: boolean): Promise<void> {
+    return this.updateWatcherSensors({ watcher, isRunning }).catch((error: unknown) => {
+      this.log.warn(
+        `Failed to sync hass discovery for watcher [${watcher.name}] (${getErrorMessage(error)})`,
+      );
     });
   }
 

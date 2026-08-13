@@ -702,6 +702,42 @@ test('updateContainerSensors should use container count queries instead of full 
   expect(getContainersSpy).not.toHaveBeenCalled();
 });
 
+test('updateContainerSensors serializes retained aggregate snapshots across containers', async () => {
+  let releaseFirstPublish!: () => void;
+  let markFirstPublishStarted!: () => void;
+  const firstPublishStarted = new Promise<void>((resolve) => {
+    markFirstPublishStarted = resolve;
+  });
+  const firstPublishGate = new Promise<void>((resolve) => {
+    releaseFirstPublish = resolve;
+  });
+  const retainedTotalCounts: number[] = [];
+  let firstTotalCountPublish = true;
+  mqttClientMock.publish.mockImplementation(async (topic: string, value: string) => {
+    if (topic !== 'topic/total_count') {
+      return;
+    }
+    if (firstTotalCountPublish) {
+      firstTotalCountPublish = false;
+      markFirstPublishStarted();
+      await firstPublishGate;
+    }
+    retainedTotalCounts.push(Number(value));
+  });
+  let containerCount = 1;
+  vi.spyOn(containerStore, 'getContainerCount').mockImplementation(() => containerCount);
+
+  const firstUpdate = hass.updateContainerSensors({ name: 'first', watcher: 'local' });
+  await firstPublishStarted;
+  containerCount = 2;
+  const secondUpdate = hass.updateContainerSensors({ name: 'second', watcher: 'local' });
+  await flushMicrotasks();
+  releaseFirstPublish();
+  await Promise.all([firstUpdate, secondUpdate]);
+
+  expect(retainedTotalCounts).toEqual([1, 2]);
+});
+
 test.each(containerData)(
   'removeContainerSensor must publish all sensor removal messages expected by HA',
   async ({ containerName, data }) => {
@@ -3095,6 +3131,28 @@ describe('hass install commands (#210)', () => {
   });
 
   describe('deregister / lifecycle', () => {
+    test('watcher lifecycle callbacks isolate publish failures', async () => {
+      const clientMock = {
+        publish: vi.fn().mockRejectedValue(new Error('watcher publish failed')),
+      };
+      new Hass({
+        client: clientMock,
+        configuration: {
+          topic: 'topic',
+          hass: { discovery: true, prefix: 'homeassistant', commands: false },
+        },
+        log,
+        isContainerAllowed: () => true,
+      });
+      const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+      const watcherStartCb = registerWatcherStart.mock.calls.at(-1)[0];
+
+      await expect(watcherStartCb({ name: 'local' })).resolves.toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Failed to sync hass discovery for watcher [local] (watcher publish failed)',
+      );
+    });
+
     test('deregister drains active discovery sync and drops stale queued work', async () => {
       let releasePublish!: () => void;
       let markPublishStarted!: () => void;
