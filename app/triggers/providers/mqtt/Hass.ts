@@ -12,6 +12,7 @@ import {
 import type { Container } from '../../../model/container.js';
 import * as containerStore from '../../../store/container.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../../updates/request-update.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { HassCommandRateLimiter } from './hass-command-rate-limiter.js';
 import {
   getHassCommandTopicFilters,
@@ -365,6 +366,33 @@ class Hass {
       }
       this.commandMessageHandler = undefined;
       this.commandSubscriptionActive = false;
+    }
+  }
+
+  /**
+   * Reconcile retained Home Assistant discovery with every container already
+   * loaded from the durable store. Container-level failures are isolated so a
+   * broker publish failure cannot abort MQTT trigger startup.
+   */
+  async resyncDiscovery(): Promise<void> {
+    let containers: Container[];
+    try {
+      containers = containerStore.getContainers({}) as Container[];
+    } catch (error: unknown) {
+      this.log.warn(
+        `Failed to load containers for hass discovery resync (${getErrorMessage(error)})`,
+      );
+      return;
+    }
+
+    for (const container of containers) {
+      try {
+        await this.syncContainerSensor(container);
+      } catch (error: unknown) {
+        this.log.warn(
+          `Failed to resync hass discovery for container [${container.name}] (${getErrorMessage(error)})`,
+        );
+      }
     }
   }
 

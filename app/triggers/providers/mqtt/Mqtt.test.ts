@@ -872,7 +872,7 @@ describe('hass command lifecycle ordering (#210)', () => {
     vi.restoreAllMocks();
   });
 
-  test('initTrigger should construct Hass and await initCommandSubscription before resolving', async () => {
+  test('initTrigger should await command subscription, then discovery resync, before resolving', async () => {
     mqtt.configuration = {
       ...configurationValid,
       clientid: 'dd',
@@ -889,6 +889,7 @@ describe('hass command lifecycle ordering (#210)', () => {
 
     const order: string[] = [];
     let resolveInitCommandSubscription: () => void;
+    let resolveResyncDiscovery: () => void;
     const initCommandSubscriptionSpy = vi
       .spyOn(Hass.prototype, 'initCommandSubscription')
       .mockImplementation(function mockedInitCommandSubscription() {
@@ -896,6 +897,17 @@ describe('hass command lifecycle ordering (#210)', () => {
         return new Promise<void>((resolve) => {
           resolveInitCommandSubscription = () => {
             order.push('initCommandSubscription-resolved');
+            resolve();
+          };
+        });
+      });
+    const resyncDiscoverySpy = vi
+      .spyOn(Hass.prototype, 'resyncDiscovery')
+      .mockImplementation(function mockedResyncDiscovery() {
+        order.push('resyncDiscovery-called');
+        return new Promise<void>((resolve) => {
+          resolveResyncDiscovery = () => {
+            order.push('resyncDiscovery-resolved');
             resolve();
           };
         });
@@ -912,14 +924,27 @@ describe('hass command lifecycle ordering (#210)', () => {
     expect(order).toEqual(['initCommandSubscription-called']);
 
     resolveInitCommandSubscription!();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(order).toEqual([
+      'initCommandSubscription-called',
+      'initCommandSubscription-resolved',
+      'resyncDiscovery-called',
+    ]);
+
+    resolveResyncDiscovery!();
     await initTriggerPromise;
 
     expect(order).toEqual([
       'initCommandSubscription-called',
       'initCommandSubscription-resolved',
+      'resyncDiscovery-called',
+      'resyncDiscovery-resolved',
       'initTrigger-resolved',
     ]);
     expect(initCommandSubscriptionSpy).toHaveBeenCalledTimes(1);
+    expect(resyncDiscoverySpy).toHaveBeenCalledTimes(1);
   });
 
   test('re-init should await the previous Hass.deregister() before constructing a new Hass', async () => {

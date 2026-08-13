@@ -1493,6 +1493,145 @@ describe('hass sensor sync gating by isContainerAllowed (#491)', () => {
   });
 });
 
+describe('hass discovery startup resync (#708)', () => {
+  function getResyncDiscovery(hassInstance: Hass): () => Promise<void> {
+    const resyncDiscovery = (hassInstance as unknown as { resyncDiscovery?: () => Promise<void> })
+      .resyncDiscovery;
+    expect(resyncDiscovery).toEqual(expect.any(Function));
+    return resyncDiscovery!.bind(hassInstance);
+  }
+
+  test('republishes stored container discovery after the command subscription is active', async () => {
+    const capableClient = makeCapableClientMock();
+    const commandsHass = new Hass({
+      client: capableClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant', commands: true },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const container = {
+      id: 'ctr-existing',
+      name: 'nginx',
+      watcher: 'local',
+      displayIcon: 'mdi:docker',
+    };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    vi.spyOn(commandsHass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await commandsHass.initCommandSubscription();
+    await getResyncDiscovery(commandsHass)();
+
+    expect(containerStore.getContainers).toHaveBeenCalledWith({});
+    const discoveryCall = capableClient.publish.mock.calls.find(
+      ([topic]) => topic === 'homeassistant/update/topic_local_nginx/config',
+    );
+    expect(discoveryCall).toBeDefined();
+    expect(JSON.parse(discoveryCall![1])).toMatchObject({
+      command_topic: 'topic/local/nginx/cmd',
+      payload_install: 'install',
+    });
+  });
+
+  test('cleans retained discovery for stored containers excluded by this trigger', async () => {
+    const container = { id: 'ctr-excluded', name: 'redis', watcher: 'local' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    const excludedHass = new Hass({
+      client: mqttClientMock,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => false,
+    });
+
+    await getResyncDiscovery(excludedHass)();
+
+    expect(mqttClientMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_redis/config',
+      '',
+      { retain: true },
+    );
+  });
+
+  test('omits command topics when broker subscription fails before resync', async () => {
+    const capableClient = makeCapableClientMock();
+    capableClient.subscribeAsync.mockRejectedValue(new Error('ACL denied'));
+    const commandsHass = new Hass({
+      client: capableClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant', commands: true },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const container = { id: 'ctr-existing', name: 'nginx', watcher: 'local' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    vi.spyOn(commandsHass, 'updateContainerSensors').mockResolvedValue(undefined);
+
+    await commandsHass.initCommandSubscription();
+    await getResyncDiscovery(commandsHass)();
+
+    const discoveryCall = capableClient.publish.mock.calls.find(
+      ([topic]) => topic === 'homeassistant/update/topic_local_nginx/config',
+    );
+    expect(discoveryCall).toBeDefined();
+    const discoveryPayload = JSON.parse(discoveryCall![1]);
+    expect(discoveryPayload).not.toHaveProperty('command_topic');
+    expect(discoveryPayload).not.toHaveProperty('payload_install');
+  });
+
+  test('logs a failed container publish and continues resyncing the remaining store', async () => {
+    const capableClient = makeCapableClientMock();
+    capableClient.publish
+      .mockRejectedValueOnce(new Error('broker publish failed'))
+      .mockResolvedValue(undefined);
+    const resilientHass = new Hass({
+      client: capableClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant' },
+      },
+      log,
+      isContainerAllowed: () => true,
+    });
+    const first = { id: 'ctr-first', name: 'first', watcher: 'local' };
+    const second = { id: 'ctr-second', name: 'second', watcher: 'local' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([first, second] as any);
+    vi.spyOn(resilientHass, 'updateContainerSensors').mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+    await expect(getResyncDiscovery(resilientHass)()).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to resync hass discovery for container [first] (broker publish failed)',
+    );
+    expect(capableClient.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_second/config',
+      expect.any(String),
+      { retain: true },
+    );
+  });
+
+  test('logs a store read failure and leaves startup resync successful', async () => {
+    vi.spyOn(containerStore, 'getContainers').mockImplementation(() => {
+      throw new Error('store unavailable');
+    });
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+    await expect(getResyncDiscovery(hass)()).resolves.toBeUndefined();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to load containers for hass discovery resync (store unavailable)',
+    );
+    expect(mqttClientMock.publish).not.toHaveBeenCalled();
+  });
+});
+
 // ── #386: agenttopicsegment flag ─────────────────────────────────────────────
 
 describe('agenttopicsegment flag', () => {
