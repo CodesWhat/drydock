@@ -33,10 +33,12 @@ const DEFAULT_LOCKOUT_WINDOW_MS = DEFAULT_LOCKOUT_WINDOW_MINUTES * MS_PER_MINUTE
 const DEFAULT_LOCKOUT_DURATION_MS = DEFAULT_LOCKOUT_DURATION_MINUTES * MS_PER_MINUTE;
 const DEFAULT_LOCKOUT_PRUNE_INTERVAL_MS = MS_PER_MINUTE;
 const DEFAULT_MAX_LOCKOUT_TRACKED_IDENTITIES = 5000;
+const DEFAULT_MAX_CONCURRENT_LOGIN_ATTEMPTS = 2;
 const LOCKOUT_STATE_FILE_SUFFIX = '.auth-lockouts.json';
 const LOCKOUT_STATE_PERSIST_DEBOUNCE_MS = 250;
 const LOGIN_LOCKOUT_ERROR_MESSAGE =
   'Account temporarily locked due to repeated failed login attempts';
+const LOGIN_CONCURRENCY_ERROR_MESSAGE = 'Too many concurrent login attempts';
 const LOCKOUT_ENTRY_NUMERIC_FIELDS: ReadonlyArray<keyof LoginLockoutEntry> = [
   'failedAttempts',
   'windowStartAt',
@@ -67,6 +69,7 @@ const ipLoginLockouts = new Map<string, LoginLockoutEntry>();
 let maintenanceTimer: ReturnType<typeof setInterval> | undefined;
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 let persistenceInitialized = false;
+let activeLoginAttempts = 0;
 
 function countActiveLockouts(lockouts: Map<string, LoginLockoutEntry>, now: number): number {
   let activeLockouts = 0;
@@ -119,6 +122,10 @@ const lockoutPruneIntervalMs = parsePositiveIntegerEnv(
 const maxTrackedLockoutIdentities = parsePositiveIntegerEnv(
   'DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES',
   DEFAULT_MAX_LOCKOUT_TRACKED_IDENTITIES,
+);
+const maxConcurrentLoginAttempts = parsePositiveIntegerEnv(
+  'DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS',
+  DEFAULT_MAX_CONCURRENT_LOGIN_ATTEMPTS,
 );
 
 function getLockoutStatePath(): string {
@@ -491,10 +498,28 @@ export function authenticateLogin(req: AuthRequest, res: Response, next: NextFun
     return;
   }
 
+  if (activeLoginAttempts >= maxConcurrentLoginAttempts) {
+    setRetryAfterHeader(res, 1);
+    recordLoginAuditEvent(req, 'error', LOGIN_CONCURRENCY_ERROR_MESSAGE, loginIdentity);
+    sendErrorResponse(res, 429, LOGIN_CONCURRENCY_ERROR_MESSAGE);
+    return;
+  }
+
+  activeLoginAttempts += 1;
+  let attemptFinished = false;
+  const finishAttempt = (): void => {
+    if (attemptFinished) {
+      return;
+    }
+    attemptFinished = true;
+    activeLoginAttempts = Math.max(0, activeLoginAttempts - 1);
+  };
+
   passport.authenticate(
     getAllIds(),
     { session: false },
     (error: unknown, user: UserWithUsername | false | null) => {
+      finishAttempt();
       if (error) {
         next(error);
         return;
@@ -557,6 +582,7 @@ export function authenticateLogin(req: AuthRequest, res: Response, next: NextFun
 export function resetLoginLockoutStateForTests(): void {
   accountLoginLockouts.clear();
   ipLoginLockouts.clear();
+  activeLoginAttempts = 0;
   if (maintenanceTimer) {
     clearInterval(maintenanceTimer);
     maintenanceTimer = undefined;

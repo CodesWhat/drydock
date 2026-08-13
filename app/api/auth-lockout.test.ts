@@ -184,6 +184,31 @@ describe('auth-lockout', () => {
     expect(mockSendErrorResponse).not.toHaveBeenCalled();
   });
 
+  test('rejects excess concurrent login verifications before passport runs', () => {
+    const pendingCallbacks: Array<(error: unknown, user: false) => void> = [];
+    mockPassportAuthenticate.mockImplementation((_ids, _options, callback) => {
+      return () => pendingCallbacks.push(callback);
+    });
+    const req = { body: { username: 'alice' }, ip: '203.0.113.11' } as any;
+    const rejectedResponse = createResponse();
+
+    authenticateLogin(req, createResponse() as any, vi.fn());
+    authenticateLogin(req, createResponse() as any, vi.fn());
+    authenticateLogin(req, rejectedResponse as any, vi.fn());
+
+    expect(mockPassportAuthenticate).toHaveBeenCalledTimes(2);
+    expect(rejectedResponse.setHeader).toHaveBeenCalledWith('Retry-After', '1');
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(
+      rejectedResponse,
+      429,
+      'Too many concurrent login attempts',
+    );
+
+    pendingCallbacks[0](null, false);
+    authenticateLogin(req, createResponse() as any, vi.fn());
+    expect(mockPassportAuthenticate).toHaveBeenCalledTimes(3);
+  });
+
   test('locks account after repeated failures and sets Retry-After', () => {
     makePassportInvalidCredentials();
     const req = {

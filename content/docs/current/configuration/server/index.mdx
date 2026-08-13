@@ -37,6 +37,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_SERVER_RATELIMIT_MAX` | ⚪ | Maximum requests accepted by the outer API limiter in each 15-minute window | integer (`>0`) | `1000` |
 | `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique client identities held in the auth lockout state. Older entries are pruned when the cap is reached. | integer (`>0`) | `5000` |
 | `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | ⚪ | Interval for pruning expired auth lockout entries from memory and the persisted lockout sidecar file | integer (`>0`) | `60000` |
+| `DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS` | ⚪ | Maximum login credential verifications running at once. Excess attempts receive `429` before password hashing starts. | integer (`>0`) | `2` |
 | `DD_SSE_MAX_CLIENTS` | ⚪ | Maximum total concurrent SSE connections across all sessions (global cap; individual sessions are also capped at 10). Connections beyond this limit receive a `429 Too Many Requests` response. | integer (`>0`) | `500` |
 | `DD_RUN_AS_ROOT` | ⚪ | Request break-glass root mode (requires `DD_ALLOW_INSECURE_ROOT=true`) | `true`, `false` | `false` |
 | `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
