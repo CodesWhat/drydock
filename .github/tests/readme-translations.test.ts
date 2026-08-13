@@ -10,6 +10,7 @@ const translatedReadmes = [
   'README.pt-BR.md',
   'README.zh-CN.md',
 ];
+const allReadmes = ['README.md', ...translatedReadmes];
 
 const requiredFragments = [
   'version-1.6.0-blue',
@@ -54,5 +55,16 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(content).not.toContain('version-1.6.0--rc.2-blue');
     expect(content).not.toContain('https://api.star-history.com/svg');
     expect(content).not.toContain('https://star-history.com/#');
+  });
+});
+
+describe.each(allReadmes)('%s star history', (readme) => {
+  const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
+
+  test('uses only the canonical first-party tracker', () => {
+    expect(content).toContain('https://getdrydock.com/api/star-history?theme=dark');
+    expect(content).toContain('https://getdrydock.com/api/star-history?theme=light');
+    expect(content).not.toContain('api.star-history.com');
+    expect(content).not.toContain('star-history.com/#');
   });
 });
