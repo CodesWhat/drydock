@@ -80,7 +80,7 @@ jobs:
           filters: .github/filters/runtime.yml
 
   playwright:
-    name: "🎭 E2E: Playwright"
+    name: "E2E: Playwright"
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.runtime == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35  # UI build + Docker build + QA stack startup + Playwright pull + UI flow tests
