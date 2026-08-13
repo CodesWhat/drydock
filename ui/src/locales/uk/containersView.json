@@ -42,7 +42,8 @@
       "host": "Хост",
       "registry": "Реєстр",
       "resources": "Ресурси",
-      "uptime": "Uptime"
+      "uptime": "Uptime",
+      "ports": "Ports"
     },
     "status": {
       "running": "працює",

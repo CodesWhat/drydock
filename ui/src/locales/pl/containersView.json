@@ -42,7 +42,8 @@
       "host": "Host",
       "registry": "Rejestr",
       "resources": "Zasoby",
-      "uptime": "Uptime"
+      "uptime": "Uptime",
+      "ports": "Ports"
     },
     "status": {
       "running": "działa",

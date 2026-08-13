@@ -42,7 +42,8 @@
       "host": "Host",
       "registry": "Register",
       "resources": "Bronnen",
-      "uptime": "Uptime"
+      "uptime": "Uptime",
+      "ports": "Ports"
     },
     "status": {
       "running": "actief",

@@ -42,7 +42,8 @@
       "host": "Host",
       "registry": "Registro",
       "resources": "Recursos",
-      "uptime": "Tiempo en funcionamiento"
+      "uptime": "Tiempo en funcionamiento",
+      "ports": "Ports"
     },
     "status": {
       "running": "en ejecución",

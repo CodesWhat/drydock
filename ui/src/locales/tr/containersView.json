@@ -42,7 +42,8 @@
       "host": "Sunucu",
       "registry": "Kayıt Defteri",
       "resources": "Kaynaklar",
-      "uptime": "Uptime"
+      "uptime": "Uptime",
+      "ports": "Ports"
     },
     "status": {
       "running": "çalışıyor",

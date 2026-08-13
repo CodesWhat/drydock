@@ -50,6 +50,51 @@ const localizedBehaviorFragments: Record<
   },
 };
 
+const localizedSurfaceFragments: Record<
+  string,
+  { featureTableHeader: string; builtWithHeading: string; communityQaHeading: string }
+> = {
+  'README.de.md': {
+    featureTableHeader: '| | Funktion | Beschreibung |',
+    builtWithHeading: '### Gebaut mit',
+    communityQaHeading: '### Community-QA',
+  },
+  'README.es.md': {
+    featureTableHeader: '| | Característica | Descripción |',
+    builtWithHeading: '### Construido con',
+    communityQaHeading: '### Control de calidad de la comunidad',
+  },
+  'README.fr.md': {
+    featureTableHeader: '| | Fonctionnalité | Descriptif |',
+    builtWithHeading: '### Construit avec',
+    communityQaHeading: '### Contrôle qualité de la communauté',
+  },
+  'README.pl.md': {
+    featureTableHeader: '| | Funkcja | Opis |',
+    builtWithHeading: '### Zbudowany z',
+    communityQaHeading: '### Kontrola jakości społeczności',
+  },
+  'README.pt-BR.md': {
+    featureTableHeader: '| | Recurso | Descrição |',
+    builtWithHeading: '### Construído com',
+    communityQaHeading: '### Controle de qualidade da comunidade',
+  },
+  'README.zh-CN.md': {
+    featureTableHeader: '| |特色|描述 |',
+    builtWithHeading: '### 技术栈',
+    communityQaHeading: '### 社区质量检查',
+  },
+};
+
+const forbiddenSourceEnglishProse = [
+  'Most tools force a tradeoff.',
+  'Nothing changes until you say so.',
+  'Data based on publicly available documentation as of March 2026.',
+  'Drydock v1.6 no longer loads `WUD_*` environment variables',
+  'This direction covers at least the next twelve months',
+  'High-level themes only; see [CHANGELOG.md](CHANGELOG.md)',
+];
+
 const requiredFragments = [
   'version-1.6.0-blue',
   'https://www.bestpractices.dev/projects/11915',
@@ -100,6 +145,19 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(content).toContain(behavior.homeAssistantUpdate);
     expect(content).toContain(behavior.portwingEventSource);
     expect(content).toContain(behavior.rawInventoryAuthority);
+  });
+
+  test('keeps public README labels in the target language', () => {
+    const surface = localizedSurfaceFragments[readme];
+    expect(content).toContain(surface.featureTableHeader);
+    expect(content).toContain(surface.builtWithHeading);
+    expect(content).toContain(surface.communityQaHeading);
+  });
+
+  test('does not splice source-English prose into translated copy', () => {
+    for (const prose of forbiddenSourceEnglishProse) {
+      expect(content, `unexpected source-English prose: ${prose}`).not.toContain(prose);
+    }
   });
 });
 

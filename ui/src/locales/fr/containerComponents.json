@@ -480,6 +480,22 @@
         "messageSelected": "Restaurer {name} à l'image de sauvegarde sélectionnée ? Ceci remplacera l'image du conteneur en cours d'exécution.",
         "messageLatest": "Restaurer {name} à la dernière image de sauvegarde ? Ceci remplacera l'image du conteneur en cours d'exécution.",
         "acceptLabel": "Restaurer"
+      },
+      "dependencyGroup": {
+        "header": "Update Dependency Chain",
+        "message": "Update {name} and its dependency chain? This will update {count} other container in dependency order. | Update {name} and its dependency chain? This will update {count} other containers in dependency order.",
+        "messageSingle": "Update {name}? No other containers depend on it, so only {name} will be updated.",
+        "waveList": "\n\nUpdate order:\n{list}",
+        "cycleWarning": "\n\nWarning: a dependency cycle was detected ({cycles}). Containers in the cycle may update in an arbitrary order.",
+        "unresolvedWarning": "\n\nWarning: some dependency labels reference containers that could not be found. Those will be skipped.",
+        "acceptLabel": "Update chain",
+        "previewFailedTitle": "Unable to preview update chain",
+        "previewFailedDetail": "Failed to load the dependency chain preview for {name}.",
+        "successMessage": "Dependency chain update started: {name}",
+        "failedTitle": "Dependency chain update failed",
+        "failedDetail": "Failed to update the dependency chain for {name}.",
+        "staleChainTitle": "Dependency chain has changed",
+        "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
       }
     },
     "actionToasts": {
