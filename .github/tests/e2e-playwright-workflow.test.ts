@@ -17,6 +17,10 @@ const authSetupPath = fileURLToPath(new URL('../../e2e/playwright/auth.setup.ts'
 const loadWorkflow = loadWorkflowFrom.bind(undefined, workflowPath);
 const getWorkflowStep = getWorkflowStepFrom.bind(undefined, workflowPath);
 
+test('required Playwright job publishes a stable plain-text check name', () => {
+  expect(loadWorkflow().jobs?.playwright?.name).toBe('E2E: Playwright');
+});
+
 test('Playwright workflow disables browser downloads for host-side npm installs', () => {
   const workflow = loadWorkflow();
 
