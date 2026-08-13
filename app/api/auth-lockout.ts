@@ -10,6 +10,7 @@ import {
 } from '../prometheus/auth.js';
 import * as store from '../store/index.js';
 import { getErrorMessage } from '../util/error.js';
+import { toPositiveInteger } from '../util/parse.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import { getAllIds } from './auth-strategies.js';
 import type { AuthRequest, UserWithUsername } from './auth-types.js';
@@ -33,10 +34,12 @@ const DEFAULT_LOCKOUT_WINDOW_MS = DEFAULT_LOCKOUT_WINDOW_MINUTES * MS_PER_MINUTE
 const DEFAULT_LOCKOUT_DURATION_MS = DEFAULT_LOCKOUT_DURATION_MINUTES * MS_PER_MINUTE;
 const DEFAULT_LOCKOUT_PRUNE_INTERVAL_MS = MS_PER_MINUTE;
 const DEFAULT_MAX_LOCKOUT_TRACKED_IDENTITIES = 5000;
+const DEFAULT_MAX_CONCURRENT_LOGIN_ATTEMPTS = 2;
 const LOCKOUT_STATE_FILE_SUFFIX = '.auth-lockouts.json';
 const LOCKOUT_STATE_PERSIST_DEBOUNCE_MS = 250;
 const LOGIN_LOCKOUT_ERROR_MESSAGE =
   'Account temporarily locked due to repeated failed login attempts';
+const LOGIN_CONCURRENCY_ERROR_MESSAGE = 'Too many concurrent login attempts';
 const LOCKOUT_ENTRY_NUMERIC_FIELDS: ReadonlyArray<keyof LoginLockoutEntry> = [
   'failedAttempts',
   'windowStartAt',
@@ -67,6 +70,7 @@ const ipLoginLockouts = new Map<string, LoginLockoutEntry>();
 let maintenanceTimer: ReturnType<typeof setInterval> | undefined;
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 let persistenceInitialized = false;
+let activeLoginAttempts = 0;
 
 function countActiveLockouts(lockouts: Map<string, LoginLockoutEntry>, now: number): number {
   let activeLockouts = 0;
@@ -84,15 +88,7 @@ function updateLockoutGaugeTotals(now = Date.now()): void {
 }
 
 function parsePositiveIntegerEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined) {
-    return fallback;
-  }
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-  return parsed;
+  return toPositiveInteger(process.env[name], fallback);
 }
 
 const accountLockoutPolicy: LoginLockoutPolicy = {
@@ -119,6 +115,10 @@ const lockoutPruneIntervalMs = parsePositiveIntegerEnv(
 const maxTrackedLockoutIdentities = parsePositiveIntegerEnv(
   'DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES',
   DEFAULT_MAX_LOCKOUT_TRACKED_IDENTITIES,
+);
+const maxConcurrentLoginAttempts = parsePositiveIntegerEnv(
+  'DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS',
+  DEFAULT_MAX_CONCURRENT_LOGIN_ATTEMPTS,
 );
 
 function getLockoutStatePath(): string {
@@ -491,72 +491,94 @@ export function authenticateLogin(req: AuthRequest, res: Response, next: NextFun
     return;
   }
 
-  passport.authenticate(
-    getAllIds(),
-    { session: false },
-    (error: unknown, user: UserWithUsername | false | null) => {
-      if (error) {
-        next(error);
-        return;
-      }
+  if (activeLoginAttempts >= maxConcurrentLoginAttempts) {
+    setRetryAfterHeader(res, 1);
+    recordLoginAuditEvent(req, 'error', LOGIN_CONCURRENCY_ERROR_MESSAGE, loginIdentity);
+    sendErrorResponse(res, 429, LOGIN_CONCURRENCY_ERROR_MESSAGE);
+    return;
+  }
 
-      if (!user) {
-        const failedAt = Date.now();
-        const accountLockoutAfterFailure = registerFailedLoginAttempt(
-          accountLoginLockouts,
-          accountLockoutPolicy,
-          accountLockoutKey,
-          failedAt,
-        );
-        const ipLockoutAfterFailure = registerFailedLoginAttempt(
-          ipLoginLockouts,
-          ipLockoutPolicy,
-          ipLockoutKey,
-          failedAt,
-        );
-        const lockoutUntil = Math.max(accountLockoutAfterFailure ?? 0, ipLockoutAfterFailure ?? 0);
-        if (lockoutUntil > failedAt) {
-          sendLockoutResponse(req, res, lockoutUntil, failedAt, loginIdentity);
+  activeLoginAttempts += 1;
+  const finishAttempt = (): void => {
+    activeLoginAttempts = Math.max(0, activeLoginAttempts - 1);
+  };
+
+  try {
+    passport.authenticate(
+      getAllIds(),
+      { session: false },
+      (error: unknown, user: UserWithUsername | false | null) => {
+        finishAttempt();
+        if (error) {
+          next(error);
           return;
         }
 
-        recordLoginAuditEvent(
-          req,
-          'error',
-          'Authentication failed (invalid credentials)',
-          loginIdentity,
-        );
-        sendUnauthorized(res);
-        return;
-      }
+        if (!user) {
+          const failedAt = Date.now();
+          const accountLockoutAfterFailure = registerFailedLoginAttempt(
+            accountLoginLockouts,
+            accountLockoutPolicy,
+            accountLockoutKey,
+            failedAt,
+          );
+          const ipLockoutAfterFailure = registerFailedLoginAttempt(
+            ipLoginLockouts,
+            ipLockoutPolicy,
+            ipLockoutKey,
+            failedAt,
+          );
+          const lockoutUntil = Math.max(
+            accountLockoutAfterFailure ?? 0,
+            ipLockoutAfterFailure ?? 0,
+          );
+          if (lockoutUntil > failedAt) {
+            sendLockoutResponse(req, res, lockoutUntil, failedAt, loginIdentity);
+            return;
+          }
 
-      clearLoginLockout(accountLoginLockouts, accountLockoutKey);
-      clearLoginLockout(ipLoginLockouts, ipLockoutKey);
-
-      const continueWithUser = (authenticatedUser: UserWithUsername): void => {
-        req.user = authenticatedUser;
-        next();
-      };
-
-      if (typeof req.login !== 'function') {
-        continueWithUser(user);
-        return;
-      }
-
-      req.login(user, { session: false }, (loginError: unknown) => {
-        if (loginError) {
-          next(loginError);
+          recordLoginAuditEvent(
+            req,
+            'error',
+            'Authentication failed (invalid credentials)',
+            loginIdentity,
+          );
+          sendUnauthorized(res);
           return;
         }
-        continueWithUser(user);
-      });
-    },
-  )(req, res, next);
+
+        clearLoginLockout(accountLoginLockouts, accountLockoutKey);
+        clearLoginLockout(ipLoginLockouts, ipLockoutKey);
+
+        const continueWithUser = (authenticatedUser: UserWithUsername): void => {
+          req.user = authenticatedUser;
+          next();
+        };
+
+        if (typeof req.login !== 'function') {
+          continueWithUser(user);
+          return;
+        }
+
+        req.login(user, { session: false }, (loginError: unknown) => {
+          if (loginError) {
+            next(loginError);
+            return;
+          }
+          continueWithUser(user);
+        });
+      },
+    )(req, res, next);
+  } catch (error: unknown) {
+    finishAttempt();
+    next(error);
+  }
 }
 
 export function resetLoginLockoutStateForTests(): void {
   accountLoginLockouts.clear();
   ipLoginLockouts.clear();
+  activeLoginAttempts = 0;
   if (maintenanceTimer) {
     clearInterval(maintenanceTimer);
     maintenanceTimer = undefined;

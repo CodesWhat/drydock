@@ -1297,6 +1297,50 @@ describe('AgentClient', () => {
       await vi.waitFor(() => expect(handleSpy).toHaveBeenCalledWith('dd:ack', { version: '1.0' }));
     });
 
+    test('should bound queued SSE chunks while an event handler is blocked', async () => {
+      const stream = new EventEmitter();
+      const destroy = vi.fn();
+      Object.assign(stream, { destroy });
+      axios.mockResolvedValue({ data: stream });
+      const reconnectSpy = vi.spyOn(client, 'scheduleReconnect').mockImplementation(() => {});
+      let releaseHandler: () => void = () => {};
+      const blockedHandler = new Promise<void>((resolve) => {
+        releaseHandler = resolve;
+      });
+      vi.spyOn(client, 'handleEvent').mockReturnValue(blockedHandler);
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      stream.emit('data', Buffer.from('data: {"type":"dd:ack","data":{"version":"1.0"}}\n\n'));
+      await vi.waitFor(() => expect(client.handleEvent).toHaveBeenCalledOnce());
+
+      stream.emit('data', Buffer.alloc(16 * 1024 * 1024, 0x61));
+
+      await vi.waitFor(() => expect(destroy).toHaveBeenCalledOnce());
+      expect(reconnectSpy).toHaveBeenCalledOnce();
+      releaseHandler();
+    });
+
+    test('should destroy and reconnect when an unterminated SSE event exceeds the buffer limit', async () => {
+      const stream = new EventEmitter();
+      const destroy = vi.fn();
+      Object.assign(stream, { destroy });
+      axios.mockResolvedValue({ data: stream });
+      const reconnectSpy = vi.spyOn(client, 'scheduleReconnect').mockImplementation(() => {});
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+
+      stream.emit('data', Buffer.alloc(16 * 1024 * 1024 + 1, 0x61));
+
+      await vi.waitFor(() => expect(destroy).toHaveBeenCalledOnce());
+      expect(reconnectSpy).toHaveBeenCalledOnce();
+      expect((client as any).activeSseStream).toBeUndefined();
+      expect(mockLogChild.error).toHaveBeenCalledWith(
+        'SSE event buffer exceeded the 16777216-byte limit. Reconnecting...',
+      );
+    });
+
     test('should process streamed container and watcher snapshot events in order', async () => {
       const stream = new EventEmitter();
       axios.mockResolvedValue({ data: stream });
@@ -3501,6 +3545,15 @@ describe('AgentClient', () => {
       await client.runRemoteTrigger(container, 'smtp', 'notify');
       const [, postedPayload] = axios.post.mock.calls[0];
       expect(postedPayload).toBe(container);
+      expect(axios.post.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: 65_000 }));
+    });
+
+    test('should preserve the 30-second timeout for accepted update triggers', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+
+      await client.runRemoteTrigger({ id: 'c1', name: 'web' }, 'docker', 'update');
+
+      expect(axios.post.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: 30_000 }));
     });
 
     test('should throw on failure', async () => {
@@ -3663,7 +3716,7 @@ describe('AgentClient', () => {
       expect(axios.post).toHaveBeenCalledWith(
         expect.stringContaining('/api/triggers/docker/update/batch'),
         containers,
-        expect.any(Object),
+        expect.objectContaining({ timeout: 30_000 }),
       );
     });
 
@@ -3681,6 +3734,7 @@ describe('AgentClient', () => {
       });
 
       await client.runRemoteTriggerBatch([{ id: 'c1' }], 'mock', 'notify');
+      expect(axios.post.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: 65_000 }));
       await client.handleEvent('dd:container-updated', {
         id: 'c1',
         name: 'test',
@@ -4583,6 +4637,22 @@ describe('AgentClient', () => {
       });
       expect((c as any).axiosOptions.headers).toBeDefined();
       expect(Object.keys((c as any).axiosOptions.headers).length).toBeGreaterThan(0);
+    });
+
+    test('ordinary agent JSON requests have finite resource bounds and reject redirects', async () => {
+      axios.get.mockResolvedValue({ data: { type: 'docker', name: 'local', configuration: {} } });
+
+      await client.getWatcher('docker', 'local');
+
+      expect(axios.get).toHaveBeenCalledWith(
+        'https://localhost:3001/api/watchers/docker/local',
+        expect.objectContaining({
+          timeout: 30_000,
+          maxContentLength: 16 * 1024 * 1024,
+          maxBodyLength: 16 * 1024 * 1024,
+          maxRedirects: 0,
+        }),
+      );
     });
 
     // Line 256: ConditionalExpression true — shouldBuildHttpsAgent
@@ -7220,6 +7290,24 @@ describe('AgentClient', () => {
       expect(axiosCallArg.method).not.toBe('');
     });
 
+    test('rejects SSE redirects without applying finite JSON response or request time limits', async () => {
+      axios.mockResolvedValue({ data: new EventEmitter() });
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+
+      const axiosCallArg = (axios as any).mock.calls[0][0];
+      expect(axiosCallArg).toEqual(
+        expect.objectContaining({
+          responseType: 'stream',
+          maxRedirects: 0,
+        }),
+      );
+      expect(axiosCallArg).not.toHaveProperty('timeout');
+      expect(axiosCallArg).not.toHaveProperty('maxContentLength');
+      expect(axiosCallArg).not.toHaveProperty('maxBodyLength');
+    });
+
     test('logs non-empty error when startSse axios call fails', async () => {
       axios.mockRejectedValue(new Error('connection refused'));
       client.startSse();
@@ -7911,6 +7999,14 @@ describe('AgentClient', () => {
           'GET',
           '/api/containers/cid/logs?tail=100&since=0&timestamps=false',
           Buffer.alloc(0),
+        );
+        expect(axios.get.mock.calls[0][1]).toEqual(
+          expect.objectContaining({
+            timeout: 30_000,
+            maxContentLength: 16 * 1024 * 1024,
+            maxBodyLength: 16 * 1024 * 1024,
+            maxRedirects: 0,
+          }),
         );
       });
 

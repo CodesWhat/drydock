@@ -274,6 +274,7 @@ Set the "Login outcomes" panel to use the `outcome` label as the legend and colo
 | `DD_AUTH_LOCKOUT_DURATION_MS` | `900000` (15 min) | lockouts are too disruptive for operators | attackers resume immediately after lock expires |
 | `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | `60000` (1 min) | very high login volume makes pruning too frequent | expired lockout state lingers too long for your memory budget |
 | `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | `5000` | many unique client IPs exist (e.g. egress across many subnets) | memory pressure from lockout state storage is a concern |
+| `DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS` | `2` | legitimate login bursts receive `429` responses | password hashing causes excessive CPU or memory pressure |
 
 Operational notes:
 

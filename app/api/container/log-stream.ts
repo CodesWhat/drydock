@@ -33,6 +33,7 @@ const RATE_LIMIT_MAX = 1000;
 const CLOSE_CODE_CONTAINER_NOT_RUNNING = 4001;
 const CLOSE_CODE_CONTAINER_NOT_FOUND = 4004;
 const MAX_VIEWER_BUFFER_BYTES = 1024 * 1024;
+const MAX_CONTAINER_LOG_STREAM_TAIL = 10_000;
 const MAX_WEBSOCKET_CLOSE_REASON_BYTES = 123;
 
 type WebSocketLike = Pick<WebSocket, 'close' | 'on' | 'send'> & {
@@ -147,10 +148,11 @@ function parseSinceParam(rawValue: string | null, fallback: number): number {
 export function parseContainerLogStreamQuery(
   query: URLSearchParams,
 ): ParsedContainerLogStreamQuery {
+  const requestedTail = parseIntegerParam(query.get('tail'), 100);
   return {
     stdout: parseBooleanParam(query.get('stdout'), true),
     stderr: parseBooleanParam(query.get('stderr'), true),
-    tail: parseIntegerParam(query.get('tail'), 100),
+    tail: Math.min(MAX_CONTAINER_LOG_STREAM_TAIL, requestedTail),
     since: parseSinceParam(query.get('since'), 0),
     follow: parseBooleanParam(query.get('follow'), true),
   };
@@ -327,18 +329,20 @@ function streamEdgeAgentLogsToWebSocket({
         ) {
           continue;
         }
-        if ((webSocket.bufferedAmount ?? 0) > MAX_VIEWER_BUFFER_BYTES) {
+        const payload = JSON.stringify({
+          ...message,
+          displayTs: formatLogDisplayTimestamp(message.ts),
+        });
+        if (
+          (webSocket.bufferedAmount ?? 0) + Buffer.byteLength(payload, 'utf8') >
+          MAX_VIEWER_BUFFER_BYTES
+        ) {
           webSocket.close(1013, 'Log viewer is too slow');
           cleanup(true);
           return false;
         }
         try {
-          webSocket.send(
-            JSON.stringify({
-              ...message,
-              displayTs: formatLogDisplayTimestamp(message.ts),
-            }),
-          );
+          webSocket.send(payload);
         } catch {
           cleanup(true);
           return false;
@@ -472,13 +476,19 @@ async function streamContainerLogsToWebSocket({
 
   const emitMessages = (messages: DockerLogMessage[]): boolean => {
     for (const message of messages) {
+      const payload = JSON.stringify({
+        ...message,
+        displayTs: formatLogDisplayTimestamp(message.ts),
+      });
+      if (
+        (webSocket.bufferedAmount ?? 0) + Buffer.byteLength(payload, 'utf8') >
+        MAX_VIEWER_BUFFER_BYTES
+      ) {
+        webSocket.close(1013, 'Log viewer is too slow');
+        return false;
+      }
       try {
-        webSocket.send(
-          JSON.stringify({
-            ...message,
-            displayTs: formatLogDisplayTimestamp(message.ts),
-          }),
-        );
+        webSocket.send(payload);
       } catch {
         return false;
       }
