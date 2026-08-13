@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.1] — 2026-08-13
+
 ### Added
 
 - **Installable PWA support** (Roadmap Phase 6.9). Drydock is now an installable Progressive Web App via `vite-plugin-pwa`: a web app manifest (`Drydock`, standalone display, theme/background color matched to the One Dark default `--dd-bg`, 192/512 icons plus dedicated maskable variants with safe-zone padding) and an auto-updating service worker (`registerType: 'autoUpdate'`) that precaches the SPA shell so the dashboard boots offline. `/api/**` is explicitly excluded from all service-worker handling — no navigation fallback, no runtime caching — so a live dashboard never serves stale API data from cache; those requests always hit the network and surface a normal error if it's unreachable. A dismissible install banner (new `InstallBanner` component, following the existing `AnnouncementBanner` pattern) listens for the browser's `beforeinstallprompt` event and offers a one-click install, with the dismissal persisted under a versioned localStorage key. iOS home-screen install is supported via `apple-mobile-web-app-capable` and the existing `apple-touch-icon`. The backend's static UI server now serves `sw.js` with `Cache-Control: no-cache` so a new deploy is never masked by a browser-cached service worker script.
@@ -2434,7 +2436,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.1...HEAD
+[1.7.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0-rc.1
 [1.6.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.13...v1.6.0
 [1.6.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.12...v1.6.0-rc.13
 [1.6.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.11...v1.6.0-rc.12

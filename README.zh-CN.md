@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,19 @@ docker run -d \
 <h2 align="center" id="recent-updates">🆕 最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.1 亮点</strong></summary>
+
+- **依赖感知更新** — 通过标签或 Compose 元数据构建经过验证的依赖关系图，预览准确的更新波次，并按确定的顺序执行更新或重启依赖项，同时安全处理循环依赖、失败和过期预览。([讨论 #219](https://github.com/CodesWhat/drydock/discussions/219))
+- **运维体验** — 可安装的 PWA、可点击的命名端口链接、实时容器运行时间、键盘快捷键，以及对新发现容器的防抖检测。
+- **不兼容的触发器迁移** — `DD_TRIGGER_*` 现在会阻止启动，旧的 `dd.trigger.include` / `dd.trigger.exclude` 标签也不再分派任务；请改用 `DD_ACTION_*`、`DD_NOTIFICATION_*` 及其作用域标签。
+- **安全与生命周期强化** — 身份验证、代理请求、日志、WebSocket 和镜像仓库请求均有明确的资源限制；敏感的命令和钩子值会被遮盖；Home Assistant 发现会在启动后重新同步，并在停用提供程序任务时避免发布过期数据。([#708](https://github.com/CodesWhat/drydock/issues/708))
+- **第一方 Star History** — 同源 `/api/star-history` 提供程序仅为允许的 Drydock、Sockguard 和 Portwing 仓库生成图表，不再依赖第三方跟踪服务。
+
+完整发行说明请参阅 [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-13)。
+
+</details>
+
+<details>
 <summary><strong>v1.6.0 亮点</strong></summary>
 
 - **Portwing Edge/代理传输趋于成熟**：Portwing 0.9.0+ 支持由控制器执行原生 Docker 检查和更新、连续 Edge 日志、Ed25519 v2 请求签名，以及与签名密钥绑定的代理显示名称。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637))
