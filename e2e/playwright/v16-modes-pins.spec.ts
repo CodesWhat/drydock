@@ -327,7 +327,7 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
     const cardState = card.locator('[data-test="container-card-update-state"]');
     await expect(cardState).toHaveText('Image update');
     await expect(cardState).not.toContainText('Digest update');
-    await cardState.hover();
+    await showTooltipFor(cardState);
     await expect(page.getByRole('tooltip')).toHaveText(
       'The tag 28.5.1 now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.',
     );
