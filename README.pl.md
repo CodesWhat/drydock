@@ -15,12 +15,13 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0--rc.2-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
   <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
+  <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/test_coverage.svg" alt="Code Coverage"></a>
   <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
   <br>
@@ -33,6 +34,11 @@
 
 > [!WARNING]
 > **Aktualizacja ze starszej wersji? Najpierw przeczytaj uwagi dotyczące aktualizacji.** Trzy poprawki zwiększające bezpieczeństwo zostały dostarczone po raz pierwszy w **1.4.6** i działają w całej linii **1.5**, więc każdy, kto dokonuje aktualizacji z wersji starszej niż 1.4.6, będzie miał wpływ na dowolną wersję, na której wyląduje (1.4.6, dowolna wersja 1.5.x lub nowsza). Nie są one wycofane i nie mają okresu karencji: OIDC wymaga teraz `authorization_endpoint` w metadanych wykrywania Twojego dostawcy, nieuwierzytelnionych kluczy ograniczających szybkość na adresie równorzędnym TCP (współdzielony zasobnik za odwrotnym proxy), a adresy URL proxy wyzwalacza HTTP muszą używać `http(s)://`. Przed aktualizacją zobacz **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)**.
+
+<!-- separate alerts: a blank-line-only gap between blockquotes trips markdownlint MD028 -->
+
+> [!WARNING]
+> **Aktualizujesz do 1.6.0-rc.3 lub nowszej wersji?** Dodatkowe zabezpieczenia obowiązują bez okresu przejściowego. Instancja bez skonfigurowanego uwierzytelniania albo z włączonym, lecz niepotwierdzonym dostępem anonimowym po aktualizacji działa teraz w trybie zamkniętym, tak samo jak nowa instalacja: kontener działa, chronione żądania API zwracają `401`, publiczne trasy wykrywania i stanu uwierzytelniania pozostają dostępne, a `/health` zwraca `503`. Powłoka SPA może się załadować, ale nie odczyta chronionych danych. Przed aktualizacją ustaw `DD_ANONYMOUS_AUTH_CONFIRM=true` lub skonfiguruj `DD_AUTH_BASIC_*`/OIDC. Nazwa cookie sesji zmienia się z `connect.sid` na `drydock.sid`, co jednorazowo wyloguje użytkowników. Wyzwalacze HTTP, webhook Hass i pobieranie ikon rejestru używają teraz chronionego DNS, który blokuje adresy metadanych chmury i link-local oraz nigdy nie śledzi przekierowań. Ustaw `allowmetadata=true` wyłącznie dla konkretnego wyzwalacza `DD_NOTIFICATION_HTTP_*`, który tego wymaga. Pełne wskazówki zawiera **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**.
 
 <h2 align="center">📑Spis treści</h2>
 
@@ -162,7 +168,7 @@ docker run -d \
 >
 > Drydock v1.6 akceptuje tylko skróty uwierzytelniające argon2id Basic. Starsze wersje `{SHA}`, `$apr1$`/`$1$`, `crypt` i skróty zwykłego tekstu są odrzucane; zregeneruj je przed aktualizacją.
 > Uwierzytelnienie jest **wymagane domyślnie**. Zobacz [auth docs](https://getdrydock.com/docs/configuration/authentications) dla OIDC, dostępu anonimowego i innych opcji.
-> Aby jawnie zezwolić na anonimowy dostęp w przypadku nowych instalacji, ustaw `DD_ANONYMOUS_AUTH_CONFIRM=true`.
+> Dostęp anonimowy musi zostać jawnie potwierdzony ustawieniem `DD_ANONYMOUS_AUTH_CONFIRM=true` zarówno w nowych, jak i aktualizowanych instalacjach. Bez tego instancja bez skonfigurowanego uwierzytelniania lub z niepotwierdzonym trybem anonimowym uruchamia się w trybie zamkniętym: chronione żądania API zwracają `401`, publiczne trasy wykrywania i stanu uwierzytelniania pozostają dostępne, a `/health` zwraca `503`.
 
 Obraz zawiera pliki binarne `trivy` i `cosign` do lokalnego skanowania pod kątem luk i weryfikacji obrazu.
 
@@ -173,11 +179,50 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">🆕 Ostatnie aktualizacje</h2>
 
 <details open>
-<summary><strong>Najważniejsze informacje w wersji 1.6.0-rc.2</strong></summary>
+<summary><strong>Najważniejsze informacje w wersji v1.6.0</strong></summary>
+
+- **Transport Edge/agent Portwing osiąga dojrzałość**: natywne kontrole i aktualizacje Dockera sterowane przez kontroler dla Portwing 0.9.0+, ciągłe logi Edge, podpisy Ed25519 v2 i nazwy agentów powiązane z kluczem. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637))
+- **Deklaratywna polityka aktualizacji z bramką dojrzałości**: trójpoziomowy priorytet `dd.updatePolicy.*`, licznik odblokowania i powiadomienie `maturity-cleared`. ([Dyskusja #307](https://github.com/CodesWhat/drydock/discussions/307), [Dyskusja #406](https://github.com/CodesWhat/drydock/discussions/406))
+- **Szablony dla reguł, preferencje dzwonka i zdarzenie `container-unhealthy`** oraz dwukierunkowy MQTT Home Assistant. ([Dyskusja #205](https://github.com/CodesWhat/drydock/discussions/205), [Dyskusja #198](https://github.com/CodesWhat/drydock/discussions/198))
+- **Wszystkie główne widoki list są responsywne** dzięki wspólnej `DataTable` i trwałemu przełącznikowi tabela/karty. ([#498](https://github.com/CodesWhat/drydock/issues/498))
+- **Pełna zgodność `/api/v1`**: usunięto `/api/*` i `WS /api/log/stream` (`410 Gone`), a opcjonalny `DD_COMPAT_WUDCARD` obsługuje wud-card/Homepage. ([Dyskusja #469](https://github.com/CodesWhat/drydock/discussions/469))
+- **Wzmocnienia bezpieczeństwa**: anonimowy dostęp po aktualizacji działa w trybie zamkniętym, wyzwalacze HTTP są chronione przed SSRF, WebSocket sprawdza pełne źródło, a cookie nosi nazwę `drydock.sid`.
+
+Pełne informacje w [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11).
+
+</details>
+
+<details>
+<summary><strong>Najważniejsze informacje w wersji v1.6.0-rc.13</strong></summary>
+
+- **Porównanie digestów korzysta z pasujących repozytoriów**: `getOrderedRepoDigests` filtruje `RepoDigests` i samoczynnie naprawia stare kotwice. ([#670](https://github.com/CodesWhat/drydock/pull/670))
+- **`nanoid` przypięto do 3.3.18** we wszystkich przestrzeniach roboczych dla CVE-2026-67213 i CVE-2026-67214. ([#673](https://github.com/CodesWhat/drydock/pull/673))
+- **Star History jest hostowane lokalnie** pod `/api/star-history`, z pamięcią podręczną i zapasowym SVG. ([#672](https://github.com/CodesWhat/drydock/pull/672))
+- **Odświeżono obrazy bazowe**: `node:24-alpine` używa Node 24.19.0, a etap `aquasec/trivy` wersji 0.73.0. ([#682](https://github.com/CodesWhat/drydock/pull/682))
+- **Rozwiązywanie aliasów ikon** jest sprawdzane dla całego pakietu. ([#683](https://github.com/CodesWhat/drydock/pull/683))
+
+</details>
+
+<details>
+<summary><strong>Najważniejsze informacje w wersji v1.6.0-rc.12</strong></summary>
+
+- **Odświeżono zależności bezpieczeństwa**: `brace-expansion` 5.0.9, `ip-address` 10.3.1 i `fast-uri` 4.1.2. ([#659](https://github.com/CodesWhat/drydock/pull/659))
+- **Zegar dojrzałości** wspólnie używa `updatePolicy.maturityMinAgeDays` w widoku i bramce, a błędy daty przechodzą z `debug` do `warn`. ([#604](https://github.com/CodesWhat/drydock/issues/604))
+- **Okres łaski rejestracji agenta** łagodzi na ekranach przejściowe blokady `agent-mismatch` i `no-update-trigger-configured`, ale przyjęcie pozostaje zamknięte. ([#605](https://github.com/CodesWhat/drydock/issues/605))
+- **Logi WebSocket i dostęp anonimowy** współpracują, gdy ten tryb jest zarejestrowany. ([#636](https://github.com/CodesWhat/drydock/issues/636))
+- **Jawne odpowiedzi 501** opisują brak transportu Docker kontrolera. ([#637](https://github.com/CodesWhat/drydock/issues/637))
+
+</details>
+
+<details>
+<summary><strong>Najważniejsze informacje w wersji v1.6.0-rc.11</strong></summary>
+
+- **Transport Portwing**: znaczniki `transport=docker-api`, `execution=controller`, `events=portwing` włączają uwierzytelniony Standard HTTP lub Edge dla sterowanych przez kontroler kontroli, aktualizacji, działań cyklu życia, podglądów i przywracania. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
 
 - **Powiadomienia** — szablony tytułów i treści dla poszczególnych reguł/dostawców z podglądem na żywo oraz wspierane audytem kategorie dzwonków w aplikacji i progi ważności aktualizacji.
 - **Panel** — Wymiana siatki CSS o zerowej zależności z możliwością zmiany kolejności myszy/dotyku, ograniczonej zmiany rozmiaru, responsywnych układów, widoczności widżetów, resetowania i opcjonalnej synchronizacji preferencji na różnych urządzeniach.
 - **Zasady aktualizacji** — Deklarowane pierwszeństwo obserwatora/etykiety/UI, zastąpienie/przywrócenie ścieżki audytu, odliczanie terminu zapadalności/ręczne zastąpienie oraz widoczność informacji przypiętych tagów z skumulowanym bieżącym → nowszym widokiem tagów.
+- **Zasoby kontenera** — Kolumna Zasoby pozostaje domyślnie widoczna, ale można ją trwale ukryć; odsyłacze do źródła, informacji o wydaniu i rejestru pozostają w menu Więcej i stopkach kart.
 - **Wydajność i odzyskiwanie** — Deduplikacja listy tagów dla poszczególnych ankiet, lżejsze prognozy zbiorcze, zwirtualizowane historie dużych dzienników, niezmienne przerzucanie logów na żywo, przekroczenie limitu czasu ładowania początkowego uwierzytelniania, pełna migracja preferencji i samonaprawa nieaktualnych fragmentów.
 - **Wymuszone migracje wersji 1.6** — aliasy env/label WUD, starsze formaty uwierzytelniania, przestarzałe przełączniki obserwatorów, aliasy szablonów, Kafka `clientId` i zniekształcone publiczne konfiguracje Hub/DHI zawierające tylko token nie są już uruchamiane. Aliasy taksonomii wyzwalaczy pozostają w wersji ostatecznej z ostrzeżeniem o poziomie błędów.
 
@@ -251,7 +296,7 @@ Większość narzędzi wymusza kompromis. Automatyczne aktualizacje (Watchtower,
 | 🪝 | **Haki cyklu życia** | Polecenia powłoki przed i po aktualizacji za pośrednictwem etykiet kontenerów, z limitami czasu dla poszczególnych haków i kontrolą przerwania w przypadku awarii. |
 | 🗂️ | **Aktualizacje Docker Compose** | Pobieraj i odtwarzaj usługi Compose za pośrednictwem interfejsu API Docker Engine z łataniem obrazów zachowującym YAML. |
 | 🎛️ | **Zasady dotyczące kontenera** | Reguły tagów Regex i routing wyzwalaczy korzystają z etykiet `dd.*`; bramki dojrzałości, pomijanie/odkładanie/przypinanie i okna konserwacji są przechowywane za pośrednictwem interfejsu użytkownika/API lub konfiguracji obserwatora. |
-| 🛰️ | **Agenci rozproszoni** | Monitoruj zdalne hosty Dockera za pośrednictwem SSE. Agenci Portwing za NAT łączą się przez WebSocket z uwierzytelnianiem Ed25519 i ciągłymi logami na żywo, bez portu wejściowego. Punkt końcowy jest domyślnie włączony; `DD_EXPERIMENTAL_PORTWING=false` służy do awaryjnego wyłączenia. |
+| 🛰️ | **Agenci rozproszeni** | Monitoruj zdalne hosty Dockera przez SSE. Agenci Portwing 0.9.0+ działają przez przychodzący Standard HTTP lub wychodzący transport WebSocket Edge; Drydock 1.6.0-rc.11+ wykonuje po stronie kontrolera natywne kontrole rejestru oraz pojedyncze i zbiorcze aktualizacje Dockera przez oba uwierzytelnione kanały. Edge przesyła też ciągłe logi bez portu przychodzącego; `DD_EXPERIMENTAL_PORTWING=false` pozostaje wyłącznikiem awaryjnym. |
 | 🖥️ | **Panel sieciowy** | Interfejs użytkownika Vue 3 z konfigurowalną siatką widżetów o zerowej zależności, responsywnymi widokami tabel/kart, aktualizacjami SSE na żywo, sterowaniem dzwonkiem powiadomień oraz szczegółami, dziennikami i statystykami dotyczącymi poszczególnych kontenerów. |
 | 🔗 | **REST API i webhooki** | Punkty końcowe uwierzytelniane tokenem dla wyzwalaczy monitorowania i aktualizacji CI/CD oraz pozyskiwania podpisanego elementu webhook rejestru dla zdarzeń push. |
 | 🔐 | **Uwierzytelnianie OIDC** | Zabezpiecz deskę rozdzielczą za pomocą OpenID Connect (Authelia, Auth0, Authentik). Domyślnie wszystkie przepływy uwierzytelniania nie są zamykane. |
@@ -340,7 +385,8 @@ Drydock v1.6 nie ładuje już zmiennych środowiskowych `WUD_*` ani etykiet `wud
 <details>
 <summary><strong>Motywy i najważniejsze wersje wersji</strong></summary>
 
-Tylko motywy wysokiego poziomu — zobacz [CHANGELOG.md](CHANGELOG.md), aby uzyskać szczegółowe informacje na temat poszczególnych wersji.
+Ten kierunek obejmuje co najmniej następne dwanaście miesięcy, do sierpnia 2027 r.
+Tylko motywy ogólne; szczegóły poszczególnych wersji zawiera [CHANGELOG.md](CHANGELOG.md).
 
 | Wersja | Motyw | Najważniejsze |
 | --- | --- | --- |
@@ -371,6 +417,10 @@ Tylko motywy wysokiego poziomu — zobacz [CHANGELOG.md](CHANGELOG.md), aby uzys
 | Wycofanie | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
 | Mapa drogowa | Zobacz sekcję [Roadmap](#roadmap) powyżej |
 | Wkład | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Kodeks postępowania | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
+| Zarządzanie | [`GOVERNANCE.md`](GOVERNANCE.md) |
+| Zapewnienie bezpieczeństwa | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md) |
+| Polityka bezpieczeństwa | [`SECURITY.md`](SECURITY.md) |
 | Problemy | [Problemy z GitHubem](https://github.com/CodesWhat/drydock/issues) |
 | Dyskusje | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — prośby o nowe funkcje i pomysły mile widziane |
 
@@ -379,8 +429,11 @@ Tylko motywy wysokiego poziomu — zobacz [CHANGELOG.md](CHANGELOG.md), aby uzys
 <a id="star-history"></a>
 
 <div align="center">
-  <a href="https://star-history.com/#CodesWhat/drydock&Date">
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=Date" />
+  <a href="https://github.com/CodesWhat/drydock/stargazers">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
+      <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
+    </picture>
   </a>
 </div>
 

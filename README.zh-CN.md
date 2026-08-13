@@ -15,12 +15,13 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0--rc.2-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
   <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
+  <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/test_coverage.svg" alt="Code Coverage"></a>
   <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
   <br>
@@ -33,6 +34,11 @@
 
 > [!WARNING]
 > **从旧版本更新？首先阅读升级说明。** 三个安全强化修复程序首先在 **1.4.6** 中发布，并贯穿整个 **1.5** 系列，因此从早于 1.4.6 的版本进行更新的任何人都会受到影响，无论他们登陆的是哪个版本（1.4.6、任何 1.5.x 或更高版本）。它们不是弃用，也没有宽限期：OIDC 现在要求您的提供商的发现元数据中包含 `authorization_endpoint`，TCP 对等地址上未经身份验证的速率限制密钥（反向代理后面的共享存储桶），并且 HTTP 触发代理 URL 必须使用 `http(s)://`。更新前请参阅 **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)**。
+
+<!-- separate alerts: a blank-line-only gap between blockquotes trips markdownlint MD028 -->
+
+> [!WARNING]
+> **正在升级到 1.6.0-rc.3 或更高版本？** 更多安全强化措施会立即生效，没有宽限期。未配置身份验证，或已启用但尚未确认匿名身份验证的实例，在升级后会像新安装一样以故障关闭方式运行：容器保持运行，受保护的 API 请求返回 `401`，公共身份验证发现和状态路由仍可访问，`/health` 返回 `503`。SPA 外壳仍可能加载，但无法读取受保护的数据。升级前请设置 `DD_ANONYMOUS_AUTH_CONFIRM=true`，或配置 `DD_AUTH_BASIC_*`/OIDC。会话 cookie 从 `connect.sid` 更名为 `drydock.sid`，因此所有现有用户会被注销一次。HTTP 通知触发器、Hass webhook 和注册表图标获取现在通过受保护的 DNS 查询解析主机名，阻止云元数据和 link-local 目标，并且绝不跟随重定向。仅在确实需要时为特定 `DD_NOTIFICATION_HTTP_*` 触发器设置 `allowmetadata=true`。完整迁移说明请参阅 **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**。
 
 <h2 align="center">📑 内容</h2>
 
@@ -162,7 +168,7 @@ docker run -d \
 >
 > Drydock v1.6 仅接受 argon2id 基本身份验证哈希值。旧版 `{SHA}`、`$apr1$`/`$1$`、`crypt` 和纯文本哈希被拒绝；在升级之前重新生成它们。
 > **默认情况下需要身份验证**。有关 OIDC、匿名访问和其他选项，请参阅 [auth docs](https://getdrydock.com/docs/configuration/authentications)。
-> 要明确允许全新安装的匿名访问，请设置 `DD_ANONYMOUS_AUTH_CONFIRM=true`。
+> 新安装和升级后的实例都必须通过 `DD_ANONYMOUS_AUTH_CONFIRM=true` 明确确认匿名访问。若未确认，无论是未配置身份验证还是匿名身份验证尚未确认，实例都会以故障关闭模式启动：受保护的 API 请求返回 `401`，公共身份验证发现和状态路由仍可用，`/health` 返回 `503`。
 
 该镜像包含`trivy`和`cosign`二进制文件，用于本地漏洞扫描和镜像验证。
 
@@ -173,11 +179,50 @@ docker run -d \
 <h2 align="center" id="recent-updates">🆕 最近更新</h2>
 
 <details open>
-<summary><strong>v1.6.0-rc.2亮点</strong></summary>
+<summary><strong>v1.6.0 亮点</strong></summary>
+
+- **Portwing Edge/代理传输趋于成熟**：Portwing 0.9.0+ 支持由控制器执行原生 Docker 检查和更新、连续 Edge 日志、Ed25519 v2 请求签名，以及与签名密钥绑定的代理显示名称。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637))
+- **带成熟度稳定门的声明式更新策略**：三级 `dd.updatePolicy.*` 优先级、候选解锁倒计时和专用 `maturity-cleared` 通知。([讨论 #307](https://github.com/CodesWhat/drydock/discussions/307)、[讨论 #406](https://github.com/CodesWhat/drydock/discussions/406))
+- **每条规则的通知模板、铃铛偏好和新 `container-unhealthy` 事件**，以及双向 Home Assistant MQTT。([讨论 #205](https://github.com/CodesWhat/drydock/discussions/205)、[讨论 #198](https://github.com/CodesWhat/drydock/discussions/198))
+- **所有主要列表视图均支持响应式布局**，使用共享 `DataTable` 和持久化的表格/卡片切换。([#498](https://github.com/CodesWhat/drydock/issues/498))
+- **完成 `/api/v1` 对等功能**：移除 `/api/*` 和 `WS /api/log/stream`（`410 Gone`），可选 `DD_COMPAT_WUDCARD` 兼容 wud-card/Homepage。([讨论 #469](https://github.com/CodesWhat/drydock/discussions/469))
+- **安全强化**：升级时匿名访问也会故障关闭，HTTP 触发器具备 SSRF 防护，WebSocket 检查完整来源，会话 cookie 更名为 `drydock.sid`。
+
+完整发行说明见 [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11)。
+
+</details>
+
+<details>
+<summary><strong>v1.6.0-rc.13 亮点</strong></summary>
+
+- **摘要比较仅使用匹配仓库的候选项**：`getOrderedRepoDigests` 会筛选 `RepoDigests`，并可自动修复过期锚点。([#670](https://github.com/CodesWhat/drydock/pull/670))
+- **所有工作区将 `nanoid` 固定为 3.3.18**，修复 CVE-2026-67213 和 CVE-2026-67214。([#673](https://github.com/CodesWhat/drydock/pull/673))
+- **Star History 改为自行托管**，使用同源 `/api/star-history` 路由、边缘缓存和备用 SVG。([#672](https://github.com/CodesWhat/drydock/pull/672))
+- **基础镜像更新**：`node:24-alpine` 使用 Node 24.19.0，`aquasec/trivy` 构建阶段使用 0.73.0。([#682](https://github.com/CodesWhat/drydock/pull/682))
+- **图标别名解析**覆盖完整图标包并由测试保护。([#683](https://github.com/CodesWhat/drydock/pull/683))
+
+</details>
+
+<details>
+<summary><strong>v1.6.0-rc.12 亮点</strong></summary>
+
+- **安全依赖更新**：`brace-expansion` 5.0.9、`ip-address` 10.3.1 和 `fast-uri` 4.1.2。([#659](https://github.com/CodesWhat/drydock/pull/659))
+- **成熟度时钟**在显示和阻止逻辑中共同使用 `updatePolicy.maturityMinAgeDays`，日期错误从 `debug` 提升为 `warn`。([#604](https://github.com/CodesWhat/drydock/issues/604))
+- **代理注册宽限期**会在显示界面中弱化临时的 `agent-mismatch` 和 `no-update-trigger-configured`，同时准入仍保持故障关闭。([#605](https://github.com/CodesWhat/drydock/issues/605))
+- **WebSocket 日志和匿名身份验证**在该模式注册时可以协同工作。([#636](https://github.com/CodesWhat/drydock/issues/636))
+- **明确的 501 响应**会说明缺少控制器 Docker 传输。([#637](https://github.com/CodesWhat/drydock/issues/637))
+
+</details>
+
+<details>
+<summary><strong>v1.6.0-rc.11 亮点</strong></summary>
+
+- **Portwing 传输**：`transport=docker-api`、`execution=controller`、`events=portwing` 标记启用经过身份验证的 Standard HTTP 或 Edge，以承载由控制器执行的检查、更新、生命周期操作、预览和回滚。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637)、[Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
 
 - **通知** — 每个规则/每个提供商的标题和正文模板，带有实时预览，加上审计支持的应用内响铃类别和更新严重性阈值。
 - **仪表板** — 零依赖 CSS 网格替换为鼠标/触摸重新排序、有界调整大小、响应式布局、小部件可见性、重置和可选的跨设备首选项同步。
 - **更新策略** — 声明式观察程序/标签/UI 优先级、覆盖/恢复审核跟踪、到期倒计时/手动覆盖以及具有堆叠的当前→较新标签视图的固定标签信息可见性。
+- **容器资源** — “资源”列默认保持可见，但可以持久隐藏；来源、发行说明和注册表快捷方式仍可从“更多”菜单和卡片页脚访问。
 - **性能和恢复** - 每次轮询标签列表重复数据删除、更轻的聚合预测、虚拟化大型日志历史、不可变的实时日志滚动、身份验证引导超时、完整的偏好迁移和陈旧块自我修复。
 - **强制执行 v1.6 迁移** — WUD 环境/标签别名、旧版身份验证格式、过时的观察程序开关、模板别名、Kafka `clientId` 和格式错误的仅令牌 Hub/DHI 公共配置不再运行。触发器分类别名保留用于最终错误级别警告版本。
 
@@ -251,7 +296,7 @@ docker run -d \
 | 🪝 | **生命周期挂钩** |通过容器标签执行更新前和更新后的 shell 命令，并具有每个钩子超时和失败时中止控制。 |
 | 🗂️ | **Docker Compose 更新** |通过 Docker Engine API 以及保留 YAML 的映像修补来拉取并重新创建 Compose 服务。 |
 | 🎛️ | **每个容器的政策** |正则表达式标签规则和触发路由使用`dd.*`标签；成熟度门、跳过/暂停/固定和维护窗口通过 UI/API 或观察者配置存储。 |
-| 🛰️ | **分布式代理** |通过 SSE 监控远程 Docker 主机。NAT 后面的 Portwing 边缘代理使用 Ed25519 密钥身份验证通过 WebSocket 主动连接，并支持连续实时日志，无需入站端口。该端点默认启用；`DD_EXPERIMENTAL_PORTWING=false` 仅用于紧急禁用。 |
+| 🛰️ | **分布式代理** |通过 SSE 监控远程 Docker 主机。Portwing 0.9.0+ 代理可以使用入站 Standard HTTP 或出站 Edge WebSocket 传输；Drydock 1.6.0-rc.11+ 可通过任一经过身份验证的路径在控制器端执行原生注册表检查以及单个或批量 Docker 更新。Edge 还可连续传输实时日志而无需入站端口；`DD_EXPERIMENTAL_PORTWING=false` 仍是紧急禁用开关。 |
 | 🖥️ | **网络仪表板** | Vue 3 UI 具有零依赖可定制小部件网格、响应式表格/卡片视图、实时 SSE 更新、通知铃控件以及每个容器的详细信息、日志和统计信息。 |
 | 🔗 | **REST API 和 Webhook** |用于 CI/CD 监视和更新触发器的令牌身份验证端点，以及用于推送事件的签名注册表 Webhook 摄取。 |
 | 🔐 | **OIDC 身份验证** |使用 OpenID Connect（Authelia、Auth0、Authentik）保护仪表板。默认情况下，所有身份验证流程都会失败关闭。 |
@@ -340,7 +385,8 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 <details>
 <summary><strong>版本主题及亮点</strong></summary>
 
-仅高级主题 - 请参阅 [CHANGELOG.md](CHANGELOG.md) 了解每个版本的详细信息。
+此方向至少覆盖未来十二个月，直至 2027 年 8 月。
+此处仅列出高级主题；各版本详情请参阅 [CHANGELOG.md](CHANGELOG.md)。
 
 |版本 |主题 |亮点|
 | --- | --- | --- |
@@ -371,6 +417,10 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 |弃用 | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
 |路线图 |请参阅上面的[路线图](#roadmap) 部分|
 |贡献 | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+|行为准则 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
+|治理 | [`GOVERNANCE.md`](GOVERNANCE.md) |
+|安全保证 | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md) |
+|安全政策 | [`SECURITY.md`](SECURITY.md) |
 |问题 | [GitHub 问题](https://github.com/CodesWhat/drydock/issues) |
 |讨论 | [GitHub 讨论](https://github.com/CodesWhat/drydock/discussions) — 欢迎功能请求和想法 |
 
@@ -379,8 +429,11 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 <a id="star-history"></a>
 
 <div align="center">
-  <a href="https://star-history.com/#CodesWhat/drydock&Date">
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=Date" />
+  <a href="https://github.com/CodesWhat/drydock/stargazers">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
+      <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
+    </picture>
   </a>
 </div>
 

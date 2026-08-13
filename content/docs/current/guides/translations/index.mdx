@@ -1,11 +1,11 @@
 ---
 title: "Translating Drydock"
-description: "Help translate the Drydock UI into your language through Crowdin. No GitHub account or build setup required."
+description: "Help translate the Drydock UI and README files through Crowdin. No GitHub account or build setup required."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Drydock's interface is fully translatable, and the translation project is open to everyone. English is the source language; every other locale is community-maintained through [Crowdin](https://crowdin.com/project/drydock).
+Drydock's interface and translated README files are managed through [Crowdin](https://crowdin.com/project/drydock), and the translation project is open to everyone. English is the source language; every other locale is community-maintained.
 
 ## Languages
 
@@ -18,11 +18,11 @@ You switch language in the app under **Config > Appearance**. See [UI configurat
 You don't need a GitHub account, a checkout, or any build tooling. Everything happens in Crowdin.
 
 1. Create a free account and open the [Drydock project](https://crowdin.com/project/drydock).
-2. Pick your language and start translating strings. Each string shows the surrounding context (and often a screenshot) so you can see where it lands in the UI.
+2. Pick your language and start translating. UI strings include surrounding context and often a screenshot; README sections retain their Markdown context.
 3. Save your suggestions. That's the whole loop.
 
 <Callout type="info">
-Translations sync back into the repository automatically. A bot opens a pull request with approved strings, so your work ships in the next release without anyone editing code by hand.
+Translations sync back into the repository automatically. A bot opens a pull request with translated strings, so your work ships in the next release without anyone editing generated translation files by hand.
 </Callout>
 
 ## Requesting a new language
@@ -31,4 +31,4 @@ Want a language that isn't listed yet? Drop a comment on the [translations annou
 
 ## How it works under the hood
 
-The English source strings live in the repo at `ui/src/locales/en/`. Crowdin watches those files: the [Crowdin GitHub Action](https://github.com/crowdin/github-action) pushes new source strings up and pulls completed translations back down as a pull request. You never edit the per-language JSON files directly. Translate in Crowdin and let the sync handle the rest.
+The English UI source strings live in `ui/src/locales/en/`, and the English README source is `README.md`. Crowdin watches both through the [Crowdin GitHub Action](https://github.com/crowdin/github-action), which pushes new source strings and pulls completed translations back as a pull request. The UI supports all 16 non-English locales listed above. README translations currently cover German, Spanish, French, Polish, Brazilian Portuguese, and Simplified Chinese. Don't edit the per-language JSON files or translated README files directly; translate in Crowdin and let the sync handle the generated files.

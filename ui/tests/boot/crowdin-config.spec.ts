@@ -36,17 +36,21 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function firstCrowdinFileSet(): Record<string, unknown> {
+function crowdinFileSet(source: string): Record<string, unknown> {
   const config = asRecord(readYaml('crowdin.yml'));
   const files = config.files;
   expect(Array.isArray(files)).toBe(true);
-  expect(files).toHaveLength(1);
-  return asRecord(files[0]);
+  if (!Array.isArray(files)) {
+    throw new TypeError('Expected crowdin.yml files to be an array');
+  }
+  const fileSet = files.find((value) => asRecord(value).source === source);
+  expect(fileSet).toBeTruthy();
+  return asRecord(fileSet);
 }
 
 describe('Crowdin locale export config', () => {
   it('maps Crowdin language codes to the locale folder IDs supported by the app', () => {
-    const fileSet = firstCrowdinFileSet();
+    const fileSet = crowdinFileSet('/ui/src/locales/en/**/*.json');
 
     expect(fileSet.translation).toBe('/ui/src/locales/%locale%/**/%original_file_name%');
     const localeMapping = asRecord(asRecord(fileSet.languages_mapping).locale);
@@ -75,7 +79,7 @@ describe('Crowdin locale export config', () => {
     const withConfig = asRecord(crowdinStep?.with);
     expect(withConfig.download_translations_args).toBeUndefined();
 
-    const fileSet = firstCrowdinFileSet();
+    const fileSet = crowdinFileSet('/ui/src/locales/en/**/*.json');
     const localeMapping = asRecord(asRecord(fileSet.languages_mapping).locale);
     expect(Object.keys(localeMapping).sort()).toEqual(
       Object.keys(expectedCrowdinLocaleMapping).sort(),
