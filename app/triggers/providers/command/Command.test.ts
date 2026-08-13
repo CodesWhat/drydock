@@ -116,7 +116,7 @@ test('should trigger with container', async () => {
   const container = { name: 'test', id: '123' };
   await cmd.trigger(container);
 
-  expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Command echo test'));
+  expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Command completed'));
 });
 
 test('should trigger batch with containers', async () => {
@@ -127,7 +127,7 @@ test('should trigger batch with containers', async () => {
   const containers = [{ name: 'test1' }, { name: 'test2' }];
   await cmd.triggerBatch(containers);
 
-  expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Command echo batch'));
+  expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('Command completed'));
 });
 
 test('should handle command execution error', async () => {
@@ -140,7 +140,7 @@ test('should handle command execution error', async () => {
   const container = { name: 'test' };
   await cmd.trigger(container);
 
-  expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('execution error'));
+  expect(logSpy).toHaveBeenCalledWith('Command execution failed');
 });
 
 test('runCommand should log execFile callback errors without rejecting', async () => {
@@ -154,9 +154,7 @@ test('runCommand should log execFile callback errors without rejecting', async (
   });
 
   await expect(cmd.trigger({ name: 'test' })).resolves.toBeUndefined();
-  expect(logSpy).toHaveBeenCalledWith(
-    expect.stringContaining('Command exit 1 \nexecution error (command failed)'),
-  );
+  expect(logSpy).toHaveBeenCalledWith('Command execution failed');
 });
 
 test('should log stderr when present', async () => {
@@ -170,6 +168,35 @@ test('should log stderr when present', async () => {
   await cmd.trigger(container);
 
   expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('stderr'));
+});
+
+test('should not include the configured command in execution logs', async () => {
+  const secretCommand = 'curl https://hooks.example.com/secret-token';
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: secretCommand });
+  const infoSpy = vi.spyOn(cmd.log, 'info');
+  const warnSpy = vi.spyOn(cmd.log, 'warn');
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({ stdout: 'ok' });
+
+  await cmd.trigger({ name: 'test' });
+
+  expect(JSON.stringify([...infoSpy.mock.calls, ...warnSpy.mock.calls])).not.toContain(
+    secretCommand,
+  );
+});
+
+test('should not include a failed configured command in execution logs', async () => {
+  const secretCommand = 'curl https://hooks.example.com/secret-token';
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: secretCommand });
+  const warnSpy = vi.spyOn(cmd.log, 'warn');
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    error: new Error(`Command failed: /bin/sh -c ${secretCommand}`),
+  });
+
+  await cmd.trigger({ name: 'test' });
+
+  expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(secretCommand);
 });
 
 test('runCommand should use execFile with shell and -c arguments', async () => {

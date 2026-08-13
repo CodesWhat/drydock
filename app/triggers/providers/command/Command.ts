@@ -211,13 +211,13 @@ class Command extends Trigger<CommandConfiguration> {
         },
       );
       if (stdout) {
-        this.log.info(`Command ${this.configuration.cmd} \nstdout ${stdout}`);
+        this.log.info(`Command completed \nstdout ${stdout}`);
       }
       if (stderr) {
-        this.log.warn(`Command ${this.configuration.cmd} \nstderr ${stderr}`);
+        this.log.warn(`Command completed \nstderr ${stderr}`);
       }
-    } catch (err) {
-      this.log.warn(`Command ${this.configuration.cmd} \nexecution error (${err.message})`);
+    } catch {
+      this.log.warn('Command execution failed');
     }
   }
 }
