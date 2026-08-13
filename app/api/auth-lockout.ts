@@ -506,12 +506,7 @@ export function authenticateLogin(req: AuthRequest, res: Response, next: NextFun
   }
 
   activeLoginAttempts += 1;
-  let attemptFinished = false;
   const finishAttempt = (): void => {
-    if (attemptFinished) {
-      return;
-    }
-    attemptFinished = true;
     activeLoginAttempts = Math.max(0, activeLoginAttempts - 1);
   };
 

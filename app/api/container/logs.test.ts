@@ -231,6 +231,35 @@ describe('api/container/logs', () => {
 
       expect(res.send).toHaveBeenCalledWith('');
     });
+
+    test('rejects an agent log response above the download byte limit', async () => {
+      const handlers = createLogHandlers({
+        storeContainer: {
+          getContainer: vi.fn(() => ({
+            id: 'c1',
+            name: 'test',
+            watcher: 'remote',
+            status: 'running',
+            agent: 'edge',
+          })),
+        },
+        getAgent: vi.fn(() => ({
+          getContainerLogs: vi.fn().mockResolvedValue('x'.repeat(16 * 1024 * 1024 + 1)),
+        })),
+        getWatchers: vi.fn(() => ({})),
+        getErrorMessage: vi.fn(() => 'error'),
+      } as any);
+      const res = createMockResponse();
+
+      await handlers.getContainerLogs(
+        { params: { id: 'c1' }, query: {}, headers: {} } as any,
+        res as any,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(413);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container log download exceeds 16 MiB' });
+      expect(res.send).not.toHaveBeenCalled();
+    });
   });
 
   describe('download response headers', () => {
