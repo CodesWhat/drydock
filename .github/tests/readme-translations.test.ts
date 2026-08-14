@@ -11,6 +11,8 @@ const translatedReadmes = [
   'README.zh-CN.md',
 ];
 const allReadmes = ['README.md', ...translatedReadmes];
+const sourceReadme = readFileSync(`${repoRoot}/README.md`, 'utf8');
+const sourceUrls = [...sourceReadme.matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url).sort();
 const localizedBehaviorFragments: Record<
   string,
   { homeAssistantUpdate: string; portwingEventSource: string; rawInventoryAuthority: string }
@@ -98,6 +100,58 @@ const localizedSurfaceFragments: Record<
   },
 };
 
+const localizedReleaseFragments: Record<
+  string,
+  { dependencyAware: string; securityHardening: string }
+> = {
+  'README.de.md': {
+    dependencyAware: '**Abhängigkeitsbewusste Updates**',
+    securityHardening: '**Sicherheits- und Lifecycle-Härtung**',
+  },
+  'README.es.md': {
+    dependencyAware: '**Actualizaciones conscientes de dependencias**',
+    securityHardening: '**Refuerzo de seguridad y ciclo de vida**',
+  },
+  'README.fr.md': {
+    dependencyAware: '**Mises à jour tenant compte des dépendances**',
+    securityHardening: '**Renforcement de la sécurité et du cycle de vie**',
+  },
+  'README.pl.md': {
+    dependencyAware: '**Aktualizacje uwzględniające zależności**',
+    securityHardening: '**Wzmocnienie bezpieczeństwa i cyklu życia**',
+  },
+  'README.pt-BR.md': {
+    dependencyAware: '**Atualizações com reconhecimento de dependências**',
+    securityHardening: '**Reforço de segurança e ciclo de vida**',
+  },
+  'README.zh-CN.md': {
+    dependencyAware: '**依赖感知更新**',
+    securityHardening: '**安全与生命周期强化**',
+  },
+};
+
+const balancedTagPairs = [
+  { name: 'details', opening: /<details(?:\s[^>]*)?>/g, closing: /<\/details>/g },
+  { name: 'summary', opening: /<summary>/g, closing: /<\/summary>/g },
+  { name: 'emphasis', opening: /<em>/g, closing: /<\/em>/g },
+];
+
+function getReleaseBlock(content: string, heading: string): string {
+  const headingIndex = content.indexOf(heading);
+  const startIndex = content.lastIndexOf('<details', headingIndex);
+  const endIndex = content.indexOf('</details>', headingIndex);
+
+  if (headingIndex === -1 || startIndex === -1 || endIndex === -1) {
+    throw new Error(`could not find release block for ${heading}`);
+  }
+
+  return content.slice(startIndex, endIndex);
+}
+
+function getBullet(block: string, fragment: string): string | undefined {
+  return block.split('\n').find((line) => line.startsWith('- ') && line.includes(fragment));
+}
+
 const forbiddenSourceEnglishProse = [
   'Most tools force a tradeoff.',
   'Nothing changes until you say so.',
@@ -168,6 +222,27 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(content).toContain(surface.releaseHeading);
   });
 
+  test('maps localized v1.7 release bullets to their source links', () => {
+    const surface = localizedSurfaceFragments[readme];
+    const release = localizedReleaseFragments[readme];
+    const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
+    const dependencyBullet = getBullet(releaseBlock, release.dependencyAware);
+    const securityBullet = getBullet(releaseBlock, release.securityHardening);
+    const getUrls = (bullet: string | undefined) =>
+      [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
+
+    expect(getUrls(dependencyBullet)).toEqual([
+      'https://github.com/CodesWhat/drydock/discussions/219',
+    ]);
+    expect(getUrls(securityBullet)).toEqual(['https://github.com/CodesWhat/drydock/issues/708']);
+  });
+
+  test('preserves the exact source URL multiset', () => {
+    const urls = [...content.matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url).sort();
+
+    expect(urls).toEqual(sourceUrls);
+  });
+
   test('does not splice source-English prose into translated copy', () => {
     for (const prose of forbiddenSourceEnglishProse) {
       expect(content, `unexpected source-English prose: ${prose}`).not.toContain(prose);
@@ -183,5 +258,16 @@ describe.each(allReadmes)('%s star history', (readme) => {
     expect(content).toContain('https://getdrydock.com/api/star-history?theme=light');
     expect(content).not.toContain('api.star-history.com');
     expect(content).not.toContain('star-history.com/#');
+  });
+});
+
+describe.each(allReadmes)('%s markup', (readme) => {
+  const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
+
+  test.each(balancedTagPairs)('balances $name tags', ({ opening, closing }) => {
+    const openingCount = content.match(opening)?.length ?? 0;
+    const closingCount = content.match(closing)?.length ?? 0;
+
+    expect(openingCount).toBe(closingCount);
   });
 });
