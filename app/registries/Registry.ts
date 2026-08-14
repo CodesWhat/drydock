@@ -78,6 +78,14 @@ function isLegacyImageConfig(mediaType: string | undefined): boolean {
   );
 }
 
+function isRedirectError(error: unknown): boolean {
+  const status =
+    error != null && typeof error === 'object'
+      ? (error as { response?: { status?: unknown } }).response?.status
+      : undefined;
+  return typeof status === 'number' && status >= 300 && status < 400;
+}
+
 /**
  * Filter a manifest list to find the best match for the requested platform.
  * Returns the matched manifest entry or undefined.
@@ -426,6 +434,9 @@ class Registry<
           manifestDigest,
         )} (${getErrorMessage(error)})`,
       );
+      if (isRedirectError(error)) {
+        return undefined;
+      }
       throw error;
     }
     const configDigest = manifestResponse?.config?.digest;
@@ -460,6 +471,9 @@ class Registry<
           digest,
         )} (${getErrorMessage(error)})`,
       );
+      if (isRedirectError(error)) {
+        return undefined;
+      }
       throw error;
     }
   }

@@ -523,6 +523,103 @@ describe('getImageManifestDigest', () => {
     );
   });
 
+  test('should propagate non-object schemaVersion 2 manifest config failures', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        throw 'manifest config unavailable';
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toBe(
+      'manifest config unavailable',
+    );
+  });
+
+  test('should preserve the digest when schemaVersion 2 created metadata redirects', async () => {
+    const registryMocked = createMockedRegistry();
+    const redirectError = Object.assign(new Error('Request failed with status code 302'), {
+      response: { status: 302 },
+    });
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        return {
+          schemaVersion: 2,
+          config: {
+            digest: 'sha256:config',
+          },
+        };
+      }
+      if (options.url === 'url/image/blobs/sha256:config') {
+        throw redirectError;
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+    });
+  });
+
+  test('should preserve the digest when the schemaVersion 2 manifest config redirects', async () => {
+    const registryMocked = createMockedRegistry();
+    const redirectError = Object.assign(new Error('Request failed with status code 307'), {
+      response: { status: 307 },
+    });
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        throw redirectError;
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+    });
+  });
+
   test('should return digest for container.image.v1 (schemaVersion 1)', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = (options) => {
