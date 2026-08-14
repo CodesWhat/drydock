@@ -63,7 +63,8 @@ test("CSP analytics allowlist rejects proxy prefix and suffix lookalikes", () =>
     "https://attacker.invalid/e.codeswhat.com",
   ]) {
     const sources = getDirectiveSources(`script-src 'self' ${source}`, "script-src");
-    assert.equal(sources.includes("https://e.codeswhat.com"), false);
+    assert.deepEqual(sources, ["'self'", source]);
+    assert.notDeepEqual(sources, ["'self'", "https://e.codeswhat.com"]);
   }
 });
 
