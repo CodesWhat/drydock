@@ -126,6 +126,26 @@ test('release metadata validation rejects a stale package base version', () => {
   );
 });
 
+test('release metadata validation rejects a stale lockfile root version', () => {
+  const root = makeReleaseFixture({
+    'app/package-lock.json': '{"version":"1.6.0","packages":{"":{"version":"1.7.0"}}}',
+  });
+  assert.throws(
+    () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
+    /app\/package-lock\.json version is 1\.6\.0, expected 1\.7\.0/u,
+  );
+});
+
+test('release metadata validation rejects a stale lockfile workspace version', () => {
+  const root = makeReleaseFixture({
+    'app/package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.6.0"}}}',
+  });
+  assert.throws(
+    () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
+    /app\/package-lock\.json packages\[""\]\.version is 1\.6\.0, expected 1\.7\.0/u,
+  );
+});
+
 test('release metadata validation rejects a stale translated README badge', () => {
   const root = makeReleaseFixture({ 'README.fr.md': 'version-1.6.0-blue\n' });
   assert.throws(

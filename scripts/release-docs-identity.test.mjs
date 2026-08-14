@@ -45,6 +45,10 @@ test('public release surfaces identify the v1.7 release candidate', () => {
   assert.match(agentApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
   assert.match(portwingApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
   assert.match(portwingApi, new RegExp(`"drydockVersion": "${escapedRcVersion}"`, 'u'));
+  assert.match(
+    quickstart,
+    new RegExp(`Use \`${escapeRegExp(RC_VERSION.split('.').slice(0, 2).join('.'))}-rc\` only`, 'u'),
+  );
 
   if (rcSuffixMatch) {
     // Prerelease shape: the quickstart tag matrix must show this exact candidate as an
