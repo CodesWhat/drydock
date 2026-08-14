@@ -228,11 +228,13 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
     const dependencyBullet = getBullet(releaseBlock, release.dependencyAware);
     const securityBullet = getBullet(releaseBlock, release.securityHardening);
+    const getUrls = (bullet: string | undefined) =>
+      [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
-    expect(dependencyBullet).toContain('https://github.com/CodesWhat/drydock/discussions/219');
-    expect(dependencyBullet).not.toContain('https://github.com/CodesWhat/drydock/issues/708');
-    expect(securityBullet).toContain('https://github.com/CodesWhat/drydock/issues/708');
-    expect(securityBullet).not.toContain('https://github.com/CodesWhat/drydock/discussions/219');
+    expect(getUrls(dependencyBullet)).toEqual([
+      'https://github.com/CodesWhat/drydock/discussions/219',
+    ]);
+    expect(getUrls(securityBullet)).toEqual(['https://github.com/CodesWhat/drydock/issues/708']);
   });
 
   test('preserves the exact source URL multiset', () => {
@@ -263,6 +265,9 @@ describe.each(allReadmes)('%s markup', (readme) => {
   const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
 
   test.each(balancedTagPairs)('balances $name tags', ({ opening, closing }) => {
-    expect(content.match(opening)).toHaveLength(content.match(closing)?.length ?? 0);
+    const openingCount = content.match(opening)?.length ?? 0;
+    const closingCount = content.match(closing)?.length ?? 0;
+
+    expect(openingCount).toBe(closingCount);
   });
 });
