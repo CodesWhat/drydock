@@ -13,6 +13,26 @@ import {
 } from "../src/lib/analytics-contract.ts";
 
 const ROUTES = new Set(["/", "/compare", "/docs/v1.7", "/docs/v1.7/guides/security"]);
+const APPROVED_CTA_TUPLES = [
+  ["marketing", "docs_root", "header"],
+  ["marketing", "github_repository", "header"],
+  ["docs", "docs_root", "header"],
+  ["docs", "github_repository", "header"],
+  ["marketing", "docs_root", "hero"],
+  ["marketing", "github_repository", "hero"],
+  ["marketing", "docs_root", "comparison"],
+  ["marketing", "github_repository", "comparison"],
+  ["marketing", "install_quick", "get_started"],
+  ["marketing", "install_secure", "get_started"],
+  ["marketing", "docs_security", "get_started"],
+  ["marketing", "docs_root", "footer"],
+  ["marketing", "github_repository", "footer"],
+  ["marketing", "community_discord", "footer"],
+  ["docs", "docs_root", "footer"],
+  ["docs", "github_repository", "footer"],
+  ["docs", "community_discord", "footer"],
+  ["marketing", "github_repository", "star_history"],
+];
 
 test("analytics requires the complete exact public environment contract", () => {
   assert.deepEqual(
@@ -73,6 +93,29 @@ test("CTA tuples are finite and surface-aware", () => {
   assert.equal(isAllowedCta("docs", "github_repository", "hero"), false);
   assert.equal(isAllowedCta("marketing", "live_demo", "hero"), false);
   assert.equal(isAllowedCta("marketing", "github_repository", "unknown"), false);
+});
+
+test("CTA allowlist exactly covers every approved site combination", () => {
+  const surfaces = ["marketing", "docs"];
+  const ctaIds = [
+    "docs_root",
+    "github_repository",
+    "community_discord",
+    "install_quick",
+    "install_secure",
+    "docs_security",
+  ];
+  const placements = ["header", "hero", "comparison", "get_started", "footer", "star_history"];
+  const actual = surfaces.flatMap((surface) =>
+    ctaIds.flatMap((ctaId) =>
+      placements
+        .filter((placement) => isAllowedCta(surface, ctaId, placement))
+        .map((placement) => `${surface}\0${ctaId}\0${placement}`),
+    ),
+  );
+  const expected = APPROVED_CTA_TUPLES.map((tuple) => tuple.join("\0"));
+
+  assert.deepEqual(actual.sort(), expected.sort());
 });
 
 test("pageviews are rebuilt from the canonical production URL and a minimal envelope", () => {
