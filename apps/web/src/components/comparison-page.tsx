@@ -237,7 +237,7 @@ export function ComparisonPage({
               No SaaS subscription, no data sent off your host, and we ship updates fast.
             </p>
 
-            <CtaButtons />
+            <CtaButtons placement="comparison" />
           </div>
         </section>
       </MarketingShell>
