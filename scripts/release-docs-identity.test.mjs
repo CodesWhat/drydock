@@ -7,6 +7,7 @@ const PREV_RC_VERSION = '1.6.0';
 const RC_DATE = '2026-08-14';
 const RC_DISPLAY_DATE = 'August 14, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
+const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
 
@@ -23,6 +24,24 @@ function extractMarkdownSection(document, heading) {
   assert.notEqual(sectionStart, -1, `missing Markdown section: ${heading}`);
   const nextSectionStart = document.indexOf('\n## ', sectionStart + heading.length + 1);
   return document.slice(sectionStart, nextSectionStart === -1 ? undefined : nextSectionStart);
+}
+
+function extractMarkdownListItem(section, marker) {
+  const item = section.split('\n').find((line) => line.startsWith('- ') && line.includes(marker));
+  assert.ok(item, `missing Markdown list item containing: ${marker}`);
+  return item;
+}
+
+function assertReleaseRedirectAllowlist(name, section) {
+  assert.doesNotMatch(section, /\b3xx\b/iu, `${name} must not use generic 3xx wording`);
+  assert.doesNotMatch(
+    section,
+    /\b3(?!01|02|03|07|08)\d{2}\b/u,
+    `${name} must not list an unapproved 3xx status`,
+  );
+  for (const status of RELEASE_REDIRECT_STATUSES) {
+    assert.match(section, new RegExp(`\\b${status}\\b`, 'u'), `${name} must list HTTP ${status}`);
+  }
 }
 
 test('public release surfaces identify the v1.7 release candidate', () => {
@@ -104,6 +123,17 @@ test('release-note section extraction stops at the next level-two heading', () =
   );
 });
 
+test('release-note redirect contracts reject broad, missing, and unlisted statuses', () => {
+  const exactAllowlist = '301, 302, 303, 307, or 308';
+
+  assert.doesNotThrow(() => assertReleaseRedirectAllowlist('valid notes', exactAllowlist));
+  assert.throws(() => assertReleaseRedirectAllowlist('broad notes', 'all 3xx statuses'));
+  assert.throws(() =>
+    assertReleaseRedirectAllowlist('unlisted status notes', `${exactAllowlist}, or 304`),
+  );
+  assert.throws(() => assertReleaseRedirectAllowlist('missing status notes', '301, 302, 303, 307'));
+});
+
 test('release candidate notes cover the post-promotion fixes', () => {
   const changelog = extractMarkdownSection(read('CHANGELOG.md'), `## [${RC_VERSION}] — ${RC_DATE}`);
   const updates = extractMarkdownSection(
@@ -117,7 +147,15 @@ test('release candidate notes cover the post-promotion fixes', () => {
     assert.ok(updates.includes(issueLink), `updates page must link issue #${issue}`);
   }
 
-  assert.doesNotMatch(updates, /\b3xx\b/iu);
+  const manifestIssueLink = 'https://github.com/CodesWhat/drydock/issues/606';
+  assertReleaseRedirectAllowlist(
+    'CHANGELOG.md manifest metadata note',
+    extractMarkdownListItem(changelog, manifestIssueLink),
+  );
+  assertReleaseRedirectAllowlist(
+    'updates page manifest metadata note',
+    extractMarkdownListItem(updates, manifestIssueLink),
+  );
   for (const fragment of [
     '`DD_PORTWING_POLL_INTERVAL`',
     '`exec_end.reason`',
