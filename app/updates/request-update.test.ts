@@ -996,6 +996,45 @@ describe('request-update', () => {
       expect(triggerFn).not.toHaveBeenCalled();
     });
 
+    test('rejects every transitive dependent when an upstream operation is already active', async () => {
+      mockGetActiveOperationByContainerId.mockImplementation((id: string) =>
+        id === 'db' ? { status: 'in-progress' } : undefined,
+      );
+      const triggerFn = vi.fn().mockResolvedValue(undefined);
+      const db = createDependentContainer({ id: 'db', name: 'db' });
+      const api = createDependentContainer({
+        id: 'api',
+        name: 'api',
+        dependsOn: ['db'],
+        dependsOnSource: 'label',
+      });
+      const sidecar = createDependentContainer({
+        id: 'sidecar',
+        name: 'sidecar',
+        dependsOn: ['api'],
+        dependsOnSource: 'label',
+        dependsOnAction: 'restart',
+        updateAvailable: false,
+      });
+
+      const result = await requestContainerUpdates([db, api, sidecar], {
+        trigger: {
+          type: 'docker',
+          trigger: triggerFn,
+        },
+      });
+      await flushAsyncWork();
+
+      expect(result.accepted).toEqual([]);
+      expect(result.rejected).toEqual([
+        expect.objectContaining({ container: db, statusCode: 409 }),
+        expect.objectContaining({ container: api, statusCode: 409 }),
+        expect.objectContaining({ container: sidecar, statusCode: 409 }),
+      ]);
+      expect(triggerFn).not.toHaveBeenCalled();
+      expect(mockRestartDependentContainer).not.toHaveBeenCalled();
+    });
+
     test('dependsOnAction=restart with no resolved dependsOn edge dispatches through the normal trigger instead (PR #681 review #2)', async () => {
       const triggerFn = vi.fn().mockResolvedValue(undefined);
 

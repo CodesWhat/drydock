@@ -400,7 +400,7 @@ export async function enqueueContainerUpdates(
   containers: Container[],
   options: EnqueueContainerUpdateOptions = {},
 ): Promise<ContainerUpdateRequestBatchResult> {
-  const preparedAccepted: PreparedContainerUpdateRequest[] = [];
+  let preparedAccepted: PreparedContainerUpdateRequest[] = [];
   const rejected: RejectedContainerUpdateRequest[] = [];
 
   for (const container of containers) {
@@ -413,6 +413,36 @@ export async function enqueueContainerUpdates(
       }
       throw error;
     }
+  }
+
+  if (rejected.length > 0 && preparedAccepted.length > 0) {
+    const { edges } = buildDependencyGraph(containers);
+    const dependentsByDependency = buildDependentsByDependency(edges);
+    const blockingRejectionByContainerId = new Map<string, RejectedContainerUpdateRequest>();
+
+    for (const blockingRejection of rejected) {
+      for (const dependentId of collectTransitiveDependents(
+        blockingRejection.container.id,
+        dependentsByDependency,
+      )) {
+        blockingRejectionByContainerId.set(dependentId, blockingRejection);
+      }
+    }
+
+    const stillAccepted: PreparedContainerUpdateRequest[] = [];
+    for (const prepared of preparedAccepted) {
+      const blockingRejection = blockingRejectionByContainerId.get(prepared.container.id);
+      if (!blockingRejection) {
+        stillAccepted.push(prepared);
+        continue;
+      }
+      rejected.push({
+        container: prepared.container,
+        message: `Required upstream dependency ${blockingRejection.container.id} was not admitted`,
+        statusCode: 409,
+      });
+    }
+    preparedAccepted = stillAccepted;
   }
 
   const queueTotal = preparedAccepted.length;

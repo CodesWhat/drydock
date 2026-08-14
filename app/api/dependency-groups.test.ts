@@ -13,6 +13,7 @@ const {
   mockGetServerConfiguration,
   mockInsertOperation,
   mockMarkOperationTerminal,
+  mockGetActiveOperationByContainerId,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), post: vi.fn() },
   mockGetContainer: vi.fn(),
@@ -25,6 +26,7 @@ const {
   mockGetServerConfiguration: vi.fn(() => ({ feature: { containeractions: true } })),
   mockInsertOperation: vi.fn((op) => ({ id: op.id || 'op-mock', ...op })),
   mockMarkOperationTerminal: vi.fn(),
+  mockGetActiveOperationByContainerId: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -71,7 +73,7 @@ vi.mock('../store/update-operation.js', () => ({
   getInProgressOperationByContainerName: vi.fn(),
   getInProgressOperationByContainerId: vi.fn(),
   getActiveOperationByContainerName: vi.fn(),
-  getActiveOperationByContainerId: vi.fn(),
+  getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
 }));
 
 vi.mock('../log/index.js', () => ({
@@ -138,6 +140,7 @@ describe('Dependency Groups Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetServerConfiguration.mockReturnValue({ feature: { containeractions: true } });
+    mockGetActiveOperationByContainerId.mockReturnValue(undefined);
   });
 
   describe('init', () => {
@@ -281,7 +284,7 @@ describe('Dependency Groups Router', () => {
       );
     });
 
-    test('keeps restart-only dispatch and annotation when its upstream is rejected during admission', async () => {
+    test('rejects a restart-only dependent when its upstream has no update to admit', async () => {
       const app = makeContainer({ id: 'app', name: 'app', updateAvailable: false });
       const sidecar = makeContainer({
         id: 'sidecar',
@@ -304,12 +307,44 @@ describe('Dependency Groups Router', () => {
       const payload = res.json.mock.calls[0][0];
       expect(payload.rejected).toEqual([
         expect.objectContaining({ containerId: 'app', statusCode: 400 }),
+        expect.objectContaining({ containerId: 'sidecar', statusCode: 409 }),
       ]);
-      expect(payload.accepted).toEqual([
-        expect.objectContaining({ containerId: 'sidecar', actionKind: 'restart', wave: 1 }),
-      ]);
+      expect(payload.accepted).toEqual([]);
       expect(trigger.trigger).not.toHaveBeenCalled();
-      expect(dockerContainer.restart).toHaveBeenCalledTimes(1);
+      expect(dockerContainer.restart).not.toHaveBeenCalled();
+    });
+
+    test('rejects a restart-only dependent while its upstream update is already active', async () => {
+      const app = makeContainer({ id: 'app', name: 'app', updateAvailable: true });
+      const sidecar = makeContainer({
+        id: 'sidecar',
+        name: 'sidecar',
+        updateAvailable: false,
+        dependsOn: ['app'],
+        dependsOnAction: 'restart',
+      });
+      mockGetContainer.mockReturnValue(app);
+      mockGetContainers.mockReturnValue([app, sidecar]);
+      mockGetActiveOperationByContainerId.mockImplementation((id: string) =>
+        id === 'app' ? { status: 'in-progress' } : undefined,
+      );
+      const { trigger, dockerContainer } = createDockerTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.local': trigger }, watcher: {} });
+
+      const handler = getHandler('post', '/:rootId/update');
+      const req = createMockRequest({ params: { rootId: 'app' } });
+      const res = createMockResponse();
+      await handler(req, res);
+      await flushAcceptedUpdateWork();
+
+      const payload = res.json.mock.calls[0][0];
+      expect(payload.rejected).toEqual([
+        expect.objectContaining({ containerId: 'app', statusCode: 409 }),
+        expect.objectContaining({ containerId: 'sidecar', statusCode: 409 }),
+      ]);
+      expect(payload.accepted).toEqual([]);
+      expect(trigger.trigger).not.toHaveBeenCalled();
+      expect(dockerContainer.restart).not.toHaveBeenCalled();
     });
 
     describe('expectedContainerIds blast-radius binding', () => {
