@@ -10,7 +10,7 @@ export function buildContentSecurityPolicy(nonce, isDevelopment) {
     `'nonce-${nonce}'`,
     "'strict-dynamic'",
     ...(isDevelopment ? ["'unsafe-eval'"] : []),
-    "https://va.vercel-scripts.com",
+    "https://e.codeswhat.com",
   ];
 
   return [
@@ -19,7 +19,7 @@ export function buildContentSecurityPolicy(nonce, isDevelopment) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https://img.shields.io https://github.com https://qlty.sh",
     "font-src 'self' data:",
-    "connect-src 'self' https://va.vercel-scripts.com",
+    "connect-src 'self' https://e.codeswhat.com",
     "frame-src https://demo.getdrydock.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",

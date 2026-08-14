@@ -37,6 +37,20 @@ test("development CSP permits React debugging without permitting arbitrary inlin
   assert.doesNotMatch(scriptDirective, /'unsafe-inline'/u);
 });
 
+test("CSP permits only the managed PostHog proxy for analytics scripts and requests", () => {
+  const policy = buildContentSecurityPolicy("c2VjdXJlLW5vbmNl", false);
+  const scriptDirective = getDirective(policy, "script-src");
+  const connectDirective = getDirective(policy, "connect-src");
+
+  for (const directive of [scriptDirective, connectDirective]) {
+    assert.match(directive, /https:\/\/e\.codeswhat\.com/u);
+    assert.doesNotMatch(directive, /va\.vercel-scripts\.com/u);
+    assert.doesNotMatch(directive, /https:\/\/us\.posthog\.com/u);
+    assert.doesNotMatch(directive, /https:\/\/us\.i\.posthog\.com/u);
+    assert.doesNotMatch(directive, /\*\.posthog\.com/u);
+  }
+});
+
 test("CSP builder rejects values that could inject another directive", () => {
   assert.throws(() => buildContentSecurityPolicy("nonce'; script-src *", false), /nonce/u);
 });

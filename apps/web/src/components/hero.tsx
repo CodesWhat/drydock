@@ -41,7 +41,7 @@ export function Hero() {
             what&apos;s outdated or exposed, and lets you roll out fixes on your terms.
           </p>
 
-          <CtaButtons align="center" />
+          <CtaButtons align="center" placement="hero" />
 
           {/* Stat strip */}
           <div className="flex flex-wrap items-center justify-center gap-0 divide-x divide-neutral-200 dark:divide-neutral-700">
