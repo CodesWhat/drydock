@@ -4,8 +4,8 @@ import test from 'node:test';
 
 const RC_VERSION = '1.7.0-rc.1';
 const PREV_RC_VERSION = '1.6.0';
-const RC_DATE = '2026-08-13';
-const RC_DISPLAY_DATE = 'August 13, 2026';
+const RC_DATE = '2026-08-14';
+const RC_DISPLAY_DATE = 'August 14, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
@@ -88,6 +88,35 @@ test('public release surfaces identify the v1.7 release candidate', () => {
       `[${RC_VERSION}]: https://github.com/CodesWhat/drydock/compare/v${PREV_RC_VERSION}...v${RC_VERSION}`,
     ),
   );
+});
+
+test('release candidate notes cover the post-promotion fixes', () => {
+  const changelog = read('CHANGELOG.md');
+  const updates = read('content/docs/current/updates/index.mdx');
+
+  for (const issue of [606, 635, 687, 688]) {
+    const issueLink = `https://github.com/CodesWhat/drydock/issues/${issue}`;
+    assert.ok(changelog.includes(issueLink), `CHANGELOG.md must link issue #${issue}`);
+    assert.ok(updates.includes(issueLink), `updates page must link issue #${issue}`);
+  }
+
+  for (const fragment of [
+    '`DD_PORTWING_POLL_INTERVAL`',
+    '`exec_end.reason`',
+    "controller's configured registry identity",
+    '4xx, 5xx, network, and non-object failures',
+  ]) {
+    assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
+  }
+
+  for (const fragment of [
+    '`DD_PORTWING_POLL_INTERVAL`',
+    '`exec_end.reason`',
+    'normalize against configured registries',
+    '4xx, 5xx, network, and non-object failures',
+  ]) {
+    assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
+  }
 });
 
 test('v1.6.0 is released and public release routing advances to v1.7', () => {

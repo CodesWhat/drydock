@@ -5,12 +5,14 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
-## v1.7.0-rc.1 Highlights — August 13, 2026
+## v1.7.0-rc.1 Highlights — August 14, 2026
 
 - **Dependency-aware updates** — labels or Compose metadata resolve into deterministic update waves, with preview-bound confirmation, restart-only dependents, cycle handling, and explicit skipped-dependency results ([Discussion #219](https://github.com/CodesWhat/drydock/discussions/219)).
 - **Operator UX additions** — installable PWA support, clickable named port links, live container uptime, keyboard shortcuts, and a configurable settling window for newly discovered containers.
 - **Trigger migration reaches removal** — `DD_TRIGGER_*` now fails startup and legacy `dd.trigger.include` / `dd.trigger.exclude` labels no longer route work; use the action/notification-specific replacements.
 - **Security and lifecycle hardening** — authentication, agent requests, logs, WebSockets, and registry requests have explicit resource bounds; sensitive command/hook values are redacted; Home Assistant discovery now resynchronizes after startup and drains retiring provider work without stale publishes ([#708](https://github.com/CodesWhat/drydock/issues/708)).
+- **Portwing controller and Edge reliability** — Edge refresh cadence is configurable with `DD_PORTWING_POLL_INTERVAL`; `exec_end.reason` reaches internal consumers without leaking sessions; and controller-owned Docker inventory/events normalize against configured registries so native watch-now checks no longer round-trip through Portwing's intentional 501 registry stub ([#688](https://github.com/CodesWhat/drydock/issues/688), [#635](https://github.com/CodesWhat/drydock/issues/635), [#687](https://github.com/CodesWhat/drydock/issues/687)).
+- **Registry metadata failures stay visible** — optional 3xx manifest/blob responses can omit `created` without discarding a resolved digest, while exhausted 4xx, 5xx, network, and non-object failures now propagate instead of silently becoming a successful result with unstable metadata ([#606](https://github.com/CodesWhat/drydock/issues/606)).
 - **First-party star history** — the same-origin `/api/star-history` provider serves allowlisted Drydock, Sockguard, and Portwing charts without relying on a third-party tracker.
 
 ## v1.6.0 Highlights — August 11, 2026
