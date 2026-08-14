@@ -83,7 +83,10 @@ function isRedirectError(error: unknown): boolean {
     error != null && typeof error === 'object'
       ? (error as { response?: { status?: unknown } }).response?.status
       : undefined;
-  return typeof status === 'number' && status >= 300 && status < 400;
+  return (
+    typeof status === 'number' &&
+    ((status >= 301 && status <= 303) || status === 307 || status === 308)
+  );
 }
 
 /**

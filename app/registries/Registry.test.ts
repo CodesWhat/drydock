@@ -620,6 +620,36 @@ describe('getImageManifestDigest', () => {
     });
   });
 
+  test('should propagate a 304 response from schemaVersion 2 manifest config', async () => {
+    const registryMocked = createMockedRegistry();
+    const notModifiedError = Object.assign(new Error('Request failed with status code 304'), {
+      response: { status: 304 },
+    });
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        throw notModifiedError;
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toBe(
+      notModifiedError,
+    );
+  });
+
   test('should return digest for container.image.v1 (schemaVersion 1)', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = (options) => {
