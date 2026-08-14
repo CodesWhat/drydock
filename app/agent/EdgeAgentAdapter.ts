@@ -55,7 +55,7 @@ export interface HelloMessage {
 interface ExecSession {
   execId: string;
   outputHandler?: (data: Buffer) => void;
-  close: () => void;
+  close: (reason?: string) => void;
 }
 
 interface PendingRequest {
@@ -898,7 +898,7 @@ export class EdgeAgentAdapter {
     }
     const session = this.execSessions.get(execId);
     if (session) {
-      session.close();
+      session.close(typeof data.reason === 'string' ? data.reason : undefined);
     }
   }
 
@@ -1194,6 +1194,7 @@ export class EdgeAgentAdapter {
    * Start an exec session on the edge agent.
    * Returns the execId once the exec_start frame is sent.
    * outputCallback receives decoded bytes for each exec_output frame.
+   * endCallback receives the optional reason from the terminal exec_end frame.
    */
   startExec(
     containerId: string,
@@ -1204,6 +1205,7 @@ export class EdgeAgentAdapter {
       rows?: number;
       tty?: boolean;
       outputCallback?: (data: Buffer) => void;
+      endCallback?: (reason?: string) => void;
     },
   ): Promise<string> {
     if (this.execSessions.size >= MAX_EXEC_SESSIONS) {
@@ -1212,16 +1214,18 @@ export class EdgeAgentAdapter {
 
     const execId = uuidv7();
     const outputCallback = options?.outputCallback;
+    const endCallback = options?.endCallback;
 
     // Pre-register the session with the callback so exec_output frames arriving
     // before the caller has a chance to wire up the handler are not lost.
     const session: ExecSession = {
       execId,
       outputHandler: outputCallback,
-      close: () => {
+      close: (reason?: string) => {
         // O5: notify the edge so it can tear down the Docker exec process/goroutine.
         this.sendExecEnd(execId);
         this.execSessions.delete(execId);
+        endCallback?.(reason);
       },
     };
     this.execSessions.set(execId, session);

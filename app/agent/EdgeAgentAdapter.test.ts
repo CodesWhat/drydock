@@ -914,6 +914,62 @@ describe('EdgeAgentAdapter — exec outputCallback via startExec', () => {
   });
 });
 
+describe('EdgeAgentAdapter — exec endCallback via startExec', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('endCallback receives the exact exec_end reason', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const endCallback = vi.fn((_reason?: string) => {});
+    const execId = await adapter.startExec('c1', ['/bin/bash'], { endCallback });
+
+    sendFrame(ws, 'exec_end', {
+      execId,
+      reason: 'exec denied: privileged exec is not allowed',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(endCallback).toHaveBeenCalledOnce();
+    expect(endCallback).toHaveBeenCalledWith('exec denied: privileged exec is not allowed');
+  });
+
+  test.each([
+    ['absent', {}],
+    ['non-string', { reason: { message: 'do not coerce me' } }],
+  ])('endCallback receives undefined when exec_end reason is %s', async (_name, data) => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const endCallback = vi.fn((_reason?: string) => {});
+    const execId = await adapter.startExec('c1', ['/bin/bash'], { endCallback });
+
+    sendFrame(ws, 'exec_end', { execId, ...data });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(endCallback).toHaveBeenCalledOnce();
+    expect(endCallback).toHaveBeenCalledWith(undefined);
+  });
+
+  test('a throwing endCallback cannot retain the closed session', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const endCallback = vi.fn(() => {
+      throw new Error('consumer callback failed');
+    });
+    const execId = await adapter.startExec('c1', ['/bin/bash'], { endCallback });
+    const adapterInternal = adapter as unknown as {
+      execSessions: Map<string, unknown>;
+    };
+
+    sendFrame(ws, 'exec_end', { execId, reason: 'exited' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(endCallback).toHaveBeenCalledOnce();
+    expect(adapterInternal.execSessions.has(execId)).toBe(false);
+  });
+});
+
 describe('EdgeAgentAdapter — requestContainerLogs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
