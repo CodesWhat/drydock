@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,19 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">🆕 Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.1</strong></summary>
+
+- **Abhängigkeitsbewusste Updates** – Labels oder Compose-Metadaten erzeugen einen validierten Abhängigkeitsgraphen, zeigen die genauen Update-Wellen in der Vorschau und führen Updates oder Neustarts von Abhängigkeiten in deterministischer Reihenfolge aus. Zyklen, Fehler und veraltete Vorschauen werden sicher behandelt. ([Diskussion #219](https://github.com/CodesWhat/drydock/discussions/219))
+- **Operator-UX** – installierbare PWA, anklickbare benannte Port-Links, Live-Container-Laufzeit, Tastenkürzel und entprellte Erkennung neu erschienener Container.
+- **Breaking-Änderung bei Triggern** – `DD_TRIGGER_*` verhindert jetzt den Start, und die alten Labels `dd.trigger.include` / `dd.trigger.exclude` leiten keine Arbeit mehr weiter. Verwenden Sie `DD_ACTION_*`, `DD_NOTIFICATION_*` und die zugehörigen bereichsspezifischen Labels.
+- **Sicherheits- und Lifecycle-Härtung** – Authentifizierung, Agent-Anfragen, Protokolle, WebSockets und Registry-Anfragen sind explizit begrenzt; vertrauliche Befehls- und Hook-Werte werden redigiert; die Home-Assistant-Erkennung synchronisiert sich nach dem Start neu und beendet Provider-Arbeit ohne veraltete Veröffentlichungen. ([#708](https://github.com/CodesWhat/drydock/issues/708))
+- **First-Party-Star-History** – der Same-Origin-Provider `/api/star-history` stellt Diagramme für die freigegebenen Repositories Drydock, Sockguard und Portwing ohne Drittanbieter-Tracker bereit.
+
+Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-13).
+
+</details>
+
+<details>
 <summary><strong>Highlights von v1.6.0</strong></summary>
 
 - **Portwing-Edge-/Agent-Transport ist ausgereift** – Controller-gesteuerte native Docker-Prüfungen und -Updates für Portwing 0.9.0+, kontinuierliches Edge-Log-Streaming, Ed25519-Anfragesignierung (v2) und agenteneigene Anzeigenamen, die an den Signaturschlüssel gebunden sind. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637))

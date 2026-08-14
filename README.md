@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,19 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.1 highlights</strong></summary>
+
+- **Dependency-aware updates** — labels or Compose metadata build a validated dependency graph, preview exact update waves, and run updates or dependent restarts in deterministic order with cycle, failure, and stale-preview handling. ([Discussion #219](https://github.com/CodesWhat/drydock/discussions/219))
+- **Operator UX** — installable PWA support, clickable named port links, live container uptime, keyboard shortcuts, and debounced first-seen container discovery.
+- **Breaking trigger migration** — `DD_TRIGGER_*` now fails startup and legacy `dd.trigger.include` / `dd.trigger.exclude` labels no longer route work; use `DD_ACTION_*`, `DD_NOTIFICATION_*`, and their scoped labels.
+- **Security and lifecycle hardening** — bounded authentication, agent, log, WebSocket, and registry operations; sensitive command and hook values are redacted; Home Assistant discovery resynchronizes after startup and retires provider work without stale publishes. ([#708](https://github.com/CodesWhat/drydock/issues/708))
+- **First-party star history** — the same-origin `/api/star-history` provider now serves allowlisted Drydock, Sockguard, and Portwing charts without a third-party tracker dependency.
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-13).
+
+</details>
+
+<details>
 <summary><strong>v1.6.0 highlights</strong></summary>
 
 - **Portwing edge/agent transport matures** — controller-owned native Docker checks/updates for Portwing 0.9.0+, continuous edge log streaming, Ed25519 request signing (v2), and agent-owned display names bound to their signing key. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637))

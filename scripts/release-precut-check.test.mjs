@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import * as releasePrecheck from './release-precut-check.mjs';
 import {
   formatReport,
   isPrerelease,
@@ -45,6 +46,123 @@ test('isPrerelease returns true for an rc tag', () => {
 
 test('isPrerelease returns false for a stable GA tag', () => {
   assert.equal(isPrerelease('v1.6.0'), false);
+});
+
+test('release precheck exposes exact repository metadata validation', () => {
+  assert.equal(typeof releasePrecheck.validateReleaseMetadata, 'function');
+});
+
+function makeReleaseFixture(overrides = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'drydock-release-metadata-'));
+  const files = {
+    'package.json': '{"version":"1.7.0"}',
+    'package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.7.0"}}}',
+    'app/package.json': '{"version":"1.7.0"}',
+    'app/package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.7.0"}}}',
+    'ui/package.json': '{"version":"1.7.0"}',
+    'ui/package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.7.0"}}}',
+    'e2e/package.json': '{"version":"1.7.0"}',
+    'e2e/package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.7.0"}}}',
+    'apps/demo/package.json': '{"version":"1.7.0"}',
+    'apps/demo/package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.7.0"}}}',
+    'CHANGELOG.md':
+      '# Changelog\n\n## [Unreleased]\n\n## [1.7.0-rc.1] — 2026-08-13\n\n### Added\n\n- release work\n',
+    'README.md': 'version-1.7.0--rc.1-blue\nv1.7.0-rc.1 highlights\n',
+    'README.de.md': 'version-1.7.0--rc.1-blue\n',
+    'README.es.md': 'version-1.7.0--rc.1-blue\n',
+    'README.fr.md': 'version-1.7.0--rc.1-blue\n',
+    'README.pl.md': 'version-1.7.0--rc.1-blue\n',
+    'README.pt-BR.md': 'version-1.7.0--rc.1-blue\n',
+    'README.zh-CN.md': 'version-1.7.0--rc.1-blue\n',
+    'apps/web/scripts/docs-versions.mjs': '{ slug: "v1.7", source: "current", title: "v1.7" }',
+    'apps/web/src/lib/site-config.ts': 'version: "1.7.0-rc.1"',
+    'content/docs/current/updates/index.mdx':
+      '## Unreleased\n\n## v1.7.0-rc.1 Highlights — August 13, 2026\n',
+    'content/docs/current/quickstart/index.mdx':
+      '| `1.7.0-rc.1` | Immutable release candidate; best for reproducible testing |\n',
+    ...overrides,
+  };
+
+  for (const [relativePath, contents] of Object.entries(files)) {
+    const path = join(root, relativePath);
+    mkdirSync(join(path, '..'), { recursive: true });
+    writeFileSync(path, contents, 'utf8');
+  }
+  return root;
+}
+
+test('release metadata validation accepts an exact RC identity', () => {
+  assert.doesNotThrow(() =>
+    releasePrecheck.validateReleaseMetadata(makeReleaseFixture(), 'v1.7.0-rc.1'),
+  );
+});
+
+test('release metadata validation accepts the GA quickstart label for a stable tag', () => {
+  const root = makeReleaseFixture({
+    'CHANGELOG.md':
+      '# Changelog\n\n## [Unreleased]\n\n## [1.7.0] — 2026-08-13\n\n### Added\n\n- release work\n',
+    'README.md': 'version-1.7.0-blue\nv1.7.0 highlights\n',
+    'README.de.md': 'version-1.7.0-blue\n',
+    'README.es.md': 'version-1.7.0-blue\n',
+    'README.fr.md': 'version-1.7.0-blue\n',
+    'README.pl.md': 'version-1.7.0-blue\n',
+    'README.pt-BR.md': 'version-1.7.0-blue\n',
+    'README.zh-CN.md': 'version-1.7.0-blue\n',
+    'apps/web/src/lib/site-config.ts': 'version: "1.7.0"',
+    'content/docs/current/updates/index.mdx':
+      '## Unreleased\n\n## v1.7.0 Highlights — August 13, 2026\n',
+    'content/docs/current/quickstart/index.mdx':
+      '| `1.7.0` | Immutable exact GA release; best for reproducible deployments |\n',
+  });
+
+  assert.doesNotThrow(() => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0'));
+});
+
+test('release metadata validation rejects a stale package base version', () => {
+  const root = makeReleaseFixture({ 'app/package.json': '{"version":"1.6.0"}' });
+  assert.throws(
+    () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
+    /app\/package\.json version is 1\.6\.0, expected 1\.7\.0/u,
+  );
+});
+
+test('release metadata validation rejects a stale lockfile root version', () => {
+  const root = makeReleaseFixture({
+    'app/package-lock.json': '{"version":"1.6.0","packages":{"":{"version":"1.7.0"}}}',
+  });
+  assert.throws(
+    () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
+    /app\/package-lock\.json version is 1\.6\.0, expected 1\.7\.0/u,
+  );
+});
+
+test('release metadata validation rejects a stale lockfile workspace version', () => {
+  const root = makeReleaseFixture({
+    'app/package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.6.0"}}}',
+  });
+  assert.throws(
+    () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
+    /app\/package-lock\.json packages\[""\]\.version is 1\.6\.0, expected 1\.7\.0/u,
+  );
+});
+
+test('release metadata validation rejects a stale translated README badge', () => {
+  const root = makeReleaseFixture({ 'README.fr.md': 'version-1.6.0-blue\n' });
+  assert.throws(
+    () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
+    /README\.fr\.md is missing version-1\.7\.0--rc\.1-blue/u,
+  );
+});
+
+test('release metadata validation rejects missing exact changelog and public RC identity', () => {
+  const root = makeReleaseFixture({
+    'CHANGELOG.md': '# Changelog\n\n## [Unreleased]\n',
+    'README.md': 'version-1.6.0-blue\nv1.6.0 highlights\n',
+  });
+  assert.throws(
+    () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
+    /CHANGELOG\.md has no non-empty \[1\.7\.0-rc\.1\] entry[\s\S]*README\.md/u,
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -153,23 +271,27 @@ test('formatReport includes the tag in the pending header', () => {
 const TRACKER_WITH_PENDING = `
 | Disc | Feature | Notes |
 | --- | --- | --- |
-| #242 | Mobile-friendly views | ☐ "shipped in v1.6" reply on release |
+| #242 | Mobile-friendly views | ☐ "shipped in v1.7" reply on release |
 `.trim();
 
 const TRACKER_ALL_CLEAR = `
 | Disc | Feature | Notes |
 | --- | --- | --- |
-| #242 | Mobile-friendly views | ☑ shipped in v1.6 |
+| #242 | Mobile-friendly views | ☑ shipped in v1.7 |
 `.trim();
 
-test('cli exits 1 and reports pending discussion when tracker has unchecked reply (GA tag)', () => {
+test('cli exits 1 and reports pending discussion when strict RC check has an unchecked reply', () => {
   const trackerPath = join(tmpDir, 'pending-ga.md');
   writeFileSync(trackerPath, TRACKER_WITH_PENDING, 'utf8');
 
-  const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.6.0'], {
-    cwd: process.cwd(),
-    encoding: 'utf8',
-  });
+  const result = spawnSync(
+    process.execPath,
+    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.1'],
+    {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    },
+  );
 
   assert.equal(result.status, 1);
   assert.match(result.stderr, /#242/u);
@@ -181,7 +303,7 @@ test('cli exits 0 when --force is set even with pending replies', () => {
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--force', 'v1.6.0'],
+    [scriptPath, '--tracker', trackerPath, '--strict', '--force', 'v1.7.0-rc.1'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -194,10 +316,14 @@ test('cli exits 0 when --force is set even with pending replies', () => {
 test('cli exits 0 with warning when tracker file does not exist', () => {
   const trackerPath = join(tmpDir, 'missing.md');
 
-  const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.6.0'], {
-    cwd: process.cwd(),
-    encoding: 'utf8',
-  });
+  const result = spawnSync(
+    process.execPath,
+    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.1'],
+    {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    },
+  );
 
   assert.equal(result.status, 0);
   assert.match(result.stderr, /Tracker not found at/u);
@@ -209,7 +335,7 @@ test('cli exits 0 for prerelease tags with pending replies (informational only)'
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.6.0-rc.3'],
+    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.1'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -225,7 +351,7 @@ test('cli exits 1 for prerelease tags with --strict and pending replies', () => 
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.6.0-rc.3'],
+    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.1'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -239,10 +365,14 @@ test('cli exits 0 and prints success when tracker has no pending replies', () =>
   const trackerPath = join(tmpDir, 'clear.md');
   writeFileSync(trackerPath, TRACKER_ALL_CLEAR, 'utf8');
 
-  const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.6.0'], {
-    cwd: process.cwd(),
-    encoding: 'utf8',
-  });
+  const result = spawnSync(
+    process.execPath,
+    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.1'],
+    {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+    },
+  );
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /No pending discussion replies/u);

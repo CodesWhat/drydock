@@ -1,0 +1,651 @@
+---
+title: "REST API"
+description: "Access Drydock state and trigger actions using the HTTP REST API."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+By default, the API is enabled and exposed on port `3000`. You can override this behaviour [using environment variables](/docs/configuration/server).
+
+## API Versioning
+
+Starting in v1.4.0, the canonical API base path is `/api/v1/*`. The unversioned `/api/*` path was a backward-compatible alias during migration; it was removed in v1.6.0.
+
+| Path | Status | Description |
+| --- | --- | --- |
+| `/api/v1/*` | **Canonical** | Versioned API path — use this for new integrations |
+| `/api/*` | Removed in v1.6.0 | Returns `410 Gone` with a JSON body pointing at the `/api/v1/` equivalent |
+
+The four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints keep responding at `/api/*` when `DD_COMPAT_WUDCARD=true` (three reshaped into a bare-array shape, the fourth unmodified), served by their own router rather than by falling through to the removed alias. Two standalone auth aliases, `GET /api/auth/methods` and `GET /api/auth/status`, are also unaffected — unconditionally, not behind any flag — because both are registered directly on the app rather than through the removed alias router; see [Authentication routes](#authentication-routes) below. Everything else under `/api/*` now returns `410 Gone`; use `/api/v1/*`. See [Deprecations](/docs/deprecations#unversioned-api-paths) for details.
+
+## Error Contract
+
+All error responses (HTTP 4xx/5xx) return a consistent JSON structure:
+
+```json
+{
+  "error": "Container not found"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `error` | string | Human-readable error message (derived from the HTTP status when not explicitly set) |
+| `details` | object | Optional contextual metadata (present only when additional context is available) |
+
+## Authentication
+
+When [authentication](/docs/configuration/authentications) is enabled, all API endpoints require a valid session (cookie-based via Basic or OIDC login).
+For cross-domain OIDC providers, keep `DD_SERVER_COOKIE_SAMESITE=lax` (default) unless you have a specific same-site policy requirement.
+
+The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer token authentication.
+
+## Destructive action confirmation
+
+Some destructive endpoints require an explicit confirmation header:
+
+`X-DD-Confirm-Action: <token>`
+
+If the header is missing or does not match the expected token, the API responds with `428 Precondition Required`.
+
+| Endpoint | Method | Required header |
+| --- | --- | --- |
+| `/api/v1/containers/:id/rollback` | `POST` | `X-DD-Confirm-Action: container-rollback` |
+| `/api/v1/containers/:id` | `DELETE` | `X-DD-Confirm-Action: container-delete` |
+
+## Endpoint overview
+
+| Category | Endpoints | Description |
+| --- | --- | --- |
+| [App](/docs/api/app) | `GET /api/v1/app`, `GET /api/v1/server` | Application info, server configuration, security runtime |
+| [Containers](/docs/api/container) | `GET /api/v1/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
+| [Agents](/docs/api/agent) | `GET /api/v1/agents` | Remote agent status and logs |
+| [Logs](/docs/api/log) | `GET /api/v1/log`, `GET /api/v1/log/entries`, `WS /api/v1/log/stream` | Application logger config, buffered entries, and live stream |
+| [Authentications](/docs/api/authentication) | `GET /api/v1/authentications` | Authentication provider configurations |
+| [Registries](/docs/api/registry) | `GET /api/v1/registries` | Registry configurations |
+| [Store](/docs/api/store) | `GET /api/v1/store` | Data store info |
+| [Triggers](/docs/api/trigger) | `GET /api/v1/triggers` | Trigger configurations |
+| [Watchers](/docs/api/watcher) | `GET /api/v1/watchers` | Watcher configurations |
+
+### Additional endpoints
+
+| Endpoint | Method | Description |
+| --- | --- | --- |
+| `/api/v1/openapi.json` | `GET` | [OpenAPI 3.1.0 specification](#openapi) (machine-readable API docs) |
+| `/health` | `GET` | Health check (returns 200 when healthy, 503 while startup readiness gates are not satisfied) |
+| `/metrics` | `GET` | Prometheus metrics (bearer token via `DD_SERVER_METRICS_TOKEN`, session auth fallback, or no auth via `DD_SERVER_METRICS_AUTH=false`) |
+| `/api/v1/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
+| `/api/v1/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
+| `/api/v1/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
+| `/api/v1/notifications/outbox` | `GET`, `POST /:id/retry`, `DELETE /:id` | [Notification outbox](#notification-outbox) (admin retry/discard for failed deliveries) |
+| `/api/v1/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
+| `/api/v1/preferences` | `GET`, `PATCH` | [Synced UI preferences](#preferences) (opt-in cross-device sync; `403` for anonymous sessions) |
+| `/api/v1/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
+| `/api/v1/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
+| `/api/v1/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
+| `/api/v1/containers/:id/stats` | `GET` | Single container stats snapshot and history (see [Container API](/docs/api/container)) |
+| `/api/v1/containers/:id/stats/stream` | `GET` | SSE stream for real-time container stats (see [Container API](/docs/api/container)) |
+| `/api/v1/stats/summary` | `GET` | Fleet-aggregate CPU/memory snapshot (see [Container API](/docs/api/container#get-fleet-stats-summary)) |
+| `/api/v1/stats/summary/stream` | `GET` | SSE feed of fleet-aggregate stats — consumed by the dashboard Resource Usage widget (see [Container API](/docs/api/container#stream-fleet-stats-summary-sse)) |
+| `/api/v1/update-operations/:id` | `GET` | Single update/rollback operation by ID — SSE-miss fallback (see [Container API](/docs/api/container#get-a-single-update-operation)) |
+| `/api/v1/self-update/:operationId/status` | `GET` | Self-update operation status — unauthenticated; polled by the UI overlay during a self-update (operation UUID acts as the access capability; returns `{ operationId, status, phase, completedAt? }`, 404 when unknown) |
+| `/api/v1/operations/:id/cancel` | `POST` | Cancel a queued or in-progress update operation (see [Container API](/docs/api/container#cancel-an-update-operation)) |
+| `/api/v1/containers/:id/release-notes` | `GET` | Structured release notes for a container's current update target (see [Container API](/docs/api/container#get-container-release-notes)) |
+| `/api/v1/containers/:id/intermediate-release-notes` | `GET` | Semver-only release notes between two tags, with `from` required and `to` defaulting to the pending update target (see [Container API](/docs/api/container#get-intermediate-release-notes)) |
+| `/api/v1/portwing/keys` | `GET`, `POST` | Stable Portwing edge-agent key registry, enabled by default (`DD_EXPERIMENTAL_PORTWING=false` is an emergency disable) |
+| `/api/v1/portwing/keys/:keyId` | `DELETE` | Revoke a Portwing Ed25519 public key and disconnect live sessions authenticated with it |
+| `/api/v1/portwing/ws` | `WS` | Stable Portwing edge-agent WebSocket endpoint using the `portwing/1.0` protocol |
+| `/api/v1/containers/update` | `POST` | Bulk queue updates for multiple containers (see [Container API](/docs/api/container#bulk-update-containers)) |
+| `/api/v1/containers/backups` | `GET` | [All image backups](/docs/api/container#list-all-backups) (optionally filter by `containerName`) |
+| `/api/v1/icons/:provider/:slug` | `GET` | Proxy and cache registry icon images |
+| `/api/v1/icons/cache` | `DELETE` | Clear the icon proxy cache |
+| `/api/v1/auth/status` | `GET` | Authentication status check |
+| `/api/v1/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
+| `/api/v1/webhook/watch/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
+| `/api/v1/webhook/update/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
+| `/api/v1/webhooks/registry` | `POST` | Signed registry-provider webhook that triggers immediate checks for matching containers |
+| `/api/v1/debug/dump` | `GET` | Download a debug dump JSON file for troubleshooting |
+
+<Callout type="info">See each sub-page for detailed request/response examples.</Callout>
+
+### Command endpoint convention
+
+Some endpoints are intentional action commands and use `POST` under a resource path (for example container watch/scan/reveal). These are RPC-style operations rather than CRUD updates.
+
+## Registry webhook
+
+`POST /api/v1/webhooks/registry` receives registry-provider webhook payloads and immediately checks matching containers.
+
+The endpoint does not use the regular webhook bearer token. It requires an HMAC-SHA256 signature computed with `DD_SERVER_WEBHOOK_SECRET`. Drydock accepts `sha256=<hex>` or raw hex signatures from these headers:
+
+- `x-drydock-signature`
+- `x-hub-signature-256`
+- `x-quay-signature`
+- `x-harbor-signature`
+- `x-ms-signature`
+- `x-registry-signature`
+
+```bash
+payload='{"provider":"dockerhub","repository":"library/nginx"}'
+signature="sha256=$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$DD_SERVER_WEBHOOK_SECRET" -binary | xxd -p -c 256)"
+
+curl -X POST http://drydock:3000/api/v1/webhooks/registry \
+  -H "Content-Type: application/json" \
+  -H "x-drydock-signature: $signature" \
+  -d "$payload"
+```
+
+Returns `202 Accepted` with registry dispatch counts, `401` for a missing or invalid signature, `403` when registry webhooks are disabled, `429` when rate-limited, or `500` if the endpoint is enabled without a configured secret.
+
+## Notification rules
+
+Notification rules control which events trigger notifications, which triggers receive them, the in-app bell filters, and optional per-provider message templates. Eight default rules are created automatically.
+
+### Get all notification rules
+
+```bash
+curl http://drydock:3000/api/v1/notifications
+
+{
+  "data": [
+    {
+      "id": "update-available",
+      "name": "Update Available",
+      "description": "When a container has a new version",
+      "enabled": true,
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
+    },
+    {
+      "id": "update-applied",
+      "name": "Update Applied",
+      "description": "After a container is successfully updated",
+      "enabled": true,
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
+    },
+    {
+      "id": "update-failed",
+      "name": "Update Failed",
+      "description": "When an update fails or is rolled back",
+      "enabled": true,
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
+    },
+    {
+      "id": "security-alert",
+      "name": "Security Alert",
+      "description": "Critical/High vulnerability detected",
+      "enabled": true,
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
+    },
+    {
+      "id": "agent-disconnect",
+      "name": "Agent Disconnected",
+      "description": "When a remote agent loses connection",
+      "enabled": false,
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
+    },
+    {
+      "id": "agent-reconnect",
+      "name": "Agent Reconnected",
+      "description": "When a remote agent reconnects after losing connection",
+      "enabled": false,
+      "triggers": [],
+      "bellEnabled": false,
+      "bellThreshold": "all",
+      "templates": {}
+    },
+    {
+      "id": "container-unhealthy",
+      "name": "Container Unhealthy",
+      "description": "When a container's Docker health check enters the unhealthy state",
+      "enabled": false,
+      "triggers": [],
+      "bellEnabled": false,
+      "bellThreshold": "all",
+      "templates": {}
+    },
+    {
+      "id": "maturity-cleared",
+      "name": "Maturity Gate Cleared",
+      "description": "When an update held back by the maturity policy becomes applicable",
+      "enabled": true,
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
+    }
+  ],
+  "total": 8
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data` | array | List of notification rules |
+| `total` | integer | Number of rules returned |
+| `data[].id` | string | Rule identifier (e.g. `update-available`, `security-alert`) |
+| `data[].name` | string | Human-readable rule name |
+| `data[].description` | string | What this rule covers |
+| `data[].enabled` | boolean | Whether the rule is active |
+| `data[].triggers` | string[] | Trigger IDs that receive this notification (empty = all triggers) |
+| `data[].bellEnabled` | boolean | Whether this rule is included in the in-app bell when its event has audit-backed bell support |
+| `data[].bellThreshold` | string | Bell threshold: `all`, `major`, `minor`, or `patch`; threshold filtering applies only to `update-available` entries |
+| `data[].templates` | object | Per-trigger overrides keyed by canonical trigger ID; each value may contain `simpleTitle`, `simpleBody`, and/or `batchTitle` |
+
+### Update a notification rule
+
+Update delivery routing, bell preferences, and/or template overrides for a rule. Only the fields you include are changed. Template keys must resolve to configured notification triggers; action triggers are rejected.
+
+```bash
+curl -X PATCH http://drydock:3000/api/v1/notifications/update-available \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "enabled": true,
+    "triggers": ["slack.alerts", "ntfy.one"],
+    "bellEnabled": true,
+    "bellThreshold": "minor",
+    "templates": {
+      "slack.alerts": {
+        "simpleTitle": "${container.name}: ${container.updateKind.remoteValue}",
+        "simpleBody": "${container.result.releaseNotes.body}"
+      }
+    }
+  }'
+```
+
+Returns 200 with the updated rule, 400 if the body is invalid or a trigger ID is not recognized, or 404 if the rule ID does not exist.
+
+### Preview notification templates
+
+Render draft overrides against representative data without saving them:
+
+```bash
+curl -X POST http://drydock:3000/api/v1/notifications/update-available/preview \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "triggerId": "slack.alerts",
+    "templates": {
+      "simpleTitle": "${container.name}: ${container.updateKind.remoteValue}",
+      "simpleBody": "${container.result.releaseNotes.body}",
+      "batchTitle": "${containers.length} updates available"
+    }
+  }'
+```
+
+The response contains rendered `simpleTitle`, `simpleBody`, and `batchTitle` strings. Omitted draft fields fall back to the saved rule override, then to the trigger's configured/default template. The endpoint returns 404 for an unknown rule and 400 for an unknown trigger or one that cannot render previews.
+
+## Notification outbox
+
+The notification outbox stores failed notification delivery attempts so admins can inspect, retry, or discard them. The outbox API and UI are session-authenticated admin surfaces.
+
+### Error body retention
+
+`lastError` is diagnostic text from the latest failed delivery attempt. It may include downstream notification provider or webhook response bodies when those providers return useful failure text, with Authorization header values redacted before storage. Treat it as admin-visible troubleshooting data, not as sanitized end-user copy.
+
+Outbox API responses expose only a safe payload projection. Full persisted delivery payloads, including full container objects, are not returned by `GET /api/v1/notifications/outbox`.
+
+### List notification outbox entries
+
+```bash
+curl "http://drydock:3000/api/v1/notifications/outbox?status=dead-letter"
+```
+
+Returns 200 with outbox entries, 400 if `status` is invalid, or 401 if authentication is required.
+
+### Retry a notification outbox entry
+
+```bash
+curl -X POST http://drydock:3000/api/v1/notifications/outbox/outbox-entry-id/retry
+```
+
+Returns 200 with the requeued entry, 404 if the entry does not exist or is not in `dead-letter` status, or 500 on an internal error.
+
+### Delete a notification outbox entry
+
+```bash
+curl -X DELETE http://drydock:3000/api/v1/notifications/outbox/outbox-entry-id
+```
+
+Returns 204 on success, 404 if the entry does not exist, or 500 on an internal error.
+
+## Audit trail
+
+Returns paginated audit log entries for container lifecycle events, updates, rollbacks, webhooks, and more.
+
+### Get audit entries
+
+```bash
+curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&container=homeassistant"
+
+{
+  "data": [
+    {
+      "id": "a1b2c3d4-...",
+      "timestamp": "2024-12-01T10:01:30.000Z",
+      "action": "update-applied",
+      "containerName": "homeassistant",
+      "containerImage": "homeassistant/home-assistant",
+      "fromVersion": "2024.11.3",
+      "toVersion": "2024.12.0",
+      "triggerName": "docker.local",
+      "status": "success",
+      "details": ""
+    }
+  ],
+  "total": 42,
+  "limit": 25,
+  "offset": 0,
+  "hasMore": true
+}
+```
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `offset` | integer | `0` | Number of entries to skip |
+| `limit` | integer | `50` | Results per page (max 200) |
+| `action` | string | | Filter by a single action type |
+| `actions` | string | | Comma-separated list of action types (e.g. `update-applied,update-failed`) |
+| `container` | string | | Filter by container name |
+| `from` | string | | ISO 8601 date -- only entries on or after this timestamp |
+| `to` | string | | ISO 8601 date -- only entries on or before this timestamp |
+
+### Action types
+
+`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`, `env-reveal`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `mqtt-command-update`
+
+## Server-Sent Events (SSE)
+
+The `/api/v1/events/ui` endpoint provides real-time push notifications to the UI via Server-Sent Events.
+
+### Connect
+
+```bash
+curl -N -H "Accept: text/event-stream" http://drydock:3000/api/v1/events/ui
+```
+
+Connection limits: max 10 per IP, max 10 per session. Returns 429 when exceeded.
+
+### Reconnection and event replay
+
+Each SSE event carries an `id:` field (`<bootId>:<counter>`). On reconnect, browsers automatically send a `Last-Event-ID` header and the server replays any buffered events since that ID. For clients that cannot set custom headers (for example `EventSource` in some environments), pass the same value via the `?last-event-id=` query parameter instead — the server checks both and the header takes precedence.
+
+The replay buffer is an in-memory 5-minute ring buffer. If the requested event is older than the buffer, the server sends `dd:resync-required` so the client can refresh full state. If the boot ID does not match the server's current boot (server restarted since the last connection), the server cannot replay events from before the restart; the client should treat that reconnect as a full re-sync.
+
+### Event types
+
+| Event | Payload | Description |
+| --- | --- | --- |
+| `dd:connected` | `{ "clientId": "...", "clientToken": "..." }` | Sent immediately on connection. The `clientToken` is used for self-update acknowledgment. |
+| `dd:heartbeat` | `{}` | Sent every 15 seconds to keep the connection alive |
+| `dd:container-added` | Container object | A new container was discovered by a watcher |
+| `dd:container-updated` | Container object | An existing container's state changed (new tag, status, scan result) |
+| `dd:container-removed` | Container object | A container was removed |
+| `dd:container-unhealthy` | `{ "containerName": "...", "health": "unhealthy", "previousHealth": "...", "container": {...} }` | A watched container's health check transitioned to unhealthy |
+| `dd:scan-started` | `{ "containerId": "..." }` | A security scan started for a container |
+| `dd:scan-completed` | `{ "containerId": "...", "status": "..." }` | A security scan finished |
+| `dd:self-update` | `{ "opId": "...", "requiresAck": bool, "ackTimeoutMs": int, "startedAt": "..." }` | Drydock is updating its own container. If `requiresAck` is true, the UI should POST an acknowledgment before the timeout. |
+| `dd:update-operation-changed` | `{ "operationId": "...", "containerName": "...", "status": "...", "phase": "...", "queuePosition": int, "queueTotal": int }` | An in-flight update operation's status or queue position changed |
+| `dd:update-applied` | `{ "containerName": "...", "containerId": "...", "newContainerId": "...", "operationId": "...", "batchId": "..." }` | An update was successfully applied to a container |
+| `dd:update-failed` | `{ "containerName": "...", "error": "...", "operationId": "...", "batchId": "...", "phase": "...", "rollbackReason": "..." }` | An update attempt failed (or was rolled back) |
+| `dd:batch-update-completed` | `{ "batchId": "...", "total": int, "succeeded": int, "failed": int, "durationMs": int, "items": [...] }` | A batch update run finished |
+| `dd:agent-connected` | Agent payload | A remote agent connected to the controller |
+| `dd:agent-disconnected` | Agent payload | A remote agent disconnected |
+| `dd:agent-stats-changed` | `{ "agentName": "..." }` | A remote agent's stats changed and should be refetched |
+| `dd:resync-required` | `{ "reason": "..." }` | Replay could not cover the requested event range; clients should refresh full state |
+| `dd:preferences-updated` | `{}` | A user's preferences changed on another device/tab; clients should refetch their own session-scoped preferences |
+
+### Self-update acknowledgment
+
+When a `dd:self-update` event has `requiresAck: true`, the UI must POST an acknowledgment before the timeout expires. The `clientId` and `clientToken` are provided in the initial `dd:connected` event.
+
+```bash
+curl -X POST http://drydock:3000/api/v1/events/ui/self-update/op-abc123/ack \
+  -H 'Content-Type: application/json' \
+  -d '{"clientId": "client-1", "clientToken": "tok-xyz"}'
+```
+
+| Status | Response | Description |
+| --- | --- | --- |
+| 202 | `{ "status": "accepted", "operationId": "..." }` | Acknowledgment recorded |
+| 202 | `{ "status": "ignored", "operationId": "..." }` | No pending ack for this operation |
+| 400 | `{ "error": "..." }` | Missing required field (`operationId`, `clientId`, or `clientToken`) |
+| 403 | `{ "status": "rejected", "operationId": "..." }` | Invalid token, mismatched client, or client not bound to operation |
+
+### SSE message format
+
+```text
+event: dd:container-updated
+data: { "id": "31a61a...", "name": "homeassistant", ... }
+```
+
+## Settings
+
+Persistent server-wide application settings stored in the Drydock database. Unlike [Preferences](#preferences), these values apply to every user and browser.
+
+### Get settings
+
+```bash
+curl http://drydock:3000/api/v1/settings
+
+{
+  "internetlessMode": false,
+  "updateMode": "manual"
+}
+```
+
+### Update settings
+
+```bash
+curl -X PATCH http://drydock:3000/api/v1/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"updateMode": "notify"}'
+
+{
+  "internetlessMode": false,
+  "updateMode": "notify"
+}
+```
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `internetlessMode` | boolean | `false` | When enabled, disables registry icon lookups and other external requests |
+| `updateMode` | `notify` \| `manual` \| `auto` | `manual` on a fresh install | `notify` detects and notifies but refuses Drydock-managed updates; `manual` allows UI/API updates but suppresses automatic action triggers; `auto` permits both. Existing pre-setting installs migrate to `auto` once to preserve their previous automatic-update behavior. |
+
+Returns 200 with the updated settings, or 400 if the body is invalid. `PUT /api/v1/settings` remains a deprecated compatibility alias; because `/api/v1` is frozen, removal is deferred to API v2. New integrations should use `PATCH`.
+
+## Preferences
+
+Cross-device sync of UI preferences (theme, layout, dashboard, language, and more) for signed-in users. Opt-in via the **Sync across devices** toggle in **Config > Appearance** — see [UI Customization](/docs/configuration/ui#sync-across-devices) for the feature overview. Requires a real, non-anonymous user identity; there is no `PUT` alias for this endpoint. The examples below assume an authenticated, non-anonymous session (see [Authentication](#authentication)); anonymous sessions receive `403`.
+
+### Get preferences
+
+```bash
+curl http://drydock:3000/api/v1/preferences
+
+{
+  "apiVersion": 1,
+  "username": "alice",
+  "schemaVersion": null,
+  "preferences": null,
+  "updatedAt": null
+}
+```
+
+`schemaVersion`, `preferences`, and `updatedAt` are `null` until the user has synced at least once.
+
+### Update preferences
+
+Replaces the full stored preferences blob — this is a full replace, not a partial merge.
+
+```bash
+curl -X PATCH http://drydock:3000/api/v1/preferences \
+  -H 'Content-Type: application/json' \
+  -d '{"apiVersion": 1, "schemaVersion": 12, "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}}}'
+
+{
+  "apiVersion": 1,
+  "username": "alice",
+  "schemaVersion": 12,
+  "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}},
+  "updatedAt": "2026-07-11T12:00:00.000Z"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `apiVersion` | integer | API contract version; must match the server's supported version (currently `1`) |
+| `username` | string | The signed-in username the preferences are keyed to |
+| `schemaVersion` | integer \| null | The client preference schema version at time of write; `null` if never synced |
+| `preferences` | object \| null | The full preferences blob, opaque to the server; `null` if never synced |
+| `updatedAt` | string \| null | ISO 8601 timestamp of the last server-side write; `null` if never synced |
+
+Returns 200 with the preferences envelope, 400 if the body is malformed, 401 if there is no session, 403 if the session is anonymous (sync requires a real user identity), 409 if `apiVersion` does not match the server's supported version, or 413 if the request body exceeds the global 256 kb JSON body limit.
+
+## Container groups
+
+Returns server-derived container groups. Group priority: `dd.group` > `com.docker.compose.project` > `com.docker.stack.namespace` > ungrouped. Browser-side manual group overrides are UI preferences: they do not mutate Docker labels and are not reflected in this response.
+
+```bash
+curl http://drydock:3000/api/v1/containers/groups
+
+{
+  "data": [
+    {
+      "name": "monitoring",
+      "containers": [
+        {
+          "id": "31a61a...",
+          "name": "prometheus",
+          "displayName": "Prometheus",
+          "updateAvailable": false
+        },
+        {
+          "id": "e5f6a7...",
+          "name": "grafana",
+          "displayName": "Grafana",
+          "updateAvailable": true
+        }
+      ],
+      "containerCount": 2,
+      "updatesAvailable": 1
+    },
+    {
+      "name": null,
+      "containers": [
+        {
+          "id": "abc123...",
+          "name": "standalone-app",
+          "displayName": "standalone-app",
+          "updateAvailable": false
+        }
+      ],
+      "containerCount": 1,
+      "updatesAvailable": 0
+    }
+  ],
+  "total": 2
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data` | array | List of container groups |
+| `total` | integer | Number of groups returned |
+| `data[].name` | string \| null | Group name (`null` for ungrouped containers) |
+| `data[].containers` | array | List of containers with `id`, `name`, `displayName`, `updateAvailable` |
+| `data[].containerCount` | integer | Number of containers in the group |
+| `data[].updatesAvailable` | integer | Number of containers with a pending update |
+
+## Authentication routes
+
+When [authentication](/docs/configuration/authentications) is enabled, these endpoints manage the login flow. Auth routes are mounted at `/auth` (not `/api/auth`).
+
+### Get authentication status
+
+Returns registered authentication providers and startup registration errors. This endpoint is unauthenticated so the login screen can check auth readiness.
+
+```bash
+curl http://drydock:3000/api/v1/auth/status
+```
+
+The same status payload is also available at `GET /auth/status`; `GET /api/auth/status` remains as the unversioned compatibility alias.
+
+### Get available strategies
+
+Returns the list of configured authentication strategies. This endpoint is unauthenticated so the login screen can render.
+
+```bash
+curl http://drydock:3000/auth/strategies
+```
+
+The `{ strategies, warnings }` response shape from `GET /auth/strategies` is deprecated and scheduled for removal in v1.8.0. Migrate to `GET /api/v1/auth/status`; see [Deprecations](/docs/deprecations#legacy-auth-strategies-shape).
+
+A legacy alias is available at `GET /api/auth/methods` (rate-limited), deprecated and scheduled for removal in v1.7.0 — see [Deprecations](/docs/deprecations#api-auth-methods).
+
+### Login
+
+Authenticate with credentials. The response sets a session cookie.
+
+```bash
+curl -X POST http://drydock:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username": "admin", "password": "..."}'
+```
+
+### Get current user
+
+Returns the currently authenticated user. Requires a valid session.
+
+```bash
+curl http://drydock:3000/auth/user
+```
+
+### Logout
+
+End the current session.
+
+```bash
+curl -X POST http://drydock:3000/auth/logout
+```
+
+When the active auth strategy exposes an OIDC end-session URL, the response includes `logoutUrl` so the UI can complete IdP logout. If `logoutUrl` is missing, logout is local-session-only.
+
+### Remember me
+
+Store a remember-me preference for the current authenticated session.
+
+```bash
+curl -X POST http://drydock:3000/auth/remember \
+  -H 'Content-Type: application/json' \
+  -d '{"remember": true}'
+```
+
+## OpenAPI
+
+Machine-readable API documentation is available as an OpenAPI 3.1.0 specification.
+
+```bash
+curl http://drydock:3000/api/v1/openapi.json
+```
+
+The spec covers HTTP API endpoints with request/response schemas. You can import the URL into tools like Swagger UI, Redoc, or Postman for interactive exploration.

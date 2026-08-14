@@ -53,6 +53,12 @@ test('required ci-verify jobs publish stable plain-text check names', () => {
 });
 
 test('script node tests are wired into local and CI gates', () => {
+  expect(getTestJobStep('Checkout')).toMatchObject({
+    with: {
+      'fetch-depth': 0,
+      'persist-credentials': false,
+    },
+  });
   expect(getTestJobStep('Run scripts tests')).toMatchObject({
     run: 'node --test scripts/*.test.mjs',
   });

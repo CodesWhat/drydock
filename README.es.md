@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.0-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,19 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <h2 align="center" id="recent-updates">🆕 Actualizaciones recientes</h2>
 
 <details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.1</strong></summary>
+
+- **Actualizaciones conscientes de dependencias**: las etiquetas o los metadatos de Compose crean un grafo de dependencias validado, muestran las oleadas exactas en la vista previa y ejecutan actualizaciones o reinicios de dependientes en orden determinista, con manejo seguro de ciclos, fallos y vistas previas obsoletas. ([Discusión #219](https://github.com/CodesWhat/drydock/discussions/219))
+- **Experiencia del operador**: PWA instalable, enlaces de puertos con nombre, tiempo de actividad del contenedor en vivo, atajos de teclado y detección con espera para contenedores recién descubiertos.
+- **Migración incompatible de disparadores**: `DD_TRIGGER_*` ahora impide el arranque y las etiquetas antiguas `dd.trigger.include` / `dd.trigger.exclude` ya no enrutan trabajo; use `DD_ACTION_*`, `DD_NOTIFICATION_*` y sus etiquetas con ámbito.
+- **Refuerzo de seguridad y ciclo de vida**: la autenticación, las solicitudes de agentes, los registros, WebSockets y las solicitudes a registros tienen límites explícitos; se ocultan valores sensibles de comandos y hooks; el descubrimiento de Home Assistant se resincroniza después del arranque y retira trabajo de proveedores sin publicaciones obsoletas. ([#708](https://github.com/CodesWhat/drydock/issues/708))
+- **Historial de estrellas propio**: el proveedor de mismo origen `/api/star-history` sirve gráficos de Drydock, Sockguard y Portwing mediante una lista permitida, sin depender de un rastreador externo.
+
+Notas completas en [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-13).
+
+</details>
+
+<details>
 <summary><strong>Aspectos destacados de v1.6.0</strong></summary>
 
 - **El transporte de agentes/Edge de Portwing madura**: comprobaciones y actualizaciones nativas de Docker controladas por el controlador para Portwing 0.9.0+, transmisión continua de registros Edge, firma de solicitudes Ed25519 (v2) y nombres visibles propiedad del agente vinculados a su clave. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637))

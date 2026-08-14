@@ -1,0 +1,78 @@
+---
+title: "Registry API"
+description: "This API allows to query the state of the registries."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<Callout type="info">[Need to add a new Registry?](/docs/configuration/registries)</Callout>
+
+## Get all Registries
+
+This operation lets you get all the configured registries.
+
+```bash
+curl http://drydock:3000/api/v1/registries
+
+{
+    "data": [
+      {
+        "id":"ecr.private",
+        "type":"ecr",
+        "name":"private",
+        "configuration":{
+            "region":"eu-west-1",
+            "accesskeyid":"[REDACTED]",
+            "secretaccesskey":"[REDACTED]"
+        }
+      },
+      {
+        "id":"hub.private",
+        "type":"hub",
+        "name":"private",
+        "configuration":{
+            "auth": "[REDACTED]"
+        }
+      }
+    ],
+    "total": 2,
+    "limit": 0,
+    "offset": 0,
+    "hasMore": false
+}
+```
+
+## Get a Registry by id
+
+This operation lets you get a specific Registry.
+
+```bash
+curl http://drydock:3000/api/v1/registries/hub/private
+
+{
+    "id": "hub.private",
+    "type": "hub",
+    "name": "private",
+    "configuration": {
+        "auth": "[REDACTED]"
+    }
+}
+```
+
+### Agent-scoped lookup
+
+To fetch a registry registered on a specific agent, append the agent name:
+
+```bash
+curl http://drydock:3000/api/v1/registries/hub/private/agent1
+
+{
+    "id": "agent1.hub.private",
+    "type": "hub",
+    "name": "private",
+    "configuration": {
+        "auth": "[REDACTED]"
+    },
+    "agent": "agent1"
+}
+```

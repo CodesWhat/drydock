@@ -1,0 +1,58 @@
+---
+title: "DNS"
+description: "Configure DNS resolution behavior for registry checks, trigger webhooks, and agent communication."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## DNS Result Ordering
+
+Drydock runs on Alpine Linux, which uses musl libc. Musl's DNS resolver can return `getaddrinfo EAI_AGAIN` errors on dual-stack (IPv4/IPv6) networks when IPv6 records are returned first but IPv6 connectivity is unavailable.
+
+To prevent this, drydock defaults to **IPv4-first** DNS ordering at startup. This matches the behavior of Node.js versions prior to v17 and works correctly on the vast majority of networks.
+
+### Variables
+
+| Env var | Required | Description | Supported values | Default |
+| --- | :-: | --- | --- | --- |
+| `DD_DNS_MODE` | - | DNS result ordering mode | `ipv4first`, `ipv6first`, `verbatim` | `ipv4first` |
+
+### Values
+
+| Value | Behavior |
+| --- | --- |
+| `ipv4first` | IPv4 addresses are resolved before IPv6 (default). Prevents `EAI_AGAIN` errors on most networks. |
+| `ipv6first` | IPv6 addresses are resolved before IPv4. Use only in IPv6-preferred environments. |
+| `verbatim` | Addresses are returned in the order the OS DNS resolver provides them. This is the Node.js default but can trigger musl DNS issues on Alpine. |
+
+<Callout type="info">This setting calls `dns.setDefaultResultOrder()` at process startup and affects **all** outbound connections: registry checks, trigger webhooks, agent communication, and OIDC token exchange.</Callout>
+
+### Examples
+
+Most users do not need to set this variable. The default `ipv4first` works on all IPv4 and dual-stack networks.
+
+#### IPv6-only network
+
+If drydock runs in a pure IPv6 environment with no IPv4 connectivity:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_DNS_MODE=ipv6first
+```
+
+#### Restore Node.js default behavior
+
+To use the OS resolver's native ordering (not recommended on Alpine):
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_DNS_MODE=verbatim
+```
+
+<Callout type="warn">Setting `DD_DNS_MODE=verbatim` on Alpine may cause intermittent `getaddrinfo EAI_AGAIN` errors on dual-stack networks. Only use this if you have a specific reason to preserve OS-native DNS ordering.</Callout>

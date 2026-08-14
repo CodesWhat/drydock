@@ -52,37 +52,49 @@ const localizedBehaviorFragments: Record<
 
 const localizedSurfaceFragments: Record<
   string,
-  { featureTableHeader: string; builtWithHeading: string; communityQaHeading: string }
+  {
+    featureTableHeader: string;
+    builtWithHeading: string;
+    communityQaHeading: string;
+    releaseHeading: string;
+  }
 > = {
   'README.de.md': {
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '### Gebaut mit',
     communityQaHeading: '### Community-QA',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.1</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '### Construido con',
     communityQaHeading: '### Control de calidad de la comunidad',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.1</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '### Construit avec',
     communityQaHeading: '### Contrôle qualité de la communauté',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.1</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '### Zbudowany z',
     communityQaHeading: '### Kontrola jakości społeczności',
+    releaseHeading:
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.1</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '### Construído com',
     communityQaHeading: '### Controle de qualidade da comunidade',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.1</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '### 技术栈',
     communityQaHeading: '### 社区质量检查',
+    releaseHeading: '<summary><strong>v1.7.0-rc.1 亮点</strong></summary>',
   },
 };
 
@@ -96,7 +108,7 @@ const forbiddenSourceEnglishProse = [
 ];
 
 const requiredFragments = [
-  'version-1.6.0-blue',
+  'version-1.7.0--rc.1-blue',
   'https://www.bestpractices.dev/projects/11915',
   '`drydock.sid`',
   '`allowmetadata=true`',
@@ -106,6 +118,7 @@ const requiredFragments = [
   'v1.6.0-rc.12',
   'v1.6.0-rc.11',
   './CHANGELOG.md#160--2026-08-11',
+  './CHANGELOG.md#170-rc1--2026-08-13',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -152,6 +165,7 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(content).toContain(surface.featureTableHeader);
     expect(content).toContain(surface.builtWithHeading);
     expect(content).toContain(surface.communityQaHeading);
+    expect(content).toContain(surface.releaseHeading);
   });
 
   test('does not splice source-English prose into translated copy', () => {

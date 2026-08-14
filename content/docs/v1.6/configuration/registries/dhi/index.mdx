@@ -1,0 +1,80 @@
+---
+title: "DHI (Docker Hardened Images)"
+description: "The dhi registry lets you configure Docker Hardened Images integration."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `dhi` registry lets you configure [Docker Hardened Images](https://docs.docker.com/dhi/get-started/) integration.
+
+Supported credential shapes:
+
+- Docker ID login + password (`LOGIN` + `PASSWORD`)
+- Docker ID login + access token (`LOGIN` + `TOKEN`)
+- Base64 auth string (`login:password`), like `.docker/config.json`
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` | ⚪ | Docker ID login | Required with `PASSWORD` or `TOKEN` | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_PASSWORD` | ⚪ | Docker ID password or access token | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_TOKEN` | ⚪ | Docker ID access token | `DD_REGISTRY_DHI_{REGISTRY_NAME}_LOGIN` must be defined; cannot be combined with `PASSWORD` | |
+| `DD_REGISTRY_DHI_{REGISTRY_NAME}_AUTH` | ⚪ | Base64 auth string (`login:password`) | Cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN` | |
+
+<Callout type="warn">Registry auth fails closed for invalid combinations. Use exactly one complete shape: `LOGIN`+`PASSWORD`, `LOGIN`+`TOKEN`, `AUTH`, or no credentials. The former token-only `DD_REGISTRY_DHI_PUBLIC_TOKEN` compatibility configuration is rejected in v1.6 instead of silently falling back to anonymous access; pair it with `DD_REGISTRY_DHI_PUBLIC_LOGIN` or remove it for intentional anonymous pulls.</Callout>
+
+## Examples
+
+### Configure with login/password
+
+<Tabs items={["Docker Compose (Login/Password)", "Docker (Login/Password)"]}>
+<Tab value="Docker Compose (Login/Password)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_DHI_PUBLIC_LOGIN=mydockerid
+      - DD_REGISTRY_DHI_PUBLIC_PASSWORD=my-token-or-password
+```
+
+</Tab>
+<Tab value="Docker (Login/Password)">
+```bash
+docker run \
+  -e DD_REGISTRY_DHI_PUBLIC_LOGIN="mydockerid" \
+  -e DD_REGISTRY_DHI_PUBLIC_PASSWORD="my-token-or-password" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Configure with base64 auth string
+
+<Tabs items={["Docker Compose (Base64 Auth)", "Docker (Base64 Auth)"]}>
+<Tab value="Docker Compose (Base64 Auth)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_REGISTRY_DHI_PUBLIC_AUTH=bXlkb2NrZXJpZDpteS10b2tlbi1vci1wYXNzd29yZA==
+```
+
+</Tab>
+<Tab value="Docker (Base64 Auth)">
+```bash
+docker run \
+  -e DD_REGISTRY_DHI_PUBLIC_AUTH="bXlkb2NrZXJpZDpteS10b2tlbi1vci1wYXNzd29yZA==" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
