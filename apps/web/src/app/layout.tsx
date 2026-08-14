@@ -1,9 +1,8 @@
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { headers } from "next/headers";
+import { AnalyticsPageview } from "@/components/analytics-pageview";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 import "./globals.css";
 
@@ -91,8 +90,7 @@ export default async function RootLayout({
             `.reveal` CSS defaults to visible. See globals.css. */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: REVEAL_BOOTSTRAP }} />
         <RootProvider theme={{ nonce }}>{children}</RootProvider>
-        <Analytics />
-        <SpeedInsights />
+        <AnalyticsPageview />
       </body>
     </html>
   );

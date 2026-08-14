@@ -1,21 +1,24 @@
 import { GithubIcon } from "@/components/github-icon";
 import { SectionHeading } from "@/components/section-heading";
 import { StarHistoryChart } from "@/components/star-history-chart";
+import { TrackedLink } from "@/components/tracked-link";
 import { GITHUB_URL } from "@/lib/site-config";
 
 // Locked: Star History = clean framed card, title above the chart (left-aligned).
 
 function GithubCta({ label = "Star on GitHub" }: { label?: string }) {
   return (
-    <a
+    <TrackedLink
       href={GITHUB_URL}
+      ctaId="github_repository"
+      placement="star_history"
       target="_blank"
       rel="noopener"
       className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 bg-white/60 px-5 py-2.5 text-sm font-medium text-neutral-900 backdrop-blur-sm transition-all hover:border-neutral-300 hover:bg-white/90 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-neutral-800/90"
     >
       <GithubIcon className="h-4 w-4" />
       {label}
-    </a>
+    </TrackedLink>
   );
 }
 

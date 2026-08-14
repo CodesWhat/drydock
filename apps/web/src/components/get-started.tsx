@@ -1,9 +1,11 @@
 "use client";
 
 import { ShieldCheck, Terminal, TriangleAlert, Zap } from "lucide-react";
-import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { SectionHeading } from "@/components/section-heading";
+import { TrackedLink } from "@/components/tracked-link";
+import { captureCta } from "@/lib/analytics";
 import { SITE_CONFIG } from "@/lib/site-config";
 
 type Preset = "quick" | "secure";
@@ -109,6 +111,12 @@ function SecureSnippet() {
 
 export function GetStarted() {
   const [preset, setPreset] = useState<Preset>("quick");
+  const pathname = usePathname();
+
+  const activatePreset = (id: Preset) => {
+    setPreset(id);
+    captureCta(pathname, `install_${id}`, "get_started");
+  };
 
   return (
     <section className="border-t border-border/60 px-4 py-20">
@@ -130,16 +138,16 @@ export function GetStarted() {
               const currentIndex = PRESETS.findIndex((p) => p.id === preset);
               if (e.key === "ArrowRight") {
                 e.preventDefault();
-                setPreset(PRESETS[(currentIndex + 1) % PRESETS.length].id);
+                activatePreset(PRESETS[(currentIndex + 1) % PRESETS.length].id);
               } else if (e.key === "ArrowLeft") {
                 e.preventDefault();
-                setPreset(PRESETS[(currentIndex - 1 + PRESETS.length) % PRESETS.length].id);
+                activatePreset(PRESETS[(currentIndex - 1 + PRESETS.length) % PRESETS.length].id);
               } else if (e.key === "Home") {
                 e.preventDefault();
-                setPreset(PRESETS[0].id);
+                activatePreset(PRESETS[0].id);
               } else if (e.key === "End") {
                 e.preventDefault();
-                setPreset(PRESETS[PRESETS.length - 1].id);
+                activatePreset(PRESETS[PRESETS.length - 1].id);
               }
             }}
           >
@@ -154,7 +162,7 @@ export function GetStarted() {
                   aria-selected={active}
                   aria-controls="preset-panel"
                   tabIndex={active ? 0 : -1}
-                  onClick={() => setPreset(id)}
+                  onClick={() => activatePreset(id)}
                   className={[
                     "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
                     active
@@ -184,12 +192,14 @@ export function GetStarted() {
               <p className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
                 <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
                 Drydock never touches the raw socket.{" "}
-                <Link
+                <TrackedLink
                   href="/docs/guides/security"
+                  ctaId="docs_security"
+                  placement="get_started"
                   className="font-medium text-neutral-900 underline-offset-4 hover:underline dark:text-neutral-100"
                 >
                   Hardening guide
-                </Link>
+                </TrackedLink>
               </p>
             )}
           </div>
