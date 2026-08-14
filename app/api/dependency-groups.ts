@@ -9,6 +9,7 @@ import {
 } from '../dependencies/dependency-graph.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import type { Container } from '../model/container.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as storeContainer from '../store/container.js';
 import {
@@ -44,17 +45,18 @@ function serializeRejectedUpdateRequest(rejected: RejectedContainerUpdateRequest
 /**
  * Annotate each accepted entry with the wave index it will actually be
  * dispatched in, using the exact same buildDependencyGraph/topologicalSort
- * pair runAcceptedContainerUpdates partitions with internally, over the same
- * accepted-container set — so `wave` here is never a second, potentially
- * divergent, computation of dispatch order (design §4). `actionKind` uses
+ * pair runAcceptedContainerUpdates partitions with internally, over the full
+ * admission batch — so rejected upstream entries cannot erase dependency
+ * context for accepted restart-only dependents. `actionKind` uses
  * the same `resolveDependencyActionKind` the dispatcher itself uses, so it
  * can't drift from which entries are actually restarted vs. updated either
  * (PR #681 review #2/#3).
  */
 function annotateAcceptedWithWave(
   accepted: AcceptedContainerUpdateRequest[],
+  dependencyContext: Container[],
 ): DependencyGroupAcceptedItem[] {
-  const { nodes, edges } = buildDependencyGraph(accepted.map((entry) => entry.container));
+  const { nodes, edges } = buildDependencyGraph(dependencyContext);
   const { waves } = topologicalSort(nodes, edges);
   const waveIndexById = new Map<string, number>();
   waves.forEach((wave, index) => {
@@ -168,7 +170,7 @@ async function updateDependencyGroup(req: Request, res: Response) {
 
     res.status(200).json({
       message: 'Dependency group update requests processed',
-      accepted: annotateAcceptedWithWave(result.accepted),
+      accepted: annotateAcceptedWithWave(result.accepted, chainContainers),
       rejected: result.rejected.map(serializeRejectedUpdateRequest),
     });
   } catch (error: unknown) {

@@ -962,6 +962,40 @@ describe('request-update', () => {
       });
     });
 
+    test('preserves restart-only dispatch when an upstream dependency was rejected during admission', async () => {
+      mockRestartDependentContainer.mockResolvedValue(undefined);
+      const triggerFn = vi.fn().mockResolvedValue(undefined);
+      const db = createDependentContainer({
+        id: 'db',
+        name: 'db',
+        updateAvailable: false,
+      });
+      const sidecar = createDependentContainer({
+        id: 'sidecar',
+        name: 'sidecar',
+        dependsOn: ['db'],
+        dependsOnSource: 'label',
+        dependsOnAction: 'restart',
+        updateAvailable: false,
+      });
+
+      await runAcceptedContainerUpdates(
+        [
+          {
+            operationId: 'op-sidecar',
+            container: sidecar,
+            trigger: { type: 'docker', trigger: triggerFn },
+          },
+        ],
+        { dependencyContext: [db, sidecar] },
+      );
+
+      expect(mockRestartDependentContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'sidecar' }),
+      );
+      expect(triggerFn).not.toHaveBeenCalled();
+    });
+
     test('dependsOnAction=restart with no resolved dependsOn edge dispatches through the normal trigger instead (PR #681 review #2)', async () => {
       const triggerFn = vi.fn().mockResolvedValue(undefined);
 

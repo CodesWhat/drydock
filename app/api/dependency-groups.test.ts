@@ -281,6 +281,37 @@ describe('Dependency Groups Router', () => {
       );
     });
 
+    test('keeps restart-only dispatch and annotation when its upstream is rejected during admission', async () => {
+      const app = makeContainer({ id: 'app', name: 'app', updateAvailable: false });
+      const sidecar = makeContainer({
+        id: 'sidecar',
+        name: 'sidecar',
+        updateAvailable: false,
+        dependsOn: ['app'],
+        dependsOnAction: 'restart',
+      });
+      mockGetContainer.mockReturnValue(app);
+      mockGetContainers.mockReturnValue([app, sidecar]);
+      const { trigger, dockerContainer } = createDockerTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.local': trigger }, watcher: {} });
+
+      const handler = getHandler('post', '/:rootId/update');
+      const req = createMockRequest({ params: { rootId: 'app' } });
+      const res = createMockResponse();
+      await handler(req, res);
+      await flushAcceptedUpdateWork();
+
+      const payload = res.json.mock.calls[0][0];
+      expect(payload.rejected).toEqual([
+        expect.objectContaining({ containerId: 'app', statusCode: 400 }),
+      ]);
+      expect(payload.accepted).toEqual([
+        expect.objectContaining({ containerId: 'sidecar', actionKind: 'restart', wave: 1 }),
+      ]);
+      expect(trigger.trigger).not.toHaveBeenCalled();
+      expect(dockerContainer.restart).toHaveBeenCalledTimes(1);
+    });
+
     describe('expectedContainerIds blast-radius binding', () => {
       test('proceeds normally when expectedContainerIds is omitted', async () => {
         const db = makeContainer({ id: 'db', name: 'db' });
