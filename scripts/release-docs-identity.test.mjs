@@ -100,6 +100,7 @@ test('release candidate notes cover the post-promotion fixes', () => {
     assert.ok(updates.includes(issueLink), `updates page must link issue #${issue}`);
   }
 
+  assert.doesNotMatch(updates, /\b3xx\b/iu);
   for (const fragment of [
     '`DD_PORTWING_POLL_INTERVAL`',
     '`exec_end.reason`',
@@ -113,6 +114,7 @@ test('release candidate notes cover the post-promotion fixes', () => {
     '`DD_PORTWING_POLL_INTERVAL`',
     '`exec_end.reason`',
     'normalize against configured registries',
+    '301, 302, 303, 307, or 308',
     '4xx, 5xx, network, and non-object failures',
   ]) {
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
