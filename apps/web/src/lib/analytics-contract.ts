@@ -6,26 +6,28 @@ const PROJECT_TOKEN_PATTERN = /^phc_[A-Za-z0-9_-]+$/u;
 const OTHER_PATH = "/_other";
 const COOKILESS_DISTINCT_ID = "$posthog_cookieless";
 
-const ALLOWED_CTA_TUPLES = new Set([
-  "marketing\0docs_root\0header",
-  "marketing\0github_repository\0header",
-  "docs\0docs_root\0header",
-  "docs\0github_repository\0header",
-  "marketing\0docs_root\0hero",
-  "marketing\0github_repository\0hero",
-  "marketing\0docs_root\0comparison",
-  "marketing\0github_repository\0comparison",
-  "marketing\0install_quick\0get_started",
-  "marketing\0install_secure\0get_started",
-  "marketing\0docs_security\0get_started",
-  "marketing\0docs_root\0footer",
-  "marketing\0github_repository\0footer",
-  "marketing\0community_discord\0footer",
-  "docs\0docs_root\0footer",
-  "docs\0github_repository\0footer",
-  "docs\0community_discord\0footer",
-  "marketing\0github_repository\0star_history",
-]);
+export const ANALYTICS_CTA_TUPLES = [
+  ["marketing", "docs_root", "header"],
+  ["marketing", "github_repository", "header"],
+  ["docs", "docs_root", "header"],
+  ["docs", "github_repository", "header"],
+  ["marketing", "docs_root", "hero"],
+  ["marketing", "github_repository", "hero"],
+  ["marketing", "docs_root", "comparison"],
+  ["marketing", "github_repository", "comparison"],
+  ["marketing", "install_quick", "get_started"],
+  ["marketing", "install_secure", "get_started"],
+  ["marketing", "docs_security", "get_started"],
+  ["marketing", "docs_root", "footer"],
+  ["marketing", "github_repository", "footer"],
+  ["marketing", "community_discord", "footer"],
+  ["docs", "docs_root", "footer"],
+  ["docs", "github_repository", "footer"],
+  ["docs", "community_discord", "footer"],
+  ["marketing", "github_repository", "star_history"],
+] as const;
+
+const ALLOWED_CTA_TUPLES = new Set(ANALYTICS_CTA_TUPLES.map((tuple) => tuple.join("\0")));
 
 const WEB_VITAL_KEYS = [
   "$web_vitals_CLS_value",

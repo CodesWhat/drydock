@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import * as analyticsContract from "../src/lib/analytics-contract.ts";
 import {
   canonicalizePathname,
   createBeforeSend,
@@ -95,17 +96,13 @@ test("CTA tuples are finite and surface-aware", () => {
   assert.equal(isAllowedCta("marketing", "github_repository", "unknown"), false);
 });
 
-test("CTA allowlist exactly covers every approved site combination", () => {
-  const surfaces = ["marketing", "docs"];
-  const ctaIds = [
-    "docs_root",
-    "github_repository",
-    "community_discord",
-    "install_quick",
-    "install_secure",
-    "docs_security",
-  ];
-  const placements = ["header", "hero", "comparison", "get_started", "footer", "star_history"];
+test("CTA allowlist exactly matches the canonical exported tuple contract", () => {
+  const canonicalTuples = analyticsContract.ANALYTICS_CTA_TUPLES;
+  assert.ok(Array.isArray(canonicalTuples), "runtime must export its canonical CTA tuples");
+
+  const surfaces = [...new Set(canonicalTuples.map(([surface]) => surface))];
+  const ctaIds = [...new Set(canonicalTuples.map(([, ctaId]) => ctaId))];
+  const placements = [...new Set(canonicalTuples.map(([, , placement]) => placement))];
   const actual = surfaces.flatMap((surface) =>
     ctaIds.flatMap((ctaId) =>
       placements
@@ -113,9 +110,11 @@ test("CTA allowlist exactly covers every approved site combination", () => {
         .map((placement) => `${surface}\0${ctaId}\0${placement}`),
     ),
   );
-  const expected = APPROVED_CTA_TUPLES.map((tuple) => tuple.join("\0"));
+  const canonical = canonicalTuples.map((tuple) => tuple.join("\0"));
+  const approved = APPROVED_CTA_TUPLES.map((tuple) => tuple.join("\0"));
 
-  assert.deepEqual(actual.sort(), expected.sort());
+  assert.deepEqual(canonical.sort(), approved.sort());
+  assert.deepEqual(actual.sort(), canonical.sort());
 });
 
 test("pageviews are rebuilt from the canonical production URL and a minimal envelope", () => {
