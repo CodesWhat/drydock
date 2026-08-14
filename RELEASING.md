@@ -39,7 +39,7 @@ Two shapes of release come out of the same workflow:
 
 Dispatch with just `release_tag` set, e.g. `v1.6.0-rc.14`. Leave `candidate_tag`, `candidate_digest`, and `soak_override_reason` empty — they're GA-only and the workflow hard-fails if any of them are set on a prerelease.
 
-`release_tag` must match `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$` — i.e. `vX.Y.Z` or `vX.Y.Z-<prerelease>` (`v1.6.0` or `v1.6.0-rc.14`). The tag's base version must match every workspace `package.json`/`package-lock.json` (`package.json`, `app/`, `ui/`, `e2e/` — checked explicitly), and the tag must not already exist pointing anywhere else.
+`release_tag` must match `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$` — i.e. `vX.Y.Z` or `vX.Y.Z-<prerelease>` (`v1.6.0` or `v1.6.0-rc.14`). The tag's base version must match every manifest checked by the release precheck: `package.json`, `package-lock.json`, `app/package.json`, `app/package-lock.json`, `ui/package.json`, `ui/package-lock.json`, `e2e/package.json`, `e2e/package-lock.json`, `apps/demo/package.json`, and `apps/demo/package-lock.json`. The tag must not already exist pointing anywhere else.
 
 The workflow builds the multi-arch image (`linux/amd64,linux/arm64`) fresh from `main`, pushes it under a run-scoped staging tag, signs it with cosign (keyless, GitHub OIDC), attests SLSA build provenance and a Trivy SPDX SBOM, generates a `git archive` tarball with matching signature/attestation, and publishes it all as a GitHub prerelease. **Registry tags never carry the `v` prefix** — the workflow strips it itself (`${RELEASE_TAG#v}`), so `v1.6.0-rc.13` publishes as `ghcr.io/codeswhat/drydock:1.6.0-rc.13`, `docker.io/codeswhat/drydock:1.6.0-rc.13`, and the Quay equivalent.
 

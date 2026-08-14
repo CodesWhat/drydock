@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -15,6 +15,56 @@ import {
 
 const scriptPath = fileURLToPath(new URL('./release-precut-check.mjs', import.meta.url));
 const tmpDir = mkdtempSync(join(tmpdir(), 'drydock-precut-test-'));
+
+const agentsGuide = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8');
+const releasingGuide = readFileSync(new URL('../RELEASING.md', import.meta.url), 'utf8');
+const lefthookConfig = readFileSync(new URL('../lefthook.yml', import.meta.url), 'utf8');
+const releasePrecheckSource = readFileSync(
+  new URL('./release-precut-check.mjs', import.meta.url),
+  'utf8',
+);
+
+test('contributor guidance documents executable UI lint commands', () => {
+  assert.doesNotMatch(agentsGuide, /npm run lint\s+\/\s+lint:fix/u);
+  assert.match(agentsGuide, /npm run lint\s+# biome check \./u);
+  assert.match(agentsGuide, /npm run lint:fix\s+# biome check --fix \./u);
+});
+
+test('contributor guidance matches full pre-push semantics and measured timing', () => {
+  assert.match(agentsGuide, /# Static analysis from repo root/u);
+  assert.match(agentsGuide, /node scripts\/qlty-smells-gate\.mjs --scope=all\s+# advisory/u);
+  assert.match(agentsGuide, /takes about \*\*5 minutes end to end\*\*/u);
+
+  const prePushSection = agentsGuide.match(
+    /## Pre-push checks \(Lefthook\)[\s\S]*?(?=\n## Merging)/u,
+  )?.[0];
+  assert.ok(prePushSection, 'AGENTS.md must have a pre-push section');
+
+  const configuredCommands = lefthookConfig
+    .slice(lefthookConfig.indexOf('\npre-push:\n'))
+    .matchAll(/^ {4}([a-z][a-z0-9-]+):$/gmu);
+  for (const [, command] of configuredCommands) {
+    assert.match(prePushSection, new RegExp(`\`${command}\``, 'u'));
+  }
+});
+
+test('release instructions enumerate every versioned workspace manifest in the precheck', () => {
+  const packagePathBlock = releasePrecheckSource.match(
+    /const packagePaths = \[(?<paths>[\s\S]*?)\];/u,
+  )?.groups?.paths;
+  assert.ok(packagePathBlock, 'release precheck must define packagePaths');
+
+  const packagePaths = [...packagePathBlock.matchAll(/'(?<path>(?:[^']*\/)?package\.json)'/gu)].map(
+    (match) => match.groups.path,
+  );
+  const requiredPaths = [
+    ...packagePaths,
+    ...packagePaths.map((path) => path.replace(/package\.json$/u, 'package-lock.json')),
+  ];
+  for (const path of requiredPaths) {
+    assert.match(releasingGuide, new RegExp(`\`${path.replaceAll('.', '\\.')}\``, 'u'));
+  }
+});
 
 // ---------------------------------------------------------------------------
 // versionSeries

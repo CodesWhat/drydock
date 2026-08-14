@@ -35,11 +35,12 @@ npm run serve             # dev server on port 8080
 npm run typecheck         # tsc --noEmit
 npm run test:unit         # vitest run --coverage (100% threshold enforced)
 npx vitest run tests/path/to/file.spec.ts   # single test file
-npm run lint / lint:fix
+npm run lint             # biome check .
+npm run lint:fix         # biome check --fix .
 
-# Full quality gate from repo root (what pre-push runs)
+# Static analysis from repo root (pre-push steps 4-5)
 ./scripts/qlty-check-gate.sh all
-node scripts/qlty-smells-gate.mjs --scope=all
+node scripts/qlty-smells-gate.mjs --scope=all   # advisory
 
 # E2E — run from e2e/
 npm run test:local        # Cucumber tests against a running instance
@@ -116,11 +117,11 @@ Add `!` before the colon (`feat(api)!: drop v1 tokens`), or a `BREAKING CHANGE:`
 
 ## Pre-push checks (Lefthook)
 
-`git push` runs a piped (sequential, fail-fast) pipeline that takes about **4 minutes end to end**. In order:
+`git push` runs a piped (sequential, fail-fast) pipeline that takes about **5 minutes end to end**. In order:
 
 1. `clean-tree` — rejects uncommitted changes (CI only ever sees committed state)
 2. `ts-nocheck` — checks for `@ts-nocheck` directives against the allowlist
-3. `biome check .` — lint/format
+3. `biome` — lint/format via `npx biome check .`
 4. `qlty` — static analysis via `./scripts/qlty-check-gate.sh all` (medium+ severity gate, budgeted at **4 minutes**)
 5. `qlty-smells` — code-smell advisory scan (non-blocking)
 6. `scripts-test` — `node --test scripts/*.test.mjs`
