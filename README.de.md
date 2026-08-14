@@ -187,7 +187,7 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 - **Sicherheits- und Lifecycle-Härtung** – Authentifizierung, Agent-Anfragen, Protokolle, WebSockets und Registry-Anfragen sind explizit begrenzt; vertrauliche Befehls- und Hook-Werte werden redigiert; die Home-Assistant-Erkennung synchronisiert sich nach dem Start neu und beendet Provider-Arbeit ohne veraltete Veröffentlichungen. ([#708](https://github.com/CodesWhat/drydock/issues/708))
 - **First-Party-Star-History** – der Same-Origin-Provider `/api/star-history` stellt Diagramme für die freigegebenen Repositories Drydock, Sockguard und Portwing ohne Drittanbieter-Tracker bereit.
 
-Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-13).
+Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14).
 
 </details>
 

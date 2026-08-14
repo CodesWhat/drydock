@@ -187,7 +187,7 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 - **Refuerzo de seguridad y ciclo de vida**: la autenticación, las solicitudes de agentes, los registros, WebSockets y las solicitudes a registros tienen límites explícitos; se ocultan valores sensibles de comandos y hooks; el descubrimiento de Home Assistant se resincroniza después del arranque y retira trabajo de proveedores sin publicaciones obsoletas. ([#708](https://github.com/CodesWhat/drydock/issues/708))
 - **Historial de estrellas propio**: el proveedor de mismo origen `/api/star-history` sirve gráficos de Drydock, Sockguard y Portwing mediante una lista permitida, sin depender de un rastreador externo.
 
-Notas completas en [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-13).
+Notas completas en [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14).
 
 </details>
 

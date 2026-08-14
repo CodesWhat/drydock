@@ -187,7 +187,7 @@ docker run -d \
 - **安全与生命周期强化** — 身份验证、代理请求、日志、WebSocket 和镜像仓库请求均有明确的资源限制；敏感的命令和钩子值会被遮盖；Home Assistant 发现会在启动后重新同步，并在停用提供程序任务时避免发布过期数据。([#708](https://github.com/CodesWhat/drydock/issues/708))
 - **第一方 Star History** — 同源 `/api/star-history` 提供程序仅为允许的 Drydock、Sockguard 和 Portwing 仓库生成图表，不再依赖第三方跟踪服务。
 
-完整发行说明请参阅 [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-13)。
+完整发行说明请参阅 [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14)。
 
 </details>
 
