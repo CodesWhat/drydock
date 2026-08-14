@@ -409,8 +409,9 @@ class Registry<
     manifestDigest: string,
     mediaType: string,
   ): Promise<string | undefined> {
+    let manifestResponse: RegistryManifestResponse;
     try {
-      const manifestResponse = await this.callRegistry<RegistryManifestResponse>({
+      manifestResponse = await this.callRegistry<RegistryManifestResponse>({
         image,
         method: 'get',
         url: `${image.registry.url}/${image.name}/manifests/${manifestDigest}`,
@@ -418,11 +419,6 @@ class Registry<
           Accept: mediaType,
         },
       });
-      const configDigest = manifestResponse?.config?.digest;
-      if (!configDigest) {
-        return undefined;
-      }
-      return this.fetchImageCreatedFromBlob(image, configDigest);
     } catch (error: unknown) {
       this.log.debug(
         `Unable to fetch manifest config created date for ${this.getImageFullName(
@@ -430,8 +426,13 @@ class Registry<
           manifestDigest,
         )} (${getErrorMessage(error)})`,
       );
+      throw error;
+    }
+    const configDigest = manifestResponse?.config?.digest;
+    if (!configDigest) {
       return undefined;
     }
+    return this.fetchImageCreatedFromBlob(image, configDigest);
   }
 
   private async fetchImageCreatedFromBlob(
@@ -459,7 +460,7 @@ class Registry<
           digest,
         )} (${getErrorMessage(error)})`,
       );
-      return undefined;
+      throw error;
     }
   }
 
