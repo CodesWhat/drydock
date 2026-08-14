@@ -21,26 +21,25 @@ function formatDurationUnit(
 
 /**
  * Format the age of an available update as a "Detected {duration} ago" tooltip string.
- * Returns undefined when no update or no detection timestamp exists. This replaces the old
+ * Returns undefined when no update or no age is available. This replaces the old
  * fresh/settled badge classification (#display-honesty) — the freshness fact is now surfaced
  * as a tooltip on the update-type badge instead of its own NEW/MATURE chrome.
+ *
+ * Takes an already-resolved `ageMs` rather than a raw `updateDetectedAt` timestamp (#556):
+ * the caller resolves the trust-aware maturity clock (see maturity-policy.ts's
+ * resolveMaturityClock) so the tooltip's duration can no longer drift from what the
+ * eligibility gate is actually measuring against when a trusted publishedAt differs from
+ * updateDetectedAt. The day/hour/minute bucketing below is otherwise unchanged.
  */
 export function formatUpdateAge(
-  updateDetectedAt: string | undefined,
+  ageMs: number | undefined,
   hasUpdate: boolean,
-  nowMs: number = Date.now(),
   t?: TranslateFn,
 ): string | undefined {
-  if (!hasUpdate || !updateDetectedAt) {
+  if (!hasUpdate || ageMs === undefined) {
     return undefined;
   }
 
-  const detectedMs = Date.parse(updateDetectedAt);
-  if (Number.isNaN(detectedMs)) {
-    return undefined;
-  }
-
-  const ageMs = Math.max(0, nowMs - detectedMs);
   const minutes = Math.floor(ageMs / 60_000);
   const hours = Math.floor(ageMs / 3_600_000);
   const days = Math.floor(ageMs / MS_PER_DAY);

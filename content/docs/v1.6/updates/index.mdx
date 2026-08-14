@@ -1,0 +1,262 @@
+---
+title: "Updates"
+description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
+---
+
+## Unreleased
+
+## v1.6.0 Highlights — August 11, 2026
+
+Consolidates the `1.6.0-rc.1` … `1.6.0-rc.13` prereleases into one GA release. The
+biggest themes: Portwing edge/agent transport maturing into a first-class citizen,
+a declarative three-tier update policy with a maturity stabilization gate,
+per-rule notification templates and a new health-status event, every major list
+view going responsive with a consistent table/card toggle, `/api/v1` parity with
+the unversioned `/api/*` alias removed, and fail-closed security hardening
+throughout. See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#160--2026-08-11)
+for the full release notes.
+
+## v1.6.0-rc.13 Highlights — August 8, 2026
+
+- **Digest comparison anchors on repo-matched candidates** — `getOrderedRepoDigests` (`app/watchers/providers/docker/docker-helpers.ts`) filters a container's `RepoDigests` entries to the ones whose repo component matches its own image reference before comparing, instead of trusting an arbitrary `RepoDigests[0]`; a store already poisoned with a stale digest anchor self-heals on the next cycle ([#670](https://github.com/CodesWhat/drydock/pull/670)).
+- **`nanoid` pinned to 3.3.18** across the root, app, apps/demo, apps/web, ui, and e2e workspaces (transitive override of `postcss`/`artillery`) for [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8) (CVE-2026-67213) and, in e2e, [GHSA-28wg-ghj8-5hjv](https://github.com/advisories/GHSA-28wg-ghj8-5hjv) (CVE-2026-67214) ([#673](https://github.com/CodesWhat/drydock/pull/673)).
+- **Star History chart is now self-hosted** — a new same-origin `GET /api/star-history` route on the website replaces the third-party embed that went down in a global outage, edge-cached six hours with stale-while-revalidate and a short-lived fallback SVG on fetch failure ([#672](https://github.com/CodesWhat/drydock/pull/672)).
+- **Base-image CVE sweep** — `node:24-alpine` bumped to Node 24.19.0 (clearing 3 HIGH + 5 MEDIUM CVEs from Node's July 29 2026 security release) and the vendored `aquasec/trivy` build-stage pin bumped from 0.72.0 to 0.73.0 (clearing 4 HIGH / 6 MEDIUM CVEs in its vendored Go dependencies) ([#682](https://github.com/CodesWhat/drydock/pull/682)).
+
+## v1.6.0-rc.12 Highlights — August 4, 2026
+
+- **Security dependency refresh** — `brace-expansion` advanced to 5.0.9 across the app, UI, and e2e workspaces (CVE-2026-69152), `ip-address` to 10.3.1 in the app runtime (CVE-2026-54272, CVE-2026-69192, CVE-2026-69198), and `fast-uri` to 4.1.2 in app and UI (backslash-authority host confusion, CVE-2026-18446) ([#659](https://github.com/CodesWhat/drydock/pull/659)).
+- **Maturity badge and gate agree again** — the hot/mature badge now resolves each container's own `updatePolicy.maturityMinAgeDays` before the global `DD_UI_MATURITY_THRESHOLD_DAYS`, matching the gate, and registry publish-date lookup failures (including GHCR/LSCR auth errors) log at `warn` instead of vanishing at `debug` ([#604](https://github.com/CodesWhat/drydock/issues/604)).
+- **No more transient "Agent Mismatch"** — the container list and SSE stream soften `agent-mismatch`/`no-update-trigger-configured` to soft blockers while an agent's components are mid-(re)registration; update admission stays fail-closed throughout ([#605](https://github.com/CodesWhat/drydock/issues/605)).
+- **WebSocket log streams accept anonymous-auth sessions** — under `DD_ANONYMOUS_AUTH_CONFIRM=true`, both the system and container log-stream upgrades now pass the same auth gate as every REST endpoint ([#636](https://github.com/CodesWhat/drydock/issues/636)).
+- **Explicit 501 for missing agent lifecycle transport** — start/stop/restart/rollback on an agent-owned container without controller Docker transport returns a 501 naming the cause instead of an ambiguous 404 ([#637](https://github.com/CodesWhat/drydock/issues/637)).
+
+## v1.6.0-rc.11 Highlights — August 1, 2026
+
+- **Portwing 0.9 Docker watcher, updates, and lifecycle actions now run controller-side** — Drydock 1.6.0-rc.11+ recognizes the exact `transport=docker-api`, `execution=controller`, `events=portwing` watcher marker, starts its native registry checks and Docker action against a loopback-only authenticated bridge, and carries Docker calls over Standard HTTP or Edge correlated request/response/stream transport. Single/batch updates, start/stop/restart, update preview, and backup rollback use this path even though Portwing advertises no remote trigger. Portwing stays authoritative for lifecycle events, and raw false/unknown inventory no longer erases controller enrichment ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76)).
+- **Standard Portwing request signing matches signature version 2** — Ed25519 agents now receive five headers including `X-Portwing-Signature-Version: 2`; the signature covers the exact escaped request path plus its unmodified raw query instead of a decoded path with the query omitted.
+
+## v1.6.0-rc.10 Highlights — July 31, 2026
+
+- **Infrastructure-mode self-updates no longer fail to spawn the helper container on Docker Hub installs** — for containers labeled `dd.update.mode=infrastructure`, the helper image reference is now resolved through the registry provider's `getImageFullName` normalization instead of a raw Hub URL, so it matches the daemon-local image name and the helper actually pulls ([#645](https://github.com/CodesWhat/drydock/pull/645), fixes [#644](https://github.com/CodesWhat/drydock/issues/644)).
+- **Startup warning for minute-precise maintenance-window crons** — the Docker watcher now logs a one-time warning at init when `DD_WATCHER_{name}_MAINTENANCE_WINDOW`'s minute field doesn't contain `*`, a common copy-paste trap that opens the window for one minute per hour instead of the whole range; the update confirm dialog also links to the update-eligibility reasons reference ([Discussion #639](https://github.com/CodesWhat/drydock/discussions/639)).
+- **Unchanged `update-available` audit entries are no longer re-recorded on a timer** — audit rows are now written only on first detection or when the update target/kind changes, instead of every time the dedupe window lapses ([#642](https://github.com/CodesWhat/drydock/pull/642)).
+- **Maintenance-window documentation corrected** — examples now use `* 2-6 * * *` instead of a minute-precise cron that was described as an hourly range, and the update confirm dialog's wording is documented verbatim in [Update Eligibility & Blockers](https://getdrydock.com/docs/configuration/actions/update-eligibility) ([#640](https://github.com/CodesWhat/drydock/pull/640)).
+- **Translations resynced from Crowdin** ([#620](https://github.com/CodesWhat/drydock/pull/620)) and routine dependency maintenance across the app and UI workspaces, including the `fast-uri` security override advancing to 4.1.1 ([#614](https://github.com/CodesWhat/drydock/pull/614), [#615](https://github.com/CodesWhat/drydock/pull/615), [#617](https://github.com/CodesWhat/drydock/pull/617), [#646](https://github.com/CodesWhat/drydock/pull/646)).
+
+## v1.6.0-rc.9 Highlights — July 28, 2026
+
+- **Portwing edge log streaming is on by default** — the authenticated container-log WebSocket now bridges correlated chunk/end/error frames from the edge gateway, cancels the agent stream when the viewer closes, and caps each downstream viewer at 1 MiB of buffered data; older Portwing agents degrade gracefully to their one-shot response. `DD_EXPERIMENTAL_PORTWING=false` remains available as an emergency disable.
+- **The row status overlay is no longer clipped at the pinned-column edge** — the "Updating/Queued/Scanning" chip is now layered above the sticky identity-cluster cells instead of being cut in half at the cluster boundary ([#631](https://github.com/CodesWhat/drydock/pull/631)).
+- **Registry errors no longer replace the container's tag** — a rate-limit/auth/not-found registry error used to overwrite or duplicate the tag cell with a danger pill; the tag column now always shows the actual tag, with the registry column glyph remaining the single error flag ([#631](https://github.com/CodesWhat/drydock/pull/631)).
+
+## v1.6.0-rc.8 Highlights — July 28, 2026
+
+- **Agent-managed containers keep their update policy** — remote agents never learn controller-side runtime overrides, so every agent report carried an empty override layer that the controller persisted verbatim, wiping maturity mode, min-age days, skip lists, and snoozes on every sync or recheck. The controller now reapplies its stored overrides when ingesting agent reports, and the store only honors an empty override layer when the update-policy API marks the clear as deliberate — so settings finally survive agent syncs while UI clears still stick ([#565](https://github.com/CodesWhat/drydock/issues/565)).
+- **Auto-update keeps running when update notifications are scoped to specific channels** — assigning any notification trigger to the update-available rule silently disabled every action trigger (Docker, Docker Compose, Command) fleet-wide, because action triggers were run through an allow-list they're structurally barred from joining. Action triggers are now exempt from the allow-list membership check; disabling the rule itself remains the kill switch ([#623](https://github.com/CodesWhat/drydock/issues/623)).
+
+## v1.6.0-rc.7 Highlights — July 26, 2026
+
+- **Four identity-drift bugs fixed** — the maturity soak clock no longer resets when a container is recreated, notification dedup no longer double-fires a `once: true` notification on a manual recheck, a finishing security scan no longer reverts an update the watcher detected mid-scan, and containers with no available update no longer surface under maturity/age filters or sorts. All four traced back to inconsistent candidate-identity comparisons, now unified behind one shared helper.
+- **Icon bundle regenerated** — `ui/src/boot/icon-bundle.json` is back in sync with the locked iconify versions, fixing drift since the tabler 1.2.35 → 1.2.37 lockfile bump.
+
+## v1.6.0-rc.6 Highlights — July 26, 2026
+
+- **Maturity-cleared updates get their own notification** — when an update held back by the maturity gate (`maturityMode: mature`) finally clears its soak window, drydock now fires a dedicated `maturity-cleared` notification right away instead of waiting on the next scan's generic update-available message ([Discussion #587](https://github.com/CodesWhat/drydock/discussions/587)). A background sweep checks gated containers every few minutes so the notification lands close to the moment the update actually becomes applicable, and it's deduplicated against `update-available` so nothing gets announced twice.
+- **Routine dependency and translation maintenance** — minor and patch bumps across the app, UI, demo, website, and end-to-end workspaces, plus a refreshed translation sync from Crowdin covering the container, dashboard, list, and shared-component catalogs.
+- **CI scripts no longer choke on empty results** — steps that piped a `grep` or `find` straight into a variable assignment could abort before their own "nothing found" fallback ever ran, since an empty match exits non-zero under `bash -eo pipefail`. Fallible commands are now guarded individually so a real failure still fails loudly and an empty result still falls through to its handler.
+
+## v1.6.0-rc.5 Highlights — July 23, 2026
+
+- **Resources can give the table its space back** — the Resources column remains visible by default, but the column picker can now hide it and preserve that choice. Source, release-note, and registry shortcuts move into each row's **More** menu while hidden; cards keep the same shortcuts in their footer without duplicating them.
+- **Phone-width Dashboard and Containers stop overflowing** — crossing into a single-column breakpoint re-syncs the dashboard widget layout so widgets no longer spill past the viewport, single-column card lists drop the empty band below reflowed cards, and long stack names in the Containers group header truncate instead of pushing the update-all button off-screen ([#498](https://github.com/CodesWhat/drydock/issues/498)).
+
+## v1.6.0-rc.4 Highlights — July 22, 2026
+
+- **Pinned freshness is honest at a glance** — an informational newer-version insight now reads Major, Minor, or Patch instead of contradicting the visible newer tag with “Current.” It remains non-actionable and cannot fire update actions or notifications.
+- **Same-tag rebuilds are explained** — “Image update” replaces “Digest update,” with tooltip copy explaining that the tag now points to a different image build and a redeploy pulls it.
+- **The Containers layout keeps context** — **Software Version** is explicitly named and folds before **Host** at constrained laptop widths. Users can also set, change, or clear a presentation-only group from a container's More menu; clearing an override restores Docker-derived grouping.
+- **Release-gated E2E failures are attributable** — Cucumber reuses the exact QA image built by CI, verifies a six-fixture manifest, restores scenario-mutated state, and publishes structured reports and diagnostics without blanket scenario retries. Playwright owns browser rendering and retains first-failure media without whole-test retries.
+
+## v1.6.0-rc.3 Highlights — July 21, 2026
+
+- **Honest update states across the UI** — digest-only changes read "Digest update" instead of a version label, an unrecognized update kind shows a neutral "Unknown" badge, the security bouncer's block state reads "Security hold", and the NEW/MATURE freshness badges are gone in favor of one maturity clock panel that names the clock the gate actually measures against.
+- **Pinned is a tag property, not an update status** — pinned containers carry a persistent pin glyph beside the tag (driven by the real pin-gate verdict, with the `dd.tag.family` remedy in its tooltip), and insight-only pinned rows read "Current" everywhere, including the container-detail Update Status panel.
+- **Security hardening batch** — anonymous access fails closed on upgrades (`401` API responses, `/health` `503`) unless explicitly confirmed, the HTTP notification trigger blocks SSRF against metadata/link-local targets including via redirects, WebSocket upgrades validate the complete origin, the session cookie is namespaced to `drydock.sid`, store files are owner-only, and icon CDN sources are pinned to exact revisions.
+  Docs: [Authentication](/docs/configuration/authentications), [HTTP trigger](/docs/configuration/triggers/http).
+- **Maturity countdown stability** — a manual recheck no longer restarts the maturity soak when only display metadata wobbled; the clock resets only when the update candidate's tag or digest actually changes.
+- **Container-list fit and follow-through fixes** — the column picker labels columns auto-hidden to fit (and its "+N" badge tooltip stays fresh), registry deep-links from container detail land on the registry they name, and the removed-API-path banner pluralizes correctly.
+
+## v1.6.0-rc.2 Highlights — July 18, 2026
+
+- **Watch errors no longer erase update state** — a container whose registry check fails keeps its last successful comparison alongside the recorded error instead of appearing never-compared, errored containers reuse the same fast refresh path as healthy ones, and repair rebuilds preserve the registry-reconciled digest that keys security scan grouping.
+- **"Version Update" container filter** — a new filter kind shows only real semver upgrades (major/minor/patch) and hides digest-only churn; bookmarkable via `?filterKind=version`.
+- **Docs aligned with shipped behavior** — FAQ and README corrections (registry list, scanner parity, runnable `config migrate` commands), the removed `WS /api/log/stream` alias documented in Deprecations, and the quickstart registry/tag matrix refreshed.
+
+## v1.6.0-rc.1 Highlights — July 15, 2026
+
+- **Notification rules are now a complete control surface** — configure delivery routing, audit-backed in-app bell categories, update severity threshold, and per-provider simple/batch templates in one detail panel; preview drafts before saving. Container-unhealthy events are bell-capable, and agent status changes refresh the bell promptly.
+  Docs: [Actions & Notifications](/docs/configuration/triggers#notification-rules), [Notification rules API](/docs/api#notification-rules).
+- **The dashboard uses a custom zero-dependency grid** — edit-mode mouse/touch reorder, bounded resize, deterministic packing, hidden widgets, responsive layouts, reset, and local or opt-in cross-device persistence replace `grid-layout-plus`.
+  Docs: [Dashboard customization](/docs/configuration/dashboard#customizing-the-layout), [UI preference sync](/docs/configuration/ui#sync-across-devices).
+- **v1.6 deprecation removals are enforced** — only argon2id Basic hashes, HTTPS OIDC discovery, `DD_*` environment variables, and `dd.*` labels are active at runtime. Removed WUD names remain recognized only by the migration CLI. Trigger-taxonomy aliases stay functional for their final warning release but now log at `error` level.
+  Docs: [Deprecation schedule](/docs/deprecations), [Migrating from WUD](/docs/quickstart#migrating-from-wud).
+- **Polling and log-view hot paths are hardened** — per-poll repository tag lists are deduplicated, aggregate endpoints avoid full-collection deep clones, large log collections are virtualized, and the 2,000-row live system-log client buffer rolls forward without freezing newest-first views.
+  Docs: [Logs](/docs/configuration/logs#application-log-viewer).
+- **Compose updates resolve the active file chain explicitly** — configured label, standard Compose project labels, live inspect fallback, then trigger-level `FILE`, with multi-file ordering, working-directory resolution, bind-mount mapping, and optional mount-prefix matching.
+  Docs: [Docker Compose auto-detection](/docs/configuration/triggers/docker-compose#auto-detection).
+
+## Documentation Refresh — v1.5.2
+
+- **Podman and Docker socket security docs refreshed** — The watcher docs now cover Podman's Docker-compatible API path ([#152](https://github.com/CodesWhat/drydock/issues/152)), direct socket vs proxy/TCP caveats, rootful/rootless socket paths, SELinux troubleshooting, remote Docker over TLS, and OIDC remote watcher auth. This is documentation and compatibility guidance.
+  Docs: [Podman Quick Start](/docs/configuration/watchers#podman-quick-start), [Docker Socket Security](/docs/configuration/watchers#docker-socket-security), [Podman FAQ](/docs/faq#podman-api-compatibility-vs-native-podman-support).
+- **Config and API reference parity** — The current docs were reconciled against runtime config schemas, Express routes, and the OpenAPI spec. Configuration tables now match the implemented env vars and defaults more closely, while the API docs cover canonical `/api/v1` routes, authentication component endpoints, registry webhook signature auth, notification outbox actions, bulk container updates, backup listing, and auth status aliases.
+  Docs: [Configuration](/docs/configuration), [REST API](/docs/api), [OpenAPI spec](/docs/api#openapi).
+
+## Release Highlights — v1.5.1-rc.4 (June 29, 2026)
+
+- **Container Version and Uptime fields** — `image.softwareVersion` now powers detail panels and the new **Version** column, while Docker `State.StartedAt` powers detail uptime and the optional **Uptime** column.
+  Docs: [Watcher container runtime details](/docs/configuration/watchers#container-runtime-details), [Tag and Version columns](/docs/configuration/watchers#tag-and-version-columns).
+- **Release notes expanded** — The release-notes popover includes current, available, and intermediate semver releases. Trigger templates can reference `${currentReleaseNotes}` alongside `${releaseNotes}`.
+  Docs: [Release notes popover](/docs/configuration/watchers#labels), [Trigger template variables](/docs/configuration/triggers#template-variable-reference), [Container release-notes API](/docs/api/container#get-intermediate-release-notes).
+- **Docker Compose mount-prefix fallback** — `DD_ACTION_DOCKERCOMPOSE_{name}_MOUNTPREFIXFALLBACK=true` can match compose paths by trailing `<project-dir>/<file>` when bind mounts expose a different prefix inside Drydock.
+  Docs: [Docker Compose trigger — Mount-prefix fallback](/docs/configuration/triggers/docker-compose#mount-prefix-fallback).
+- **Maintenance and maturity gates tightened** — Auto-apply now respects maintenance windows on every detection path, Docker Hub/GHCR publish dates can clear mature updates immediately, and a changed pending tag/digest restarts the soak clock.
+  Docs: [Update eligibility blockers](/docs/configuration/actions/update-eligibility), [Maturity filter configuration](/docs/api/container#maturity-filter-configuration).
+- **Upgrade note for v1.5.1+ stores** — Newer `dd.json` fields are tolerated on later downgrades, but rolling back from v1.5.1 to v1.5.0 still requires removing `details.startedAt` and `image.softwareVersion`.
+  Docs: [Storage](/docs/configuration/storage#downgrade-notes).
+- **One-time mature-update burst** — On the first poll after upgrade, Docker Hub or GHCR updates that are already older than `maturityMinAgeDays` may immediately fire notifications or action triggers.
+  Docs: [Maturity policy gate](/docs/api/container#policy-gate-holds-updates).
+
+## Release Highlights — v1.5.0 (June 22, 2026)
+
+- **Default watcher cron changed to every 6 hours** — The default `DD_WATCHER_{name}_CRON` value changed from `0 * * * *` (hourly) to `0 */6 * * *` (every 6 hours) to stay within anonymous Docker Hub and GHCR rate limits on larger inventories. Deployments that set `DD_WATCHER_{name}_CRON` explicitly are unaffected. To keep near-real-time detection, set `DD_WATCHER_LOCAL_CRON=0 * * * *`.
+  Docs: [Watchers configuration](/docs/configuration/watchers).
+- **17 UI locales** — The UI now ships with English plus 16 non-English locales: Simplified Chinese, Traditional Chinese, Italian, Spanish, German, French, Brazilian Portuguese, Dutch, Polish, Turkish, Japanese, Korean, Russian, Vietnamese, Ukrainian, and Arabic. Switch language in **Config > Appearance**.
+  Docs: [UI Customization — Language](/docs/configuration/ui#language--locale).
+- **`DD_LOG_FORMAT` default is now `text`** — The official Docker image defaults to human-readable log output. Set `DD_LOG_FORMAT=json` for structured output consumed by log aggregators.
+  Docs: [Logs](/docs/configuration/logs), [FAQ](/docs/faq#log-output-format-json-vs-pretty).
+- **Notification outbox** — Failed notification deliveries are persisted and retried with exponential backoff. A new **Notification outbox** page (under Settings) shows pending, delivered, and dead-letter entries with retry and discard actions.
+  Docs: [Triggers](/docs/configuration/triggers#notification-outbox).
+- **Diagnostic debug dump** — One-click export from **Config > Diagnostics** collects a redacted snapshot of recent events. `GET /api/v1/debug/dump?minutes=30`.
+  Docs: [Configuration > Diagnostics](/docs/configuration#diagnostics), [API](/docs/api/app#download-diagnostic-debug-dump).
+
+## Release Highlights (March 2026)
+
+- **Shared data table sizing** — Tables now share one sizing model with stable columns, sticky actions, pointer/keyboard resize, double-click autosize, and persisted per-view widths. Containers also folds lower-priority metadata at narrow widths instead of compressing primary identifiers.
+  Docs: [UI customization — Data Tables](/docs/configuration/ui#data-tables).
+- **System log live streaming** — The Configuration Logs view now supports live WebSocket system logs with level/component filtering and tail backfill.  
+  Docs: [Logs configuration](/docs/configuration/logs), [Log API stream endpoint](/docs/api/log#stream-application-logs-websocket).
+- **Watcher run-time visibility** — Watchers expose `metadata.lastRunAt` and `metadata.nextRunAt`, and the UI surfaces these in the Watchers and Agents views as **Last run** and **Next run**.  
+  Docs: [Watcher API](/docs/api/watcher).
+- **Container list query enhancements** — Container list now supports `order`, runtime `status` filters (`running`, `paused`, etc.), and watched-state `kind` filters (`watched`, `unwatched`, `all`).  
+  Docs: [Container API query parameters](/docs/api/container#get-all-containers).
+- **Digest notification mode** — Triggers can accumulate updates and flush on schedule with `MODE=digest` + `DIGESTCRON`.  
+  Docs: [Trigger modes](/docs/configuration/triggers#notes).
+- **Signed registry webhooks** — Added HMAC-verified registry push webhook endpoint for targeted checks.  
+  Docs: [Webhooks](/docs/configuration/webhooks).
+- **Podman API compatibility improvements** — Watchers now handle Podman API-version differences more reliably (including redirect-prone unversioned API paths).  
+  Docs: [Watchers Podman setup](/docs/configuration/watchers#podman-quick-start), [Podman FAQ](/docs/faq).
+- **Container-action failure toasts** — UI now surfaces update/delete failures as visible toast notifications instead of silent failures.  
+  Docs: [Container actions](/docs/configuration/actions).
+- **Unified update-completion toasts (v1.5.0-rc.19)** — Update, rollback, and cancel result toasts now appear the moment the operation completes, and are replayed correctly after a reconnect.
+
+## Per-container Update Policy (February 9, 2026)
+
+This update adds skip/snooze controls per container to reduce noisy repeated notifications for known-bad versions.
+
+### What changed
+
+- Added container-level update policy in store:
+  - `skipTags`
+  - `skipDigests`
+  - `snoozeUntil`
+- Added API endpoint:
+  - `PATCH /api/v1/containers/:id/update-policy`
+  - Actions: `skip-current`, `clear-skips`, `snooze`, `unsnooze`, `clear`
+- Added UI controls on container cards:
+  - Skip current update
+  - Snooze for 1/7/30 days
+  - Clear snooze or all policy
+
+### Behavior
+
+- `updateKind` still reflects the detected remote update.
+- `updateAvailable` is suppressed while policy applies (skip/snooze), and becomes true again when a new unmatched version/digest is detected or snooze expires.
+
+## Trigger Coordination Improvements (February 9, 2026)
+
+This update improves how triggers can be coordinated when they share the same trigger name (for example `docker.update` and `discord.update`).
+
+### What changed
+
+#### 1. Trigger execution ordering
+
+You can now control trigger execution order with:
+
+`DD_ACTION_{trigger_type}_{trigger_name}_ORDER` / `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ORDER`
+
+- Lower values run first
+- Default is `100`
+- If two triggers have the same `ORDER`, they are sorted by trigger id
+
+Example:
+
+```bash
+DD_ACTION_DOCKER_UPDATE_ORDER=10
+DD_NOTIFICATION_DISCORD_UPDATE_ORDER=20
+```
+
+This ensures the Docker update trigger runs before the Discord notification trigger for the same update event.
+
+#### 2. Trigger name aliases in container labels
+
+Container labels `dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) now accept either:
+
+- full trigger id (`docker.update`)
+- trigger name alias (`update`)
+
+Example:
+
+```bash
+dd.action.exclude=update
+```
+
+This applies to every **action** trigger named `update` (for example `docker.update` and `dockercompose.update`).
+
+Each label filters only its own trigger category. `dd.action.include` / `dd.action.exclude` never filter notification triggers, and `dd.notification.include` / `dd.notification.exclude` never filter action triggers. To exclude both `docker.update` and `discord.update`, set both labels:
+
+```bash
+dd.action.exclude=update
+dd.notification.exclude=update
+```
+
+The legacy labels `dd.trigger.include` / `dd.trigger.exclude` still work as aliases until v1.7.0, and apply to both categories — but only for a category whose own scoped label is absent.
+
+#### 3. Shared threshold by trigger name
+
+Triggers sharing the same trigger name can share `THRESHOLD` automatically:
+
+- if exactly one threshold value is explicitly set among same-name triggers, that value is inherited by the others
+- if multiple different threshold values are set, no inheritance is applied
+
+Example:
+
+```bash
+DD_ACTION_DOCKER_UPDATE_THRESHOLD=minor
+```
+
+With no explicit Discord threshold, `discord.update` inherits `minor`.
+
+### Recommended setup for "update then notify"
+
+```bash
+DD_ACTION_DOCKER_UPDATE_THRESHOLD=minor
+DD_ACTION_DOCKER_UPDATE_ORDER=10
+DD_ACTION_DOCKER_UPDATE_PRUNE=true
+
+DD_NOTIFICATION_DISCORD_UPDATE_ORDER=20
+DD_NOTIFICATION_DISCORD_UPDATE_URL=<discord_webhook_url>
+DD_NOTIFICATION_DISCORD_UPDATE_SIMPLETITLE=Updated ${container.name}
+DD_NOTIFICATION_DISCORD_UPDATE_SIMPLEBODY=Container ${container.name} has been updated from ${container.updateKind.localValue} to ${container.updateKind.remoteValue}
+```

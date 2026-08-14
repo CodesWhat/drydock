@@ -3,8 +3,7 @@ import os from 'node:os';
 import type { Request } from 'express';
 import joi from 'joi';
 import setValue from 'set-value';
-import { logError, logWarn } from '../log/warn.js';
-import { recordLegacyInput } from '../prometheus/compatibility.js';
+import { logWarn } from '../log/warn.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
@@ -125,8 +124,6 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
 
 // 1. Get a copy of all DD_ environment variables.
 export const ddEnvVars: Record<string, string | undefined> = {};
-const warnedLegacyTriggerEnvVars = new Set<string>();
-const triggerLegacyPrefixUsage = new Set<string>();
 let packageVersionCache: string | undefined;
 let packageVersionResolved = false;
 let detectedServerName: string | undefined;
@@ -323,6 +320,31 @@ function normalizeWatcherMaturityEnvAliases(
   });
 }
 
+function normalizeWatcherDiscoveryEnvAliases(
+  watcherConfigurations: Record<string, Record<string, unknown>>,
+) {
+  const aliases = [['_DISCOVERY_SETTLE_MS', 'discoverysettlems']] as const;
+  Object.entries(ddEnvVars).forEach(([envKey, envValue]) => {
+    const envKeyUpper = envKey.toUpperCase();
+    if (!envKeyUpper.startsWith('DD_WATCHER_') || envValue === undefined) {
+      return;
+    }
+    const alias = aliases.find(([suffix]) => envKeyUpper.endsWith(suffix));
+    if (!alias) {
+      return;
+    }
+    const watcherName = envKeyUpper.slice('DD_WATCHER_'.length, -alias[0].length).toLowerCase();
+    if (!watcherName) {
+      return;
+    }
+    watcherConfigurations[watcherName] ??= {};
+    watcherConfigurations[watcherName][alias[1]] = envValue;
+  });
+  Object.values(watcherConfigurations).forEach((configuration) => {
+    delete configuration.discovery;
+  });
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -344,48 +366,65 @@ function mergeRecords(
   return merged;
 }
 
-function getLegacyTriggerIdFromEnvKey(envKey: string) {
-  const envKeyUpper = envKey.toUpperCase();
+/**
+ * Trigger types classified as "action" for the purposes of suggesting a
+ * DD_ACTION_ / DD_NOTIFICATION_ replacement for a legacy DD_TRIGGER_* env
+ * var below. Mirrors the taxonomy in `triggers/trigger-category.ts`
+ * (`ACTION_TRIGGER_TYPES`), but is duplicated here rather than imported —
+ * same reasoning as that module's own duplication comment: this is one of
+ * the lowest-level modules in the app (nearly everything reads
+ * `ddEnvVars`/`get()` from it during startup), so pulling in trigger-domain
+ * modules here risks a require cycle.
+ */
+const ACTION_TRIGGER_ENV_TYPES = new Set(['docker', 'dockercompose', 'command']);
+
+/**
+ * Suggest the DD_ACTION_ / DD_NOTIFICATION_ replacement for a detected
+ * DD_TRIGGER_* environment variable, based on the trigger type segment
+ * (DD_TRIGGER_<TYPE>_<NAME>_...).
+ */
+function getLegacyTriggerEnvReplacement(envKeyUpper: string): string {
   const prefix = 'DD_TRIGGER_';
-
-  const triggerPath = envKeyUpper
-    .slice(prefix.length)
-    .split('_')
-    .map((part) => part.trim().toLowerCase())
-    .filter((part) => part.length > 0);
-
-  if (triggerPath.length < 2) {
-    return undefined;
-  }
-
-  return `${triggerPath[0]}.${triggerPath[1]}`;
+  const remainder = envKeyUpper.slice(prefix.length);
+  const typeSegment = remainder.split('_')[0].toLowerCase();
+  const replacementPrefix = ACTION_TRIGGER_ENV_TYPES.has(typeSegment)
+    ? 'DD_ACTION_'
+    : 'DD_NOTIFICATION_';
+  return `${replacementPrefix}${remainder}`;
 }
 
-function collectLegacyTriggerUsage() {
-  triggerLegacyPrefixUsage.clear();
+/**
+ * Fail startup with a clear, actionable error when any legacy DD_TRIGGER_*
+ * environment variable is present. DD_TRIGGER_* was deprecated in v1.5.0,
+ * logged at error level throughout v1.6.0, and is removed entirely in
+ * v1.7.0 (see DEPRECATIONS.md). Every detected variable is listed with its
+ * exact replacement so a single startup failure is enough to fix a config
+ * in one pass, without an iterative fail/retry loop.
+ */
+function assertNoLegacyTriggerEnvVars(): void {
+  const legacyEnvVarKeys = Array.from(
+    new Set(
+      Object.keys(ddEnvVars)
+        .filter((envKey) => ddEnvVars[envKey] !== undefined)
+        .map((envKey) => envKey.toUpperCase())
+        .filter((envKeyUpper) => envKeyUpper.startsWith('DD_TRIGGER_')),
+    ),
+  ).sort();
 
-  Object.keys(ddEnvVars)
-    .filter((envKey) => envKey.toUpperCase().startsWith('DD_TRIGGER_'))
-    .forEach((envKey) => {
-      const envValue = ddEnvVars[envKey];
-      if (envValue === undefined) {
-        return;
-      }
+  if (legacyEnvVarKeys.length === 0) {
+    return;
+  }
 
-      const envKeyUpper = envKey.toUpperCase();
-      const legacyTriggerId = getLegacyTriggerIdFromEnvKey(envKeyUpper);
-      if (legacyTriggerId) {
-        triggerLegacyPrefixUsage.add(legacyTriggerId);
-      }
+  const replacementLines = legacyEnvVarKeys
+    .map((envKeyUpper) => `  - ${envKeyUpper} → ${getLegacyTriggerEnvReplacement(envKeyUpper)}`)
+    .join('\n');
 
-      if (!warnedLegacyTriggerEnvVars.has(envKeyUpper)) {
-        warnedLegacyTriggerEnvVars.add(envKeyUpper);
-        recordLegacyInput('env', envKeyUpper);
-        logError(
-          `Legacy trigger environment variable "${envKeyUpper}" is deprecated and will be removed in v1.7.0. Use DD_ACTION_* or DD_NOTIFICATION_* instead.`,
-        );
-      }
-    });
+  throw new Error(
+    `The DD_TRIGGER_* environment variable prefix was removed in v1.7.0. ` +
+      `Rename ${legacyEnvVarKeys.length} detected variable(s) before starting drydock:\n${replacementLines}\n` +
+      `Run "node dist/index.js config migrate --source trigger" to rewrite these automatically, ` +
+      `or see https://getdrydock.com/docs/deprecations#legacy-trigger-prefix for manual migration steps.`,
+  );
 }
 
 function getTriggerConfigurationsForPrefix(prefix: string) {
@@ -401,6 +440,7 @@ export function getWatcherConfigurations() {
   >;
   normalizeWatcherMaintenanceEnvAliases(watcherConfigurations);
   normalizeWatcherMaturityEnvAliases(watcherConfigurations);
+  normalizeWatcherDiscoveryEnvAliases(watcherConfigurations);
   return watcherConfigurations;
 }
 
@@ -408,19 +448,11 @@ export function getWatcherConfigurations() {
  * Get trigger configurations.
  */
 export function getTriggerConfigurations() {
-  collectLegacyTriggerUsage();
-  const legacyTriggerConfigurations = getTriggerConfigurationsForPrefix('dd.trigger');
+  assertNoLegacyTriggerEnvVars();
   const actionTriggerConfigurations = getTriggerConfigurationsForPrefix('dd.action');
   const notificationTriggerConfigurations = getTriggerConfigurationsForPrefix('dd.notification');
 
-  return mergeRecords(
-    mergeRecords(legacyTriggerConfigurations, actionTriggerConfigurations),
-    notificationTriggerConfigurations,
-  );
-}
-
-export function usesLegacyTriggerPrefix(triggerType: string, triggerName: string) {
-  return triggerLegacyPrefixUsage.has(`${triggerType}.${triggerName}`.toLowerCase());
+  return mergeRecords(actionTriggerConfigurations, notificationTriggerConfigurations);
 }
 
 /**

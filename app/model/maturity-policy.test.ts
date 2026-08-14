@@ -3,6 +3,7 @@ import {
   DEFAULT_MATURITY_MIN_AGE_DAYS,
   daysToMs,
   getMaturityStartMs,
+  getUpdateAgeMs,
   isMaturityGatePending,
   MATURITY_MIN_AGE_DAYS_MAX,
   MATURITY_MIN_AGE_DAYS_MIN,
@@ -280,6 +281,39 @@ describe('resolveMaturityClock', () => {
     }
   });
 
+  test('falls back to firstSeenAt when updateDetectedAt is absent', () => {
+    const firstSeenAt = new Date(NOW - daysToMs(4)).toISOString();
+    expect(resolveMaturityClock({ firstSeenAt }, NOW)).toEqual({
+      startMs: Date.parse(firstSeenAt),
+      source: 'detectedAt',
+    });
+  });
+
+  test('falls back to firstSeenAt when updateDetectedAt fails to parse', () => {
+    const firstSeenAt = new Date(NOW - daysToMs(4)).toISOString();
+    expect(resolveMaturityClock({ updateDetectedAt: 'not-a-date', firstSeenAt }, NOW)).toEqual({
+      startMs: Date.parse(firstSeenAt),
+      source: 'detectedAt',
+    });
+  });
+
+  test('prefers updateDetectedAt over firstSeenAt when both are present', () => {
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    const firstSeenAt = new Date(NOW - daysToMs(9)).toISOString();
+    expect(resolveMaturityClock({ updateDetectedAt: detectedAt, firstSeenAt }, NOW)).toEqual({
+      startMs: Date.parse(detectedAt),
+      source: 'detectedAt',
+    });
+  });
+
+  test('firstSeenAt fallback also participates in the trusted-publishedAt tie-break', () => {
+    const publishedAt = new Date(NOW - daysToMs(3)).toISOString();
+    const firstSeenAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      resolveMaturityClock({ firstSeenAt, result: { publishedAt, publishedAtTrusted: true } }, NOW),
+    ).toEqual({ startMs: Date.parse(firstSeenAt), source: 'detectedAt' });
+  });
+
   test('getMaturityStartMs is a thin wrapper returning resolveMaturityClock().startMs', () => {
     const scenarios: Array<{
       updateDetectedAt?: string;
@@ -368,6 +402,55 @@ describe('isMaturityGatePending', () => {
           updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
         }),
       ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('getUpdateAgeMs', () => {
+  const NOW = new Date('2026-04-23T12:00:00.000Z').getTime();
+
+  test('returns undefined when neither updateDetectedAt, firstSeenAt, nor a trusted publishedAt resolve', () => {
+    expect(getUpdateAgeMs({}, NOW)).toBeUndefined();
+    expect(
+      getUpdateAgeMs({ result: { publishedAt: 'bogus', publishedAtTrusted: true } }, NOW),
+    ).toBeUndefined();
+  });
+
+  test('uses a trusted publishedAt earlier than detectedAt', () => {
+    const publishedAt = new Date(NOW - daysToMs(10)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(5)).toISOString();
+    expect(
+      getUpdateAgeMs(
+        { updateDetectedAt: detectedAt, result: { publishedAt, publishedAtTrusted: true } },
+        NOW,
+      ),
+    ).toBe(daysToMs(10));
+  });
+
+  test('ignores an untrusted publishedAt earlier than detectedAt, uses detectedAt instead', () => {
+    const publishedAt = new Date(NOW - daysToMs(45)).toISOString();
+    const detectedAt = new Date(NOW - daysToMs(2)).toISOString();
+    expect(
+      getUpdateAgeMs(
+        { updateDetectedAt: detectedAt, result: { publishedAt, publishedAtTrusted: false } },
+        NOW,
+      ),
+    ).toBe(daysToMs(2));
+  });
+
+  test('clamps to 0 instead of going negative when nowMs is before the resolved startMs', () => {
+    const detectedAt = new Date(NOW + daysToMs(1)).toISOString();
+    expect(getUpdateAgeMs({ updateDetectedAt: detectedAt }, NOW)).toBe(0);
+  });
+
+  test('defaults nowMs to Date.now() when omitted', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    try {
+      const detectedAt = new Date(NOW - daysToMs(3)).toISOString();
+      expect(getUpdateAgeMs({ updateDetectedAt: detectedAt })).toBe(daysToMs(3));
     } finally {
       vi.useRealTimers();
     }

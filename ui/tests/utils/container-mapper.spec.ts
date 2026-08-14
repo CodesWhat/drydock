@@ -613,6 +613,20 @@ describe('container-mapper', () => {
       expect(c.newTag).toBeNull();
     });
 
+    it('maps agent and portLabel through unchanged (trimmed) when present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ agent: 'remote-agent-1', portLabel: '  80=Web UI,443/tcp=Admin  ' }),
+      );
+      expect(c.agent).toBe('remote-agent-1');
+      expect(c.portLabel).toBe('80=Web UI,443/tcp=Admin');
+    });
+
+    it('leaves agent and portLabel undefined when absent from the payload', () => {
+      const c = mapApiContainer(makeApiContainer({ agent: null }));
+      expect(c.agent).toBeUndefined();
+      expect(c.portLabel).toBeUndefined();
+    });
+
     it('maps stopped status', () => {
       const c = mapApiContainer(makeApiContainer({ status: 'exited' }));
       expect(c.status).toBe('stopped');
@@ -872,6 +886,77 @@ describe('container-mapper', () => {
       expect((c as any).suppressedUpdateTag).toBeUndefined();
     });
 
+    it('fallback isMaturityBlocked uses a trusted publishedAt to clear the gate despite a recent updateDetectedAt (#556)', () => {
+      // No updateEligibility payload, so this exercises the local fallback. A
+      // recent updateDetectedAt alone would still be gated at the 7-day minimum;
+      // a trusted publishedAt from 10 days ago must be honored instead.
+      const freshDate = new Date(Date.now() - daysToMs(2)).toISOString();
+      const publishedAt = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          result: { tag: '1.26', publishedAt, publishedAtTrusted: true },
+          updateDetectedAt: freshDate,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('fallback isMaturityBlocked ignores an untrusted publishedAt and stays blocked on a recent updateDetectedAt (#556)', () => {
+      const freshDate = new Date(Date.now() - daysToMs(2)).toISOString();
+      const publishedAt = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          // publishedAtTrusted omitted — must not be used to clear the gate.
+          result: { tag: '1.26', publishedAt },
+          updateDetectedAt: freshDate,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+    });
+
+    it('fallback isMaturityBlocked falls back to firstSeenAt when updateDetectedAt is absent and clears the gate (#678)', () => {
+      // No updateDetectedAt at all — only firstSeenAt, old enough to clear the
+      // 7-day gate. Mirrors the app-side resolver's firstSeenAt fallback; the
+      // UI must resolve the same clock or it drifts from the backend (#556/#678).
+      const firstSeenAt = new Date(Date.now() - daysToMs(10)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          result: { tag: '1.26' },
+          firstSeenAt,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBeUndefined();
+      expect((c as any).suppressedUpdateTag).toBeUndefined();
+    });
+
+    it('fallback isMaturityBlocked stays blocked on a recent firstSeenAt when updateDetectedAt is absent (#678)', () => {
+      const firstSeenAt = new Date(Date.now() - daysToMs(2)).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          result: { tag: '1.26' },
+          firstSeenAt,
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+    });
+
     it('prefers a backend maturity-not-reached verdict over a met legacy threshold (#display-honesty)', () => {
       // Legacy computation alone (old detection date, threshold met) would NOT mark this
       // maturity-blocked; a backend eligibility payload saying otherwise must win.
@@ -1027,6 +1112,21 @@ describe('container-mapper', () => {
       expect(c.updateDetectedAt).toBeUndefined();
     });
 
+    it('fallback isMaturityBlocked ignores an invalid firstSeenAt value, not resolving a clock from it (#678)', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: '1.26' },
+          result: { tag: '1.26' },
+          firstSeenAt: 'not-a-date',
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        }),
+      );
+      // No resolvable clock at all (no updateDetectedAt, malformed firstSeenAt) —
+      // hasSuppressedUpdateCandidate + undefined start still means "gated".
+      expect((c as any).updatePolicyState).toBe('maturity-blocked');
+    });
+
     it('maps imageCreated from api image.created when valid', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -1079,6 +1179,47 @@ describe('container-mapper', () => {
     it('leaves updateMaturityTooltip undefined when no update available', () => {
       const c = mapApiContainer(makeApiContainer());
       expect(c.updateMaturityTooltip).toBeUndefined();
+    });
+
+    it('updateMaturityTooltip duration comes from a trusted publishedAt when earlier than updateDetectedAt (#556)', () => {
+      const recentDate = new Date(Date.now() - 2 * 86_400_000).toISOString();
+      const publishedAt = new Date(Date.now() - 10 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0', publishedAt, publishedAtTrusted: true },
+          updateDetectedAt: recentDate,
+        }),
+      );
+      expect(c.updateMaturityTooltip).toMatch(/^Detected 10 days? ago$/);
+    });
+
+    it('updateMaturityTooltip ignores an untrusted publishedAt even when earlier than updateDetectedAt (#556)', () => {
+      const recentDate = new Date(Date.now() - 2 * 86_400_000).toISOString();
+      const publishedAt = new Date(Date.now() - 10 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0', publishedAt },
+          updateDetectedAt: recentDate,
+        }),
+      );
+      expect(c.updateMaturityTooltip).toMatch(/^Detected 2 days? ago$/);
+    });
+
+    it('updateMaturityTooltip duration falls back to firstSeenAt when updateDetectedAt is absent (#678)', () => {
+      const firstSeenAt = new Date(Date.now() - 14 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0' },
+          firstSeenAt,
+        }),
+      );
+      expect(c.updateMaturityTooltip).toMatch(/^Detected 14 days ago$/);
     });
 
     it('extracts labels from object', () => {
@@ -1187,6 +1328,76 @@ describe('container-mapper', () => {
         }),
       );
       expect(c.tagPinGated).toBeUndefined();
+    });
+
+    it('maps dependencyCount and dependentCount when present in API response', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: 2,
+          dependentCount: 3,
+        }),
+      );
+      expect(c.dependencyCount).toBe(2);
+      expect(c.dependentCount).toBe(3);
+    });
+
+    it('maps dependencyCount/dependentCount of zero (a legitimate value, not absence)', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: 0,
+          dependentCount: 0,
+        }),
+      );
+      expect(c.dependencyCount).toBe(0);
+      expect(c.dependentCount).toBe(0);
+    });
+
+    it('leaves dependencyCount/dependentCount undefined when absent from the API response', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.dependencyCount).toBeUndefined();
+      expect(c.dependentCount).toBeUndefined();
+    });
+
+    it('leaves dependencyCount/dependentCount undefined when negative', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: -1,
+          dependentCount: -1,
+        }),
+      );
+      expect(c.dependencyCount).toBeUndefined();
+      expect(c.dependentCount).toBeUndefined();
+    });
+
+    it('leaves dependencyCount/dependentCount undefined when not an integer', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: 1.5,
+          dependentCount: 'two',
+        }),
+      );
+      expect(c.dependencyCount).toBeUndefined();
+      expect(c.dependentCount).toBeUndefined();
+    });
+
+    it('parses numeric-string dependencyCount/dependentCount', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: '4',
+          dependentCount: '0',
+        }),
+      );
+      expect(c.dependencyCount).toBe(4);
+      expect(c.dependentCount).toBe(0);
+    });
+
+    it('leaves dependencyCount undefined when the numeric string overflows a safe integer', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          dependencyCount: '99999999999999999999',
+        }),
+      );
+      expect(c.dependencyCount).toBeUndefined();
     });
 
     it('maps tagPrecision as specific when set', () => {

@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.6.0';
-const PREV_RC_VERSION = '1.6.0-rc.13';
-const RC_DATE = '2026-08-11';
-const RC_DISPLAY_DATE = 'August 11, 2026';
-const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
+const RC_VERSION = '1.7.0-rc.1';
+const PREV_RC_VERSION = '1.6.0';
+const RC_DATE = '2026-08-13';
+const RC_DISPLAY_DATE = 'August 13, 2026';
+const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
 
@@ -18,7 +18,7 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
-test('public release surfaces identify the v1.6 release candidate', () => {
+test('public release surfaces identify the v1.7 release candidate', () => {
   const readme = read('README.md');
   const siteConfig = read('apps/web/src/lib/site-config.ts');
   const updates = read('content/docs/current/updates/index.mdx');
@@ -45,6 +45,10 @@ test('public release surfaces identify the v1.6 release candidate', () => {
   assert.match(agentApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
   assert.match(portwingApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
   assert.match(portwingApi, new RegExp(`"drydockVersion": "${escapedRcVersion}"`, 'u'));
+  assert.match(
+    quickstart,
+    new RegExp(`Use \`${escapeRegExp(RC_VERSION.split('.').slice(0, 2).join('.'))}-rc\` only`, 'u'),
+  );
 
   if (rcSuffixMatch) {
     // Prerelease shape: the quickstart tag matrix must show this exact candidate as an
@@ -86,23 +90,34 @@ test('public release surfaces identify the v1.6 release candidate', () => {
   );
 });
 
-test('v1.5.2 is archived and public release routing advances to v1.6', () => {
+test('v1.6.0 is released and public release routing advances to v1.7', () => {
   const readme = read('README.md');
   const siteContent = read('apps/web/src/lib/site-content.ts');
   const docsVersions = read('apps/web/scripts/docs-versions.mjs');
+  const v16Changelog = read('content/docs/v1.6/changelog/index.mdx');
   const archivedChangelog = read('content/docs/v1.5/changelog/index.mdx');
   const docsReadme = read('content/docs/README.md');
 
   assert.match(readme, /<summary><strong>v1\.5\.2 highlights<\/strong><\/summary>/u);
-  assert.match(siteContent, /version: "v1\.5\.2",[\s\S]{0,500}?status: "released"/u);
   assert.match(
     siteContent,
-    new RegExp(`version: "v${escapeRegExp(RC_VERSION)}",[\\s\\S]{0,500}?status: "next"`, 'u'),
+    /version: "v1\.6\.0",[\s\S]{0,500}?status: "released",[\s\S]{0,100}?border-emerald-500/u,
+  );
+  assert.match(
+    siteContent,
+    new RegExp(
+      `version: "v${escapeRegExp(RC_VERSION)}",[\\s\\S]{0,500}?status: "next",[\\s\\S]{0,100}?border-orange-400`,
+      'u',
+    ),
   );
   assert.match(
     docsVersions,
-    /\{ slug: "v1\.6", source: "current", title: "v1\.6" \},\s+\{ slug: "v1\.5", source: "v1\.5", title: "v1\.5" \}/u,
+    /\{ slug: "v1\.7", source: "current", title: "v1\.7" \},\s+\{ slug: "v1\.6", source: "v1\.6", title: "v1\.6" \},\s+\{ slug: "v1\.5", source: "v1\.5", title: "v1\.5" \}/u,
   );
+  assert.match(v16Changelog, /^## \[1\.6\.0\] — 2026-08-11$/mu);
+  assert.doesNotMatch(v16Changelog, /^## \[Unreleased\]$/mu);
+  assert.doesNotMatch(v16Changelog, /^\[Unreleased\]:/mu);
+  assert.doesNotMatch(v16Changelog, /^## \[1\.7\.0-rc\.1\]/mu);
   assert.match(archivedChangelog, /^## \[1\.5\.2\] — 2026-07-13$/mu);
   assert.doesNotMatch(archivedChangelog, /^## \[Unreleased\]$/mu);
   assert.doesNotMatch(archivedChangelog, /^\[Unreleased\]:/mu);
@@ -110,6 +125,10 @@ test('v1.5.2 is archived and public release routing advances to v1.6', () => {
   assert.match(
     docsReadme,
     /`v1\.5\/`: stable `1\.5` docs initialized from the published `v1\.5\.2` tag/u,
+  );
+  assert.match(
+    docsReadme,
+    /`v1\.6\/`: stable `1\.6` docs initialized from the published `v1\.6\.0` release tree/u,
   );
   assert.match(docsReadme, /## Versioned-doc correction policy/u);
   assert.match(
@@ -377,7 +396,7 @@ test('current and archived docs describe destructive and recovery behavior accur
       /\*\*Delete\*\*[\s\S]{0,180}?Remove the container from Drydock tracking/u,
     );
     assert.match(actions, /does not delete the runtime container/u);
-    if (root === 'content/docs/current') {
+    if (root !== 'content/docs/v1.5') {
       // v1.6 removed the warn-and-serve grandfather path: upgrades fail closed like fresh installs.
       assert.match(
         authentications,
@@ -500,6 +519,8 @@ test('current and archived release examples use consistent tags, filenames, date
 
   assert.match(
     read('.gitattributes'),
-    /^# Suppress whitespace-error checks for the v1\.5 source snapshot during Git validation\.$/mu,
+    /^# Suppress whitespace-error checks for versioned source snapshots during Git validation\.$/mu,
   );
+  assert.match(read('.gitattributes'), /^content\/docs\/v1\.6\/\*\* -whitespace$/mu);
+  assert.match(read('.gitattributes'), /^content\/docs\/v1\.5\/\*\* -whitespace$/mu);
 });

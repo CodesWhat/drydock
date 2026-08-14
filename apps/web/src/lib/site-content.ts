@@ -284,9 +284,9 @@ export const roadmap: Milestone[] = [
     version: "v1.6.0",
     title: "Notifications, Policy & Release Intel",
     emoji: "\u{1F4E8}",
-    status: "next",
+    status: "released",
     dotColor:
-      "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
       "Notification templates and preferences",
       "Declarative and maturity policy workflows",
@@ -294,12 +294,12 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.7.0",
+    version: "v1.7.0-rc.1",
     title: "Smart Updates & UX",
     emoji: "\u{1F680}",
-    status: "planned",
+    status: "next",
     dotColor:
-      "border-pink-400 bg-pink-50 text-pink-500 dark:border-pink-500 dark:bg-pink-950 dark:text-pink-400",
+      "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
     items: [
       "Dependency-aware update flows",
       "Image cleanup and static-image monitoring",

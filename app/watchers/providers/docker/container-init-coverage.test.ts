@@ -269,14 +269,14 @@ describe('container-init coverage', () => {
       expect(resolved.triggerInclude).toBe('docker');
     });
 
-    test('the deprecated label fills only the categories without a scoped label, warns once, and records the legacy input once per resolution', () => {
+    test('the removed deprecated label is detected/warned once but no longer fills any category (v1.7.0)', () => {
       const warn = vi.fn();
       const warnedLegacyTriggerLabels = new Set<string>();
       const labels = { 'dd.action.include': 'docker', 'dd.trigger.include': 'both' };
 
       const first = resolveTriggerLabelOverrides(labels, {}, { warn, warnedLegacyTriggerLabels });
       expect(first.actionTriggerInclude).toBe('docker');
-      expect(first.notificationTriggerInclude).toBe('both');
+      expect(first.notificationTriggerInclude).toBeUndefined();
       expect(first.triggerInclude).toBe('docker');
 
       // One legacy label, one direction, one metric increment — not one per category.
@@ -287,6 +287,7 @@ describe('container-init coverage', () => {
 
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('dd.trigger.include');
+      expect(warn.mock.calls[0][0]).toContain('removed in v1.7.0');
     });
 
     test('records a legacy input per direction when both deprecated labels are present', () => {
@@ -306,12 +307,22 @@ describe('container-init coverage', () => {
       const labels = { 'dd.trigger.include': 'both', 'dd.trigger.exclude': 'both' };
 
       // Docker.ts resolves these labels once to build the override bag; resolveLabelsFromContainer
-      // then resolves the same labels again. The second pass must not re-fire the side effects.
+      // then resolves the same labels again. The second pass must not re-fire the side effects,
+      // even though the removed dd.trigger.<dir> label resolves every field to undefined here —
+      // the short-circuit is presence-based, not truthiness-based (see resolveTriggerLabelDirection).
       const overrides = resolveTriggerLabelOverrides(
         labels,
         {},
         { warn, warnedLegacyTriggerLabels: new Set() },
       );
+      expect(overrides).toEqual({
+        actionTriggerInclude: undefined,
+        actionTriggerExclude: undefined,
+        notificationTriggerInclude: undefined,
+        notificationTriggerExclude: undefined,
+        triggerInclude: undefined,
+        triggerExclude: undefined,
+      });
       expect(recordLegacyInput).toHaveBeenCalledTimes(2);
 
       const second = resolveTriggerLabelOverrides(labels, overrides, {
@@ -332,7 +343,7 @@ describe('container-init coverage', () => {
       expect(resolved.notificationTriggerInclude).toBe('slack');
     });
 
-    test('warns naming the exclude aliases for a deprecated dd.trigger.exclude label', () => {
+    test('warns naming the exclude aliases for a deprecated dd.trigger.exclude label, without filling either category (v1.7.0)', () => {
       const warn = vi.fn();
 
       const resolved = resolveTriggerLabelOverrides(
@@ -341,8 +352,8 @@ describe('container-init coverage', () => {
         { warn, warnedLegacyTriggerLabels: new Set() },
       );
 
-      expect(resolved.actionTriggerExclude).toBe('both');
-      expect(resolved.notificationTriggerExclude).toBe('both');
+      expect(resolved.actionTriggerExclude).toBeUndefined();
+      expect(resolved.notificationTriggerExclude).toBeUndefined();
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('dd.action.exclude');
       expect(warn.mock.calls[0][0]).toContain('dd.notification.exclude');
@@ -655,6 +666,14 @@ describe('container-init coverage', () => {
       expect(container.linkTemplate).toBe('https://example.com/${major}');
     });
 
+    test('derives portLabel from dd.port.label label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, {
+        'dd.port.label': '80=Web UI,443/tcp=Admin Console',
+      });
+      expect(container.portLabel).toBe('80=Web UI,443/tcp=Admin Console');
+    });
+
     test('derives triggerInclude from dd.action.include label', () => {
       const container = makeContainer();
       applyDerivedLabelFieldsToContainer(container, { 'dd.action.include': 'my-action' });
@@ -697,6 +716,54 @@ describe('container-init coverage', () => {
       applyDerivedLabelFieldsToContainer(container, { 'dd.display.name': 'New Display Name' });
       // displayName is intentionally NOT updated by applyDerivedLabelFieldsToContainer
       expect(container.displayName).toBe('My Custom App');
+    });
+
+    describe('dependsOn (#219)', () => {
+      test('sets dependsOn/dependsOnSource/dependsOnAction from dd.depends_on', () => {
+        const container = makeContainer();
+        applyDerivedLabelFieldsToContainer(container, { 'dd.depends_on': 'db,cache' });
+        expect(container.dependsOn).toEqual(['db', 'cache']);
+        expect(container.dependsOnSource).toBe('label');
+        expect(container.dependsOnAction).toBe('update');
+      });
+
+      test('honors dd.depends_on.action=restart', () => {
+        const container = makeContainer();
+        applyDerivedLabelFieldsToContainer(container, {
+          'dd.depends_on': 'db',
+          'dd.depends_on.action': 'restart',
+        });
+        expect(container.dependsOnAction).toBe('restart');
+      });
+
+      test('clears a previously label-sourced dependsOn once the label is removed', () => {
+        const container = makeContainer({
+          dependsOn: ['db'],
+          dependsOnSource: 'label',
+          dependsOnAction: 'update',
+        });
+        applyDerivedLabelFieldsToContainer(container, {});
+        expect(container.dependsOn).toBeUndefined();
+        expect(container.dependsOnSource).toBeUndefined();
+      });
+
+      test('leaves a previously compose-sourced dependsOn untouched (event path cannot re-derive compose)', () => {
+        const container = makeContainer({
+          dependsOn: ['db'],
+          dependsOnSource: 'compose',
+          dependsOnAction: 'update',
+        });
+        applyDerivedLabelFieldsToContainer(container, {});
+        expect(container.dependsOn).toEqual(['db']);
+        expect(container.dependsOnSource).toBe('compose');
+      });
+
+      test('leaves dependsOn unset when there is no dd.depends_on label and none was previously set', () => {
+        const container = makeContainer();
+        applyDerivedLabelFieldsToContainer(container, {});
+        expect(container.dependsOn).toBeUndefined();
+        expect(container.dependsOnSource).toBeUndefined();
+      });
     });
   });
 

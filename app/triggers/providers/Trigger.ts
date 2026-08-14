@@ -1,6 +1,11 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { getAgents } from '../../agent/manager.js';
-import { getServerName, usesLegacyTriggerPrefix } from '../../configuration/index.js';
+import { getServerName } from '../../configuration/index.js';
+import {
+  buildDependencyGraph,
+  buildDependentsByDependency,
+  collectTransitiveDependents,
+} from '../../dependencies/dependency-graph.js';
 import * as event from '../../event/index.js';
 import {
   type Container,
@@ -2969,18 +2974,55 @@ class Trigger<
       return false;
     }
 
-    const deferred: Container[] = [];
-    const ready = containers.filter((container) => {
+    const windowDeferred: Container[] = [];
+    const deferredIds = new Set<string>();
+    for (const container of containers) {
       if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
-        deferred.push(container);
-        return false;
+        windowDeferred.push(container);
+        deferredIds.add(container.id);
       }
-      return true;
-    });
+    }
 
-    for (const container of deferred) {
+    // A dependent whose own upstream dependency is window-deferred this cycle
+    // must not be force-updated out of order (v1.7 Phase 6.1, #219 — design
+    // §3): defer it too. It re-enters together with its now-eligible
+    // dependency on a later scan once the window opens.
+    const dependencyDeferred: Container[] = [];
+    if (windowDeferred.length > 0) {
+      const { edges } = buildDependencyGraph(containers);
+      const dependentsByDependency = buildDependentsByDependency(edges);
+      const containerById = new Map(containers.map((container) => [container.id, container]));
+      for (const blockedContainer of windowDeferred) {
+        for (const dependentId of collectTransitiveDependents(
+          blockedContainer.id,
+          dependentsByDependency,
+        )) {
+          if (deferredIds.has(dependentId)) {
+            continue;
+          }
+          const dependent = containerById.get(dependentId);
+          /* v8 ignore next 3 -- defensive only: every dependent id originates from
+             buildDependencyGraph(containers), so containerById (keyed the same way)
+             always has a match. */
+          if (!dependent) {
+            continue;
+          }
+          deferredIds.add(dependentId);
+          dependencyDeferred.push(dependent);
+        }
+      }
+    }
+
+    const ready = containers.filter((container) => !deferredIds.has(container.id));
+
+    for (const container of windowDeferred) {
       this.log.debug(
         `Outside maintenance window, deferring auto update for ${getContainerNotificationKey(container) || fullName(container)} until the window opens`,
+      );
+    }
+    for (const container of dependencyDeferred) {
+      this.log.debug(
+        `Deferring auto update for ${getContainerNotificationKey(container) || fullName(container)} because an upstream dependency is outside its maintenance window this cycle`,
       );
     }
 
@@ -3024,7 +3066,6 @@ class Trigger<
   getMetadata(): Record<string, unknown> {
     return {
       category: this.getCategory(),
-      usesLegacyPrefix: usesLegacyTriggerPrefix(this.type, this.name),
     };
   }
 

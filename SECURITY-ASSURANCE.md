@@ -1,6 +1,6 @@
 # Drydock Security Assurance Case
 
-Last reviewed: 2026-08-11
+Last reviewed: 2026-08-12
 
 This document states Drydock's security requirements, threat boundaries, and
 the public evidence supporting its security claims. It is a living assurance
@@ -57,11 +57,16 @@ The principal trust boundaries are:
 
 ### Fail-safe defaults and complete mediation
 
-Authentication configuration fails closed. Anonymous mode must be explicitly
-confirmed, and protected routes share the authentication middleware rather than
-opting in route by route. Docker updates flow through the same policy and
-operation tracking used by the API and UI. Regression tests cover authentication
-failure, authorization, rate limiting, update admission, and agent boundaries.
+Authentication configuration fails closed at the request boundary rather than by
+terminating the process. With no authentication configured and anonymous access
+not confirmed, no Passport strategy is registered: protected requests are
+rejected and `/health` reports `503 auth strategies not yet registered` instead
+of serving traffic unauthenticated. Anonymous mode must be explicitly confirmed
+via `DD_ANONYMOUS_AUTH_CONFIRM`, and protected routes share the authentication
+middleware rather than opting in route by route. Docker updates flow through the
+same policy and operation tracking used by the API and UI. Regression tests cover
+authentication failure, authorization, rate limiting, update admission, and agent
+boundaries.
 
 Evidence: [`app/authentications/`](app/authentications),
 [`app/api/`](app/api), [`app/updates/`](app/updates), and the tests adjacent to
@@ -80,16 +85,37 @@ Evidence: [`Dockerfile`](Dockerfile), [`app/debug/`](app/debug),
 
 ### Untrusted input, injection, and outbound-request controls
 
-Inputs are parsed into typed configuration and request models. Registry auth,
-release-note, icon, webhook, and notification HTTP paths constrain protocols,
-redirects, DNS targets, and response sizes where credentials or server-side
-network access are involved. Shell-like update and hook surfaces use explicit
-argument handling and validation. Tests include malformed input, redirect,
-metadata-address, traversal, injection, and resource-limit cases.
+Inputs are parsed into typed configuration and request models. Outbound HTTP
+controls are applied per path rather than uniformly, so this section states them
+individually rather than claiming a blanket policy:
+
+| Path | Timeout | Redirects refused | Response size capped | Metadata/link-local address refused |
+| --- | --- | --- | --- | --- |
+| Registry auth and manifests (`app/registries/`) | yes | yes | no | no |
+| HTTP trigger (`app/triggers/providers/http/`) | yes | yes | no | yes |
+| Agent Docker proxy (`app/agent/`) | yes | yes | yes | no |
+| Icon fetch (`app/api/icons/`) | yes | no | yes | no |
+| Release notes (`app/release-notes/`) | yes | no | no | no |
+| Notification providers calling axios directly (Apprise, Discord, Google Chat, Matrix, Mattermost, ntfy, Rocket.Chat, Teams, Telegram) | yes | no | no | no |
+| IFTTT notification provider (`app/triggers/providers/ifttt/`) | yes | no | no | no |
+| Notification providers wrapping a vendor SDK (Gotify, Kafka, Pushover, Slack, SMTP) | vendor default | vendor default | vendor default | vendor default |
+
+Shell-like update and hook surfaces use explicit argument handling and
+validation. Tests include malformed input, redirect, metadata-address,
+traversal, injection, and resource-limit cases.
+
+The gaps in that table are real and deliberate to state. Only the HTTP trigger,
+which takes an operator-supplied URL, resolves and refuses cloud metadata and
+link-local addresses; several notification providers are self-hostable and so
+also take an operator-supplied host, without that check. Release notes and icons
+follow redirects, and release notes applies no response-size cap. Providers
+built on a vendor SDK inherit whatever controls that dependency applies;
+Drydock does not establish them and does not claim them here.
 
 Evidence: [`app/configuration/`](app/configuration),
 [`app/registries/`](app/registries), [`app/release-notes/`](app/release-notes),
-[`app/api/icons/`](app/api/icons), and [`app/triggers/`](app/triggers).
+[`app/api/icons/`](app/api/icons), and
+[`app/triggers/providers/`](app/triggers/providers).
 
 ### Common weakness and dependency controls
 
@@ -113,6 +139,13 @@ the selected revision, creates an SBOM, signs images and archives with Sigstore,
 attests provenance through GitHub, verifies those records, and only then
 publishes tags and release assets. General-availability releases promote the
 previously tested release-candidate digest instead of rebuilding it.
+
+A GA promotion normally requires the candidate to have soaked for seven days,
+measured from its release publication time. That floor can be overridden by
+dispatch, and the override is deliberately noisy rather than silent: it requires
+a justification of at least 20 characters, emits a workflow warning naming the
+actual candidate age, and records the justification in both the run summary and
+the published release notes. v1.6.0 was promoted this way, at three days.
 
 Evidence: [`.github/workflows/release-cut.yml`](.github/workflows/release-cut.yml)
 and the public [release history](https://github.com/CodesWhat/drydock/releases).

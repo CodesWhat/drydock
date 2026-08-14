@@ -17,6 +17,7 @@ import type {
   FailedContainerUpdateOperationPhase,
   InProgressContainerUpdateOperationPhase,
   RolledBackContainerUpdateOperationPhase,
+  SkippedDependencyContainerUpdateOperationPhase,
   SucceededContainerUpdateOperationPhase,
 } from '../model/container-update-operation.js';
 import {
@@ -53,6 +54,18 @@ interface UpdateOperationBase {
   lastError?: string;
   recoveredAt?: string;
   completedAt?: string;
+  /**
+   * Set alongside `status: 'skipped-dependency'` (v1.7 Phase 6.1, #219): why a
+   * dependency-ordered wave dispatch never attempted this container —
+   * `upstream-failed` when a dependency in its chain failed/rolled back this
+   * cycle, `waiting-on-dependency-window` when a dependency was deferred by
+   * its own maintenance window. See design §3.
+   */
+  skippedDependencyReason?: 'upstream-failed' | 'waiting-on-dependency-window';
+  /** The upstream container id that caused a `skipped-dependency` terminal state. */
+  blockingContainerId?: string;
+  /** The upstream operation id that caused a `skipped-dependency` terminal state. */
+  blockingOperationId?: string;
   /**
    * Operator-requested mid-flight cancellation. Set by the cancel API; the
    * lifecycle checks this at safe checkpoints and aborts before any further
@@ -133,13 +146,31 @@ interface ExpiredUpdateOperation extends UpdateOperationBase {
   queueTotal?: undefined;
 }
 
+/**
+ * Terminal state for a container never attempted because a dependency in its
+ * chain blocked it this cycle (v1.7 Phase 6.1, #219 — design §3): either an
+ * upstream container failed/rolled back, or an upstream container was
+ * deferred by its own maintenance window. Like `expired`, it emits NO
+ * `update-failed` lifecycle event — work that was never attempted must never
+ * surface a false "update failed" notification.
+ */
+interface SkippedDependencyUpdateOperation extends UpdateOperationBase {
+  status: 'skipped-dependency';
+  phase: SkippedDependencyContainerUpdateOperationPhase;
+  completedAt: string;
+  batchId?: undefined;
+  queuePosition?: undefined;
+  queueTotal?: undefined;
+}
+
 type UpdateOperation =
   | QueuedUpdateOperation
   | InProgressUpdateOperation
   | SucceededUpdateOperation
   | RolledBackUpdateOperation
   | FailedUpdateOperation
-  | ExpiredUpdateOperation;
+  | ExpiredUpdateOperation
+  | SkippedDependencyUpdateOperation;
 
 type ActiveUpdateOperation = QueuedUpdateOperation | InProgressUpdateOperation;
 type BatchCompletionItemStatus = 'succeeded' | 'failed';
@@ -166,6 +197,9 @@ type MutableUpdateOperationFields = Pick<
   | 'recoveredAt'
   | 'cancelRequested'
   | 'container'
+  | 'skippedDependencyReason'
+  | 'blockingContainerId'
+  | 'blockingOperationId'
 >;
 
 interface InsertUpdateOperationInput
@@ -228,6 +262,10 @@ type TerminalUpdateOperationPatch =
   | (TerminalUpdateOperationPatchBase & {
       status: 'expired';
       phase?: ExpiredContainerUpdateOperationPhase;
+    })
+  | (TerminalUpdateOperationPatchBase & {
+      status: 'skipped-dependency';
+      phase?: SkippedDependencyContainerUpdateOperationPhase;
     });
 
 interface UpdateOperationCollectionDocument {
@@ -409,6 +447,11 @@ function emitTerminalLifecycleEvent(operation: UpdateOperation, batchId?: string
       // Intentionally silent: an expired (TTL-swept / startup-orphaned) operation
       // never completed nor was confirmed failed, so emitting `update-failed`
       // here would surface a false "update failed" notification. See issue #410.
+      return;
+    case 'skipped-dependency':
+      // Intentionally silent: a dependency-ordered wave dispatch never attempted
+      // this container (upstream failure or maintenance-window deferral), so it
+      // was neither applied nor genuinely failed. See design §3 (#219).
       return;
   }
 }

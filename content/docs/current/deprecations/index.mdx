@@ -155,6 +155,32 @@ Hub/DHI public instances that provide `PUBLIC_TOKEN` without the matching `PUBLI
 | **Removed since** | v1.6.0 |
 | **Migration** | Add the matching login and use `LOGIN`+`TOKEN`, use `LOGIN`+`PASSWORD`, use `AUTH`, or remove credentials for intentional anonymous access |
 
+## v1.7.0 removals and deferrals
+
+### `DD_TRIGGER_*` environment variable prefix {#legacy-trigger-prefix}
+
+The `DD_TRIGGER_*` prefix has been replaced by semantic prefixes that distinguish action triggers from notification triggers. As of v1.7.0, any detected `DD_TRIGGER_*` environment variable fails startup outright — the error lists every offending variable next to its exact replacement, so a config can be fixed in one pass.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Removed since** | v1.7.0 |
+| **Detection** | Startup error listing every detected variable with its exact replacement; drydock does not start until all are renamed |
+| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
+
+### `dd.trigger.include` / `dd.trigger.exclude` container labels {#legacy-trigger-labels}
+
+These labels have been replaced by semantic equivalents. As of v1.7.0, `dd.trigger.include` / `dd.trigger.exclude` no longer resolve to anything — only the scoped `dd.action.*` / `dd.notification.*` labels are read for include/exclude filtering.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Removed since** | v1.7.0 |
+| **Detection** | Error-level log during container initialization (once per label key); Prometheus counter `dd_legacy_input_total{source="label"}` |
+| **Migration** | Replace `dd.trigger.include` with `dd.action.include` or `dd.notification.include`. Replace `dd.trigger.exclude` with `dd.action.exclude` or `dd.notification.exclude` |
+
+A container still carrying either legacy label is detected and logged (so an unmigrated fleet stays visible in monitoring), but the label itself is never consulted for filtering — only the scoped labels affect trigger routing.
+
 ## Removal in v1.7.0
 
 ### `curl` in Docker image {#curl-healthcheck-override}
@@ -167,37 +193,15 @@ The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backwa
 | **Detection** | UI deprecation banner when Drydock can inspect its own container via the local Docker socket; otherwise manual config review |
 | **Migration** | Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](/docs/monitoring) |
 
-### `DD_TRIGGER_*` environment variable prefix {#legacy-trigger-prefix}
-
-The `DD_TRIGGER_*` prefix is being replaced by semantic prefixes that distinguish action triggers from notification triggers.
-
-| | |
-| --- | --- |
-| **Deprecated since** | v1.5.0 |
-| **Detection** | Error-level startup log for every legacy key; Prometheus counter `dd_legacy_input_total`; UI deprecation banner |
-| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
-
-### `dd.trigger.include` / `dd.trigger.exclude` container labels {#legacy-trigger-labels}
-
-These labels are being replaced by semantic equivalents.
-
-| | |
-| --- | --- |
-| **Deprecated since** | v1.5.0 |
-| **Detection** | Error-level log during container initialization |
-| **Migration** | Replace `dd.trigger.include` with `dd.action.include` or `dd.notification.include`. Replace `dd.trigger.exclude` with `dd.action.exclude` or `dd.notification.exclude` |
-
-A legacy label applies to both trigger categories, but only as a fallback: for a given category it is consulted only when that category's own scoped label is absent from the container. It is never merged with a scoped label that is present. So `dd.action.include=docker` plus `dd.trigger.include=slack` filters action triggers by `docker` and notification triggers by `slack`.
-
 ### Manual updates bypass `dd.action.include` / `dd.action.exclude` {#action-include-exclude-soft-blocker}
 
-In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons are **soft** blockers: the UI shows a *Trigger filtered* / *Trigger excluded* pill, but clicking the per-row Update button still queues the update after a confirmation step. In v1.7.0 these reasons become **hard** blockers and the Update button is locked when the labels filter out the action trigger.
+In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons are **soft** blockers: the UI shows a *Trigger filtered* / *Trigger excluded* pill, but clicking the per-row Update button still queues the update after a confirmation step. These reasons are scheduled to become **hard** blockers later in the v1.7 cycle, shipping together with the per-action execution policy; until that lands they remain soft and a confirmed manual update still works. Once hard, the Update button is locked when the labels filter out the action trigger.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.5.0 |
 | **Detection** | UI eligibility pill on container row; confirmation modal warning |
-| **Migration** | If you rely on manual updates bypassing an action trigger's include/exclude filter, either (a) remove the `dd.action.exclude` / `dd.trigger.exclude` label, (b) add the trigger to the container's `dd.action.include` / `dd.trigger.include` list, or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies the exact trigger / label combination in conflict |
+| **Migration** | If you rely on manual updates bypassing an action trigger's include/exclude filter, either (a) remove the `dd.action.exclude` label, (b) add the trigger to the container's `dd.action.include` list, or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies the exact trigger / label combination in conflict |
 
 ### Unversioned `GET /api/auth/methods` alias {#api-auth-methods}
 
@@ -264,7 +268,7 @@ Drydock provides multiple channels for discovering deprecated feature usage:
 | Channel | Covers |
 | --- | --- |
 | **Startup log warnings** | All runtime-detectable deprecations |
-| **UI deprecation banners** | Active v1.7 trigger-prefix inputs |
-| **Prometheus counters** | `dd_legacy_input_total{source,key}` for active trigger-prefix inputs, API tombstones, and historical observations |
+| **UI deprecation banners** | Active `dd.trigger.*` container-label usage (the `DD_TRIGGER_*` env var prefix now fails startup instead, so there is no running instance left to surface a banner for) |
+| **Prometheus counters** | `dd_legacy_input_total{source,key}` for active `dd.trigger.*` label usage, API tombstones, and historical observations |
 | **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/settings`, `GET /api/auth/methods`, and `GET /auth/strategies` |
 | **Migration CLI** | `node dist/index.js config migrate --dry-run` previews all env var and label renames |

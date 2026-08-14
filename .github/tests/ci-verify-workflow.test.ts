@@ -29,7 +29,6 @@ const secretScanScriptPath = fileURLToPath(
 );
 const gitleaksConfigPath = fileURLToPath(new URL('../../.gitleaks.toml', import.meta.url));
 const gitleaksIgnorePath = fileURLToPath(new URL('../../.gitleaksignore', import.meta.url));
-const emojiPrefix = /^\p{Extended_Pictographic}/u;
 const workflowTestsCommand = 'npm run test:workflows';
 const loadWorkflow = loadWorkflowFrom.bind(undefined, workflowPath);
 const getWorkflowStep = getWorkflowStepFrom.bind(undefined, workflowPath);
@@ -43,20 +42,23 @@ function getTestJobStep(name: string): WorkflowStep | undefined {
   return workflow.jobs?.test?.steps?.find((step) => step.name === name);
 }
 
-test('ci-verify job names are emoji-prefixed for GitHub checks readability', () => {
+test('required ci-verify jobs publish stable plain-text check names', () => {
   const workflow = loadWorkflow();
 
-  const jobsWithoutEmoji = Object.entries(workflow.jobs ?? {})
-    .map(([jobId, job]) => ({
-      jobId,
-      name: job.name ?? '',
-    }))
-    .filter(({ name }) => !emojiPrefix.test(name));
-
-  expect(jobsWithoutEmoji).toStrictEqual([]);
+  expect(workflow.jobs?.zizmor?.name).toBe('Security: Actions');
+  expect(workflow.jobs?.lint?.name).toBe('Quality: Lint');
+  expect(workflow.jobs?.test?.name).toBe('Quality: Test & Coverage');
+  expect(workflow.jobs?.build?.name).toBe('Build');
+  expect(workflow.jobs?.e2e?.name).toBe('E2E: Cucumber');
 });
 
 test('script node tests are wired into local and CI gates', () => {
+  expect(getTestJobStep('Checkout')).toMatchObject({
+    with: {
+      'fetch-depth': 0,
+      'persist-credentials': false,
+    },
+  });
   expect(getTestJobStep('Run scripts tests')).toMatchObject({
     run: 'node --test scripts/*.test.mjs',
   });

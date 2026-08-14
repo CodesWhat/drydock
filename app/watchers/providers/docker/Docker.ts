@@ -42,6 +42,8 @@ import {
   getDockerWatcherSourceKey,
   getLabel,
   getMatchingImgsetConfiguration as getMatchingImgsetConfigurationState,
+  getPendingDiscoverySettleDelayMs,
+  getSettledContainersToWatch,
   isDockerWatcher,
   mergeConfigWithImgset,
   pruneOldContainers,
@@ -89,6 +91,12 @@ import {
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
 import {
+  appendBoundedHistoryEntry,
+  filterAndSliceTimestampedHistory,
+  RECENT_ALIAS_FILTER_DECISION_LIMIT,
+  RECENT_DOCKER_EVENT_LIMIT,
+} from './docker-history.js';
+import {
   addImageDetailsToContainerOrchestration,
   type ContainerLabelOverrides,
 } from './docker-image-details-orchestration.js';
@@ -107,6 +115,7 @@ import {
   ddDisplayIcon,
   ddDisplayName,
   ddLinkTemplate,
+  ddPortLabel,
   ddRegistryLookupImage,
   ddRegistryLookupUrl,
   ddTagExclude,
@@ -167,8 +176,6 @@ const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
-const RECENT_DOCKER_EVENT_LIMIT = 1000;
-const RECENT_ALIAS_FILTER_DECISION_LIMIT = 1000;
 const DOCKER_WATCH_CONCURRENCY = 10;
 
 function mapWithDockerWatchConcurrency<T, R>(
@@ -185,25 +192,6 @@ function allSettledWithDockerWatchConcurrency<T, R>(
 ) {
   const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
   return Promise.allSettled(items.map((item, index) => limit(() => mapper(item, index))));
-}
-
-function filterAndSliceTimestampedHistory<T extends { timestamp: string }>(
-  history: T[],
-  sinceMs: number | undefined,
-  limit: number,
-): T[] {
-  const filtered = history.filter((entry) => {
-    if (sinceMs === undefined) {
-      return true;
-    }
-    const timestampMs = Date.parse(entry.timestamp);
-    return Number.isNaN(timestampMs) ? false : timestampMs >= sinceMs;
-  });
-
-  if (!Number.isFinite(limit) || limit <= 0) {
-    return filtered;
-  }
-  return filtered.slice(-Math.trunc(limit));
 }
 
 interface DockerEventsStream {
@@ -346,6 +334,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public isCronWatchInProgress: boolean = false;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
+  public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();
+  public pendingDiscoverySettleTimeout?: NodeJS.Timeout;
   public unregisterContainerUpdateApplied?: () => void;
   #cachedTimeMatcher: { cron: string; matcher: CronTaskWithNextMatch['timeMatcher'] } | undefined;
 
@@ -401,6 +391,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       maintenancewindowtz: this.joi.string().default('UTC'),
       maturitymode: this.joi.string().valid('all', 'mature'),
       maturityminagedays: this.joi.number().integer().min(1).max(365),
+      discoverysettlems: this.joi.number().integer().min(0).default(30_000), // sync w/ DEFAULT_DISCOVERY_SETTLE_MS
       tag: this.joi.object({
         family: this.joi.string().valid('strict', 'loose').default('strict'),
         pin: this.joi.object({
@@ -779,14 +770,6 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     return sleep(ms);
   }
 
-  private appendBoundedHistoryEntry<T>(history: T[], entry: T, maxEntries: number): void {
-    history.push(entry);
-    if (history.length <= maxEntries * 2) {
-      return;
-    }
-    history.splice(0, history.length - maxEntries);
-  }
-
   private toEventTimestamp(rawDockerEvent: Record<string, unknown>): string {
     const rawTimeNano = rawDockerEvent.timeNano;
     if (typeof rawTimeNano === 'number' && Number.isFinite(rawTimeNano) && rawTimeNano > 0) {
@@ -835,17 +818,34 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       actorId,
     };
 
-    this.appendBoundedHistoryEntry(this.recentDockerEvents, recentEvent, RECENT_DOCKER_EVENT_LIMIT);
+    appendBoundedHistoryEntry(this.recentDockerEvents, recentEvent, RECENT_DOCKER_EVENT_LIMIT);
   }
 
   private recordAliasFilterDecisions(decisions: AliasFilterDecision[]): void {
     decisions.forEach((decision) => {
-      this.appendBoundedHistoryEntry(
+      appendBoundedHistoryEntry(
         this.recentAliasFilterDecisions,
         decision,
         RECENT_ALIAS_FILTER_DECISION_LIMIT,
       );
     });
+  }
+
+  private schedulePendingDiscoverySettleWatch(): void {
+    if (this.pendingDiscoverySettleTimeout) {
+      clearTimeout(this.pendingDiscoverySettleTimeout);
+      delete this.pendingDiscoverySettleTimeout;
+    }
+    const delayMs = getPendingDiscoverySettleDelayMs(this);
+    if (delayMs === undefined || this.isWatcherDeregistered) {
+      return;
+    }
+    this.pendingDiscoverySettleTimeout = setTimeout(() => {
+      delete this.pendingDiscoverySettleTimeout;
+      // watchCronDebounced only exists when watchevents is on — else watch directly.
+      const watch = this.watchCronDebounced ?? (() => this.watchFromCron().catch(() => undefined));
+      watch();
+    }, delayMs);
   }
 
   getRecentDockerEvents(options: { sinceMs?: number; limit?: number } = {}): DockerRecentEvent[] {
@@ -893,6 +893,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       delete this.dockerEventsReconnectTimeout;
     }
     this.cleanupDockerEventsStream(true);
+    this.schedulePendingDiscoverySettleWatch(); // clears the timer; never reschedules once deregistered
     delete this.watchCronDebounced;
     this.unregisterContainerUpdateApplied?.();
     this.unregisterContainerUpdateApplied = undefined;
@@ -1279,8 +1280,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       containersFromTheStore,
     );
     this.recordAliasFilterDecisions(decisions);
-
-    const enrichmentResults = await mapWithDockerWatchConcurrency(containersToWatch, (container) =>
+    const settled = getSettledContainersToWatch(containersToWatch, containersFromTheStore, this);
+    this.schedulePendingDiscoverySettleWatch();
+    const enrichmentResults = await mapWithDockerWatchConcurrency(settled, (container) =>
       this.addImageDetailsToContainer(container, {
         includeTags: getLabel(container.Labels, ddTagInclude),
         excludeTags: getLabel(container.Labels, ddTagExclude),
@@ -1288,6 +1290,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         tagFamily: getLabel(container.Labels, ddTagFamily),
         tagPinInfo: getLabel(container.Labels, ddTagPinInfo),
         linkTemplate: getLabel(container.Labels, ddLinkTemplate),
+        portLabel: getLabel(container.Labels, ddPortLabel),
         displayName: getLabel(container.Labels, ddDisplayName),
         displayIcon: getLabel(container.Labels, ddDisplayIcon),
         ...resolveTriggerLabelOverrides(container.Labels),

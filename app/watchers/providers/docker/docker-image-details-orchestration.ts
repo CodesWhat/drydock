@@ -13,6 +13,7 @@ import {
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
   isDockerWatcher,
+  resolveContainerDependsOn,
   warnTriggerCategoryScopeChangeIfNeeded,
 } from './container-init.js';
 import {
@@ -44,6 +45,7 @@ export interface ContainerLabelOverrides {
   tagFamily?: string;
   tagPinInfo?: string;
   linkTemplate?: string;
+  portLabel?: string;
   displayName?: string;
   displayIcon?: string;
   actionTriggerInclude?: string;
@@ -79,6 +81,13 @@ interface DockerContainerInspectPayload {
     };
     [key: string]: unknown;
   };
+  // Structurally satisfies `DockerApiBindMountInspector` (see
+  // `ComposePathBindMounts.ts`) so `watcher.dockerApi` can be forwarded
+  // straight into compose-based dependency detection for self-container
+  // bind-mount path translation.
+  HostConfig?: {
+    Binds?: string[];
+  };
   [key: string]: unknown;
 }
 
@@ -110,6 +119,7 @@ interface ResolvedContainerLabelOverrides {
   tagFamily?: string;
   tagPinInfo?: string;
   linkTemplate?: string;
+  portLabel?: string;
   displayName?: string;
   displayIcon?: string;
   actionTriggerInclude?: string;
@@ -130,6 +140,7 @@ interface ResolvedContainerConfig {
   tagFamily?: string;
   tagPinInfo?: boolean;
   linkTemplate?: string;
+  portLabel?: string;
   displayName?: string;
   displayIcon?: string;
   actionTriggerInclude?: string;
@@ -450,6 +461,30 @@ async function refreshStoredContainerImageFields(
   }
 }
 
+/**
+ * Re-derive `dependsOn`/`dependsOnSource`/`dependsOnAction` from the
+ * container's current labels/compose file. Called on every full discovery
+ * and refresh pass (#219) — unlike most other label-derived fields, this one
+ * self-heals every watch cycle rather than only on discovery/events, since a
+ * recreated container's compose membership can only be re-confirmed here
+ * (compose detection needs async file I/O the lightweight Docker-event path
+ * can't do).
+ */
+async function applyContainerDependsOn(
+  container: Container,
+  labels: Record<string, string>,
+  watcher: DockerImageDetailsWatcher,
+  dockerContainerName: string,
+): Promise<void> {
+  const resolution = await resolveContainerDependsOn(labels, dockerContainerName, {
+    warn: (message) => watcher.log.warn(message),
+    dockerApi: watcher.dockerApi,
+  });
+  container.dependsOn = resolution.dependsOn;
+  container.dependsOnSource = resolution.dependsOnSource;
+  container.dependsOnAction = resolution.dependsOnAction;
+}
+
 async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyInStoreContext) {
   const {
     watcher,
@@ -469,6 +504,12 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     container.Labels || {},
     watcher.configuration,
     { logger: watcher.log, containerName: dockerContainerName },
+  );
+  await applyContainerDependsOn(
+    containerInStore,
+    container.Labels || {},
+    watcher,
+    dockerContainerName,
   );
 
   // Health is read unconditionally (decoupled from shouldInspectContainer /
@@ -851,6 +892,7 @@ export async function addImageDetailsToContainerOrchestration(
     tagFamily: resolvedConfig.tagFamily,
     tagPinInfo: resolvedConfig.tagPinInfo,
     linkTemplate: resolvedConfig.linkTemplate,
+    portLabel: resolvedConfig.portLabel,
     displayName: getContainerDisplayName(
       dockerContainerName,
       parsedImage.path,
@@ -924,6 +966,7 @@ export async function addImageDetailsToContainerOrchestration(
     logger: watcher.log,
     containerName: dockerContainerName,
   });
+  await applyContainerDependsOn(containerToReturn, containerLabels, watcher, dockerContainerName);
   removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
 
   return containerToReturn;

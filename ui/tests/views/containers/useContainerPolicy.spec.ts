@@ -217,6 +217,146 @@ describe('useContainerPolicy', () => {
     harness.wrapper.unmount();
   });
 
+  it('local fallback uses a trusted publishedAt to clear the maturity gate even when updateDetectedAt is recent (#556)', () => {
+    // No updateEligibility payload, so this exercises the local fallback branch.
+    // updateDetectedAt alone (1 day ago) would still be gated at a 7-day minimum;
+    // a trusted publishedAt from 10 days ago must be honored instead.
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        tagged: {
+          updateAvailable: false,
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
+          updateKind: { kind: 'tag' },
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          result: {
+            publishedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+            publishedAtTrusted: true,
+          },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('tagged');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: false,
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      }),
+    );
+
+    harness.wrapper.unmount();
+  });
+
+  it('local fallback ignores an untrusted publishedAt and stays blocked on a recent updateDetectedAt (#556)', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        tagged: {
+          updateAvailable: false,
+          updateDetectedAt: RECENT_UPDATE_DETECTED_AT,
+          updateKind: { kind: 'tag' },
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          result: {
+            publishedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+            // No publishedAtTrusted flag — must be ignored, not used to clear the gate.
+          },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('tagged');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: true,
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      }),
+    );
+
+    harness.wrapper.unmount();
+  });
+
+  it('local fallback falls back to firstSeenAt when updateDetectedAt is absent and clears the gate (#678)', () => {
+    // No updateDetectedAt at all — only firstSeenAt, old enough to clear the
+    // 7-day gate. Must mirror the app-side resolver's firstSeenAt fallback or
+    // this local fallback drifts from the backend gate (#556/#678).
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        tagged: {
+          updateAvailable: false,
+          firstSeenAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+          updateKind: { kind: 'tag' },
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('tagged');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: false,
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      }),
+    );
+
+    harness.wrapper.unmount();
+  });
+
+  it('local fallback stays blocked on a recent firstSeenAt when updateDetectedAt is absent (#678)', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        tagged: {
+          updateAvailable: false,
+          firstSeenAt: RECENT_UPDATE_DETECTED_AT,
+          updateKind: { kind: 'tag' },
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('tagged');
+
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: true,
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      }),
+    );
+
+    harness.wrapper.unmount();
+  });
+
+  it('local fallback ignores an invalid firstSeenAt value, not resolving a clock from it (#678)', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        tagged: {
+          updateAvailable: false,
+          firstSeenAt: 'not-a-date',
+          updateKind: { kind: 'tag' },
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        },
+      },
+    });
+
+    const state = harness.composable.getContainerListPolicyState('tagged');
+
+    // No resolvable clock at all — undefined startMs still means "gated".
+    expect(state).toEqual(
+      expect.objectContaining({
+        maturityBlocked: true,
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+      }),
+    );
+
+    harness.wrapper.unmount();
+  });
+
   it('prefers a backend maturity-not-reached verdict over an unblocked legacy computation (#display-honesty)', () => {
     // maturityMode 'all' can never legacy-block (the local formula only fires for
     // 'mature'), so a blocked result here can only come from the backend verdict.

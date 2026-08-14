@@ -24,6 +24,7 @@ To limit brute-force attempts on `POST /auth/login`, drydock tracks failed login
 | `DD_AUTH_LOCKOUT_DURATION_MS` | ⚪ | Lockout duration (milliseconds) once a threshold is reached | Positive integer (`> 0`) | `900000` |
 | `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | ⚪ | Interval for pruning expired lockout entries from memory and the persisted lockout sidecar file | Positive integer (`> 0`) | `60000` |
 | `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique account/IP identities tracked before older entries are pruned | Positive integer (`> 0`) | `5000` |
+| `DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS` | ⚪ | Maximum login credential verifications running at once. Excess attempts receive `429` with `Retry-After: 1` before password hashing starts. | Positive integer (`> 0`) | `2` |
 
 If a lockout value is missing or invalid, drydock falls back to the corresponding default.
 

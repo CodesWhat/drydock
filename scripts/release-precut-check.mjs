@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseReleaseTag } from './release-tag.mjs';
 
 const releaseTagRegex =
   /^v?(?<major>(?:0|[1-9]\d*))\.(?<minor>(?:0|[1-9]\d*))\.(?<patch>(?:0|[1-9]\d*))(?:-(?<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/u;
 
 function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 export function versionSeries(tag) {
@@ -23,6 +25,93 @@ export function isPrerelease(tag) {
   const value = String(tag ?? '').trim();
   const match = value.match(releaseTagRegex);
   return Boolean(match?.groups?.prerelease);
+}
+
+export function validateReleaseMetadata(root, tag) {
+  const normalizedTag = String(tag).startsWith('v') ? String(tag) : `v${tag}`;
+  const metadata = parseReleaseTag(normalizedTag);
+  const version = metadata.tag.slice(1);
+  const problems = [];
+  const packagePaths = [
+    'package.json',
+    'app/package.json',
+    'ui/package.json',
+    'e2e/package.json',
+    'apps/demo/package.json',
+  ];
+  const lockPaths = packagePaths.map((path) =>
+    path.replace(/package\.json$/u, 'package-lock.json'),
+  );
+
+  for (const relativePath of packagePaths) {
+    const contents = JSON.parse(readFileSync(join(root, relativePath), 'utf8'));
+    if (contents.version !== metadata.baseVersion) {
+      problems.push(
+        `${relativePath} version is ${contents.version ?? '<missing>'}, expected ${metadata.baseVersion}`,
+      );
+    }
+  }
+  for (const relativePath of lockPaths) {
+    const contents = JSON.parse(readFileSync(join(root, relativePath), 'utf8'));
+    for (const [location, actual] of [
+      ['version', contents.version],
+      ['packages[""].version', contents.packages?.['']?.version],
+    ]) {
+      if (actual !== metadata.baseVersion) {
+        problems.push(
+          `${relativePath} ${location} is ${actual ?? '<missing>'}, expected ${metadata.baseVersion}`,
+        );
+      }
+    }
+  }
+
+  const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
+  const escapedVersion = escapeRegExp(version);
+  const changelogEntry = changelog.match(
+    new RegExp(
+      `^## \\[${escapedVersion}\\] [–—-] \\d{4}-\\d{2}-\\d{2}\\n(?<body>[\\s\\S]*?)(?=^## |(?![\\s\\S]))`,
+      'mu',
+    ),
+  );
+  if (!changelogEntry?.groups?.body.trim()) {
+    problems.push(`CHANGELOG.md has no non-empty [${version}] entry`);
+  }
+
+  const publicChecks = [
+    ['README.md', [`version-${version.replaceAll('-', '--')}-blue`, `v${version} highlights`]],
+    ['README.de.md', [`version-${version.replaceAll('-', '--')}-blue`]],
+    ['README.es.md', [`version-${version.replaceAll('-', '--')}-blue`]],
+    ['README.fr.md', [`version-${version.replaceAll('-', '--')}-blue`]],
+    ['README.pl.md', [`version-${version.replaceAll('-', '--')}-blue`]],
+    ['README.pt-BR.md', [`version-${version.replaceAll('-', '--')}-blue`]],
+    ['README.zh-CN.md', [`version-${version.replaceAll('-', '--')}-blue`]],
+    ['apps/web/src/lib/site-config.ts', [`version: "${version}"`]],
+    [
+      'apps/web/scripts/docs-versions.mjs',
+      [
+        `{ slug: "v${versionSeries(metadata.tag)}", source: "current", title: "v${versionSeries(metadata.tag)}" }`,
+      ],
+    ],
+    ['content/docs/current/updates/index.mdx', [`## v${version} Highlights`]],
+    [
+      'content/docs/current/quickstart/index.mdx',
+      [
+        `| \`${version}\` | ${metadata.isPrerelease ? 'Immutable release candidate' : 'Immutable exact GA release'}`,
+      ],
+    ],
+  ];
+  for (const [relativePath, requiredValues] of publicChecks) {
+    const contents = readFileSync(join(root, relativePath), 'utf8');
+    for (const requiredValue of requiredValues) {
+      if (!contents.includes(requiredValue)) {
+        problems.push(`${relativePath} is missing ${requiredValue}`);
+      }
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(`Release metadata does not match ${metadata.tag}:\n- ${problems.join('\n- ')}`);
+  }
 }
 
 export function parsePendingReplies(markdown, tag) {
@@ -134,6 +223,10 @@ function main() {
   if (!tag) {
     throw new Error('release tag is required (e.g. v1.6.0)');
   }
+
+  const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
+  validateReleaseMetadata(repositoryRoot, tag);
+  console.log(`✓ Release metadata matches ${tag.startsWith('v') ? tag : `v${tag}`}.`);
 
   const defaultTrackerPath = fileURLToPath(
     new URL('../.planning/roadmap/current-tracker.md', import.meta.url),

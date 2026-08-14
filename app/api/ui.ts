@@ -5,6 +5,10 @@ import { resolveUiDirectory } from '../runtime/paths.js';
 
 const HTML_DOCUMENT_CACHE_CONTROL = 'no-store';
 const STATIC_ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+// The service worker script must be revalidated on every request so a new
+// deploy is never masked by a stale, previously-cached sw.js — that would
+// pin clients to the old precached shell indefinitely.
+const SERVICE_WORKER_CACHE_CONTROL = 'no-cache';
 
 /**
  * Init the UI router.
@@ -27,6 +31,10 @@ export function init() {
         const topLevelDirectory = relativePath.split(path.sep)[0];
         if (relativePath.endsWith('.html')) {
           res.setHeader('Cache-Control', HTML_DOCUMENT_CACHE_CONTROL);
+          return;
+        }
+        if (relativePath === 'sw.js') {
+          res.setHeader('Cache-Control', SERVICE_WORKER_CACHE_CONTROL);
           return;
         }
         if (topLevelDirectory === 'assets') {

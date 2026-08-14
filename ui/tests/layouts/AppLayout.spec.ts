@@ -915,4 +915,46 @@ describe('AppLayout', () => {
     expect(rendered).toContain(', or');
     expect(rendered).toContain('; use');
   });
+
+  describe('keyboard shortcuts wiring', () => {
+    it('pressing "/" outside a text input opens the search overlay', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: '/' }));
+      await flushPromises();
+
+      expect((wrapper.vm as unknown as { showSearch: boolean }).showSearch).toBe(true);
+    });
+
+    it('pressing "/" closes an open mobile menu before opening search, matching the sidebar search button', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      (wrapper.vm as unknown as { isMobileMenuOpen: boolean }).isMobileMenuOpen = true;
+      await flushPromises();
+
+      globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: '/' }));
+      await flushPromises();
+
+      expect((wrapper.vm as unknown as { isMobileMenuOpen: boolean }).isMobileMenuOpen).toBe(false);
+      expect((wrapper.vm as unknown as { showSearch: boolean }).showSearch).toBe(true);
+    });
+
+    it('pressing Escape closes the search overlay via the shortcuts composable', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      (wrapper.vm as unknown as { showSearch: boolean }).showSearch = true;
+      await flushPromises();
+
+      globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await flushPromises();
+
+      expect((wrapper.vm as unknown as { showSearch: boolean }).showSearch).toBe(false);
+    });
+  });
 });

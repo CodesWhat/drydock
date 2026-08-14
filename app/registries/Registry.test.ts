@@ -1991,6 +1991,41 @@ describe('callRegistry', () => {
     );
   });
 
+  test('should refuse redirects for registry data requests', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    const registryMocked = createMockedRegistry();
+
+    await registryMocked.callRegistry({
+      image: {},
+      url: 'https://registry.example/v2/image/manifests/latest',
+      method: 'get',
+    });
+
+    expect(axios).toHaveBeenCalledWith(expect.objectContaining({ maxRedirects: 0 }));
+  });
+
+  test('should restore redirect refusal after authentication replaces request options', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    axios.mockClear();
+    const registryMocked = createMockedRegistry();
+    vi.spyOn(registryMocked, 'authenticate').mockResolvedValue({
+      url: 'https://registry.example/v2/image/manifests/latest',
+      method: 'get',
+      maxRedirects: 5,
+    });
+
+    await registryMocked.callRegistry({
+      image: {},
+      url: 'https://registry.example/v2/image/manifests/latest',
+      method: 'get',
+    });
+
+    expect(axios).toHaveBeenCalledTimes(1);
+    expect(axios.mock.calls[0][0]).toEqual(expect.objectContaining({ maxRedirects: 0 }));
+  });
+
   test('should use centralized outbound timeout when env override is set', async () => {
     const previousTimeout = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
     process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '2345';
@@ -2454,6 +2489,7 @@ describe('callRegistry', () => {
       expect(result).toEqual({ tags: ['v1'] });
       // axios called twice: original + retry
       expect(axios).toHaveBeenCalledTimes(2);
+      expect(axios.mock.calls[1][0]).toEqual(expect.objectContaining({ maxRedirects: 0 }));
       // acquireToken called twice: once for each request
       expect(acquireToken).toHaveBeenCalledTimes(2);
     });

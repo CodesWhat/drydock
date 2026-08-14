@@ -655,6 +655,18 @@ export const openApiSchemas = {
       updateAvailable: { type: 'boolean' },
       tagPinGated: { type: 'boolean' },
       updateEligibility: { $ref: '#/components/schemas/UpdateEligibility' },
+      dependencyCount: {
+        type: 'integer',
+        minimum: 0,
+        description:
+          'Number of containers this one declares as a dependency (dd.depends_on). Cheap badge count for the list view; full graph detail is at GET /containers/dependencies.',
+      },
+      dependentCount: {
+        type: 'integer',
+        minimum: 0,
+        description:
+          'Number of containers that declare this one as a dependency. Cheap badge count for the list view; full graph detail is at GET /containers/dependencies.',
+      },
       image: { ...genericObjectSchema },
       updatePolicy: { $ref: '#/components/schemas/ContainerUpdatePolicy' },
       updatePolicyDeclarative: {
@@ -666,25 +678,25 @@ export const openApiSchemas = {
         type: 'string',
         example: 'dockercompose.local:minor',
         description:
-          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label, falling back to the deprecated dd.trigger.include. Applies only to action triggers (docker, dockercompose, command).',
+          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label. The legacy dd.trigger.include fallback was removed in v1.7.0. Applies only to action triggers (docker, dockercompose, command).',
       },
       actionTriggerExclude: {
         type: 'string',
         example: 'docker.local',
         description:
-          'Comma-separated action trigger ids or names that must not fire for this container. From the dd.action.exclude label, falling back to the deprecated dd.trigger.exclude. Applies only to action triggers.',
+          'Comma-separated action trigger ids or names that must not fire for this container. From the dd.action.exclude label. The legacy dd.trigger.exclude fallback was removed in v1.7.0. Applies only to action triggers.',
       },
       notificationTriggerInclude: {
         type: 'string',
         example: 'smtp.gmail,slack.alerts:major',
         description:
-          'Comma-separated notification trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.notification.include label, falling back to the deprecated dd.trigger.include. Applies only to notification triggers.',
+          'Comma-separated notification trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.notification.include label. The legacy dd.trigger.include fallback was removed in v1.7.0. Applies only to notification triggers.',
       },
       notificationTriggerExclude: {
         type: 'string',
         example: 'pushover.mobile',
         description:
-          'Comma-separated notification trigger ids or names that must not fire for this container. From the dd.notification.exclude label, falling back to the deprecated dd.trigger.exclude. Applies only to notification triggers.',
+          'Comma-separated notification trigger ids or names that must not fire for this container. From the dd.notification.exclude label. The legacy dd.trigger.exclude fallback was removed in v1.7.0. Applies only to notification triggers.',
       },
       triggerInclude: {
         type: 'string',
@@ -984,6 +996,139 @@ export const openApiSchemas = {
     required: ['message', 'accepted', 'rejected'],
     additionalProperties: false,
   },
+  DependencyGraphNode: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      displayName: { type: 'string' },
+      watcher: { type: 'string' },
+      agent: { type: 'string' },
+    },
+    required: ['id', 'name', 'displayName'],
+    additionalProperties: false,
+  },
+  DependencyGraphEdge: {
+    type: 'object',
+    properties: {
+      from: { type: 'string', description: "The dependent container's id." },
+      to: { type: 'string', description: 'The dependency (must dispatch first).' },
+      action: { type: 'string', enum: ['update', 'restart'] },
+      source: { type: 'string', enum: ['label', 'compose'] },
+    },
+    required: ['from', 'to', 'action', 'source'],
+    additionalProperties: false,
+  },
+  DependencyGraphUnresolvedEdge: {
+    type: 'object',
+    properties: {
+      nodeId: { type: 'string' },
+      missingTarget: { type: 'string' },
+    },
+    required: ['nodeId', 'missingTarget'],
+    additionalProperties: false,
+  },
+  DependencyGraphCrossHostIgnoredEdge: {
+    type: 'object',
+    properties: {
+      from: { type: 'string' },
+      to: { type: 'string' },
+    },
+    required: ['from', 'to'],
+    additionalProperties: false,
+  },
+  DependencyGraphResponse: {
+    type: 'object',
+    properties: {
+      nodes: { type: 'array', items: { $ref: '#/components/schemas/DependencyGraphNode' } },
+      edges: { type: 'array', items: { $ref: '#/components/schemas/DependencyGraphEdge' } },
+      cycles: {
+        type: 'array',
+        items: { type: 'array', items: { type: 'string' } },
+        description: 'Groups of node ids involved in a cycle (unordered among themselves).',
+      },
+      unresolved: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/DependencyGraphUnresolvedEdge' },
+      },
+      crossHostIgnored: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/DependencyGraphCrossHostIgnoredEdge' },
+      },
+    },
+    required: ['nodes', 'edges', 'cycles', 'unresolved', 'crossHostIgnored'],
+    additionalProperties: false,
+  },
+  UpdateChainPreviewWaveContainer: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      actionKind: { type: 'string', enum: ['update', 'restart'] },
+    },
+    required: ['id', 'name', 'actionKind'],
+    additionalProperties: false,
+  },
+  UpdateChainPreviewWave: {
+    type: 'object',
+    properties: {
+      index: { type: 'integer', minimum: 0 },
+      containers: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/UpdateChainPreviewWaveContainer' },
+      },
+    },
+    required: ['index', 'containers'],
+    additionalProperties: false,
+  },
+  UpdateChainPreviewResponse: {
+    type: 'object',
+    properties: {
+      waves: { type: 'array', items: { $ref: '#/components/schemas/UpdateChainPreviewWave' } },
+      warnings: {
+        type: 'object',
+        properties: {
+          cycles: { type: 'array', items: { type: 'array', items: { type: 'string' } } },
+          unresolved: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/DependencyGraphUnresolvedEdge' },
+          },
+        },
+        required: ['cycles', 'unresolved'],
+        additionalProperties: false,
+      },
+    },
+    required: ['waves', 'warnings'],
+    additionalProperties: false,
+  },
+  DependencyGroupBulkUpdateAcceptedItem: {
+    type: 'object',
+    properties: {
+      containerId: { type: 'string' },
+      containerName: { type: 'string' },
+      operationId: { type: 'string' },
+      wave: { type: 'integer', minimum: 0 },
+      actionKind: { type: 'string', enum: ['update', 'restart'] },
+    },
+    required: ['containerId', 'containerName', 'operationId', 'wave', 'actionKind'],
+    additionalProperties: false,
+  },
+  DependencyGroupBulkUpdateResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      accepted: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/DependencyGroupBulkUpdateAcceptedItem' },
+      },
+      rejected: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContainerBulkUpdateRejectedItem' },
+      },
+    },
+    required: ['message', 'accepted', 'rejected'],
+    additionalProperties: false,
+  },
   ComponentItem: {
     type: 'object',
     properties: {
@@ -1179,7 +1324,15 @@ export const openApiSchemas = {
       id: { type: 'string' },
       status: {
         type: 'string',
-        enum: ['queued', 'in-progress', 'succeeded', 'failed', 'rolled-back', 'expired'],
+        enum: [
+          'queued',
+          'in-progress',
+          'succeeded',
+          'failed',
+          'rolled-back',
+          'expired',
+          'skipped-dependency',
+        ],
       },
       phase: { type: 'string' },
       kind: { type: 'string' },

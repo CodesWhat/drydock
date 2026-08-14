@@ -1,8 +1,11 @@
 import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { resetAllowlistWarningStateForTests, runHook } from './HookRunner.js';
 
-var childProcessMockControl = vi.hoisted(() => ({
-  execFileImpl: null as null | ((...args: unknown[]) => unknown),
+var { childProcessMockControl, hookLogMock } = vi.hoisted(() => ({
+  childProcessMockControl: {
+    execFileImpl: null as null | ((...args: unknown[]) => unknown),
+  },
+  hookLogMock: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
 vi.mock('node:child_process', async () => {
@@ -22,7 +25,7 @@ vi.mock('node:child_process', async () => {
 
 vi.mock('../../log/index.js', () => ({
   default: {
-    child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
+    child: () => hookLogMock,
   },
 }));
 
@@ -30,6 +33,8 @@ describe('HookRunner', () => {
   const originalHooksEnabled = process.env.DD_HOOKS_ENABLED;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    childProcessMockControl.execFileImpl = null;
     process.env.DD_HOOKS_ENABLED = 'true';
     resetAllowlistWarningStateForTests();
   });
@@ -77,6 +82,25 @@ describe('HookRunner', () => {
     expect(result.stdout.trim()).toBe('hello');
     expect(result.stderr).toBe('');
     expect(result.timedOut).toBe(false);
+  });
+
+  test('should not include the configured hook command in logs', async () => {
+    const secretCommand = 'curl https://hooks.example.com/secret-token';
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      setImmediate(() => callback(null, '', ''));
+      return { exitCode: 0 };
+    };
+    const result = await runHook(secretCommand, { label: 'post-update' });
+
+    expect(result.exitCode).toBe(0);
+    expect(
+      JSON.stringify([...hookLogMock.info.mock.calls, ...hookLogMock.warn.mock.calls]),
+    ).not.toContain(secretCommand);
   });
 
   test('should capture non-zero exit code', async () => {

@@ -26,9 +26,12 @@ import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update
 import type { Container } from '../../types/container';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
+import ContainerPortEntry from './ContainerPortEntry.vue';
 import ContainersGroupHeader from './ContainersGroupHeader.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { registryLookup } from './registry-link';
+import { enrichContainerPorts } from '../../utils/ports';
+import { useAgentHosts } from '../../composables/useAgentHosts';
 
 const {
   filteredContainers,
@@ -85,8 +88,20 @@ const {
 } = useContainersViewTemplateContext();
 const updateMode = computed(() => configuredUpdateMode?.value ?? 'manual');
 const { visibleColumns } = useColumnVisibility();
-const nowMs = useNow(30_000, () => visibleColumns.value.has('uptime'));
+const nowMs = useNow(
+  30_000,
+  () => visibleColumns.value.has('uptime') || containerViewMode.value === 'cards',
+);
 const { t, te } = useI18n();
+const { resolveHost } = useAgentHosts();
+
+function getEnrichedPorts(c: Container) {
+  return enrichContainerPorts(
+    c.details?.ports ?? [],
+    c.portLabel,
+    resolveHost(c.agent, window.location.hostname),
+  );
+}
 const { batches, clearBatch, getBatch, incrementSucceeded, incrementFailed } = useUpdateBatches();
 
 const openActionsContainer = computed(() =>
@@ -891,9 +906,26 @@ onScopeDispose(() => {
         </template>
         <!-- Uptime -->
         <template #cell-uptime="{ row: c }">
-          <span class="text-2xs-plus dd-text-secondary font-mono">
+          <span class="text-2xs-plus dd-text-secondary font-mono" v-tooltip.top="tt(c.details?.startedAt ?? '')">
             {{ formatUptimeFromIso(c.details?.startedAt, nowMs) }}
           </span>
+        </template>
+        <!-- Ports -->
+        <template #cell-ports="{ row: c }">
+          <div v-if="(c.details?.ports?.length ?? 0) > 0" class="flex items-center gap-1.5 flex-wrap text-2xs-plus font-mono">
+            <ContainerPortEntry
+              v-for="entry in getEnrichedPorts(c).slice(0, 2)"
+              :key="entry.raw"
+              :href="entry.href"
+              :label="entry.label"
+            />
+            <span
+              v-if="getEnrichedPorts(c).length > 2"
+              class="text-3xs dd-text-muted"
+              v-tooltip.top="tt(getEnrichedPorts(c).slice(2).map((p) => p.label).join(', '))"
+            >+{{ getEnrichedPorts(c).length - 2 }}</span>
+          </div>
+          <span v-else class="text-2xs-plus dd-text-muted">—</span>
         </template>
         <!-- Actions -->
         <template #actions="{ row: c, cardMode }">
@@ -1206,6 +1238,20 @@ onScopeDispose(() => {
             <div v-if="c.suggestedTag" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
             </div>
+            <div v-if="(c.details?.ports?.length ?? 0) > 0" class="flex items-center gap-1.5 flex-wrap mt-2 text-2xs-plus font-mono">
+              <AppIcon name="network" :size="10" class="dd-text-muted shrink-0" />
+              <ContainerPortEntry
+                v-for="entry in getEnrichedPorts(c).slice(0, 3)"
+                :key="entry.raw"
+                :href="entry.href"
+                :label="entry.label"
+              />
+              <span
+                v-if="getEnrichedPorts(c).length > 3"
+                class="text-3xs dd-text-muted"
+                v-tooltip.top="tt(getEnrichedPorts(c).slice(3).map((p) => p.label).join(', '))"
+              >+{{ getEnrichedPorts(c).length - 3 }}</span>
+            </div>
           </div>
 
           <div
@@ -1248,6 +1294,12 @@ onScopeDispose(() => {
               <span v-else class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerStatusColor(c) }"></span>
               {{ getContainerStatusLabel(c) }}
             </span>
+            <span
+              v-if="c.status === 'running' && c.details?.startedAt"
+              class="text-2xs-plus dd-text-muted font-mono"
+              data-test="container-card-uptime"
+              v-tooltip.top="tt(c.details.startedAt)"
+            >{{ formatUptimeFromIso(c.details.startedAt, nowMs) }}</span>
 
             <!-- Card actions: the same icon-style action row as the table's #actions slot
                  above (same buttons/handlers/conditions — stop/start/restart/scan/update/

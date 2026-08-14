@@ -9,8 +9,10 @@ import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { ELIGIBILITY_DOCS } from '../../composables/useUpdateStatus';
 import {
   deleteContainer as apiDeleteContainer,
+  previewUpdateChain as apiPreviewUpdateChain,
   refreshContainer as apiRefreshContainer,
   scanContainer as apiScanContainer,
+  updateDependencyGroup as apiUpdateDependencyGroup,
 } from '../../services/container';
 import {
   cancelUpdateOperation as apiCancelUpdateOperation,
@@ -38,7 +40,7 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
   type TranslateFn,
 } from '../../utils/container-update';
-import { errorMessage } from '../../utils/error';
+import { ApiError, errorMessage } from '../../utils/error';
 import {
   getPrimaryHardBlocker,
   getSoftBlockers,
@@ -458,6 +460,168 @@ async function deleteContainerState(args: {
     const next = new Map(args.actionInProgress.value);
     next.delete(args.actionKey);
     args.actionInProgress.value = next;
+  }
+}
+
+/**
+ * Runs the actual bulk dependency-group update once the user accepts the
+ * chain-preview confirm dialog (#219). Kept as a standalone function (rather
+ * than inline in the confirm handler) so it can be unit tested directly like
+ * updateAllInGroupState/deleteContainerState.
+ *
+ * `expectedContainerIds` is the exact container id set the confirm dialog
+ * previewed — forwarded so the backend can refuse (409) to run against a
+ * chain that changed shape between preview and confirm, rather than
+ * silently updating a different set of containers than the ones the user
+ * saw and accepted.
+ */
+async function runDependencyGroupUpdateState(args: {
+  rootId: string;
+  name: string;
+  expectedContainerIds: string[];
+  loadContainers: () => Promise<void>;
+  t: TranslateFn;
+}) {
+  const toast = useToast();
+  try {
+    const response = await apiUpdateDependencyGroup(args.rootId, args.expectedContainerIds);
+    // Mirrors updateAllInGroupState's rejected-entry handling for the same
+    // {accepted, rejected} shape (PR #681 review #8): a 200 response can
+    // still carry per-container rejections (e.g. one chain member's own
+    // update raced and is no longer available), so success is never assumed
+    // just because the HTTP call resolved.
+    for (const rejected of response.rejected) {
+      if (isStaleContainerUpdateError(rejected.message)) {
+        continue;
+      }
+      toast.error(
+        args.t('containerComponents.actionToasts.groupUpdateRejected', {
+          name: rejected.containerName,
+          message: rejected.message,
+        }),
+      );
+    }
+    if (response.accepted.length > 0) {
+      toast.success(
+        args.t('containerComponents.confirmDialogs.dependencyGroup.successMessage', {
+          name: args.name,
+        }),
+      );
+    }
+    await args.loadContainers();
+  } catch (e: unknown) {
+    if (e instanceof ApiError && e.status === 409) {
+      toast.error(
+        args.t('containerComponents.confirmDialogs.dependencyGroup.staleChainTitle'),
+        args.t('containerComponents.confirmDialogs.dependencyGroup.staleChainDetail', {
+          name: args.name,
+        }),
+      );
+      return;
+    }
+    const msg = errorMessage(
+      e,
+      args.t('containerComponents.confirmDialogs.dependencyGroup.failedDetail', {
+        name: args.name,
+      }),
+    );
+    toast.error(args.t('containerComponents.confirmDialogs.dependencyGroup.failedTitle'), msg);
+  }
+}
+
+/**
+ * Fetches the dependency-chain preview for `target` and opens a confirm
+ * dialog listing the resolved update waves (#219). Calling
+ * previewUpdateChain/updateDependencyGroup here — the exact same pair the
+ * backend's own preview and dispatch endpoints share — is what keeps the
+ * dialog's wave list from ever drifting out of sync with what actually runs.
+ */
+async function confirmDependencyGroupUpdateState(args: {
+  containerActionsEnabled: boolean;
+  containerActionsDisabledReason: string;
+  target: ContainerActionTarget;
+  containerIdMap: Record<string, string>;
+  inputError: Ref<string | null>;
+  dependencyPreviewLoading: Ref<boolean>;
+  confirm: ReturnType<typeof useConfirmDialog>;
+  loadContainers: () => Promise<void>;
+  t: TranslateFn;
+}) {
+  if (!args.containerActionsEnabled) {
+    args.inputError.value = args.containerActionsDisabledReason;
+    return;
+  }
+  const { containerId, name } = resolveContainerActionTarget(args.target, args.containerIdMap);
+  if (!containerId) {
+    return;
+  }
+
+  args.dependencyPreviewLoading.value = true;
+  try {
+    const preview = await apiPreviewUpdateChain(containerId);
+    const totalContainers = preview.waves.reduce((sum, wave) => sum + wave.containers.length, 0);
+    // The exact container id set being previewed, forwarded as
+    // expectedContainerIds so the backend can bind the eventual update to
+    // this same chain rather than whatever it happens to be at accept time.
+    const expectedContainerIds = preview.waves.flatMap((wave) => wave.containers.map((c) => c.id));
+    const waveList = preview.waves
+      .map((wave, index) => {
+        const names = wave.containers
+          .map((c) => (c.actionKind === 'restart' ? `${c.name} (restart)` : c.name))
+          .join(', ');
+        return `${index + 1}. ${names}`;
+      })
+      .join('\n');
+
+    let message =
+      totalContainers > 1
+        ? args.t('containerComponents.confirmDialogs.dependencyGroup.message', {
+            name,
+            count: totalContainers - 1,
+          })
+        : args.t('containerComponents.confirmDialogs.dependencyGroup.messageSingle', { name });
+    if (waveList) {
+      message += args.t('containerComponents.confirmDialogs.dependencyGroup.waveList', {
+        list: waveList,
+      });
+    }
+    if (preview.warnings.cycles.length > 0) {
+      message += args.t('containerComponents.confirmDialogs.dependencyGroup.cycleWarning', {
+        cycles: preview.warnings.cycles.map((cycle) => cycle.join(' → ')).join('; '),
+      });
+    }
+    if (preview.warnings.unresolved.length > 0) {
+      message += args.t('containerComponents.confirmDialogs.dependencyGroup.unresolvedWarning');
+    }
+
+    args.confirm.require({
+      header: args.t('containerComponents.confirmDialogs.dependencyGroup.header'),
+      message,
+      rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: args.t('containerComponents.confirmDialogs.dependencyGroup.acceptLabel'),
+      severity: 'warn',
+      accept: () =>
+        runDependencyGroupUpdateState({
+          rootId: containerId,
+          name,
+          expectedContainerIds,
+          loadContainers: args.loadContainers,
+          t: args.t,
+        }),
+    });
+  } catch (e: unknown) {
+    const msg = errorMessage(
+      e,
+      args.t('containerComponents.confirmDialogs.dependencyGroup.previewFailedDetail', { name }),
+    );
+    args.inputError.value = msg;
+    const toast = useToast();
+    toast.error(
+      args.t('containerComponents.confirmDialogs.dependencyGroup.previewFailedTitle'),
+      msg,
+    );
+  } finally {
+    args.dependencyPreviewLoading.value = false;
   }
 }
 
@@ -1133,6 +1297,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
   );
 
   const recheckingContainerId = ref<string | null>(null);
+  const dependencyGroupPreviewLoading = ref(false);
   const actionInProgress = ref(new Map<string, ContainerActionKind>());
   const actionPending = ref<Map<string, Container>>(new Map());
   const actionPendingStartTimes = ref<Map<string, number>>(new Map());
@@ -1467,6 +1632,20 @@ export function useContainerActions(input: UseContainerActionsInput) {
     t: t as TranslateFn,
   });
 
+  async function confirmDependencyGroupUpdate(target: ContainerActionTarget) {
+    await confirmDependencyGroupUpdateState({
+      containerActionsEnabled: containerActionsEnabled.value,
+      containerActionsDisabledReason: containerActionsDisabledReason.value,
+      target,
+      containerIdMap: input.containerIdMap.value,
+      inputError: input.error,
+      dependencyPreviewLoading: dependencyGroupPreviewLoading,
+      confirm,
+      loadContainers: input.loadContainers,
+      t: t as TranslateFn,
+    });
+  }
+
   return {
     actionInProgress,
     actionPending,
@@ -1481,12 +1660,14 @@ export function useContainerActions(input: UseContainerActionsInput) {
     maturityMinAgeDaysInput: policy.maturityMinAgeDaysInput,
     maturityModeInput: policy.maturityModeInput,
     confirmDelete,
+    confirmDependencyGroupUpdate,
     confirmForceUpdate,
     confirmUpdate,
     confirmRollback,
     confirmRestart,
     confirmStop,
     containerPolicyTooltip: policy.containerPolicyTooltip,
+    dependencyGroupPreviewLoading,
     detailBackups: backups.detailBackups,
     detailComposePreview: preview.detailComposePreview,
     detailPreview: preview.detailPreview,

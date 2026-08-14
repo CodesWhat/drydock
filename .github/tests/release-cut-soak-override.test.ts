@@ -237,6 +237,32 @@ test('a too-short soak_override_reason hard-fails with a clear error', () => {
   expect(result.stdout).toContain('soak_override_reason must be at least 20 characters');
 });
 
+// The two cases above jump from 1 character straight to a 68-character reason,
+// so an off-by-one flip of `-lt 20` to `-le 20` would keep every one of them
+// green. These pin both sides of the boundary, after trimming.
+test('a soak_override_reason of exactly 20 characters after trimming opens the gate', () => {
+  const reason = 'x'.repeat(20);
+  const result = runSourceStep({
+    isPrerelease: false,
+    ageSeconds: THREE_DAYS,
+    soakOverrideReason: `  ${reason}  `,
+  });
+
+  expect(result.status).toBe(0);
+  expect(result.reasonFileContent).toBe(reason);
+});
+
+test('a soak_override_reason of 19 characters after trimming does not', () => {
+  const result = runSourceStep({
+    isPrerelease: false,
+    ageSeconds: THREE_DAYS,
+    soakOverrideReason: `  ${'x'.repeat(19)}  `,
+  });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).toContain('soak_override_reason must be at least 20 characters');
+});
+
 test('a real soak_override_reason bypasses the age gate with an auditable warning and summary', () => {
   const reason = 'rc.13 fleet soak passed on 2026-08-09; owner approved early GA ship.';
   const ageSeconds = THREE_DAYS + 3600;

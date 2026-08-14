@@ -77,11 +77,22 @@ export const ddDisplayName = 'dd.display.name';
 export const ddDisplayIcon = 'dd.display.icon';
 
 /**
+ * Optional custom label for a specific published port, shown in the UI's
+ * clickable port links. Comma-separated `<port>=<label>` pairs, e.g.
+ * `80=Web UI,443/tcp=Admin Console`. Bare port numbers default to /tcp.
+ */
+export const ddPortLabel = 'dd.port.label';
+
+/**
  * Optional list of triggers to include
  */
 export const ddActionInclude = 'dd.action.include';
 export const ddNotificationInclude = 'dd.notification.include';
-/** @deprecated Removed in v1.7.0 — use ddActionInclude or ddNotificationInclude */
+/**
+ * Removed in v1.7.0 — no longer resolved into action/notification trigger
+ * filtering. Still detected so a container carrying it gets a migration
+ * warning; use ddActionInclude or ddNotificationInclude instead.
+ */
 export const ddTriggerInclude = 'dd.trigger.include';
 
 /**
@@ -89,7 +100,11 @@ export const ddTriggerInclude = 'dd.trigger.include';
  */
 export const ddActionExclude = 'dd.action.exclude';
 export const ddNotificationExclude = 'dd.notification.exclude';
-/** @deprecated Removed in v1.7.0 — use ddActionExclude or ddNotificationExclude */
+/**
+ * Removed in v1.7.0 — no longer resolved into action/notification trigger
+ * filtering. Still detected so a container carrying it gets a migration
+ * warning; use ddActionExclude or ddNotificationExclude instead.
+ */
 export const ddTriggerExclude = 'dd.trigger.exclude';
 
 /**
@@ -149,3 +164,15 @@ export const ddRollbackWindow = 'dd.rollback.window';
  * Health polling interval in milliseconds (default: 10000 = 10s).
  */
 export const ddRollbackInterval = 'dd.rollback.interval';
+
+/**
+ * Comma-separated list of container names this container depends on.
+ * Overrides compose-derived `depends_on` detection entirely (no merge).
+ */
+export const ddDependsOn = 'dd.depends_on';
+
+/**
+ * Action to take on this container's dependents when it updates
+ * ('update' | 'restart', default: 'update').
+ */
+export const ddDependsOnAction = 'dd.depends_on.action';

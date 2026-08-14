@@ -115,6 +115,7 @@ describe('Component Router', () => {
           webhook: {
             url: 'https://hooks.example.com/path',
           },
+          cmd: 'curl https://hooks.example.com/secret-token',
           mode: 'simple',
         })),
       };
@@ -126,6 +127,7 @@ describe('Component Router', () => {
           host: '[REDACTED]',
         },
         webhook: '[REDACTED]',
+        cmd: '[REDACTED]',
         mode: 'simple',
       });
     });

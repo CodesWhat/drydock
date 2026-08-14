@@ -20,6 +20,11 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: isCI ? 'retain-on-failure' : 'off',
+    // The PWA service worker proxies /api fetches once active, and requests
+    // made from inside a service worker are invisible to page.route() — the
+    // mock-driven specs would intermittently see live responses instead of
+    // their fixtures. No spec exercises the SW itself, so block it outright.
+    serviceWorkers: 'block',
   },
 
   projects: [

@@ -16,6 +16,7 @@ import type {
 } from './container-update-operation.js';
 import {
   getMaturityStartMs,
+  getUpdateAgeMs,
   MATURITY_MIN_AGE_DAYS_MAX,
   MATURITY_MIN_AGE_DAYS_MIN,
   maturityMinAgeDaysToMilliseconds,
@@ -204,6 +205,7 @@ export interface Container {
   tagFamily?: string;
   tagPinInfo?: boolean;
   linkTemplate?: string;
+  portLabel?: string;
   link?: string;
   actionTriggerInclude?: string;
   actionTriggerExclude?: string;
@@ -213,6 +215,13 @@ export interface Container {
   triggerInclude?: string;
   /** @deprecated compat mirror. */
   triggerExclude?: string;
+  // Dependency-ordering fields (#219). Derived, not persisted independently —
+  // re-resolved from the container's labels/compose file every watch cycle,
+  // same pattern as actionTriggerInclude/includeTags above. See
+  // app/dependencies/dependency-graph.ts for how these are consumed.
+  dependsOn?: string[];
+  dependsOnSource?: 'label' | 'compose';
+  dependsOnAction?: 'update' | 'restart';
   tagPinned?: boolean;
   tagPinGated?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
@@ -235,6 +244,11 @@ export interface Container {
   updateMaturityLevel?: 'hot' | 'mature' | 'established';
   updateOperation?: ContainerUpdateOperationState;
   updateEligibility?: import('./update-eligibility.js').UpdateEligibility;
+  // List-view badge counts (#219, design §4) — attached only by the container
+  // list handler, derived from buildDependencyGraph over the whole fleet, not
+  // persisted. Full graph detail lives behind GET /containers/dependencies.
+  dependencyCount?: number;
+  dependentCount?: number;
   labels?: Record<string, string>;
   sourceRepo?: string;
   currentReleaseNotes?: ContainerReleaseNotes;
@@ -347,6 +361,7 @@ const schema = joi.object({
   tagFamily: joi.string(),
   tagPinInfo: joi.boolean(),
   linkTemplate: joi.string(),
+  portLabel: joi.string(),
   link: joi.string(),
   actionTriggerInclude: joi.string(),
   actionTriggerExclude: joi.string(),
@@ -354,6 +369,9 @@ const schema = joi.object({
   notificationTriggerExclude: joi.string(),
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
+  dependsOn: joi.array().items(joi.string()).optional(),
+  dependsOnSource: joi.string().valid('label', 'compose').optional(),
+  dependsOnAction: joi.string().valid('update', 'restart').optional(),
   tagPinned: joi.boolean(),
   tagPinGated: joi.boolean(),
   updatePolicy: joi.object({
@@ -710,11 +728,6 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
   return false;
 }
 
-function parseDateMs(value: string | undefined): number | undefined {
-  const timestampMs = Date.parse(value || '');
-  return Number.isFinite(timestampMs) ? timestampMs : undefined;
-}
-
 function resolveUiMaturityThresholdDays(): number {
   return resolveMaturityMinAgeDays(
     process.env[UI_MATURITY_THRESHOLD_DAYS_ENV],
@@ -722,26 +735,20 @@ function resolveUiMaturityThresholdDays(): number {
   );
 }
 
+/**
+ * Trust-aware "how old is this update" — delegates to the same resolved
+ * clock the eligibility gate (isUpdateSuppressed/computeUpdateEligibility)
+ * measures against, via getUpdateAgeMs. Previously blended firstSeenAt and
+ * result.publishedAt with a bare Math.min and no publishedAtTrusted check,
+ * so an untrusted early publishedAt (e.g. Docker Hub's `created` date) could
+ * make an update look older/more mature than it actually is (#556).
+ */
 function getRawUpdateAge(container: Container): number | undefined {
   if (!container.updateAvailable) {
     return undefined;
   }
 
-  const firstSeenAtMs = parseDateMs(container.firstSeenAt);
-  const publishedAtMs = parseDateMs(container.result?.publishedAt);
-  let startedAtMs: number | undefined;
-
-  if (firstSeenAtMs !== undefined && publishedAtMs !== undefined) {
-    startedAtMs = Math.min(firstSeenAtMs, publishedAtMs);
-  } else {
-    startedAtMs = firstSeenAtMs ?? publishedAtMs;
-  }
-
-  if (startedAtMs === undefined) {
-    return undefined;
-  }
-
-  return Math.max(0, Date.now() - startedAtMs);
+  return getUpdateAgeMs(container);
 }
 
 function getRawUpdateMaturityLevel(

@@ -58,7 +58,7 @@ Active deprecations and their removal timeline. Each entry includes the version 
 
 In v1.5.x the eligibility model classifies `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill says *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queues the update (the confirm modal lists the soft blocker and switches the accept label to *Update anyway*). This preserves the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
 
-In v1.7.0 these reasons become **hard** blockers: the Update button is locked when the labels filter out the action trigger, and the API rejects manual updates with the blocker's message. The labels then mean what the pill says: *this trigger does not handle this container*.
+These reasons are scheduled to become **hard** blockers later in the v1.7 cycle, shipping together with the per-action execution policy (which separates action authorization from automatic promotion so the manual-only escape hatch isn't removed on its own). Until that lands they remain soft and a confirmed manual update still works. Once hard, the Update button is locked when the labels filter out the action trigger, and the API rejects manual updates with the blocker's message. The labels then mean what the pill says: *this trigger does not handle this container*.
 
 **Migration:** If you currently rely on manual updates running through a trigger that the container's labels exclude, either (a) remove the `dd.action.exclude` / legacy `dd.trigger.exclude` label from the container, (b) add the trigger to the container's `dd.action.include` / legacy `dd.trigger.include` list, or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row tells you exactly which trigger / label combination is in conflict.
 
@@ -75,36 +75,6 @@ In v1.7.0 these reasons become **hard** blockers: the Update button is locked wh
 The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` uses the lightweight static binary (`/bin/healthcheck`) instead.
 
 **Migration:** Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](https://getdrydock.com/docs/monitoring).
-
----
-
-### Legacy trigger prefix inputs (`DD_TRIGGER_*`, `dd.trigger.*`)
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.5.0 |
-| **Removed in** | v1.7.0 |
-| **Affects** | Trigger configs using `DD_TRIGGER_*` env vars and container labels `dd.trigger.include` / `dd.trigger.exclude` |
-
-Legacy trigger prefixes are accepted as compatibility aliases while the trigger taxonomy moves to action/notification prefixes.
-
-Starting in v1.6.0, every detected `DD_TRIGGER_*` variable and deprecated `dd.trigger.*` label is logged at `error` level. This is an intentionally loud migration signal; the legacy inputs remain functional until their planned removal in v1.7.0.
-
-The `dd.trigger.include` / `dd.trigger.exclude` labels apply to both trigger categories as a shared fallback beneath `dd.action.include` / `dd.action.exclude` and `dd.notification.include` / `dd.notification.exclude`: for a given category, the legacy label is only consulted when that category's own scoped label is absent from the container. It is not merged with a scoped label that is present.
-
-**Migration:** Prefer `DD_ACTION_*` / `DD_NOTIFICATION_*` and `dd.action.*` / `dd.notification.*`.
-
-The migration CLI can rewrite legacy trigger prefixes for you:
-
-```bash
-# Preview changes
-node dist/index.js config migrate --source trigger --dry-run
-
-# Apply to specific files
-node dist/index.js config migrate --source trigger --file .env --file compose.yaml
-```
-
-The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_ACTION_*`, `dd.action.*`), which remain fully compatible.
 
 ---
 
@@ -125,6 +95,35 @@ Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` opts into the 
 **Migration:** Multi-agent deployments should set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` and re-point any affected Home Assistant references before v1.7.0 makes it the default.
 
 ## Removed compatibility behaviors
+
+### Legacy trigger prefix inputs (`DD_TRIGGER_*`, `dd.trigger.*`)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0 |
+| **Removed in** | v1.7.0 |
+| **Affects** | Trigger configs using `DD_TRIGGER_*` env vars and container labels `dd.trigger.include` / `dd.trigger.exclude` |
+
+`DD_TRIGGER_*` and `dd.trigger.*` were accepted as compatibility aliases while the trigger taxonomy moved to action/notification prefixes, and were logged at `error` level throughout v1.6.0 as a loud migration signal. Both are removed in v1.7.0:
+
+- **`DD_TRIGGER_*` environment variables now fail startup.** Any detected `DD_TRIGGER_*` variable raises a startup error that lists every offending variable with its exact `DD_ACTION_*` / `DD_NOTIFICATION_*` replacement (action for `docker`/`dockercompose`/`command`, notification for every other provider), plus the `config migrate --source trigger` command and a link to this page. Drydock does not start until every listed variable is renamed.
+- **`dd.trigger.include` / `dd.trigger.exclude` container labels no longer resolve to anything.** They stopped acting as a per-category fallback beneath `dd.action.include` / `dd.action.exclude` and `dd.notification.include` / `dd.notification.exclude`; only the scoped labels are read now. A container still carrying either legacy label logs an `error`-level warning (once per label key) and increments the `dd_legacy_input_total{source="label"}` counter, so a fleet that hasn't migrated its labels stays visible in the deprecation banner and Prometheus — the label is just no longer consulted for actual include/exclude filtering.
+
+**Migration:** Prefer `DD_ACTION_*` / `DD_NOTIFICATION_*` and `dd.action.*` / `dd.notification.*`.
+
+The migration CLI can rewrite legacy trigger prefixes for you:
+
+```bash
+# Preview changes
+node dist/index.js config migrate --source trigger --dry-run
+
+# Apply to specific files
+node dist/index.js config migrate --source trigger --file .env --file compose.yaml
+```
+
+The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_ACTION_*`, `dd.action.*`), which remain fully compatible. It runs as a standalone text-rewriting tool over local config files — it is unaffected by the runtime removal above and stays available indefinitely as the migration path off `DD_TRIGGER_*` / `dd.trigger.*`.
+
+---
 
 ### v1.6.0 configuration and authentication removals
 

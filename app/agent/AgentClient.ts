@@ -116,6 +116,10 @@ export interface DockerApiProxyResponse {
 
 const MAX_DOCKER_PROXY_RESPONSE_BYTES = 100 * 1024 * 1024;
 const PORTWING_DOCKER_PROXY_INACTIVITY_TIMEOUT_MS = 30_000;
+const AGENT_REQUEST_TIMEOUT_MS = 30_000;
+const SYNCHRONOUS_REMOTE_TRIGGER_TIMEOUT_MS = 65_000;
+const MAX_AGENT_JSON_BYTES = 16 * 1024 * 1024;
+const MAX_SSE_EVENT_BUFFER_BYTES = 16 * 1024 * 1024;
 
 function isStreamingDockerTarget(target: string): boolean {
   const path = target.split('?', 1)[0];
@@ -396,7 +400,7 @@ export class AgentClient {
   }
 
   private buildAxiosOptions(): AxiosRequestConfig {
-    const options: AxiosRequestConfig = {};
+    const options: AxiosRequestConfig = { maxRedirects: 0 };
 
     // Token mode (default): static X-Dd-Agent-Secret header, unchanged from
     // pre-ed25519 behavior. Ed25519 mode signs each request individually (see
@@ -461,9 +465,28 @@ export class AgentClient {
    * `path` is the exact origin-form request target placed on the wire:
    * escaped path plus the unmodified raw query string. Portwing signature v2
    * verifies those bytes verbatim, including query ordering and escaping.
-   * In token mode this just returns the static axiosOptions, unchanged.
+   * In token mode this uses the static authentication options. Ordinary JSON
+   * requests also receive finite transport and body limits.
    */
-  private buildRequestConfig(method: string, path: string, data?: unknown): AxiosRequestConfig {
+  private buildRequestConfig(
+    method: string,
+    path: string,
+    data?: unknown,
+    timeout = AGENT_REQUEST_TIMEOUT_MS,
+  ): AxiosRequestConfig {
+    return {
+      ...this.buildAuthenticatedRequestConfig(method, path, data),
+      timeout,
+      maxContentLength: MAX_AGENT_JSON_BYTES,
+      maxBodyLength: MAX_AGENT_JSON_BYTES,
+    };
+  }
+
+  private buildAuthenticatedRequestConfig(
+    method: string,
+    path: string,
+    data?: unknown,
+  ): AxiosRequestConfig {
     if (!this.ed25519PrivateKey || !this.config.signingkeyid) {
       return this.axiosOptions;
     }
@@ -1145,10 +1168,20 @@ export class AgentClient {
     return remainder;
   }
 
-  private attachStreamHandlers(stream: NodeJS.EventEmitter) {
+  private attachStreamHandlers(stream: NodeJS.EventEmitter & { destroy?: () => void }) {
     const decoder = new StringDecoder('utf8');
     let buffer = '';
+    let queuedBytes = 0;
     let sseProcessing = Promise.resolve();
+
+    const failForBufferOverflow = () => {
+      this.activeSseStream = undefined;
+      stream.destroy?.();
+      this.log.error(
+        `SSE event buffer exceeded the ${MAX_SSE_EVENT_BUFFER_BYTES}-byte limit. Reconnecting...`,
+      );
+      this.scheduleReconnect();
+    };
 
     stream.on('data', (chunk: Buffer) => {
       if (this.stopped || this.activeSseStream !== stream) {
@@ -1158,9 +1191,19 @@ export class AgentClient {
       if (!decodedChunk) {
         return;
       }
+      const decodedBytes = Buffer.byteLength(decodedChunk, 'utf8');
+      if (
+        Buffer.byteLength(buffer, 'utf8') + queuedBytes + decodedBytes >
+        MAX_SSE_EVENT_BUFFER_BYTES
+      ) {
+        failForBufferOverflow();
+        return;
+      }
+      queuedBytes += decodedBytes;
 
       sseProcessing = sseProcessing
         .then(async () => {
+          queuedBytes = Math.max(0, queuedBytes - decodedBytes);
           if (this.stopped || this.activeSseStream !== stream) {
             return;
           }
@@ -1201,7 +1244,7 @@ export class AgentClient {
       method: 'get',
       url: `${this.baseUrl}/api/events`,
       responseType: 'stream',
-      ...this.buildRequestConfig('GET', '/api/events'),
+      ...this.buildAuthenticatedRequestConfig('GET', '/api/events'),
     })
       .then((response) => {
         if (this.stopped) {
@@ -1989,7 +2032,14 @@ export class AgentClient {
       await axios.post(
         `${this.baseUrl}${target}`,
         payload,
-        this.buildRequestConfig('POST', target, payload),
+        this.buildRequestConfig(
+          'POST',
+          target,
+          payload,
+          REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)
+            ? AGENT_REQUEST_TIMEOUT_MS
+            : SYNCHRONOUS_REMOTE_TRIGGER_TIMEOUT_MS,
+        ),
       );
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {
         this.markPendingFreshState(container.id);
@@ -2024,7 +2074,14 @@ export class AgentClient {
       await axios.post(
         `${this.baseUrl}${target}`,
         body,
-        this.buildRequestConfig('POST', target, body),
+        this.buildRequestConfig(
+          'POST',
+          target,
+          body,
+          REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)
+            ? AGENT_REQUEST_TIMEOUT_MS
+            : SYNCHRONOUS_REMOTE_TRIGGER_TIMEOUT_MS,
+        ),
       );
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {
         containers.forEach(({ id }) => this.markPendingFreshState(id));

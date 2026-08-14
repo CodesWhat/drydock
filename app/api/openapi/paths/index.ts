@@ -12,6 +12,7 @@ import {
 import { authPaths } from './auth.js';
 import { componentReadPaths } from './component-read.js';
 import { containerPaths } from './containers.js';
+import { dependencyGroupPaths } from './dependency-groups.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
 import { portwingPaths } from './portwing.js';
 import { statsPaths } from './stats.js';
@@ -419,6 +420,7 @@ export const openApiPaths = {
   },
   ...containerPaths,
   ...statsPaths,
+  ...dependencyGroupPaths,
   '/api/v1/operations/{id}/cancel': {
     post: {
       tags: ['Containers', 'Actions'],

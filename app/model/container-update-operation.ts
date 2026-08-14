@@ -9,6 +9,7 @@ export const CONTAINER_UPDATE_OPERATION_STATUSES = [
   'rolled-back',
   'failed',
   'expired',
+  'skipped-dependency',
 ] as const;
 
 export type ContainerUpdateOperationStatus = (typeof CONTAINER_UPDATE_OPERATION_STATUSES)[number];
@@ -23,6 +24,7 @@ export const TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES = [
   'rolled-back',
   'failed',
   'expired',
+  'skipped-dependency',
 ] as const;
 
 export type TerminalContainerUpdateOperationStatus =
@@ -54,6 +56,7 @@ export const CONTAINER_UPDATE_OPERATION_PHASES = [
   'rollback-deferred',
   'rollback-failed',
   'expired',
+  'skipped-dependency',
 ] as const;
 
 export type ContainerUpdateOperationPhase = (typeof CONTAINER_UPDATE_OPERATION_PHASES)[number];
@@ -123,11 +126,22 @@ export const EXPIRED_CONTAINER_UPDATE_OPERATION_PHASES = ['expired'] as const;
 export type ExpiredContainerUpdateOperationPhase =
   (typeof EXPIRED_CONTAINER_UPDATE_OPERATION_PHASES)[number];
 
+// Non-notifying terminal phase used when a dependency-ordered wave dispatch
+// (v1.7 Phase 6.1, #219) skips a container because an upstream dependency in
+// its chain failed or is deferred by its own maintenance window this cycle.
+// Deliberately NOT a member of FAILED_* so no false "update failed" lifecycle
+// event fires for a container that was never attempted (see design §3).
+export const SKIPPED_DEPENDENCY_CONTAINER_UPDATE_OPERATION_PHASES = ['skipped-dependency'] as const;
+
+export type SkippedDependencyContainerUpdateOperationPhase =
+  (typeof SKIPPED_DEPENDENCY_CONTAINER_UPDATE_OPERATION_PHASES)[number];
+
 export type TerminalContainerUpdateOperationPhase =
   | SucceededContainerUpdateOperationPhase
   | RolledBackContainerUpdateOperationPhase
   | FailedContainerUpdateOperationPhase
-  | ExpiredContainerUpdateOperationPhase;
+  | ExpiredContainerUpdateOperationPhase
+  | SkippedDependencyContainerUpdateOperationPhase;
 
 export type TerminalContainerUpdateOperationPhaseForStatus<
   TStatus extends TerminalContainerUpdateOperationStatus,
@@ -137,13 +151,16 @@ export type TerminalContainerUpdateOperationPhaseForStatus<
     ? RolledBackContainerUpdateOperationPhase
     : TStatus extends 'expired'
       ? ExpiredContainerUpdateOperationPhase
-      : FailedContainerUpdateOperationPhase;
+      : TStatus extends 'skipped-dependency'
+        ? SkippedDependencyContainerUpdateOperationPhase
+        : FailedContainerUpdateOperationPhase;
 
 const DEFAULT_TERMINAL_PHASE_BY_STATUS = {
   succeeded: 'succeeded',
   'rolled-back': 'rolled-back',
   failed: 'failed',
   expired: 'expired',
+  'skipped-dependency': 'skipped-dependency',
 } as const satisfies {
   [TStatus in TerminalContainerUpdateOperationStatus]: TerminalContainerUpdateOperationPhaseForStatus<TStatus>;
 };
@@ -259,6 +276,15 @@ export function isExpiredContainerUpdateOperationPhase(
   );
 }
 
+export function isSkippedDependencyContainerUpdateOperationPhase(
+  value: unknown,
+): value is SkippedDependencyContainerUpdateOperationPhase {
+  return (
+    typeof value === 'string' &&
+    (SKIPPED_DEPENDENCY_CONTAINER_UPDATE_OPERATION_PHASES as readonly string[]).includes(value)
+  );
+}
+
 export function isTerminalContainerUpdateOperationPhase(
   value: unknown,
 ): value is TerminalContainerUpdateOperationPhase {
@@ -266,7 +292,8 @@ export function isTerminalContainerUpdateOperationPhase(
     isSucceededContainerUpdateOperationPhase(value) ||
     isRolledBackContainerUpdateOperationPhase(value) ||
     isFailedContainerUpdateOperationPhase(value) ||
-    isExpiredContainerUpdateOperationPhase(value)
+    isExpiredContainerUpdateOperationPhase(value) ||
+    isSkippedDependencyContainerUpdateOperationPhase(value)
   );
 }
 
@@ -299,6 +326,8 @@ export function isTerminalContainerUpdateOperationPhaseForStatus<
       return isFailedContainerUpdateOperationPhase(phase);
     case 'expired':
       return isExpiredContainerUpdateOperationPhase(phase);
+    case 'skipped-dependency':
+      return isSkippedDependencyContainerUpdateOperationPhase(phase);
     default:
       return assertNever(status);
   }
@@ -318,6 +347,10 @@ export function getDefaultTerminalContainerUpdateOperationPhase<
       return DEFAULT_TERMINAL_PHASE_BY_STATUS.failed as TerminalContainerUpdateOperationPhaseForStatus<TStatus>;
     case 'expired':
       return DEFAULT_TERMINAL_PHASE_BY_STATUS.expired as TerminalContainerUpdateOperationPhaseForStatus<TStatus>;
+    case 'skipped-dependency':
+      return DEFAULT_TERMINAL_PHASE_BY_STATUS[
+        'skipped-dependency'
+      ] as TerminalContainerUpdateOperationPhaseForStatus<TStatus>;
     default:
       return assertNever(status);
   }

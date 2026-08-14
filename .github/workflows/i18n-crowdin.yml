@@ -8,6 +8,7 @@ on:
     # that is not supposed to take independent commits.
     branches: ['dev/**', main]
     paths:
+      - 'README.md'
       - 'ui/src/locales/en/**'
       - 'crowdin.yml'
       - '.github/workflows/i18n-crowdin.yml'
@@ -89,11 +90,11 @@ jobs:
           download_translations: true
           localization_branch_name: l10n_crowdin
           create_pull_request: true
-          pull_request_title: "🔧 chore(i18n): sync translations from Crowdin"
+          pull_request_title: "chore(i18n): sync translations from Crowdin"
           pull_request_body: "Automated sync from Crowdin. Review wording, then merge."
           pull_request_labels: "translations,crowdin"
           pull_request_base_branch_name: ${{ steps.base.outputs.name }}
-          commit_message: "🔧 chore(i18n): sync translations from Crowdin"
+          commit_message: "chore(i18n): sync translations from Crowdin"
         env:
           # The crowdin/github-action entrypoint runs `git config --global`
           # (safe.directory, then the commit user) but the container inherits

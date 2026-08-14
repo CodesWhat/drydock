@@ -22,6 +22,7 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | `DD_WATCHER_{watcher_name}_AUTH_USER` | ⚪ | Username for remote Docker API basic auth (HTTPS only) | | |
 | `DD_WATCHER_{watcher_name}_CERTFILE` | ⚪ | Certificate pem file path (only for TLS connection) | | |
 | `DD_WATCHER_{watcher_name}_CRON` | ⚪ | Scheduling options | [Valid CRON expression](https://crontab.guru/) | `0 */6 * * *` (every 6 hours) |
+| `DD_WATCHER_{watcher_name}_DISCOVERY_SETTLE_MS` | ⚪ | How long a newly-discovered container must remain visible before drydock registers it (store/triggers/UI) — rides out Docker's brief rename-alias window during container recreation. `0` disables settling entirely | integer ms (`>= 0`) | `30000` (30 seconds) |
 | `DD_WATCHER_{watcher_name}_HOST` | ⚪ | Docker hostname or ip of the host to watch | | |
 | `DD_WATCHER_{watcher_name}_JITTER` | ⚪ | Jitter in ms applied to the CRON to better distribute the load on the registries (on the Hub at the first place) | > 0 | `60000` (1 minute) |
 | `DD_WATCHER_{watcher_name}_KEYFILE` | ⚪ | Key pem file path (only for TLS connection) | | |
@@ -792,6 +793,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.display.icon` | ⚪ | Custom display icon for the container | Valid [Fontawesome Icon](https://fontawesome.com/), [Homarr Labs Icon](https://dashboardicons.com/), [Selfh.st Icon](https://selfh.st/icons/), or [Simple Icon](https://simpleicons.org/) (see details below). `mdi:` icons are auto-resolved but not recommended. | `fab fa-docker` |
 | `dd.display.picture` | ⚪ | Custom entity picture URL for Home Assistant MQTT integration. When set to an HTTP/HTTPS URL, overrides the icon-derived `entity_picture` in HASS discovery payloads. | Valid HTTP or HTTPS URL | |
 | `dd.display.name` | ⚪ | Custom display name for the container | Valid String | Container name |
+| `dd.port.label` | ⚪ | Custom label for a specific published port, shown on the clickable port links in the UI's container list and detail views | Comma-separated `<port>=<label>` pairs, e.g. `80=Web UI,443/tcp=Admin Console`. Bare port numbers default to `/tcp`. | Raw port mapping (e.g. `8080->80/tcp`) |
 | `dd.group` | ⚪ | Durable server-side group name for stack/group views (falls back to `com.docker.compose.project`, then `com.docker.stack.namespace`). A browser-only manual override can temporarily supersede this presentation without changing the label. | Valid String | |
 | `dd.inspect.tag.path` | ⚪ | Docker inspect path used to derive a local semver tag. The extracted value overwrites the image tag (for update detection) **and** is written to `image.softwareVersion` (for the Version column). Use `dd.inspect.tag.version-only=true` to route it to `image.softwareVersion` only. | Slash-separated path in `docker inspect` output | |
 | `dd.inspect.tag.version-only` | ⚪ | When `dd.inspect.tag.path` is set, route the extracted value to `image.softwareVersion` only instead of overwriting the image tag. Default behavior (tag overwrite) is unchanged when this label is absent or `false`. | `true`, `false` | `false` |
@@ -810,8 +812,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.action.include` | ⚪ | Only allow specific action triggers to automatically execute for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.notification.exclude` | ⚪ | Exclude specific notification triggers from this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.notification.include` | ⚪ | Only allow specific notification triggers for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
-| `dd.trigger.exclude` | ⚪ | **Deprecated** — use `dd.action.exclude` or `dd.notification.exclude` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
-| `dd.trigger.include` | ⚪ | **Deprecated** — use `dd.action.include` or `dd.notification.include` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.exclude` | ⚪ | **Removed in v1.7.0** — no longer resolved; use `dd.action.exclude` or `dd.notification.exclude` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
+| `dd.trigger.include` | ⚪ | **Removed in v1.7.0** — no longer resolved; use `dd.action.include` or `dd.notification.include` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.watch.digest` | ⚪ | Watch this container digest. Missing values are auto-enabled for both mutable floating tags and fully-pinned specific semver tags. | Valid Boolean | Automatic |
 | `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
 | `dd.compose.file` | ⚪ | Path to the docker-compose.yml file for compose-native updates (also configurable via trigger `COMPOSEFILELABEL`) | file path | |
@@ -824,11 +826,21 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.rollback.auto` | ⚪ | Automatically rollback the container if the health check fails after an update | Valid Boolean | `false` |
 | `dd.rollback.window` | ⚪ | Health monitoring window in milliseconds after an update (how long to watch for failures) | integer | `300000` |
 | `dd.rollback.interval` | ⚪ | Health polling interval in milliseconds during the rollback window | integer | `10000` |
+| `dd.depends_on` | ⚪ | Comma-separated list of container names this container depends on. Overrides compose-file `depends_on` detection entirely (no merge) — when set, drydock uses exactly this list. Setting it to an empty value declares "no dependencies" and also suppresses compose detection. A self-reference is dropped with a warning. | CSV container names | Detected from the compose file's `depends_on` when the container is compose-managed; otherwise none |
+| `dd.depends_on.action` | ⚪ | What to do with this container's dependents when it updates. Applies to both label-declared and compose-detected dependencies. An unrecognized value falls back to `update` with a warning. | `update`, `restart` | `update` |
 | `dd.update.mode` | ⚪ | Update routing mode for infrastructure containers (socket proxies, etc.) | `infrastructure` | standard update path |
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 
 `dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
+
+<Callout type="info" title="Dependency-ordered updates">
+
+`dd.depends_on` and `dd.depends_on.action` don't just record a relationship — they change dispatch order. Any bulk update (a manual multi-select, a group update, a maintenance-window batch) is partitioned into topological "waves" before dispatch: a container never starts updating until every container it depends on has finished. Dependents configured with `dd.depends_on.action=restart` are restarted (not re-pulled) once their dependency's update completes; if an earlier wave fails outright, dependents that never got a chance to run land in a `skipped-dependency` status rather than silently vanishing from the operations list. A dependency cycle is never a deadlock — cycle members are grouped into one unordered wave and dispatched together.
+
+Inspect the resolved graph with `GET /api/v1/containers/dependencies`, dry-run the wave order for one container's chain with `POST /api/v1/containers/{id}/update-chain-preview`, or bulk-accept that whole chain with `POST /api/v1/dependency-groups/{rootId}/update`. In the UI, the "Update dependency chain" action previews the same wave order — including any cycle or unresolved-target warnings — before you confirm.
+
+</Callout>
 
 <Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. By default the extracted value overwrites the image tag (enabling update detection against the embedded semver) and is also written to `image.softwareVersion` (shown in the Version column). Add `dd.inspect.tag.version-only=true` when you want the Version column populated without changing how drydock matches updates. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
 
@@ -850,7 +862,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 <Callout type="warn" title="dd.source.repo container label can shadow a trusted OCI source label">Adding a `dd.source.repo` label directly to a running container (rather than baking it into the image) silently downgrades source resolution from trusted to untrusted when the image already carries a trusted `org.opencontainers.image.source` (or `org.opencontainers.image.url`) OCI label. The downgrade means the GHCR token fallback is not used for release-notes lookups on that container. Drydock logs a `warn`-level line each watch cycle whenever a `dd.source.repo` container label shadows a trusted OCI source label, naming both repos. If you rely on the GHCR token fallback, remove the `dd.source.repo` container label and let the OCI label resolve the source repo instead.</Callout>
 
-<Callout type="info">**`dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) control automatic trigger dispatch.** These labels filter which triggers fire automatically when an update is detected (e.g., route notifications to specific Slack channels or restrict which docker trigger auto-updates this container). They match against the trigger **name** (e.g., `alerts`) or **full ID** (e.g., `smtp.alerts`). Manual updates from the UI use [agent-based matching](/docs/configuration/agents) instead — the update is routed to the agent that discovered the container. The legacy `dd.trigger.include` / `dd.trigger.exclude` labels still work but are deprecated — see [Deprecation Schedule](/docs/deprecations#legacy-trigger-labels).</Callout>
+<Callout type="info">**`dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) control automatic trigger dispatch.** These labels filter which triggers fire automatically when an update is detected (e.g., route notifications to specific Slack channels or restrict which docker trigger auto-updates this container). They match against the trigger **name** (e.g., `alerts`) or **full ID** (e.g., `smtp.alerts`). Manual updates from the UI use [agent-based matching](/docs/configuration/agents) instead — the update is routed to the agent that discovered the container. The legacy `dd.trigger.include` / `dd.trigger.exclude` labels were removed in v1.7.0 and no longer affect trigger routing — see [Deprecation Schedule](/docs/deprecations#legacy-trigger-labels).</Callout>
 
 <Callout type="info">**Update hooks** (`dd.hook.pre` / `dd.hook.post`) let you run arbitrary shell commands before and after a container update. If `dd.hook.pre.abort` is `true` (the default) and the pre-hook exits non-zero, the update is cancelled. Use `dd.hook.timeout` to control how long the hook is allowed to run before being killed.</Callout>
 
@@ -1206,6 +1218,33 @@ docker run -d --name mariadb --label 'dd.display.name=Maria DB' --label 'dd.disp
 </Tab>
 </Tabs>
 
+### Label a specific port
+
+You can attach a custom label to one of a container's published ports. It's shown on the clickable port link in the container list and detail views instead of the raw `hostPort->containerPort/protocol` mapping. Keys are `<port>=<label>` pairs, comma-separated for multiple ports; a bare port number matches `/tcp` by default.
+
+<Tabs items={["Docker Compose (Port Label)", "Docker (Port Label)"]}>
+<Tab value="Docker Compose (Port Label)">
+
+```yaml
+services:
+
+  traefik:
+    image: traefik:3
+    ports:
+      - "80:80"
+      - "8443:443"
+    labels:
+      - dd.port.label=80=Web UI,443=Admin Console
+```
+
+</Tab>
+<Tab value="Docker (Port Label)">
+```bash
+docker run -d --name traefik -p 80:80 -p 8443:443 --label 'dd.port.label=80=Web UI,443=Admin Console' traefik:3
+```
+</Tab>
+</Tabs>
+
 ### Assign different triggers to containers
 
 You can assign different triggers and thresholds on a per container basis.
@@ -1256,6 +1295,9 @@ Each monitored container exposes runtime details sourced from Docker inspect and
 | `details.ports` | `string[]` | Published port mappings (e.g. `8080->80/tcp`, `443/tcp`) |
 | `details.volumes` | `string[]` | Volume and bind mounts (e.g. `myvolume:/data`, `/host/path:/container/path:ro`) |
 | `details.env` | `{ key, value }[]` | Environment variables set on the container |
+| `details.startedAt` | `string (ISO 8601)` | When the container's current run started (`State.StartedAt` from Docker inspect). Drives the live "Up …" uptime display in the container list and detail views; absent for stopped containers. |
+
+In the UI, each host-published port in `details.ports` renders as a clickable link (opened in a new tab). The target scheme is auto-detected from the container-side port — `443` and `8443` get `https://`, everything else gets `http://` — and the host is the published `HostIp` when it's a real bindable address, falling back to the agent's configured host for agent-watched containers, or the browser's own hostname otherwise. Internal-only (unpublished) ports render as plain text. Use [`dd.port.label`](#labels) to give a port a friendly display name instead of the raw mapping.
 
 ## Container Status Fields
 

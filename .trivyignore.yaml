@@ -1,0 +1,11 @@
+misconfigurations:
+  # Entrypoint drops privileges at runtime via su-exec (see Docker.entrypoint.sh
+  # and the checkov CKV_DOCKER_3 skip on Dockerfile line 1) — no static USER
+  # instruction is needed since the container never runs application code as
+  # root past entrypoint startup.
+  - id: AVD-DS-0002
+    paths:
+      - "Dockerfile"
+    statement: >-
+      Entrypoint uses su-exec for runtime privilege drop; no static USER
+      instruction needed.

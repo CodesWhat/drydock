@@ -13,6 +13,7 @@ const {
   mockStatSync,
   mockGetUpdateMode,
   mockGetAgent,
+  mockRestartDependentContainer,
   agentFixture,
 } = vi.hoisted(() => {
   const agentFixture = { name: 'edge-2', isRegisteringComponents: false };
@@ -29,6 +30,7 @@ const {
     mockStatSync: vi.fn(() => ({ isSocket: () => false })),
     mockGetUpdateMode: vi.fn(() => 'auto' as const),
     mockGetAgent: vi.fn(),
+    mockRestartDependentContainer: vi.fn(),
     agentFixture,
   };
 });
@@ -64,6 +66,10 @@ vi.mock('node:fs', () => ({
   default: {
     statSync: mockStatSync,
   },
+}));
+
+vi.mock('./dependency-restart.js', () => ({
+  restartDependentContainer: mockRestartDependentContainer,
 }));
 
 import {
@@ -741,6 +747,525 @@ describe('request-update', () => {
       lastError: 'pull denied',
     });
     expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith('op-2', expect.anything());
+  });
+
+  describe('runAcceptedContainerUpdates dependency-ordered wave dispatch (#219)', () => {
+    function createDependentContainer(overrides: Record<string, unknown> = {}) {
+      return createContainer({ watcher: 'local', ...overrides });
+    }
+
+    test('defers a dependent to a later wave than its dependency, regardless of accepted[] array order', async () => {
+      const dbGate = deferred();
+      const apiGate = deferred();
+      const started: string[] = [];
+      const dbTrigger = vi.fn(async () => {
+        started.push('db');
+        await dbGate.promise;
+      });
+      const apiTrigger = vi.fn(async () => {
+        started.push('api');
+        await apiGate.promise;
+      });
+
+      // api is listed FIRST in accepted[] but depends on db — wave order must
+      // still dispatch db before api.
+      const run = runAcceptedContainerUpdates([
+        {
+          operationId: 'op-api',
+          container: createDependentContainer({
+            id: 'c-api',
+            name: 'api',
+            dependsOn: ['db'],
+            dependsOnSource: 'label',
+          }),
+          trigger: { type: 'docker', trigger: apiTrigger },
+        },
+        {
+          operationId: 'op-db',
+          container: createDependentContainer({ id: 'c-db', name: 'db' }),
+          trigger: { type: 'docker', trigger: dbTrigger },
+        },
+      ]);
+
+      await flushAsyncWork();
+      expect(started).toEqual(['db']);
+      expect(apiTrigger).not.toHaveBeenCalled();
+
+      dbGate.resolve();
+      await flushAsyncWork();
+      await flushAsyncWork();
+      expect(started).toEqual(['db', 'api']);
+
+      apiGate.resolve();
+      await expect(run).resolves.toBeUndefined();
+    });
+
+    test('a graph with no dd.depends_on edges dispatches as a single wave (no-op regression guard)', async () => {
+      const gates = [deferred(), deferred()];
+      const started: string[] = [];
+      const accepted = gates.map((gate, index) => ({
+        operationId: `op-${index}`,
+        container: createDependentContainer({ id: `c-${index}`, name: `app-${index}` }),
+        trigger: {
+          type: 'docker',
+          trigger: vi.fn(async () => {
+            started.push(`op-${index}`);
+            await gate.promise;
+          }),
+        },
+      }));
+
+      const run = runAcceptedContainerUpdates(accepted);
+      await flushAsyncWork();
+      // Both dispatch immediately together — no waiting for one another.
+      expect(started).toEqual(['op-0', 'op-1']);
+
+      for (const gate of gates) gate.resolve();
+      await expect(run).resolves.toBeUndefined();
+    });
+
+    test('an upstream failure skips only its transitive dependents, leaving unrelated containers in the same batch unaffected', async () => {
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        status: 'queued',
+        phase: 'queued',
+      }));
+      const dbTrigger = vi.fn().mockRejectedValue(new Error('db pull denied'));
+      const apiTrigger = vi.fn().mockResolvedValue(undefined);
+      const unrelatedTrigger = vi.fn().mockResolvedValue(undefined);
+
+      await expect(
+        runAcceptedContainerUpdates([
+          {
+            operationId: 'op-db',
+            container: createDependentContainer({ id: 'c-db', name: 'db' }),
+            trigger: { type: 'docker', trigger: dbTrigger },
+          },
+          {
+            operationId: 'op-api',
+            container: createDependentContainer({
+              id: 'c-api',
+              name: 'api',
+              dependsOn: ['db'],
+              dependsOnSource: 'label',
+            }),
+            trigger: { type: 'docker', trigger: apiTrigger },
+          },
+          {
+            operationId: 'op-unrelated',
+            container: createDependentContainer({ id: 'c-unrelated', name: 'unrelated' }),
+            trigger: { type: 'docker', trigger: unrelatedTrigger },
+          },
+        ]),
+      ).rejects.toThrow('db pull denied');
+
+      expect(dbTrigger).toHaveBeenCalled();
+      expect(apiTrigger).not.toHaveBeenCalled();
+      expect(unrelatedTrigger).toHaveBeenCalled();
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-api', {
+        status: 'skipped-dependency',
+        phase: 'skipped-dependency',
+        skippedDependencyReason: 'upstream-failed',
+        blockingContainerId: 'c-db',
+        blockingOperationId: 'op-db',
+        lastError: 'Skipped: upstream dependency c-db failed (operation op-db)',
+      });
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith('op-unrelated', expect.anything());
+    });
+
+    test('skip propagates transitively across multiple wave levels (db -> api -> proxy)', async () => {
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        status: 'queued',
+        phase: 'queued',
+      }));
+      const dbTrigger = vi.fn().mockRejectedValue(new Error('db pull denied'));
+      const apiTrigger = vi.fn();
+      const proxyTrigger = vi.fn();
+
+      await expect(
+        runAcceptedContainerUpdates([
+          {
+            operationId: 'op-db',
+            container: createDependentContainer({ id: 'c-db', name: 'db' }),
+            trigger: { type: 'docker', trigger: dbTrigger },
+          },
+          {
+            operationId: 'op-api',
+            container: createDependentContainer({
+              id: 'c-api',
+              name: 'api',
+              dependsOn: ['db'],
+              dependsOnSource: 'label',
+            }),
+            trigger: { type: 'docker', trigger: apiTrigger },
+          },
+          {
+            operationId: 'op-proxy',
+            container: createDependentContainer({
+              id: 'c-proxy',
+              name: 'proxy',
+              dependsOn: ['api'],
+              dependsOnSource: 'label',
+            }),
+            trigger: { type: 'docker', trigger: proxyTrigger },
+          },
+        ]),
+      ).rejects.toThrow('db pull denied');
+
+      expect(apiTrigger).not.toHaveBeenCalled();
+      expect(proxyTrigger).not.toHaveBeenCalled();
+      // Both descendants attribute the skip to the ORIGINAL failure (db), not
+      // to their immediate (also-skipped) parent.
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-api',
+        expect.objectContaining({ blockingContainerId: 'c-db', blockingOperationId: 'op-db' }),
+      );
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-proxy',
+        expect.objectContaining({ blockingContainerId: 'c-db', blockingOperationId: 'op-db' }),
+      );
+    });
+
+    test('dependsOnAction=restart dispatches via the dependency-chain restart primitive instead of trigger.trigger()', async () => {
+      mockRestartDependentContainer.mockResolvedValue(undefined);
+      const triggerFn = vi.fn().mockResolvedValue(undefined);
+
+      await runAcceptedContainerUpdates([
+        {
+          operationId: 'op-tdarr',
+          container: createDependentContainer({
+            id: 'c-tdarr',
+            name: 'tdarr-node',
+            dependsOn: ['db'],
+            dependsOnSource: 'label',
+            dependsOnAction: 'restart',
+            updateAvailable: false,
+          }),
+          trigger: { type: 'docker', trigger: triggerFn },
+        },
+        {
+          operationId: 'op-db',
+          container: createDependentContainer({ id: 'db', name: 'db' }),
+          trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+        },
+      ]);
+
+      expect(mockRestartDependentContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c-tdarr' }),
+      );
+      expect(triggerFn).not.toHaveBeenCalled();
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-tdarr', {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+    });
+
+    test('preserves restart-only dispatch when an upstream dependency was rejected during admission', async () => {
+      mockRestartDependentContainer.mockResolvedValue(undefined);
+      const triggerFn = vi.fn().mockResolvedValue(undefined);
+      const db = createDependentContainer({
+        id: 'db',
+        name: 'db',
+        updateAvailable: false,
+      });
+      const sidecar = createDependentContainer({
+        id: 'sidecar',
+        name: 'sidecar',
+        dependsOn: ['db'],
+        dependsOnSource: 'label',
+        dependsOnAction: 'restart',
+        updateAvailable: false,
+      });
+
+      await runAcceptedContainerUpdates(
+        [
+          {
+            operationId: 'op-sidecar',
+            container: sidecar,
+            trigger: { type: 'docker', trigger: triggerFn },
+          },
+        ],
+        { dependencyContext: [db, sidecar] },
+      );
+
+      expect(mockRestartDependentContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'sidecar' }),
+      );
+      expect(triggerFn).not.toHaveBeenCalled();
+    });
+
+    test('rejects every transitive dependent when an upstream operation is already active', async () => {
+      mockGetActiveOperationByContainerId.mockImplementation((id: string) =>
+        id === 'db' ? { status: 'in-progress' } : undefined,
+      );
+      const triggerFn = vi.fn().mockResolvedValue(undefined);
+      const db = createDependentContainer({ id: 'db', name: 'db' });
+      const api = createDependentContainer({
+        id: 'api',
+        name: 'api',
+        dependsOn: ['db'],
+        dependsOnSource: 'label',
+      });
+      const sidecar = createDependentContainer({
+        id: 'sidecar',
+        name: 'sidecar',
+        dependsOn: ['api'],
+        dependsOnSource: 'label',
+        dependsOnAction: 'restart',
+        updateAvailable: false,
+      });
+
+      const result = await requestContainerUpdates([db, api, sidecar], {
+        trigger: {
+          type: 'docker',
+          trigger: triggerFn,
+        },
+      });
+      await flushAsyncWork();
+
+      expect(result.accepted).toEqual([]);
+      expect(result.rejected).toEqual([
+        expect.objectContaining({ container: db, statusCode: 409 }),
+        expect.objectContaining({ container: api, statusCode: 409 }),
+        expect.objectContaining({ container: sidecar, statusCode: 409 }),
+      ]);
+      expect(triggerFn).not.toHaveBeenCalled();
+      expect(mockRestartDependentContainer).not.toHaveBeenCalled();
+    });
+
+    test('dependsOnAction=restart with no resolved dependsOn edge dispatches through the normal trigger instead (PR #681 review #2)', async () => {
+      const triggerFn = vi.fn().mockResolvedValue(undefined);
+
+      await runAcceptedContainerUpdates([
+        {
+          operationId: 'op-orphan',
+          container: createDependentContainer({
+            id: 'c-orphan',
+            name: 'orphan',
+            dependsOnAction: 'restart',
+            updateAvailable: false,
+          }),
+          trigger: { type: 'docker', trigger: triggerFn },
+        },
+      ]);
+
+      expect(triggerFn).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-orphan' }), {
+        operationId: 'op-orphan',
+      });
+      expect(mockRestartDependentContainer).not.toHaveBeenCalled();
+    });
+
+    test('dependsOnAction=restart with its own pending update dispatches through the normal trigger instead of restarting (PR #681 review #3)', async () => {
+      const dbTrigger = vi.fn().mockResolvedValue(undefined);
+      const tdarrTrigger = vi.fn().mockResolvedValue(undefined);
+
+      await runAcceptedContainerUpdates([
+        {
+          operationId: 'op-db',
+          container: createDependentContainer({ id: 'db', name: 'db' }),
+          trigger: { type: 'docker', trigger: dbTrigger },
+        },
+        {
+          operationId: 'op-tdarr',
+          container: createDependentContainer({
+            id: 'c-tdarr',
+            name: 'tdarr-node',
+            dependsOn: ['db'],
+            dependsOnSource: 'label',
+            dependsOnAction: 'restart',
+            updateAvailable: true,
+          }),
+          trigger: { type: 'docker', trigger: tdarrTrigger },
+        },
+      ]);
+
+      expect(tdarrTrigger).toHaveBeenCalledWith(expect.objectContaining({ id: 'c-tdarr' }), {
+        operationId: 'op-tdarr',
+      });
+      expect(mockRestartDependentContainer).not.toHaveBeenCalled();
+    });
+
+    test('a failed restart is classified through the normal failure path and still cascades to its dependents', async () => {
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        status: 'queued',
+        phase: 'queued',
+      }));
+      mockRestartDependentContainer.mockRejectedValue(new Error('restart failed'));
+      const downstreamTrigger = vi.fn();
+
+      await expect(
+        runAcceptedContainerUpdates([
+          {
+            operationId: 'op-db',
+            container: createDependentContainer({ id: 'db', name: 'db' }),
+            trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+          },
+          {
+            operationId: 'op-tdarr',
+            container: createDependentContainer({
+              id: 'c-tdarr',
+              name: 'tdarr-node',
+              dependsOn: ['db'],
+              dependsOnSource: 'label',
+              dependsOnAction: 'restart',
+              updateAvailable: false,
+            }),
+            trigger: { type: 'docker', trigger: vi.fn() },
+          },
+          {
+            operationId: 'op-downstream',
+            container: createDependentContainer({
+              id: 'c-downstream',
+              name: 'downstream',
+              dependsOn: ['tdarr-node'],
+              dependsOnSource: 'label',
+            }),
+            trigger: { type: 'docker', trigger: downstreamTrigger },
+          },
+        ]),
+      ).rejects.toThrow('restart failed');
+
+      expect(downstreamTrigger).not.toHaveBeenCalled();
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-tdarr', {
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'restart failed',
+      });
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-downstream',
+        expect.objectContaining({ blockingContainerId: 'c-tdarr' }),
+      );
+    });
+
+    test('BFS descendant walk de-duplicates a diamond-shaped chain reached via two paths', async () => {
+      // proxy depends on BOTH api1 and api2, which both depend on db. When db
+      // fails, proxy is reachable via two BFS paths — it must still only be
+      // skipped once (exercises the descendants.has() dedup guard).
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        status: 'queued',
+        phase: 'queued',
+      }));
+      const dbTrigger = vi.fn().mockRejectedValue(new Error('db pull denied'));
+
+      await expect(
+        runAcceptedContainerUpdates([
+          {
+            operationId: 'op-db',
+            container: createDependentContainer({ id: 'c-db', name: 'db' }),
+            trigger: { type: 'docker', trigger: dbTrigger },
+          },
+          {
+            operationId: 'op-api1',
+            container: createDependentContainer({
+              id: 'c-api1',
+              name: 'api1',
+              dependsOn: ['db'],
+              dependsOnSource: 'label',
+            }),
+            trigger: { type: 'docker', trigger: vi.fn() },
+          },
+          {
+            operationId: 'op-api2',
+            container: createDependentContainer({
+              id: 'c-api2',
+              name: 'api2',
+              dependsOn: ['db'],
+              dependsOnSource: 'label',
+            }),
+            trigger: { type: 'docker', trigger: vi.fn() },
+          },
+          {
+            operationId: 'op-proxy',
+            container: createDependentContainer({
+              id: 'c-proxy',
+              name: 'proxy',
+              dependsOn: ['api1', 'api2'],
+              dependsOnSource: 'label',
+            }),
+            trigger: { type: 'docker', trigger: vi.fn() },
+          },
+        ]),
+      ).rejects.toThrow('db pull denied');
+
+      const proxySkipCalls = mockMarkOperationTerminal.mock.calls.filter(
+        (call) => call[0] === 'op-proxy',
+      );
+      expect(proxySkipCalls).toHaveLength(1);
+      expect(proxySkipCalls[0][1]).toEqual(
+        expect.objectContaining({ status: 'skipped-dependency', blockingContainerId: 'c-db' }),
+      );
+    });
+
+    test('when two independent dependencies fail in the same wave, a shared dependent attributes the skip to whichever failed first', async () => {
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        status: 'queued',
+        phase: 'queued',
+      }));
+      const db1Trigger = vi.fn().mockRejectedValue(new Error('db1 pull denied'));
+      const db2Trigger = vi.fn().mockRejectedValue(new Error('db2 pull denied'));
+
+      await expect(
+        runAcceptedContainerUpdates(
+          [
+            {
+              operationId: 'op-db1',
+              container: createDependentContainer({ id: 'c-db1', name: 'db1' }),
+              trigger: { type: 'docker', trigger: db1Trigger },
+            },
+            {
+              operationId: 'op-db2',
+              container: createDependentContainer({ id: 'c-db2', name: 'db2' }),
+              trigger: { type: 'docker', trigger: db2Trigger },
+            },
+            {
+              operationId: 'op-api',
+              container: createDependentContainer({
+                id: 'c-api',
+                name: 'api',
+                dependsOn: ['db1', 'db2'],
+                dependsOnSource: 'label',
+              }),
+              trigger: { type: 'docker', trigger: vi.fn() },
+            },
+          ],
+          // concurrency: 1 forces strictly sequential dispatch within the wave,
+          // so db1 always fails (and is recorded) before db2 even starts.
+          { concurrency: 1 },
+        ),
+      ).rejects.toThrow('db1 pull denied');
+
+      const apiSkipCalls = mockMarkOperationTerminal.mock.calls.filter(
+        (call) => call[0] === 'op-api',
+      );
+      expect(apiSkipCalls).toHaveLength(1);
+      expect(apiSkipCalls[0][1]).toEqual(
+        expect.objectContaining({ blockingContainerId: 'c-db1', blockingOperationId: 'op-db1' }),
+      );
+    });
+
+    test('logs a single warning when the batch dependency graph has unresolved or cross-host targets', async () => {
+      await runAcceptedContainerUpdates([
+        {
+          operationId: 'op-api',
+          container: createDependentContainer({
+            id: 'c-api',
+            name: 'api',
+            dependsOn: ['ghost'],
+            dependsOnSource: 'label',
+          }),
+          trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+        },
+      ]);
+
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        expect.stringContaining('1 unresolved target(s) and 0 cross-host edge(s) ignored'),
+      );
+    });
   });
 
   describe('hard-blocker enforcement via update-eligibility', () => {

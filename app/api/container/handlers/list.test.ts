@@ -10,6 +10,7 @@ import {
 function createMockContext(operation?: unknown): CrudHandlerContext {
   return {
     getContainersFromStore: vi.fn(),
+    getContainersRawFromStore: vi.fn(() => []),
     getContainerCountFromStore: vi.fn(),
     storeContainer: { getContainer: vi.fn(), deleteContainer: vi.fn() },
     updateOperationStore: {
@@ -416,6 +417,74 @@ describe('attachInProgressUpdateOperation cross-agent scoping (issue #411)', () 
     const result = attachInProgressUpdateOperation(context, container);
 
     expect((result as any).updateOperation?.id).toBe('op-a1');
+  });
+});
+
+describe('buildContainerListResponse dependency badge counts (#219)', () => {
+  test('attaches dependencyCount/dependentCount computed over the whole fleet, not just the page', () => {
+    const db = createContainer({ id: 'db', name: 'db', displayName: 'db', watcher: 'local' });
+    const api = createContainer({
+      id: 'api',
+      name: 'api',
+      displayName: 'api',
+      watcher: 'local',
+      dependsOn: ['db'],
+    } as any);
+    const proxy = createContainer({
+      id: 'proxy',
+      name: 'proxy',
+      displayName: 'proxy',
+      watcher: 'local',
+      dependsOn: ['api'],
+    } as any);
+    // Only `db` is on this page — its dependent `api` lives outside it, so the
+    // count must come from the unpaginated fleet-wide lookup, not the page.
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => [db]),
+      getContainersRawFromStore: vi.fn(() => [db, api, proxy]),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/v1/containers',
+    );
+
+    expect(response.data[0]).toEqual(
+      expect.objectContaining({ id: 'db', dependencyCount: 0, dependentCount: 1 }),
+    );
+    expect(context.getContainersRawFromStore).toHaveBeenCalledWith({
+      excludeRollbackContainers: true,
+    });
+  });
+
+  test('defaults both counts to 0 for a container with no dependency edges', () => {
+    const lonely = createContainer({
+      id: 'lonely',
+      name: 'lonely',
+      displayName: 'lonely',
+      watcher: 'local',
+    });
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => [lonely]),
+      getContainersRawFromStore: vi.fn(() => [lonely]),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/v1/containers',
+    );
+
+    expect(response.data[0]).toEqual(
+      expect.objectContaining({ dependencyCount: 0, dependentCount: 0 }),
+    );
   });
 });
 

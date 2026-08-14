@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const BASE_VERSION = '1.6.0';
-const RC_VERSION = '1.6.0';
+const BASE_VERSION = '1.7.0';
+const RC_VERSION = '1.7.0-rc.1';
 const DEMO_RELEASE_FIXTURES = [
   {
     path: 'apps/demo/src/mocks/data/server.ts',
@@ -40,7 +40,7 @@ function extractVersionValues(contents, valuePattern) {
   return [...new Set([...contents.matchAll(valuePattern)].map((match) => match[1]))].sort();
 }
 
-test('release-gated workspace packages and locks use the v1.6 base version', () => {
+test('release-gated workspace packages and locks use the v1.7 base version', () => {
   for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo']) {
     const prefix = workspace === '.' ? '' : `${workspace}/`;
     const manifest = readJson(`${prefix}package.json`);

@@ -330,7 +330,7 @@ export async function runHook(command: string, options: HookRunnerOptions): Prom
     return result;
   }
 
-  hookLog.info(`Running ${options.label} hook: ${command}`);
+  hookLog.info(`Running ${options.label} hook`);
 
   return new Promise<HookResult>((resolve) => {
     let child: ReturnType<typeof execFile> | undefined;

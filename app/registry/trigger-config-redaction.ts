@@ -15,6 +15,7 @@ const TRIGGER_INFRASTRUCTURE_CONFIG_KEYS = new Set([
   'username',
   'user',
   'botusername',
+  'cmd',
 ]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

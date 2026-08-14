@@ -52,7 +52,7 @@ permissions: {}
 
 jobs:
   zizmor:
-    name: "🔐 Security: Actions"
+    name: "Security: Actions"
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -359,7 +359,7 @@ jobs:
           head-ref: ${{ github.event_name == 'push' && github.sha || '' }}
 
   lint:
-    name: "🧹 Quality: Lint"
+    name: "Quality: Lint"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -415,7 +415,7 @@ jobs:
           retention-days: 14
 
   test:
-    name: "🧪 Quality: Test & Coverage"
+    name: "Quality: Test & Coverage"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -431,6 +431,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js
@@ -564,7 +565,7 @@ jobs:
         working-directory: apps/web
 
   build:
-    name: "🏗️ Build"
+    name: "Build"
     needs: [lint, test]
     runs-on: ubuntu-latest
     timeout-minutes: 35  # Includes UI build + single-arch QA image + multi-arch smoke build
@@ -1061,7 +1062,7 @@ jobs:
         run: docker compose -p drydock-zap -f test/qa-compose.yml down -v --remove-orphans
 
   e2e:
-    name: "🥒 E2E: Cucumber"
+    name: "E2E: Cucumber"
     if: github.event_name == 'workflow_dispatch' || (github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true')
     runs-on: ubuntu-latest
     # Covers the bounded npm/setup retry budgets, readiness waits, scenario
