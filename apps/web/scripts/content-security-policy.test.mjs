@@ -25,6 +25,19 @@ function getDirectiveSources(policy, name) {
   return directive.split(/\s+/u).slice(1);
 }
 
+function assertExactAnalyticsSources(policy) {
+  assert.deepEqual(getDirectiveSources(policy, "script-src"), [
+    "'self'",
+    "'nonce-c2VjdXJlLW5vbmNl'",
+    "'strict-dynamic'",
+    "https://e.codeswhat.com",
+  ]);
+  assert.deepEqual(getDirectiveSources(policy, "connect-src"), [
+    "'self'",
+    "https://e.codeswhat.com",
+  ]);
+}
+
 test("production CSP permits only nonce-authorized inline scripts", () => {
   const policy = buildContentSecurityPolicy("c2VjdXJlLW5vbmNl", false);
   const scriptDirective = getDirective(policy, "script-src");
@@ -45,26 +58,19 @@ test("development CSP permits React debugging without permitting arbitrary inlin
 
 test("CSP permits only the managed PostHog proxy for analytics scripts and requests", () => {
   const policy = buildContentSecurityPolicy("c2VjdXJlLW5vbmNl", false);
-  const scriptSources = getDirectiveSources(policy, "script-src");
-  const connectSources = getDirectiveSources(policy, "connect-src");
 
-  assert.deepEqual(scriptSources, [
-    "'self'",
-    "'nonce-c2VjdXJlLW5vbmNl'",
-    "'strict-dynamic'",
-    "https://e.codeswhat.com",
-  ]);
-  assert.deepEqual(connectSources, ["'self'", "https://e.codeswhat.com"]);
+  assertExactAnalyticsSources(policy);
 });
 
 test("CSP analytics allowlist rejects proxy prefix and suffix lookalikes", () => {
+  const policy = buildContentSecurityPolicy("c2VjdXJlLW5vbmNl", false);
+
   for (const source of [
     "https://e.codeswhat.com.attacker.invalid",
     "https://attacker.invalid/e.codeswhat.com",
   ]) {
-    const sources = getDirectiveSources(`script-src 'self' ${source}`, "script-src");
-    assert.deepEqual(sources, ["'self'", source]);
-    assert.notDeepEqual(sources, ["'self'", "https://e.codeswhat.com"]);
+    const hostilePolicy = policy.replaceAll("https://e.codeswhat.com", source);
+    assert.throws(() => assertExactAnalyticsSources(hostilePolicy), assert.AssertionError);
   }
 });
 
