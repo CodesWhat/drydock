@@ -23,7 +23,12 @@ import {
   PORTWING_WS_ROUTE_PATTERN,
 } from './portwing-ws.js';
 
+const { mockGetPortwingPollInterval } = vi.hoisted(() => ({
+  mockGetPortwingPollInterval: vi.fn(() => 300),
+}));
+
 vi.mock('../configuration/index.js', () => ({
+  getPortwingPollInterval: mockGetPortwingPollInterval,
   getServerConfiguration: vi.fn(() => ({})),
   getVersion: vi.fn(() => '9.9.9-test'),
 }));
@@ -580,7 +585,7 @@ describe('hello verification — rejection paths', () => {
         dockerVersion: 'unknown',
         hostname: 'test',
         capabilities: [],
-        tokenHash: 'abcdef1234567890',
+        tokenHash: 'present',
       },
     });
     await new Promise((r) => setTimeout(r, 0));
@@ -966,6 +971,40 @@ describe('hello verification — happy path', () => {
     expect(welcome.data.pollInterval).toBeGreaterThan(0);
     expect(welcome.data.config.serverCompatLevel).toBe('1.4.0');
     expect(welcome.data.config.supportedProtocols).toBe('portwing/1.0');
+  });
+
+  test('uses the controller-configured poll interval in the welcome and agent metadata', async () => {
+    mockGetPortwingPollInterval.mockReturnValueOnce(5);
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'd2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await vi.waitFor(() => {
+      expect(ws.sentMessages.length).toBeGreaterThan(0);
+    });
+
+    const welcome = JSON.parse(ws.sentMessages[0]) as {
+      data: { pollInterval: number };
+    };
+    expect(welcome.data.pollInterval).toBe(5);
+    expect(getLastAgentClientInstance()?.info).toMatchObject({ pollInterval: '5' });
   });
 
   test('protocol portwing/1.0 is accepted', async () => {
