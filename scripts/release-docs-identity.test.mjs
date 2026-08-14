@@ -18,6 +18,13 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
 
+function extractMarkdownSection(document, heading) {
+  const sectionStart = document.indexOf(`${heading}\n`);
+  assert.notEqual(sectionStart, -1, `missing Markdown section: ${heading}`);
+  const nextSectionStart = document.indexOf('\n## ', sectionStart + heading.length + 1);
+  return document.slice(sectionStart, nextSectionStart === -1 ? undefined : nextSectionStart);
+}
+
 test('public release surfaces identify the v1.7 release candidate', () => {
   const readme = read('README.md');
   const siteConfig = read('apps/web/src/lib/site-config.ts');
@@ -90,9 +97,19 @@ test('public release surfaces identify the v1.7 release candidate', () => {
   );
 });
 
+test('release-note section extraction stops at the next level-two heading', () => {
+  assert.equal(
+    extractMarkdownSection('## Target\nkeep\n\n## Later\nignore\n', '## Target'),
+    '## Target\nkeep\n',
+  );
+});
+
 test('release candidate notes cover the post-promotion fixes', () => {
-  const changelog = read('CHANGELOG.md');
-  const updates = read('content/docs/current/updates/index.mdx');
+  const changelog = extractMarkdownSection(read('CHANGELOG.md'), `## [${RC_VERSION}] — ${RC_DATE}`);
+  const updates = extractMarkdownSection(
+    read('content/docs/current/updates/index.mdx'),
+    `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
+  );
 
   for (const issue of [606, 635, 687, 688]) {
     const issueLink = `https://github.com/CodesWhat/drydock/issues/${issue}`;
