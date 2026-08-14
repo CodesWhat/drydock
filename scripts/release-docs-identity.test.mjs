@@ -4,9 +4,10 @@ import test from 'node:test';
 
 const RC_VERSION = '1.7.0-rc.1';
 const PREV_RC_VERSION = '1.6.0';
-const RC_DATE = '2026-08-13';
-const RC_DISPLAY_DATE = 'August 13, 2026';
+const RC_DATE = '2026-08-14';
+const RC_DISPLAY_DATE = 'August 14, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
+const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
 
@@ -16,6 +17,31 @@ function read(path) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+function extractMarkdownSection(document, heading) {
+  const sectionStart = document.indexOf(`${heading}\n`);
+  assert.notEqual(sectionStart, -1, `missing Markdown section: ${heading}`);
+  const nextSectionStart = document.indexOf('\n## ', sectionStart + heading.length + 1);
+  return document.slice(sectionStart, nextSectionStart === -1 ? undefined : nextSectionStart);
+}
+
+function extractMarkdownListItem(section, marker) {
+  const item = section.split('\n').find((line) => line.startsWith('- ') && line.includes(marker));
+  assert.ok(item, `missing Markdown list item containing: ${marker}`);
+  return item;
+}
+
+function assertReleaseRedirectAllowlist(name, section) {
+  assert.doesNotMatch(section, /\b3xx\b/iu, `${name} must not use generic 3xx wording`);
+  assert.doesNotMatch(
+    section,
+    /\b3(?!01|02|03|07|08)\d{2}\b/u,
+    `${name} must not list an unapproved 3xx status`,
+  );
+  for (const status of RELEASE_REDIRECT_STATUSES) {
+    assert.match(section, new RegExp(`\\b${status}\\b`, 'u'), `${name} must list HTTP ${status}`);
+  }
 }
 
 test('public release surfaces identify the v1.7 release candidate', () => {
@@ -88,6 +114,66 @@ test('public release surfaces identify the v1.7 release candidate', () => {
       `[${RC_VERSION}]: https://github.com/CodesWhat/drydock/compare/v${PREV_RC_VERSION}...v${RC_VERSION}`,
     ),
   );
+});
+
+test('release-note section extraction stops at the next level-two heading', () => {
+  assert.equal(
+    extractMarkdownSection('## Target\nkeep\n\n## Later\nignore\n', '## Target'),
+    '## Target\nkeep\n',
+  );
+});
+
+test('release-note redirect contracts reject broad, missing, and unlisted statuses', () => {
+  const exactAllowlist = '301, 302, 303, 307, or 308';
+
+  assert.doesNotThrow(() => assertReleaseRedirectAllowlist('valid notes', exactAllowlist));
+  assert.throws(() => assertReleaseRedirectAllowlist('broad notes', 'all 3xx statuses'));
+  assert.throws(() =>
+    assertReleaseRedirectAllowlist('unlisted status notes', `${exactAllowlist}, or 304`),
+  );
+  assert.throws(() => assertReleaseRedirectAllowlist('missing status notes', '301, 302, 303, 307'));
+});
+
+test('release candidate notes cover the post-promotion fixes', () => {
+  const changelog = extractMarkdownSection(read('CHANGELOG.md'), `## [${RC_VERSION}] — ${RC_DATE}`);
+  const updates = extractMarkdownSection(
+    read('content/docs/current/updates/index.mdx'),
+    `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
+  );
+
+  for (const issue of [606, 635, 687, 688]) {
+    const issueLink = `https://github.com/CodesWhat/drydock/issues/${issue}`;
+    assert.ok(changelog.includes(issueLink), `CHANGELOG.md must link issue #${issue}`);
+    assert.ok(updates.includes(issueLink), `updates page must link issue #${issue}`);
+  }
+
+  const manifestIssueLink = 'https://github.com/CodesWhat/drydock/issues/606';
+  assertReleaseRedirectAllowlist(
+    'CHANGELOG.md manifest metadata note',
+    extractMarkdownListItem(changelog, manifestIssueLink),
+  );
+  assertReleaseRedirectAllowlist(
+    'updates page manifest metadata note',
+    extractMarkdownListItem(updates, manifestIssueLink),
+  );
+  for (const fragment of [
+    '`DD_PORTWING_POLL_INTERVAL`',
+    '`exec_end.reason`',
+    "controller's configured registry identity",
+    '4xx, 5xx, network, and non-object failures',
+  ]) {
+    assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
+  }
+
+  for (const fragment of [
+    '`DD_PORTWING_POLL_INTERVAL`',
+    '`exec_end.reason`',
+    'normalize against configured registries',
+    '301, 302, 303, 307, or 308',
+    '4xx, 5xx, network, and non-object failures',
+  ]) {
+    assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
+  }
 });
 
 test('v1.6.0 is released and public release routing advances to v1.7', () => {

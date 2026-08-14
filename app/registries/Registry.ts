@@ -78,6 +78,17 @@ function isLegacyImageConfig(mediaType: string | undefined): boolean {
   );
 }
 
+function isRedirectError(error: unknown): boolean {
+  const status =
+    error != null && typeof error === 'object'
+      ? (error as { response?: { status?: unknown } }).response?.status
+      : undefined;
+  return (
+    typeof status === 'number' &&
+    ((status >= 301 && status <= 303) || status === 307 || status === 308)
+  );
+}
+
 /**
  * Filter a manifest list to find the best match for the requested platform.
  * Returns the matched manifest entry or undefined.
@@ -409,8 +420,9 @@ class Registry<
     manifestDigest: string,
     mediaType: string,
   ): Promise<string | undefined> {
+    let manifestResponse: RegistryManifestResponse;
     try {
-      const manifestResponse = await this.callRegistry<RegistryManifestResponse>({
+      manifestResponse = await this.callRegistry<RegistryManifestResponse>({
         image,
         method: 'get',
         url: `${image.registry.url}/${image.name}/manifests/${manifestDigest}`,
@@ -418,11 +430,6 @@ class Registry<
           Accept: mediaType,
         },
       });
-      const configDigest = manifestResponse?.config?.digest;
-      if (!configDigest) {
-        return undefined;
-      }
-      return this.fetchImageCreatedFromBlob(image, configDigest);
     } catch (error: unknown) {
       this.log.debug(
         `Unable to fetch manifest config created date for ${this.getImageFullName(
@@ -430,8 +437,16 @@ class Registry<
           manifestDigest,
         )} (${getErrorMessage(error)})`,
       );
+      if (isRedirectError(error)) {
+        return undefined;
+      }
+      throw error;
+    }
+    const configDigest = manifestResponse?.config?.digest;
+    if (!configDigest) {
       return undefined;
     }
+    return this.fetchImageCreatedFromBlob(image, configDigest);
   }
 
   private async fetchImageCreatedFromBlob(
@@ -459,7 +474,10 @@ class Registry<
           digest,
         )} (${getErrorMessage(error)})`,
       );
-      return undefined;
+      if (isRedirectError(error)) {
+        return undefined;
+      }
+      throw error;
     }
   }
 

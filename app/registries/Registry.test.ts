@@ -348,6 +348,9 @@ describe('getImageManifestDigest', () => {
           platformManifest('armv7', 'linux', 'digest_y', 'fail'),
         ]);
       }
+      if (options.url?.includes('/blobs/')) {
+        return {};
+      }
       throw new Error('Boom!');
     };
     await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
@@ -492,7 +495,35 @@ describe('getImageManifestDigest', () => {
     });
   });
 
-  test('should continue when schemaVersion 2 manifest config fetch fails', async () => {
+  test('should propagate schemaVersion 2 manifest config fetch failures', async () => {
+    const registryMocked = createMockedRegistry();
+    const manifestConfigError = new Error('manifest config unavailable');
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        throw manifestConfigError;
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toBe(
+      manifestConfigError,
+    );
+  });
+
+  test('should propagate non-object schemaVersion 2 manifest config failures', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = vi.fn((options) => {
       if (options.method === 'head') {
@@ -509,7 +540,45 @@ describe('getImageManifestDigest', () => {
         options.method === 'get' &&
         options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
       ) {
-        throw new Error('manifest config unavailable');
+        throw 'manifest config unavailable';
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toBe(
+      'manifest config unavailable',
+    );
+  });
+
+  test('should preserve the digest when schemaVersion 2 created metadata redirects', async () => {
+    const registryMocked = createMockedRegistry();
+    const redirectError = Object.assign(new Error('Request failed with status code 302'), {
+      response: { status: 302 },
+    });
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        return {
+          schemaVersion: 2,
+          config: {
+            digest: 'sha256:config',
+          },
+        };
+      }
+      if (options.url === 'url/image/blobs/sha256:config') {
+        throw redirectError;
       }
       throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
     });
@@ -518,6 +587,67 @@ describe('getImageManifestDigest', () => {
       version: 2,
       digest: 'sha256:manifest',
     });
+  });
+
+  test('should preserve the digest when the schemaVersion 2 manifest config redirects', async () => {
+    const registryMocked = createMockedRegistry();
+    const redirectError = Object.assign(new Error('Request failed with status code 307'), {
+      response: { status: 307 },
+    });
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        throw redirectError;
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+      version: 2,
+      digest: 'sha256:manifest',
+    });
+  });
+
+  test('should propagate a 304 response from schemaVersion 2 manifest config', async () => {
+    const registryMocked = createMockedRegistry();
+    const notModifiedError = Object.assign(new Error('Request failed with status code 304'), {
+      response: { status: 304 },
+    });
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return {
+          schemaVersion: 2,
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        };
+      }
+      if (
+        options.url === 'url/image/manifests/sha256:manifest' &&
+        options.method === 'get' &&
+        options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
+      ) {
+        throw notModifiedError;
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toBe(
+      notModifiedError,
+    );
   });
 
   test('should return digest for container.image.v1 (schemaVersion 1)', async () => {
@@ -779,8 +909,9 @@ describe('getImageManifestDigest', () => {
     );
   });
 
-  test('should gracefully handle blob fetch error for legacy manifest config', async () => {
+  test('should propagate blob fetch failures for legacy manifest config', async () => {
     const registryMocked = createMockedRegistry();
+    const blobFetchError = new Error('blob fetch failed');
     registryMocked.callRegistry = vi.fn((options) => {
       if (options.headers?.Accept === ALL_MANIFEST_ACCEPT) {
         return manifestListResponse([
@@ -793,12 +924,11 @@ describe('getImageManifestDigest', () => {
         ]);
       }
       if (options.url?.includes('/blobs/')) {
-        throw new Error('blob fetch failed');
+        throw blobFetchError;
       }
       throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
     });
-    const result = await registryMocked.getImageManifestDigest(imageInput());
-    expect(result).toStrictEqual({ version: 1, digest: 'digest_x' });
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toBe(blobFetchError);
   });
 
   test('should include created date when legacy manifest config blob metadata is present', async () => {
@@ -1424,6 +1554,7 @@ describe('getImageManifestDigest', () => {
     // Kill line 411 StringLiteral `` mutant: error log must include image identifier
     const registryMocked = createMockedRegistry();
     const debugSpy = vi.fn();
+    const blobFetchError = new Error('blob-access-denied');
     registryMocked.log = { debug: debugSpy } as any;
     registryMocked.callRegistry = vi.fn((options) => {
       if (options.method === 'head') {
@@ -1439,14 +1570,12 @@ describe('getImageManifestDigest', () => {
         return { config: { digest: 'sha256:blob' } };
       }
       if (options.url?.includes('/blobs/')) {
-        throw new Error('blob-access-denied');
+        throw blobFetchError;
       }
       throw new Error(`Unexpected: ${JSON.stringify(options)}`);
     });
 
-    const result = await registryMocked.getImageManifestDigest(imageInput());
-    // Should still succeed (error caught), result has no created date
-    expect(result.digest).toBe('sha256:mfst');
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toBe(blobFetchError);
     // Debug log should mention blob error
     const debugMessages = debugSpy.mock.calls.map(([msg]) => msg);
     expect(
@@ -1569,10 +1698,11 @@ describe('getImageManifestDigest logging', () => {
     rootDebugSpy.mockRestore();
   });
 
-  test('should keep manifest-config fallback debug logs on the child logger', async () => {
+  test('should keep manifest-config failure debug logs on the child logger', async () => {
     const registryMocked = new Registry();
     await registryMocked.register('registry', 'hub', 'test', {});
     const childDebug = vi.fn();
+    const manifestConfigError = new Error('manifest config unavailable');
     registryMocked.log = { debug: childDebug } as any;
     const rootDebugSpy = vi.spyOn(log, 'debug').mockImplementation(() => undefined);
 
@@ -1591,17 +1721,14 @@ describe('getImageManifestDigest logging', () => {
         options.method === 'get' &&
         options.headers?.Accept === 'application/vnd.docker.distribution.manifest.v2+json'
       ) {
-        throw new Error('manifest config unavailable');
+        throw manifestConfigError;
       }
       throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
     });
 
-    await expect(
-      registryMocked.getImageManifestDigest(imageInput({ name: 'image' })),
-    ).resolves.toStrictEqual({
-      version: 2,
-      digest: 'sha256:manifest',
-    });
+    await expect(registryMocked.getImageManifestDigest(imageInput({ name: 'image' }))).rejects.toBe(
+      manifestConfigError,
+    );
 
     expect(rootDebugSpy).not.toHaveBeenCalled();
     expect(childDebug).toHaveBeenCalledWith(

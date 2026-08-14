@@ -598,6 +598,27 @@ describe('EdgeAgentAdapter — disconnect cleanup', () => {
     ).toBe(true);
   });
 
+  test('onDisconnect continues cleanup when an exec endCallback throws', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+    const throwingEndCallback = vi.fn(() => {
+      throw new Error('consumer callback failed');
+    });
+    const laterEndCallback = vi.fn((_reason?: string) => {});
+    await adapter.startExec('c1', ['/bin/first'], { endCallback: throwingEndCallback });
+    await adapter.startExec('c2', ['/bin/second'], { endCallback: laterEndCallback });
+    const adapterInternal = adapter as unknown as {
+      execSessions: Map<string, unknown>;
+    };
+
+    await expect(adapter.onDisconnect()).resolves.toBeUndefined();
+
+    expect(throwingEndCallback).toHaveBeenCalledOnce();
+    expect(laterEndCallback).toHaveBeenCalledOnce();
+    expect(adapterInternal.execSessions.size).toBe(0);
+    expect(manager.removeAgent).toHaveBeenCalled();
+  });
+
   test('onDisconnect calls removeAgent', async () => {
     const { adapter } = createAdapter();
     adapter.activate();
@@ -911,6 +932,62 @@ describe('EdgeAgentAdapter — exec outputCallback via startExec', () => {
 
     expect(received).toHaveLength(1);
     expect(received[0].toString()).toBe('after ready');
+  });
+});
+
+describe('EdgeAgentAdapter — exec endCallback via startExec', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('endCallback receives the exact exec_end reason', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const endCallback = vi.fn((_reason?: string) => {});
+    const execId = await adapter.startExec('c1', ['/bin/bash'], { endCallback });
+
+    sendFrame(ws, 'exec_end', {
+      execId,
+      reason: 'exec denied: privileged exec is not allowed',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(endCallback).toHaveBeenCalledOnce();
+    expect(endCallback).toHaveBeenCalledWith('exec denied: privileged exec is not allowed');
+  });
+
+  test.each([
+    ['absent', {}],
+    ['non-string', { reason: { message: 'do not coerce me' } }],
+  ])('endCallback receives undefined when exec_end reason is %s', async (_name, data) => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const endCallback = vi.fn((_reason?: string) => {});
+    const execId = await adapter.startExec('c1', ['/bin/bash'], { endCallback });
+
+    sendFrame(ws, 'exec_end', { execId, ...data });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(endCallback).toHaveBeenCalledOnce();
+    expect(endCallback).toHaveBeenCalledWith(undefined);
+  });
+
+  test('a throwing endCallback cannot retain the closed session', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+    const endCallback = vi.fn(() => {
+      throw new Error('consumer callback failed');
+    });
+    const execId = await adapter.startExec('c1', ['/bin/bash'], { endCallback });
+    const adapterInternal = adapter as unknown as {
+      execSessions: Map<string, unknown>;
+    };
+
+    sendFrame(ws, 'exec_end', { execId, reason: 'exited' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(endCallback).toHaveBeenCalledOnce();
+    expect(adapterInternal.execSessions.has(execId)).toBe(false);
   });
 });
 

@@ -172,7 +172,7 @@ const requiredFragments = [
   'v1.6.0-rc.12',
   'v1.6.0-rc.11',
   './CHANGELOG.md#160--2026-08-11',
-  './CHANGELOG.md#170-rc1--2026-08-13',
+  './CHANGELOG.md#170-rc1--2026-08-14',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',

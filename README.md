@@ -187,7 +187,7 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 - **Security and lifecycle hardening** — bounded authentication, agent, log, WebSocket, and registry operations; sensitive command and hook values are redacted; Home Assistant discovery resynchronizes after startup and retires provider work without stale publishes. ([#708](https://github.com/CodesWhat/drydock/issues/708))
 - **First-party star history** — the same-origin `/api/star-history` provider now serves allowlisted Drydock, Sockguard, and Portwing charts without a third-party tracker dependency.
 
-Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-13).
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14).
 
 </details>
 

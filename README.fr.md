@@ -187,7 +187,7 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 - **Renforcement de la sécurité et du cycle de vie** : l'authentification, les requêtes d'agents, les journaux, les WebSockets et les requêtes de registres sont explicitement bornés ; les valeurs sensibles de commandes et hooks sont masquées ; la découverte Home Assistant se resynchronise après le démarrage et retire les tâches des fournisseurs sans publication périmée. ([#708](https://github.com/CodesWhat/drydock/issues/708))
 - **Historique des étoiles propriétaire** : le fournisseur même origine `/api/star-history` sert les graphiques Drydock, Sockguard et Portwing autorisés sans dépendre d'un service tiers.
 
-Notes complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-13).
+Notes complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14).
 
 </details>
 

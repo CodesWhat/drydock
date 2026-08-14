@@ -20,6 +20,7 @@ const TEST_DIRECTORY = getTestDirectory();
 afterEach(() => {
   configuration.setDetectedServerName(undefined);
   delete configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX;
+  delete configuration.ddEnvVars.DD_PORTWING_POLL_INTERVAL;
 });
 
 test('getVersion should return dd version', async () => {
@@ -121,6 +122,24 @@ test('getExperimentalPortwingEnabled should return false for non-"true" values',
   expect(configuration.getExperimentalPortwingEnabled()).toStrictEqual(false);
   delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
 });
+
+test('getPortwingPollInterval should default to 300 seconds', () => {
+  delete configuration.ddEnvVars.DD_PORTWING_POLL_INTERVAL;
+  expect(configuration.getPortwingPollInterval()).toBe(300);
+});
+
+test('getPortwingPollInterval should accept a positive integer', () => {
+  configuration.ddEnvVars.DD_PORTWING_POLL_INTERVAL = ' 5 ';
+  expect(configuration.getPortwingPollInterval()).toBe(5);
+});
+
+test.each(['0', '-1', '1.5', '5seconds', '', '9007199254740992'])(
+  'getPortwingPollInterval should use the default for invalid value %j',
+  (value) => {
+    configuration.ddEnvVars.DD_PORTWING_POLL_INTERVAL = value;
+    expect(configuration.getPortwingPollInterval()).toBe(300);
+  },
+);
 
 test('getWudCardCompatEnabled should default to false', () => {
   delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
