@@ -40,7 +40,7 @@ npm run lint:fix         # biome check --fix .
 
 # Static analysis from repo root (pre-push steps 4-5)
 ./scripts/qlty-check-gate.sh all
-node scripts/qlty-smells-gate.mjs --scope=all   # advisory
+node scripts/qlty-smells-gate.mjs --scope=all || true   # advisory
 
 # E2E — run from e2e/
 npm run test:local        # Cucumber tests against a running instance

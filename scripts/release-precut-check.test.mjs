@@ -31,8 +31,20 @@ test('contributor guidance documents executable UI lint commands', () => {
 });
 
 test('contributor guidance matches full pre-push semantics and measured timing', () => {
-  assert.match(agentsGuide, /# Static analysis from repo root/u);
-  assert.match(agentsGuide, /node scripts\/qlty-smells-gate\.mjs --scope=all\s+# advisory/u);
+  const staticAnalysisSection = agentsGuide.match(
+    /# Static analysis from repo root[\s\S]*?(?=\n\n# E2E)/u,
+  )?.[0];
+  assert.ok(staticAnalysisSection, 'AGENTS.md must have a static-analysis command block');
+  for (const command of ['qlty', 'qlty-smells']) {
+    const run = lefthookConfig.match(new RegExp(`^ {4}${command}:\\n {6}run: (?<run>.+)$`, 'mu'))
+      ?.groups?.run;
+    assert.ok(run, `lefthook.yml must define the ${command} run command`);
+    assert.ok(
+      staticAnalysisSection.includes(run),
+      `AGENTS.md must document the exact ${command} run command`,
+    );
+  }
+  assert.match(staticAnalysisSection, /qlty-smells-gate\.mjs --scope=all \|\| true\s+# advisory/u);
   assert.match(agentsGuide, /takes about \*\*5 minutes end to end\*\*/u);
 
   const prePushSection = agentsGuide.match(
