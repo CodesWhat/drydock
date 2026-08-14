@@ -54,6 +54,7 @@ import * as updateOperationStore from '../store/update-operation.js';
 import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
+import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
@@ -788,9 +789,15 @@ export class AgentClient {
       };
     }
     container.agent = this.name;
+    if (
+      this.controllerDockerTransportWatchers.has(container.watcher) &&
+      container.image?.registry?.url
+    ) {
+      container = normalizeContainer(container);
+    }
     container = this.preserveControllerDockerEnrichment(container);
-    // The container coming from Agent should already be normalized and have results
-    // We rely on the Agent to perform Registry checks if configured
+    // Traditional agents own registry normalization and results. Controller-owned
+    // Docker transport instead applies the controller's configured registry above.
 
     // Strip redaction metadata (e.g. `sensitive`) that the agent's event
     // emitter may attach — the controller's Joi schema does not allow it.
