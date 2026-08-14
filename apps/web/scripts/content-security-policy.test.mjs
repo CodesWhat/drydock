@@ -19,6 +19,12 @@ function getDirective(policy, name) {
     .find((directive) => directive.startsWith(`${name} `));
 }
 
+function getDirectiveSources(policy, name) {
+  const directive = getDirective(policy, name);
+  assert.ok(directive);
+  return directive.split(/\s+/u).slice(1);
+}
+
 test("production CSP permits only nonce-authorized inline scripts", () => {
   const policy = buildContentSecurityPolicy("c2VjdXJlLW5vbmNl", false);
   const scriptDirective = getDirective(policy, "script-src");
@@ -39,15 +45,25 @@ test("development CSP permits React debugging without permitting arbitrary inlin
 
 test("CSP permits only the managed PostHog proxy for analytics scripts and requests", () => {
   const policy = buildContentSecurityPolicy("c2VjdXJlLW5vbmNl", false);
-  const scriptDirective = getDirective(policy, "script-src");
-  const connectDirective = getDirective(policy, "connect-src");
+  const scriptSources = getDirectiveSources(policy, "script-src");
+  const connectSources = getDirectiveSources(policy, "connect-src");
 
-  for (const directive of [scriptDirective, connectDirective]) {
-    assert.match(directive, /https:\/\/e\.codeswhat\.com/u);
-    assert.doesNotMatch(directive, /va\.vercel-scripts\.com/u);
-    assert.doesNotMatch(directive, /https:\/\/us\.posthog\.com/u);
-    assert.doesNotMatch(directive, /https:\/\/us\.i\.posthog\.com/u);
-    assert.doesNotMatch(directive, /\*\.posthog\.com/u);
+  assert.deepEqual(scriptSources, [
+    "'self'",
+    "'nonce-c2VjdXJlLW5vbmNl'",
+    "'strict-dynamic'",
+    "https://e.codeswhat.com",
+  ]);
+  assert.deepEqual(connectSources, ["'self'", "https://e.codeswhat.com"]);
+});
+
+test("CSP analytics allowlist rejects proxy prefix and suffix lookalikes", () => {
+  for (const source of [
+    "https://e.codeswhat.com.attacker.invalid",
+    "https://attacker.invalid/e.codeswhat.com",
+  ]) {
+    const sources = getDirectiveSources(`script-src 'self' ${source}`, "script-src");
+    assert.equal(sources.includes("https://e.codeswhat.com"), false);
   }
 });
 
