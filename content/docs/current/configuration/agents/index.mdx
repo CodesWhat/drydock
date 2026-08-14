@@ -30,6 +30,17 @@ The WebSocket endpoint is `WS /api/v1/portwing/ws` (compatibility alias: `/api/p
 
 You can also preload keys at startup with `DD_PORTWING_AUTHORIZED_KEYS=/path/to/authorized_keys`. The file format is `ed25519 <base64-raw-pubkey> [comment]`, and the file must not be world-readable.
 
+The controller owns each edge agent's container-refresh cadence and sends it in
+the authenticated welcome frame:
+
+| Env var | Required | Description | Default |
+| :--- | :---: | :--- | :--- |
+| `DD_PORTWING_POLL_INTERVAL` | ⚪ | Edge-agent container refresh interval in seconds | `300` |
+
+Invalid, zero, or negative values fall back to the 300-second default. This is
+separate from `DD_AGENT_{name}_*`, which configures controller-initiated Standard
+Mode connections rather than Portwing dial-out sessions.
+
 ### Edge-agent example (Docker Compose)
 
 A [Portwing](https://github.com/CodesWhat/portwing) edge agent runs on the remote/NAT'd host and dials out — no inbound ports need to be published on that side:
@@ -58,7 +69,7 @@ secrets:
 
 <Callout type="warn">This example bind-mounts the raw Docker socket into the Portwing container for brevity, and `:ro` is not a security boundary — it only prevents modifying the socket file itself, while every Docker Engine API operation (create, exec, delete) remains available through it. In production, front it with a socket filter instead — see the [sockguard tab](/docs/guides/security#isolate-the-docker-socket) of the Security Hardening Guide, and sockguard's [`examples/compose/tri-tool/`](https://github.com/CodesWhat/sockguard/tree/main/examples/compose/tri-tool) bundle for a runnable compose stack that fronts an Edge agent's Docker socket with sockguard instead of a raw bind mount.</Callout>
 
-The Drydock controller needs the agent's public key registered before it connects. No Portwing-specific environment variable is required:
+The Drydock controller needs the agent's public key registered before it connects. No additional Portwing setting is required unless you want to change the default poll cadence:
 
 ```yaml
 services:
@@ -66,6 +77,8 @@ services:
     image: codeswhat/drydock
     ports:
       - "3000:3000"
+    environment:
+      - DD_PORTWING_POLL_INTERVAL=60
 ```
 
 Generate the agent's keypair with `portwing keygen -comment "edge-host-01"`, then register the printed public key with the controller (`POST /api/v1/portwing/keys`, or preload it via `DD_PORTWING_AUTHORIZED_KEYS`) before starting the agent — see the REST API table above.

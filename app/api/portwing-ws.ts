@@ -19,7 +19,11 @@ import {
   type WebSocketLike,
 } from '../agent/EdgeAgentAdapter.js';
 import { getAgent } from '../agent/manager.js';
-import { getServerConfiguration, getVersion } from '../configuration/index.js';
+import {
+  getPortwingPollInterval,
+  getServerConfiguration,
+  getVersion,
+} from '../configuration/index.js';
 import logger from '../log/index.js';
 import * as agentKeys from '../store/agent-keys.js';
 import { save as saveStore } from '../store/index.js';
@@ -793,7 +797,7 @@ async function processHello(
   }
 
   // Step 11: Send WELCOME
-  const pollInterval = 300;
+  const pollInterval = getPortwingPollInterval();
   const welcome = {
     type: 'welcome',
     data: {
