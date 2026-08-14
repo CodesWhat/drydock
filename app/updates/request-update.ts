@@ -64,6 +64,7 @@ export interface AcceptedContainerUpdateRequest {
 
 export interface AcceptedUpdateDispatchOptions {
   concurrency?: number;
+  dependencyContext?: Container[];
 }
 
 export interface RejectedContainerUpdateRequest {
@@ -399,7 +400,7 @@ export async function enqueueContainerUpdates(
   containers: Container[],
   options: EnqueueContainerUpdateOptions = {},
 ): Promise<ContainerUpdateRequestBatchResult> {
-  const preparedAccepted: PreparedContainerUpdateRequest[] = [];
+  let preparedAccepted: PreparedContainerUpdateRequest[] = [];
   const rejected: RejectedContainerUpdateRequest[] = [];
 
   for (const container of containers) {
@@ -412,6 +413,36 @@ export async function enqueueContainerUpdates(
       }
       throw error;
     }
+  }
+
+  if (rejected.length > 0 && preparedAccepted.length > 0) {
+    const { edges } = buildDependencyGraph(containers);
+    const dependentsByDependency = buildDependentsByDependency(edges);
+    const blockingRejectionByContainerId = new Map<string, RejectedContainerUpdateRequest>();
+
+    for (const blockingRejection of rejected) {
+      for (const dependentId of collectTransitiveDependents(
+        blockingRejection.container.id,
+        dependentsByDependency,
+      )) {
+        blockingRejectionByContainerId.set(dependentId, blockingRejection);
+      }
+    }
+
+    const stillAccepted: PreparedContainerUpdateRequest[] = [];
+    for (const prepared of preparedAccepted) {
+      const blockingRejection = blockingRejectionByContainerId.get(prepared.container.id);
+      if (!blockingRejection) {
+        stillAccepted.push(prepared);
+        continue;
+      }
+      rejected.push({
+        container: prepared.container,
+        message: `Required upstream dependency ${blockingRejection.container.id} was not admitted`,
+        statusCode: 409,
+      });
+    }
+    preparedAccepted = stillAccepted;
   }
 
   const queueTotal = preparedAccepted.length;
@@ -496,9 +527,8 @@ export async function runAcceptedContainerUpdates(
   }
 
   const entryById = new Map(accepted.map((entry) => [entry.container.id, entry]));
-  const { nodes, edges, unresolved, crossHostIgnored } = buildDependencyGraph(
-    accepted.map((entry) => entry.container),
-  );
+  const dependencyContext = options.dependencyContext ?? accepted.map((entry) => entry.container);
+  const { nodes, edges, unresolved, crossHostIgnored } = buildDependencyGraph(dependencyContext);
   const { waves } = topologicalSort(nodes, edges);
   const dependentsByDependency = buildDependentsByDependency(edges);
   const containerIdsWithResolvedDependsOn = collectContainerIdsWithResolvedDependsOn(edges);
@@ -516,9 +546,8 @@ export async function runAcceptedContainerUpdates(
     const waveEntries: AcceptedContainerUpdateRequest[] = [];
     for (const id of wave) {
       const entry = entryById.get(id);
-      /* v8 ignore next 3 -- defensive only: every wave id originates from
-         buildDependencyGraph(accepted.map(...)), so entryById (keyed the same
-         way) always has a match. */
+      /* The dependency context can include entries rejected during admission,
+         so only dispatch wave members that have an accepted operation. */
       if (!entry) {
         continue;
       }
@@ -631,6 +660,6 @@ export async function requestContainerUpdates(
     allowSoftPolicyOverride: true,
     source: 'manual',
   });
-  dispatchAccepted(result.accepted);
+  dispatchAccepted(result.accepted, { dependencyContext: containers });
   return result;
 }
