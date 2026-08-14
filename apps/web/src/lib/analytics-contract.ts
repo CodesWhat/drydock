@@ -192,7 +192,13 @@ function createCaptureResult(input: CaptureResult, properties: CaptureProperties
 
 export function createBeforeSend(token: string, routes: ReadonlySet<string>) {
   return (input: CaptureResult | null): CaptureResult | null => {
-    if (input === null || typeof input !== "object" || typeof input.properties !== "object") {
+    if (
+      input === null ||
+      typeof input !== "object" ||
+      input.properties === null ||
+      typeof input.properties !== "object" ||
+      Array.isArray(input.properties)
+    ) {
       return null;
     }
 

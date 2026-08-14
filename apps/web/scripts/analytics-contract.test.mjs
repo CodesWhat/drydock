@@ -192,6 +192,8 @@ test("unknown events and invalid capture results are dropped", () => {
   const beforeSend = createBeforeSend("phc_public-token_123", ROUTES);
 
   assert.equal(beforeSend(null), null);
+  assert.equal(beforeSend({ uuid: "018f", event: "$pageview", properties: null }), null);
+  assert.equal(beforeSend({ uuid: "018f", event: "$pageview", properties: [] }), null);
   assert.equal(
     beforeSend({ uuid: "018f", event: "$autocapture", properties: { path: "/" } }),
     null,
