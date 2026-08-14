@@ -585,7 +585,7 @@ describe('hello verification — rejection paths', () => {
         dockerVersion: 'unknown',
         hostname: 'test',
         capabilities: [],
-        tokenHash: 'abcdef1234567890',
+        tokenHash: 'present',
       },
     });
     await new Promise((r) => setTimeout(r, 0));

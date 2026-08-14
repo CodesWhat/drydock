@@ -11,6 +11,7 @@ const agentConfiguration = readFileSync(
   new URL('../content/docs/current/configuration/agents/index.mdx', import.meta.url),
   'utf8',
 );
+const obsoletePollIntervalPattern = /\bDD_AGENT_POLL_INTERVAL\b/u;
 
 test('Portwing FAQ links to the current controller-owned transport heading', () => {
   assert.match(
@@ -40,5 +41,15 @@ test('edge-agent configuration documents the controller-owned poll interval', ()
     agentConfiguration,
     /\| `DD_PORTWING_POLL_INTERVAL` \| ⚪ \| Edge-agent container refresh interval in seconds \| `300` \|/u,
   );
-  assert.doesNotMatch(agentConfiguration, /`DD_AGENT_POLL_INTERVAL`/u);
+  assert.doesNotMatch(agentConfiguration, obsoletePollIntervalPattern);
+});
+
+test('obsolete poll interval detection is independent of documentation formatting', () => {
+  for (const value of [
+    'DD_AGENT_POLL_INTERVAL',
+    '`DD_AGENT_POLL_INTERVAL`',
+    '**DD_AGENT_POLL_INTERVAL**',
+  ]) {
+    assert.match(value, obsoletePollIntervalPattern);
+  }
 });
