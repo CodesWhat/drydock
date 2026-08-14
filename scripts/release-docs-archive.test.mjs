@@ -75,3 +75,31 @@ test('CodeRabbit reviews the archive contract instead of the immutable snapshot 
   assert.doesNotMatch(config, /!content\/docs\/archive-provenance\.json/u);
   assert.doesNotMatch(config, /!scripts\/release-docs-archive\.test\.mjs/u);
 });
+
+test('secret-scan exceptions for the immutable archive are exact and commit-independent', () => {
+  const exceptions = readFileSync('.gitleaksignore', 'utf8')
+    .trim()
+    .split('\n')
+    .filter((entry) => entry.startsWith(`${archiveRoot}/`));
+
+  assert.deepEqual(exceptions, [
+    'content/docs/v1.6/configuration/authentications/oidc/index.mdx:private-key:55',
+    'content/docs/v1.6/configuration/registries/alicr/index.mdx:generic-api-key:60',
+    'content/docs/v1.6/configuration/registries/alicr/index.mdx:generic-api-key:67',
+    'content/docs/v1.6/configuration/registries/dhi/index.mdx:generic-api-key:68',
+    'content/docs/v1.6/configuration/registries/dhi/index.mdx:generic-api-key:75',
+    'content/docs/v1.6/configuration/registries/docr/index.mdx:generic-api-key:85',
+    'content/docs/v1.6/configuration/registries/docr/index.mdx:generic-api-key:95',
+    'content/docs/v1.6/configuration/registries/gcr/index.mdx:private-key:40',
+    'content/docs/v1.6/configuration/registries/hub/index.mdx:generic-api-key:102',
+    'content/docs/v1.6/configuration/registries/hub/index.mdx:generic-api-key:109',
+    'content/docs/v1.6/configuration/registries/ibmcr/index.mdx:generic-api-key:86',
+    'content/docs/v1.6/configuration/registries/ibmcr/index.mdx:generic-api-key:93',
+    'content/docs/v1.6/configuration/registries/ocir/index.mdx:generic-api-key:60',
+    'content/docs/v1.6/configuration/registries/ocir/index.mdx:generic-api-key:67',
+    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:115',
+    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:122',
+    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:129',
+    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:46',
+  ]);
+});
