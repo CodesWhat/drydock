@@ -1330,7 +1330,13 @@ export class EdgeAgentAdapter {
 
     // Close all exec sessions — session.close() sends exec_end before deleting (O5)
     for (const session of this.execSessions.values()) {
-      session.close();
+      try {
+        session.close();
+      } catch (error: unknown) {
+        log.warn(
+          `Failed to notify exec consumer during disconnect for ${session.execId}: ${getErrorMessage(error)}`,
+        );
+      }
     }
     this.execSessions.clear();
 
