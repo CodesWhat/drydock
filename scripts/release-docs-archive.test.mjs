@@ -67,3 +67,11 @@ test('v1.6 archive is byte-for-byte bound to the published GA docs tree', () => 
     provenance.generatedChangelogSha256,
   );
 });
+
+test('CodeRabbit reviews the archive contract instead of the immutable snapshot files', () => {
+  const config = readFileSync('.coderabbit.yaml', 'utf8');
+
+  assert.match(config, /^ {4}- "!content\/docs\/v1\.6\/\*\*"$/mu);
+  assert.doesNotMatch(config, /!content\/docs\/archive-provenance\.json/u);
+  assert.doesNotMatch(config, /!scripts\/release-docs-archive\.test\.mjs/u);
+});

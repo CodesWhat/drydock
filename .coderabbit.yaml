@@ -67,6 +67,9 @@ reviews:
     - "!**/*.lock"
     - "!**/*.generated.*"
     - "!CHANGELOG.md"
+    # Immutable release archives are byte-bound to their published source by
+    # scripts/release-docs-archive.test.mjs. Review the manifest and contract.
+    - "!content/docs/v1.6/**"
 
   path_instructions:
     - path: "app/registries/**"
