@@ -5,6 +5,7 @@ import joi from 'joi';
 import setValue from 'set-value';
 import { logWarn } from '../log/warn.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
+import { toPositiveInteger } from '../util/parse.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
 const MAX_SECRET_FILE_SIZE_BYTES = 1024 * 1024;
@@ -20,6 +21,7 @@ const DEFAULT_GRYPE_WORKER_IMAGE =
   'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1';
 const DEFAULT_SYFT_WORKER_IMAGE =
   'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36';
+const DEFAULT_PORTWING_POLL_INTERVAL = 300;
 
 export type SecuritySeverity = (typeof SECURITY_SEVERITY_VALUES)[number];
 export type SecuritySbomFormat = (typeof SECURITY_SBOM_FORMAT_VALUES)[number];
@@ -217,6 +219,10 @@ export function getExperimentalPortwingEnabled() {
     return true;
   }
   return envFlagEnabled(value);
+}
+
+export function getPortwingPollInterval(): number {
+  return toPositiveInteger(ddEnvVars.DD_PORTWING_POLL_INTERVAL, DEFAULT_PORTWING_POLL_INTERVAL);
 }
 
 /**
