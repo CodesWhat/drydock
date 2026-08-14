@@ -17,7 +17,7 @@ const mockCreateSbomStorage = vi.hoisted(() => vi.fn(() => ({ storage: 'controll
 const mockRegistryState = vi.hoisted(() => ({
   trigger: {},
   watcher: {} as Record<string, { watchContainer?: ReturnType<typeof vi.fn> }>,
-  registry: {},
+  registry: {} as Record<string, unknown>,
   authentication: {},
   agent: {},
 }));
@@ -87,6 +87,7 @@ vi.mock('../registry/index.js', () => ({
 
 import * as event from '../event/index.js';
 import * as gateWatch from '../maturity/gate-watch.js';
+import Hub from '../registries/providers/hub/Hub.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
@@ -104,6 +105,9 @@ describe('AgentClient', () => {
     vi.mocked(updateOperationStore.getOperationById).mockReturnValue(undefined);
     for (const watcherId of Object.keys(mockRegistryState.watcher)) {
       delete mockRegistryState.watcher[watcherId];
+    }
+    for (const registryId of Object.keys(mockRegistryState.registry)) {
+      delete mockRegistryState.registry[registryId];
     }
     vi.useFakeTimers();
     client = new AgentClient('test-agent', {
@@ -8061,6 +8065,12 @@ describe('AgentClient', () => {
   });
 
   describe('Portwing Docker API transport', () => {
+    async function registerAnonymousHub() {
+      const hub = new Hub();
+      await hub.register('registry', 'hub', 'public', {});
+      mockRegistryState.registry[hub.getId()] = hub;
+    }
+
     test('reports whether a watcher uses controller Docker transport', async () => {
       await client.handleComponentSync(
         [
@@ -8193,6 +8203,55 @@ describe('AgentClient', () => {
       );
     });
 
+    test('marker-mode inventory normalizes a raw Portwing Docker Hub image through the configured provider', async () => {
+      await registerAnonymousHub();
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'busybox',
+          watcher: 'docker',
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: '1.36.0', semver: false },
+            digest: { watch: false },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            name: 'library/busybox',
+            registry: {
+              name: 'hub.public',
+              url: 'https://registry-1.docker.io/v2',
+            },
+          }),
+        }),
+      );
+    });
+
     test('marker-mode incremental events cannot clear controller-owned update enrichment', async () => {
       const existing = {
         id: 'c1',
@@ -8279,6 +8338,61 @@ describe('AgentClient', () => {
           agent: 'test-agent',
           image: { id: 'sha256:changed' },
           labels: { 'com.example.channel': 'stable' },
+        }),
+        { emitBatchEvent: true },
+      );
+    });
+
+    test('marker-mode Portwing events give the native watcher a configured registry identity', async () => {
+      await registerAnonymousHub();
+      const refreshContainer = vi.fn().mockResolvedValue({
+        container: { id: 'c1', watcher: 'docker', updateAvailable: false },
+        changed: false,
+      });
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+      mockRegistryState.watcher['test-agent.docker.docker'] = {
+        watchContainer: refreshContainer,
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((value) => value);
+
+      await client.handleEvent('dd:container-updated', {
+        id: 'c1',
+        name: 'busybox',
+        watcher: 'docker',
+        image: {
+          id: 'sha256:current',
+          registry: { name: 'unknown', url: 'docker.io' },
+          name: 'busybox',
+          tag: { value: '1.36.0', semver: false },
+          digest: { watch: false },
+          architecture: 'arm64',
+          os: 'linux',
+        },
+      });
+
+      expect(refreshContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            name: 'library/busybox',
+            registry: {
+              name: 'hub.public',
+              url: 'https://registry-1.docker.io/v2',
+            },
+          }),
         }),
         { emitBatchEvent: true },
       );
