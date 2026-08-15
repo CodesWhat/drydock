@@ -204,8 +204,27 @@ export function createBeforeSend(token: string, routes: ReadonlySet<string>) {
       return null;
     }
 
+    // PostHog's cookieless server-hash ingestion reads $raw_user_agent and
+    // $host straight off event properties and drops the event (silently,
+    // with a cookieless_missing_user_agent / cookieless_missing_host
+    // ingestion warning) if either is absent. Require and forward both.
+    // $ip is intentionally never forwarded: PostHog's capture service fills
+    // it in server-side from the request connection.
+    const rawUserAgent = input.properties.$raw_user_agent;
+    const host = input.properties.$host;
+    if (
+      typeof rawUserAgent !== "string" ||
+      rawUserAgent === "" ||
+      typeof host !== "string" ||
+      host === ""
+    ) {
+      return null;
+    }
+
     const rawPath = getRawPath(input.properties);
     const properties = createCommonProperties(token, input.properties, rawPath, routes);
+    properties.$raw_user_agent = rawUserAgent;
+    properties.$host = host;
 
     if (input.event === "$pageview") {
       properties.$current_url = `${PRODUCTION_ORIGIN}${properties.path}`;

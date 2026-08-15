@@ -14,6 +14,15 @@ import {
 } from "../src/lib/analytics-contract.ts";
 
 const ROUTES = new Set(["/", "/compare", "/docs/v1.7", "/docs/v1.7/guides/security"]);
+// posthog-js attaches these to every envelope by default. PostHog's
+// cookieless server-hash ingestion reads them straight off event.properties
+// and drops the event with a cookieless_missing_user_agent /
+// cookieless_missing_host warning if either is absent, so before_send must
+// require and forward them.
+const COOKIELESS_HASH_PROPERTIES = {
+  $raw_user_agent: "Mozilla/5.0 (Test Runner)",
+  $host: "getdrydock.com",
+};
 const APPROVED_CTA_TUPLES = [
   ["marketing", "docs_root", "header"],
   ["marketing", "github_repository", "header"],
@@ -126,6 +135,7 @@ test("pageviews are rebuilt from the canonical production URL and a minimal enve
     timestamp,
     $set: { email: "secret@example.com" },
     properties: {
+      ...COOKIELESS_HASH_PROPERTIES,
       token: "attacker-token",
       distinct_id: "$posthog_cookieless",
       $cookieless_mode: true,
@@ -152,8 +162,58 @@ test("pageviews are rebuilt from the canonical production URL and a minimal enve
       surface: "marketing",
       path: "/compare",
       $current_url: `${PRODUCTION_ORIGIN}/compare`,
+      ...COOKIELESS_HASH_PROPERTIES,
     },
   });
+});
+
+test("before_send requires and forwards the cookieless server-hash fields", () => {
+  const beforeSend = createBeforeSend("phc_public-token_123", ROUTES);
+  const validProperties = {
+    ...COOKIELESS_HASH_PROPERTIES,
+    path: "/",
+  };
+
+  const result = beforeSend({
+    uuid: "018f0000-0000-7000-8000-000000000005",
+    event: "$pageview",
+    properties: validProperties,
+  });
+  assert.ok(result);
+  assert.equal(result.properties.$raw_user_agent, COOKIELESS_HASH_PROPERTIES.$raw_user_agent);
+  assert.equal(result.properties.$host, COOKIELESS_HASH_PROPERTIES.$host);
+  assert.equal("$ip" in result.properties, false);
+
+  // Regression guard: if before_send ever goes back to rebuilding properties
+  // from an allowlist that forgets these two keys, cookieless ingestion drops
+  // every event again with zero warning-free indication beyond
+  // cookieless_missing_user_agent / cookieless_missing_host.
+  for (const missingKey of Object.keys(COOKIELESS_HASH_PROPERTIES)) {
+    const withoutField = { ...validProperties };
+    delete withoutField[missingKey];
+    assert.equal(
+      beforeSend({
+        uuid: "018f0000-0000-7000-8000-000000000006",
+        event: "$pageview",
+        properties: withoutField,
+      }),
+      null,
+      `before_send must drop events missing ${missingKey}`,
+    );
+  }
+
+  for (const emptyKey of Object.keys(COOKIELESS_HASH_PROPERTIES)) {
+    const withEmptyField = { ...validProperties, [emptyKey]: "" };
+    assert.equal(
+      beforeSend({
+        uuid: "018f0000-0000-7000-8000-000000000007",
+        event: "$pageview",
+        properties: withEmptyField,
+      }),
+      null,
+      `before_send must drop events with empty ${emptyKey}`,
+    );
+  }
 });
 
 test("CTA events require an allowlisted tuple and retain no extra properties", () => {
@@ -162,6 +222,7 @@ test("CTA events require an allowlisted tuple and retain no extra properties", (
     uuid: "018f0000-0000-7000-8000-000000000002",
     event: "cta activated",
     properties: {
+      ...COOKIELESS_HASH_PROPERTIES,
       path: "/docs/v1.7/guides/security",
       cta_id: "github_repository",
       placement: "footer",
@@ -180,6 +241,7 @@ test("CTA events require an allowlisted tuple and retain no extra properties", (
       path: "/docs/v1.7/guides/security",
       cta_id: "github_repository",
       placement: "footer",
+      ...COOKIELESS_HASH_PROPERTIES,
     },
   });
   assert.equal(
@@ -197,6 +259,7 @@ test("web vitals keep only finite nonnegative allowlisted metric values", () => 
     uuid: "018f0000-0000-7000-8000-000000000003",
     event: "$web_vitals",
     properties: {
+      ...COOKIELESS_HASH_PROPERTIES,
       $current_url: `${PRODUCTION_ORIGIN}/docs/v1.7?secret=yes#private`,
       $web_vitals_CLS_value: 0.01,
       $web_vitals_FCP_value: 123.4,
@@ -218,13 +281,14 @@ test("web vitals keep only finite nonnegative allowlisted metric values", () => 
       path: "/docs/v1.7",
       $web_vitals_CLS_value: 0.01,
       $web_vitals_FCP_value: 123.4,
+      ...COOKIELESS_HASH_PROPERTIES,
     },
   });
   assert.equal(
     beforeSend({
       uuid: "018f0000-0000-7000-8000-000000000004",
       event: "$web_vitals",
-      properties: { $current_url: PRODUCTION_ORIGIN },
+      properties: { ...COOKIELESS_HASH_PROPERTIES, $current_url: PRODUCTION_ORIGIN },
     }),
     null,
   );
