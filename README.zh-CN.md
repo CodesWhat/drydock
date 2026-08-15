@@ -14,8 +14,7 @@
 
 </div>
 
-<p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
+<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -97,8 +96,7 @@ services:
     restart: unless-stopped
 ```
 
-<details>
-<summary>替代方案：<a href="https://github.com/CodesWhat/sockguard">sockguard</a>套接字代理</summary>
+<details><summary>替代方案：<a href="https://github.com/CodesWhat/sockguard">sockguard</a>套接字代理</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) 是来自同一 CodesWhat 生态系统的默认拒绝 Docker 套接字过滤器，具有为 drydock 构建的预设：
 
@@ -137,8 +135,7 @@ services:
 
 </details>
 
-<details>
-<summary>替代方案：通过直接插座安装快速启动</summary>
+<details><summary>替代方案：通过直接插座安装快速启动</summary>
 
 ```bash
 docker run -d \
@@ -178,8 +175,7 @@ docker run -d \
 
 <h2 align="center" id="recent-updates">🆕 最近更新</h2>
 
-<details open>
-<summary><strong>v1.7.0-rc.1 亮点</strong></summary>
+<details open><summary><strong>v1.7.0-rc.1 亮点</strong></summary>
 
 - **依赖感知更新** — 通过标签或 Compose 元数据构建经过验证的依赖关系图，预览准确的更新波次，并按确定的顺序执行更新或重启依赖项，同时安全处理循环依赖、失败和过期预览。([讨论 #219](https://github.com/CodesWhat/drydock/discussions/219))
 - **运维体验** — 可安装的 PWA、可点击的命名端口链接、实时容器运行时间、键盘快捷键，以及对新发现容器的防抖检测。
@@ -191,8 +187,7 @@ docker run -d \
 
 </details>
 
-<details>
-<summary><strong>v1.6.0 亮点</strong></summary>
+<details><summary><strong>v1.6.0 亮点</strong></summary>
 
 - **Portwing Edge/代理传输趋于成熟**：Portwing 0.9.0+ 支持由控制器执行原生 Docker 检查和更新、连续 Edge 日志、Ed25519 v2 请求签名，以及与签名密钥绑定的代理显示名称。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637))
 - **带成熟度稳定门的声明式更新策略**：三级 `dd.updatePolicy.*` 优先级、候选解锁倒计时和专用 `maturity-cleared` 通知。([讨论 #307](https://github.com/CodesWhat/drydock/discussions/307)、[讨论 #406](https://github.com/CodesWhat/drydock/discussions/406))
@@ -205,8 +200,7 @@ docker run -d \
 
 </details>
 
-<details>
-<summary><strong>v1.6.0-rc.13 亮点</strong></summary>
+<details><summary><strong>v1.6.0-rc.13 亮点</strong></summary>
 
 - **摘要比较仅使用匹配仓库的候选项**：`getOrderedRepoDigests` 会筛选 `RepoDigests`，并可自动修复过期锚点。([#670](https://github.com/CodesWhat/drydock/pull/670))
 - **所有工作区将 `nanoid` 固定为 3.3.18**，修复 CVE-2026-67213 和 CVE-2026-67214。([#673](https://github.com/CodesWhat/drydock/pull/673))
@@ -216,8 +210,7 @@ docker run -d \
 
 </details>
 
-<details>
-<summary><strong>v1.6.0-rc.12 亮点</strong></summary>
+<details><summary><strong>v1.6.0-rc.12 亮点</strong></summary>
 
 - **安全依赖更新**：`brace-expansion` 5.0.9、`ip-address` 10.3.1 和 `fast-uri` 4.1.2。([#659](https://github.com/CodesWhat/drydock/pull/659))
 - **成熟度时钟**在显示和阻止逻辑中共同使用 `updatePolicy.maturityMinAgeDays`，日期错误从 `debug` 提升为 `warn`。([#604](https://github.com/CodesWhat/drydock/issues/604))
@@ -227,11 +220,9 @@ docker run -d \
 
 </details>
 
-<details>
-<summary><strong>v1.6.0-rc.11 亮点</strong></summary>
+<details><summary><strong>v1.6.0-rc.11 亮点</strong></summary>
 
 - **Portwing 传输**：`transport=docker-api`、`execution=controller`、`events=portwing` 标记启用经过身份验证的 Standard HTTP 或 Edge，以承载由控制器执行的检查、更新、生命周期操作、预览和回滚。Portwing 仍是生命周期事件源，原始清单无法抹除控制器增强的更新结果。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637)、[Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
-
 - **通知** — 每个规则/每个提供商的标题和正文模板，带有实时预览，加上审计支持的应用内响铃类别和更新严重性阈值。
 - **仪表板** — 零依赖 CSS 网格替换为鼠标/触摸重新排序、有界调整大小、响应式布局、小部件可见性、重置和可选的跨设备首选项同步。
 - **更新策略** — 声明式观察程序/标签/UI 优先级、覆盖/恢复审核跟踪、到期倒计时/手动覆盖以及具有堆叠的当前→较新标签视图的固定标签信息可见性。
@@ -243,8 +234,7 @@ docker run -d \
 
 </details>
 
-<details>
-<summary><strong>v1.5.2亮点</strong></summary>
+<details><summary><strong>v1.5.2亮点</strong></summary>
 
 - **重新创建安全的更新策略** - 成熟度门、跳过的标签/摘要和暂停现在可以在本地和远程代理工作负载的容器重新创建中继续存在。
 - **固定标签可靠性** — 完全固定标签再次检测相同标签摘要重建，而 UI 可以显示不可操作的较新同系列标签，而无需更改更新或触发行为。
@@ -267,7 +257,7 @@ docker run -d \
 <p align="center"><em>发现更新，查看到底发生了什么变化，然后应用它。处理备份、健康检查和回滚。</em></p>
 
 <table>
-<tr>
+<tbody><tr>
 <td width="50%" align="center"><strong>光</strong></td>
 <td width="50%" align="center"><strong>黑暗</strong></td>
 </tr>
@@ -275,7 +265,7 @@ docker run -d \
 <td><img src="docs/assets/drydock-dashboard-light.png" alt="Dashboard Light"></td>
 <td><img src="docs/assets/drydock-dashboard-dark.png" alt="Dashboard Dark"></td>
 </tr>
-</table>
+</tbody></table>
 
 <div align="center">
 
@@ -300,22 +290,22 @@ docker run -d \
 <h2 align="center" id="features">✨ 特点</h2>
 
 | |特色|描述 |
-|---|---|---|
-| 🔭 | **监控优先检测** |监视每个正在运行的容器，并在发生任何情况之前将每个可用更新分类为主要、次要、补丁或摘要。除非你这么说，否则一切都不会改变。 |
-| 📦 | **23 家注册提供商** | Docker Hub、GHCR、ECR、ACR、GCR、GAR、GitLab、Quay、Harbor、Artifactory、Nexus 等 12 个。公共和私有、云和自托管，具有每个注册表 TLS 和身份验证。 |
-| 🔔 | **20 个触发器** | 17 个通知通道（Slack、Discord、Telegram、Teams、SMTP、MQTT、ntfy 等）以及 Docker、Docker Compose 和命令操作，具有每个事件/提供商模板、实时预览、阈值过滤和批处理模式。 |
-| 🥊 | **Update Bouncer** | Trivy/Grype 漏洞扫描可在部署之前阻止不安全的更新，并具有联合签名验证和 SBOM 生成功能（CycloneDX 和 SPDX）。 |
-| ↩️ | **镜像备份和自动回滚** |预更新映像快照，具有可配置的保留、运行状况检查失败时自动回滚以及从 UI 中一键手动回滚。 |
-| 🪝 | **生命周期挂钩** |通过容器标签执行更新前和更新后的 shell 命令，并具有每个钩子超时和失败时中止控制。 |
-| 🗂️ | **Docker Compose 更新** |通过 Docker Engine API 以及保留 YAML 的映像修补来拉取并重新创建 Compose 服务。 |
-| 🎛️ | **每个容器的政策** |正则表达式标签规则和触发路由使用`dd.*`标签；成熟度门、跳过/暂停/固定和维护窗口通过 UI/API 或观察者配置存储。 |
-| 🛰️ | **分布式代理** |通过 SSE 监控远程 Docker 主机。Portwing 0.9.0+ 代理可以使用入站 Standard HTTP 或出站 Edge WebSocket 传输；Drydock 1.6.0-rc.11+ 可通过任一经过身份验证的路径在控制器端执行原生注册表检查以及单个或批量 Docker 更新。Edge 还可连续传输实时日志而无需入站端口；`DD_EXPERIMENTAL_PORTWING=false` 仍是紧急禁用开关。 |
-| 🖥️ | **网络仪表板** | Vue 3 UI 具有零依赖可定制小部件网格、响应式表格/卡片视图、实时 SSE 更新、通知铃控件以及每个容器的详细信息、日志和统计信息。 |
-| 🔗 | **REST API 和 Webhook** |用于 CI/CD 监视和更新触发器的令牌身份验证端点，以及用于推送事件的签名注册表 Webhook 摄取。 |
-| 🔐 | **OIDC 身份验证** |使用 OpenID Connect（Authelia、Auth0、Authentik）保护仪表板。默认情况下，所有身份验证流程都会失败关闭。 |
-| 📈 | **Prometheus 指标** |内置 `/metrics` 端点，具有适用于 Prometheus 和 Grafana 监控堆栈的可选身份验证旁路。 |
-| 🌍 | **17 个 UI 语言环境** |全有线翻译系统，具有完整的英语和 16 个社区维护的语言环境，通过 Crowdin 同步，可在 Config 中切换。 |
-| 🔒 | **ReDoS-免疫正则表达式** |每个用户提供的标签模式都通过 re2js（纯 JS RE2 端口）进行编译，以实现线性时间匹配，不会因灾难性回溯模式而停止。 |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 🔭  | **监控优先检测**             | 监视每个正在运行的容器，并在发生任何情况之前将每个可用更新分类为主要、次要、补丁或摘要。除非你这么说，否则一切都不会改变。                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 📦  | **23 家注册提供商**          | Docker Hub、GHCR、ECR、ACR、GCR、GAR、GitLab、Quay、Harbor、Artifactory、Nexus 等 12 个。公共和私有、云和自托管，具有每个注册表 TLS 和身份验证。                                                                                                                                                                                                                                                                                                                                                      |
+| 🔔  | **20 个触发器**            | 17 个通知通道（Slack、Discord、Telegram、Teams、SMTP、MQTT、ntfy 等）以及 Docker、Docker Compose 和命令操作，具有每个事件/提供商模板、实时预览、阈值过滤和批处理模式。                                                                                                                                                                                                                                                                                                                                                                                                |
+| 🥊  | **Update Bouncer**     | Trivy/Grype 漏洞扫描可在部署之前阻止不安全的更新，并具有联合签名验证和 SBOM 生成功能（CycloneDX 和 SPDX）。                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ↩️  | **镜像备份和自动回滚**          | 预更新映像快照，具有可配置的保留、运行状况检查失败时自动回滚以及从 UI 中一键手动回滚。                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 🪝  | **生命周期挂钩**             | 通过容器标签执行更新前和更新后的 shell 命令，并具有每个钩子超时和失败时中止控制。                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 🗂️ | **Docker Compose 更新**  | 通过 Docker Engine API 以及保留 YAML 的映像修补来拉取并重新创建 Compose 服务。                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 🎛️ | **每个容器的政策**            | 正则表达式标签规则和触发路由使用`dd.*`标签；成熟度门、跳过/暂停/固定和维护窗口通过 UI/API 或观察者配置存储。                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 🛰️ | **分布式代理**              | 通过 SSE 监控远程 Docker 主机。Portwing 0.9.0+ 代理可以使用入站 Standard HTTP 或出站 Edge WebSocket 传输；Drydock 1.6.0-rc.11+ 可通过任一经过身份验证的路径在控制器端执行原生注册表检查以及单个或批量 Docker 更新。Edge 还可连续传输实时日志而无需入站端口；`DD_EXPERIMENTAL_PORTWING=false` 仍是紧急禁用开关。                                                                                                                                                                                                                |
+| 🖥️ | **网络仪表板**              | Vue 3 UI 具有零依赖可定制小部件网格、响应式表格/卡片视图、实时 SSE 更新、通知铃控件以及每个容器的详细信息、日志和统计信息。                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 🔗  | **REST API 和 Webhook** | 用于 CI/CD 监视和更新触发器的令牌身份验证端点，以及用于推送事件的签名注册表 Webhook 摄取。                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| 🔐  | **OIDC 身份验证**          | 使用 OpenID Connect（Authelia、Auth0、Authentik）保护仪表板。默认情况下，所有身份验证流程都会失败关闭。                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 📈  | **Prometheus 指标**      | 内置 `/metrics` 端点，具有适用于 Prometheus 和 Grafana 监控堆栈的可选身份验证旁路。                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| 🌍  | **17 个 UI 语言环境**       | 全有线翻译系统，具有完整的英语和 16 个社区维护的语言环境，通过 Crowdin 同步，可在 Config 中切换。                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| 🔒  | **ReDoS-免疫正则表达式**      | 每个用户提供的标签模式都通过 re2js（纯 JS RE2 端口）进行编译，以实现线性时间匹配，不会因灾难性回溯模式而停止。                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 <hr>
 
@@ -345,35 +335,46 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 
 <h2 align="center" id="feature-comparison">⚖️功能比较</h2>
 
-<details>
-<summary><strong>drydock 与其他容器更新工具相比如何？</strong></summary>
+<details><summary><strong>drydock 与其他容器更新工具相比如何？</strong></summary>
 
 > ✅ = 支持❌ = 不支持⚠️ = 部分/有限 &nbsp; † = 已存档，不再维护
 
-| Feature | drydock | WUD | Diun | *Watchtower †* | *Ouroboros †* |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Web 界面 / 仪表盘 | ✅ | ✅ | ❌ | ❌ | ❌ |
-| 自动更新容器 | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Docker Compose 更新 | ✅ | ✅ | ❌ | ⚠️ | ❌ |
-| 触发器 / 通知渠道 | 20 | 16 | 17 | ~19 | ~6 |
-| 镜像仓库提供商 | 23 | 13 | ⚠️ | ⚠️ | ⚠️ |
-| OIDC / SSO 身份验证 | ✅ | ✅ | ❌ | ❌ | ❌ |
-| REST API | ✅ | ✅ | ⚠️ | ⚠️ | ❌ |
-| Prometheus 指标 | ✅ | ✅ | ❌ | ✅ | ✅ |
-| MQTT / Home Assistant | ✅ | ✅ | ✅ | ❌ | ❌ |
-| 镜像备份与回滚 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 容器分组 / 堆栈 | ✅ | ✅ | ❌ | ⚠️ | ❌ |
-| 生命周期钩子（更新前/后） | ✅ | ❌ | ❌ | ✅ | ❌ |
-| 用于 CI/CD 的 Webhook API | ✅ | ❌ | ❌ | ✅ | ❌ |
-| 启动/停止/重启/更新容器 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 分布式代理（远程） | ✅ | ❌ | ✅ | ⚠️ | ❌ |
-| 审计日志 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 安全扫描（Trivy/Grype） | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 支持 SemVer 的更新 | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Digest 监控 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 多架构（amd64/arm64） | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 容器日志查看器 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 积极维护 | ✅ | ✅ | ✅ | ❌ | ❌ |
+<table>
+<thead>
+<tr>
+<th width="28%">Feature</th>
+<th width="15%" align="center">drydock</th>
+<th width="15%" align="center">WUD</th>
+<th width="15%" align="center">Diun</th>
+<th width="13%" align="center">*Watchtower †*</th>
+<th width="14%" align="center">*Ouroboros †*</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Web 界面 / 仪表盘</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>自动更新容器</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Docker Compose 更新</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>触发器 / 通知渠道</td><td align="center">20</td><td align="center">16</td><td align="center">17</td><td align="center">~19</td><td align="center">~6</td></tr>
+<tr><td>镜像仓库提供商</td><td align="center">23</td><td align="center">13</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>OIDC / SSO 身份验证</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Prometheus 指标</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>镜像备份与回滚</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>容器分组 / 堆栈</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>生命周期钩子（更新前/后）</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>用于 CI/CD 的 Webhook API</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>启动/停止/重启/更新容器</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>分布式代理（远程）</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>审计日志</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>安全扫描（Trivy/Grype）</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>支持 SemVer 的更新</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Digest 监控</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>多架构（amd64/arm64）</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>容器日志查看器</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>积极维护</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+</tbody>
+</table>
 
 > 数据基于截至 2026 年 3 月的公开文档。
 > 如果有任何信息不准确，欢迎贡献。
@@ -384,8 +385,7 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 
 <h2 align="center" id="migration">🔄 迁移</h2>
 
-<details>
-<summary><strong>从 WUD 迁移（Docker 怎么样？）</strong></summary>
+<details><summary><strong>从 WUD 迁移（Docker 怎么样？）</strong></summary>
 
 Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。在启动升级服务之前重写它们；持久状态仍然会自动迁移。使用`docker exec -it drydock node dist/index.js config migrate --dry-run`进行预览，然后使用`docker exec -it drydock node dist/index.js config migrate --file .env --file compose.yaml`将配置重写为`DD_*`和`dd.*`命名。
 
@@ -395,23 +395,22 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 <h2 align="center" id="roadmap">🗺️路线图</h2>
 
-<details>
-<summary><strong>版本主题及亮点</strong></summary>
+<details><summary><strong>版本主题及亮点</strong></summary>
 
 此方向至少覆盖未来十二个月，直至 2027 年 8 月。
 此处仅列出高级主题；各版本详情请参阅 [CHANGELOG.md](CHANGELOG.md)。
 
-|版本 |主题 |亮点|
-| --- | --- | --- |
-| **v1.3.x** ✅ |安全稳定 | Trivy 扫描、Update Bouncer、SBOM、7 个新注册表、4 个新触发器、re2js 正则表达式引擎 |
-| **v1.4.x** ✅ | UI 现代化和强化 | Tailwind 4 + 自定义组件、6 个主题、Cmd/K 调色板、OpenAPI 3.1、撰写原生 YAML 更新、双槽扫描、OIDC 强化 |
-| **v1.5.0** ✅ |可观察性和 i18n |触发分类拆分 (`DD_ACTION_*`/`DD_NOTIFICATION_*`)、WebSocket 日志查看器、仪表板自定义、资源监控、通知发件箱 + DLQ、安全扫描摘要、17 个区域设置、SSE 最后事件 ID 重播、使用 Ed25519 身份验证的边缘代理拨出（实验性、`DD_EXPERIMENTAL_PORTWING=true`）|
-| **v1.5.1** ✅ |安全与维护| GCR/GAR pull-auth 修复、注册表 TLS 完成 (M-2)、hook env-var 注入强化、`DD_SESSION_SECRET__FILE` 支持、调试转储凭据编辑、机密文件权限检查、成熟度门死锁修复、完整 UI 可翻译性 + 社区翻译、维护窗口自动应用门、容器正常运行时间显示、标签/版本列分割显示软件版本（OCI 标签，带有 `dd.inspect.tag.path`双写 + 选择加入 `dd.inspect.tag.version-only` 路由），选择加入 compose 挂载前缀匹配，`${currentReleaseNotes}` 模板变量 |
-| **v1.5.2** ✅ |政策和固定标签可靠性 |娱乐安全成熟度/跳过/暂停策略保留、固定标签摘要重建检测和信息同族洞察、回滚候选清理、回滚级联预防、显式 MAC 保存和本地映像注册表跳过行为 |
-| **v1.6.0** |通知、政策和发布 英特尔 |每规则/每触发器通知模板，具有实时预览、通知铃声首选项、跨设备首选项同步、零依赖自定义仪表板网格 ([#281](https://github.com/CodesWhat/drydock/issues/281))、声明性更新策略 ([#320](https://github.com/CodesWhat/drydock/issues/320))、成熟稳定倒计时 + 即时候选人可见性 + 手动覆盖 ([#406](https://github.com/CodesWhat/drydock/discussions/406))、可操作更新状态面板和全局`notify` / `manual` / `auto` 更新模式 ([#325](https://github.com/CodesWhat/drydock/discussions/325))、观察者/imgset/容器标签策略继承以及堆叠当前 → 较新的固定标签可见性 ([#498](https://github.com/CodesWhat/drydock/issues/498))、标准化 44px 跨表、卡片和详细信息的源/发行说明/注册表资源操作([#295](https://github.com/CodesWhat/drydock/discussions/295))、运行状况事件通知 ([#198](https://github.com/CodesWhat/drydock/discussions/198))、双向 Home Assistant MQTT、响应式表/卡列表视图、Trivy/Grype/跨命令或固定 Docker-worker 后端扫描、扫描器资产拉取/热控制、堆外重复数据删除SBOM 存储、Trivy 长扫描正确性 ([#490](https://github.com/CodesWhat/drydock/issues/490))、触发分类迁移警告、v1.6 兼容性删除、文档/API 卫生以及 `/api` → `/api/v1` 迁移完成，并选择加入 wud-card/Homepage 兼容性填充程序 (`DD_COMPAT_WUDCARD`)。 |
-| **v1.7.0** |智能更新和用户体验 |依赖性感知排序（[#219](https://github.com/CodesWhat/drydock/discussions/219)）、选择性批量更新（[#232](https://github.com/CodesWhat/drydock/discussions/232)）、每次操作更新策略（[#511](https://github.com/CodesWhat/drydock/discussions/511)）、图像修剪、静态图像监控、图像成熟度指示器、统一的成熟度/更新时间时钟、可点击端口链接、键盘快捷键、PWA、`DD_TRIGGER_*` 删除（v1.5.0 弃用窗口结束），从图像中删除了curl |
-| **v1.8.0** |车队管理和实时配置 | YAML 配置、实时 UI 配置、卷浏览器、并行更新、SQLite 存储迁移 |
-| **v2.0+** |平台扩展及其他 | Swarm/Kubernetes 观察者、GitOps、健康门、金丝雀部署、Web 终端、RBAC、作用域可旋转 API 密钥（用于 HA/仪表板集成的静态承载令牌，[#469](https://github.com/CodesWhat/drydock/discussions/469)）、LDAP/AD、超越 Docker 兼容 API 的本机 Podman 提供程序、CLI、Wolfi 强化映像、套接字代理 |
+| 版本                                           | 主题           | 亮点                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **v1.3.x** ✅ | 安全稳定         | Trivy 扫描、Update Bouncer、SBOM、7 个新注册表、4 个新触发器、re2js 正则表达式引擎                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **v1.4.x** ✅ | UI 现代化和强化    | Tailwind 4 + 自定义组件、6 个主题、Cmd/K 调色板、OpenAPI 3.1、撰写原生 YAML 更新、双槽扫描、OIDC 强化                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **v1.5.0** ✅ | 可观察性和 i18n   | 触发分类拆分 (`DD_ACTION_*`/`DD_NOTIFICATION_*`)、WebSocket 日志查看器、仪表板自定义、资源监控、通知发件箱 + DLQ、安全扫描摘要、17 个区域设置、SSE 最后事件 ID 重播、使用 Ed25519 身份验证的边缘代理拨出（实验性、`DD_EXPERIMENTAL_PORTWING=true`）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **v1.5.1** ✅ | 安全与维护        | GCR/GAR pull-auth 修复、注册表 TLS 完成 (M-2)、hook env-var 注入强化、`DD_SESSION_SECRET__FILE` 支持、调试转储凭据编辑、机密文件权限检查、成熟度门死锁修复、完整 UI 可翻译性 + 社区翻译、维护窗口自动应用门、容器正常运行时间显示、标签/版本列分割显示软件版本（OCI 标签，带有 `dd.inspect.tag.path`双写 + 选择加入 `dd.inspect.tag.version-only` 路由），选择加入 compose 挂载前缀匹配，`${currentReleaseNotes}` 模板变量                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **v1.5.2** ✅ | 政策和固定标签可靠性   | 娱乐安全成熟度/跳过/暂停策略保留、固定标签摘要重建检测和信息同族洞察、回滚候选清理、回滚级联预防、显式 MAC 保存和本地映像注册表跳过行为                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **v1.6.0**   | 通知、政策和发布 英特尔 | 每规则/每触发器通知模板，具有实时预览、通知铃声首选项、跨设备首选项同步、零依赖自定义仪表板网格 ([#281](https://github.com/CodesWhat/drydock/issues/281))、声明性更新策略 ([#320](https://github.com/CodesWhat/drydock/issues/320))、成熟稳定倒计时 + 即时候选人可见性 + 手动覆盖 ([#406](https://github.com/CodesWhat/drydock/discussions/406))、可操作更新状态面板和全局`notify` / `manual` / `auto` 更新模式 ([#325](https://github.com/CodesWhat/drydock/discussions/325))、观察者/imgset/容器标签策略继承以及堆叠当前 → 较新的固定标签可见性 ([#498](https://github.com/CodesWhat/drydock/issues/498))、标准化 44px 跨表、卡片和详细信息的源/发行说明/注册表资源操作([#295](https://github.com/CodesWhat/drydock/discussions/295))、运行状况事件通知 ([#198](https://github.com/CodesWhat/drydock/discussions/198))、双向 Home Assistant MQTT、响应式表/卡列表视图、Trivy/Grype/跨命令或固定 Docker-worker 后端扫描、扫描器资产拉取/热控制、堆外重复数据删除SBOM 存储、Trivy 长扫描正确性 ([#490](https://github.com/CodesWhat/drydock/issues/490))、触发分类迁移警告、v1.6 兼容性删除、文档/API 卫生以及 `/api` → `/api/v1` 迁移完成，并选择加入 wud-card/Homepage 兼容性填充程序 (`DD_COMPAT_WUDCARD`)。 |
+| **v1.7.0**   | 智能更新和用户体验    | 依赖性感知排序（[#219](https://github.com/CodesWhat/drydock/discussions/219)）、选择性批量更新（[#232](https://github.com/CodesWhat/drydock/discussions/232)）、每次操作更新策略（[#511](https://github.com/CodesWhat/drydock/discussions/511)）、图像修剪、静态图像监控、图像成熟度指示器、统一的成熟度/更新时间时钟、可点击端口链接、键盘快捷键、PWA、`DD_TRIGGER_*` 删除（v1.5.0 弃用窗口结束），从图像中删除了curl                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **v1.8.0**   | 车队管理和实时配置    | YAML 配置、实时 UI 配置、卷浏览器、并行更新、SQLite 存储迁移                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **v2.0+**                    | 平台扩展及其他      | Swarm/Kubernetes 观察者、GitOps、健康门、金丝雀部署、Web 终端、RBAC、作用域可旋转 API 密钥（用于 HA/仪表板集成的静态承载令牌，[#469](https://github.com/CodesWhat/drydock/discussions/469)）、LDAP/AD、超越 Docker 兼容 API 的本机 Podman 提供程序、CLI、Wolfi 强化映像、套接字代理                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 </details>
 
@@ -419,30 +418,29 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 <h2 align="center" id="documentation">📖 文档</h2>
 
-|资源 |链接 |
-| --- | --- |
-|网站 | [获取drydock.com](https://getdrydock.com/) |
-|现场演示 | [demo.getdrydock.com](https://demo.getdrydock.com) |
-|文档 | [getdrydock.com/docs](https://getdrydock.com/docs) |
-|配置| [配置](https://getdrydock.com/docs/configuration) |
-|快速入门 | [快速入门](https://getdrydock.com/docs/quickstart) |
-|更新日志 | [`CHANGELOG.md`](CHANGELOG.md) |
-|弃用 | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
-|路线图 |请参阅上面的[路线图](#roadmap) 部分|
-|贡献 | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
-|行为准则 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
-|治理 | [`GOVERNANCE.md`](GOVERNANCE.md) |
-|安全保证 | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md) |
-|安全政策 | [`SECURITY.md`](SECURITY.md) |
-|问题 | [GitHub 问题](https://github.com/CodesWhat/drydock/issues) |
-|讨论 | [GitHub 讨论](https://github.com/CodesWhat/drydock/discussions) — 欢迎功能请求和想法 |
+| 资源           | 链接                                                                                 |
+| ------------ | ---------------------------------------------------------------------------------- |
+| 网站           | [获取drydock.com](https://getdrydock.com/)                           |
+| 现场演示         | [demo.getdrydock.com](https://demo.getdrydock.com) |
+| 文档           | [getdrydock.com/docs](https://getdrydock.com/docs)                 |
+| 配置           | [配置](https://getdrydock.com/docs/configuration)                                    |
+| 快速入门         | [快速入门](https://getdrydock.com/docs/quickstart)                                     |
+| 更新日志         | [`CHANGELOG.md`](CHANGELOG.md)                                                     |
+| 弃用           | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                               |
+| 路线图          | 请参阅上面的[路线图](#roadmap) 部分                                                           |
+| 贡献           | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                               |
+| 行为准则         | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                         |
+| 治理           | [`GOVERNANCE.md`](GOVERNANCE.md)                                                   |
+| 安全保证         | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)                                   |
+| 安全政策         | [`SECURITY.md`](SECURITY.md)                                                       |
+| 问题           | [GitHub 问题](https://github.com/CodesWhat/drydock/issues)                           |
+| 讨论           | [GitHub 讨论](https://github.com/CodesWhat/drydock/discussions) — 欢迎功能请求和想法          |
 
 <hr>
 
 <a id="star-history"></a>
 
-<div align="center">
-  <a href="https://github.com/CodesWhat/drydock/stargazers">
+<div align="center"><a href="https://github.com/CodesWhat/drydock/stargazers">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
       <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
@@ -484,11 +482,11 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 ### CodesWhat 生态系统的一部分
 
 <table>
-  <tr><th>工具</th><th>角色</th></tr>
+  <tbody><tr><th>工具</th><th>角色</th></tr>
   <tr><td><b>drydock</b></td><td>容器更新监控——Web UI 和通知引擎</td></tr>
   <tr><td><a href="https://github.com/CodesWhat/portwing"><b>portwing</b></a></td><td>远程 Docker 代理 — 从 Drydock 或独立的安全套接字级访问</td></tr>
   <tr><td><a href="https://github.com/CodesWhat/sockguard"><b>sockguard</b></a></td><td>Docker 套接字代理 — 默认拒绝白名单过滤器保护套接字</td></tr>
-</table>
+</tbody></table>
 
 这三个工具旨在分层：sockguard 过滤套接字，portwing 远程公开它，drydock 监视容器状态并对其进行操作。
 
