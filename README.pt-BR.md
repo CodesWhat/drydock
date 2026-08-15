@@ -418,7 +418,7 @@ Apenas temas gerais; consulte [CHANGELOG.md](CHANGELOG.md) para detalhes de cada
 
 <h2 align="center" id="documentation">📖 Documentação</h2>
 
-| Recurso                | Link                                                                                                                        |
+| Recurso                | Ligação                                                                                                                     |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Site                   | [getdrydock.com](https://getdrydock.com/)                                                                   |
 | Demonstração ao vivo   | [demo.getdrydock.com](https://demo.getdrydock.com)                                          |

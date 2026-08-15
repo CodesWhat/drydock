@@ -418,7 +418,7 @@ Tylko motywy ogólne; szczegóły poszczególnych wersji zawiera [CHANGELOG.md](
 
 <h2 align="center" id="documentation">📖 Dokumentacja</h2>
 
-| Resource                   | Link                                                                                                                   |
+| Zasób                      | Link                                                                                                                   |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Strona internetowa         | [getdrydock.com](https://getdrydock.com/)                                                              |
 | Demo na żywo               | [demo.getdrydock.com](https://demo.getdrydock.com)                                     |
