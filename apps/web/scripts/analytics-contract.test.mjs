@@ -201,6 +201,19 @@ test("before_send requires and forwards the cookieless server-hash fields", () =
       `before_send must drop events missing ${missingKey}`,
     );
   }
+
+  for (const emptyKey of Object.keys(COOKIELESS_HASH_PROPERTIES)) {
+    const withEmptyField = { ...validProperties, [emptyKey]: "" };
+    assert.equal(
+      beforeSend({
+        uuid: "018f0000-0000-7000-8000-000000000007",
+        event: "$pageview",
+        properties: withEmptyField,
+      }),
+      null,
+      `before_send must drop events with empty ${emptyKey}`,
+    );
+  }
 });
 
 test("CTA events require an allowlisted tuple and retain no extra properties", () => {
