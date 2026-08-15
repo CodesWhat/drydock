@@ -37,7 +37,7 @@
 <!-- separate alerts: a blank-line-only gap between blockquotes trips markdownlint MD028 -->
 
 > [!WARNING]
-> **Aktualizujesz do 1.6.0-rc.3 lub nowszej wersji?** Dodatkowe zabezpieczenia obowiązują bez okresu przejściowego. Instancja bez skonfigurowanego uwierzytelniania albo z włączonym, lecz niepotwierdzonym dostępem anonimowym po aktualizacji działa teraz w trybie zamkniętym, tak samo jak nowa instalacja: kontener działa, chronione żądania API zwracają `401`, publiczne trasy wykrywania i stanu uwierzytelniania pozostają dostępne, a `/health` zwraca `503`. Powłoka SPA może się załadować, ale nie odczyta chronionych danych. Przed aktualizacją ustaw `DD_ANONYMOUS_AUTH_CONFIRM=true` lub skonfiguruj `DD_AUTH_BASIC_*`/OIDC. Nazwa cookie sesji zmienia się z `connect.sid` na `drydock.sid`, co jednorazowo wyloguje użytkowników. HTTP notification triggers (plus the Hass webhook and registry icon fetches) now resolve hostnames through a guarded DNS lookup that blocks cloud-metadata/link-local targets and never follow redirects — set `allowmetadata=true` on a specific `DD_NOTIFICATION_HTTP_*` trigger if you legitimately need one. Pełne wskazówki zawiera **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**.
+> **Aktualizujesz do 1.6.0-rc.3 lub nowszej wersji?** Dodatkowe zabezpieczenia obowiązują bez okresu przejściowego. Instancja bez skonfigurowanego uwierzytelniania albo z włączonym, lecz niepotwierdzonym dostępem anonimowym po aktualizacji działa teraz w trybie zamkniętym, tak samo jak nowa instalacja: kontener działa, chronione żądania API zwracają `401`, publiczne trasy wykrywania i stanu uwierzytelniania pozostają dostępne, a `/health` zwraca `503`. Powłoka SPA może się załadować, ale nie odczyta chronionych danych. Przed aktualizacją ustaw `DD_ANONYMOUS_AUTH_CONFIRM=true` lub skonfiguruj `DD_AUTH_BASIC_*`/OIDC. Nazwa cookie sesji zmienia się z `connect.sid` na `drydock.sid`, co jednorazowo wyloguje użytkowników. Wyzwalacze powiadomień HTTP, webhook Hass i pobieranie ikon rejestrów rozwiązują teraz nazwy hostów za pomocą chronionego wyszukiwania DNS, które blokuje cele metadanych chmurowych i adresy link-local oraz nigdy nie podąża za przekierowaniami — ustaw `allowmetadata=true` dla konkretnego wyzwalacza `DD_NOTIFICATION_HTTP_*` tylko wtedy, gdy rzeczywiście jest to potrzebne. Pełne wskazówki zawiera **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**.
 
 <h2 align="center">📑Spis treści</h2>
 
@@ -96,7 +96,7 @@ services:
     restart: unless-stopped
 ```
 
-<details><summary>Alternatywa:<a href="https://github.com/CodesWhat/sockguard">sockguard</a>proxy gniazda</summary>
+<details><summary>Alternatywa: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> proxy gniazda</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) to filtr gniazda Docker z domyślną odmową z tego samego ekosystemu CodesWhat, z ustawieniem wstępnym zbudowanym dla drydock:
 
@@ -302,7 +302,7 @@ Większość narzędzi wymusza kompromis. Automatyczne aktualizacje (Watchtower,
 | 🛰️ | **Agenci rozproszeni**                                | Monitoruj zdalne hosty Dockera przez SSE. Agenci Portwing 0.9.0+ działają przez przychodzący Standard HTTP lub wychodzący transport WebSocket Edge; Drydock 1.6.0-rc.11+ wykonuje po stronie kontrolera natywne kontrole rejestru oraz pojedyncze i zbiorcze aktualizacje Dockera przez oba uwierzytelnione kanały. Edge przesyła też ciągłe logi bez portu przychodzącego; `DD_EXPERIMENTAL_PORTWING=false` pozostaje wyłącznikiem awaryjnym. |
 | 🖥️ | **Panel sieciowy**                                    | Interfejs użytkownika Vue 3 z konfigurowalną siatką widżetów o zerowej zależności, responsywnymi widokami tabel/kart, aktualizacjami SSE na żywo, sterowaniem dzwonkiem powiadomień oraz szczegółami, dziennikami i statystykami dotyczącymi poszczególnych kontenerów.                                                                                                                                                                                                                                                                                        |
 | 🔗  | **REST API i webhooki**                               | Punkty końcowe uwierzytelniane tokenem dla wyzwalaczy monitorowania i aktualizacji CI/CD oraz pozyskiwania podpisanego elementu webhook rejestru dla zdarzeń push.                                                                                                                                                                                                                                                                                                                                                                                             |
-| 🔐  | **Uwierzytelnianie OIDC**                             | Zabezpiecz deskę rozdzielczą za pomocą OpenID Connect (Authelia, Auth0, Authentik). Domyślnie wszystkie przepływy uwierzytelniania nie są zamykane.                                                                                                                                                                                                                                                                                                                                                                         |
+| 🔐  | **Uwierzytelnianie OIDC**                             | Zabezpiecz deskę rozdzielczą za pomocą OpenID Connect (Authelia, Auth0, Authentik). Domyślnie każdy błąd przepływu uwierzytelniania powoduje odmowę dostępu (fail-closed).                                                                                                                                                                                                                                                                                                                                                  |
 | 📈  | **Dane Prometheus**                                   | Wbudowany punkt końcowy `/metrics` z opcjonalnym obejściem uwierzytelniania dla stosów monitorowania Prometheus i Grafana.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | 🌍  | **17 ustawień regionalnych interfejsu użytkownika**   | W pełni przewodowy system tłumaczeń z pełnym językiem angielskim i 16 obsługiwanymi przez społeczność lokalizacjami zsynchronizowanymi za pośrednictwem Crowdin, przełączalny w konfiguracji.                                                                                                                                                                                                                                                                                                                                                                  |
 | 🔒  | **ReDoS-Regex immunologiczny**                        | Każdy wzorzec znacznika dostarczony przez użytkownika jest kompilowany przez re2js (port oparty wyłącznie na JS RE2) w celu uzyskania liniowego dopasowania, którego nie może zatrzymać katastrofalny wzorzec cofania się.                                                                                                                                                                                                                                                                                                                  |
@@ -325,7 +325,7 @@ Appprise · Discord · Czat Google · Gotify · HTTP · IFTTT · Kafka · Matrix
 
 ### 🔐 Uwierzytelnianie
 
-Anonimowy (opcja poprzez `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Podstawowy (nazwa użytkownika + skrót hasła) · OIDC (Authelia, Auth0, Authentik). Domyślnie wszystkie przepływy uwierzytelniania nie są zamykane.
+Anonimowy (opcja poprzez `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Podstawowy (nazwa użytkownika + skrót hasła) · OIDC (Authelia, Auth0, Authentik). Domyślnie każdy błąd przepływu uwierzytelniania powoduje odmowę dostępu (fail-closed).
 
 ### 🥊 Update Bouncer
 
@@ -342,12 +342,12 @@ Skanowanie pod kątem luk w zabezpieczeniach oparte na Trivy lub Grype blokuje n
 <table>
 <thead>
 <tr>
-<th width="28%">Feature</th>
+<th width="28%">Funkcja</th>
 <th width="15%" align="center">drydock</th>
 <th width="15%" align="center">WUD</th>
 <th width="15%" align="center">Diun</th>
-<th width="13%" align="center">*Watchtower †*</th>
-<th width="14%" align="center">*Ouroboros †*</th>
+<th width="13%" align="center"><em>Watchtower †</em></th>
+<th width="14%" align="center"><em>Ouroboros †</em></th>
 </tr>
 </thead>
 <tbody>
@@ -365,11 +365,11 @@ Skanowanie pod kątem luk w zabezpieczeniach oparte na Trivy lub Grype blokuje n
 <tr><td>Hooki cyklu życia (przed/po)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
 <tr><td>Webhook API dla CI/CD</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
 <tr><td>Start/stop/restart/aktualizacja kontenerów</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Distributed agents (remote)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Agenci rozproszeni (zdalni)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
 <tr><td>Dziennik audytu</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Skanowanie bezpieczeństwa (Trivy/Grype)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Aktualizacje zgodne z SemVer</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Monitorowanie digestów</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Wiele architektur (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Podgląd logów kontenera</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Aktywnie utrzymywane</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>

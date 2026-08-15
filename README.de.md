@@ -96,7 +96,7 @@ services:
     restart: unless-stopped
 ```
 
-<details><summary>Alternativ:<a href="https://github.com/CodesWhat/sockguard">sockguard</a>Socket-Proxy</summary>
+<details><summary>Alternativ: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> Socket-Proxy</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) ist ein standardmäßig verweigernder Docker-Socket-Filter aus demselben CodesWhat-Ökosystem mit einer für drydock erstellten Voreinstellung:
 
@@ -302,7 +302,7 @@ Die meisten Tools erzwingen einen Kompromiss. Die Auto-Updater (Watchtower, Ouro
 | 🛰️ | **Verteilte Agenten**                          | Überwachen Sie Remote-Docker-Hosts über SSE. Portwing 0.9.0+-Agents arbeiten über eingehendes Standard HTTP oder ausgehenden Edge-WebSocket-Transport; Drydock 1.6.0-rc.11+ kann native Registry-Prüfungen und einzelne oder gebündelte Docker-Updates über beide authentifizierten Pfade controllerseitig ausführen. Edge überträgt außerdem fortlaufende Live-Protokolle ohne eingehenden Port; `DD_EXPERIMENTAL_PORTWING=false` bleibt die Notabschaltung. |
 | 🖥️ | **Web-Dashboard**                              | Vue 3-Benutzeroberfläche mit einem anpassbaren Widget-Raster ohne Abhängigkeiten, reaktionsfähigen Tabellen-/Kartenansichten, Live-SSE-Updates, Steuerelementen für Benachrichtigungsglocken sowie Details, Protokollen und Statistiken pro Container.                                                                                                                                                                                                                                                                                                                        |
 | 🔗  | **REST-API und Webhooks**                      | Token-authentifizierte Endpunkte für CI/CD-Überwachungs- und Update-Trigger sowie signierte Registrierungs-Webhook-Aufnahme für Push-Ereignisse.                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| 🔐  | **OIDC-Authentifizierung**                     | Sichern Sie das Dashboard mit OpenID Connect (Authelia, Auth0, Authentik). Alle Authentifizierungsflüsse werden standardmäßig nicht geschlossen.                                                                                                                                                                                                                                                                                                                                                                                           |
+| 🔐  | **OIDC-Authentifizierung**                     | Sichern Sie das Dashboard mit OpenID Connect (Authelia, Auth0, Authentik). Alle Authentifizierungsabläufe verweigern bei einem Fehler standardmäßig den Zugriff (Fail-Closed).                                                                                                                                                                                                                                                                                                                                                              |
 | 📈  | **Prometheus-Metriken**                        | Integrierter `/metrics`-Endpunkt mit optionaler Authentifizierungsumgehung für die Überwachungsstacks Prometheus und Grafana.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | 🌍  | **17 UI-Gebietsschemas**                       | Vollständig verkabeltes Übersetzungssystem mit vollständigem Englisch und 16 von der Community gepflegten Gebietsschemas, synchronisiert über Crowdin, umschaltbar in Config.                                                                                                                                                                                                                                                                                                                                                                                                 |
 | 🔒  | **ReDoS-Immune Regex**                         | Jedes vom Benutzer bereitgestellte Tag-Muster wird über re2js (einen reinen JS-RE2-Port) für einen linearen Zeitabgleich kompiliert, der nicht durch ein katastrophales Backtracking-Muster blockiert werden kann.                                                                                                                                                                                                                                                                                                                                         |
@@ -325,7 +325,7 @@ Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix 
 
 ### 🔐 Authentifizierung
 
-Anonym (Opt-in über `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Basic (Benutzername + Passwort-Hash) · OIDC (Authelia, Auth0, Authentik). Alle Authentifizierungsflüsse werden standardmäßig nicht geschlossen.
+Anonym (Opt-in über `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Basic (Benutzername + Passwort-Hash) · OIDC (Authelia, Auth0, Authentik). Alle Authentifizierungsabläufe verweigern bei einem Fehler standardmäßig den Zugriff (Fail-Closed).
 
 ### 🥊 Update Bouncer
 
@@ -342,12 +342,12 @@ Trivy- oder Grype-gestützte Schwachstellenscans blockieren unsichere Updates, b
 <table>
 <thead>
 <tr>
-<th width="28%">Feature</th>
+<th width="28%">Funktion</th>
 <th width="15%" align="center">drydock</th>
 <th width="15%" align="center">WUD</th>
 <th width="15%" align="center">Diun</th>
-<th width="13%" align="center">*Watchtower †*</th>
-<th width="14%" align="center">*Ouroboros †*</th>
+<th width="13%" align="center"><em>Watchtower †</em></th>
+<th width="14%" align="center"><em>Ouroboros †</em></th>
 </tr>
 </thead>
 <tbody>
@@ -369,7 +369,7 @@ Trivy- oder Grype-gestützte Schwachstellenscans blockieren unsichere Updates, b
 <tr><td>Audit-Protokoll</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Sicherheitsscans (Trivy/Grype)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>SemVer-fähige Updates</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Digest-Überwachung</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Multi-Architektur (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Container-Loganzeige</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Aktiv gepflegt</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>

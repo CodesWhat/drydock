@@ -96,7 +96,7 @@ services:
     restart: unless-stopped
 ```
 
-<details><summary>Alternativa:<a href="https://github.com/CodesWhat/sockguard">sockguard</a>proxy de socket</summary>
+<details><summary>Alternativa: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> proxy de socket</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) es un filtro de socket Docker de denegación predeterminado del mismo ecosistema CodesWhat, con un ajuste preestablecido creado para drydock:
 
@@ -234,7 +234,7 @@ Guía completa de migración en [DEPRECATIONS.md](./DEPRECATIONS.md).
 
 </details>
 
-<details><summary><strong>v1.5.2 aspectos destacados</strong></summary>
+<details><summary><strong>Aspectos destacados de v1.5.2</strong></summary>
 
 - **Política de actualización segura para la recreación**: las puertas de madurez, las etiquetas/resúmenes omitidos y las posposiciones ahora sobreviven a la recreación de contenedores para cargas de trabajo de agentes locales y remotos.
 - **Confiabilidad de etiquetas fijadas**: las etiquetas completamente fijadas detectan reconstrucciones de resúmenes de la misma etiqueta nuevamente, mientras que la interfaz de usuario puede mostrar una etiqueta de la misma familia más nueva y no procesable sin cambiar el comportamiento de actualización o activación.
@@ -302,7 +302,7 @@ La mayoría de las herramientas obligan a hacer concesiones. Los actualizadores 
 | 🛰️ | **Agentes distribuidos**                                  | Supervise hosts Docker remotos mediante SSE. Los agentes Portwing 0.9.0+ funcionan por Standard HTTP entrante o transporte WebSocket Edge saliente; Drydock 1.6.0-rc.11+ puede ejecutar en el controlador comprobaciones nativas de registros y actualizaciones Docker individuales o por lotes a través de cualquiera de las rutas autenticadas. Edge también transporta registros continuos sin puerto de entrada; `DD_EXPERIMENTAL_PORTWING=false` sigue siendo la desactivación de emergencia. |
 | 🖥️ | **Panel web**                                             | Interfaz de usuario de Vue 3 con una cuadrícula de widgets personalizable sin dependencia, vistas de tablas/tarjetas responsivas, actualizaciones SSE en vivo, controles de campana de notificación y detalles, registros y estadísticas por contenedor.                                                                                                                                                                                                                                                                                                                                                           |
 | 🔗  | **API REST y webhooks**                                   | Puntos finales autenticados por token para activación de actualizaciones y vigilancia de CI/CD, además de ingesta de webhooks de registro firmados para eventos push.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| 🔐  | **Autenticación OIDC**                                    | Asegure el tablero con OpenID Connect (Authelia, Auth0, Authentik). Todos los flujos de autenticación fallan al cerrarse de forma predeterminada.                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| 🔐  | **Autenticación OIDC**                                    | Asegure el tablero con OpenID Connect (Authelia, Auth0, Authentik). De forma predeterminada, todos los flujos de autenticación deniegan el acceso ante cualquier fallo (fail-closed).                                                                                                                                                                                                                                                                                                                                                                                              |
 | 📈  | **Métricas Prometheus**                                   | Punto final `/metrics` incorporado con omisión de autenticación opcional para pilas de monitoreo Prometheus y Grafana.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | 🌍  | **17 configuraciones regionales de UI**                   | Sistema de traducción completamente cableado con inglés completo y 16 configuraciones regionales mantenidas por la comunidad sincronizadas a través de Crowdin, conmutables en Config.                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | 🔒  | **Expresión regular inmune a ReDoS**                      | Cada patrón de etiquetas proporcionado por el usuario se compila a través de re2js (un puerto RE2 JS puro) para una coincidencia de tiempo lineal que no puede detenerse por un patrón de retroceso catastrófico.                                                                                                                                                                                                                                                                                                                                                                               |
@@ -325,7 +325,7 @@ Informar · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix
 
 ### 🔐 Autenticación
 
-Anónimo (suscripción a través de `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Básico (nombre de usuario + hash de contraseña) · OIDC (Authelia, Auth0, Authentik). Todos los flujos de autenticación fallan al cerrarse de forma predeterminada.
+Anónimo (suscripción a través de `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Básico (nombre de usuario + hash de contraseña) · OIDC (Authelia, Auth0, Authentik). De forma predeterminada, todos los flujos de autenticación deniegan el acceso ante cualquier fallo (fail-closed).
 
 ### 🥊 Update Bouncer
 
@@ -342,12 +342,12 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 <table>
 <thead>
 <tr>
-<th width="28%">Feature</th>
+<th width="28%">Característica</th>
 <th width="15%" align="center">drydock</th>
 <th width="15%" align="center">WUD</th>
 <th width="15%" align="center">Diun</th>
-<th width="13%" align="center">*Watchtower †*</th>
-<th width="14%" align="center">*Ouroboros †*</th>
+<th width="13%" align="center"><em>Watchtower †</em></th>
+<th width="14%" align="center"><em>Ouroboros †</em></th>
 </tr>
 </thead>
 <tbody>
@@ -369,7 +369,7 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 <tr><td>Registro de auditoría</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Análisis de seguridad (Trivy/Grype)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Actualizaciones compatibles con SemVer</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Monitorización de digest</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Multi-arquitectura (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Visor de registros del contenedor</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Mantenimiento activo</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
