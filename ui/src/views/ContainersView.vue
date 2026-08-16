@@ -858,14 +858,18 @@ watch(
 );
 
 function normalizeQueryRecord(query: Record<string, unknown>): Record<string, string> {
-  const normalized: Record<string, string> = {};
+  // Route query keys originate from the URL and are therefore untrusted. Accumulate
+  // them in a Map (rather than writing `record[key] = value` on a plain object) so no
+  // dynamically-named property write can ever reach the object literal's prototype
+  // chain, then materialize the result in one shot via Object.fromEntries.
+  const normalized = new Map<string, string>();
   for (const [key, value] of Object.entries(query)) {
     const normalizedValue = firstQueryValue(value);
     if (normalizedValue !== undefined) {
-      normalized[key] = normalizedValue;
+      normalized.set(key, normalizedValue);
     }
   }
-  return normalized;
+  return Object.fromEntries(normalized);
 }
 
 function buildSyncedRouteQuery(): Record<string, string> {
