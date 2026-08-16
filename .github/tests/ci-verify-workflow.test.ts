@@ -60,16 +60,20 @@ test('security-actions calls the reusable go-ci workflow-security gate', () => {
 
   expect(job?.name).toBe('Security: Actions');
   expect(job?.uses).toBe(
-    'CodesWhat/.github/.github/workflows/go-ci.yml@01bf40b06b110946f12a49b82e407d77c6480df7',
+    'CodesWhat/.github/.github/workflows/go-ci.yml@47820bd85d49eb6cd0a935c31789c7d7ce037401',
   );
   expect(job?.with?.['run-workflow-security']).toBe(true);
   expect(job?.with?.['workflow-security-egress-policy']).toBe('block');
   expect(job?.with?.['workflow-security-allowed-endpoints']).toBe(
     'ghcr.io:443 github.com:443 pkg-containers.githubusercontent.com:443',
   );
+  // drydock is Go-less, so both Go jobs go-ci.yml gained must stay disabled.
+  expect(job?.with?.['run-test']).toBe(false);
+  expect(job?.with?.['run-lint']).toBe(false);
 
   const runFlags = Object.keys(job?.with ?? {}).filter(
-    (key) => key.startsWith('run-') && key !== 'run-workflow-security',
+    (key) =>
+      key.startsWith('run-') && !['run-workflow-security', 'run-test', 'run-lint'].includes(key),
   );
   expect(runFlags).toStrictEqual([]);
 });

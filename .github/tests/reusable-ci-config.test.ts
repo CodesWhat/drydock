@@ -19,7 +19,7 @@ interface WorkflowWithReusableJobs {
 // The go-ci.yml SHA every CodesWhat/.github reusable-workflow caller in this
 // repo must be pinned to. Bumping the reusable workflow means bumping this
 // constant and re-verifying every caller in the same change.
-const frozenGoCiSha = '01bf40b06b110946f12a49b82e407d77c6480df7';
+const frozenGoCiSha = '47820bd85d49eb6cd0a935c31789c7d7ce037401';
 const goCiUses = `CodesWhat/.github/.github/workflows/go-ci.yml@${frozenGoCiSha}`;
 
 const workflowsDir = fileURLToPath(new URL('../workflows', import.meta.url));
@@ -116,4 +116,17 @@ test('security-actions caller grants exactly the statically-validated permission
     contents: 'read',
     'security-events': 'write',
   });
+});
+
+test('security-actions caller disables the Go test and lint jobs', () => {
+  const job = reusableCallerJobs().find(
+    ({ file, jobId }) => file === 'ci-verify.yml' && jobId === 'security-actions',
+  )?.job;
+
+  expect(job).toBeDefined();
+  // drydock is Go-less: go-ci.yml's run-test/run-lint jobs have nothing to
+  // run here and must be disabled, or CI Verify would fail on a repo with no
+  // Go module.
+  expect(job?.with?.['run-test']).toBe(false);
+  expect(job?.with?.['run-lint']).toBe(false);
 });
