@@ -925,6 +925,52 @@ describe('ContainersView', () => {
     });
   });
 
+  describe('remote property injection guard (CodeQL #556)', () => {
+    // JSON.parse creates own data properties (CreateDataProperty), which is the only
+    // reliable way to construct an object with a literal "__proto__" key in a test —
+    // the `{ __proto__: ... }` object-literal syntax is special-cased by the engine and
+    // would silently no-op instead of reproducing what a malicious URL query string
+    // parses into.
+    function maliciousRouteQuery(): Record<string, unknown> {
+      return JSON.parse('{"__proto__":"polluted","normalKey":"kept"}');
+    }
+
+    it('normalizeQueryRecord does not let a "__proto__" query key alter Object.prototype', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      const normalized = vm.normalizeQueryRecord(maliciousRouteQuery());
+
+      // The real prototype chain is untouched — no denial-of-service via a poisoned
+      // Object.prototype.
+      expect(Object.getPrototypeOf(normalized)).toBe(Object.prototype);
+      expect((Object.prototype as Record<string, unknown>).polluted).toBeUndefined();
+
+      // The attacker-controlled key still round-trips as an inert own data property
+      // (never as a prototype mutation), and legitimate keys are preserved untouched.
+      const protoDescriptor = Object.getOwnPropertyDescriptor(normalized, '__proto__');
+      expect(protoDescriptor?.value).toBe('polluted');
+      expect(normalized.normalKey).toBe('kept');
+    });
+
+    it('does not pollute Object.prototype when syncing a malicious route query to the URL', async () => {
+      mockRoute.query = maliciousRouteQuery();
+      await mountContainersView([makeContainer()]);
+
+      mockFilterSearch.value = 'nginx';
+      await flushPromises();
+
+      expect(mockRouterReplace).toHaveBeenCalled();
+      const lastCall = mockRouterReplace.mock.calls.at(-1)?.[0];
+      const nextQuery = lastCall?.query as Record<string, unknown>;
+
+      expect(Object.getPrototypeOf(nextQuery)).toBe(Object.prototype);
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+      expect(Object.hasOwn(nextQuery, '__proto__')).toBe(true);
+      expect(nextQuery.normalKey).toBe('kept');
+    });
+  });
+
   describe('collapsed filter summary', () => {
     it('shows active filter chips when filters are collapsed', async () => {
       const wrapper = await mountContainersView([
