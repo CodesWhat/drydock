@@ -45,11 +45,29 @@ function getTestJobStep(name: string): WorkflowStep | undefined {
 test('required ci-verify jobs publish stable plain-text check names', () => {
   const workflow = loadWorkflow();
 
-  expect(workflow.jobs?.zizmor?.name).toBe('Security: Actions');
+  expect(workflow.jobs?.['legacy-security-actions']?.name).toBe('Security: Actions');
   expect(workflow.jobs?.lint?.name).toBe('Quality: Lint');
   expect(workflow.jobs?.test?.name).toBe('Quality: Test & Coverage');
   expect(workflow.jobs?.build?.name).toBe('Build');
   expect(workflow.jobs?.e2e?.name).toBe('E2E: Cucumber');
+});
+
+test('security-actions calls the reusable go-ci workflow-security gate', () => {
+  const workflow = loadWorkflow();
+  const job = workflow.jobs?.['security-actions'] as
+    | { uses?: string; with?: Record<string, unknown>; name?: string }
+    | undefined;
+
+  expect(job?.name).toBe('Security: Actions');
+  expect(job?.uses).toBe(
+    'CodesWhat/.github/.github/workflows/go-ci.yml@01bf40b06b110946f12a49b82e407d77c6480df7',
+  );
+  expect(job?.with?.['run-workflow-security']).toBe(true);
+
+  const runFlags = Object.keys(job?.with ?? {}).filter(
+    (key) => key.startsWith('run-') && key !== 'run-workflow-security',
+  );
+  expect(runFlags).toStrictEqual([]);
 });
 
 test('script node tests are wired into local and CI gates', () => {
@@ -107,7 +125,7 @@ test('secret scanning gates full history and the tracked working tree', () => {
 
   expect(job).toMatchObject({
     name: '🔑 Security: Secrets',
-    needs: ['zizmor'],
+    needs: ['security-actions'],
     'runs-on': 'ubuntu-latest',
     'timeout-minutes': 10,
   });
@@ -168,12 +186,12 @@ test('ci-verify can dispatch the complete release-candidate matrix manually', ()
     expect(workflow.jobs?.[jobId]?.if).toContain("github.event_name == 'workflow_dispatch'");
   }
 
-  for (const jobId of ['zizmor', 'changes', 'lint', 'test', 'build']) {
+  for (const jobId of ['security-actions', 'changes', 'lint', 'test', 'build']) {
     expect(workflow.jobs?.[jobId]?.if).toBeUndefined();
   }
 
-  expect(workflow.jobs?.codeql?.needs).toStrictEqual(['zizmor']);
-  expect(workflow.jobs?.fuzz?.needs).toStrictEqual(['zizmor']);
+  expect(workflow.jobs?.codeql?.needs).toStrictEqual(['security-actions']);
+  expect(workflow.jobs?.fuzz?.needs).toStrictEqual(['security-actions']);
   expect(workflow.jobs?.web?.needs).toStrictEqual(['changes']);
   expect(workflow.jobs?.['dast-zap-baseline']?.needs).toStrictEqual(['build']);
   expect(workflow.jobs?.e2e?.needs).toStrictEqual(['build', 'changes']);

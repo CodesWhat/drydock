@@ -28,6 +28,12 @@ function loadWorkflowFiles(): Array<{
     });
 }
 
+// legacy-security-actions is a temporary fail-closed bridge job: it only
+// republishes ci-verify.yml's security-actions result under the old plain
+// check name and makes no outbound calls of its own, so it runs with
+// egress-policy: block instead of the audit policy every other job uses.
+const blockEgressJobs = new Set(['ci-verify.yml/legacy-security-actions']);
+
 test('GitHub-hosted workflow jobs start with current pinned Harden Runner', () => {
   const violations: string[] = [];
 
@@ -43,13 +49,23 @@ test('GitHub-hosted workflow jobs start with current pinned Harden Runner', () =
         continue;
       }
 
-      if (firstStep.with?.['egress-policy'] !== 'audit') {
-        violations.push(`${file}/${jobId} missing audit egress policy`);
+      const expectedEgressPolicy = blockEgressJobs.has(`${file}/${jobId}`) ? 'block' : 'audit';
+      if (firstStep.with?.['egress-policy'] !== expectedEgressPolicy) {
+        violations.push(`${file}/${jobId} missing ${expectedEgressPolicy} egress policy`);
       }
     }
   }
 
   expect(violations).toStrictEqual([]);
+});
+
+test('legacy-security-actions bridge runs Harden Runner in fail-closed mode', () => {
+  const ciVerify = loadWorkflowFiles().find(({ file }) => file === 'ci-verify.yml');
+  const job = ciVerify?.workflow.jobs?.['legacy-security-actions'];
+  const firstStep = job?.steps?.[0];
+
+  expect(firstStep?.uses).toBe(hardenRunnerRef);
+  expect(firstStep?.with?.['egress-policy']).toBe('block');
 });
 
 test('Harden Runner comments match the pinned release version', () => {
