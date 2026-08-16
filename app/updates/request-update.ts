@@ -1,8 +1,5 @@
 import crypto from 'node:crypto';
-import {
-  findDockerTriggerForContainer,
-  NO_DOCKER_TRIGGER_FOUND_ERROR,
-} from '../api/docker-trigger.js';
+import { NO_DOCKER_TRIGGER_FOUND_ERROR } from '../api/docker-trigger.js';
 import {
   buildDependencyGraph,
   buildDependentsByDependency,
@@ -13,6 +10,11 @@ import {
 } from '../dependencies/dependency-graph.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import {
+  type ActionPolicyTrigger,
+  resolveForTrigger,
+  selectActionTrigger,
+} from '../model/action-policy.js';
 import { type Container, hasRawUpdate } from '../model/container.js';
 import {
   computeUpdateEligibility,
@@ -98,6 +100,8 @@ const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercomp
 const log = logger.child({ component: 'updates.request-update' });
 const NOTIFY_MODE_REJECTION_MESSAGE = 'Update mode is notify; Drydock will not apply updates';
 const MANUAL_MODE_REJECTION_MESSAGE = 'Update mode is manual; automatic updates are disabled';
+const ACTION_POLICY_NOT_AUTO_REJECTION_MESSAGE =
+  'Action policy for this trigger does not permit automatic updates for this container';
 
 export class UpdateRequestError extends Error {
   statusCode: number;
@@ -149,13 +153,25 @@ function resolveUpdateTrigger(
     return providedTrigger;
   }
 
-  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container, {
-    triggerTypes: options.triggerTypes || DEFAULT_UPDATE_TRIGGER_TYPES,
-  });
-  if (!trigger) {
+  // Routed through the action-policy resolver's hybrid multi-trigger walk
+  // (spec-6.0.1-action-policy.md) rather than the plain agent/compose
+  // compatibility lookup: a candidate that resolves `not-included` is no
+  // longer eligible to be the resolved trigger, even though it would have
+  // been returned (and admitted, subject only to the soft blocker) before
+  // this wiring. An explicit `dd.action.exclude` hit is still returned (hard
+  // stop) so eligibility's `trigger-excluded` messaging/severity is unchanged
+  // by this slice. `options.triggerTypes` is not honored here — in practice
+  // every caller passes the same docker/dockercompose default `selectActionTrigger`
+  // already scopes to (see `CANDIDATE_TRIGGER_TYPES`).
+  const selection = selectActionTrigger(
+    registry.getState().trigger as unknown as Record<string, ActionPolicyTrigger> | undefined,
+    container,
+    { requireAuto: false },
+  );
+  if (!selection) {
     throw new UpdateRequestError(404, NO_DOCKER_TRIGGER_FOUND_ERROR);
   }
-  return trigger as ResolvedUpdateTrigger;
+  return selection.trigger as unknown as ResolvedUpdateTrigger;
 }
 
 function getActiveUpdateOperationForContainer(container: Container) {
@@ -329,9 +345,24 @@ function prepareContainerUpdateRequest(
     throw new UpdateRequestError(statusCodeForHardBlocker(hardBlocker), hardBlocker.message);
   }
 
+  const trigger = resolveUpdateTrigger(container, options);
+
+  // Defense-in-depth (spec-6.0.1-action-policy.md): trigger-excluded/trigger-not-included
+  // are still 'soft' severity ahead of the DEPRECATIONS.md hard flip (slice 6), so the hard
+  // blocker check above does not yet reject a not-included/excluded container. Automatic
+  // (watcher-driven) admission must never fire through anything short of a resolved 'auto'
+  // policy regardless of that severity timing — manual/API callers (source 'manual') keep
+  // today's behavior and admit both 'manual' and 'auto' states.
+  if (source === 'automatic') {
+    const resolvedPolicy = resolveForTrigger(trigger as unknown as ActionPolicyTrigger, container);
+    if (resolvedPolicy.state !== 'auto') {
+      throw new UpdateRequestError(409, ACTION_POLICY_NOT_AUTO_REJECTION_MESSAGE);
+    }
+  }
+
   return {
     container,
-    trigger: resolveUpdateTrigger(container, options),
+    trigger,
   };
 }
 

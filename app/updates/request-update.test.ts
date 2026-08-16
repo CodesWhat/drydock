@@ -171,7 +171,11 @@ describe('request-update', () => {
 
   test('auto mode allows automatic update admission', async () => {
     mockGetUpdateMode.mockReturnValue('auto');
-    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    };
 
     const accepted = await enqueueContainerUpdate(createContainer(), {
       trigger,
@@ -313,6 +317,7 @@ describe('request-update', () => {
     const trigger = {
       type: 'docker',
       trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
     };
 
     const result = await enqueueContainerUpdates(
@@ -357,6 +362,7 @@ describe('request-update', () => {
       getDefaultComposeFilePath: vi.fn(() => '/opt/drydock/test/monitoring.yml'),
       getComposeFilesForContainer: vi.fn(() => ['/opt/drydock/test/monitoring.yml']),
       trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'dockercompose.compose',
     };
     mockGetState.mockReturnValue({
       trigger: {
@@ -420,7 +426,11 @@ describe('request-update', () => {
   });
 
   test('enqueueContainerUpdate uses provided operationId instead of generating a new one (#289)', async () => {
-    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    };
     const accepted = await enqueueContainerUpdate(createContainer(), {
       trigger,
       operationId: 'controller-op-uuid',
@@ -433,7 +443,11 @@ describe('request-update', () => {
   });
 
   test('enqueueContainerUpdates uses provided operationId for single-container batches (#289)', async () => {
-    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    };
     const result = await enqueueContainerUpdates([createContainer({ id: 'c1', name: 'nginx' })], {
       trigger,
       operationId: 'controller-single-op',
@@ -447,7 +461,11 @@ describe('request-update', () => {
   });
 
   test('enqueueContainerUpdates ignores provided operationId for multi-container batches (#289)', async () => {
-    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    };
     const result = await enqueueContainerUpdates(
       [createContainer({ id: 'c1', name: 'nginx' }), createContainer({ id: 'c2', name: 'redis' })],
       { trigger, operationId: 'should-not-be-used' },
@@ -1507,7 +1525,13 @@ describe('request-update', () => {
           image: { name: 'drydock', tag: { value: '1.5.0' } },
           result: { tag: '1.6.0' },
         }),
-        { trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) } },
+        {
+          trigger: {
+            type: 'docker',
+            trigger: vi.fn().mockResolvedValue(undefined),
+            getId: () => 'docker.other',
+          },
+        },
       );
       expect(accepted.operationId).toBeDefined();
       expect(mockInsertOperation).toHaveBeenCalled();
@@ -1529,7 +1553,13 @@ describe('request-update', () => {
         createContainerWithRawUpdate({
           updatePolicy: { snoozeUntil: '2099-01-01T00:00:00.000Z' },
         }),
-        { trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) } },
+        {
+          trigger: {
+            type: 'docker',
+            trigger: vi.fn().mockResolvedValue(undefined),
+            getId: () => 'docker.other',
+          },
+        },
       );
       expect(accepted.operationId).toBeDefined();
       expect(mockInsertOperation).toHaveBeenCalled();
@@ -1591,7 +1621,13 @@ describe('request-update', () => {
 
       const accepted = await enqueueContainerUpdate(
         createContainerWithRawUpdate({ triggerExclude: 'nginx' }),
-        { trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) } },
+        {
+          trigger: {
+            type: 'docker',
+            trigger: vi.fn().mockResolvedValue(undefined),
+            getId: () => 'docker.other',
+          },
+        },
       );
       expect(accepted.operationId).toBeDefined();
       expect(mockInsertOperation).toHaveBeenCalled();
@@ -1611,10 +1647,133 @@ describe('request-update', () => {
 
       const accepted = await enqueueContainerUpdate(
         createContainerWithRawUpdate({ triggerInclude: 'other-app' }),
-        { trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) } },
+        {
+          trigger: {
+            type: 'docker',
+            trigger: vi.fn().mockResolvedValue(undefined),
+            getId: () => 'docker.other',
+          },
+        },
       );
       expect(accepted.operationId).toBeDefined();
       expect(mockInsertOperation).toHaveBeenCalled();
+    });
+  });
+
+  describe('automatic-source admission guard (spec-6.0.1-action-policy.md slice 3)', () => {
+    // These tests resolve the trigger via the auto-resolve path (no explicit
+    // `options.trigger`) so both `resolveUpdateTrigger` and the automatic-source
+    // guard exercise the same registry-backed trigger through
+    // `selectActionTrigger`/`resolveForTrigger`.
+    function createRegistryTrigger(overrides: Record<string, unknown> = {}) {
+      return {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        agent: undefined,
+        configuration: {},
+        getId: () => 'docker.update',
+        ...overrides,
+      };
+    }
+
+    test('admits automatic dispatch when the resolved action policy state is auto (default AUTO=all)', async () => {
+      const trigger = createRegistryTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      const accepted = await enqueueContainerUpdate(createContainer(), { source: 'automatic' });
+
+      expect(accepted.operationId).toBeDefined();
+    });
+
+    test('rejects automatic dispatch with 409 when the resolved action policy state is manual (AUTO=none)', async () => {
+      const trigger = createRegistryTrigger({ configuration: { auto: 'none' } });
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      await expect(
+        enqueueContainerUpdate(createContainer(), { source: 'automatic' }),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message:
+          'Action policy for this trigger does not permit automatic updates for this container',
+      });
+      expect(trigger.trigger).not.toHaveBeenCalled();
+      expect(mockInsertOperation).not.toHaveBeenCalled();
+    });
+
+    test('legacy AUTO=true boolean (~ all) admits automatic dispatch, matching the migration table', async () => {
+      const trigger = createRegistryTrigger({ configuration: { auto: true } });
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      const accepted = await enqueueContainerUpdate(createContainer(), { source: 'automatic' });
+
+      expect(accepted.operationId).toBeDefined();
+    });
+
+    test('legacy AUTO=false boolean (~ none) still admits manual/API requests exactly as today', async () => {
+      // Pre-6.0.1, admission never consulted trigger auto mode at all — manual/API
+      // requests admitted regardless. The automatic-source guard only applies when
+      // source === 'automatic', so a manual-sourced request must keep admitting here
+      // even though the resolved state is 'manual'.
+      const trigger = createRegistryTrigger({ configuration: { auto: false } });
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      const accepted = await requestContainerUpdate(createContainer());
+      await flushAsyncWork();
+
+      expect(accepted.operationId).toBeDefined();
+      expect(trigger.trigger).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        expect.objectContaining({ operationId: accepted.operationId }),
+      );
+    });
+
+    test('regression matrix #10: same-name containers on different agents resolve independently through admission', async () => {
+      const triggerEdge1 = createRegistryTrigger({
+        agent: 'edge-1',
+        getId: () => 'edge-1.docker.update',
+      });
+      const triggerEdge2 = createRegistryTrigger({
+        agent: 'edge-2',
+        getId: () => 'edge-2.docker.update',
+      });
+      mockGetState.mockReturnValue({
+        trigger: {
+          'edge-1.docker.update': triggerEdge1,
+          'edge-2.docker.update': triggerEdge2,
+        },
+        watcher: {},
+      });
+
+      const containerA = createContainer({
+        id: 'c-edge1',
+        name: 'web',
+        agent: 'edge-1',
+        watcher: 'w1',
+      });
+      const containerB = createContainer({
+        id: 'c-edge2',
+        name: 'web',
+        agent: 'edge-2',
+        watcher: 'w2',
+      });
+
+      const acceptedA = await requestContainerUpdate(containerA);
+      await flushAsyncWork();
+      const acceptedB = await requestContainerUpdate(containerB);
+      await flushAsyncWork();
+
+      expect(acceptedA.trigger).toBe(triggerEdge1);
+      expect(acceptedB.trigger).toBe(triggerEdge2);
+      expect(triggerEdge1.trigger).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c-edge1', agent: 'edge-1' }),
+        expect.objectContaining({ operationId: acceptedA.operationId }),
+      );
+      expect(triggerEdge2.trigger).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c-edge2', agent: 'edge-2' }),
+        expect.objectContaining({ operationId: acceptedB.operationId }),
+      );
+      expect(triggerEdge1.trigger).toHaveBeenCalledTimes(1);
+      expect(triggerEdge2.trigger).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1736,6 +1895,7 @@ describe('request-update', () => {
     const trigger = {
       type: 'docker',
       trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
     };
 
     const result = await enqueueContainerUpdates(
