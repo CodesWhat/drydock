@@ -220,6 +220,29 @@ describe('category-scoped trigger label normalization (#494)', () => {
 
     expect(saved.triggerInclude).toBe('docker');
   });
+
+  test('derives actionTriggerAuto from dd.action.auto (no mirror to fall back to)', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.auto': 'docker:patch' },
+    });
+
+    expect(saved.actionTriggerAuto).toBe('docker:patch');
+  });
+
+  test('leaves actionTriggerAuto unset when there are no labels', () => {
+    const saved = saveAndCapture({ labels: undefined });
+
+    expect(saved.actionTriggerAuto).toBeUndefined();
+  });
+
+  test('never overwrites an already-populated actionTriggerAuto field', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.auto': 'docker:patch' },
+      actionTriggerAuto: 'explicit',
+    });
+
+    expect(saved.actionTriggerAuto).toBe('explicit');
+  });
 });
 
 test('updateContainer should use collection update when available for existing containers', async () => {

@@ -211,6 +211,8 @@ export interface Container {
   actionTriggerExclude?: string;
   notificationTriggerInclude?: string;
   notificationTriggerExclude?: string;
+  /** Action category only — no notification counterpart, no deprecated mirror. */
+  actionTriggerAuto?: string;
   /** @deprecated compat mirror for /api/v1, persisted store, and mixed-version agents. */
   triggerInclude?: string;
   /** @deprecated compat mirror. */
@@ -367,6 +369,7 @@ const schema = joi.object({
   actionTriggerExclude: joi.string(),
   notificationTriggerInclude: joi.string(),
   notificationTriggerExclude: joi.string(),
+  actionTriggerAuto: joi.string(),
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
   dependsOn: joi.array().items(joi.string()).optional(),

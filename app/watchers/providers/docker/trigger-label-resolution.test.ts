@@ -117,9 +117,22 @@ describe('resolveTriggerLabelFieldsPure', () => {
       actionTriggerExclude: 'compose',
       notificationTriggerInclude: 'slack',
       notificationTriggerExclude: 'ntfy',
+      actionTriggerAuto: undefined,
       triggerInclude: 'docker',
       triggerExclude: 'compose',
     });
+  });
+
+  test('resolves dd.action.auto with no notification counterpart and no mirror participation', () => {
+    const fields = resolveTriggerLabelFieldsPure({
+      'dd.action.auto': 'docker',
+      'dd.notification.include': 'slack',
+    });
+
+    expect(fields.actionTriggerAuto).toBe('docker');
+    // dd.action.auto never contributes to the include/exclude mirror.
+    expect(fields.triggerInclude).toBe('slack');
+    expect(fields.notificationTriggerInclude).toBe('slack');
   });
 
   test('a lone action include leaves the notification include unset (strict scoping)', () => {
@@ -145,6 +158,7 @@ describe('resolveTriggerLabelFieldsPure', () => {
       actionTriggerExclude: undefined,
       notificationTriggerInclude: undefined,
       notificationTriggerExclude: undefined,
+      actionTriggerAuto: undefined,
       triggerInclude: undefined,
       triggerExclude: undefined,
     });

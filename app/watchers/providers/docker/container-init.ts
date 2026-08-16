@@ -21,6 +21,7 @@ import {
 } from './docker-helpers.js';
 import type { ContainerLabelOverrides } from './docker-image-details-orchestration.js';
 import {
+  ddActionAuto,
   ddActionExclude,
   ddActionInclude,
   ddDependsOn,
@@ -88,6 +89,8 @@ interface ResolvedContainerLabelOverrides {
   actionTriggerExclude?: string;
   notificationTriggerInclude?: string;
   notificationTriggerExclude?: string;
+  /** Action category only — no notification counterpart, no deprecated mirror. */
+  actionTriggerAuto?: string;
   /** @deprecated compat mirror — see Container.triggerInclude/triggerExclude. */
   triggerInclude?: string;
   /** @deprecated compat mirror. */
@@ -200,9 +203,10 @@ const containerLabelOverrideMappings = [
   },
   { key: 'displayName', ddKey: ddDisplayName, overrideKey: 'displayName' },
   { key: 'displayIcon', ddKey: ddDisplayIcon, overrideKey: 'displayIcon' },
-  // Trigger include/exclude are NOT in this generic table: dd.action.*/dd.notification.*/
-  // dd.trigger.* resolve into 4 category-scoped fields plus a deprecated mirror, which
-  // doesn't fit the single-key shape below. See resolveTriggerLabelOverrides().
+  // Trigger include/exclude/auto are NOT in this generic table: dd.action.*/
+  // dd.notification.*/dd.trigger.* resolve into scoped fields (plus, for
+  // include/exclude, a deprecated mirror), which doesn't fit the single-key
+  // shape below. See resolveTriggerLabelOverrides().
 ] as const satisfies ReadonlyArray<{
   key: keyof ResolvedContainerLabelOverrides;
   ddKey: string;
@@ -320,9 +324,12 @@ function resolveTriggerLabelDirection(
 
 /**
  * Resolve the four category-scoped trigger label fields plus the deprecated
- * triggerInclude/triggerExclude mirror. `overrides` (already-resolved values
- * from an earlier pass over the same labels) take priority, matching the
- * override-vs-label precedence used for every other label-derived field.
+ * triggerInclude/triggerExclude mirror, plus the action-only `actionTriggerAuto`
+ * field (dd.action.auto — no notification counterpart, no mirror, so it skips
+ * the direction/mirror machinery above and is just a plain override-or-label
+ * read). `overrides` (already-resolved values from an earlier pass over the
+ * same labels) take priority, matching the override-vs-label precedence used
+ * for every other label-derived field.
  */
 export function resolveTriggerLabelOverrides(
   containerLabels: Record<string, string>,
@@ -334,6 +341,7 @@ export function resolveTriggerLabelOverrides(
   | 'actionTriggerExclude'
   | 'notificationTriggerInclude'
   | 'notificationTriggerExclude'
+  | 'actionTriggerAuto'
   | 'triggerInclude'
   | 'triggerExclude'
 > {
@@ -355,6 +363,7 @@ export function resolveTriggerLabelOverrides(
     actionTriggerExclude: excludeResolved.action,
     notificationTriggerInclude: includeResolved.notification,
     notificationTriggerExclude: excludeResolved.notification,
+    actionTriggerAuto: overrides.actionTriggerAuto ?? getLabel(containerLabels, ddActionAuto),
     triggerInclude: includeResolved.mirror,
     triggerExclude: excludeResolved.mirror,
   };
@@ -1054,6 +1063,7 @@ export function applyDerivedLabelFieldsToContainer(
   container.actionTriggerExclude = resolved.actionTriggerExclude;
   container.notificationTriggerInclude = resolved.notificationTriggerInclude;
   container.notificationTriggerExclude = resolved.notificationTriggerExclude;
+  container.actionTriggerAuto = resolved.actionTriggerAuto;
   container.triggerInclude = resolved.triggerInclude;
   container.triggerExclude = resolved.triggerExclude;
   const dependsOnResolution = resolveDependsOnFromLabels(labels, container.name);
@@ -1368,6 +1378,9 @@ export function mergeConfigWithImgset(
       labelOverrides.notificationTriggerExclude,
       matchingImgset?.triggerExclude,
     ),
+    // No imgset counterpart (unlike triggerInclude/triggerExclude above) —
+    // dd.action.auto is action-only and imgsets don't carry a matching key.
+    actionTriggerAuto: labelOverrides.actionTriggerAuto,
     triggerInclude: getContainerConfigValue(
       labelOverrides.triggerInclude,
       matchingImgset?.triggerInclude,

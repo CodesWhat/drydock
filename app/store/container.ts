@@ -30,6 +30,7 @@ import {
   applyUpdatePolicyOverrides,
   getUpdatePolicyOverrides,
 } from '../model/update-policy.js';
+import { ddActionAuto } from '../watchers/providers/docker/label.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
@@ -943,10 +944,11 @@ export function createCollections(db) {
 }
 
 /**
- * Normalize the four category-scoped trigger label fields (#494). Applied on
- * every insert/update so incoming agent snapshots are repaired too, not only
- * rows touched by store/migrate.ts's startup migration. Never overwrites an
- * already-populated scoped field, and never touches the mirror itself.
+ * Normalize the four category-scoped trigger label fields (#494), plus the
+ * action-only `actionTriggerAuto` field. Applied on every insert/update so
+ * incoming agent snapshots are repaired too, not only rows touched by
+ * store/migrate.ts's startup migration. Never overwrites an already-populated
+ * scoped field, and never touches the mirror itself.
  *
  * Resolved per direction. When the labels carry any trigger label for that
  * direction, the scoped values win and the deprecated
@@ -977,6 +979,14 @@ function normalizeContainerTriggerLabelFields<T extends Partial<container.Contai
   } else {
     containerToNormalize.actionTriggerExclude ??= containerToNormalize.triggerExclude;
     containerToNormalize.notificationTriggerExclude ??= containerToNormalize.triggerExclude;
+  }
+
+  // dd.action.auto has no mirror to fall back to (it was never conflated with
+  // a category-agnostic label), so this is a plain label-presence repair: an
+  // incoming snapshot that carries labels but not the derived field yet
+  // (e.g. an older agent) gets it filled in from the label directly.
+  if (labels) {
+    containerToNormalize.actionTriggerAuto ??= labels[ddActionAuto];
   }
 
   return containerToNormalize;

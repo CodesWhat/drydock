@@ -49,7 +49,7 @@ import {
 } from './trigger-threshold.js';
 
 type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
-type TriggerAutoMode = 'all' | 'oninclude' | 'none';
+type TriggerAutoMode = 'all' | 'oninclude' | 'onauto' | 'none';
 type DigestEventKind = 'update-available-digest' | 'security-alert-digest';
 
 /**
@@ -2624,7 +2624,12 @@ class Trigger<
 
   isTriggerIncluded(containerResult: Container, triggerInclude: string | undefined) {
     if (!triggerInclude) {
-      return this.getAutoMode() !== 'oninclude';
+      // 'onauto' behaves exactly like 'oninclude' here in this slice (closed
+      // by default absent an explicit include label) — its real semantics
+      // (auto-label-only grants access too) land with the resolver in
+      // app/model/action-policy.ts in a later slice.
+      const autoMode = this.getAutoMode();
+      return autoMode !== 'oninclude' && autoMode !== 'onauto';
     }
     return this.isTriggerIncludedOrExcluded(containerResult, triggerInclude);
   }
@@ -2674,7 +2679,7 @@ class Trigger<
       const shouldRegisterBatchHandler = Trigger.isBatchCapableMode(this.configuration.mode);
       const shouldRegisterDigestHandler = Trigger.isDigestCapableMode(this.configuration.mode);
       this.log.info(
-        autoMode === 'oninclude'
+        autoMode === 'oninclude' || autoMode === 'onauto'
           ? 'Registering for auto execution (only containers with explicit include labels)'
           : 'Registering for auto execution (all watched containers)',
       );
@@ -2851,7 +2856,10 @@ class Trigger<
     const schemaWithDefaultOptions = schema.append({
       auto: this.joi
         .alternatives()
-        .try(this.joi.bool(), this.joi.string().insensitive().valid('all', 'oninclude', 'none'))
+        .try(
+          this.joi.bool(),
+          this.joi.string().insensitive().valid('all', 'oninclude', 'onauto', 'none'),
+        )
         .default(this.getCategory() === 'action' ? 'oninclude' : true),
       order: this.joi.number().default(100),
       threshold: this.joi

@@ -1,4 +1,5 @@
 import {
+  ddActionAuto,
   ddActionExclude,
   ddActionInclude,
   ddNotificationExclude,
@@ -19,6 +20,12 @@ export interface ResolvedTriggerLabelFields {
   actionTriggerExclude?: string;
   notificationTriggerInclude?: string;
   notificationTriggerExclude?: string;
+  /**
+   * Action category only — no notification counterpart, and (unlike
+   * include/exclude) no deprecated mirror; `dd.action.auto` was never
+   * conflated with a category-agnostic label.
+   */
+  actionTriggerAuto?: string;
   /** @deprecated compat mirror. */
   triggerInclude?: string;
   /** @deprecated compat mirror. */
@@ -87,6 +94,7 @@ export function resolveTriggerLabelFieldsPure(
     actionTriggerExclude: excludeResolved.action,
     notificationTriggerInclude: includeResolved.notification,
     notificationTriggerExclude: excludeResolved.notification,
+    actionTriggerAuto: labels[ddActionAuto],
     triggerInclude: includeResolved.mirror,
     triggerExclude: excludeResolved.mirror,
   };
