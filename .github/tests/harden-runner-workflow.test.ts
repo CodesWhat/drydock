@@ -28,12 +28,6 @@ function loadWorkflowFiles(): Array<{
     });
 }
 
-// legacy-security-actions is a temporary fail-closed bridge job: it only
-// republishes ci-verify.yml's security-actions result under the old plain
-// check name and makes no outbound calls of its own, so it runs with
-// egress-policy: block instead of the audit policy every other job uses.
-const blockEgressJobs = new Set(['ci-verify.yml/legacy-security-actions']);
-
 test('GitHub-hosted workflow jobs start with current pinned Harden Runner', () => {
   const violations: string[] = [];
 
@@ -49,33 +43,13 @@ test('GitHub-hosted workflow jobs start with current pinned Harden Runner', () =
         continue;
       }
 
-      const expectedEgressPolicy = blockEgressJobs.has(`${file}/${jobId}`) ? 'block' : 'audit';
-      if (firstStep.with?.['egress-policy'] !== expectedEgressPolicy) {
-        violations.push(`${file}/${jobId} missing ${expectedEgressPolicy} egress policy`);
+      if (firstStep.with?.['egress-policy'] !== 'audit') {
+        violations.push(`${file}/${jobId} missing audit egress policy`);
       }
     }
   }
 
   expect(violations).toStrictEqual([]);
-});
-
-test('legacy-security-actions bridge runs Harden Runner in fail-closed mode', () => {
-  const ciVerify = loadWorkflowFiles().find(({ file }) => file === 'ci-verify.yml');
-  const job = ciVerify?.workflow.jobs?.['legacy-security-actions'];
-  const firstStep = job?.steps?.[0];
-
-  expect(firstStep?.uses).toBe(hardenRunnerRef);
-  expect(firstStep?.with?.['egress-policy']).toBe('block');
-
-  // Fail-closed contract: the bridge must always run (even when the caller
-  // fails or is skipped) and must convert anything but caller success into
-  // its own failure, so the plain "Security: Actions" context never goes
-  // green on a failed or skipped security scan.
-  expect(job?.needs).toBe('security-actions');
-  expect(job?.if).toBe('${{ always() }}');
-  const gateStep = job?.steps?.find((step) => step.run?.includes('test "${RESULT}"'));
-  expect(gateStep?.env?.RESULT).toBe('${{ needs.security-actions.result }}');
-  expect(gateStep?.run?.trim()).toBe('test "${RESULT}" = "success"');
 });
 
 test('Harden Runner comments match the pinned release version', () => {
