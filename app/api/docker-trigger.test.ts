@@ -286,7 +286,6 @@ describe('docker-trigger helper', () => {
     };
 
     const result = getDockerTriggerSpecificity(trigger, {
-      id: 'c1',
       labels: {
         'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring/compose.yaml',
       },

@@ -424,7 +424,9 @@ describe('selectActionTrigger — tied-candidate WARN', () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('warn-first'));
   });
 
-  test('does not warn when there is only one candidate at the top specificity tier', () => {
+  test('does not warn when there is only one candidate at the top specificity tier', async () => {
+    const logger = (await import('../log/index.js')).default;
+    vi.mocked(logger.warn).mockClear();
     const container = makeContainer({
       labels: {
         'com.docker.compose.project.config_files': '/opt/drydock/test/nowarn/compose.yaml',
@@ -442,11 +444,8 @@ describe('selectActionTrigger — tied-candidate WARN', () => {
     });
     const triggers = { 'nowarn.catch-all': catchAll, 'nowarn.matched': fileMatched };
     selectActionTrigger(triggers, container);
-    // No assertion on call count here beyond "did not throw" — the shared
-    // logger mock's call count is already exercised precisely by the test
-    // above; this test's job is only to prove a clean single-winner tier
-    // doesn't touch the tie path at all (no crash, deterministic winner).
     expect(selectActionTrigger(triggers, container)?.triggerId).toBe('nowarn.matched');
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });
 
