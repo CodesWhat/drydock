@@ -63,6 +63,10 @@ test('security-actions calls the reusable go-ci workflow-security gate', () => {
     'CodesWhat/.github/.github/workflows/go-ci.yml@01bf40b06b110946f12a49b82e407d77c6480df7',
   );
   expect(job?.with?.['run-workflow-security']).toBe(true);
+  expect(job?.with?.['workflow-security-egress-policy']).toBe('block');
+  expect(job?.with?.['workflow-security-allowed-endpoints']).toBe(
+    'ghcr.io:443 github.com:443 pkg-containers.githubusercontent.com:443',
+  );
 
   const runFlags = Object.keys(job?.with ?? {}).filter(
     (key) => key.startsWith('run-') && key !== 'run-workflow-security',

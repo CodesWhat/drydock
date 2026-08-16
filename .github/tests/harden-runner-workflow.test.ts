@@ -66,6 +66,16 @@ test('legacy-security-actions bridge runs Harden Runner in fail-closed mode', ()
 
   expect(firstStep?.uses).toBe(hardenRunnerRef);
   expect(firstStep?.with?.['egress-policy']).toBe('block');
+
+  // Fail-closed contract: the bridge must always run (even when the caller
+  // fails or is skipped) and must convert anything but caller success into
+  // its own failure, so the plain "Security: Actions" context never goes
+  // green on a failed or skipped security scan.
+  expect(job?.needs).toBe('security-actions');
+  expect(job?.if).toBe('${{ always() }}');
+  const gateStep = job?.steps?.find((step) => step.run?.includes('test "${RESULT}"'));
+  expect(gateStep?.env?.RESULT).toBe('${{ needs.security-actions.result }}');
+  expect(gateStep?.run?.trim()).toBe('test "${RESULT}" = "success"');
 });
 
 test('Harden Runner comments match the pinned release version', () => {
