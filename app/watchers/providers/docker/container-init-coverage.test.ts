@@ -421,6 +421,15 @@ describe('container-init coverage', () => {
 
       expect(resolved.actionTriggerAuto).toBe('override');
     });
+
+    test('an explicit empty actionTriggerAuto override is preserved over the label', () => {
+      const resolved = resolveTriggerLabelOverrides(
+        { 'dd.action.auto': 'docker:patch' },
+        { actionTriggerAuto: '' },
+      );
+
+      expect(resolved.actionTriggerAuto).toBe('');
+    });
   });
 
   describe('warnTriggerCategoryScopeChangeIfNeeded', () => {

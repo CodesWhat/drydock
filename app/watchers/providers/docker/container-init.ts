@@ -363,7 +363,7 @@ export function resolveTriggerLabelOverrides(
     actionTriggerExclude: excludeResolved.action,
     notificationTriggerInclude: includeResolved.notification,
     notificationTriggerExclude: excludeResolved.notification,
-    actionTriggerAuto: overrides.actionTriggerAuto || getLabel(containerLabels, ddActionAuto),
+    actionTriggerAuto: overrides.actionTriggerAuto ?? getLabel(containerLabels, ddActionAuto),
     triggerInclude: includeResolved.mirror,
     triggerExclude: excludeResolved.mirror,
   };
