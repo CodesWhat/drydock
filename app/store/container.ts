@@ -32,6 +32,7 @@ import {
 } from '../model/update-policy.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
+import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
 import { initCollection } from './util.js';
 
 let containers: ReturnType<typeof initCollection> | undefined;
@@ -1000,15 +1001,23 @@ function stashUpdatePolicyForReplacement(containerRaw) {
     return;
   }
   updatePolicyRetentionCache.delete(cacheKey);
-  updatePolicyRetentionCache.set(cacheKey, {
+  const entry: UpdatePolicyRetentionCacheEntry = {
     updatePolicyOverrides,
     expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
-  });
+  };
+  updatePolicyRetentionCache.set(cacheKey, entry);
+  // #565: write-through to the durable store so this stash survives the
+  // cross-process recreation that IS drydock's own self-update (recreate
+  // action -> SIGTERM -> shutdown()'s store.save() -> new process ->
+  // rehydrateUpdatePolicyRetentionCacheFromStore()) — the same failure mode
+  // #556 already fixed for the lifecycle/clock cache.
+  updatePolicyRetentionCacheStore.upsertRecord({ cacheKey, ...entry });
   if (updatePolicyRetentionCache.size > UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES) {
     const nowMs = Date.now();
     for (const [expiredKey, expiredEntry] of updatePolicyRetentionCache.entries()) {
       if (expiredEntry.expiresAt <= nowMs) {
         updatePolicyRetentionCache.delete(expiredKey);
+        updatePolicyRetentionCacheStore.deleteRecord(expiredKey);
       }
     }
   }
@@ -1019,6 +1028,7 @@ function stashUpdatePolicyForReplacement(containerRaw) {
       break;
     }
     updatePolicyRetentionCache.delete(oldestKey);
+    updatePolicyRetentionCacheStore.deleteRecord(oldestKey);
   }
 }
 
@@ -1046,6 +1056,7 @@ function restoreRetainedUpdatePolicy(container) {
     return;
   }
   updatePolicyRetentionCache.delete(cacheKey);
+  updatePolicyRetentionCacheStore.deleteRecord(cacheKey);
   if (entry.expiresAt <= Date.now()) {
     return;
   }
@@ -1597,6 +1608,30 @@ export function rehydrateUpdateLifecycleCacheFromStore(): void {
       firstSeenAt: record.firstSeenAt,
       maturityGatePendingSince: record.maturityGatePendingSince,
       resultSignature: record.resultSignature,
+      expiresAt: record.expiresAt,
+    });
+  }
+}
+
+/**
+ * Repopulate the in-memory updatePolicyRetentionCache Map from its durable store
+ * counterpart. Called once at startup (see store/index.ts's createCollections())
+ * after both the containers collection and the update-policy-retention-cache
+ * collection have been created. Drops any record whose TTL already lapsed while
+ * the process was down rather than resurrecting a stale stash (#565).
+ */
+export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
+  const nowMs = Date.now();
+  for (const record of updatePolicyRetentionCacheStore.listRecords()) {
+    if (record.expiresAt <= nowMs) {
+      // Prune expired records from the durable store too, not just skip them —
+      // otherwise a long-stopped process leaves dead rows in the collection
+      // forever (it only ever grows via the write-through path elsewhere).
+      updatePolicyRetentionCacheStore.deleteRecord(record.cacheKey);
+      continue;
+    }
+    updatePolicyRetentionCache.set(record.cacheKey, {
+      updatePolicyOverrides: record.updatePolicyOverrides as container.ContainerUpdatePolicy,
       expiresAt: record.expiresAt,
     });
   }
