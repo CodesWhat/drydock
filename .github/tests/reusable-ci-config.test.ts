@@ -101,14 +101,19 @@ test('CodesWhat/.github reusable-workflow callers do not inherit secrets', () =>
   expect(inheritLines).toStrictEqual([]);
 });
 
-test('security-actions caller permissions are exactly actions:read and contents:read', () => {
+test('security-actions caller grants exactly the statically-validated permission set', () => {
   const job = reusableCallerJobs().find(
     ({ file, jobId }) => file === 'ci-verify.yml' && jobId === 'security-actions',
   )?.job;
 
   expect(job).toBeDefined();
+  // security-events: write is required even though run-codeql is unset:
+  // GitHub validates the called workflow's job-level permissions statically
+  // (go-ci.yml's nested codeql job declares it), regardless of if: gating.
+  // Granting less makes every CI Verify run end in startup_failure.
   expect(job?.permissions).toStrictEqual({
     actions: 'read',
     contents: 'read',
+    'security-events': 'write',
   });
 });

@@ -53,9 +53,14 @@ permissions: {}
 jobs:
   security-actions:
     name: "Security: Actions"
+    # go-ci.yml's nested codeql job declares security-events: write even
+    # though run-codeql stays unset here — GitHub validates a called
+    # workflow's job-level permissions statically, regardless of if:
+    # gating, so the caller must still grant it.
     permissions:
       actions: read
       contents: read
+      security-events: write
     uses: CodesWhat/.github/.github/workflows/go-ci.yml@01bf40b06b110946f12a49b82e407d77c6480df7
     with:
       run-workflow-security: true
