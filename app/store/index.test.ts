@@ -56,6 +56,7 @@ const {
       getContainersRaw: vi.fn(() => []),
       updateContainer: vi.fn(),
       rehydrateUpdateLifecycleCacheFromStore: vi.fn(),
+      rehydrateUpdatePolicyRetentionCacheFromStore: vi.fn(),
       ...overrides,
     };
   }
@@ -153,6 +154,7 @@ vi.mock('./settings', createCollectionsMock);
 vi.mock('./ui-preferences', createCollectionsMock);
 vi.mock('./update-lifecycle-cache', createCollectionsMock);
 vi.mock('./update-operation', createCollectionsMock);
+vi.mock('./update-policy-retention-cache', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
 describe('Store Module', () => {
@@ -187,6 +189,7 @@ describe('Store Module', () => {
     const uiPreferences = await import('./ui-preferences.js');
     const updateLifecycleCache = await import('./update-lifecycle-cache.js');
     const updateOperation = await import('./update-operation.js');
+    const updatePolicyRetentionCache = await import('./update-policy-retention-cache.js');
 
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
@@ -211,6 +214,20 @@ describe('Store Module', () => {
     );
     expect(
       container.rehydrateUpdateLifecycleCacheFromStore.mock.invocationCallOrder[0],
+    ).toBeLessThan(app.completeStartupInitialization.mock.invocationCallOrder[0]);
+
+    // #565: same rationale as #556 above, for the update-policy retention cache — the
+    // collection must exist, and container's in-memory Map must be rehydrated from it,
+    // before startup is considered complete.
+    expect(updatePolicyRetentionCache.createCollections).toHaveBeenCalled();
+    expect(container.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      updatePolicyRetentionCache.createCollections.mock.invocationCallOrder[0],
+    );
+    expect(updatePolicyRetentionCache.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      container.rehydrateUpdatePolicyRetentionCacheFromStore.mock.invocationCallOrder[0],
+    );
+    expect(
+      container.rehydrateUpdatePolicyRetentionCacheFromStore.mock.invocationCallOrder[0],
     ).toBeLessThan(app.completeStartupInitialization.mock.invocationCallOrder[0]);
   });
 
