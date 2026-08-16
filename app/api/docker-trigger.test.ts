@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   findDockerTriggerForContainer,
+  getDockerTriggerSpecificity,
   isTriggerCompatibleWithContainer,
   NO_DOCKER_TRIGGER_FOUND_ERROR,
 } from './docker-trigger.js';
@@ -269,6 +270,29 @@ describe('docker-trigger helper', () => {
     });
 
     expect(result).toBe(false);
+  });
+
+  test('getDockerTriggerSpecificity ranks a mismatched configured file as compose-catch-all, not compose-file-matched', () => {
+    // isTriggerCompatibleWithContainer would already reject this trigger as a
+    // *candidate* (see the compatibility test above using the same fixture),
+    // so selectActionTrigger never reaches this branch in practice — but
+    // getDockerTriggerSpecificity is a standalone exported function with its
+    // own contract, independent of any particular caller's pre-filtering.
+    const trigger = {
+      type: 'dockercompose',
+      configuration: { file: '/opt/drydock/test/mysql' },
+      getDefaultComposeFilePath: () => '/opt/drydock/test/mysql',
+      getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring/compose.yaml'],
+    };
+
+    const result = getDockerTriggerSpecificity(trigger, {
+      id: 'c1',
+      labels: {
+        'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring/compose.yaml',
+      },
+    });
+
+    expect(result).toBe('compose-catch-all');
   });
 
   test('treats compose trigger as compatible when no configured file path', () => {
