@@ -69,25 +69,6 @@ jobs:
       run-test: false
       run-lint: false
 
-  # Temporary fail-closed bridge: republishes the reusable caller's result
-  # under the old plain "Security: Actions" check context so branch
-  # protection keeps working unchanged during the migration window. Remove
-  # once the ruleset is repointed at "Security: Actions / Workflow Security".
-  legacy-security-actions:
-    name: "Security: Actions"
-    needs: security-actions
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
-        with:
-          egress-policy: block
-      - env:
-          RESULT: ${{ needs.security-actions.result }}
-        run: test "${RESULT}" = "success"
-
   secrets:
     name: "🔑 Security: Secrets"
     needs: [security-actions]
