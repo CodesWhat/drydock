@@ -45,11 +45,36 @@ function getTestJobStep(name: string): WorkflowStep | undefined {
 test('required ci-verify jobs publish stable plain-text check names', () => {
   const workflow = loadWorkflow();
 
-  expect(workflow.jobs?.['legacy-security-actions']?.name).toBe('Security: Actions');
   expect(workflow.jobs?.lint?.name).toBe('Quality: Lint');
   expect(workflow.jobs?.test?.name).toBe('Quality: Test & Coverage');
   expect(workflow.jobs?.build?.name).toBe('Build');
   expect(workflow.jobs?.e2e?.name).toBe('E2E: Cucumber');
+});
+
+test('the retired "legacy-security-actions" bridge job and its plain check name stay removed', () => {
+  const workflow = loadWorkflow();
+  const source = readFileSync(workflowPath, 'utf8');
+
+  // Ruleset 13077055 was narrowed to require the composite "Security: Actions
+  // / Workflow Security" context directly, so the fail-closed bridge that
+  // republished the old plain "Security: Actions" context is gone.
+  expect(workflow.jobs?.['legacy-security-actions']).toBeUndefined();
+
+  // No job may republish the retired plain "Security: Actions" context. The
+  // security-actions caller's own name: field legitimately reads "Security:
+  // Actions" too -- for a `uses:` job GitHub only ever consumes it as the
+  // "<caller name> / <called job name>" composite prefix, never as a
+  // standalone check -- so it's the one expected exception here.
+  const otherJobsWithBareName = Object.entries(workflow.jobs ?? {}).filter(
+    ([jobId, job]) => jobId !== 'security-actions' && job?.name === 'Security: Actions',
+  );
+  expect(otherJobsWithBareName).toStrictEqual([]);
+
+  // Anchored to `name:` at (optionally indented) line-start with optional
+  // quotes so this can't false-positive on an input key that merely ends in
+  // "name:", e.g. `workflow-security-check-name: Security: Actions`.
+  const bareNameLines = [...source.matchAll(/^[ \t]*name:\s*["']?Security: Actions["']?\s*$/gmu)];
+  expect(bareNameLines).toHaveLength(1);
 });
 
 test('security-actions calls the reusable go-ci workflow-security gate', () => {
