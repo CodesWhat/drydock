@@ -245,7 +245,7 @@ test('validateConfiguration should normalize auto=false to none', () => {
   expect(validatedConfiguration.auto).toBe('none');
 });
 
-test('validateConfiguration should accept and normalize auto all/none/oninclude values', () => {
+test('validateConfiguration should accept and normalize auto all/none/oninclude/onauto values', () => {
   expect(
     trigger.validateConfiguration({
       ...configurationValid,
@@ -266,6 +266,13 @@ test('validateConfiguration should accept and normalize auto all/none/oninclude 
       auto: 'oninclude',
     }).auto,
   ).toBe('oninclude');
+
+  expect(
+    trigger.validateConfiguration({
+      ...configurationValid,
+      auto: 'onauto',
+    }).auto,
+  ).toBe('onauto');
 });
 
 test('validateConfiguration should normalize mixed-case auto value', () => {
@@ -274,6 +281,14 @@ test('validateConfiguration should normalize mixed-case auto value', () => {
     auto: 'OnInclude',
   });
   expect(validatedConfiguration.auto).toBe('oninclude');
+});
+
+test('validateConfiguration should normalize mixed-case onauto value', () => {
+  const validatedConfiguration = trigger.validateConfiguration({
+    ...configurationValid,
+    auto: 'OnAuto',
+  });
+  expect(validatedConfiguration.auto).toBe('onauto');
 });
 
 test('validateConfiguration should default auto to all for notification triggers', () => {
@@ -452,6 +467,27 @@ test('init should register auto listeners when auto is oninclude', async () => {
   trigger.configuration = trigger.validateConfiguration({
     ...configurationValid,
     auto: 'oninclude',
+    mode: 'simple',
+  });
+
+  await trigger.init();
+
+  expect(reportSpy).toHaveBeenCalled();
+  expect(updateAppliedSpy).toHaveBeenCalled();
+  expect(updateFailedSpy).toHaveBeenCalled();
+  expect(securityAlertSpy).toHaveBeenCalled();
+  expect(agentDisconnectedSpy).toHaveBeenCalled();
+});
+
+test('init should register auto listeners when auto is onauto', async () => {
+  const reportSpy = vi.spyOn(event, 'registerContainerReport');
+  const updateAppliedSpy = vi.spyOn(event, 'registerContainerUpdateApplied');
+  const updateFailedSpy = vi.spyOn(event, 'registerContainerUpdateFailed');
+  const securityAlertSpy = vi.spyOn(event, 'registerSecurityAlert');
+  const agentDisconnectedSpy = vi.spyOn(event, 'registerAgentDisconnected');
+  trigger.configuration = trigger.validateConfiguration({
+    ...configurationValid,
+    auto: 'onauto',
     mode: 'simple',
   });
 
@@ -1219,6 +1255,41 @@ test('mustTrigger should fire with include label when auto is oninclude', () => 
   trigger.type = 'docker';
   trigger.name = 'update';
   trigger.configuration.auto = 'oninclude';
+
+  expect(
+    trigger.mustTrigger({
+      actionTriggerInclude: 'update:minor',
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'minor',
+      },
+    }),
+  ).toBe(true);
+});
+
+// This slice (6.0.1 #1) makes 'onauto' behave exactly like 'oninclude':
+// closed by default absent an explicit dd.action.include label. The
+// auto-label-only-grants-access semantics (decision 2 of spec-6.0.1) land
+// with the resolver module in a later slice.
+test('mustTrigger should not fire without include label when auto is onauto', () => {
+  trigger.type = 'docker';
+  trigger.name = 'update';
+  trigger.configuration.auto = 'onauto';
+
+  expect(
+    trigger.mustTrigger({
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'minor',
+      },
+    }),
+  ).toBe(false);
+});
+
+test('mustTrigger should fire with include label when auto is onauto', () => {
+  trigger.type = 'docker';
+  trigger.name = 'update';
+  trigger.configuration.auto = 'onauto';
 
   expect(
     trigger.mustTrigger({
