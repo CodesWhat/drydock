@@ -43,12 +43,16 @@ import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplic
 import { DigestBuffer } from './trigger-digest-buffer.js';
 import { renderBatch, renderSimple, renderTemplate } from './trigger-expression-parser.js';
 import {
+  doesReferenceMatchId as doesReferenceMatchIdHelper,
+  matchesTriggerReferenceList,
+  parseIncludeOrIncludeTriggerString as parseIncludeOrIncludeTriggerStringHelper,
+} from './trigger-reference-matching.js';
+import {
   isThresholdReached as isThresholdReachedHelper,
   parseThresholdWithDigestBehavior as parseThresholdWithDigestBehaviorHelper,
   SUPPORTED_THRESHOLDS,
 } from './trigger-threshold.js';
 
-type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
 type TriggerAutoMode = 'all' | 'oninclude' | 'onauto' | 'none';
 type DigestEventKind = 'update-available-digest' | 'security-alert-digest';
 
@@ -612,10 +616,6 @@ export function resolveNotificationTemplate(
   return templates[notificationEvent.kind] ?? fallback;
 }
 
-function isSupportedThreshold(value: string): value is SupportedThreshold {
-  return SUPPORTED_THRESHOLDS.includes(value as SupportedThreshold);
-}
-
 export interface TriggerConfiguration extends ComponentConfiguration {
   auto?: boolean | TriggerAutoMode;
   order?: number;
@@ -646,13 +646,6 @@ interface SecurityDigestEntry {
   summary: SecurityAlertSummary;
   status?: string;
   bufferedAt: string;
-}
-
-function splitAndTrimCommaSeparatedList(value: string): string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
 }
 
 /**
@@ -858,31 +851,7 @@ class Trigger<
    * @returns
    */
   static parseIncludeOrIncludeTriggerString(includeOrExcludeTriggerString: string) {
-    const hasThresholdSeparator = includeOrExcludeTriggerString.includes(':');
-    const separatorIndex = hasThresholdSeparator ? includeOrExcludeTriggerString.indexOf(':') : -1;
-    const hasMultipleSeparators =
-      hasThresholdSeparator &&
-      includeOrExcludeTriggerString.slice(separatorIndex + 1).includes(':');
-
-    const triggerId = hasThresholdSeparator
-      ? includeOrExcludeTriggerString.slice(0, separatorIndex).trim()
-      : includeOrExcludeTriggerString.trim();
-    const includeOrExcludeTrigger: { id: string; threshold: SupportedThreshold } = {
-      id: triggerId,
-      threshold: 'all',
-    };
-
-    if (hasThresholdSeparator && !hasMultipleSeparators) {
-      const thresholdCandidate = includeOrExcludeTriggerString
-        .slice(separatorIndex + 1)
-        .trim()
-        .toLowerCase();
-      if (isSupportedThreshold(thresholdCandidate)) {
-        includeOrExcludeTrigger.threshold = thresholdCandidate;
-      }
-    }
-
-    return includeOrExcludeTrigger;
+    return parseIncludeOrIncludeTriggerStringHelper(includeOrExcludeTriggerString);
   }
 
   /**
@@ -894,31 +863,7 @@ class Trigger<
    * @param triggerId
    */
   static doesReferenceMatchId(triggerReference: string, triggerId: string) {
-    const triggerReferenceNormalized = triggerReference.toLowerCase();
-    const triggerIdNormalized = triggerId.toLowerCase();
-
-    if (triggerReferenceNormalized === triggerIdNormalized) {
-      return true;
-    }
-
-    const triggerIdParts = triggerIdNormalized.split('.');
-    const triggerName = triggerIdParts.at(-1);
-    if (!triggerName) {
-      return false;
-    }
-    if (triggerReferenceNormalized === triggerName) {
-      return true;
-    }
-
-    if (triggerIdParts.length >= 2) {
-      const provider = triggerIdParts.at(-2);
-      const providerAndName = `${provider}.${triggerName}`;
-      if (triggerReferenceNormalized === providerAndName) {
-        return true;
-      }
-    }
-
-    return false;
+    return doesReferenceMatchIdHelper(triggerReference, triggerId);
   }
 
   private isTriggerEnabledForRule(
@@ -2609,17 +2554,7 @@ class Trigger<
   }
 
   isTriggerIncludedOrExcluded(containerResult: Container, trigger: string) {
-    const triggerId = this.getId().toLowerCase();
-    const triggers = splitAndTrimCommaSeparatedList(trigger).map((triggerToMatch) =>
-      Trigger.parseIncludeOrIncludeTriggerString(triggerToMatch),
-    );
-    const triggerMatched = triggers.find((triggerToMatch) =>
-      Trigger.doesReferenceMatchId(triggerToMatch.id, triggerId),
-    );
-    if (!triggerMatched) {
-      return false;
-    }
-    return Trigger.isThresholdReached(containerResult, triggerMatched.threshold.toLowerCase());
+    return matchesTriggerReferenceList(this.getId(), trigger, containerResult);
   }
 
   isTriggerIncluded(containerResult: Container, triggerInclude: string | undefined) {
