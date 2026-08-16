@@ -256,6 +256,7 @@ describe('container-init coverage', () => {
         actionTriggerExclude: 'compose',
         notificationTriggerInclude: 'slack',
         notificationTriggerExclude: 'ntfy',
+        actionTriggerAuto: undefined,
         triggerInclude: 'docker',
         triggerExclude: 'compose',
       });
@@ -320,6 +321,7 @@ describe('container-init coverage', () => {
         actionTriggerExclude: undefined,
         notificationTriggerInclude: undefined,
         notificationTriggerExclude: undefined,
+        actionTriggerAuto: undefined,
         triggerInclude: undefined,
         triggerExclude: undefined,
       });
@@ -399,9 +401,25 @@ describe('container-init coverage', () => {
         actionTriggerExclude: undefined,
         notificationTriggerInclude: undefined,
         notificationTriggerExclude: undefined,
+        actionTriggerAuto: undefined,
         triggerInclude: undefined,
         triggerExclude: undefined,
       });
+    });
+
+    test('resolves actionTriggerAuto from dd.action.auto with no notification counterpart', () => {
+      const resolved = resolveTriggerLabelOverrides({ 'dd.action.auto': 'docker:patch' });
+
+      expect(resolved.actionTriggerAuto).toBe('docker:patch');
+    });
+
+    test('actionTriggerAuto override takes priority over the label', () => {
+      const resolved = resolveTriggerLabelOverrides(
+        { 'dd.action.auto': 'docker:patch' },
+        { actionTriggerAuto: 'override' },
+      );
+
+      expect(resolved.actionTriggerAuto).toBe('override');
     });
   });
 
@@ -628,6 +646,22 @@ describe('container-init coverage', () => {
       expect(container.triggerInclude).toBe('docker');
     });
 
+    test('derives actionTriggerAuto from dd.action.auto with no notification counterpart', () => {
+      const container = makeContainer();
+
+      applyDerivedLabelFieldsToContainer(container, { 'dd.action.auto': 'docker:patch' });
+
+      expect(container.actionTriggerAuto).toBe('docker:patch');
+    });
+
+    test('leaves actionTriggerAuto unset when dd.action.auto is absent', () => {
+      const container = makeContainer({ actionTriggerAuto: 'stale' });
+
+      applyDerivedLabelFieldsToContainer(container, {});
+
+      expect(container.actionTriggerAuto).toBeUndefined();
+    });
+
     test('never emits the category-scope warning on the event path (labels here are imgset-blind)', () => {
       mockGetState.mockReturnValue({ trigger: { 'slack.notify': { type: 'slack' } } });
       const container = makeContainer({ name: 'imgset-backed' });
@@ -808,6 +842,15 @@ describe('container-init coverage', () => {
         expect.objectContaining({ tagFamily: 'strict', tagPinInfo: true }),
       );
     });
+  });
+
+  test('mergeConfigWithImgset passes actionTriggerAuto through with no imgset counterpart', () => {
+    expect(mergeConfigWithImgset({ actionTriggerAuto: 'docker:patch' }, undefined, {})).toEqual(
+      expect.objectContaining({ actionTriggerAuto: 'docker:patch' }),
+    );
+    expect(mergeConfigWithImgset({}, undefined, {})).toEqual(
+      expect.objectContaining({ actionTriggerAuto: undefined }),
+    );
   });
 
   test('filterRecreatedContainerAliases skips aliases that are still fresh', () => {

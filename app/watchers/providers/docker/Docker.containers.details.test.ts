@@ -577,6 +577,27 @@ describe('Docker Watcher', () => {
       expect(result.triggerInclude).toBe('action.default:major');
     });
 
+    test('should derive actionTriggerAuto from dd.action.auto with no notification counterpart', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'ghcr.io/home-assistant/home-assistant:2026.2.1',
+          Names: ['/homeassistant'],
+          Labels: { 'dd.action.auto': 'action.default:patch' },
+        },
+        imageDetails: {
+          Variant: 'v8',
+          RepoDigests: ['ghcr.io/home-assistant/home-assistant@sha256:abc123'],
+        },
+        parseImpl: createHaParseMock(),
+        semverValue: { major: 2026, minor: 2, patch: 1 },
+        registryId: 'ghcr',
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.actionTriggerAuto).toBe('action.default:patch');
+    });
+
     test('should apply tagFamily from container labels', async () => {
       const container = await setupContainerDetailTest(docker, {
         container: {

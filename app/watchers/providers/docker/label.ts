@@ -108,6 +108,15 @@ export const ddNotificationExclude = 'dd.notification.exclude';
 export const ddTriggerExclude = 'dd.trigger.exclude';
 
 /**
+ * Optional list of triggers to auto-execute against. Action category only —
+ * auto-execution is an action-only concept, so there is no
+ * `dd.notification.auto` counterpart. Listing a trigger here grants both
+ * auto-execution AND manual access for that trigger (see
+ * `app/model/action-policy.ts`, added in a later slice).
+ */
+export const ddActionAuto = 'dd.action.auto';
+
+/**
  * Optional source repository override used for release-notes lookup.
  */
 export const ddSourceRepo = 'dd.source.repo';

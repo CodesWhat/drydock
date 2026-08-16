@@ -52,6 +52,8 @@ export interface ContainerLabelOverrides {
   actionTriggerExclude?: string;
   notificationTriggerInclude?: string;
   notificationTriggerExclude?: string;
+  /** Action category only — no notification counterpart, no deprecated mirror. */
+  actionTriggerAuto?: string;
   /** @deprecated compat mirror — see Container.triggerInclude/triggerExclude. */
   triggerInclude?: string;
   /** @deprecated compat mirror. */
@@ -126,6 +128,7 @@ interface ResolvedContainerLabelOverrides {
   actionTriggerExclude?: string;
   notificationTriggerInclude?: string;
   notificationTriggerExclude?: string;
+  actionTriggerAuto?: string;
   triggerInclude?: string;
   triggerExclude?: string;
   lookupImage?: string;
@@ -147,6 +150,7 @@ interface ResolvedContainerConfig {
   actionTriggerExclude?: string;
   notificationTriggerInclude?: string;
   notificationTriggerExclude?: string;
+  actionTriggerAuto?: string;
   triggerInclude?: string;
   triggerExclude?: string;
   lookupImage?: string;
@@ -903,6 +907,7 @@ export async function addImageDetailsToContainerOrchestration(
     actionTriggerExclude: resolvedConfig.actionTriggerExclude,
     notificationTriggerInclude: resolvedConfig.notificationTriggerInclude,
     notificationTriggerExclude: resolvedConfig.notificationTriggerExclude,
+    actionTriggerAuto: resolvedConfig.actionTriggerAuto,
     triggerInclude: resolvedConfig.triggerInclude,
     triggerExclude: resolvedConfig.triggerExclude,
     image: {
