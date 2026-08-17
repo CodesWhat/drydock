@@ -159,7 +159,11 @@ describe('request-update', () => {
 
   test('manual mode rejects automatic update admission but allows manual requests', async () => {
     mockGetUpdateMode.mockReturnValue('manual');
-    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    };
 
     await expect(enqueueContainerUpdate(createContainer(), { trigger })).rejects.toMatchObject({
       statusCode: 409,
@@ -189,6 +193,7 @@ describe('request-update', () => {
     const trigger = {
       type: 'docker',
       trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
     };
 
     const accepted = await requestContainerUpdate(createContainer(), { trigger });
@@ -217,6 +222,7 @@ describe('request-update', () => {
     const trigger = {
       type: 'docker',
       trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
     };
     const container = createContainer({ id: 'c42', name: 'myapp' });
 
@@ -238,6 +244,7 @@ describe('request-update', () => {
     const trigger = {
       type: 'docker',
       trigger: vi.fn().mockRejectedValue(new Error('pull failed')),
+      getId: () => 'docker.update',
     };
     mockGetOperationById.mockImplementation((id: string) => ({
       id,
@@ -259,6 +266,7 @@ describe('request-update', () => {
     const trigger = {
       type: 'docker',
       trigger: vi.fn().mockRejectedValue({ message: 'registry timeout' }),
+      getId: () => 'docker.update',
     };
     mockGetOperationById.mockImplementation((id: string) => ({
       id,
@@ -392,6 +400,47 @@ describe('request-update', () => {
     );
   });
 
+  test('options.triggerTypes is honored: a scoped auto-resolve never selects an excluded trigger type', async () => {
+    // A compose file-matched trigger normally outranks a generic docker
+    // trigger, but `triggerTypes: ['docker']` must exclude it from the
+    // candidate pool entirely before ranking (action-policy.test.ts covers
+    // the resolver-level behavior directly).
+    const composeTrigger = {
+      type: 'dockercompose',
+      configuration: { auto: 'all' },
+      getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring.yml',
+      getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring.yml'],
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'dockercompose.compose',
+    };
+    const dockerTrigger = {
+      type: 'docker',
+      configuration: { auto: 'all' },
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.generic',
+    };
+    mockGetState.mockReturnValue({
+      trigger: {
+        'dockercompose.compose': composeTrigger,
+        'docker.generic': dockerTrigger,
+      },
+    });
+    const container = createContainer({
+      labels: {
+        'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring.yml',
+      },
+    });
+
+    const accepted = await requestContainerUpdate(container, {
+      triggerTypes: ['docker'],
+    });
+    await flushAsyncWork();
+
+    expect(accepted.trigger).toBe(dockerTrigger);
+    expect(dockerTrigger.trigger).toHaveBeenCalled();
+    expect(composeTrigger.trigger).not.toHaveBeenCalled();
+  });
+
   test('enqueueContainerUpdate rejects invalid provided trigger shapes', async () => {
     await expect(
       enqueueContainerUpdate(createContainer(), {
@@ -406,7 +455,7 @@ describe('request-update', () => {
   test('enqueueContainerUpdate rejects non-container update trigger types', async () => {
     await expect(
       enqueueContainerUpdate(createContainer(), {
-        trigger: { type: 'slack', trigger: vi.fn() } as any,
+        trigger: { type: 'slack', trigger: vi.fn(), getId: () => 'slack.default' } as any,
       }),
     ).rejects.toMatchObject<Partial<UpdateRequestError>>({
       statusCode: 400,
@@ -1039,6 +1088,7 @@ describe('request-update', () => {
         trigger: {
           type: 'docker',
           trigger: triggerFn,
+          getId: () => 'docker.update',
         },
       });
       await flushAsyncWork();
@@ -1584,7 +1634,11 @@ describe('request-update', () => {
       });
 
       const accepted = await requestContainerUpdate(maturitySuppressed, {
-        trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+        trigger: {
+          type: 'docker',
+          trigger: vi.fn().mockResolvedValue(undefined),
+          getId: () => 'docker.other',
+        },
       });
 
       expect(accepted.operationId).toBeDefined();
@@ -1691,6 +1745,25 @@ describe('request-update', () => {
 
       await expect(
         enqueueContainerUpdate(createContainer(), { source: 'automatic' }),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message:
+          'Action policy for this trigger does not permit automatic updates for this container',
+      });
+      expect(trigger.trigger).not.toHaveBeenCalled();
+      expect(mockInsertOperation).not.toHaveBeenCalled();
+    });
+
+    test('rejects automatic dispatch with 409 for an explicit trigger (options.trigger) when the resolved action policy state is manual (AUTO=none)', async () => {
+      // Same guard, but through the explicit-trigger path (`options.trigger`
+      // provided directly, bypassing the registry-backed auto-resolve walk)
+      // rather than the auto-resolve path the other tests in this describe
+      // exercise — the automatic-source admission guard must apply
+      // regardless of which path resolved the trigger.
+      const trigger = createRegistryTrigger({ configuration: { auto: 'none' } });
+
+      await expect(
+        enqueueContainerUpdate(createContainer(), { trigger, source: 'automatic' }),
       ).rejects.toMatchObject<Partial<UpdateRequestError>>({
         statusCode: 409,
         message:
@@ -1877,6 +1950,7 @@ describe('request-update', () => {
     const trigger = {
       type: 'docker',
       trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
     };
 
     const result = await requestContainerUpdates(
@@ -1946,6 +2020,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
       };
       const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
         trigger,
@@ -1962,6 +2037,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
       };
       const accepted = await requestContainerUpdate(
         createContainer({
@@ -1984,6 +2060,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
       };
       const accepted = await requestContainerUpdate(
         createContainer({ id: 'c-w1', name: 'web', watcher: 'watcher-1' }),
@@ -2024,6 +2101,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockRejectedValue(docker404Error),
+        getId: () => 'docker.update',
       };
 
       // Operation is in queued state when we check
@@ -2064,6 +2142,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockRejectedValue(docker404Error),
+        getId: () => 'docker.update',
       };
 
       mockGetOperationById.mockImplementation((id: string) => ({
@@ -2094,6 +2173,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockRejectedValue(docker404Error),
+        getId: () => 'docker.update',
       };
 
       mockGetOperationById.mockImplementation((id: string) => ({
@@ -2135,6 +2215,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockRejectedValue(conflict409Error),
+        getId: () => 'docker.update',
       };
 
       mockGetOperationById.mockImplementation((id: string) => ({
@@ -2168,6 +2249,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockRejectedValue(conflict409Error),
+        getId: () => 'docker.update',
       };
 
       mockGetOperationById.mockImplementation((id: string) => ({
@@ -2200,6 +2282,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockRejectedValue(conflict409Error),
+        getId: () => 'docker.update',
       };
 
       mockGetOperationById.mockImplementation((id: string) => ({
@@ -2238,6 +2321,7 @@ describe('request-update', () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockRejectedValue(pullError),
+        getId: () => 'docker.update',
       };
 
       mockGetOperationById.mockImplementation((id: string) => ({
@@ -2285,10 +2369,12 @@ describe('request-update', () => {
       const winnerTrigger = {
         type: 'docker',
         trigger: vi.fn(() => winnerPull.promise),
+        getId: () => 'docker.update',
       };
       const loserTrigger = {
         type: 'docker',
         trigger: vi.fn().mockRejectedValue(loserConflict409),
+        getId: () => 'docker.update',
       };
 
       // Winner op: queued with agent+watcher identity.

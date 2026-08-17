@@ -158,6 +158,7 @@ describe('Trigger Router', () => {
       const mockTrigger = {
         type: 'docker',
         trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
       };
       registry.getState.mockReturnValue({
         trigger: { 'docker.update': mockTrigger },
@@ -190,6 +191,7 @@ describe('Trigger Router', () => {
       const mockTrigger = {
         type: 'docker',
         trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
       };
       registry.getState.mockReturnValue({
         trigger: { 'docker.update': mockTrigger },

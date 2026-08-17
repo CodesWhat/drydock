@@ -4,7 +4,7 @@ import * as requestUpdate from '../../updates/request-update.js';
 import { createTriggerHandlers } from './triggers.js';
 
 function createTrigger(overrides: Record<string, unknown> = {}) {
-  return {
+  const trigger = {
     id: 'slack.notify',
     type: 'slack',
     name: 'notify',
@@ -12,6 +12,7 @@ function createTrigger(overrides: Record<string, unknown> = {}) {
     trigger: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
+  return { getId: () => trigger.id as string, ...trigger };
 }
 
 function createHarness(

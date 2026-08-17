@@ -50,6 +50,7 @@ type UpdateTriggerLike = {
 type ResolvedUpdateTrigger = UpdateTriggerLike & {
   agent?: string;
   configuration?: object;
+  getId: () => string;
   getDefaultComposeFilePath?: () => string | null;
   getComposeFilesForContainer?: (container: {
     name?: string;
@@ -135,7 +136,12 @@ function toRejectedContainerUpdateRequest(
 }
 
 function isResolvedUpdateTrigger(trigger: UpdateTriggerLike): trigger is ResolvedUpdateTrigger {
-  return typeof trigger === 'object' && trigger !== null && typeof trigger.type === 'string';
+  return (
+    typeof trigger === 'object' &&
+    trigger !== null &&
+    typeof trigger.type === 'string' &&
+    typeof (trigger as { getId?: unknown }).getId === 'function'
+  );
 }
 
 function resolveUpdateTrigger(
@@ -160,13 +166,14 @@ function resolveUpdateTrigger(
   // been returned (and admitted, subject only to the soft blocker) before
   // this wiring. An explicit `dd.action.exclude` hit is still returned (hard
   // stop) so eligibility's `trigger-excluded` messaging/severity is unchanged
-  // by this slice. `options.triggerTypes` is not honored here — in practice
-  // every caller passes the same docker/dockercompose default `selectActionTrigger`
-  // already scopes to (see `CANDIDATE_TRIGGER_TYPES`).
+  // by this slice. `options.triggerTypes` is honored via `selectActionTrigger`'s
+  // own `triggerTypes` option: when provided, candidates whose type is not in
+  // the list are excluded before ranking, so a narrower caller-supplied scope
+  // (e.g. compose-only) can never fall through to a type it didn't ask for.
   const selection = selectActionTrigger(
     registry.getState().trigger as unknown as Record<string, ActionPolicyTrigger> | undefined,
     container,
-    { requireAuto: false },
+    { requireAuto: false, triggerTypes: options.triggerTypes },
   );
   if (!selection) {
     throw new UpdateRequestError(404, NO_DOCKER_TRIGGER_FOUND_ERROR);

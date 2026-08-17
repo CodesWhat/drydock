@@ -56,6 +56,15 @@ export interface SelectActionTriggerOptions {
    * callers pass `false`/omit.
    */
   requireAuto?: boolean;
+  /**
+   * When provided, restricts candidates to triggers whose `type` is in this
+   * list. Applied before ranking, so an excluded type can never win even when
+   * it would otherwise outrank every included candidate (e.g. a compose
+   * file-matched trigger is never selected when the caller scopes to
+   * `['docker']`). Omitted/undefined keeps today's behavior: every
+   * `CANDIDATE_TRIGGER_TYPES` type is eligible.
+   */
+  triggerTypes?: string[];
 }
 
 export interface SelectActionTriggerResult extends ActionPolicyResult {
@@ -248,7 +257,11 @@ export function selectActionTrigger(
   container: Container,
   options: SelectActionTriggerOptions = {},
 ): SelectActionTriggerResult | undefined {
-  const ranked = rankCandidates(getCompatibleCandidates(triggers, container));
+  const compatible = getCompatibleCandidates(triggers, container);
+  const scoped = options.triggerTypes
+    ? compatible.filter((candidate) => options.triggerTypes?.includes(candidate.trigger.type))
+    : compatible;
+  const ranked = rankCandidates(scoped);
 
   for (const candidate of ranked) {
     const result = resolveForTrigger(candidate.trigger, container);
