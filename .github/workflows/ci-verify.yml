@@ -589,10 +589,16 @@ jobs:
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
         with:
           egress-policy: block
+          # fonts.googleapis.com + fonts.gstatic.com: next/font/google in
+          # apps/web/src/app/layout.tsx downloads IBM Plex at build time, but
+          # the web job only runs on web-path changes, so the gap stayed
+          # invisible on every non-web PR after the block-mode flip.
           allowed-endpoints: >
             github.com:443
             registry.npmjs.org:443
             nodejs.org:443
+            fonts.googleapis.com:443
+            fonts.gstatic.com:443
             *.actions.githubusercontent.com:443
           disable-sudo: true
 
