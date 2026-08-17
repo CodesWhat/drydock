@@ -1,0 +1,21 @@
+name: "🐙 Review: Greptile Second Opinion"
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions: {}
+
+jobs:
+  summon:
+    name: Summon Greptile
+    if: github.event.label.name == 'second-opinion'
+    permissions:
+      pull-requests: write
+    # The org's .github repo has no tags; pinned to its HEAD commit as of
+    # 2026-08-16. Re-check the org's .github commit history periodically and
+    # bump this pin if the reusable workflow's inputs change.
+    uses: CodesWhat/.github/.github/workflows/greptile-summon.yml@bbc181dc4d462f673dac2dff5f88a8408dd9c763  # main, 2026-08-16
+    with:
+      pr_number: ${{ github.event.pull_request.number }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
