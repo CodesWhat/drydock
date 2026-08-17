@@ -1,4 +1,4 @@
-import { defineComponent, nextTick } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 
 const mockGetServer = vi.fn();
 const mockGetStore = vi.fn();
@@ -192,6 +192,33 @@ vi.mock('@/composables/useIcons', () => ({
   }),
 }));
 
+// useUpdateMode caches its fetched settings in a module-level singleton (see
+// src/composables/useUpdateMode.ts): `loaded` only flips true once, for the
+// lifetime of the module instance, regardless of which component mounted it.
+// ConfigView previously pulled in the *real* composable here, so its own
+// direct getSettings() call (for internetlessMode) and useUpdateMode's
+// internal getSettings() call (for updateMode) both fired on a cold module —
+// 2 calls where the "on mount" test expects 1. Every other real consumer of
+// useUpdateMode (ContainerUpdateDialog.spec.ts, DashboardView.spec.ts,
+// SecurityView.spec.ts) already mocks it out for exactly this reason; this
+// file was the one gap. Mocking it here removes both the redundant fetch and
+// the singleton's cross-test-order dependency.
+const mockUpdateModeValue = ref<'notify' | 'manual' | 'auto'>('manual');
+const mockUpdateModeLoaded = ref(true);
+const mockUpdateModeSaving = ref(false);
+const mockUpdateModeError = ref<string | null>(null);
+const mockSetUpdateMode = vi.fn();
+
+vi.mock('@/composables/useUpdateMode', () => ({
+  useUpdateMode: () => ({
+    updateMode: mockUpdateModeValue,
+    loaded: mockUpdateModeLoaded,
+    saving: mockUpdateModeSaving,
+    error: mockUpdateModeError,
+    setUpdateMode: mockSetUpdateMode,
+  }),
+}));
+
 vi.mock('@/icons', () => ({
   libraryLabels: { 'ph-duotone': 'Phosphor Duotone', lucide: 'Lucide' },
   iconMap: {
@@ -255,6 +282,10 @@ describe('ConfigView', () => {
     resetPreferences();
     setI18nLocale('en');
     resetMockFontState();
+    mockUpdateModeValue.value = 'manual';
+    mockUpdateModeLoaded.value = true;
+    mockUpdateModeSaving.value = false;
+    mockUpdateModeError.value = null;
     mockGetUser.mockResolvedValue({
       username: 'admin',
       email: 'admin@test.com',
