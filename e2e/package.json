@@ -51,6 +51,6 @@
     "protobufjs": "7.6.5",
     "@opentelemetry/core": "2.10.0",
     "undici": "7.29.0",
-    "nanoid": "3.3.18"
+    "nanoid": "6.0.1"
   }
 }

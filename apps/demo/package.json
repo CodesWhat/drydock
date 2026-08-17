@@ -41,7 +41,7 @@
     "postcss": "8.5.26",
     "yaml": "2.9.0",
     "esbuild": "0.28.2",
-    "nanoid": "3.3.18"
+    "nanoid": "6.0.1"
   },
   "msw": {
     "workerDirectory": [
