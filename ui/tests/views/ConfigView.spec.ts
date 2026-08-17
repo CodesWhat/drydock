@@ -3,7 +3,6 @@ import { defineComponent, nextTick, ref } from 'vue';
 const mockGetServer = vi.fn();
 const mockGetStore = vi.fn();
 const mockGetAppInfos = vi.fn();
-const mockGetSettings = vi.fn();
 const mockUpdateSettings = vi.fn();
 const mockClearIconCache = vi.fn();
 const mockDownloadDebugDump = vi.fn();
@@ -23,7 +22,6 @@ vi.mock('@/services/store', () => ({
 }));
 
 vi.mock('@/services/settings', () => ({
-  getSettings: (...args: any[]) => mockGetSettings(...args),
   updateSettings: (...args: any[]) => mockUpdateSettings(...args),
   clearIconCache: (...args: any[]) => mockClearIconCache(...args),
 }));
@@ -203,19 +201,32 @@ vi.mock('@/composables/useIcons', () => ({
 // SecurityView.spec.ts) already mocks it out for exactly this reason; this
 // file was the one gap. Mocking it here removes both the redundant fetch and
 // the singleton's cross-test-order dependency.
+//
+// ConfigView no longer calls getSettings() directly at all (drydock#780):
+// internetlessMode is now sourced from the same loadUpdateMode() fetch that
+// useUpdateMode already performs, so mockLoadUpdateMode below stands in for
+// the single shared settings request.
 const mockUpdateModeValue = ref<'notify' | 'manual' | 'auto'>('manual');
+const mockInternetlessMode = ref(false);
 const mockUpdateModeLoaded = ref(true);
 const mockUpdateModeSaving = ref(false);
 const mockUpdateModeError = ref<string | null>(null);
 const mockSetUpdateMode = vi.fn();
+const mockLoadUpdateMode = vi.fn();
+const mockSetInternetlessMode = vi.fn((value: boolean) => {
+  mockInternetlessMode.value = value;
+});
 
 vi.mock('@/composables/useUpdateMode', () => ({
   useUpdateMode: () => ({
     updateMode: mockUpdateModeValue,
+    internetlessMode: mockInternetlessMode,
     loaded: mockUpdateModeLoaded,
     saving: mockUpdateModeSaving,
     error: mockUpdateModeError,
     setUpdateMode: mockSetUpdateMode,
+    loadUpdateMode: mockLoadUpdateMode,
+    setInternetlessMode: mockSetInternetlessMode,
   }),
 }));
 
@@ -283,9 +294,11 @@ describe('ConfigView', () => {
     setI18nLocale('en');
     resetMockFontState();
     mockUpdateModeValue.value = 'manual';
+    mockInternetlessMode.value = false;
     mockUpdateModeLoaded.value = true;
     mockUpdateModeSaving.value = false;
     mockUpdateModeError.value = null;
+    mockLoadUpdateMode.mockResolvedValue(undefined);
     mockGetUser.mockResolvedValue({
       username: 'admin',
       email: 'admin@test.com',
@@ -311,14 +324,13 @@ describe('ConfigView', () => {
           trustproxy: false,
         },
       });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       factory();
       await vi.waitFor(() => {
         expect(mockGetServer).toHaveBeenCalledOnce();
         expect(mockGetStore).toHaveBeenCalledOnce();
         expect(mockGetAppInfos).toHaveBeenCalledOnce();
-        expect(mockGetSettings).toHaveBeenCalledOnce();
+        expect(mockLoadUpdateMode).toHaveBeenCalledOnce();
       });
     });
 
@@ -332,7 +344,6 @@ describe('ConfigView', () => {
           metrics: { auth: false },
         },
       });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => {
@@ -355,7 +366,6 @@ describe('ConfigView', () => {
           trustproxy: false,
         },
       });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => {
@@ -381,7 +391,6 @@ describe('ConfigView', () => {
           trustproxy: false,
         },
       });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => {
@@ -410,7 +419,6 @@ describe('ConfigView', () => {
       mockGetStore.mockResolvedValue({
         configuration: { path: '/var/drydock', file: 'prod.json' },
       });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => {
@@ -426,7 +434,6 @@ describe('ConfigView', () => {
     it('shows default values when server fetch fails', async () => {
       mockGetServer.mockRejectedValue(new Error('fail'));
       mockGetAppInfos.mockRejectedValue(new Error('fail'));
-      mockGetSettings.mockRejectedValue(new Error('fail'));
 
       const w = factory();
       await vi.waitFor(() => {
@@ -455,7 +462,6 @@ describe('ConfigView', () => {
           },
         },
       });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => {
@@ -472,7 +478,6 @@ describe('ConfigView', () => {
   describe('tab switching', () => {
     it('shows general tab by default', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
@@ -484,7 +489,6 @@ describe('ConfigView', () => {
 
     it('switches to appearance tab on click', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
@@ -503,7 +507,6 @@ describe('ConfigView', () => {
 
     it('switches and persists the UI language from appearance settings', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
@@ -544,11 +547,10 @@ describe('ConfigView', () => {
   describe('internetless mode toggle', () => {
     it('calls updateSettings when toggled', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
       mockUpdateSettings.mockResolvedValue({ internetlessMode: true });
 
       const w = factory();
-      await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+      await vi.waitFor(() => expect(mockLoadUpdateMode).toHaveBeenCalled());
       await nextTick();
       await nextTick();
 
@@ -559,16 +561,16 @@ describe('ConfigView', () => {
 
       await vi.waitFor(() => {
         expect(mockUpdateSettings).toHaveBeenCalledWith({ internetlessMode: true });
+        expect(mockSetInternetlessMode).toHaveBeenCalledWith(true);
       });
     });
 
     it('disables Iconify API when internetless mode is enabled', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
       mockUpdateSettings.mockResolvedValue({ internetlessMode: true });
 
       const w = factory();
-      await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+      await vi.waitFor(() => expect(mockLoadUpdateMode).toHaveBeenCalled());
       await nextTick();
       await nextTick();
 
@@ -587,7 +589,6 @@ describe('ConfigView', () => {
       mockGetUser.mockClear();
       mockGetUser.mockResolvedValue({ username });
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
       mockPushInitialSync.mockResolvedValue(undefined);
       const wrapper = factory();
       await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
@@ -607,7 +608,6 @@ describe('ConfigView', () => {
     it('stays hidden while the profile is loading and appears after authentication resolves', async () => {
       mockRouteQuery.value = { tab: 'appearance' };
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
       let resolveProfile!: (user: { username: string }) => void;
       mockGetUser.mockReturnValue(
         new Promise((resolve) => {
@@ -668,7 +668,6 @@ describe('ConfigView', () => {
     it('hides the toggle when the profile load fails', async () => {
       mockRouteQuery.value = { tab: 'appearance' };
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
       mockGetUser.mockClear();
       mockGetUser.mockRejectedValue(new Error('profile failed'));
       const wrapper = factory();
@@ -687,11 +686,10 @@ describe('ConfigView', () => {
   describe('cache clear', () => {
     it('calls clearIconCache and shows result', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
       mockClearIconCache.mockResolvedValue({ cleared: 42 });
 
       const w = factory();
-      await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+      await vi.waitFor(() => expect(mockLoadUpdateMode).toHaveBeenCalled());
       await nextTick();
       await nextTick();
 
@@ -745,10 +743,9 @@ describe('ConfigView', () => {
 
     it('downloads a debug dump from settings', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
-      await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+      await vi.waitFor(() => expect(mockLoadUpdateMode).toHaveBeenCalled());
       await nextTick();
 
       const downloadButton = w.find('[data-test="download-debug-dump"]');
@@ -764,11 +761,10 @@ describe('ConfigView', () => {
 
     it('shows debug dump download error', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
       mockDownloadDebugDump.mockRejectedValue(new Error('debug dump unavailable'));
 
       const w = factory();
-      await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalled());
+      await vi.waitFor(() => expect(mockLoadUpdateMode).toHaveBeenCalled());
       await nextTick();
 
       const downloadButton = w.find('[data-test="download-debug-dump"]');
@@ -783,7 +779,6 @@ describe('ConfigView', () => {
   describe('appearance tab', () => {
     async function mountAppearanceTab() {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
       mockRouteQuery.value = { tab: 'appearance' };
 
       const w = factory();
@@ -897,7 +892,6 @@ describe('ConfigView', () => {
   describe('profile tab', () => {
     async function mountProfileTab() {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
@@ -912,7 +906,6 @@ describe('ConfigView', () => {
 
     it('renders profile tab button', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
@@ -945,7 +938,6 @@ describe('ConfigView', () => {
     it('selects profile tab from query param', async () => {
       mockRouteQuery.value = { tab: 'profile' };
       mockGetServer.mockResolvedValue({ configuration: {} });
-      mockGetSettings.mockResolvedValue({ internetlessMode: false });
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());

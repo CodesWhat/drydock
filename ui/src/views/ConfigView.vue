@@ -18,7 +18,7 @@ import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
 import { downloadDebugDump } from '../services/debug';
 import { getServer } from '../services/server';
-import { clearIconCache, getSettings, updateSettings } from '../services/settings';
+import { clearIconCache, updateSettings } from '../services/settings';
 import { getStore } from '../services/store';
 import { applyFontSize } from '../preferences/font-size';
 import { applyRadius, type RadiusPresetId, RADIUS_PRESET_VALUES } from '../preferences/radius';
@@ -159,15 +159,17 @@ const webhookExample = computed(
 );
 
 // Settings state
-const internetlessMode = ref(false);
 const settingsLoading = ref(false);
 const settingsError = ref('');
 const {
   updateMode,
+  internetlessMode,
   loaded: updateModeLoaded,
   saving: updateModeSaving,
   error: updateModeError,
   setUpdateMode,
+  loadUpdateMode,
+  setInternetlessMode,
 } = useUpdateMode();
 
 // Preference sync state
@@ -239,11 +241,11 @@ async function loadGeneralSettingsData() {
   serverError.value = '';
   settingsError.value = '';
   try {
-    const [serverData, appData, storeData, settings] = await Promise.all([
+    const [serverData, appData, storeData] = await Promise.all([
       getServer().catch(() => null),
       getAppInfos().catch(() => null),
       getStore().catch(() => null),
-      getSettings().catch(() => null),
+      loadUpdateMode(),
     ]);
     const config = serverData?.configuration ?? {};
     const storeConfig = storeData?.configuration ?? {};
@@ -291,9 +293,6 @@ async function loadGeneralSettingsData() {
     ];
     serverFields.value = fields;
     storeFields.value = storeConfigFields;
-    if (settings) {
-      internetlessMode.value = settings.internetlessMode;
-    }
   } catch (e: unknown) {
     serverError.value = errorMessage(e, t('configView.general.errors.loadServerInfo'));
     webhookEnabled.value = false;
@@ -341,7 +340,7 @@ async function toggleInternetlessMode() {
   settingsLoading.value = true;
   try {
     const updated = await updateSettings({ internetlessMode: !internetlessMode.value });
-    internetlessMode.value = updated.internetlessMode;
+    setInternetlessMode(updated.internetlessMode);
     if (updated.internetlessMode) {
       disableIconifyApi();
     }
