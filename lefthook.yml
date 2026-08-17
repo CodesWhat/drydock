@@ -80,31 +80,40 @@ pre-push:
       run: npx biome check .
       priority: 3
       timeout: 30s
+
+    # ── Knip: dead-code / unused dependency detection (app + ui) ─────
+    # Source-only check like biome, no build/coverage needed. Both
+    # workspaces run in ~1-2s each, so no sharding like coverage/build.
+    knip:
+      run: ./scripts/knip-gate.sh
+      priority: 4
+      timeout: 30s
+
     qlty:
       run: ./scripts/qlty-check-gate.sh all
-      priority: 4
+      priority: 5
       timeout: 4m
     qlty-smells:
       run: node scripts/qlty-smells-gate.mjs --scope=all || true
-      priority: 5
+      priority: 6
       timeout: 2m
 
     # ── Scripts tests: node:test coverage for maintenance scripts ─────
     scripts-test:
       run: node --test scripts/*.test.mjs
-      priority: 6
+      priority: 7
       timeout: 30s
 
     # ── Workflow tests: CI/workflow invariants outside app coverage ───
     workflow-tests:
       run: npm run test:workflows
-      priority: 7
+      priority: 8
       timeout: 30s
 
     # ── UI typecheck: catches TypeScript errors that vite build misses ──
     typecheck-ui:
       run: npm run typecheck --prefix ui
-      priority: 8
+      priority: 9
       timeout: 2m
 
     # ── apps/web scripts tests: node:test for the marketing/docs site ──
@@ -114,7 +123,7 @@ pre-push:
     web-scripts-test:
       glob: 'apps/web/**'
       run: npm run test:scripts --prefix apps/web
-      priority: 9
+      priority: 10
       timeout: 60s
 
     # ── Coverage: sharded app+ui parallel, 100% threshold ────────────
@@ -123,14 +132,14 @@ pre-push:
     # Honors DD_COVERAGE_FAIL_FAST=1 for sequential first-failure mode.
     coverage:
       run: ./scripts/pre-push-coverage.sh
-      priority: 10
+      priority: 11
       timeout: 10m
 
     # ── Build: sharded app+ui parallel, no tests ─────────────────────
     # Tests already ran in the coverage step, so this is tsc/vite only.
     build:
       run: ./scripts/pre-push-build.sh
-      priority: 11
+      priority: 12
       timeout: 4m
 
     # ── Docker build (opt-in via DD_LOCAL_DOCKER=1) ───────────────────
@@ -139,7 +148,7 @@ pre-push:
       run: docker build --build-arg DD_VERSION=local -t drydock:local .
       skip:
         - run: '[ -z "$DD_LOCAL_DOCKER" ]'
-      priority: 12
+      priority: 13
       timeout: 10m
       fail_text: "Docker QA build failed — fix Dockerfile before push"
 
@@ -149,5 +158,5 @@ pre-push:
       run: zizmor .github/workflows/
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 13
+      priority: 14
       timeout: 30s

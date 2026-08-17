@@ -132,7 +132,7 @@ test('workflow tests are wired outside the app coverage suite', () => {
 
   expect(loadLefthook()['pre-push']?.commands?.['workflow-tests']).toMatchObject({
     run: workflowTestsCommand,
-    priority: 7,
+    priority: 8,
   });
 });
 
