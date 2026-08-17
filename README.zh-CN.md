@@ -470,7 +470,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 ### 社区
 
-问题、反馈和早期支持：**[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
+实时聊天和早期支持：**[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
 
 明确的错误和功能请求请提交到 **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)**；开放式问题、想法和展示请前往 **[GitHub Discussions](https://github.com/CodesWhat/drydock/discussions)**；实时聊天在 **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)** 进行。
 

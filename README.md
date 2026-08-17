@@ -484,7 +484,7 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 <h2 align="center" id="community-support">Community & Support</h2>
 
-Questions, feedback, and early support: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
+Real-time chat and early support: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
 
 Bugs and concrete feature requests go to **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)**; open-ended questions, ideas, and show-and-tell go to **[GitHub Discussions](https://github.com/CodesWhat/drydock/discussions)**; real-time chat happens on the **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**.
 

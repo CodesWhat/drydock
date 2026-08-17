@@ -470,7 +470,7 @@ Thèmes généraux uniquement ; consultez [CHANGELOG.md](CHANGELOG.md) pour les
 
 ### Communauté
 
-Questions, commentaires et assistance précoce : **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
+Chat en temps réel et assistance précoce : **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
 
 Les bogues et les demandes de fonctionnalités concrètes vont dans **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)** ; les questions ouvertes, idées et démonstrations vont dans **[GitHub Discussions](https://github.com/CodesWhat/drydock/discussions)** ; le chat en temps réel se passe sur **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**.
 

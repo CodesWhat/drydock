@@ -470,7 +470,7 @@ Tylko motywy ogólne; szczegóły poszczególnych wersji zawiera [CHANGELOG.md](
 
 ### Społeczność
 
-Pytania, opinie i wczesne wsparcie: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
+Czat na żywo i wczesne wsparcie: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
 
 Błędy i konkretne prośby o nowe funkcje trafiają do **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)**; otwarte pytania, pomysły i prezentacje trafiają do **[GitHub Discussions](https://github.com/CodesWhat/drydock/discussions)**; czat na żywo odbywa się na **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**.
 
