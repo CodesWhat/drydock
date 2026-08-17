@@ -115,7 +115,7 @@ The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_
 | --- | --- |
 | **Deprecated in** | v1.5.0 |
 | **Removed in** | v1.7.0 |
-| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` (or the legacy `dd.trigger.include` / `dd.trigger.exclude`) where the labels filter out the matching docker / dockercompose action trigger |
+| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` where the labels filter out the matching docker / dockercompose action trigger (v1.7.0 ignores the legacy `dd.trigger.*` labels — see the runtime removal above) |
 
 In v1.5.x–v1.6.x the eligibility model classified `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill said *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queued the update (the confirm modal listed the soft blocker and switched the accept label to *Update anyway*). This preserved the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
 
@@ -123,7 +123,7 @@ As of v1.7.0 both reasons are **hard** blockers, shipping together with the per-
 
 **This does not change `AUTO=oninclude`'s meaning.** A trigger left on `AUTO=oninclude` keeps its pre-6.0.1 conflated behavior permanently: a matching `dd.action.include` label still grants both manual and automatic access under that mode, exactly as before — that row of the migration table is explicitly unchanged. Only the *default-deny* outcome (no matching include/auto label at all) and the *explicit-exclude* outcome (`dd.action.exclude` match) flip from soft to hard. An operator who wants the split between manual-only and automatic access opts in by switching a trigger to `AUTO=onauto`; nothing about this flip forces that switch.
 
-**Migration:** If you relied on manual updates running through a trigger that the container's labels excluded, either (a) remove the `dd.action.exclude` / legacy `dd.trigger.exclude` label from the container, (b) add the trigger to the container's `dd.action.include` / legacy `dd.trigger.include` list (or `dd.action.auto` list, for a trigger configured with `AUTO=onauto`), or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies exactly which trigger / label combination is in conflict.
+**Migration:** If legacy `dd.trigger.include` / `dd.trigger.exclude` labels are still present, first rename them to the corresponding `dd.action.*` labels (v1.7.0 no longer reads them — the migration CLI above does this rewrite). Then, if you relied on manual updates running through a trigger that the container's labels excluded, either (a) remove the `dd.action.exclude` label from the container, (b) add the trigger to the container's `dd.action.include` list (or `dd.action.auto` list, for a trigger configured with `AUTO=onauto`), or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies exactly which trigger / label combination is in conflict.
 
 ---
 
