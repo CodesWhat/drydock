@@ -6,7 +6,7 @@ description: "Verify Drydock container images and release archives with cosign a
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-Every Drydock release is signed with [cosign](https://docs.sigstore.dev/) (keyless, via the Sigstore public-good infrastructure) and ships with [SLSA build provenance](https://slsa.dev/) attestations generated inside GitHub Actions. You can — and should — verify both before running the image or extracting the archive.
+Every Drydock release is signed with [cosign](https://docs.sigstore.dev/) (keyless, via the Sigstore public-good infrastructure) and ships with [SLSA Build L2 provenance](https://slsa.dev/) attestations generated inside GitHub Actions. You can — and should — verify both before running the image or extracting the archive.
 
 The examples on this page use `v1.5.2` as a placeholder. Replace it with the tag you're verifying.
 
@@ -72,7 +72,7 @@ A successful verification prints the signature payload and exits 0. Any other ou
 
 ### Verify image provenance (SLSA)
 
-The container image also carries a signed [SLSA provenance](https://slsa.dev/spec/v1.0/provenance) attestation published to the registry. Verify it with the GitHub CLI:
+The container image also carries a signed [SLSA Build L2 provenance](https://slsa.dev/spec/v1.0/provenance) attestation published to the registry. Verify it with the GitHub CLI:
 
 ```bash
 gh attestation verify \
@@ -94,7 +94,7 @@ Each GitHub release includes six files for the source archive:
 | `drydock-${TAG}.tar.gz.sig` | Cosign detached signature |
 | `drydock-${TAG}.tar.gz.pem` | Signing certificate |
 | `drydock-${TAG}.tar.gz.bundle` | Cosign bundle (sig + cert + Rekor proof) |
-| `drydock-${TAG}.tar.gz.intoto.jsonl` | SLSA provenance attestation |
+| `drydock-${TAG}.tar.gz.intoto.jsonl` | SLSA Build L2 provenance attestation |
 
 ### 1. Download
 
@@ -139,7 +139,7 @@ cosign verify-blob \
 # Verified OK
 ```
 
-### 4. Verify the SLSA provenance
+### 4. Verify the SLSA Build L2 provenance {#4-verify-the-slsa-provenance}
 
 The `.intoto.jsonl` file is a signed [in-toto](https://in-toto.io/) attestation describing how, when, and where the tarball was built. Two ways to verify:
 
@@ -170,7 +170,7 @@ slsa-verifier verify-artifact \
 </Tab>
 </Tabs>
 
-Passing both the cosign signature and the SLSA attestation confirms the tarball came from the release workflow, on this tag, and has not been modified.
+Passing both the cosign signature and the SLSA Build L2 attestation confirms the tarball came from the release workflow, on this tag, and has not been modified.
 
 ## Why some older tags look different
 
@@ -200,4 +200,4 @@ If any verification step fails, do not run the image or extract the archive. Ope
 - [Security Hardening Guide](/docs/guides/security) — lock down a running Drydock deployment
 - [Update Bouncer](/docs/configuration/security) — use Drydock's built-in cosign support to verify the images Drydock itself is watching
 - [Sigstore documentation](https://docs.sigstore.dev/) — background on keyless signing and Rekor transparency log
-- [SLSA framework](https://slsa.dev/) — what the provenance attestation proves
+- [SLSA framework](https://slsa.dev/) — what the SLSA Build L2 provenance attestation proves
