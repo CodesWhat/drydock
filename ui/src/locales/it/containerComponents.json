@@ -193,7 +193,6 @@
       "setGroupAction": "Imposta gruppo",
       "rollbackAction": "Rollback",
       "deleteAction": "Elimina",
-      "pinnedTooltip": "Bloccato",
       "skippedLabel": "Saltato",
       "upToDateTooltip": "Aggiornato",
       "imageUpdateTooltip": "Il tag {tag} ora punta a una build immagine diversa. Esegui nuovamente il deploy per scaricare la nuova immagine; il tag di versione in sé non è cambiato.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "Suggerito: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "Più recente disponibile",
       "tooltip": "Nuova versione disponibile: {tag}. Questo Tag è bloccato, drydock non lo aggiornerà automaticamente."
     },
     "eligibilityBadges": {

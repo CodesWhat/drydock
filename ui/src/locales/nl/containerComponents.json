@@ -193,7 +193,6 @@
       "setGroupAction": "Groep instellen",
       "rollbackAction": "Terugdraaien",
       "deleteAction": "Verwijderen",
-      "pinnedTooltip": "Vastgezet",
       "skippedLabel": "Overgeslagen",
       "upToDateTooltip": "Up-to-date",
       "imageUpdateTooltip": "De tag {tag} verwijst nu naar een andere image-build. Rol opnieuw uit om de nieuwe image op te halen; de versietag zelf is niet gewijzigd.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "Voorgesteld: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "Nieuwere beschikbaar",
       "tooltip": "Nieuwere versie beschikbaar: {tag}. Deze Tag is vastgezet, drydock werkt hem niet automatisch bij."
     },
     "eligibilityBadges": {
