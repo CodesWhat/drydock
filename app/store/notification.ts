@@ -25,7 +25,7 @@ let notifications: NotificationCollection | undefined;
 let notificationRulesCache: NotificationRule[] | null = null;
 
 export const NOTIFICATION_BELL_THRESHOLDS = ['all', 'major', 'minor', 'patch'] as const;
-export type NotificationBellThreshold = (typeof NOTIFICATION_BELL_THRESHOLDS)[number];
+type NotificationBellThreshold = (typeof NOTIFICATION_BELL_THRESHOLDS)[number];
 
 export interface NotificationTemplateOverride {
   simpleTitle?: string;
@@ -34,7 +34,7 @@ export interface NotificationTemplateOverride {
 }
 
 export type NotificationTemplateField = keyof NotificationTemplateOverride;
-export type NotificationTemplateOverrides = Record<string, NotificationTemplateOverride>;
+type NotificationTemplateOverrides = Record<string, NotificationTemplateOverride>;
 
 export interface NotificationRule {
   id: string;
@@ -52,7 +52,7 @@ export interface NotificationRuleDispatchOptions {
   defaultWhenRuleMissing?: boolean;
 }
 
-export type NotificationRuleDispatchReason =
+type NotificationRuleDispatchReason =
   | 'invalid-input'
   | 'missing-rule'
   | 'default-when-rule-missing'

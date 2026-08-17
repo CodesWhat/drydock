@@ -124,7 +124,7 @@ interface SemverCandidateFilterStats {
   greaterSkipped: boolean;
 }
 
-export interface TagInsight {
+interface TagInsight {
   tag: string;
   kind: 'major' | 'minor' | 'patch';
 }

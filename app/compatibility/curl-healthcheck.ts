@@ -21,7 +21,7 @@ export interface CurlHealthcheckOverrideCompatibility {
   commandPreview?: string;
 }
 
-export function getSelfContainerIdentifier(hostname = process.env.HOSTNAME): string | null {
+function getSelfContainerIdentifier(hostname = process.env.HOSTNAME): string | null {
   const normalizedHostname = hostname?.trim();
   if (!normalizedHostname || !SELF_CONTAINER_IDENTIFIER_PATTERN.test(normalizedHostname)) {
     return null;
@@ -50,7 +50,7 @@ export function getHealthcheckCommandPreview(test: unknown): string | undefined 
   return `${command.slice(0, COMMAND_PREVIEW_MAX_LENGTH - 1)}…`;
 }
 
-export function usesCurlHealthcheckOverride(test: unknown): boolean {
+function usesCurlHealthcheckOverride(test: unknown): boolean {
   const command = getHealthcheckCommandPreview(test);
   return typeof command === 'string' && CURL_HEALTHCHECK_PATTERN.test(command);
 }

@@ -1,8 +1,6 @@
 import log from '../../../log/index.js';
 import Docker from './Docker.js';
 
-export { log };
-
 export const configurationValid = {
   prune: false,
   dryrun: false,
@@ -166,7 +164,7 @@ vi.mock('../../../registry', () => ({
 }));
 
 /** Default registry state used by the Docker trigger test suite */
-export function createDefaultRegistryState() {
+function createDefaultRegistryState() {
   return {
     watcher: {
       'docker.test': {

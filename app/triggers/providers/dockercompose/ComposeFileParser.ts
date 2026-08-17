@@ -15,7 +15,7 @@ type ComposeParserLog = {
   error?: (message: string) => void;
 };
 
-export interface ComposeFileParserOptions {
+interface ComposeFileParserOptions {
   resolveComposeFilePath: (file: string) => string;
   getDefaultComposeFilePath?: () => string | null | undefined;
   getLog?: () => ComposeParserLog | undefined;

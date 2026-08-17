@@ -14,7 +14,7 @@ interface UseContainerTriggersInput {
   refreshActionTabData: () => Promise<void>;
 }
 
-export function getTriggerKey(trigger: ApiContainerTrigger): string {
+function getTriggerKey(trigger: ApiContainerTrigger): string {
   if (trigger.id) {
     return trigger.id;
   }

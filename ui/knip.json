@@ -10,5 +10,11 @@
     "config": "vite.config.ts"
   },
   "ignoreBinaries": ["biome"],
-  "ignoreDependencies": ["@iconify-json/*", "@fontsource/*", "tailwindcss"]
+  "ignoreDependencies": [
+    "@iconify-json/*",
+    "@fontsource/*",
+    "tailwindcss",
+    "@stryker-mutator/api",
+    "@vitest/coverage-custom"
+  ]
 }

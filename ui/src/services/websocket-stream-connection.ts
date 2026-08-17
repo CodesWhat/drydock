@@ -1,4 +1,4 @@
-export type WebSocketStreamStatus = 'connected' | 'disconnected';
+type WebSocketStreamStatus = 'connected' | 'disconnected';
 
 export interface WebSocketStreamConnectionOptions<TQuery extends object, TMessage> {
   query?: TQuery;

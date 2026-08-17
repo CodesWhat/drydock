@@ -36,5 +36,4 @@ async function updatePreferences(
   return readJsonResponse<PreferencesEnvelope>(response);
 }
 
-export type { PreferencesEnvelope };
 export { getPreferences, updatePreferences };

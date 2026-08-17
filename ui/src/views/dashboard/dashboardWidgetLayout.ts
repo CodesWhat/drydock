@@ -93,7 +93,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-export function isSingleColumnBreakpoint(breakpoint: DashboardLayoutBreakpoint): boolean {
+function isSingleColumnBreakpoint(breakpoint: DashboardLayoutBreakpoint): boolean {
   return GRID_COLS[breakpoint] === 1;
 }
 

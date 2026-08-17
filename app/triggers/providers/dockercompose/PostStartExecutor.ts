@@ -53,7 +53,7 @@ type DockerApiLike = {
   getContainer: (containerName: string) => DockerContainerLike;
 };
 
-export interface PostStartExecutorOptions {
+interface PostStartExecutorOptions {
   getLog?: () => PostStartExecutorLog | undefined;
   getWatcher: (container: unknown) => unknown;
   isDryRun?: () => boolean;

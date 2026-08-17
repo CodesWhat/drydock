@@ -1,6 +1,6 @@
-export type TrivyWarmupResult = 'ready' | 'skipped' | 'failed';
+type TrivyWarmupResult = 'ready' | 'skipped' | 'failed';
 
-export interface TrivyWarmupConfiguration {
+interface TrivyWarmupConfiguration {
   enabled: boolean;
   scanner: string;
   trivy: {
@@ -9,7 +9,7 @@ export interface TrivyWarmupConfiguration {
   };
 }
 
-export interface TrivyWarmupCommand {
+interface TrivyWarmupCommand {
   command: string;
   args: string[];
   timeoutMs: number;

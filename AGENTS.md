@@ -122,16 +122,17 @@ Add `!` before the colon (`feat(api)!: drop v1 tokens`), or a `BREAKING CHANGE:`
 1. `clean-tree` — rejects uncommitted changes (CI only ever sees committed state)
 2. `ts-nocheck` — checks for `@ts-nocheck` directives against the allowlist
 3. `biome` — lint/format via `npx biome check .`
-4. `qlty` — static analysis via `./scripts/qlty-check-gate.sh all` (medium+ severity gate, budgeted at **4 minutes**)
-5. `qlty-smells` — code-smell advisory scan (non-blocking)
-6. `scripts-test` — `node --test scripts/*.test.mjs`
-7. `workflow-tests` — `npm run test:workflows` (CI/workflow invariants, outside the app suite)
-8. `typecheck-ui` — `npm run typecheck --prefix ui`
-9. `web-scripts-test` — `npm run test:scripts --prefix apps/web`, only when a push touches `apps/web/**`
-10. `coverage` — sharded `app`+`ui` parallel vitest with the 100% threshold above (takes roughly **210 seconds**); on failure writes `.coverage-gaps.json`
-11. `build` — sharded `app`+`ui` parallel `tsc`/`vite`, no tests (they already ran in step 10)
-12. `docker-build` — optional, only when `DD_LOCAL_DOCKER=1`
-13. `zizmor` — GitHub Actions workflow security scan, only when `.github/workflows/*.yml` changed and `zizmor` is installed
+4. `knip` — dead-code/unused-dependency check across `app`+`ui` via `./scripts/knip-gate.sh`
+5. `qlty` — static analysis via `./scripts/qlty-check-gate.sh all` (medium+ severity gate, budgeted at **4 minutes**)
+6. `qlty-smells` — code-smell advisory scan (non-blocking)
+7. `scripts-test` — `node --test scripts/*.test.mjs`
+8. `workflow-tests` — `npm run test:workflows` (CI/workflow invariants, outside the app suite)
+9. `typecheck-ui` — `npm run typecheck --prefix ui`
+10. `web-scripts-test` — `npm run test:scripts --prefix apps/web`, only when a push touches `apps/web/**`
+11. `coverage` — sharded `app`+`ui` parallel vitest with the 100% threshold above (takes roughly **210 seconds**); on failure writes `.coverage-gaps.json`
+12. `build` — sharded `app`+`ui` parallel `tsc`/`vite`, no tests (they already ran in step 11)
+13. `docker-build` — optional, only when `DD_LOCAL_DOCKER=1`
+14. `zizmor` — GitHub Actions workflow security scan, only when `.github/workflows/*.yml` changed and `zizmor` is installed
 
 Coverage runs before build so tests execute exactly once per push, and a coverage failure surfaces before a slower build failure would bury it.
 

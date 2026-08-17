@@ -1,10 +1,10 @@
 import { sanitizeLogParam } from '../log/sanitize.js';
 
 export type ScannerAssetProviderId = 'trivy' | 'grype' | 'syft';
-export type ScannerAssetState = 'missing' | 'pulling' | 'warming' | 'ready' | 'error';
-export type ScannerAssetOperation = 'pull' | 'warm';
+type ScannerAssetState = 'missing' | 'pulling' | 'warming' | 'ready' | 'error';
+type ScannerAssetOperation = 'pull' | 'warm';
 
-export interface ScannerAssetAuth {
+interface ScannerAssetAuth {
   username?: string;
   password?: string;
 }
@@ -43,7 +43,7 @@ export interface ScannerAssetStatus {
   lastError?: string;
 }
 
-export type ScannerAssetAuditAction =
+type ScannerAssetAuditAction =
   | 'scanner-asset-pull-started'
   | 'scanner-asset-pull-succeeded'
   | 'scanner-asset-pull-failed'
@@ -51,7 +51,7 @@ export type ScannerAssetAuditAction =
   | 'scanner-asset-warm-succeeded'
   | 'scanner-asset-warm-failed';
 
-export interface ScannerAssetAuditDiagnostics {
+interface ScannerAssetAuditDiagnostics {
   resolvedDigest?: string;
   version?: string;
   updatedAt?: string;

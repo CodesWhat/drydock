@@ -1,4 +1,4 @@
-export function getFirstQueryValue(value: unknown): string | undefined {
+function getFirstQueryValue(value: unknown): string | undefined {
   if (Array.isArray(value)) {
     for (const item of value) {
       if (typeof item === 'string') {

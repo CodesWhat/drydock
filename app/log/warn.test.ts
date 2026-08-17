@@ -26,16 +26,13 @@ test('setWarnLogger should delegate to provided logger', async () => {
 
 test('logError should use console.error by default and delegate after logger setup', async () => {
   const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-  const warnModule = await import('./warn.js');
-  const logError = (warnModule as typeof warnModule & { logError?: (message: string) => void })
-    .logError;
+  const { logError, setWarnLogger } = await import('./warn.js');
 
-  expect(logError).toBeTypeOf('function');
-  logError?.('default error');
+  logError('default error');
   expect(errorSpy).toHaveBeenCalledWith('default error');
 
   const logger = { warn: vi.fn(), error: vi.fn() };
-  warnModule.setWarnLogger(logger);
-  logError?.('custom error');
+  setWarnLogger(logger);
+  logError('custom error');
   expect(logger.error).toHaveBeenCalledWith('custom error');
 });

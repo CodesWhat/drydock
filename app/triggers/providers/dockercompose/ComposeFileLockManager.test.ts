@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';
-import { ComposeFileLockManager } from './ComposeFileLockManager.js';
+import ComposeFileLockManager from './ComposeFileLockManager.js';
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();

@@ -40,12 +40,12 @@ export interface DependencyEdge {
   source: 'label' | 'compose';
 }
 
-export interface UnresolvedDependencyEdge {
+interface UnresolvedDependencyEdge {
   nodeId: string;
   missingTarget: string;
 }
 
-export interface CrossHostIgnoredEdge {
+interface CrossHostIgnoredEdge {
   from: string;
   to: string;
 }

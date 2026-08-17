@@ -1,8 +1,8 @@
-export const CONTAINER_UPDATE_OPERATION_KINDS = ['container-update', 'self-update'] as const;
+const CONTAINER_UPDATE_OPERATION_KINDS = ['container-update', 'self-update'] as const;
 
 export type ContainerUpdateOperationKind = (typeof CONTAINER_UPDATE_OPERATION_KINDS)[number];
 
-export const CONTAINER_UPDATE_OPERATION_STATUSES = [
+const CONTAINER_UPDATE_OPERATION_STATUSES = [
   'queued',
   'in-progress',
   'succeeded',
@@ -61,9 +61,9 @@ export const CONTAINER_UPDATE_OPERATION_PHASES = [
 
 export type ContainerUpdateOperationPhase = (typeof CONTAINER_UPDATE_OPERATION_PHASES)[number];
 
-export const QUEUED_CONTAINER_UPDATE_OPERATION_PHASES = ['queued'] as const;
+const QUEUED_CONTAINER_UPDATE_OPERATION_PHASES = ['queued'] as const;
 
-export type QueuedContainerUpdateOperationPhase =
+type QueuedContainerUpdateOperationPhase =
   (typeof QUEUED_CONTAINER_UPDATE_OPERATION_PHASES)[number];
 
 export const IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES = [
@@ -88,7 +88,7 @@ export type ActiveContainerUpdateOperationPhase =
   | QueuedContainerUpdateOperationPhase
   | InProgressContainerUpdateOperationPhase;
 
-export const SUCCEEDED_CONTAINER_UPDATE_OPERATION_PHASES = [
+const SUCCEEDED_CONTAINER_UPDATE_OPERATION_PHASES = [
   'dryrun',
   'succeeded',
   'recovered-cleanup-temp',
@@ -98,7 +98,7 @@ export const SUCCEEDED_CONTAINER_UPDATE_OPERATION_PHASES = [
 export type SucceededContainerUpdateOperationPhase =
   (typeof SUCCEEDED_CONTAINER_UPDATE_OPERATION_PHASES)[number];
 
-export const ROLLED_BACK_CONTAINER_UPDATE_OPERATION_PHASES = [
+const ROLLED_BACK_CONTAINER_UPDATE_OPERATION_PHASES = [
   'rolled-back',
   'recovered-rollback',
 ] as const;
@@ -106,7 +106,7 @@ export const ROLLED_BACK_CONTAINER_UPDATE_OPERATION_PHASES = [
 export type RolledBackContainerUpdateOperationPhase =
   (typeof ROLLED_BACK_CONTAINER_UPDATE_OPERATION_PHASES)[number];
 
-export const FAILED_CONTAINER_UPDATE_OPERATION_PHASES = [
+const FAILED_CONTAINER_UPDATE_OPERATION_PHASES = [
   'pull-failed',
   'failed',
   'recovery-failed',
@@ -121,7 +121,7 @@ export type FailedContainerUpdateOperationPhase =
 // reconciliation terminalises a stuck operation. It is deliberately NOT a member
 // of FAILED_* so that no "update failed" lifecycle event is emitted (see
 // emitTerminalLifecycleEvent in app/store/update-operation.ts). See issue #410.
-export const EXPIRED_CONTAINER_UPDATE_OPERATION_PHASES = ['expired'] as const;
+const EXPIRED_CONTAINER_UPDATE_OPERATION_PHASES = ['expired'] as const;
 
 export type ExpiredContainerUpdateOperationPhase =
   (typeof EXPIRED_CONTAINER_UPDATE_OPERATION_PHASES)[number];
@@ -131,7 +131,7 @@ export type ExpiredContainerUpdateOperationPhase =
 // its chain failed or is deferred by its own maintenance window this cycle.
 // Deliberately NOT a member of FAILED_* so no false "update failed" lifecycle
 // event fires for a container that was never attempted (see design §3).
-export const SKIPPED_DEPENDENCY_CONTAINER_UPDATE_OPERATION_PHASES = ['skipped-dependency'] as const;
+const SKIPPED_DEPENDENCY_CONTAINER_UPDATE_OPERATION_PHASES = ['skipped-dependency'] as const;
 
 export type SkippedDependencyContainerUpdateOperationPhase =
   (typeof SKIPPED_DEPENDENCY_CONTAINER_UPDATE_OPERATION_PHASES)[number];
@@ -214,7 +214,7 @@ export function isContainerUpdateOperationPhase(
   );
 }
 
-export function isQueuedContainerUpdateOperationPhase(
+function isQueuedContainerUpdateOperationPhase(
   value: unknown,
 ): value is QueuedContainerUpdateOperationPhase {
   return (
@@ -223,7 +223,7 @@ export function isQueuedContainerUpdateOperationPhase(
   );
 }
 
-export function isInProgressContainerUpdateOperationPhase(
+function isInProgressContainerUpdateOperationPhase(
   value: unknown,
 ): value is InProgressContainerUpdateOperationPhase {
   return (
@@ -240,7 +240,7 @@ export function isActiveContainerUpdateOperationPhase(
   );
 }
 
-export function isSucceededContainerUpdateOperationPhase(
+function isSucceededContainerUpdateOperationPhase(
   value: unknown,
 ): value is SucceededContainerUpdateOperationPhase {
   return (
@@ -249,7 +249,7 @@ export function isSucceededContainerUpdateOperationPhase(
   );
 }
 
-export function isRolledBackContainerUpdateOperationPhase(
+function isRolledBackContainerUpdateOperationPhase(
   value: unknown,
 ): value is RolledBackContainerUpdateOperationPhase {
   return (
@@ -258,7 +258,7 @@ export function isRolledBackContainerUpdateOperationPhase(
   );
 }
 
-export function isFailedContainerUpdateOperationPhase(
+function isFailedContainerUpdateOperationPhase(
   value: unknown,
 ): value is FailedContainerUpdateOperationPhase {
   return (

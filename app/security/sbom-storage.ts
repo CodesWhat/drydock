@@ -9,7 +9,7 @@ const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 const SBOM_KEY_PATTERN =
   /^sbom\/([0-9a-f]{64})(?:\/([0-9a-f]{64}))?\/(spdx-json|cyclonedx-json)\.json$/;
 
-export type SbomFormat = (typeof SBOM_FORMATS)[number];
+type SbomFormat = (typeof SBOM_FORMATS)[number];
 
 export type SbomDocumentRef = {
   key: string;
@@ -17,7 +17,7 @@ export type SbomDocumentRef = {
   bytes: number;
 };
 
-export interface WriteSbomDocumentOptions {
+interface WriteSbomDocumentOptions {
   subjectDigest?: string;
   image: string;
   format: SbomFormat;

@@ -43,7 +43,6 @@ const coverageConfig: CustomCoverageConfig = {
     '**/api/container/query-values.ts',
     '**/api/container/sorting.ts',
     '**/api/container/update-age.ts',
-    '**/test/mock-factories.ts',
     '**/*.test.helpers.ts',
     'vitest.config.ts',
     'vitest.coverage-provider.ts',

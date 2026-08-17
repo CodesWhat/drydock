@@ -1,10 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["index.ts"],
+  "entry": ["**/*.typecheck.ts"],
   "project": ["**/*.ts"],
-  "ignore": ["**/*.typecheck.ts"],
-  "ignoreBinaries": ["biome"],
-  "ignoreDependencies": ["fast-check"],
+  "ignoreBinaries": ["biome", "cc", "openssl"],
+  "ignoreDependencies": ["fast-check", "@stryker-mutator/api", "@vitest/coverage-custom"],
   "vitest": {
     "entry": ["**/*.test.ts"]
   }
