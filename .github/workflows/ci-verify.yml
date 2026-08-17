@@ -744,9 +744,13 @@ jobs:
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
         with:
           egress-policy: block
+          # raw.githubusercontent.com: anchore/scan-action pulls its grype
+          # installer from there before get.anchore.io is ever consulted —
+          # blocking it fails the scan step with a bare ECONNREFUSED.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            raw.githubusercontent.com:443
             get.anchore.io:443
             grype.anchore.io:443
             objects.githubusercontent.com:443
