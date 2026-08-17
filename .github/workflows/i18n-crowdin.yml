@@ -36,7 +36,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -82,7 +82,7 @@ jobs:
           git fetch origin "refs/heads/${BASE}:refs/remotes/origin/${BASE}"
           git checkout -B "${BASE}" "refs/remotes/origin/${BASE}"
 
-      - uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f  # v2.16.3
+      - uses: crowdin/github-action@c7af9bc98b01694653031fef2a0dc6c7888ce9bc  # v2.17.0
         with:
           user: auto
           upload_sources: true
