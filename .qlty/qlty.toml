@@ -108,22 +108,10 @@ version = "0.9.0"
 name = "shfmt"
 
 [[plugin]]
-name = "trivy"
-drivers = [
-  "config",
-]
-version = "0.69.3"
-
-[[plugin]]
 name = "trufflehog"
 
 [[plugin]]
 name = "yamllint"
-
-# Entrypoint uses su-exec for runtime privilege drop; no static USER needed
-[[triage]]
-match.rules = ["trivy:DS002", "trivy:DS-0002"]
-set.ignored = true
 
 # markdownlint table style is low-signal for this repository's docs format
 [[triage]]
