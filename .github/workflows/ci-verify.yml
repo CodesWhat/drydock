@@ -360,9 +360,13 @@ jobs:
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
         with:
           egress-policy: block
+          # api.deps.dev: dependency-review-action fetches changed-package
+          # metadata there, but only on PRs that actually change dependencies,
+          # so the gap stays invisible on dependency-neutral PRs.
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            api.deps.dev:443
             *.actions.githubusercontent.com:443
           disable-sudo: true
 
