@@ -22,6 +22,7 @@ const expectedPolicy: Record<string, EgressPolicy> = {
   'ci-verify.yml/fuzz': 'block',
   'ci-verify.yml/test': 'block',
   'ci-verify.yml/web': 'block',
+  'ci-verify.yml/grype-image': 'block',
   'e2e-playwright.yml/changes': 'block',
   'quality-mutation-monthly.yml/stryker': 'block',
   'quality-mutation-monthly.yml/aggregate': 'block',

@@ -723,6 +723,86 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  grype-image:
+    name: "🐳 Security: Grype Image"
+    # security-grype.yml's own grype-image job only runs on workflow_dispatch
+    # and schedule, so the image every PR actually ships is never scanned
+    # pre-merge. This job closes that gap by scanning the same QA image
+    # `build` already produced instead of building a second time. Path-
+    # filtered like e2e/dast so it skips cleanly on docs-only PRs.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true')
+    needs: [build, changes]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            api.github.com:443
+            get.anchore.io:443
+            grype.anchore.io:443
+            objects.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+            *.actions.githubusercontent.com:443
+          disable-sudo: true
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Download QA image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: qa-image-${{ github.run_id }}
+          path: artifacts/qa
+
+      - name: Load QA image
+        run: docker load < artifacts/qa/drydock-dev-image.tar.gz
+
+      - name: Run Grype vulnerability scanner
+        # Scans the exact image the PR built (drydock:dev, loaded from the
+        # build job's artifact) — the same severity gate as the periodic
+        # image scan, applied to what a merge would actually ship.
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
+        id: grype
+        env:
+          # Load the repo-root .grype.yaml explicitly — see security-grype.yml
+          # for why the bundled cosign/trivy vendored Go-module CVEs are triaged.
+          GRYPE_CONFIG: ${{ github.workspace }}/.grype.yaml
+        with:
+          image: drydock:dev
+          severity-cutoff: high
+          fail-build: true
+          output-format: sarif
+
+      - name: Upload Grype SARIF to code scanning
+        # Code scanning uploads need a public repo or GHAS. Drydock is public,
+        # so this runs; the guard keeps the job green on a fork/private mirror.
+        # Distinct category from security-grype.yml's `grype-image` so the two
+        # scans (PR-built vs. periodic) don't collide in the same ref's results.
+        if: always() && github.event.repository.visibility == 'public'
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: grype-image-pr
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### Grype Container Scan (PR-built image)"
+            echo "- Scanned the PR-built image's shipped dependency set for HIGH/CRITICAL CVEs"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   dast-zap-baseline:
     name: "🕷️ DAST: ZAP + Nuclei"
     runs-on: ubuntu-24.04
