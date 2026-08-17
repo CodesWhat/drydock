@@ -421,6 +421,48 @@ describe('ContainersGroupedViews — update button states', () => {
     expect(lockBtn?.attributes('disabled')).toBeDefined();
   });
 
+  it('icons mode: renders lock icon (disabled) for trigger-not-included (hard flip, spec-6.0.1-action-policy.md slice 6)', () => {
+    const container = makeContainer({
+      id: 'c-hard-not-included',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateEligibility: makeEligibility([
+        {
+          reason: 'trigger-not-included',
+          message: 'Trigger not matched by container label dd.action.include.',
+          actionable: true,
+        },
+      ]),
+    });
+    const { wrapper } = mountWithSingleContainer(container, 'icons');
+    const row = rowByName(wrapper, 'alpha');
+    expect(row.find('[data-icon="lock"]').exists()).toBe(true);
+    expect(row.find('[data-icon="cloud-download"]').exists()).toBe(false);
+    const lockBtn = row.findAll('button').find((b: any) => b.find('[data-icon="lock"]').exists());
+    expect(lockBtn?.attributes('disabled')).toBeDefined();
+  });
+
+  it('icons mode: renders lock icon (disabled) for trigger-excluded (hard flip, spec-6.0.1-action-policy.md slice 6)', () => {
+    const container = makeContainer({
+      id: 'c-hard-excluded',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateEligibility: makeEligibility([
+        {
+          reason: 'trigger-excluded',
+          message: "Trigger excluded by container label dd.action.exclude='docker.update'.",
+          actionable: true,
+        },
+      ]),
+    });
+    const { wrapper } = mountWithSingleContainer(container, 'icons');
+    const row = rowByName(wrapper, 'alpha');
+    expect(row.find('[data-icon="lock"]').exists()).toBe(true);
+    expect(row.find('[data-icon="cloud-download"]').exists()).toBe(false);
+    const lockBtn = row.findAll('button').find((b: any) => b.find('[data-icon="lock"]').exists());
+    expect(lockBtn?.attributes('disabled')).toBeDefined();
+  });
+
   // -------------------------------------------------------------------------
   // icons mode — soft blocker → variant="warning"
   // -------------------------------------------------------------------------
@@ -431,7 +473,7 @@ describe('ContainersGroupedViews — update button states', () => {
       name: 'alpha',
       newTag: '2.0.0',
       updateEligibility: makeEligibility([
-        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
+        { reason: 'threshold-not-reached', message: 'Threshold not reached.', actionable: false },
       ]),
     });
     const { wrapper } = mountWithSingleContainer(container, 'icons');
@@ -451,7 +493,7 @@ describe('ContainersGroupedViews — update button states', () => {
       name: 'alpha',
       newTag: '2.0.0',
       updateEligibility: makeEligibility([
-        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
+        { reason: 'threshold-not-reached', message: 'Threshold not reached.', actionable: false },
       ]),
     });
     const { wrapper } = mountWithSingleContainer(container, 'icons');
@@ -471,7 +513,7 @@ describe('ContainersGroupedViews — update button states', () => {
       name: 'alpha',
       newTag: '2.0.0',
       updateEligibility: makeEligibility([
-        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
+        { reason: 'threshold-not-reached', message: 'Threshold not reached.', actionable: false },
       ]),
     });
     const { wrapper, spies } = mountWithSingleContainer(container, 'icons');
@@ -554,7 +596,7 @@ describe('ContainersGroupedViews — update button states', () => {
       name: 'alpha',
       newTag: '2.0.0',
       updateEligibility: makeEligibility([
-        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
+        { reason: 'threshold-not-reached', message: 'Threshold not reached.', actionable: false },
       ]),
     });
     const { wrapper, refs } = mountWithSingleContainer(container, 'icons');
@@ -580,7 +622,7 @@ describe('ContainersGroupedViews — update button states', () => {
       name: 'alpha',
       newTag: '2.0.0',
       updateEligibility: makeEligibility([
-        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
+        { reason: 'threshold-not-reached', message: 'Threshold not reached.', actionable: false },
       ]),
     });
     const { wrapper } = mountWithSingleContainer(container, 'buttons');
@@ -599,7 +641,7 @@ describe('ContainersGroupedViews — update button states', () => {
       name: 'alpha',
       newTag: '2.0.0',
       updateEligibility: makeEligibility([
-        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
+        { reason: 'threshold-not-reached', message: 'Threshold not reached.', actionable: false },
       ]),
     });
     const { wrapper, spies } = mountWithSingleContainer(container, 'buttons');
@@ -687,7 +729,7 @@ describe('ContainersGroupedViews — update button states', () => {
       newTag: '2.0.0',
       status: 'stopped',
       updateEligibility: makeEligibility([
-        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
+        { reason: 'threshold-not-reached', message: 'Threshold not reached.', actionable: false },
       ]),
     });
     const ready = makeContainer({

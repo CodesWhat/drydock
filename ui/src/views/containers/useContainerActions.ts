@@ -943,7 +943,9 @@ function createConfirmHandlers(args: {
     }
 
     // Surface soft blockers so the user knows they're overriding a policy gate
-    // (snooze, threshold, maturity, skip-tag/digest, trigger-not-included/excluded).
+    // (snooze, threshold, maturity, skip-tag/digest). trigger-not-included/excluded
+    // became hard in v1.7.0 (spec-6.0.1-action-policy.md slice 6) and no longer reach
+    // here — the Update button is locked for those instead. See DEPRECATIONS.md.
     const softBlockers = getSoftBlockers(eligibility);
     if (softBlockers.length > 0) {
       const list = softBlockers.map((b) => `• ${b.message}`).join('\n');

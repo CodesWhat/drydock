@@ -1240,6 +1240,8 @@ describe('computeUpdateEligibility', () => {
       const blocker = result.blockers.find((b) => b.reason === 'trigger-excluded');
       expect(blocker).toBeDefined();
       expect(blocker?.details?.triggerExclude).toBe('docker.update');
+      // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+      expect(blocker?.severity).toBe('hard');
     });
 
     test('reads the action-scoped exclude, never the deprecated mirror (#494)', () => {
@@ -1281,6 +1283,8 @@ describe('computeUpdateEligibility', () => {
       const blocker = result.blockers.find((b) => b.reason === 'trigger-not-included');
       expect(blocker).toBeDefined();
       expect(blocker?.details?.triggerInclude).toBe('other.trigger');
+      // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+      expect(blocker?.severity).toBe('hard');
     });
 
     test('actionHint references dd.action.auto alongside include/exclude (locked-button tooltip copy)', () => {
@@ -1747,6 +1751,10 @@ describe('computeUpdateEligibility', () => {
       expect(BLOCKER_SEVERITY['last-update-rolled-back']).toBe('hard');
       expect(BLOCKER_SEVERITY['agent-mismatch']).toBe('hard');
       expect(BLOCKER_SEVERITY['no-update-trigger-configured']).toBe('hard');
+      // trigger-excluded / trigger-not-included flipped soft -> hard in v1.7.0
+      // (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+      expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('hard');
+      expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('hard');
     });
 
     test('soft severities cover policy reasons that manual update bypasses', () => {
@@ -1755,9 +1763,6 @@ describe('computeUpdateEligibility', () => {
       expect(BLOCKER_SEVERITY['skip-digest']).toBe('soft');
       expect(BLOCKER_SEVERITY['maturity-not-reached']).toBe('soft');
       expect(BLOCKER_SEVERITY['threshold-not-reached']).toBe('soft');
-      // trigger-excluded / trigger-not-included are soft until v1.7.0 — see DEPRECATIONS.md
-      expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('soft');
-      expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('soft');
     });
 
     test('computeUpdateEligibility stamps severity on every emitted blocker', () => {

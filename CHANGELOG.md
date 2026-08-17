@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Dropped the trivy qlty plugin in favor of Grype.** Grype already owns the vuln-scanning surface (`.github/workflows/security-grype.yml`); trivy's qlty-plugin `config` driver only ever ran its DS*/KSV* Dockerfile misconfiguration checks, which checkov already covers (the `checkov:skip=CKV_DOCKER_3` comment on `Dockerfile` line 1, with matching rationale in `.trivyignore.yaml` for the standalone `trivy` binary the image ships at runtime — a separate concern, untouched here). Removed the `[[plugin]] name = "trivy"` block and the `trivy:DS002`/`trivy:DS-0002` triage entry from `.qlty/qlty.toml`; trufflehog stays as-is. ([#753](https://github.com/CodesWhat/drydock/issues/753))
 
+### Removed
+
+- **BREAKING: `trigger-excluded` and `trigger-not-included` are now hard blockers, ending the v1.5.0–v1.6.x soft-severity grace period** (spec-6.0.1-action-policy.md, slice 6 — see `DEPRECATIONS.md`). Previously, a container filtered out by `dd.action.exclude`/`dd.action.include` (or the legacy `dd.trigger.*` labels) showed a *Trigger filtered*/*Trigger excluded* pill but still let a manual Update click through after a confirm-modal warning. As of this release both reasons are hard: the Update button is locked, and the API rejects a manual update request with the blocker's `409` message instead of queuing it — matching every other hard eligibility gate. This ships together with, and not before, the per-action execution policy (`dd.action.auto` label, `AUTO=onauto` trigger mode) landed across slices 1-5, so the manual-only escape hatch isn't removed without a replacement path: an operator who wants a container to stay manually updatable while excluded from automatic dispatch now expresses that with `AUTO=onauto` plus `dd.action.include` (or `dd.action.auto`), rather than relying on the soft bypass. `AUTO=oninclude`'s existing meaning is unchanged — a matching `dd.action.include` label still grants both manual and automatic access under that mode.
+
 ## [1.7.0-rc.1] — 2026-08-14
 
 ### Added

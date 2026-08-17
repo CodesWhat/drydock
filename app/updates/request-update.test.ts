@@ -1661,56 +1661,65 @@ describe('request-update', () => {
       });
     });
 
-    test('allows manual update when only soft blockers (trigger-excluded) are present', async () => {
+    test('rejects manual update with 409 when trigger-excluded blocker fires (hard flip, spec-6.0.1-action-policy.md slice 6)', async () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockResolvedValue(undefined),
         agent: undefined,
         configuration: { threshold: 'all' },
         getId: () => 'docker.update',
-        isTriggerIncluded: () => true,
-        isTriggerExcluded: () => true,
       };
       mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
 
-      const accepted = await enqueueContainerUpdate(
-        createContainerWithRawUpdate({ triggerExclude: 'nginx' }),
-        {
-          trigger: {
-            type: 'docker',
-            trigger: vi.fn().mockResolvedValue(undefined),
-            getId: () => 'docker.other',
+      // actionTriggerExclude (not the deprecated triggerExclude mirror) is the field
+      // the action-policy resolver actually reads — see update-eligibility.test.ts's
+      // "reads the action-scoped exclude, never the deprecated mirror (#494)".
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({ actionTriggerExclude: 'docker.update' }),
+          {
+            trigger: {
+              type: 'docker',
+              trigger: vi.fn().mockResolvedValue(undefined),
+              getId: () => 'docker.other',
+            },
           },
-        },
-      );
-      expect(accepted.operationId).toBeDefined();
-      expect(mockInsertOperation).toHaveBeenCalled();
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: "Trigger excluded by container label dd.action.exclude='docker.update'.",
+      });
+      expect(trigger.trigger).not.toHaveBeenCalled();
+      expect(mockInsertOperation).not.toHaveBeenCalled();
     });
 
-    test('allows manual update when only soft blockers (trigger-not-included) are present', async () => {
+    test('rejects manual update with 409 when trigger-not-included blocker fires (hard flip, spec-6.0.1-action-policy.md slice 6)', async () => {
       const trigger = {
         type: 'docker',
         trigger: vi.fn().mockResolvedValue(undefined),
         agent: undefined,
-        configuration: { threshold: 'all' },
+        configuration: { auto: 'oninclude', threshold: 'all' },
         getId: () => 'docker.update',
-        isTriggerIncluded: () => false,
-        isTriggerExcluded: () => false,
       };
       mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
 
-      const accepted = await enqueueContainerUpdate(
-        createContainerWithRawUpdate({ triggerInclude: 'other-app' }),
-        {
-          trigger: {
-            type: 'docker',
-            trigger: vi.fn().mockResolvedValue(undefined),
-            getId: () => 'docker.other',
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({ actionTriggerInclude: 'other-app' }),
+          {
+            trigger: {
+              type: 'docker',
+              trigger: vi.fn().mockResolvedValue(undefined),
+              getId: () => 'docker.other',
+            },
           },
-        },
-      );
-      expect(accepted.operationId).toBeDefined();
-      expect(mockInsertOperation).toHaveBeenCalled();
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: "Trigger not matched by container label dd.action.include='other-app'.",
+      });
+      expect(trigger.trigger).not.toHaveBeenCalled();
+      expect(mockInsertOperation).not.toHaveBeenCalled();
     });
   });
 
