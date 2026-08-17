@@ -44,6 +44,10 @@ jobs:
             *.actions.githubusercontent.com:443
             proxy.golang.org:443
             sum.golang.org:443
+            api.github.com:443
+            raw.githubusercontent.com:443
+            go.dev:443
+            dl.google.com:443
           disable-sudo: true
 
       - name: Checkout Drydock

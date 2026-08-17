@@ -139,6 +139,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             github.com:443
+            api.github.com:443
             *.actions.githubusercontent.com:443
           disable-sudo: true
 

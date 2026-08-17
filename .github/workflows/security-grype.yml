@@ -51,6 +51,8 @@ jobs:
             toolbox-data.anchore.io:443
             objects.githubusercontent.com:443
             release-assets.githubusercontent.com:443
+            api.github.com:443
+            raw.githubusercontent.com:443
           disable-sudo: true
 
       - name: Checkout
