@@ -22,6 +22,7 @@
   <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
+  <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/maintainability.svg" alt="Maintainability"></a>
   <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/test_coverage.svg" alt="Code Coverage"></a>
   <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
   <br>
@@ -40,25 +41,47 @@
 > [!WARNING]
 > **Updating to 1.6.0-rc.3 or later?** More security-hardening fixes land with no grace period. An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — now **fails closed** on upgrade, exactly like a fresh install: the container runs; protected API requests return `401`; authentication discovery/status routes remain public; and `/health` returns `503`. The SPA shell may still load, but it cannot read protected application data. Set `DD_ANONYMOUS_AUTH_CONFIRM=true` or configure `DD_AUTH_BASIC_*`/OIDC before upgrading. The session cookie is renamed `connect.sid` → `drydock.sid`, signing every existing user out once. HTTP notification triggers (plus the Hass webhook and registry icon fetches) now resolve hostnames through a guarded DNS lookup that blocks cloud-metadata/link-local targets and never follow redirects — set `allowmetadata=true` on a specific `DD_NOTIFICATION_HTTP_*` trigger if you legitimately need one. See **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)** for full migration guidance.
 
-<h2 align="center">📑 Contents</h2>
+<h2 align="center">Contents</h2>
 
-- [📖 Documentation](https://getdrydock.com/docs)
-- [🚀 Quick Start](#quick-start)
-- [🆕 Recent Updates](#recent-updates)
-- [📸 Screenshots & Live Demo](#screenshots)
-- [🤔 Why Drydock](#why-drydock)
-- [✨ Features](#features)
-- [🔌 Supported Integrations](#supported-integrations)
-- [⚖️ Feature Comparison](#feature-comparison)
-- [🔄 Migration](#migration)
-- [🗺️ Roadmap](#roadmap)
-- [⭐ Star History](#star-history)
-- [🔧 Built With](#built-with)
-- [🤝 Community QA](#community-qa)
+- [Documentation](#documentation)
+- [Quick Start](#quick-start)
+- [Recent Updates](#recent-updates)
+- [Screenshots & Live Demo](#screenshots)
+- [Why Drydock](#why-drydock)
+- [Features](#features)
+- [Supported Integrations](#supported-integrations)
+- [Feature Comparison](#feature-comparison)
+- [Migration](#migration)
+- [Roadmap](#roadmap)
+- [Star History](#star-history)
+- [Built With](#built-with)
+- [Community QA](#community-qa)
 
 <hr>
 
-<h2 align="center" id="quick-start">🚀 Quick Start</h2>
+<h2 align="center" id="documentation">Documentation</h2>
+
+| Resource | Link |
+| --- | --- |
+| Website | [getdrydock.com](https://getdrydock.com/) |
+| Live Demo | [demo.getdrydock.com](https://demo.getdrydock.com) |
+| Docs | [getdrydock.com/docs](https://getdrydock.com/docs) |
+| Configuration | [Configuration](https://getdrydock.com/docs/configuration) |
+| Quick Start | [Quick Start](https://getdrydock.com/docs/quickstart) |
+| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
+| Deprecations | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
+| Roadmap | See [Roadmap](#roadmap) section below |
+| Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Code of Conduct | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
+| Governance | [`GOVERNANCE.md`](GOVERNANCE.md) |
+| Security Assurance | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md) |
+| Security Policy | [`SECURITY.md`](SECURITY.md) |
+| Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
+| Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
+
+<hr>
+
+<h2 align="center" id="quick-start">Quick Start</h2>
 
 **Recommended: use a socket proxy** to restrict which Docker API endpoints Drydock can access. This avoids giving the container full access to the Docker socket.
 
@@ -176,7 +199,7 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <hr>
 
-<h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
+<h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
 <summary><strong>v1.7.0-rc.1 highlights</strong></summary>
@@ -257,7 +280,7 @@ Full history in [CHANGELOG.md](./CHANGELOG.md).
 
 <hr>
 
-<h2 align="center" id="screenshots">📸 Screenshots & Live Demo</h2>
+<h2 align="center" id="screenshots">Screenshots & Live Demo</h2>
 
 <p align="center">
   <img src="docs/assets/drydock-demo.gif" alt="Drydock detecting and applying a container update" width="880">
@@ -288,7 +311,7 @@ Fully interactive — real UI, mock data, no install required. Runs entirely in-
 
 <hr>
 
-<h2 align="center" id="why-drydock">🤔 Why Drydock</h2>
+<h2 align="center" id="why-drydock">Why Drydock</h2>
 
 Container images drift out of date silently. A base image patches a CVE, an app cuts a release, a tag moves. Unless you're watching every registry by hand, your running containers fall behind until something breaks or gets exploited.
 
@@ -296,7 +319,7 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 
 <hr>
 
-<h2 align="center" id="features">✨ Features</h2>
+<h2 align="center" id="features">Features</h2>
 
 | | Feature | Description |
 |---|---|---|
@@ -318,31 +341,31 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 
 <hr>
 
-<h2 align="center" id="supported-integrations">🔌 Supported Integrations</h2>
+<h2 align="center" id="supported-integrations">Supported Integrations</h2>
 
-### 📦 Registries (23)
+### Registries (23)
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
 
-### ⚡ Actions (3)
+### Actions (3)
 
 Docker · Docker Compose · Command
 
-### 🔔 Notifications (17)
+### Notifications (17)
 
 Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
 
-### 🔐 Authentication
+### Authentication
 
 Anonymous (opt-in via `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Basic (username + password hash) · OIDC (Authelia, Auth0, Authentik). All auth flows fail closed by default.
 
-### 🥊 Update Bouncer
+### Update Bouncer
 
 Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they deploy. Includes cosign signature verification and SBOM generation (CycloneDX & SPDX).
 
 <hr>
 
-<h2 align="center" id="feature-comparison">⚖️ Feature Comparison</h2>
+<h2 align="center" id="feature-comparison">Feature Comparison</h2>
 
 <details>
 <summary><strong>How does drydock compare to other container update tools?</strong></summary>
@@ -393,7 +416,7 @@ Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they
 
 <hr>
 
-<h2 align="center" id="migration">🔄 Migration</h2>
+<h2 align="center" id="migration">Migration</h2>
 
 <details>
 <summary><strong>Migrating from WUD (What's Up Docker?)</strong></summary>
@@ -404,7 +427,7 @@ Drydock v1.6 no longer loads `WUD_*` environment variables or `wud.*` labels at 
 
 <hr>
 
-<h2 align="center" id="roadmap">🗺️ Roadmap</h2>
+<h2 align="center" id="roadmap">Roadmap</h2>
 
 <details>
 <summary><strong>Version themes & highlights</strong></summary>
@@ -425,28 +448,6 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 | **v2.0+** | Platform Expansion & Beyond | Swarm/Kubernetes watchers, GitOps, health gates, canary deploys, web terminal, RBAC, scoped rotatable API keys (static bearer tokens for HA/dashboard integrations, [#469](https://github.com/CodesWhat/drydock/discussions/469)), LDAP/AD, native Podman provider beyond the Docker-compatible API, CLI, Wolfi hardened image, socket proxy |
 
 </details>
-
-<hr>
-
-<h2 align="center" id="documentation">📖 Documentation</h2>
-
-| Resource | Link |
-| --- | --- |
-| Website | [getdrydock.com](https://getdrydock.com/) |
-| Live Demo | [demo.getdrydock.com](https://demo.getdrydock.com) |
-| Docs | [getdrydock.com/docs](https://getdrydock.com/docs) |
-| Configuration | [Configuration](https://getdrydock.com/docs/configuration) |
-| Quick Start | [Quick Start](https://getdrydock.com/docs/quickstart) |
-| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
-| Deprecations | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
-| Roadmap | See [Roadmap](#roadmap) section above |
-| Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
-| Code of Conduct | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
-| Governance | [`GOVERNANCE.md`](GOVERNANCE.md) |
-| Security Assurance | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md) |
-| Security Policy | [`SECURITY.md`](SECURITY.md) |
-| Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
-| Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
 
 <hr>
 
