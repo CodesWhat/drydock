@@ -48,22 +48,6 @@ Active deprecations and their removal timeline. Each entry includes the version 
 
 ---
 
-### Manual updates bypass `dd.action.include` / `dd.action.exclude` (and legacy `dd.trigger.include` / `dd.trigger.exclude`)
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.5.0 |
-| **Removed in** | v1.7.0 |
-| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` (or the legacy `dd.trigger.include` / `dd.trigger.exclude`) where the labels filter out the matching docker / dockercompose action trigger |
-
-In v1.5.x the eligibility model classifies `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill says *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queues the update (the confirm modal lists the soft blocker and switches the accept label to *Update anyway*). This preserves the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
-
-These reasons are scheduled to become **hard** blockers later in the v1.7 cycle, shipping together with the per-action execution policy (which separates action authorization from automatic promotion so the manual-only escape hatch isn't removed on its own). Until that lands they remain soft and a confirmed manual update still works. Once hard, the Update button is locked when the labels filter out the action trigger, and the API rejects manual updates with the blocker's message. The labels then mean what the pill says: *this trigger does not handle this container*.
-
-**Migration:** If you currently rely on manual updates running through a trigger that the container's labels exclude, either (a) remove the `dd.action.exclude` / legacy `dd.trigger.exclude` label from the container, (b) add the trigger to the container's `dd.action.include` / legacy `dd.trigger.include` list, or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row tells you exactly which trigger / label combination is in conflict.
-
----
-
 ### `curl` in Docker image
 
 | | |
@@ -122,6 +106,24 @@ node dist/index.js config migrate --source trigger --file .env --file compose.ya
 ```
 
 The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_ACTION_*`, `dd.action.*`), which remain fully compatible. It runs as a standalone text-rewriting tool over local config files — it is unaffected by the runtime removal above and stays available indefinitely as the migration path off `DD_TRIGGER_*` / `dd.trigger.*`.
+
+---
+
+### Manual updates bypassing `dd.action.include` / `dd.action.exclude`
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0 |
+| **Removed in** | v1.7.0 |
+| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` (or the legacy `dd.trigger.include` / `dd.trigger.exclude`) where the labels filter out the matching docker / dockercompose action trigger |
+
+In v1.5.x–v1.6.x the eligibility model classified `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill said *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queued the update (the confirm modal listed the soft blocker and switched the accept label to *Update anyway*). This preserved the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
+
+As of v1.7.0 both reasons are **hard** blockers, shipping together with the per-action execution policy (`dd.action.auto` container label, `AUTO=onauto` trigger mode — spec-6.0.1-action-policy.md) that separates action authorization from automatic promotion, so the manual-only escape hatch isn't removed on its own. The Update button is now locked when the labels filter out the action trigger, and the API rejects a manual update request with the blocker's message (`409`). The labels now mean what the pill always said: *this trigger does not handle this container*.
+
+**This does not change `AUTO=oninclude`'s meaning.** A trigger left on `AUTO=oninclude` keeps its pre-6.0.1 conflated behavior permanently: a matching `dd.action.include` label still grants both manual and automatic access under that mode, exactly as before — that row of the migration table is explicitly unchanged. Only the *default-deny* outcome (no matching include/auto label at all) and the *explicit-exclude* outcome (`dd.action.exclude` match) flip from soft to hard. An operator who wants the split between manual-only and automatic access opts in by switching a trigger to `AUTO=onauto`; nothing about this flip forces that switch.
+
+**Migration:** If you relied on manual updates running through a trigger that the container's labels excluded, either (a) remove the `dd.action.exclude` / legacy `dd.trigger.exclude` label from the container, (b) add the trigger to the container's `dd.action.include` / legacy `dd.trigger.include` list (or `dd.action.auto` list, for a trigger configured with `AUTO=onauto`), or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies exactly which trigger / label combination is in conflict.
 
 ---
 

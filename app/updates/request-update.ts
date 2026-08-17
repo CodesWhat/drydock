@@ -163,9 +163,9 @@ function resolveUpdateTrigger(
   // (spec-6.0.1-action-policy.md) rather than the plain agent/compose
   // compatibility lookup: a candidate that resolves `not-included` is no
   // longer eligible to be the resolved trigger, even though it would have
-  // been returned (and admitted, subject only to the soft blocker) before
-  // this wiring. An explicit `dd.action.exclude` hit is still returned (hard
-  // stop) so eligibility's `trigger-excluded` messaging/severity is unchanged
+  // been returned (and, before the slice-6 soft->hard flip, admitted) prior
+  // to this wiring. An explicit `dd.action.exclude` hit is still returned
+  // (hard stop) so eligibility's `trigger-excluded` messaging is unchanged
   // by this slice. `options.triggerTypes` is honored via `selectActionTrigger`'s
   // own `triggerTypes` option: when provided, candidates whose type is not in
   // the list are excluded before ranking, so a narrower caller-supplied scope
@@ -330,9 +330,12 @@ function prepareContainerUpdateRequest(
     throw new UpdateRequestError(400, 'No update available for this container');
   }
 
-  // Reject on any hard eligibility blocker. Soft blockers (snooze, threshold, maturity,
-  // skip-tag/digest, trigger-not-included/excluded) still allow manual update — that
-  // mirrors the badge layer's "warn but allow" stance for user-policy gates.
+  // Reject on any hard eligibility blocker. `trigger-not-included`/`trigger-excluded`
+  // became hard in v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md —
+  // so a container the action-policy resolver did not authorize is now rejected here too,
+  // same as any other hard blocker. Soft blockers (snooze, threshold, maturity,
+  // skip-tag/digest) still allow manual update — that mirrors the badge layer's "warn but
+  // allow" stance for user-policy gates.
   //
   // The raw-candidate check above is the source of truth for "an update exists"
   // when a soft gate deliberately makes updateAvailable false.
@@ -354,12 +357,13 @@ function prepareContainerUpdateRequest(
 
   const trigger = resolveUpdateTrigger(container, options);
 
-  // Defense-in-depth (spec-6.0.1-action-policy.md): trigger-excluded/trigger-not-included
-  // are still 'soft' severity ahead of the DEPRECATIONS.md hard flip (slice 6), so the hard
-  // blocker check above does not yet reject a not-included/excluded container. Automatic
-  // (watcher-driven) admission must never fire through anything short of a resolved 'auto'
-  // policy regardless of that severity timing — manual/API callers (source 'manual') keep
-  // today's behavior and admit both 'manual' and 'auto' states.
+  // Defense-in-depth (spec-6.0.1-action-policy.md): now that trigger-excluded/
+  // trigger-not-included are 'hard' (slice 6), the hard-blocker check above already
+  // rejects a not-included/excluded container regardless of source. This guard stays
+  // as belt-and-suspenders for automatic (watcher-driven) admission specifically —
+  // it must never fire through anything short of a resolved 'auto' policy even in a
+  // future where a not-included/excluded reason's severity changes again — while
+  // manual/API callers (source 'manual') keep admitting both 'manual' and 'auto' states.
   if (source === 'automatic') {
     const resolvedPolicy = resolveForTrigger(trigger as unknown as ActionPolicyTrigger, container);
     if (resolvedPolicy.state !== 'auto') {

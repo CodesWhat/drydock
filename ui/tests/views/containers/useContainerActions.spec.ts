@@ -4048,9 +4048,12 @@ describe('useContainerActions', () => {
             actionable: true,
           },
           {
-            reason: 'trigger-not-included',
+            // threshold-not-reached, not trigger-not-included: the latter became a hard
+            // blocker in v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see
+            // DEPRECATIONS.md — so it can no longer reach this soft-blocker override path.
+            reason: 'threshold-not-reached',
             severity: 'soft',
-            message: 'Trigger is not in the include list',
+            message: 'Trigger threshold is not reached',
             actionable: false,
           },
         ],
@@ -4071,7 +4074,7 @@ describe('useContainerActions', () => {
       link?: { href: string; label: string };
     };
     expect(confirmCall.message).toContain('• Container is snoozed until 2026-06-01');
-    expect(confirmCall.message).toContain('• Trigger is not in the include list');
+    expect(confirmCall.message).toContain('• Trigger threshold is not reached');
     expect(confirmCall.message).toContain('Click Update anyway to override.');
     expect(confirmCall.acceptLabel).toBe('Update anyway');
     expect(confirmCall.link).toEqual({

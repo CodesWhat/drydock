@@ -215,7 +215,8 @@ describe('deriveUpdateStatus', () => {
           updateEligibility: eligibility([
             blocker({ reason: 'snoozed', severity: 'soft' }),
             blocker({ reason: 'security-scan-blocked', severity: 'hard' }),
-            blocker({ reason: 'trigger-not-included', severity: 'soft' }),
+            // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+            blocker({ reason: 'trigger-not-included', severity: 'hard' }),
             blocker({ reason: 'last-update-rolled-back', severity: 'hard' }),
             blocker({ reason: 'no-update-trigger-configured', severity: 'hard' }),
           ]),
@@ -408,8 +409,11 @@ describe('deriveUpdateStatus', () => {
     ['skip-digest', 'soft', 'warning', 'tab'],
     ['maturity-not-reached', 'soft', 'warning', 'tab'],
     ['threshold-not-reached', 'soft', 'warning', 'external'],
-    ['trigger-excluded', 'soft', 'warning', 'external'],
-    ['trigger-not-included', 'soft', 'warning', 'external'],
+    // trigger-excluded / trigger-not-included are hard as of v1.7.0
+    // (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md. `tone` follows
+    // `severity` (hard -> danger) in toCondition(), so both columns moved together.
+    ['trigger-excluded', 'hard', 'danger', 'external'],
+    ['trigger-not-included', 'hard', 'danger', 'external'],
     ['agent-mismatch', 'hard', 'danger', 'external'],
     ['no-update-trigger-configured', 'hard', 'danger', 'external'],
     ['self-update-unavailable', 'hard', 'danger', 'external'],

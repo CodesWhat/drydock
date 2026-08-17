@@ -39,8 +39,9 @@ export type UpdateBlockerReason =
  * - 'soft': API allows manual update; UI shows the pill but the button stays enabled (with a
  *   warning + confirm modal listing the soft blockers).
  *
- * `trigger-not-included` and `trigger-excluded` are 'soft' in v1.5.x with a deprecation
- * notice — they become 'hard' in v1.7.0. See DEPRECATIONS.md.
+ * `trigger-not-included` and `trigger-excluded` were 'soft' in v1.5.x-v1.6.x with a
+ * deprecation notice; the flip to 'hard' landed in v1.7.0 (spec-6.0.1-action-policy.md
+ * slice 6). See DEPRECATIONS.md.
  */
 export type UpdateBlockerSeverity = 'hard' | 'soft';
 
@@ -58,9 +59,9 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'skip-digest': 'soft',
   'maturity-not-reached': 'soft',
   'threshold-not-reached': 'soft',
-  // Deprecation: become 'hard' in v1.7.0. See DEPRECATIONS.md.
-  'trigger-excluded': 'soft',
-  'trigger-not-included': 'soft',
+  // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6). See DEPRECATIONS.md.
+  'trigger-excluded': 'hard',
+  'trigger-not-included': 'hard',
   // soft: manual UI/API updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
 };

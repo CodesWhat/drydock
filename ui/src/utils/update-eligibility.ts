@@ -26,9 +26,9 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'skip-digest': 'soft',
   'maturity-not-reached': 'soft',
   'threshold-not-reached': 'soft',
-  // Deprecation: become 'hard' in v1.7.0. See DEPRECATIONS.md.
-  'trigger-excluded': 'soft',
-  'trigger-not-included': 'soft',
+  // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6). See DEPRECATIONS.md.
+  'trigger-excluded': 'hard',
+  'trigger-not-included': 'hard',
   // soft: manual UI updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
 };

@@ -181,6 +181,19 @@ These labels have been replaced by semantic equivalents. As of v1.7.0, `dd.trigg
 
 A container still carrying either legacy label is detected and logged (so an unmigrated fleet stays visible in monitoring), but the label itself is never consulted for filtering — only the scoped labels affect trigger routing.
 
+### Manual updates bypass `dd.action.include` / `dd.action.exclude` {#action-include-exclude-soft-blocker}
+
+In v1.5.x–v1.6.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons were **soft** blockers: the UI showed a *Trigger filtered* / *Trigger excluded* pill, but clicking the per-row Update button still queued the update after a confirmation step. As of v1.7.0, both reasons are **hard** blockers, shipping together with the per-action execution policy (`dd.action.auto` / `AUTO=onauto`) that separates action authorization from automatic promotion, so the manual-only escape hatch isn't removed on its own. The Update button is now locked when the labels filter out the action trigger, and the API rejects manual update requests with the blocker's message.
+
+This does not change `AUTO=oninclude`'s meaning — a matching `dd.action.include` label still grants both manual and automatic access under that mode, exactly as before. Only the *default-deny* and *explicit-exclude* outcomes (no matching include/auto label, or an explicit `dd.action.exclude` match) flip from soft to hard.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Removed since** | v1.7.0 |
+| **Detection** | UI eligibility pill on container row (now locked instead of clickable); API `409` response on manual update attempts |
+| **Migration** | If you relied on manual updates bypassing an action trigger's include/exclude filter, either (a) remove the `dd.action.exclude` label, (b) add the trigger to the container's `dd.action.include` list (or `dd.action.auto` list under `AUTO=onauto`), or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies the exact trigger / label combination in conflict |
+
 ## Removal in v1.7.0
 
 ### `curl` in Docker image {#curl-healthcheck-override}
@@ -192,16 +205,6 @@ The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backwa
 | **Deprecated since** | v1.5.0 |
 | **Detection** | UI deprecation banner when Drydock can inspect its own container via the local Docker socket; otherwise manual config review |
 | **Migration** | Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](/docs/monitoring) |
-
-### Manual updates bypass `dd.action.include` / `dd.action.exclude` {#action-include-exclude-soft-blocker}
-
-In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons are **soft** blockers: the UI shows a *Trigger filtered* / *Trigger excluded* pill, but clicking the per-row Update button still queues the update after a confirmation step. These reasons are scheduled to become **hard** blockers later in the v1.7 cycle, shipping together with the per-action execution policy; until that lands they remain soft and a confirmed manual update still works. Once hard, the Update button is locked when the labels filter out the action trigger.
-
-| | |
-| --- | --- |
-| **Deprecated since** | v1.5.0 |
-| **Detection** | UI eligibility pill on container row; confirmation modal warning |
-| **Migration** | If you rely on manual updates bypassing an action trigger's include/exclude filter, either (a) remove the `dd.action.exclude` label, (b) add the trigger to the container's `dd.action.include` list, or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies the exact trigger / label combination in conflict |
 
 ### Unversioned `GET /api/auth/methods` alias {#api-auth-methods}
 

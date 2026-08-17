@@ -18,7 +18,7 @@ function eligibility(
       ? [
           {
             reason,
-            severity: reason === 'security-scan-blocked' ? 'hard' : 'soft',
+            severity: severityForReason(reason),
             message: 'Condition detail.',
             actionable: true,
           },
@@ -26,6 +26,12 @@ function eligibility(
       : [],
     evaluatedAt: '2026-07-12T00:00:00.000Z',
   };
+}
+
+// `trigger-not-included`'s severity is 'hard' as of v1.7.0
+// (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+function severityForReason(reason: 'snoozed' | 'security-scan-blocked' | 'trigger-not-included') {
+  return reason === 'snoozed' ? 'soft' : 'hard';
 }
 
 function container(reason?: 'snoozed' | 'security-scan-blocked' | 'trigger-not-included') {
