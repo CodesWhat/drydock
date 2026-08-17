@@ -1,0 +1,408 @@
+name: "🕷️ Security: DAST (Web Surfaces)"
+run-name: >-
+  ${{
+    github.event_name == 'schedule' && '🕷️ Security: DAST (Web Surfaces) — Weekly schedule' ||
+    format('🕷️ Security: DAST (Web Surfaces) — Manual by {0}', github.actor)
+  }}
+
+# Scheduled-advisory per security.md's gating-posture matrix: DAST runs
+# against the already-deployed Vercel surfaces, so it can never gate a PR
+# that hasn't deployed yet. A red run here is an incident to triage, not a
+# merge blocker — hence no `pull_request` trigger.
+on:
+  workflow_dispatch:
+  schedule:
+    # Wednesday 08:00 UTC — deliberately off the existing Mon/Sun 06:00-07:45
+    # UTC cluster (ci-verify's twice-weekly sweep, security-grype,
+    # security-scorecard, i18n-crowdin, quality-mutation-monthly) so this
+    # doesn't stack scanner load on the same window.
+    - cron: '0 8 * * 3'  # Wednesday 08:00 UTC
+
+permissions: {}
+
+concurrency:
+  group: security-dast-web-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dast-web:
+    name: "DAST: getdrydock.com"
+    # Dynamic surface (server-side API routes: /api/search, /api/star-history)
+    # → full tier: ZAP active/full scan + Nuclei, per security.md's DAST
+    # tiering decision.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
+        with:
+          # DAST scanners hit unbounded third-party endpoints (ZAP passive
+          # rule callbacks, Nuclei template fetches) with no stable
+          # upstream-published allowlist — same accepted-audit exception as
+          # ci-verify.yml's dast-zap-baseline job (security.md Known drift).
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Run ZAP full scan
+        uses: zaproxy/action-full-scan@3c58388149901b9a03b7718852c5ba889646c27c  # v0.13.0
+        with:
+          target: https://getdrydock.com
+          docker_name: ghcr.io/zaproxy/zaproxy@sha256:2ec1d5d5b44d55cfd02ba9b89cd26852f06d92b7fc0ce9f064b9463babc73074  # stable digest, 2026-05-28
+          rules_file_name: .zap/rules.tsv
+          allow_issue_writing: false
+          fail_action: true
+          cmd_options: '-I'
+
+      - name: Convert ZAP JSON report to SARIF
+        if: always() && hashFiles('report_json.json') != ''
+        run: |
+          node scripts/zap-json-to-sarif.mjs \
+            --input=report_json.json \
+            --output=artifacts/zap/zap-web-getdrydock.sarif
+
+      - name: Upload ZAP SARIF
+        if: always() && hashFiles('artifacts/zap/zap-web-getdrydock.sarif') != ''
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
+        with:
+          sarif_file: artifacts/zap/zap-web-getdrydock.sarif
+          category: zap-web-getdrydock
+
+      - name: Upload ZAP HTML report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: dast-zap-getdrydock-html-${{ github.run_id }}-${{ github.run_attempt }}
+          path: report_html.html
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize ZAP findings
+        if: always()
+        run: |
+          set -uo pipefail
+
+          report="report_json.json"
+          artifact_name="dast-zap-getdrydock-html-${{ github.run_id }}-${{ github.run_attempt }}"
+          artifact_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}#artifacts"
+
+          high=0
+          medium=0
+          low=0
+          info=0
+          total=0
+          parse_error=0
+
+          if [ -f "${report}" ] && [ -s "${report}" ]; then
+            if jq -e . "${report}" >/dev/null 2>&1; then
+              high="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "3")] | length' "${report}")"
+              medium="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "2")] | length' "${report}")"
+              low="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "1")] | length' "${report}")"
+              info="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "0")] | length' "${report}")"
+              total=$((high + medium + low + info))
+            else
+              parse_error=1
+            fi
+          fi
+
+          {
+            echo "### DAST: ZAP Full Scan (getdrydock.com)"
+            if [ ! -f "${report}" ]; then
+              echo "- Report: JSON output not found (\`${report}\`)."
+            elif [ ! -s "${report}" ]; then
+              echo "- Report: JSON output is empty (\`${report}\`)."
+            elif [ "${parse_error}" -eq 1 ]; then
+              echo "- Report: JSON output could not be parsed (\`${report}\`)."
+            fi
+            echo "- Findings: **${total}**"
+            echo "- Severity breakdown: high=${high}, medium=${medium}, low=${low}, info=${info}"
+            echo "- Target: https://getdrydock.com"
+            echo "- Artifact: [${artifact_name}](${artifact_url})"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Create Nuclei report directory
+        if: always()
+        run: mkdir -p artifacts/dast
+
+      - name: Run Nuclei scan
+        id: nuclei_scan
+        if: always()
+        continue-on-error: true
+        uses: projectdiscovery/nuclei-action@cc153d0541e1adf8a42bbe31c0a4fb2376147538  # v3.1.1
+        with:
+          version: v3.8.0
+          args: >-
+            -u https://getdrydock.com
+            -severity medium,high,critical
+            -type http
+            -json-export artifacts/dast/nuclei-report.json
+            -sarif-export artifacts/dast/nuclei-report.sarif
+            -silent
+
+      - name: Enforce Nuclei severity gate (medium+)
+        if: always()
+        env:
+          SCAN_OUTCOME: ${{ steps.nuclei_scan.outcome }}
+        run: |
+          set -euo pipefail
+
+          report="artifacts/dast/nuclei-report.json"
+
+          if [ ! -f "${report}" ]; then
+            echo "Nuclei did not produce a JSON report."
+            if [ "${SCAN_OUTCOME}" != "success" ]; then
+              echo "Nuclei action failed before report generation."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          if [ ! -s "${report}" ]; then
+            echo "No medium+ findings detected."
+            if [ "${SCAN_OUTCOME}" != "success" ]; then
+              echo "Nuclei action did not succeed."
+              exit 1
+            fi
+            exit 0
+          fi
+
+          finding_count="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase | test("^(medium|high|critical)$")))] | length' "${report}")"
+          echo "Medium+ findings: ${finding_count}"
+
+          if [ "${SCAN_OUTCOME}" != "success" ]; then
+            echo "Nuclei action did not complete successfully."
+            exit 1
+          fi
+
+          if [ "${finding_count}" -gt 0 ]; then
+            echo "Nuclei reported medium+ severity findings."
+            exit 1
+          fi
+
+      - name: Prepare Nuclei SARIF report
+        id: nuclei_sarif
+        if: always()
+        env:
+          SCAN_OUTCOME: ${{ steps.nuclei_scan.outcome }}
+        run: |
+          set -euo pipefail
+
+          sarif="artifacts/dast/nuclei-report.sarif"
+
+          if [ -s "${sarif}" ]; then
+            if jq -e '.version == "2.1.0" and (.runs | type == "array")' "${sarif}" >/dev/null; then
+              echo "upload=true" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+
+            echo "::warning::Nuclei SARIF output is not valid SARIF 2.1.0; skipping Code Scanning upload."
+            echo "upload=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if [ "${SCAN_OUTCOME}" != "success" ]; then
+            echo "Nuclei did not produce SARIF because the scan failed."
+            echo "upload=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          cat > "${sarif}" <<'JSON'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": {
+                  "driver": {
+                    "name": "Nuclei",
+                    "informationUri": "https://github.com/projectdiscovery/nuclei",
+                    "semanticVersion": "3.8.0",
+                    "rules": []
+                  }
+                },
+                "results": []
+              }
+            ]
+          }
+          JSON
+
+          echo "upload=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload Nuclei SARIF to code scanning
+        if: always() && steps.nuclei_sarif.outputs.upload == 'true'
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
+        with:
+          sarif_file: artifacts/dast/nuclei-report.sarif
+          category: nuclei-web-getdrydock
+
+      - name: Upload Nuclei reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: dast-nuclei-getdrydock-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/dast/nuclei-report.json
+            artifacts/dast/nuclei-report.sarif
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize Nuclei findings
+        if: always()
+        run: |
+          set -uo pipefail
+
+          report="artifacts/dast/nuclei-report.json"
+          sarif="artifacts/dast/nuclei-report.sarif"
+          artifact_name="dast-nuclei-getdrydock-report-${{ github.run_id }}-${{ github.run_attempt }}"
+          artifact_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}#artifacts"
+
+          critical=0
+          high=0
+          medium=0
+          low=0
+          info=0
+          total=0
+          parse_error=0
+
+          if [ -f "${report}" ] && [ -s "${report}" ]; then
+            if jq -e -s . "${report}" >/dev/null 2>&1; then
+              total="$(jq -s '[.[] | (if type == "array" then .[] else . end)] | length' "${report}")"
+              critical="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "critical")] | length' "${report}")"
+              high="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "high")] | length' "${report}")"
+              medium="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "medium")] | length' "${report}")"
+              low="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "low")] | length' "${report}")"
+              info="$(jq -s '[.[] | (if type == "array" then .[] else . end) | select(((.info.severity // .severity // "") | ascii_downcase) == "info")] | length' "${report}")"
+            else
+              parse_error=1
+            fi
+          fi
+
+          {
+            echo "### DAST: Nuclei (getdrydock.com)"
+            if [ ! -f "${report}" ]; then
+              echo "- Report: JSON output not found (\`${report}\`)."
+            elif [ ! -s "${report}" ]; then
+              echo "- Report: JSON output is empty (\`${report}\`)."
+            elif [ "${parse_error}" -eq 1 ]; then
+              echo "- Report: JSON output could not be parsed (\`${report}\`)."
+            fi
+            echo "- Findings: **${total}**"
+            echo "- Severity breakdown: critical=${critical}, high=${high}, medium=${medium}, low=${low}, info=${info}"
+            echo "- Target: https://getdrydock.com"
+            echo "- Templates: HTTP templates at medium+ severity"
+            if [ -s "${sarif}" ]; then
+              echo "- SARIF: \`${sarif}\`"
+            else
+              echo "- SARIF: not produced"
+            fi
+            echo "- Artifact: [${artifact_name}](${artifact_url})"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  dast-demo:
+    name: "DAST: demo.getdrydock.com"
+    # Static/MSW SPA (no auth, no server-side handlers) → ZAP baseline
+    # passive scan only, per security.md's DAST tiering decision. Active
+    # scanning and Nuclei are overkill here: there's no injection surface.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
+        with:
+          # Same accepted-audit exception as dast-web above and
+          # ci-verify.yml's dast-zap-baseline job (security.md Known drift).
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Run ZAP baseline scan
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25  # v0.15.0
+        with:
+          target: https://demo.getdrydock.com
+          docker_name: ghcr.io/zaproxy/zaproxy@sha256:2ec1d5d5b44d55cfd02ba9b89cd26852f06d92b7fc0ce9f064b9463babc73074  # stable digest, 2026-05-28
+          rules_file_name: .zap/rules.tsv
+          allow_issue_writing: false
+          fail_action: true
+          cmd_options: '-I'
+
+      - name: Convert ZAP JSON report to SARIF
+        if: always() && hashFiles('report_json.json') != ''
+        run: |
+          node scripts/zap-json-to-sarif.mjs \
+            --input=report_json.json \
+            --output=artifacts/zap/zap-web-demo-baseline.sarif
+
+      - name: Upload ZAP SARIF
+        if: always() && hashFiles('artifacts/zap/zap-web-demo-baseline.sarif') != ''
+        uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4.37.0
+        with:
+          sarif_file: artifacts/zap/zap-web-demo-baseline.sarif
+          category: zap-web-demo-baseline
+
+      - name: Upload ZAP HTML report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: dast-zap-demo-html-${{ github.run_id }}-${{ github.run_attempt }}
+          path: report_html.html
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Summarize ZAP findings
+        if: always()
+        run: |
+          set -uo pipefail
+
+          report="report_json.json"
+          artifact_name="dast-zap-demo-html-${{ github.run_id }}-${{ github.run_attempt }}"
+          artifact_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}#artifacts"
+
+          high=0
+          medium=0
+          low=0
+          info=0
+          total=0
+          parse_error=0
+
+          if [ -f "${report}" ] && [ -s "${report}" ]; then
+            if jq -e . "${report}" >/dev/null 2>&1; then
+              high="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "3")] | length' "${report}")"
+              medium="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "2")] | length' "${report}")"
+              low="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "1")] | length' "${report}")"
+              info="$(jq '[.site[]?.alerts[]? | select((.riskcode // "") == "0")] | length' "${report}")"
+              total=$((high + medium + low + info))
+            else
+              parse_error=1
+            fi
+          fi
+
+          {
+            echo "### DAST: ZAP Baseline (demo.getdrydock.com)"
+            if [ ! -f "${report}" ]; then
+              echo "- Report: JSON output not found (\`${report}\`)."
+            elif [ ! -s "${report}" ]; then
+              echo "- Report: JSON output is empty (\`${report}\`)."
+            elif [ "${parse_error}" -eq 1 ]; then
+              echo "- Report: JSON output could not be parsed (\`${report}\`)."
+            fi
+            echo "- Findings: **${total}**"
+            echo "- Severity breakdown: high=${high}, medium=${medium}, low=${low}, info=${info}"
+            echo "- Target: https://demo.getdrydock.com"
+            echo "- Artifact: [${artifact_name}](${artifact_url})"
+          } >> "${GITHUB_STEP_SUMMARY}"
