@@ -429,7 +429,7 @@ describe('ContainersGroupedViews — update button states', () => {
       updateEligibility: makeEligibility([
         {
           reason: 'trigger-not-included',
-          message: "Trigger not matched by container label dd.action.include='undefined'.",
+          message: 'Trigger not matched by container label dd.action.include.',
           actionable: true,
         },
       ]),

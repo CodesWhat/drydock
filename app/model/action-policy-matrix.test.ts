@@ -171,7 +171,7 @@ describe('case 1: oninclude default, no labels -> blocked, no auto fire (hard po
 
     await expect(requestContainerUpdate(container)).rejects.toMatchObject({
       statusCode: 409,
-      message: "Trigger not matched by container label dd.action.include='undefined'.",
+      message: 'Trigger not matched by container label dd.action.include.',
     });
     expect(trigger.trigger).not.toHaveBeenCalled();
     expect(mockInsertOperation).not.toHaveBeenCalled();

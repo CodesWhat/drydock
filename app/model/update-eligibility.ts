@@ -605,7 +605,10 @@ export function computeUpdateEligibility(
       blockers.push(
         makeBlocker({
           reason: 'trigger-not-included',
-          message: `Trigger not matched by container label dd.action.include='${triggerInclude}'.`,
+          message:
+            triggerInclude === undefined
+              ? 'Trigger not matched by container label dd.action.include.'
+              : `Trigger not matched by container label dd.action.include='${triggerInclude}'.`,
           actionable: true,
           // References dd.action.auto alongside dd.action.include/exclude (locked-button
           // tooltip copy, spec-6.0.1-action-policy.md): under a trigger's AUTO=onauto,
