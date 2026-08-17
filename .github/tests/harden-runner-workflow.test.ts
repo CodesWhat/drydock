@@ -77,7 +77,22 @@ test('GitHub-hosted workflow jobs start with current pinned Harden Runner', () =
   expect(violations).toStrictEqual([]);
 });
 
-test('Block-mode jobs carry a non-empty allowed-endpoints list', () => {
+test('Every expectedPolicy key maps to a real local job', () => {
+  const knownKeys = new Set<string>();
+  for (const { file, workflow } of loadWorkflowFiles()) {
+    for (const [jobId, job] of Object.entries(workflow.jobs ?? {})) {
+      if (!job['runs-on'] || !job.steps?.length) {
+        continue;
+      }
+      knownKeys.add(`${file}/${jobId}`);
+    }
+  }
+
+  const staleKeys = Object.keys(expectedPolicy).filter((key) => !knownKeys.has(key));
+  expect(staleKeys).toStrictEqual([]);
+});
+
+test('Block-mode jobs carry a non-empty allowed-endpoints list and disable-sudo', () => {
   const violations: string[] = [];
 
   for (const { file, workflow } of loadWorkflowFiles()) {
@@ -95,6 +110,9 @@ test('Block-mode jobs carry a non-empty allowed-endpoints list', () => {
       const allowedEndpoints = firstStep.with?.['allowed-endpoints'];
       if (typeof allowedEndpoints !== 'string' || allowedEndpoints.trim() === '') {
         violations.push(key);
+      }
+      if (firstStep.with?.['disable-sudo'] !== true) {
+        violations.push(`${key} missing disable-sudo: true`);
       }
     }
   }

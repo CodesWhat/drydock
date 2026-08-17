@@ -225,6 +225,7 @@ jobs:
           allowed-endpoints: >
             github.com:443
             registry.npmjs.org:443
+            nodejs.org:443
             api.github.com:443
             *.actions.githubusercontent.com:443
           disable-sudo: true
@@ -448,6 +449,9 @@ jobs:
           allowed-endpoints: >
             github.com:443
             registry.npmjs.org:443
+            nodejs.org:443
+            qlty-releases.s3.amazonaws.com:443
+            qlty.sh:443
             *.actions.githubusercontent.com:443
           disable-sudo: true
 
@@ -558,6 +562,7 @@ jobs:
           allowed-endpoints: >
             github.com:443
             registry.npmjs.org:443
+            nodejs.org:443
             *.actions.githubusercontent.com:443
           disable-sudo: true
 
