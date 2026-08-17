@@ -402,6 +402,37 @@ describe('selectActionTrigger — requireAuto', () => {
   });
 });
 
+describe('selectActionTrigger — triggerTypes', () => {
+  test('triggerTypes excludes a higher-specificity compose candidate so a scoped docker trigger wins', () => {
+    // A compose file-matched trigger normally outranks a generic docker
+    // trigger (case 9 above). `triggerTypes: ['docker']` must filter the
+    // compose candidate out entirely BEFORE ranking, so the docker trigger
+    // wins even though it would lose the specificity walk unscoped.
+    const container = makeContainer({
+      labels: {
+        'com.docker.compose.project.config_files': '/opt/drydock/test/monitoring/compose.yaml',
+      },
+    });
+    const composeTrigger = makeTrigger('dockercompose.monitoring', {
+      type: 'dockercompose',
+      configuration: { auto: 'all' },
+      getDefaultComposeFilePath: () => '/opt/drydock/test/monitoring/compose.yaml',
+      getComposeFilesForContainer: () => ['/opt/drydock/test/monitoring/compose.yaml'],
+    });
+    const dockerTrigger = makeTrigger('docker.generic', { configuration: { auto: 'all' } });
+    const triggers = {
+      'dockercompose.monitoring': composeTrigger,
+      'docker.generic': dockerTrigger,
+    };
+
+    const unscoped = selectActionTrigger(triggers, container);
+    expect(unscoped?.triggerId).toBe('dockercompose.monitoring');
+
+    const scoped = selectActionTrigger(triggers, container, { triggerTypes: ['docker'] });
+    expect(scoped?.triggerId).toBe('docker.generic');
+  });
+});
+
 describe('selectActionTrigger — tied-candidate WARN', () => {
   test('warns once (not twice) when equally specific candidates tie on registration order', async () => {
     const logger = (await import('../log/index.js')).default;

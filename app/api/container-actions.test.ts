@@ -581,7 +581,7 @@ describe('Container Actions Router', () => {
         .mockReturnValueOnce(clearedContainer); // after updateContainer clears flag
       mockUpdateContainer.mockReturnValue(clearedContainer);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const handler = getHandler('post', '/:id/update');
@@ -630,7 +630,7 @@ describe('Container Actions Router', () => {
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
       const updateOperationStore = await import('../store/update-operation');
 
@@ -683,7 +683,11 @@ describe('Container Actions Router', () => {
         .mockReturnValueOnce(clearedContainer); // after clearing flag
       mockUpdateContainer.mockReturnValue(clearedContainer);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
-      const trigger = { type: 'dockercompose', trigger: mockTriggerFn };
+      const trigger = {
+        type: 'dockercompose',
+        trigger: mockTriggerFn,
+        getId: () => 'dockercompose.default',
+      };
       mockGetState.mockReturnValue({ trigger: { 'dockercompose.default': trigger } });
 
       const handler = getHandler('post', '/:id/update');
@@ -721,7 +725,7 @@ describe('Container Actions Router', () => {
         .mockReturnValueOnce(updatedContainer)
         .mockReturnValueOnce(updatedContainer);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const handler = getHandler('post', '/:id/update');
@@ -760,6 +764,7 @@ describe('Container Actions Router', () => {
         getDefaultComposeFilePath: vi.fn(() => '/opt/drydock/test/mysql.yml'),
         getComposeFilesForContainer: vi.fn(() => ['/opt/drydock/test/monitoring.yml']),
         trigger: mysqlTriggerFn,
+        getId: () => 'dockercompose.mysql',
       };
       const monitoringTrigger = {
         type: 'dockercompose',
@@ -767,6 +772,7 @@ describe('Container Actions Router', () => {
         getDefaultComposeFilePath: vi.fn(() => '/opt/drydock/test/monitoring.yml'),
         getComposeFilesForContainer: vi.fn(() => ['/opt/drydock/test/monitoring.yml']),
         trigger: monitoringTriggerFn,
+        getId: () => 'dockercompose.monitoring',
       };
       mockGetState.mockReturnValue({
         trigger: {
@@ -1095,7 +1101,7 @@ describe('Container Actions Router', () => {
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockRejectedValue(new Error('pull failed'));
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const handler = getHandler('post', '/:id/update');
@@ -1127,7 +1133,7 @@ describe('Container Actions Router', () => {
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockRejectedValue(new Error('Security scan blocked update'));
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
       const updateOperationStore = await import('../store/update-operation');
       (updateOperationStore.getOperationById as ReturnType<typeof vi.fn>).mockImplementation(
@@ -1165,7 +1171,7 @@ describe('Container Actions Router', () => {
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockRejectedValue('Security scan blocked update');
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
       const updateOperationStore = await import('../store/update-operation');
       (updateOperationStore.getOperationById as ReturnType<typeof vi.fn>).mockImplementation(
@@ -1203,7 +1209,7 @@ describe('Container Actions Router', () => {
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const handler = getHandler('post', '/:id/update');
@@ -1231,7 +1237,7 @@ describe('Container Actions Router', () => {
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockRejectedValue(new Error('Docker error'));
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const handler = getHandler('post', '/:id/update');
@@ -1259,7 +1265,7 @@ describe('Container Actions Router', () => {
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const mockAuditInc = vi.fn();
@@ -1287,7 +1293,7 @@ describe('Container Actions Router', () => {
       };
       mockGetContainer.mockReturnValue(container);
       const mockTriggerFn = vi.fn().mockRejectedValue('update failed as string');
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const handler = getHandler('post', '/:id/update');
@@ -1383,7 +1389,7 @@ describe('Container Actions Router', () => {
         return undefined;
       });
       const mockTriggerFn = vi.fn().mockResolvedValue(undefined);
-      const trigger = { type: 'docker', trigger: mockTriggerFn };
+      const trigger = { type: 'docker', trigger: mockTriggerFn, getId: () => 'docker.default' };
       mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
 
       const handler = getHandler('post', '/update');
@@ -1431,7 +1437,13 @@ describe('Container Actions Router', () => {
       mockGetContainer.mockReturnValue(nginx);
       const mockTriggerFn = vi.fn().mockRejectedValue(new Error('bulk trigger failed'));
       mockGetState.mockReturnValue({
-        trigger: { 'docker.default': { type: 'docker', trigger: mockTriggerFn } },
+        trigger: {
+          'docker.default': {
+            type: 'docker',
+            trigger: mockTriggerFn,
+            getId: () => 'docker.default',
+          },
+        },
       });
 
       const handler = getHandler('post', '/update');
@@ -1479,7 +1491,11 @@ describe('Container Actions Router', () => {
       });
       mockGetState.mockReturnValue({
         trigger: {
-          'docker.default': { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+          'docker.default': {
+            type: 'docker',
+            trigger: vi.fn().mockResolvedValue(undefined),
+            getId: () => 'docker.default',
+          },
         },
       });
       const handler = getHandler('post', '/update');

@@ -116,6 +116,7 @@ function createDockerTrigger() {
   return {
     trigger: {
       type: 'docker',
+      getId: vi.fn(() => 'docker.local'),
       trigger: vi.fn().mockResolvedValue(undefined),
       getWatcher: vi.fn(() => ({
         dockerApi: { getContainer: vi.fn(() => mockDockerContainer) },
