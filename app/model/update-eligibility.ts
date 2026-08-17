@@ -1,6 +1,7 @@
 import { findDockerTriggerForContainer } from '../api/docker-trigger.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
+import { type ActionPolicyTrigger, selectActionTrigger } from './action-policy.js';
 import type { Container } from './container.js';
 import { isRollbackContainer } from './container.js';
 import {
@@ -167,8 +168,6 @@ interface TriggerInstanceMethods {
   agent?: string;
   configuration?: { threshold?: string };
   getId?: () => string;
-  isTriggerIncluded: (container: Container, include: string | undefined) => boolean;
-  isTriggerExcluded: (container: Container, exclude: string | undefined) => boolean;
 }
 
 function formatSnoozeDate(isoString: string): string {
@@ -533,13 +532,29 @@ export function computeUpdateEligibility(
     }
 
     // 8. trigger-excluded / 9. trigger-not-included
-    // Action admission reads the action-scoped labels explicitly, never the deprecated mirror.
-    const { actionTriggerInclude: triggerInclude, actionTriggerExclude: triggerExclude } =
-      container;
-    const included = t.isTriggerIncluded(container, triggerInclude);
-    const excluded = t.isTriggerExcluded(container, triggerExclude);
+    //
+    // Derived from the action-policy resolver's hybrid multi-trigger walk
+    // (spec-6.0.1-action-policy.md decision 3) rather than a single trigger's
+    // raw include/exclude booleans: an explicit `dd.action.exclude` match
+    // anywhere in the ranked walk is an authoritative hard stop
+    // (trigger-excluded), while a container is only trigger-not-included
+    // when NO compatible candidate resolves to manual/auto access. This can
+    // authorize the container via a different, less-specific trigger than
+    // `t` above when the walk finds an authorized fallback — a deliberate,
+    // spec-called-out improvement over the pre-6.0.1 single-trigger check.
+    // `t` (the raw agent-compatible candidate from
+    // findDockerTriggerForContainer) still backs threshold-not-reached and
+    // rollback-container above, and backs this block's triggerId only in the
+    // trigger-not-included fallback case (no candidate to name a winner
+    // from); wiring those to the walk's winner too is left to a later slice.
+    const selection = selectActionTrigger(
+      context.triggers as unknown as Record<string, ActionPolicyTrigger> | undefined,
+      container,
+      { requireAuto: false },
+    );
 
-    if (excluded) {
+    if (selection?.reason === 'excluded') {
+      const triggerExclude = container.actionTriggerExclude;
       blockers.push(
         makeBlocker({
           reason: 'trigger-excluded',
@@ -549,11 +564,12 @@ export function computeUpdateEligibility(
             'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.',
           details: {
             triggerExclude,
-            triggerId: t.getId?.(),
+            triggerId: selection.triggerId,
           },
         }),
       );
-    } else if (!included) {
+    } else if (!selection) {
+      const triggerInclude = container.actionTriggerInclude;
       blockers.push(
         makeBlocker({
           reason: 'trigger-not-included',

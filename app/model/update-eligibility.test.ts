@@ -72,15 +72,17 @@ function makeContainerWithDigestUpdate(overrides: Partial<Container> = {}): Cont
   });
 }
 
-// A minimal trigger mock with all the methods eligibility needs
+// A minimal trigger mock with everything eligibility (and the action-policy
+// resolver it now delegates the exclude/include verdict to) needs. `auto`
+// defaults to unset, which `resolveForTrigger` normalizes to 'all' (legacy
+// access-always-open, same as the pre-6.0.1 default isTriggerIncluded/
+// isTriggerExcluded mock behavior this replaced).
 function makeTrigger(
   overrides: Partial<{
     type: string;
     agent: string | undefined;
-    configuration: { threshold?: string };
+    configuration: { threshold?: string; auto?: boolean | string };
     getId: () => string;
-    isTriggerIncluded: (c: Container, include: string | undefined) => boolean;
-    isTriggerExcluded: (c: Container, exclude: string | undefined) => boolean;
   }> = {},
 ) {
   return {
@@ -88,8 +90,6 @@ function makeTrigger(
     agent: undefined,
     configuration: { threshold: 'all' },
     getId: () => 'docker.update',
-    isTriggerIncluded: (_c: Container, include: string | undefined) => !include,
-    isTriggerExcluded: (_c: Container, _exclude: string | undefined) => false,
     ...overrides,
   };
 }
@@ -1243,11 +1243,11 @@ describe('computeUpdateEligibility', () => {
     });
 
     test('reads the action-scoped exclude, never the deprecated mirror (#494)', () => {
-      const isTriggerExcluded = vi.fn().mockReturnValue(false);
-      const trigger = makeTrigger({
-        isTriggerExcluded,
-        isTriggerIncluded: () => true,
-      });
+      // The deprecated triggerExclude/notificationTriggerExclude mirror carries a
+      // value that WOULD exclude this trigger if it were (wrongly) consulted.
+      // actionTriggerExclude is left unset, so the resolver — which only ever
+      // reads the action-scoped field — must not exclude.
+      const trigger = makeTrigger();
       const container = makeContainerWithTagUpdate({
         triggerExclude: 'docker.update',
         notificationTriggerExclude: 'docker.update',
@@ -1261,17 +1261,13 @@ describe('computeUpdateEligibility', () => {
         }),
       );
 
-      expect(isTriggerExcluded).toHaveBeenCalledWith(container, undefined);
       expect(result.blockers.find((b) => b.reason === 'trigger-excluded')).toBeUndefined();
     });
   });
 
   describe('trigger-not-included', () => {
-    test('emits trigger-not-included when isTriggerIncluded returns false and not excluded', () => {
-      const trigger = makeTrigger({
-        isTriggerExcluded: () => false,
-        isTriggerIncluded: () => false,
-      });
+    test('emits trigger-not-included when the include label does not match and not excluded', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
       const container = makeContainerWithTagUpdate({
         actionTriggerInclude: 'other.trigger',
       });
@@ -1288,14 +1284,14 @@ describe('computeUpdateEligibility', () => {
     });
 
     test('reads the action-scoped include, never the deprecated mirror (#494)', () => {
-      const isTriggerIncluded = vi.fn().mockReturnValue(true);
-      const trigger = makeTrigger({
-        isTriggerExcluded: () => false,
-        isTriggerIncluded,
-      });
+      // Under 'oninclude', access is closed by default. The deprecated
+      // triggerInclude/notificationTriggerInclude mirror carries a value that
+      // WOULD grant access if it were (wrongly) consulted; actionTriggerInclude
+      // is left unset, so the resolver must still report trigger-not-included.
+      const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
       const container = makeContainerWithTagUpdate({
-        triggerInclude: 'slack.alert',
-        notificationTriggerInclude: 'slack.alert',
+        triggerInclude: 'docker.update',
+        notificationTriggerInclude: 'docker.update',
       });
 
       const result = computeUpdateEligibility(
@@ -1306,18 +1302,14 @@ describe('computeUpdateEligibility', () => {
         }),
       );
 
-      expect(isTriggerIncluded).toHaveBeenCalledWith(container, undefined);
-      expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeUndefined();
+      expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeDefined();
     });
 
     test('trigger-excluded takes precedence over trigger-not-included', () => {
-      const trigger = makeTrigger({
-        isTriggerExcluded: () => true,
-        isTriggerIncluded: () => false,
-      });
+      const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
       const container = makeContainerWithTagUpdate({
-        triggerExclude: 'docker.update',
-        triggerInclude: 'other',
+        actionTriggerExclude: 'docker.update',
+        actionTriggerInclude: 'other',
       });
       const result = computeUpdateEligibility(
         container,
