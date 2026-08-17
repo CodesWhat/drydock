@@ -193,7 +193,6 @@
       "setGroupAction": "Set group",
       "rollbackAction": "Rollback",
       "deleteAction": "Delete",
-      "pinnedTooltip": "Pinned",
       "skippedLabel": "Skipped",
       "upToDateTooltip": "Up to date",
       "imageUpdateTooltip": "The tag {tag} now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "Suggested: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "Newer available",
       "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
     },
     "eligibilityBadges": {

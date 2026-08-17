@@ -193,7 +193,6 @@
       "setGroupAction": "グループを設定",
       "rollbackAction": "ロールバック",
       "deleteAction": "削除",
-      "pinnedTooltip": "固定済み",
       "skippedLabel": "スキップ済み",
       "upToDateTooltip": "最新の状態です",
       "imageUpdateTooltip": "タグ {tag} は現在別のイメージビルドを指しています。再デプロイして新しいイメージを取得してください。バージョンタグ自体は変更されていません。",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "おすすめ：{tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "新しいバージョンあり",
       "tooltip": "新しいバージョンが利用可能です: {tag}。この Tag は固定済みのため、drydock は自動的に更新しません。"
     },
     "eligibilityBadges": {

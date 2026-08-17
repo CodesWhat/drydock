@@ -193,7 +193,6 @@
       "setGroupAction": "Ustaw grupę",
       "rollbackAction": "Wycofaj",
       "deleteAction": "Usuń",
-      "pinnedTooltip": "Przypięty",
       "skippedLabel": "Pominięto",
       "upToDateTooltip": "Aktualne",
       "imageUpdateTooltip": "Tag {tag} wskazuje teraz na inny build obrazu. Wdróż ponownie, aby pobrać nowy obraz; sam tag wersji się nie zmienił.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "Sugerowane: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "Dostępna nowsza",
       "tooltip": "Dostępna nowsza wersja: {tag}. Ten Tag jest przypięty, drydock nie zaktualizuje go automatycznie."
     },
     "eligibilityBadges": {

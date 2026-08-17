@@ -193,7 +193,6 @@
       "setGroupAction": "設定群組",
       "rollbackAction": "回滾",
       "deleteAction": "刪除",
-      "pinnedTooltip": "已固定",
       "skippedLabel": "已略過",
       "upToDateTooltip": "已是最新",
       "imageUpdateTooltip": "標籤 {tag} 現在指向不同的映像檔建置。重新部署以提取新映像檔；版本標籤本身未變更。",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "建議：{tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "有更新版本",
       "tooltip": "有更新版本可用：{tag}。此 Tag 已固定，drydock 不會自動更新。"
     },
     "eligibilityBadges": {
