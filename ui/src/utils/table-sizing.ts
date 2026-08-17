@@ -93,7 +93,7 @@ export function normalizeTableColumnSizing(
   };
 }
 
-export function columnMinimumFootprint(column: TableColumnSizingInput): number {
+function columnMinimumFootprint(column: TableColumnSizingInput): number {
   return normalizeTableColumnSizing(column).minSize;
 }
 

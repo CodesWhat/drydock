@@ -16,7 +16,7 @@ import { getErrorMessage } from '../../../util/error.js';
 import { getImageForRegistryLookup } from './docker-helpers.js';
 import { getTagCandidates } from './tag-candidates.js';
 
-export interface ContainerTagLookupProvider {
+interface ContainerTagLookupProvider {
   normalizeImage: (image: ContainerImage) => ContainerImage;
   getTags: (image: Container['image'], options?: RegistryLookupOptions) => Promise<string[]>;
   getImageManifestDigest: (
@@ -49,7 +49,7 @@ export interface ContainerTagLookupProvider {
  * so the call site receives an image ready for HTTP requests without mutating
  * the container's deploy identity.
  */
-export function getImageForRegistryQuery(
+function getImageForRegistryQuery(
   image: ContainerImage,
   registryProvider: Pick<ContainerTagLookupProvider, 'normalizeImage'>,
 ): ContainerImage {

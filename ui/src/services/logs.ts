@@ -2,7 +2,7 @@ import { createWebSocketStreamConnection } from '@/services/websocket-stream-con
 
 type LogStreamTail = number | 'all';
 
-export interface ContainerLogFrame {
+interface ContainerLogFrame {
   type: 'stdout' | 'stderr';
   ts: string;
   displayTs: string;

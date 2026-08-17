@@ -2,8 +2,6 @@ import { createPinia, getActivePinia, setActivePinia } from 'pinia';
 import { computed } from 'vue';
 import { type FrozenBatch, useOperationStore } from '@/stores/operations';
 
-export type { FrozenBatch };
-
 let fallbackPinia: ReturnType<typeof createPinia> | undefined;
 
 function getStore() {

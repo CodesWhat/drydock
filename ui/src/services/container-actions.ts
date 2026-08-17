@@ -1,17 +1,17 @@
-export interface BulkContainerUpdateAcceptedItem {
+interface BulkContainerUpdateAcceptedItem {
   containerId: string;
   containerName: string;
   operationId: string;
 }
 
-export interface BulkContainerUpdateRejectedItem {
+interface BulkContainerUpdateRejectedItem {
   containerId: string;
   containerName: string;
   message: string;
   statusCode: number;
 }
 
-export interface BulkContainerUpdateResponse {
+interface BulkContainerUpdateResponse {
   message: string;
   accepted: BulkContainerUpdateAcceptedItem[];
   rejected: BulkContainerUpdateRejectedItem[];

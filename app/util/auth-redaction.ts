@@ -1,4 +1,4 @@
-export const REDACTED_AUTH_HEADER_VALUE = '[REDACTED]';
+const REDACTED_AUTH_HEADER_VALUE = '[REDACTED]';
 
 const AUTHORIZATION_HEADER_VALUE_PATTERN =
   /\b(authorization["']?\s*[:=]\s*)(["']?)([^\r\n"',;}\]]*?)(?=(?:\s+(?:x-registry-auth|[a-z0-9_-]*token|api[-_]?key)["']?\s*[:=])|[\r\n"',;}\]]|$)/gi;

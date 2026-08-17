@@ -19,8 +19,6 @@ export interface NotificationTemplateOverride {
   batchTitle?: string;
 }
 
-export type NotificationTemplateField = keyof NotificationTemplateOverride;
-
 export type NotificationTemplateOverrides = Record<string, NotificationTemplateOverride>;
 
 export type NotificationTemplatePreview = Required<NotificationTemplateOverride>;

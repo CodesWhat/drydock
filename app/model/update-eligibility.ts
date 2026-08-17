@@ -131,7 +131,7 @@ function makeBlocker(
  * `no-update-trigger-configured`/`agent-mismatch` blockers own that
  * messaging (see the `no compatible trigger` comment at the call site).
  */
-export interface UpdateEligibilityActionPolicy {
+interface UpdateEligibilityActionPolicy {
   state: ActionPolicyState;
   triggerId?: string;
   reason?: ActionPolicyBlockedReason;

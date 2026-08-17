@@ -829,7 +829,7 @@ export function filterRecreatedContainerAliases<T extends DockerContainerSummary
  * mid-window rename (transient alias -> canonical name) registers under the
  * FINAL name rather than the name it happened to have on first sight.
  */
-export interface PendingDiscoveryEntry {
+interface PendingDiscoveryEntry {
   firstSeenAtMs: number;
   name: string;
 }
@@ -1125,7 +1125,7 @@ export function resolveEffectiveContainerTagPolicy(
   );
 }
 
-export function applyEffectiveTagPolicyFromLabels(
+function applyEffectiveTagPolicyFromLabels(
   container: Container,
   labels: Record<string, string>,
   watcherTagDefaults: WatcherTagDefaults | undefined,

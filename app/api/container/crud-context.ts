@@ -5,12 +5,12 @@ import type { ContainerDashboardLike } from '../../util/container-summary.js';
 import type { PaginationLinks } from '../pagination-links.js';
 import type { ContainerSortMode } from './sorting.js';
 
-export interface CrudStoreContainerApi {
+interface CrudStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
   deleteContainer: (id: string) => void;
 }
 
-export interface ContainerListPagination {
+interface ContainerListPagination {
   limit: number;
   offset: number;
   sort?: ContainerSortMode;
@@ -29,7 +29,7 @@ export interface WatchContainersBody {
   containerIds?: string[];
 }
 
-export interface UpdateOperationStoreApi {
+interface UpdateOperationStoreApi {
   listActiveOperations?: () => unknown[];
   getOperationsByContainerName: (containerName: string) => unknown[];
   getOperationsByContainerId: (containerId: string) => unknown[];
@@ -45,7 +45,7 @@ export interface UpdateOperationStoreApi {
   getActiveOperationByContainerId: (containerId: string) => unknown | undefined;
 }
 
-export interface ServerConfiguration {
+interface ServerConfiguration {
   feature: {
     delete: boolean;
   };
@@ -60,7 +60,7 @@ export interface LocalContainerWatcher {
   ) => Promise<ContainerReport>;
 }
 
-export interface AuditStoreApi {
+interface AuditStoreApi {
   insertAudit: (entry: {
     action: string;
     containerName: string;

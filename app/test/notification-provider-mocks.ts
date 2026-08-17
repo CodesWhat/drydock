@@ -14,7 +14,7 @@ interface ChildProcessCallbackMockOptions {
 
 type ChildProcessCallback = (error: Error | null, stdout: unknown, stderr: unknown) => void;
 
-export function createHttpStatusError(message: string, status: number) {
+function createHttpStatusError(message: string, status: number) {
   return Object.assign(new Error(message), {
     response: { status },
   });

@@ -12,7 +12,7 @@ type SecurityRuntimeToolStatus = {
   message: string;
 };
 
-export interface SecurityRuntimeProviderStatus extends SecurityRuntimeToolStatus {
+interface SecurityRuntimeProviderStatus extends SecurityRuntimeToolStatus {
   provider: 'trivy' | 'grype' | 'syft';
   role: 'scanner' | 'sbom';
 }

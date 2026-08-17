@@ -49,7 +49,7 @@ export function formatOperationStatus(status: unknown, t?: (key: string) => stri
   return formatOperationValue(status, t);
 }
 
-export function getOperationStatusStyle(status: unknown) {
+function getOperationStatusStyle(status: unknown) {
   const normalized = String(status || '').toLowerCase();
   if (normalized === 'succeeded') {
     return {

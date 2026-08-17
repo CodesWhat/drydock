@@ -15,11 +15,12 @@ import { hasValidCommandPath } from './runtime.js';
 import { getDefaultScannerRuntime } from './scanner-runtime.js';
 import { createTrivyDatabaseWarmup } from './trivy-warmup.js';
 
-export { SECURITY_SBOM_FORMATS, type SecuritySbomFormat, type SecuritySeverity, toPositiveInteger };
-export type SecurityScanStatus = 'passed' | 'blocked' | 'error';
-export type SecuritySignatureStatus = 'verified' | 'unverified' | 'error';
-export type SecuritySbomStatus = 'generated' | 'error';
-export type SecurityScanner = 'trivy' | 'grype' | 'both';
+export { SECURITY_SBOM_FORMATS, toPositiveInteger };
+
+type SecurityScanStatus = 'passed' | 'blocked' | 'error';
+type SecuritySignatureStatus = 'verified' | 'unverified' | 'error';
+type SecuritySbomStatus = 'generated' | 'error';
+type SecurityScanner = 'trivy' | 'grype' | 'both';
 
 export interface ContainerVulnerabilitySummary {
   unknown: number;

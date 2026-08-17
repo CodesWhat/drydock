@@ -1,10 +1,7 @@
 import type { Container } from '../../model/container.js';
-import { getFirstNonEmptyQueryValue } from './query-values.js';
 import { getContainerUpdateAge } from './update-age.js';
 
-const DEFAULT_CONTAINER_SORT_MODE: ContainerSortMode = 'name';
-
-export const CONTAINER_SORT_MODES = [
+const CONTAINER_SORT_MODES = [
   'name',
   '-name',
   'status',
@@ -17,49 +14,20 @@ export const CONTAINER_SORT_MODES = [
 
 export type ContainerSortMode = (typeof CONTAINER_SORT_MODES)[number];
 
-export const CONTAINER_ORDER_VALUES = ['asc', 'desc'] as const;
-export type ContainerOrderDirection = (typeof CONTAINER_ORDER_VALUES)[number];
-
 type AscendingContainerSortMode = Exclude<
   ContainerSortMode,
   '-name' | '-status' | '-age' | '-created'
 >;
 
-export function parseContainerSortMode(sortQuery: unknown): ContainerSortMode {
-  const sortValue = getFirstNonEmptyQueryValue(sortQuery);
-  if (!sortValue || !isContainerSortMode(sortValue)) {
-    return DEFAULT_CONTAINER_SORT_MODE;
-  }
-  return sortValue;
-}
-
-export function resolveContainerSortMode(
-  sortQuery: unknown,
-  orderQuery: unknown,
-): ContainerSortMode {
-  const baseSortMode = parseContainerSortMode(sortQuery);
-  const orderValue = getFirstNonEmptyQueryValue(orderQuery)?.toLowerCase();
-
-  if (orderValue === 'desc') {
-    const normalizedSort = normalizeContainerSortMode(baseSortMode);
-    return `-${normalizedSort}` as ContainerSortMode;
-  }
-  if (orderValue === 'asc') {
-    return normalizeContainerSortMode(baseSortMode);
-  }
-
-  return baseSortMode;
-}
-
-export function getContainerNameForSort(container: Container): string {
+function getContainerNameForSort(container: Container): string {
   return typeof container.name === 'string' ? container.name : '';
 }
 
-export function getContainerIdForSort(container: Container): string {
+function getContainerIdForSort(container: Container): string {
   return typeof container.id === 'string' ? container.id : '';
 }
 
-export function getContainerWatcherForSort(container: Container): string {
+function getContainerWatcherForSort(container: Container): string {
   return typeof container.watcher === 'string' ? container.watcher : '';
 }
 

@@ -6,11 +6,11 @@
 export const OPERATOR_CANCELLED_ROLLBACK_REASON = 'cancelled';
 export const OPERATOR_CANCELLED_ERROR_MESSAGE = 'Cancelled by operator';
 
-export const CONTAINER_UPDATE_OPERATION_KINDS = ['container-update', 'self-update'] as const;
+const CONTAINER_UPDATE_OPERATION_KINDS = ['container-update', 'self-update'] as const;
 
 export type ContainerUpdateOperationKind = (typeof CONTAINER_UPDATE_OPERATION_KINDS)[number];
 
-export const CONTAINER_UPDATE_OPERATION_STATUSES = [
+const CONTAINER_UPDATE_OPERATION_STATUSES = [
   'queued',
   'in-progress',
   'succeeded',
@@ -22,7 +22,7 @@ export const CONTAINER_UPDATE_OPERATION_STATUSES = [
 
 export type ContainerUpdateOperationStatus = (typeof CONTAINER_UPDATE_OPERATION_STATUSES)[number];
 
-export const ACTIVE_CONTAINER_UPDATE_OPERATION_STATUSES = ['queued', 'in-progress'] as const;
+const ACTIVE_CONTAINER_UPDATE_OPERATION_STATUSES = ['queued', 'in-progress'] as const;
 
 export type ActiveContainerUpdateOperationStatus =
   (typeof ACTIVE_CONTAINER_UPDATE_OPERATION_STATUSES)[number];
@@ -37,7 +37,7 @@ export type ActiveContainerUpdateOperationStatus =
 // upstream dependency in its chain failed or was deferred by its own
 // maintenance window this cycle — no "update failed" toast is warranted for
 // work that was never attempted.
-export const TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES = [
+const TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES = [
   'succeeded',
   'rolled-back',
   'failed',
@@ -48,7 +48,7 @@ export const TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES = [
 export type TerminalContainerUpdateOperationStatus =
   (typeof TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES)[number];
 
-export const CONTAINER_UPDATE_OPERATION_PHASES = [
+const CONTAINER_UPDATE_OPERATION_PHASES = [
   'queued',
   'pulling',
   'scanning',
@@ -79,12 +79,12 @@ export const CONTAINER_UPDATE_OPERATION_PHASES = [
 
 export type ContainerUpdateOperationPhase = (typeof CONTAINER_UPDATE_OPERATION_PHASES)[number];
 
-export const QUEUED_CONTAINER_UPDATE_OPERATION_PHASES = ['queued'] as const;
+const QUEUED_CONTAINER_UPDATE_OPERATION_PHASES = ['queued'] as const;
 
-export type QueuedContainerUpdateOperationPhase =
+type QueuedContainerUpdateOperationPhase =
   (typeof QUEUED_CONTAINER_UPDATE_OPERATION_PHASES)[number];
 
-export const IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES = [
+const IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES = [
   'pulling',
   'scanning',
   'sbom-generating',
@@ -99,7 +99,7 @@ export const IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES = [
   'rollback-deferred',
 ] as const;
 
-export type InProgressContainerUpdateOperationPhase =
+type InProgressContainerUpdateOperationPhase =
   (typeof IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES)[number];
 
 export type ActiveContainerUpdateOperationPhase =
@@ -146,7 +146,7 @@ export function isContainerUpdateOperationPhase(
   );
 }
 
-export function isQueuedContainerUpdateOperationPhase(
+function isQueuedContainerUpdateOperationPhase(
   value: unknown,
 ): value is QueuedContainerUpdateOperationPhase {
   return (
@@ -155,7 +155,7 @@ export function isQueuedContainerUpdateOperationPhase(
   );
 }
 
-export function isInProgressContainerUpdateOperationPhase(
+function isInProgressContainerUpdateOperationPhase(
   value: unknown,
 ): value is InProgressContainerUpdateOperationPhase {
   return (

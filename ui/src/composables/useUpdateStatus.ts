@@ -31,7 +31,7 @@ export type UpdateStatusAction =
     }
   | { kind: 'external'; label: string; href: string };
 
-export interface UpdateStatusCondition {
+interface UpdateStatusCondition {
   reason: UpdateBlockerReason;
   severity: UpdateBlockerSeverity;
   tone: 'danger' | 'warning' | 'info';
@@ -42,7 +42,7 @@ export interface UpdateStatusCondition {
   action?: UpdateStatusAction;
 }
 
-export type UpdateStatusState =
+type UpdateStatusState =
   | 'up-to-date'
   | 'insight'
   | 'ready'
@@ -60,7 +60,7 @@ export type UpdateStatusState =
  * mapping is reusable anywhere all three states need explaining (e.g. the
  * per-trigger resolvedState tooltip in the associated-triggers list).
  */
-export interface ActionPolicyBadge {
+interface ActionPolicyBadge {
   state: ActionPolicyState;
   label: string;
   tooltip: string;

@@ -8,7 +8,7 @@ const COMPOSE_FILE_LOCK_SUFFIX = '.drydock.lock';
 const COMPOSE_FILE_LOCK_MAX_WAIT_MS = 10_000;
 const COMPOSE_FILE_LOCK_STALE_MS = 120_000;
 
-export interface ComposeFileLockManagerOptions {
+interface ComposeFileLockManagerOptions {
   getLog?: () => { warn?: (message: string) => void } | undefined;
 }
 
@@ -24,7 +24,7 @@ function hasErrorCode(error: unknown, code: string): boolean {
  * Manages file-level locking for compose writes, including stale lock cleanup
  * and lock-file change notifications.
  */
-export class ComposeFileLockManager {
+class ComposeFileLockManager {
   _composeFileLocksHeld = new Set<string>();
   private static readonly composeFileLockQueue = new Map<string, Promise<void>>();
   private readonly getLog?: () => { warn?: (message: string) => void } | undefined;
