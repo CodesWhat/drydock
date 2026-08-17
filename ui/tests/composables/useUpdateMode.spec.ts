@@ -28,6 +28,28 @@ describe('useUpdateMode', () => {
     expect(first.loaded.value).toBe(true);
   });
 
+  it('loads internetlessMode alongside updateMode from the shared settings fetch', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: true, updateMode: 'auto' });
+    const { useUpdateMode } = await import('@/composables/useUpdateMode');
+    const state = useUpdateMode({ autoLoad: false });
+
+    await state.loadUpdateMode();
+
+    expect(state.internetlessMode.value).toBe(true);
+  });
+
+  it('records an internetlessMode value obtained by a consumer without refetching', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: false, updateMode: 'manual' });
+    const { useUpdateMode } = await import('@/composables/useUpdateMode');
+    const state = useUpdateMode({ autoLoad: false });
+
+    await state.loadUpdateMode();
+    state.setInternetlessMode(true);
+
+    expect(state.internetlessMode.value).toBe(true);
+    expect(mockGetSettings).toHaveBeenCalledTimes(1);
+  });
+
   it('force-loads a newer mode after the initial request', async () => {
     mockGetSettings
       .mockResolvedValueOnce({ internetlessMode: false, updateMode: 'manual' })

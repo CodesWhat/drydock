@@ -3,6 +3,7 @@ import { getSettings, type UpdateMode, updateSettings } from '../services/settin
 import { errorMessage } from '../utils/error';
 
 const updateMode = ref<UpdateMode>('manual');
+const internetlessMode = ref(false);
 const loaded = ref(false);
 const saving = ref(false);
 const error = ref<string | null>(null);
@@ -24,6 +25,7 @@ async function loadUpdateMode(options: LoadUpdateModeOptions = {}): Promise<void
       const settings = await getSettings();
       if (loadRevision === canonicalRevision) {
         updateMode.value = settings.updateMode;
+        internetlessMode.value = settings.internetlessMode;
         loaded.value = true;
         error.value = null;
       }
@@ -34,6 +36,15 @@ async function loadUpdateMode(options: LoadUpdateModeOptions = {}): Promise<void
     }
   })();
   return loadPromise;
+}
+
+/**
+ * Records an internetlessMode value obtained by a consumer's own
+ * updateSettings() call (e.g. ConfigView's network toggle), so the shared
+ * singleton stays in sync without owning that mutation itself.
+ */
+function setInternetlessMode(value: boolean): void {
+  internetlessMode.value = value;
 }
 
 async function setUpdateMode(mode: UpdateMode): Promise<void> {
@@ -93,10 +104,12 @@ export function useUpdateMode(options: { autoLoad?: boolean } = {}) {
   }
   return {
     updateMode: readonly(updateMode),
+    internetlessMode: readonly(internetlessMode),
     loaded: readonly(loaded),
     saving: readonly(saving),
     error: readonly(error),
     loadUpdateMode,
     setUpdateMode,
+    setInternetlessMode,
   };
 }
