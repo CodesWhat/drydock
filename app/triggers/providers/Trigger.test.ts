@@ -6333,11 +6333,12 @@ describe('digest mode', () => {
       log,
     });
 
+    const warnSpy = vi.spyOn(log, 'warn');
     bufferStore.enforceLimit();
 
     expect([...buffer.keys()]).toEqual(['', 'c2']);
     expect([...timestamps.keys()]).toEqual(['', 'c2']);
-    expect(log.warn).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   test('DigestBuffer should treat missing timestamps as the oldest entries', () => {
@@ -6369,11 +6370,12 @@ describe('digest mode', () => {
       log,
     });
 
+    const warnSpy = vi.spyOn(log, 'warn');
     bufferStore.enforceLimit();
 
     expect([...buffer.keys()]).toEqual(['c2']);
     expect([...timestamps.keys()]).toEqual(['c2']);
-    expect(log.warn).toHaveBeenCalledWith(
+    expect(warnSpy).toHaveBeenCalledWith(
       'Evicted oldest digest buffer entry c1 after reaching the 1-entry limit',
     );
   });
@@ -6616,10 +6618,11 @@ describe('digest mode', () => {
 
     (trigger as any).isDigestFlushInProgress = true;
 
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
     await trigger.flushDigestBuffer();
 
-    expect(trigger.log.debug).toHaveBeenCalledWith('Digest flush already in progress');
+    expect(debugSpy).toHaveBeenCalledWith('Digest flush already in progress');
     expect(triggerBatchSpy).not.toHaveBeenCalled();
     triggerBatchSpy.mockRestore();
   });
@@ -9589,6 +9592,7 @@ describe('security digest mode (SECURITYMODE=digest)', () => {
     const flushSecurityDigestBufferSpy = vi
       .spyOn(trigger as any, 'flushSecurityDigestBuffer')
       .mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(trigger.log, 'warn');
 
     await trigger.flushDigestBuffer({
       eventKind: 'security-alert-digest',
@@ -9603,12 +9607,12 @@ describe('security digest mode (SECURITYMODE=digest)', () => {
       cycleId: 'cycle-001',
     });
 
-    expect(trigger.log.warn).toHaveBeenCalledTimes(2);
-    expect(trigger.log.warn).toHaveBeenNthCalledWith(
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenNthCalledWith(
       1,
       'flushDigestBuffer called for security-alert-digest without cycleId/cyclePayload — skipping',
     );
-    expect(trigger.log.warn).toHaveBeenNthCalledWith(
+    expect(warnSpy).toHaveBeenNthCalledWith(
       2,
       'flushDigestBuffer called for security-alert-digest without cycleId/cyclePayload — skipping',
     );
@@ -10834,11 +10838,9 @@ describe('seedNotificationHistoryFromStore targeted mutant coverage', () => {
     };
     storeContainer.getContainersRaw.mockReturnValue([container1, container2]);
 
+    const debugSpy = vi.spyOn(log, 'debug');
+
     await trigger.register('trigger', 'test', 'pushover', configurationValid);
-
-    const debugSpy = vi.spyOn((trigger as any).log, 'debug');
-
-    trigger.init();
 
     // Should have seeded 2 entries (one per container)
     expect(
@@ -10867,10 +10869,9 @@ describe('seedNotificationHistoryFromStore targeted mutant coverage', () => {
     };
     storeContainer.getContainersRaw.mockReturnValue([container]);
 
-    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    const debugSpy = vi.spyOn(log, 'debug');
 
-    const debugSpy = vi.spyOn((trigger as any).log, 'debug');
-    trigger.init();
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
 
     expect(debugSpy).toHaveBeenCalledWith(
       expect.stringMatching(
