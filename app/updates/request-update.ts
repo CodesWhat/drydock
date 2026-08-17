@@ -135,11 +135,11 @@ function toRejectedContainerUpdateRequest(
   };
 }
 
-function isResolvedUpdateTrigger(trigger: UpdateTriggerLike): trigger is ResolvedUpdateTrigger {
+function isResolvedUpdateTrigger(trigger: unknown): trigger is ResolvedUpdateTrigger {
   return (
     typeof trigger === 'object' &&
     trigger !== null &&
-    typeof trigger.type === 'string' &&
+    typeof (trigger as { type?: unknown }).type === 'string' &&
     typeof (trigger as { getId?: unknown }).getId === 'function'
   );
 }
