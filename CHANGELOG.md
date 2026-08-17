@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dropped the trivy qlty plugin in favor of Grype.** Grype already owns the vuln-scanning surface (`.github/workflows/security-grype.yml`); trivy's qlty-plugin `config` driver only ever ran its DS*/KSV* Dockerfile misconfiguration checks, which checkov already covers (the `checkov:skip=CKV_DOCKER_3` comment on `Dockerfile` line 1, with matching rationale in `.trivyignore.yaml` for the standalone `trivy` binary the image ships at runtime — a separate concern, untouched here). Removed the `[[plugin]] name = "trivy"` block and the `trivy:DS002`/`trivy:DS-0002` triage entry from `.qlty/qlty.toml`; trufflehog stays as-is. ([#753](https://github.com/CodesWhat/drydock/issues/753))
+
 ## [1.7.0-rc.1] — 2026-08-14
 
 ### Added

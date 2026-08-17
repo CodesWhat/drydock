@@ -153,7 +153,7 @@ Longer-form working notes and the roadmap tracker live under `.planning/` at the
 
 ## Key constraints
 
-- Biome is a direct devDependency in the root workspace; qlty handles all other linters (actionlint, checkov, dockerfmt, hadolint, markdownlint, osv-scanner, shellcheck, shfmt, trivy, trufflehog, yamllint) but not biome — qlty's biome integration doesn't reliably apply fixes.
+- Biome is a direct devDependency in the root workspace; qlty handles all other linters (actionlint, checkov, dockerfmt, hadolint, markdownlint, osv-scanner, shellcheck, shfmt, trufflehog, yamllint) but not biome — qlty's biome integration doesn't reliably apply fixes.
 - `content/docs/` is the source of truth for published docs; the generated copy under `apps/web/content/docs/` is gitignored.
 - `CHANGELOG.md` at the repo root is the single source of truth for the changelog.
 - Regex from user config (tag include/exclude/transform) is compiled via `re2js` for linear-time execution — never introduce a raw `RegExp` on user-supplied patterns.
