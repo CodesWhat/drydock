@@ -6,6 +6,18 @@ import {
 
 registerServerAvailabilityCheck(test);
 
+// Mirrors TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES from
+// app/model/container-update-operation.ts. e2e is a separate npm workspace
+// with no cross-package import path to app source, so the vocabulary is
+// duplicated here rather than imported.
+const TERMINAL_UPDATE_OPERATION_STATUSES = new Set([
+  'succeeded',
+  'rolled-back',
+  'failed',
+  'expired',
+  'skipped-dependency',
+]);
+
 test.describe('Dashboard', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -90,6 +102,12 @@ test.describe('Dashboard', () => {
   });
 
   test('dashboard updates start in place without leaving the dashboard', async ({ page }) => {
+    // Extends the default 60s test timeout: beyond the in-place UI assertions,
+    // this test now polls the backend until the triggered update operation
+    // reaches a terminal state, which involves a real image pull + container
+    // recreate against the QA stack (issue #763).
+    test.setTimeout(90_000);
+
     const widget = page.locator('[aria-label="Updates Available widget"]');
     const updateButtons = widget.locator('[data-test="dashboard-update-btn"]');
 
@@ -102,7 +120,7 @@ test.describe('Dashboard', () => {
 
     expect(targetName).toBeTruthy();
 
-    const updateAccepted = page.waitForResponse((response) => {
+    const updateAcceptedResponse = page.waitForResponse((response) => {
       return (
         response.request().method() === 'POST' &&
         /\/api\/v1\/containers\/[^/]+\/update$/.test(response.url()) &&
@@ -116,7 +134,9 @@ test.describe('Dashboard', () => {
     await expect(dialog).toContainText(`Update ${targetName} now?`);
     await dialog.getByRole('button', { name: 'Update', exact: true }).click();
 
-    await updateAccepted;
+    const updateAccepted = await updateAcceptedResponse;
+    const { operationId } = (await updateAccepted.json()) as { operationId?: string };
+    expect(operationId, 'update-accepted response should include an operationId').toBeTruthy();
 
     await expect(page).toHaveURL(/\/$/);
 
@@ -138,5 +158,34 @@ test.describe('Dashboard', () => {
     }
 
     expect(sawInFlightState || buttonCountAfter < buttonCountBefore).toBeTruthy();
+
+    // The assertions above only prove the update *fired* — an operation that
+    // errors out after dispatch still looks green there. Poll the operation
+    // status API (the same signal the dashboard/audit views read) until it
+    // reaches a terminal state, then require the terminal state to be the
+    // success state specifically, so a silently-failing dispatch fails loud.
+    let lastOperation: { phase?: string; status?: string } = {};
+
+    await expect
+      .poll(
+        async () => {
+          const response = await page.request.get(`/api/v1/update-operations/${operationId}`);
+          if (!response.ok()) {
+            return false;
+          }
+          lastOperation = await response.json();
+          return TERMINAL_UPDATE_OPERATION_STATUSES.has(lastOperation.status ?? '');
+        },
+        {
+          message: `update operation ${operationId} should reach a terminal status`,
+          timeout: 60_000,
+        },
+      )
+      .toBe(true);
+
+    expect(
+      lastOperation.status,
+      `update operation ${operationId} finished in a terminal but non-success state (phase=${lastOperation.phase})`,
+    ).toBe('succeeded');
   });
 });
