@@ -7,6 +7,7 @@ import {
   collectTransitiveDependents,
 } from '../../dependencies/dependency-graph.js';
 import * as event from '../../event/index.js';
+import { type ActionPolicyTrigger, selectActionTrigger } from '../../model/action-policy.js';
 import {
   type Container,
   fullName,
@@ -1808,6 +1809,40 @@ class Trigger<
     }
 
     const category = this.getCategory();
+
+    // Update-action triggers (docker/dockercompose) route auto-dispatch
+    // eligibility entirely through the action-policy resolver's hybrid
+    // specificity walk (spec-6.0.1-action-policy.md) instead of the plain
+    // include/exclude check below. This is a deliberate REPLACEMENT, not an
+    // addition, for two reasons:
+    //   1. `onauto` access can be granted by a `dd.action.auto` label alone
+    //      (no `dd.action.include` needed) — the plain include/exclude check
+    //      below has no concept of the auto-label list, so a container
+    //      relying on auto-only access would be rejected here before ever
+    //      reaching the resolver.
+    //   2. The resolver distinguishes 'manual' from 'auto' state (`onauto`
+    //      access via include-only, with no matching auto label, resolves to
+    //      'manual' — eligible for admission but not for unattended
+    //      dispatch). The plain include/exclude check only has a binary
+    //      included/excluded concept and cannot express that distinction, so
+    //      routing through it would let an include-only `onauto` container
+    //      auto-fire, which is exactly the bug this slice closes.
+    // Command triggers are `category === 'action'` but NOT update-action
+    // triggers (`isUpdateActionTrigger()` is false for them — see
+    // `UPDATE_ACTION_TRIGGER_TYPES`), so they fall through to the unchanged
+    // plain include/exclude path below, preserving today's behavior exactly.
+    if (category === 'action' && this.isUpdateActionTrigger()) {
+      if (!this.isActionPolicyDispatchWinner(containerResult)) {
+        return {
+          allowed: false,
+          reason: 'action policy resolver did not select this trigger for automatic dispatch',
+        };
+      }
+      return {
+        allowed: true,
+      };
+    }
+
     const { include: triggerInclude, exclude: triggerExclude } =
       getContainerTriggerFiltersForCategory(containerResult, category);
     const included = this.isTriggerIncluded(containerResult, triggerInclude);
@@ -2365,25 +2400,35 @@ class Trigger<
     );
     const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
       const currentContainer = currentContainersByBusinessId.get(containerName);
+      const stillHasUpdate = !currentContainer || currentContainer.updateAvailable;
 
-      if (!currentContainer) {
-        return [
-          {
-            containerName,
-            bufferedContainer,
-            currentContainer: bufferedContainer,
-          },
-        ];
-      }
+      if (stillHasUpdate) {
+        const evaluatedContainer = currentContainer ?? bufferedContainer;
 
-      if (currentContainer.updateAvailable) {
-        return [
-          {
-            containerName,
-            bufferedContainer,
-            currentContainer,
-          },
-        ];
+        // Re-check the action-policy dispatch winner at flush time, not just
+        // at buffer time (handleContainerReportDigest / shouldHandleDigest-
+        // ContainerReport). A container can sit in the digest buffer across
+        // multiple cron ticks; by flush time another registered action
+        // trigger may now be the resolver's ranked winner for it (e.g. a
+        // more specific trigger registered since buffering, or a config
+        // change). Mirrors the isAutomaticActionDispatchBlocked() re-check
+        // above the same way: buffering does not freeze the world, so
+        // dispatch authorization is re-evaluated at the moment of actual
+        // dispatch. A no-op for notification and command triggers — see
+        // `isActionPolicyDispatchWinner`.
+        if (this.isActionPolicyDispatchWinner(evaluatedContainer)) {
+          return [
+            {
+              containerName,
+              bufferedContainer,
+              currentContainer: evaluatedContainer,
+            },
+          ];
+        }
+
+        this.log.debug(
+          `Evicting ${containerName} from digest buffer at flush (no longer the action-policy dispatch winner)`,
+        );
       }
 
       if (this.digestBuffer.get(containerName) === bufferedContainer) {
@@ -2889,6 +2934,58 @@ class Trigger<
 
   private isUpdateActionTrigger(): boolean {
     return UPDATE_ACTION_TRIGGER_TYPES.has(this.type.toLowerCase());
+  }
+
+  /**
+   * Build the candidate trigger map for the action-policy hybrid specificity
+   * walk (`selectActionTrigger`, spec-6.0.1-action-policy.md). Sourced from
+   * the live registry (`registry.getState().trigger`) so every other
+   * registered docker/dockercompose trigger competes on equal footing, with
+   * `this` unioned in explicitly (self wins any id collision) so the walk
+   * always sees this instance as a candidate even if the registry snapshot
+   * is momentarily stale (e.g. mid-registration) or, in unit tests, not
+   * populated at all — a lone trigger instance must still be able to resolve
+   * itself as the winner of a one-candidate walk.
+   */
+  private getActionPolicyCandidateTriggers(): Record<string, ActionPolicyTrigger> {
+    const registered = registry.getState().trigger as unknown as
+      | Record<string, ActionPolicyTrigger>
+      | undefined;
+    return {
+      ...registered,
+      [this.getId()]: this as unknown as ActionPolicyTrigger,
+    };
+  }
+
+  /**
+   * True when this trigger is the action-policy resolver's winning candidate
+   * for `container`, i.e. `selectActionTrigger(..., {requireAuto: true})`
+   * resolves to this trigger's id. Closes the pre-existing latent fan-out
+   * double-dispatch (spec-6.0.1-action-policy.md): before this gate, every
+   * registered action trigger decided independently whether to fire, so two
+   * compatible triggers could both run the same update. After this gate,
+   * only the resolver's ranked winner fires.
+   *
+   * A no-op (`true`) for triggers outside the update-action category/type
+   * scope (notification triggers, and command triggers — see the call site
+   * in `getMustTriggerDecision`), so callers can invoke this unconditionally
+   * from shared code paths (e.g. the digest flush re-check below) without
+   * re-deriving the category/type guard themselves.
+   */
+  private isActionPolicyDispatchWinner(container: Container): boolean {
+    if (this.getCategory() !== 'action' || !this.isUpdateActionTrigger()) {
+      return true;
+    }
+    const winner = selectActionTrigger(this.getActionPolicyCandidateTriggers(), container, {
+      requireAuto: true,
+    });
+    // `selectActionTrigger`'s hard-stop exclude case returns a result whose
+    // `triggerId` identifies the excluding candidate but whose `state` is
+    // `'blocked'`, not `'auto'` — a triggerId match alone is not sufficient,
+    // the resolved state must also be `'auto'` (requireAuto only skips a
+    // `'manual'` verdict to try the next candidate; it does not turn an
+    // exclude hard-stop into anything other than blocked).
+    return winner?.triggerId === this.getId() && winner.state === 'auto';
   }
 
   /**

@@ -1267,10 +1267,10 @@ test('mustTrigger should fire with include label when auto is oninclude', () => 
   ).toBe(true);
 });
 
-// This slice (6.0.1 #1) makes 'onauto' behave exactly like 'oninclude':
-// closed by default absent an explicit dd.action.include label. The
-// auto-label-only-grants-access semantics (decision 2 of spec-6.0.1) land
-// with the resolver module in a later slice.
+// Absent any include/auto label, 'onauto' is closed by default whether the
+// decision comes from the plain include/exclude check (notification/command
+// triggers) or, since spec-6.0.1 slice 4, the action-policy resolver
+// (update-action triggers) — both agree there is no access at all.
 test('mustTrigger should not fire without include label when auto is onauto', () => {
   trigger.type = 'docker';
   trigger.name = 'update';
@@ -1286,7 +1286,17 @@ test('mustTrigger should not fire without include label when auto is onauto', ()
   ).toBe(false);
 });
 
-test('mustTrigger should fire with include label when auto is onauto', () => {
+// Spec-6.0.1 slice 4: update-action triggers now route auto-dispatch through
+// the action-policy resolver (`getMustTriggerDecision` ->
+// `isActionPolicyDispatchWinner` -> `selectActionTrigger`), which correctly
+// distinguishes 'manual' from 'auto' state. `onauto` + include-only (no
+// `dd.action.auto` label) grants MANUAL access but resolves to 'manual', not
+// 'auto' — per the resolver pseudocode's "onauto -> auto if auto-label
+// matches else manual". Before this slice, the plain include/exclude check
+// had no such distinction and incorrectly let this configuration auto-fire;
+// see the analogous 'mustTrigger should fire with auto label when auto is
+// onauto' test below for the case that actually resolves to 'auto'.
+test('mustTrigger should not auto-dispatch with include label only when auto is onauto', () => {
   trigger.type = 'docker';
   trigger.name = 'update';
   trigger.configuration.auto = 'onauto';
@@ -1294,6 +1304,22 @@ test('mustTrigger should fire with include label when auto is onauto', () => {
   expect(
     trigger.mustTrigger({
       actionTriggerInclude: 'update:minor',
+      updateKind: {
+        kind: 'tag',
+        semverDiff: 'minor',
+      },
+    }),
+  ).toBe(false);
+});
+
+test('mustTrigger should fire with auto label when auto is onauto', () => {
+  trigger.type = 'docker';
+  trigger.name = 'update';
+  trigger.configuration.auto = 'onauto';
+
+  expect(
+    trigger.mustTrigger({
+      actionTriggerAuto: 'update:minor',
       updateKind: {
         kind: 'tag',
         semverDiff: 'minor',
@@ -1419,7 +1445,13 @@ test('mustTrigger should include multiple trigger types by name-only', async () 
 test('mustTrigger should support name-only include with threshold for hybrid triggers', async () => {
   const dockerTrigger = new Trigger();
   dockerTrigger.log = log;
-  dockerTrigger.configuration = { ...configurationValid };
+  // auto: 'oninclude' (not the configurationValid default 'all') so the
+  // include label's threshold is actually load-bearing on the action side:
+  // per the action-policy resolver (spec-6.0.1 slice 4), 'all' mode grants
+  // unconditional open access and ignores any include label's threshold
+  // entirely (`accessOpen` short-circuits `includeMatches`), whereas
+  // 'oninclude' access is exactly the include label's own match/threshold.
+  dockerTrigger.configuration = { ...configurationValid, auto: 'oninclude' };
   dockerTrigger.type = 'docker';
   dockerTrigger.name = 'update';
 
@@ -13269,5 +13301,263 @@ describe('maintenance window auto-apply gate (isAutoUpdateDeferredByMaintenanceW
       String(call[0]).includes('upstream dependency is outside its maintenance window'),
     );
     expect(dependencyDeferredLogs).toHaveLength(0);
+  });
+});
+
+// spec-6.0.1-action-policy.md slice 4: update-action (docker/dockercompose)
+// triggers now gate every automatic dispatch decision point
+// (getMustTriggerDecision, consumed by the simple/batch/digest paths) on
+// `selectActionTrigger(..., {requireAuto: true})`. This closes the
+// pre-existing latent fan-out double-dispatch: before this slice, every
+// registered action trigger decided independently whether to fire, so two
+// compatible triggers could both run the same update. After this slice only
+// the resolver's ranked winner fires.
+describe('action-policy dispatch winner gate (spec-6.0.1 slice 4)', () => {
+  const container = {
+    id: 'c1',
+    name: 'app',
+    watcher: 'test',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'minor' },
+  } as any;
+
+  function makeActionTrigger(name: string, configOverrides: Record<string, unknown> = {}) {
+    const instance = new Trigger() as any;
+    instance.log = log;
+    instance.configuration = { ...configurationValid, mode: 'simple', ...configOverrides };
+    instance.type = 'docker';
+    instance.name = name;
+    instance.trigger = vi.fn().mockResolvedValue(undefined);
+    return instance;
+  }
+
+  function registerTriggers(...triggers: any[]) {
+    const triggerMap: Record<string, unknown> = {};
+    for (const t of triggers) {
+      triggerMap[t.getId()] = t;
+    }
+    mockRegistryGetState.mockReturnValue({
+      watcher: {} as Record<string, unknown>,
+      trigger: triggerMap,
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+  }
+
+  beforeEach(() => {
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+  });
+
+  test('case 5: one authorized of two compatible triggers — the authorized one wins', async () => {
+    // 'oninclude' with no matching include label => not-included => the walk
+    // skips it. It is registered FIRST so the walk visiting it first (before
+    // finding the authorized one) is exercised, not just "the only one".
+    const unauthorized = makeActionTrigger('unauthorized', { auto: 'oninclude' });
+    const authorized = makeActionTrigger('authorized', { auto: 'all' });
+    registerTriggers(unauthorized, authorized);
+
+    const requestUpdateModule = await import('../../updates/request-update.js');
+    const enqueueSpy = vi
+      .spyOn(requestUpdateModule, 'enqueueContainerUpdate')
+      .mockResolvedValue({ container, operationId: 'op-1', trigger: authorized } as any);
+
+    await unauthorized.handleContainerReport({ container, changed: true });
+    await authorized.handleContainerReport({ container, changed: true });
+
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+    expect(enqueueSpy).toHaveBeenCalledWith(
+      container,
+      expect.objectContaining({ trigger: authorized, source: 'automatic' }),
+    );
+  });
+
+  test.each(['simple', 'batch', 'digest'] as const)(
+    'case 6 (%s mode): two auto-authorized triggers — only the ranked winner fires, the loser is never invoked',
+    async (mode) => {
+      // Same specificity tier (both plain 'docker') and both resolve 'auto'
+      // ('all' mode) — the tie is broken by registry insertion order, so
+      // `winner` (registered first) must win over `loser` (registered
+      // second) even though both are independently authorized.
+      const winner = makeActionTrigger('winner', { mode, auto: 'all' });
+      const loser = makeActionTrigger('loser', { mode, auto: 'all' });
+      registerTriggers(winner, loser);
+
+      const { enqueueContainerUpdates: enqueueBatchMock } = await import(
+        '../../updates/request-update.js'
+      );
+      vi.mocked(enqueueBatchMock).mockReset();
+      vi.mocked(enqueueBatchMock).mockResolvedValue({
+        accepted: [{ container, operationId: 'op-1', trigger: winner }],
+        rejected: [],
+      } as any);
+
+      if (mode === 'simple') {
+        const requestUpdateModule = await import('../../updates/request-update.js');
+        const enqueueSingleSpy = vi
+          .spyOn(requestUpdateModule, 'enqueueContainerUpdate')
+          .mockResolvedValue({ container, operationId: 'op-1', trigger: winner } as any);
+
+        await loser.handleContainerReport({ container, changed: true });
+        await winner.handleContainerReport({ container, changed: true });
+
+        expect(enqueueSingleSpy).toHaveBeenCalledTimes(1);
+        expect(enqueueSingleSpy).toHaveBeenCalledWith(
+          container,
+          expect.objectContaining({ trigger: winner, source: 'automatic' }),
+        );
+        return;
+      }
+
+      if (mode === 'batch') {
+        await loser.handleContainerReports([{ container, changed: true }]);
+        await winner.handleContainerReports([{ container, changed: true }]);
+
+        expect(enqueueBatchMock).toHaveBeenCalledTimes(1);
+        expect(enqueueBatchMock).toHaveBeenCalledWith(
+          [container],
+          expect.objectContaining({ trigger: winner, source: 'automatic' }),
+        );
+        return;
+      }
+
+      // digest
+      await loser.handleContainerReportDigest({ container, changed: true });
+      await winner.handleContainerReportDigest({ container, changed: true });
+
+      expect(loser.digestBuffer.size).toBe(0);
+      expect(winner.digestBuffer.size).toBe(1);
+
+      await winner.flushDigestBuffer();
+
+      expect(enqueueBatchMock).toHaveBeenCalledTimes(1);
+      expect(enqueueBatchMock).toHaveBeenCalledWith(
+        [container],
+        expect.objectContaining({ trigger: winner, source: 'automatic' }),
+      );
+    },
+  );
+
+  test('digest flush re-checks the action-policy winner at flush time, not just at buffer time', async () => {
+    // Buffer directly (bypassing the buffer-time check) to simulate a
+    // container that was authorized for `stale` when it was buffered.
+    const stale = makeActionTrigger('stale', { mode: 'digest', auto: 'all' });
+    const nowWinner = makeActionTrigger('nowWinner', { mode: 'digest', auto: 'all' });
+    registerTriggers(stale, nowWinner);
+    stale.digestBuffer.set('c1', container);
+    stale.digestBufferUpdatedAt.set('c1', Date.now());
+
+    const { enqueueContainerUpdates: enqueueBatchMock } = await import(
+      '../../updates/request-update.js'
+    );
+    vi.mocked(enqueueBatchMock).mockReset();
+
+    // By flush time `stale` no longer resolves 'auto' for this container
+    // (switched to 'oninclude' with no matching include label => not
+    // included), so `nowWinner` becomes the resolver's winner instead.
+    stale.configuration.auto = 'oninclude';
+
+    const debugSpy = vi.spyOn(stale.log, 'debug');
+    await stale.flushDigestBuffer();
+
+    expect(enqueueBatchMock).not.toHaveBeenCalled();
+    expect(stale.digestBuffer.size).toBe(0);
+    expect(
+      debugSpy.mock.calls.some((call) =>
+        String(call[0]).includes('no longer the action-policy dispatch winner'),
+      ),
+    ).toBe(true);
+  });
+
+  test('legacy preservation: AUTO=all fires exactly as today for a solo trigger absent from the registry snapshot', async () => {
+    const solo = makeActionTrigger('solo', { auto: 'all' });
+    // Deliberately do NOT call registerTriggers() — registry.getState().trigger
+    // stays the default empty object from the outer beforeEach, mirroring
+    // every pre-existing single-trigger mustTrigger() test in this file. The
+    // self-union in getActionPolicyCandidateTriggers() must still resolve
+    // `solo` as the winner of a one-candidate walk.
+    const requestUpdateModule = await import('../../updates/request-update.js');
+    const enqueueSpy = vi
+      .spyOn(requestUpdateModule, 'enqueueContainerUpdate')
+      .mockResolvedValue({ container, operationId: 'op-1', trigger: solo } as any);
+
+    await solo.handleContainerReport({ container, changed: true });
+
+    expect(enqueueSpy).toHaveBeenCalledWith(
+      container,
+      expect.objectContaining({ trigger: solo, source: 'automatic' }),
+    );
+  });
+
+  test('legacy preservation: oninclude + matching include label still fires', async () => {
+    const solo = makeActionTrigger('solo', { auto: 'oninclude' });
+    registerTriggers(solo);
+    const includedContainer = { ...container, actionTriggerInclude: 'solo:minor' };
+    const requestUpdateModule = await import('../../updates/request-update.js');
+    const enqueueSpy = vi.spyOn(requestUpdateModule, 'enqueueContainerUpdate').mockResolvedValue({
+      container: includedContainer,
+      operationId: 'op-1',
+      trigger: solo,
+    } as any);
+
+    await solo.handleContainerReport({ container: includedContainer, changed: true });
+
+    expect(enqueueSpy).toHaveBeenCalledWith(
+      includedContainer,
+      expect.objectContaining({ trigger: solo, source: 'automatic' }),
+    );
+  });
+
+  test.each(['simple', 'batch', 'digest'] as const)(
+    'case 11 (%s mode): updateMode=manual still suppresses the resolved winner',
+    async (mode) => {
+      mockGetUpdateMode.mockReturnValue('manual');
+      const solo = makeActionTrigger('solo', { mode, auto: 'all' });
+      registerTriggers(solo);
+
+      const { enqueueContainerUpdates: enqueueBatchMock } = await import(
+        '../../updates/request-update.js'
+      );
+      vi.mocked(enqueueBatchMock).mockReset();
+      const requestUpdateModule = await import('../../updates/request-update.js');
+      const enqueueSingleSpy = vi.spyOn(requestUpdateModule, 'enqueueContainerUpdate');
+
+      if (mode === 'simple') {
+        await solo.handleContainerReport({ container, changed: true });
+      } else if (mode === 'batch') {
+        await solo.handleContainerReports([{ container, changed: true }]);
+      } else {
+        await solo.handleContainerReportDigest({ container, changed: true });
+        expect(solo.digestBuffer.size).toBe(0);
+        await solo.flushDigestBuffer();
+      }
+
+      expect(enqueueSingleSpy).not.toHaveBeenCalled();
+      expect(enqueueBatchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  test('notification triggers are unaffected by the action-policy winner gate', async () => {
+    const notifierA = new Trigger() as any;
+    notifierA.log = log;
+    notifierA.configuration = { ...configurationValid, mode: 'simple', auto: true };
+    notifierA.type = 'slack';
+    notifierA.name = 'a';
+    notifierA.trigger = vi.fn().mockResolvedValue(undefined);
+
+    const notifierB = new Trigger() as any;
+    notifierB.log = log;
+    notifierB.configuration = { ...configurationValid, mode: 'simple', auto: true };
+    notifierB.type = 'slack';
+    notifierB.name = 'b';
+    notifierB.trigger = vi.fn().mockResolvedValue(undefined);
+
+    // Deliberately do not register either in registry.getState().trigger —
+    // notification triggers never consult it, so this must not matter.
+    await notifierA.handleContainerReport({ container, changed: true });
+    await notifierB.handleContainerReport({ container, changed: true });
+
+    expect(notifierA.trigger).toHaveBeenCalledTimes(1);
+    expect(notifierB.trigger).toHaveBeenCalledTimes(1);
   });
 });
