@@ -1,0 +1,19 @@
+# Dedicated target file for the QA DockerCompose action trigger.
+#
+# This file is intentionally NOT the fleet's qa-compose.yml and is never
+# started by the QA suite. The trigger-specificity walk matches a
+# DockerCompose trigger to containers by compose-file basename
+# (doesComposeFilePathSuffixMatchConfiguredPath), so pointing
+# DD_ACTION_DOCKERCOMPOSE_QA_FILE at qa-compose.yml made the trigger the
+# "most specific" winner for the entire fixture fleet — and every dashboard
+# update then EROFS-failed against the read-only mount instead of using the
+# working docker trigger. Keeping a distinct basename here means no fleet
+# container ever matches this trigger, so DD_ACTION_DOCKER_LOCAL stays the
+# selected action for the fixtures while the trigger itself remains
+# registered for trigger-list UI coverage.
+services:
+  compose-demo-nginx:
+    image: mirror.gcr.io/library/nginx:1.25.5-alpine
+    container_name: drydock-playwright-compose-demo
+    labels:
+      - dd.watch=false

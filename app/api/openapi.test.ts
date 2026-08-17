@@ -429,7 +429,6 @@ describe('OpenAPI document', () => {
   test('should model non-paginated collection endpoints with CollectionResult envelopes', () => {
     const collectionPaths = [
       '/api/v1/containers/{id}/backups',
-      '/api/v1/containers/{id}/triggers',
       '/api/v1/containers/{id}/update-operations',
       '/api/v1/agents',
       '/api/v1/notifications',
@@ -440,6 +439,31 @@ describe('OpenAPI document', () => {
         openApiDocument.paths[path]?.get?.responses?.['200']?.content?.['application/json']?.schema;
       expect(schema).toEqual({ $ref: '#/components/schemas/CollectionResult' });
     }
+  });
+
+  // GET /containers/{id}/triggers uses a dedicated { data, total } envelope (same shape as
+  // CollectionResult) instead of the generic CollectionResult ref, because its `data` items
+  // need the specific ContainerAssociatedTrigger schema (id/type/name/configuration/agent plus
+  // the action-policy resolvedState — spec-6.0.1-action-policy.md) rather than CollectionResult's
+  // generic-object items.
+  test('should model GET /containers/{id}/triggers with typed ContainerAssociatedTrigger items', () => {
+    const schema = openApiDocument.paths['/api/v1/containers/{id}/triggers']?.get?.responses?.[
+      '200'
+    ]?.content?.['application/json']?.schema as
+      | {
+          type?: string;
+          properties?: { data?: { items?: unknown }; total?: unknown };
+          required?: string[];
+        }
+      | undefined;
+
+    expect(schema?.type).toBe('object');
+    expect(schema?.required).toStrictEqual(['data', 'total']);
+    expect(schema?.properties?.data).toStrictEqual({
+      type: 'array',
+      items: { $ref: '#/components/schemas/ContainerAssociatedTrigger' },
+    });
+    expect(schema?.properties?.total).toStrictEqual({ type: 'integer', minimum: 0 });
   });
 
   test('should compose auth, container, and trigger paths from domain modules', async () => {

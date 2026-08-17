@@ -41,10 +41,26 @@ export interface UpdateBlocker {
   details?: Record<string, unknown>;
 }
 
+/** Mirrors app/model/action-policy.ts's ActionPolicyState (spec-6.0.1-action-policy.md). */
+export type ActionPolicyState = 'blocked' | 'manual' | 'auto';
+export type ActionPolicyBlockedReason = 'excluded' | 'not-included';
+
+/**
+ * Non-blocker reflection of the action-policy resolver's verdict for this container.
+ * Omitted entirely when no compatible action trigger exists at all (no-update-trigger-configured
+ * / agent-mismatch own that messaging). Drives the "Auto" badge — see useUpdateStatus.ts.
+ */
+export interface ActionPolicy {
+  state: ActionPolicyState;
+  triggerId?: string;
+  reason?: ActionPolicyBlockedReason;
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
+  actionPolicy?: ActionPolicy;
 }
 
 /** Shared UI container type used across views, composables, and templates. */

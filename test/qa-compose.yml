@@ -7,7 +7,7 @@ services:
       - "${DD_PLAYWRIGHT_PORT:-3333}:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./qa-compose.yml:/drydock/qa-compose.yml:ro
+      - ./qa-action-demo-compose.yml:/drydock/qa-action-demo-compose.yml
     # Optional gitignored credentials file (Docker Hub / GHCR tokens). See
     # test/.env.qa-creds.example. Compose silently no-ops when the file is
     # absent so CI / fresh checkouts still work without it.
@@ -66,7 +66,12 @@ services:
       - DD_NOTIFICATION_MQTT_QA_HASS_ATTRIBUTES=short
       - DD_NOTIFICATION_MQTT_QA_HASS_FILTER_INCLUDE=name,image_name,result_tag,update_kind_kind
       # --- Docker Compose action (manual only) ---
-      - DD_ACTION_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
+      # Must NOT point at qa-compose.yml: the specificity walk matches
+      # compose triggers by file basename, so the fleet's own compose file
+      # would make this trigger the winner for every fixture container and
+      # dashboard updates would EROFS-fail instead of using the docker
+      # trigger. See qa-action-demo-compose.yml.
+      - DD_ACTION_DOCKERCOMPOSE_QA_FILE=/drydock/qa-action-demo-compose.yml
       - DD_ACTION_DOCKERCOMPOSE_QA_AUTO=false
       # Docker Hub + GHCR creds come from test/.env.qa-creds (gitignored,
       # optional). When that file is absent: Hub pulls hit the anonymous IP

@@ -1,6 +1,8 @@
 import { findDockerTriggerForContainer } from '../api/docker-trigger.js';
 import {
   type ActionPolicyTrigger,
+  findInertAutoLabelContainers,
+  findOnincludeAutoMigrationGaps,
   resolveForTrigger,
   selectActionTrigger,
 } from './action-policy.js';
@@ -599,5 +601,69 @@ describe('selectActionTrigger — equivalence with findDockerTriggerForContainer
     });
     expect(selectActionTrigger(triggers, container)?.trigger).toBe(monitoringComposeTrigger);
     expect(findDockerTriggerForContainer(triggers, container)).toBe(monitoringComposeTrigger);
+  });
+});
+
+describe('findOnincludeAutoMigrationGaps', () => {
+  test('names a container that matches include but has no matching auto label', () => {
+    const trigger = makeTrigger('docker.update', { configuration: { auto: 'oninclude' } });
+    const gapContainer = makeContainer({ id: 'c1', actionTriggerInclude: 'docker.update' });
+    expect(findOnincludeAutoMigrationGaps(trigger, [gapContainer])).toStrictEqual([gapContainer]);
+  });
+
+  test('excludes a container whose include AND auto label both match (no migration gap)', () => {
+    const trigger = makeTrigger('docker.update', { configuration: { auto: 'oninclude' } });
+    const coveredContainer = makeContainer({
+      id: 'c1',
+      actionTriggerInclude: 'docker.update',
+      actionTriggerAuto: 'docker.update',
+    });
+    expect(findOnincludeAutoMigrationGaps(trigger, [coveredContainer])).toStrictEqual([]);
+  });
+
+  test('excludes a container that does not match include at all', () => {
+    const trigger = makeTrigger('docker.update', { configuration: { auto: 'oninclude' } });
+    const unrelatedContainer = makeContainer({ id: 'c1', actionTriggerInclude: 'other.trigger' });
+    expect(findOnincludeAutoMigrationGaps(trigger, [unrelatedContainer])).toStrictEqual([]);
+  });
+
+  test('excludes a container the trigger is not compatible with (agent mismatch)', () => {
+    const trigger = makeTrigger('docker.update', {
+      agent: 'agent-x',
+      configuration: { auto: 'oninclude' },
+    });
+    const wrongAgentContainer = makeContainer({
+      id: 'c1',
+      agent: 'agent-y',
+      actionTriggerInclude: 'docker.update',
+    });
+    expect(findOnincludeAutoMigrationGaps(trigger, [wrongAgentContainer])).toStrictEqual([]);
+  });
+});
+
+describe('findInertAutoLabelContainers', () => {
+  test('names a container with a matching dd.action.auto label', () => {
+    const trigger = makeTrigger('docker.update', { configuration: { auto: 'none' } });
+    const container = makeContainer({ id: 'c1', actionTriggerAuto: 'docker.update' });
+    expect(findInertAutoLabelContainers(trigger, [container])).toStrictEqual([container]);
+  });
+
+  test('excludes a container with no dd.action.auto label at all', () => {
+    const trigger = makeTrigger('docker.update', { configuration: { auto: 'none' } });
+    const container = makeContainer({ id: 'c1' });
+    expect(findInertAutoLabelContainers(trigger, [container])).toStrictEqual([]);
+  });
+
+  test('excludes a container the trigger is not compatible with (agent mismatch)', () => {
+    const trigger = makeTrigger('docker.update', {
+      agent: 'agent-x',
+      configuration: { auto: 'none' },
+    });
+    const container = makeContainer({
+      id: 'c1',
+      agent: 'agent-y',
+      actionTriggerAuto: 'docker.update',
+    });
+    expect(findInertAutoLabelContainers(trigger, [container])).toStrictEqual([]);
   });
 });

@@ -1,4 +1,9 @@
 import type { Request, Response } from 'express';
+import {
+  type ActionPolicyAutoMode,
+  type ActionPolicyTrigger,
+  resolveForTrigger,
+} from '../../model/action-policy.js';
 import type { Container } from '../../model/container.js';
 import Trigger from '../../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
@@ -24,7 +29,9 @@ interface TriggerComponent {
   name: string;
   configuration: {
     threshold?: string;
+    auto?: boolean | ActionPolicyAutoMode;
   };
+  resolvedState?: 'blocked' | 'manual' | 'auto';
 }
 
 interface TriggerRuntimeComponent extends TriggerComponent {
@@ -98,6 +105,36 @@ function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
 }
 
+/**
+ * Attach the action-policy resolver's `resolvedState` to a docker/dockercompose
+ * (update-action) trigger entry in the `GET /containers/:id/triggers` response
+ * (spec-6.0.1-action-policy.md API surface). Notification and command triggers
+ * are left untouched — `resolvedState` has no meaning outside the update-action
+ * candidate set `action-policy.ts` resolves over (`CANDIDATE_TRIGGER_TYPES`).
+ *
+ * Reads `auto` off the live runtime trigger's configuration (falling back to
+ * the already-associated, possibly redacted copy) so the resolver always sees
+ * the real configured auto mode rather than a masked/redacted value.
+ */
+function attachResolvedState(
+  trigger: TriggerComponent,
+  triggerMap: Record<string, TriggerRuntimeComponent>,
+  container: Container,
+): TriggerComponent {
+  if (!UPDATE_TRIGGER_TYPES.has(trigger.type.toLowerCase())) {
+    return trigger;
+  }
+  const triggerId = trigger.id || `${trigger.type}.${trigger.name}`;
+  const runtimeTrigger = triggerMap[triggerId];
+  const policyTrigger: ActionPolicyTrigger = {
+    type: trigger.type,
+    configuration: (runtimeTrigger ?? trigger).configuration,
+    getId: () => triggerId,
+  };
+  const { state } = resolveForTrigger(policyTrigger, container);
+  return { ...trigger, resolvedState: state };
+}
+
 function createGetContainerTriggersHandler({
   storeContainer,
   mapComponentsToList,
@@ -144,7 +181,13 @@ function createGetContainerTriggersHandler({
           getTriggerCategoryForType(trigger.type) === 'action'
             ? [actionIncludedTriggers, actionExcludedTriggers]
             : [notificationIncludedTriggers, notificationExcludedTriggers];
-        return resolveTriggerAssociation(trigger, includedTriggers, excludedTriggers, Trigger);
+        const associated = resolveTriggerAssociation(
+          trigger,
+          includedTriggers,
+          excludedTriggers,
+          Trigger,
+        );
+        return associated ? attachResolvedState(associated, triggerMap, container) : undefined;
       })
       .filter(isDefined);
 

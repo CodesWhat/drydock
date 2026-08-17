@@ -547,6 +547,53 @@ describe('deriveUpdateStatus', () => {
     expect(condition.body).toBe('Maturity policy requires updates to be at least 7 days old.');
   });
 
+  it('surfaces the Auto badge when actionPolicy resolves to auto', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: {
+            ...eligibility(),
+            actionPolicy: { state: 'auto', triggerId: 'docker.update' },
+          },
+        },
+      }),
+    );
+
+    expect(status.actionPolicyBadge).toEqual({
+      state: 'auto',
+      label: 'Auto',
+      tooltip:
+        "Drydock will apply this update automatically once it's detected — no manual click needed.",
+    });
+  });
+
+  it('omits the Auto badge when actionPolicy resolves to manual', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: {
+            ...eligibility(),
+            actionPolicy: { state: 'manual', triggerId: 'docker.update' },
+          },
+        },
+      }),
+    );
+
+    expect(status.actionPolicyBadge).toBeUndefined();
+  });
+
+  it('omits the Auto badge when there is no actionPolicy at all', () => {
+    const status = deriveUpdateStatus(input());
+
+    expect(status.actionPolicyBadge).toBeUndefined();
+  });
+
   it('formats a live lift countdown without dropping the exact date', () => {
     expect(
       formatLiftCountdown('2026-07-18T12:00:00.000Z', Date.parse('2026-07-12T12:00:00.000Z')),

@@ -3217,6 +3217,98 @@ test('init should log manual execution when auto is false', async () => {
   );
 });
 
+describe('init — spec-6.0.1-action-policy.md startup WARNs', () => {
+  test('warns about the oninclude->onauto migration gap for an action trigger', async () => {
+    trigger.type = 'docker';
+    trigger.name = 'update';
+    trigger.configuration.auto = 'oninclude';
+    storeContainer.getContainers.mockReturnValue([
+      { id: 'c1', name: 'web', watcher: 'local', actionTriggerInclude: 'docker.update' },
+    ]);
+    const spyLog = vi.spyOn(log, 'warn');
+
+    await trigger.init();
+
+    expect(spyLog).toHaveBeenCalledWith(expect.stringContaining('AUTO=oninclude'));
+    expect(spyLog).toHaveBeenCalledWith(expect.stringContaining('web'));
+  });
+
+  test('does not warn about the migration gap when every included container also has an auto label', async () => {
+    trigger.type = 'docker';
+    trigger.name = 'update';
+    trigger.configuration.auto = 'oninclude';
+    storeContainer.getContainers.mockReturnValue([
+      {
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        actionTriggerInclude: 'docker.update',
+        actionTriggerAuto: 'docker.update',
+      },
+    ]);
+    const spyLog = vi.spyOn(log, 'warn');
+
+    await trigger.init();
+
+    expect(spyLog).not.toHaveBeenCalledWith(expect.stringContaining('AUTO=oninclude'));
+  });
+
+  test('does not warn about the migration gap for a notification-category trigger', async () => {
+    trigger.type = 'slack';
+    trigger.name = 'notify';
+    trigger.configuration.auto = 'oninclude';
+    storeContainer.getContainers.mockReturnValue([
+      { id: 'c1', name: 'web', watcher: 'local', actionTriggerInclude: 'slack.notify' },
+    ]);
+    const spyLog = vi.spyOn(log, 'warn');
+
+    await trigger.init();
+
+    expect(spyLog).not.toHaveBeenCalledWith(expect.stringContaining('AUTO=oninclude'));
+  });
+
+  test('warns that a dd.action.auto label is inert when AUTO=none', async () => {
+    trigger.type = 'docker';
+    trigger.name = 'update';
+    trigger.configuration.auto = false;
+    storeContainer.getContainers.mockReturnValue([
+      { id: 'c1', name: 'web', watcher: 'local', actionTriggerAuto: 'docker.update' },
+    ]);
+    const spyLog = vi.spyOn(log, 'warn');
+
+    await trigger.init();
+
+    expect(spyLog).toHaveBeenCalledWith(expect.stringContaining('AUTO=none'));
+    expect(spyLog).toHaveBeenCalledWith(expect.stringContaining('web'));
+  });
+
+  test('does not warn about an inert auto label when no container has one', async () => {
+    trigger.type = 'docker';
+    trigger.name = 'update';
+    trigger.configuration.auto = 'none';
+    storeContainer.getContainers.mockReturnValue([{ id: 'c1', name: 'web', watcher: 'local' }]);
+    const spyLog = vi.spyOn(log, 'warn');
+
+    await trigger.init();
+
+    expect(spyLog).not.toHaveBeenCalledWith(expect.stringContaining('AUTO=none'));
+  });
+
+  test('does not warn about an inert auto label for a notification-category trigger', async () => {
+    trigger.type = 'slack';
+    trigger.name = 'notify';
+    trigger.configuration.auto = 'none';
+    storeContainer.getContainers.mockReturnValue([
+      { id: 'c1', name: 'web', watcher: 'local', actionTriggerAuto: 'slack.notify' },
+    ]);
+    const spyLog = vi.spyOn(log, 'warn');
+
+    await trigger.init();
+
+    expect(spyLog).not.toHaveBeenCalledWith(expect.stringContaining('AUTO=none'));
+  });
+});
+
 test('init should register for notification resolution when resolvenotifications is true', async () => {
   const unregisterFn = vi.fn();
   vi.spyOn(event, 'registerContainerReport').mockReturnValue(vi.fn());

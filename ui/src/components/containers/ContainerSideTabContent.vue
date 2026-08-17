@@ -1004,9 +1004,15 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                      :data-trigger-key="getTriggerKey(trigger)"
                      class="flex items-center justify-between gap-2 px-2.5 py-2 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-                  <div class="min-w-0">
-                    <div class="font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
-                    <div v-if="trigger.agent" class="text-2xs dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
+                  <div class="min-w-0 flex items-center gap-1.5"
+                       v-tooltip.top="trigger.resolvedState ? t(`containerComponents.triggers.resolvedStateTooltip.${trigger.resolvedState}`) : undefined">
+                    <div class="min-w-0">
+                      <div class="font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
+                      <div v-if="trigger.agent" class="text-2xs dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
+                    </div>
+                    <AppBadge v-if="trigger.resolvedState === 'auto'" tone="success" size="xs">
+                      {{ t('containerComponents.triggers.autoBadge') }}
+                    </AppBadge>
                   </div>
                   <AppButton size="xs"
                           :disabled="triggerRunInProgress !== null || (updateMode === 'notify' && isManagedUpdateTrigger(trigger))"
