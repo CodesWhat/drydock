@@ -23,7 +23,7 @@ concurrency:
 jobs:
   stryker:
     name: "🧬 Quality: Stryker Advisory (${{ matrix.name }})"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: mutation
     timeout-minutes: 360  # GitHub Actions maximum; mutation testing is expensive and advisory-only
     continue-on-error: true  # advisory by policy; review results, then file focused follow-up work
@@ -271,7 +271,7 @@ jobs:
     name: "🧬 Quality: Aggregate Mutation Score"
     needs: stryker
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: mutation
     continue-on-error: true
     env:

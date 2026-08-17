@@ -51,7 +51,7 @@ env:
 jobs:
   release:
     name: "🚀 Release: Build, Publish, Tag"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120  # Multi-arch build, signing, attestations, release upload, and CI-success polling budget
     environment: release-publish
     env:

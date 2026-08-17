@@ -35,7 +35,7 @@ concurrency:
 jobs:
   grype-deps:
     name: "📦 Security: Grype Dependency Scan (npm lockfiles)"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -89,7 +89,7 @@ jobs:
     # PRs get fast, accurate dependency coverage from grype-deps without
     # paying for a Docker build on every push.
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read

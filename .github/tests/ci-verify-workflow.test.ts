@@ -159,7 +159,7 @@ test('secret scanning gates full history and the tracked working tree', () => {
   expect(job).toMatchObject({
     name: '🔑 Security: Secrets',
     needs: ['security-actions'],
-    'runs-on': 'ubuntu-latest',
+    'runs-on': 'ubuntu-24.04',
     'timeout-minutes': 10,
   });
   expect(getWorkflowStep('secrets', 'Checkout')).toMatchObject({
