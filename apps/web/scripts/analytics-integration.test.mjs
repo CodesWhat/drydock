@@ -24,7 +24,7 @@ function walk(directory) {
 test("PostHog replaces both Vercel telemetry packages at one exact version", () => {
   const packageJson = JSON.parse(source("package.json"));
 
-  assert.equal(packageJson.dependencies["posthog-js"], "1.417.0");
+  assert.equal(packageJson.dependencies["posthog-js"], "1.417.1");
   assert.equal(packageJson.dependencies["@vercel/analytics"], undefined);
   assert.equal(packageJson.dependencies["@vercel/speed-insights"], undefined);
 });
