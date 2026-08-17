@@ -61,14 +61,19 @@ export default defineConfig({
     environment: 'node',
     // Coverage writes can race with clean-up; keep file execution serial.
     fileParallelism: false,
-    // One retry as a guard against a rare, non-deterministic cross-file
-    // isolation flake (a prior file's module mock occasionally leaks into
-    // registry/index.test.ts under serial execution). This only re-runs a
-    // *failing* test once — green runs and hard failures are unaffected, so it
-    // cannot hide a consistently-broken test. The underlying leak is tracked
-    // separately; this keeps the rare flake from reddening an otherwise-clean
-    // build. Keep it at 1 so genuine new flakiness stays visible.
-    retry: 1,
+    // No test-level retry (house standard: root-cause or quarantine, never
+    // blind-retry). The cross-file flake this used to guard against
+    // (store/index.test.ts, registry/index.test.ts) traced to
+    // store/index.test.ts's 'node:fs' mock: it was swapped per test via
+    // `vi.doMock('node:fs', () => createFsMock(overrides))` after
+    // `vi.resetModules()`, so a freshly re-imported store/index.js could in
+    // principle capture a stale/incomplete prior mock instead of the
+    // just-registered one (symptom: renameSync asserted called 0 times — see
+    // PR #417 / #436 history). Fixed by giving 'node:fs' one stable,
+    // hoisted mock object for the whole file and reconfiguring its methods
+    // in place instead of swapping the mocked module's identity — see
+    // store/index.test.ts. Validated with 100+ shuffled/targeted full-suite
+    // runs (with and without coverage) with retry removed and zero flakes.
     exclude: ['**/node_modules/**', '**/dist/**', '**/.stryker-tmp/**'],
     server: {
       deps: {

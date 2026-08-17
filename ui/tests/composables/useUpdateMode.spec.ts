@@ -1,3 +1,5 @@
+import { effectScope } from 'vue';
+
 const mockGetSettings = vi.fn();
 const mockUpdateSettings = vi.fn();
 
@@ -40,6 +42,20 @@ describe('useUpdateMode', () => {
     expect(state.updateMode.value).toBe('auto');
   });
 
+  it('skips refetching once already loaded unless force is requested', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: false, updateMode: 'auto' });
+    const { useUpdateMode } = await import('@/composables/useUpdateMode');
+    const state = useUpdateMode({ autoLoad: false });
+
+    await state.loadUpdateMode();
+    expect(mockGetSettings).toHaveBeenCalledTimes(1);
+
+    await state.loadUpdateMode();
+
+    expect(mockGetSettings).toHaveBeenCalledTimes(1);
+    expect(state.updateMode.value).toBe('auto');
+  });
+
   it('exposes an initial load error without treating the default as loaded', async () => {
     mockGetSettings.mockRejectedValue(new Error('settings unavailable'));
     const { useUpdateMode } = await import('@/composables/useUpdateMode');
@@ -78,6 +94,45 @@ describe('useUpdateMode', () => {
     expect(addDocument).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
     expect(removeWindow).toHaveBeenCalledWith('focus', expect.any(Function));
     expect(removeDocument).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+  });
+
+  it('autoloads by default and registers/tears down revalidation within its effect scope', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: false, updateMode: 'notify' });
+    const addWindow = vi.spyOn(window, 'addEventListener');
+    const removeWindow = vi.spyOn(window, 'removeEventListener');
+    const { useUpdateMode } = await import('@/composables/useUpdateMode');
+
+    const scope = effectScope();
+    let state!: ReturnType<typeof useUpdateMode>;
+    scope.run(() => {
+      state = useUpdateMode();
+    });
+
+    await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalledTimes(1));
+    expect(state.updateMode.value).toBe('notify');
+    expect(addWindow).toHaveBeenCalledWith('focus', expect.any(Function));
+
+    scope.stop();
+
+    expect(removeWindow).toHaveBeenCalledWith('focus', expect.any(Function));
+  });
+
+  it('only registers/removes revalidation listeners for the first consumer in and the last consumer out', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: false, updateMode: 'manual' });
+    const addWindow = vi.spyOn(window, 'addEventListener');
+    const removeWindow = vi.spyOn(window, 'removeEventListener');
+    const { startUpdateModeRevalidation } = await import('@/composables/useUpdateMode');
+
+    const stopFirst = startUpdateModeRevalidation();
+    const stopSecond = startUpdateModeRevalidation();
+
+    expect(addWindow).toHaveBeenCalledTimes(1);
+
+    stopFirst();
+    expect(removeWindow).not.toHaveBeenCalled();
+
+    stopSecond();
+    expect(removeWindow).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a successful save when an older forced load resolves afterward', async () => {
