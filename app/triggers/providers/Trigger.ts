@@ -7,7 +7,12 @@ import {
   collectTransitiveDependents,
 } from '../../dependencies/dependency-graph.js';
 import * as event from '../../event/index.js';
-import { type ActionPolicyTrigger, selectActionTrigger } from '../../model/action-policy.js';
+import {
+  type ActionPolicyTrigger,
+  findInertAutoLabelContainers,
+  findOnincludeAutoMigrationGaps,
+  selectActionTrigger,
+} from '../../model/action-policy.js';
 import {
   type Container,
   fullName,
@@ -2622,6 +2627,61 @@ class Trigger<
   }
 
   /**
+   * spec-6.0.1-action-policy.md decision 1 migration-checklist startup WARN.
+   * Called from `init()` for any action-category trigger configured with the
+   * legacy `AUTO=oninclude` value. There is no persisted record of a
+   * trigger's *previous* `auto` value, so this can't detect an actual
+   * before/after switch — instead it proactively lists, against whatever the
+   * store currently knows about (a first-ever boot with an empty store won't
+   * surface any names until a later restart), every container this trigger
+   * matches on `dd.action.include` but has no matching `dd.action.auto`
+   * label for: exactly the containers that would silently lose automatic
+   * execution if this trigger's `AUTO` value were switched to `onauto`
+   * without also adding an auto label first.
+   */
+  private warnOnincludeMigrationGap(): void {
+    const containers = storeContainer.getContainersRaw() as Container[];
+    const gaps = findOnincludeAutoMigrationGaps(this as unknown as ActionPolicyTrigger, containers);
+    if (gaps.length === 0) {
+      return;
+    }
+    const names = gaps.map((container) => fullName(container)).join(', ');
+    this.log.warn(
+      'AUTO=oninclude grants both manual and automatic execution via dd.action.include. ' +
+        'The following containers match dd.action.include for this trigger but have no ' +
+        `matching dd.action.auto label: ${names}. Switching this trigger to AUTO=onauto ` +
+        'without first adding a dd.action.auto label to each would silently drop their ' +
+        'automatic execution to manual-only. See the trigger AUTO migration checklist in ' +
+        'the drydock triggers configuration docs before switching.',
+    );
+  }
+
+  /**
+   * spec-6.0.1-action-policy.md decision 1 inert-label startup WARN. Called
+   * from `init()` for any action-category trigger configured with
+   * `AUTO=none`. Lists, against whatever the store currently knows about,
+   * every container that carries a `dd.action.auto` label matching this
+   * trigger — under `AUTO=none` that label can never grant automatic
+   * execution (access is capped at manual, fail closed), so the label is
+   * inert for this trigger and almost certainly a misconfiguration.
+   */
+  private warnInertAutoLabel(): void {
+    const containers = storeContainer.getContainersRaw() as Container[];
+    const withAutoLabel = findInertAutoLabelContainers(
+      this as unknown as ActionPolicyTrigger,
+      containers,
+    );
+    if (withAutoLabel.length === 0) {
+      return;
+    }
+    const names = withAutoLabel.map((container) => fullName(container)).join(', ');
+    this.log.warn(
+      'AUTO=none never registers automatic execution. The dd.action.auto label on the ' +
+        `following containers is inert for this trigger and access stays capped at manual: ${names}.`,
+    );
+  }
+
+  /**
    * Return true if must trigger on this container.
    * @param containerResult
    * @returns {boolean}
@@ -2663,6 +2723,9 @@ class Trigger<
           ? 'Registering for auto execution (only containers with explicit include labels)'
           : 'Registering for auto execution (all watched containers)',
       );
+      if (this.getCategory() === 'action' && autoMode === 'oninclude') {
+        this.warnOnincludeMigrationGap();
+      }
       if (normalizedMode === 'simple') {
         this.unregisterContainerReport = event.registerContainerReport(
           async (containerReport) => this.handleContainerReport(containerReport),
@@ -2708,6 +2771,9 @@ class Trigger<
       this.seedRecentApplicationSuppressionFromStore();
     } else {
       this.log.info('Registering for manual execution (lifecycle notifications still active)');
+      if (this.getCategory() === 'action') {
+        this.warnInertAutoLabel();
+      }
     }
 
     // Lifecycle event handlers register regardless of `auto` mode. `auto`

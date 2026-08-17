@@ -171,6 +171,68 @@ export function resolveForTrigger(
   }
 }
 
+/**
+ * Startup migration-checklist WARN support (spec-6.0.1-action-policy.md
+ * decision 1): "Switching oninclude→onauto logs a one-time startup WARN
+ * listing containers that have a matching dd.action.include but no matching
+ * dd.action.auto (a concrete migration checklist)." There is no persisted
+ * record of a trigger's *previous* `auto` value to detect an actual
+ * before/after transition, so this is computed proactively for any trigger
+ * currently configured with `oninclude`: it names every container this
+ * trigger is compatible with that matches `dd.action.include` but has no
+ * matching `dd.action.auto` label — i.e. the containers that would silently
+ * lose automatic execution if the operator switches this trigger's `AUTO`
+ * value from `oninclude` to `onauto` without also adding an auto label.
+ *
+ * Pure (no I/O/logging) so it's independently testable; the caller
+ * (`Trigger.init()`) owns deciding when to call this and how to log it.
+ */
+export function findOnincludeAutoMigrationGaps(
+  trigger: ActionPolicyTrigger,
+  containers: Container[],
+): Container[] {
+  const triggerId = trigger.getId();
+  return containers.filter((container) => {
+    if (!isTriggerCompatibleWithContainer(trigger, container)) {
+      return false;
+    }
+    const includeMatches = matchesTriggerReferenceList(
+      triggerId,
+      container.actionTriggerInclude,
+      container,
+    );
+    if (!includeMatches) {
+      return false;
+    }
+    return !matchesTriggerReferenceList(triggerId, container.actionTriggerAuto, container);
+  });
+}
+
+/**
+ * Startup inert-label WARN support (spec-6.0.1-action-policy.md decision 1):
+ * "AUTO=none unchanged: never registers auto handlers; a dd.action.auto
+ * label under none caps at manual (fail closed) with a WARN." Names every
+ * container this trigger is compatible with that carries a `dd.action.auto`
+ * label matching this trigger — under `AUTO=none` that label can never grant
+ * automatic execution (access is capped at manual), so the label is inert
+ * and almost certainly a misconfiguration worth flagging.
+ *
+ * Pure (no I/O/logging) so it's independently testable; the caller
+ * (`Trigger.init()`) owns deciding when to call this and how to log it.
+ */
+export function findInertAutoLabelContainers(
+  trigger: ActionPolicyTrigger,
+  containers: Container[],
+): Container[] {
+  const triggerId = trigger.getId();
+  return containers.filter((container) => {
+    if (!isTriggerCompatibleWithContainer(trigger, container)) {
+      return false;
+    }
+    return matchesTriggerReferenceList(triggerId, container.actionTriggerAuto, container);
+  });
+}
+
 interface RankedCandidate {
   id: string;
   trigger: ActionPolicyTrigger;

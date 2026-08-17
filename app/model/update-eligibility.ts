@@ -1,7 +1,12 @@
 import { findDockerTriggerForContainer } from '../api/docker-trigger.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
-import { type ActionPolicyTrigger, selectActionTrigger } from './action-policy.js';
+import {
+  type ActionPolicyBlockedReason,
+  type ActionPolicyState,
+  type ActionPolicyTrigger,
+  selectActionTrigger,
+} from './action-policy.js';
 import type { Container } from './container.js';
 import { isRollbackContainer } from './container.js';
 import {
@@ -114,10 +119,28 @@ function makeBlocker(
   return { ...blocker, severity: severityOverride ?? BLOCKER_SEVERITY[blocker.reason] };
 }
 
+/**
+ * Additive, non-blocker reflection of the action-policy resolver's verdict
+ * for this container (spec-6.0.1-action-policy.md API surface). Distinct
+ * from `blockers`: `manual`/`auto` never produce a blocker, and even a
+ * `blocked` verdict here duplicates information already carried by the
+ * `trigger-excluded`/`trigger-not-included` blocker rather than gating
+ * `eligible` on its own. Drives the UI's "Auto" badge. Omitted entirely
+ * when no compatible action trigger exists at all — the
+ * `no-update-trigger-configured`/`agent-mismatch` blockers own that
+ * messaging (see the `no compatible trigger` comment at the call site).
+ */
+export interface UpdateEligibilityActionPolicy {
+  state: ActionPolicyState;
+  triggerId?: string;
+  reason?: ActionPolicyBlockedReason;
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
+  actionPolicy?: UpdateEligibilityActionPolicy;
 }
 
 export interface UpdateEligibilityContext {
@@ -457,6 +480,13 @@ export function computeUpdateEligibility(
       context.triggers as Record<string, TriggerInstanceMethods> | undefined,
     );
 
+  // Non-blocker action-policy reflection (spec-6.0.1-action-policy.md API surface).
+  // Stays `undefined` — and therefore omitted from the response — when no compatible
+  // action trigger exists at all (no-update-trigger-configured / agent-mismatch below
+  // own that messaging); populated in the `else` branch once a compatible trigger is
+  // confirmed to exist.
+  let actionPolicy: UpdateEligibilityActionPolicy | undefined;
+
   if (!typeOnlyTrigger) {
     // 11. no-update-trigger-configured — no docker/dockercompose trigger exists at all.
     // AgentClient._doHandshake() deregisters an agent's components before re-registering,
@@ -568,6 +598,7 @@ export function computeUpdateEligibility(
           },
         }),
       );
+      actionPolicy = { state: 'blocked', reason: 'excluded', triggerId: selection.triggerId };
     } else if (!selection) {
       const triggerInclude = container.actionTriggerInclude;
       blockers.push(
@@ -575,14 +606,24 @@ export function computeUpdateEligibility(
           reason: 'trigger-not-included',
           message: `Trigger not matched by container label dd.action.include='${triggerInclude}'.`,
           actionable: true,
+          // References dd.action.auto alongside dd.action.include/exclude (locked-button
+          // tooltip copy, spec-6.0.1-action-policy.md): under a trigger's AUTO=onauto,
+          // dd.action.auto alone also grants manual access (decision 2) — the only
+          // include/exclude vocabulary this blocker used to name.
           actionHint:
-            'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.',
+            'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container ' +
+            '(or `dd.action.auto`, for a trigger configured with AUTO=onauto).',
           details: {
             triggerInclude,
             triggerId: t.getId?.(),
           },
         }),
       );
+      actionPolicy = { state: 'blocked', reason: 'not-included', triggerId: t.getId?.() };
+    } else {
+      // manual/auto: no blocker, but still worth reflecting so the UI can show the
+      // "Auto" badge (and distinguish it from a manual-only resolution).
+      actionPolicy = { state: selection.state, triggerId: selection.triggerId };
     }
   }
 
@@ -610,5 +651,6 @@ export function computeUpdateEligibility(
     eligible,
     blockers,
     evaluatedAt,
+    ...(actionPolicy ? { actionPolicy } : {}),
   };
 }

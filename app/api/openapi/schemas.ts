@@ -630,6 +630,24 @@ export const openApiSchemas = {
     required: ['reason', 'severity', 'message', 'actionable'],
     additionalProperties: false,
   },
+  ActionPolicy: {
+    type: 'object',
+    description:
+      'Non-blocker reflection of the action-policy resolver verdict for this container ' +
+      '(spec-6.0.1-action-policy.md). Omitted entirely from UpdateEligibility when no ' +
+      'compatible docker/dockercompose action trigger exists at all — the ' +
+      'no-update-trigger-configured/agent-mismatch blockers own that messaging in that case. ' +
+      "A `state` of 'manual' or 'auto' never produces an UpdateEligibility blocker; a " +
+      "`state` of 'blocked' duplicates information already carried by the trigger-excluded/" +
+      'trigger-not-included blocker. Drives the UI "Auto" badge.',
+    properties: {
+      state: { type: 'string', enum: ['blocked', 'manual', 'auto'] },
+      triggerId: { type: 'string' },
+      reason: { type: 'string', enum: ['excluded', 'not-included'] },
+    },
+    required: ['state'],
+    additionalProperties: false,
+  },
   UpdateEligibility: {
     type: 'object',
     properties: {
@@ -639,6 +657,7 @@ export const openApiSchemas = {
         items: { $ref: '#/components/schemas/UpdateBlocker' },
       },
       evaluatedAt: { type: 'string', format: 'date-time' },
+      actionPolicy: { $ref: '#/components/schemas/ActionPolicy' },
     },
     required: ['eligible', 'blockers', 'evaluatedAt'],
     additionalProperties: false,
@@ -685,6 +704,12 @@ export const openApiSchemas = {
         example: 'docker.local',
         description:
           'Comma-separated action trigger ids or names that must not fire for this container. From the dd.action.exclude label. The legacy dd.trigger.exclude fallback was removed in v1.7.0. Applies only to action triggers.',
+      },
+      actionTriggerAuto: {
+        type: 'string',
+        example: 'dockercompose.local:minor',
+        description:
+          "Comma-separated action trigger ids or names, each with an optional :threshold, that may fire AUTOMATICALLY for this container. From the dd.action.auto label. Only consulted by a trigger configured with AUTO=onauto: listing a trigger here grants both manual and automatic access for it (matching dd.action.include's grant of manual access), independent of and with an optionally different threshold than actionTriggerInclude. No effect under AUTO=all/oninclude/none.",
       },
       notificationTriggerInclude: {
         type: 'string',
@@ -1140,6 +1165,33 @@ export const openApiSchemas = {
     },
     required: ['id', 'type', 'name'],
     additionalProperties: true,
+  },
+  ContainerAssociatedTrigger: {
+    type: 'object',
+    description:
+      'A trigger associated with a container (GET /containers/{id}/triggers), same shape as ' +
+      'ComponentItem plus the action-policy resolvedState.',
+    allOf: [
+      { $ref: '#/components/schemas/ComponentItem' },
+      {
+        type: 'object',
+        properties: {
+          resolvedState: {
+            type: 'string',
+            enum: ['blocked', 'manual', 'auto'],
+            description:
+              'Action-policy resolver verdict (spec-6.0.1-action-policy.md) for this trigger ' +
+              'against the requested container. Only present for docker/dockercompose ' +
+              '(update-action) triggers — notification and command triggers have no ' +
+              'automatic-execution policy and never carry this field. A trigger can appear ' +
+              "here with resolvedState 'blocked' (e.g. AUTO=oninclude with no matching " +
+              'dd.action.include label): association in this list only reflects the ' +
+              'include/exclude labels, not the auto-mode-driven default-access rule.',
+          },
+        },
+        additionalProperties: true,
+      },
+    ],
   },
   IconCacheClearResponse: {
     type: 'object',
