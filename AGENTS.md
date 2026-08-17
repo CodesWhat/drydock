@@ -143,6 +143,8 @@ Never use `--no-verify`. If a hook fails, fix the root cause — that's what it'
 
 Pull requests are **squash-only** — the repo has merge commits and rebase merges disabled. Don't rely on `git merge-base --is-ancestor` for anything branch-related in this repo; every merge to `main` mints a new commit that `dev/vX.Y` never had, so ancestry checks fail even on a fully in-sync branch. Compare trees instead (`git diff --quiet <a> <b>`) — see `RELEASING.md` for where this matters.
 
+Applying the `second-opinion` label to a PR triggers `.github/workflows/greptile.yml` (config in `greptile.json`), which summons Greptile as a second-opinion reviewer alongside the standard review.
+
 ## Release & branch model
 
 Feature work and fixes land on `dev/vX.Y` via PR — never target `main` directly (see `CONTRIBUTING.md`). Cutting an actual release (`main` sync, RC/GA tagging, the soak requirement) is a maintainer operation documented in `RELEASING.md`.

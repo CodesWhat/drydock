@@ -22,12 +22,12 @@
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
   <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/maintainability.svg" alt="Maintainability"></a>
-  <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/test_coverage.svg" alt="Code Coverage"></a>
   <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
   <br>
   <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-150K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://github.com/veggiemonk/awesome-docker#container-management"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Docker"></a>
   <a href="https://crowdin.com/project/drydock"><img src="https://badges.crowdin.net/drydock/localized.svg" alt="Crowdin localization"></a>
+  <a href="https://github.com/sponsors/CodesWhat"><img src="https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white" alt="Sponsor"></a>
 </p>
 
 <hr>
@@ -470,9 +470,9 @@ Tylko motywy ogólne; szczegóły poszczególnych wersji zawiera [CHANGELOG.md](
 
 ### Społeczność
 
-Pytania, opinie i wczesne wsparcie: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
+Czat na żywo i wczesne wsparcie: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
 
-Prosimy o zgłaszanie konkretnych błędów i propozycji nowych funkcji w **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)**, aby nie zgubiły się na czacie.
+Błędy i konkretne prośby o nowe funkcje trafiają do **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)**; otwarte pytania, pomysły i prezentacje trafiają do **[GitHub Discussions](https://github.com/CodesWhat/drydock/discussions)**; czat na żywo odbywa się na **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**.
 
 ### Kontrola jakości społeczności
 
@@ -504,8 +504,6 @@ Zobacz plik [portwing's COMPATIBILITY.md](https://github.com/CodesWhat/portwing/
     <img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28">
   </picture>
 </a>
-
-[![Sponsor](https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/CodesWhat)
 
 <a href="#drydock">Powrót do góry</a>
 
