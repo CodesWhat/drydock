@@ -25,7 +25,7 @@ concurrency:
 jobs:
   analysis:
     name: "🛡️ Security: Scorecard Analysis"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       actions: read  # Allow SARIF upload metadata reads on private repos

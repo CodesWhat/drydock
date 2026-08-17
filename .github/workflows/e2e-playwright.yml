@@ -50,7 +50,7 @@ env:
 jobs:
   changes:
     name: "🔎 Changes: Path Filter"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -82,7 +82,7 @@ jobs:
   playwright:
     name: "E2E: Playwright"
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.runtime == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35  # UI build + Docker build + QA stack startup + Playwright pull + UI flow tests
     needs: [changes]
     permissions:
