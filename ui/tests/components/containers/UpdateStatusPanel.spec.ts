@@ -54,6 +54,28 @@ describe('UpdateStatusPanel', () => {
     // No conditions, no dryRunTriggerId, no insightNote — the details block's
     // three-way v-if should stay entirely closed.
     expect(wrapper.find('details').exists()).toBe(false);
+    // No actionPolicy on this eligibility payload — no Auto badge.
+    expect(wrapper.find('[data-test="update-status-action-policy-badge"]').exists()).toBe(false);
+  });
+
+  it('shows the Auto badge when the eligibility payload resolves to auto', () => {
+    const wrapper = mount(UpdateStatusPanel, {
+      props: {
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: {
+            ...eligibility(),
+            actionPolicy: { state: 'auto', triggerId: 'docker.update' },
+          },
+        },
+        mode: 'manual',
+      },
+      global: { stubs: { AppIcon: { template: '<span />' } } },
+    });
+
+    expect(wrapper.get('[data-test="update-status-action-policy-badge"]').text()).toBe('Auto');
   });
 
   it('renders a pinned-tag insight as newer-but-non-actionable with an informational detail row (#498)', () => {
