@@ -199,6 +199,50 @@ test('secret scanning gates full history and the tracked working tree', () => {
   ).toBe(true);
 });
 
+test('a pull request cannot weaken the secrets gate that scans it', () => {
+  const workflow = loadWorkflow();
+  const steps = workflow.jobs?.secrets?.steps ?? [];
+
+  const checkoutIndex = steps.findIndex((step) => step.name === 'Checkout');
+  const restoreIndex = steps.findIndex(
+    (step) => step.name === 'Restore scanner policy from the base ref',
+  );
+  const installGitleaksIndex = steps.findIndex((step) => step.name === 'Install Gitleaks');
+  const scanIndex = steps.findIndex((step) => step.name === 'Scan secrets');
+
+  // The restore must run after the checkout gives it something to restore
+  // into, and strictly before anything that installs or invokes the scanner,
+  // otherwise a PR-modified script or policy file could still be read.
+  expect(checkoutIndex).toBeGreaterThanOrEqual(0);
+  expect(restoreIndex).toBeGreaterThan(checkoutIndex);
+  expect(installGitleaksIndex).toBeGreaterThan(restoreIndex);
+  expect(scanIndex).toBeGreaterThan(restoreIndex);
+
+  const restoreStep = getWorkflowStep('secrets', 'Restore scanner policy from the base ref');
+  expect(restoreStep).toMatchObject({
+    if: "github.event_name == 'pull_request'",
+    env: {
+      BASE_REF: '${{ github.base_ref }}',
+    },
+  });
+
+  // Only pull_request has a meaningful base_ref/head divergence -- push,
+  // schedule, workflow_dispatch, and workflow_call all run trusted content
+  // already, so gating any wider would be a no-op at best.
+  expect(restoreStep?.if).not.toContain('push');
+  expect(restoreStep?.if).not.toContain('schedule');
+  expect(restoreStep?.if).not.toContain('workflow_dispatch');
+
+  const run = restoreStep?.run ?? '';
+  expect(run).toContain('set -euo pipefail');
+  // Depth-1 fetch of just the base branch tip -- cheap, and the restore only
+  // ever needs the current state of those three files on base, not history.
+  expect(run).toContain('git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"');
+  expect(run).toContain(
+    'git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore',
+  );
+});
+
 test('ci-verify can dispatch the complete release-candidate matrix manually', () => {
   const workflow = loadWorkflow();
 
