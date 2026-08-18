@@ -571,11 +571,16 @@ test('current and archived release examples use consistent tags, filenames, date
     assert.match(verification, /The examples on this page use `v1\.5\.2` as a placeholder/u);
     assert.doesNotMatch(verification, /TAG="v1\.5\.0(?:-rc\.9)?"/u);
     assert.equal(verification.match(/^TAG="v1\.5\.2"$/gmu)?.length, 2);
+    // `current` gained a third `gh attestation verify` example (the container
+    // SBOM attestation) alongside the pre-existing image and tarball
+    // provenance examples; the frozen v1.5/v1.6 archives predate that
+    // section and still carry only the original two.
+    const expectedSignerWorkflowMatches = root === 'content/docs/current' ? 3 : 2;
     assert.equal(
       verification.match(
         /--signer-workflow CodesWhat\/drydock\/\.github\/workflows\/release-cut\.yml/gu,
       )?.length,
-      2,
+      expectedSignerWorkflowMatches,
     );
     assert.doesNotMatch(verification, /release workflow on the matching tag/u);
     assert.doesNotMatch(verification, /offline-capable/u);

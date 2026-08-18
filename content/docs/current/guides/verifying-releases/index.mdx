@@ -6,7 +6,7 @@ description: "Verify Drydock container images and release archives with cosign a
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-Every Drydock release is signed with [cosign](https://docs.sigstore.dev/) (keyless, via the Sigstore public-good infrastructure) and ships with [SLSA Build L2 provenance](https://slsa.dev/) attestations generated inside GitHub Actions. You can — and should — verify both before running the image or extracting the archive.
+Every Drydock release is signed with [cosign](https://docs.sigstore.dev/) (keyless, via the Sigstore public-good infrastructure) and ships with [SLSA Build L2 provenance](https://slsa.dev/) attestations generated inside GitHub Actions. The container image additionally carries a signed [SPDX](https://spdx.dev/) SBOM attestation. You can — and should — verify all of these before running the image or extracting the archive.
 
 The examples on this page use `v1.5.2` as a placeholder. Replace it with the tag you're verifying.
 
@@ -82,6 +82,20 @@ gh attestation verify \
 ```
 
 `gh` confirms that the image digest has a valid attestation from `CodesWhat/drydock`'s `release-cut.yml` workflow. This command does not bind the image to the release tag; the tarball provenance check below performs the tag-bound verification.
+
+### Verify the container SBOM attestation
+
+The container image also carries a signed Software Bill of Materials, generated with [Trivy](https://trivy.dev/) in [SPDX 2.3](https://spdx.dev/) format and attested the same way as the provenance above. The image digest carries both attestation types, so pass `--predicate-type` to verify the SBOM specifically:
+
+```bash
+gh attestation verify \
+  oci://ghcr.io/codeswhat/drydock:1.5.2 \
+  --repo CodesWhat/drydock \
+  --signer-workflow CodesWhat/drydock/.github/workflows/release-cut.yml \
+  --predicate-type https://spdx.dev/Document/v2.3
+```
+
+A successful verification confirms the SBOM was produced and signed by the same `release-cut.yml` run that built the image. To inspect the SBOM contents rather than just verify the signature, a human-readable copy is also attached to the GitHub release as `drydock-${TAG}.image.spdx.json` — but that file is a convenience copy, not itself a security control. Trust the attestation verification above (or extract the SBOM from the attestation bundle) before relying on package-list contents for vulnerability triage.
 
 ## Verify the release tarball
 
