@@ -104,6 +104,14 @@ jobs:
         # A PR must not be able to alter the gate that scans it: restore the
         # scanner script and ignore policy from the protected base ref, so
         # policy changes only take effect after they merge.
+        #
+        # pull_request only. push/schedule/workflow_dispatch/workflow_call all
+        # run already-trusted content, where head and base are the same trust
+        # domain. `merge_group` is deliberately NOT covered: no ruleset enables
+        # a merge queue today, so those events never fire, and `github.base_ref`
+        # is empty there anyway. If a merge queue is ever turned on, extend this
+        # to merge_group via `github.event.merge_group.base_ref` — until then a
+        # queue would evaluate the PR's own unmerged scanner policy.
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
