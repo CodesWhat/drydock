@@ -100,6 +100,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Restore scanner policy from the base ref
+        # A PR must not be able to alter the gate that scans it: restore the
+        # scanner script and ignore policy from the protected base ref, so
+        # policy changes only take effect after they merge.
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"
+          git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore
+
       - name: Install Gitleaks
         env:
           GITLEAKS_VERSION: '8.30.1'
