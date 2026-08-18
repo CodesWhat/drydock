@@ -41,25 +41,46 @@
 > [!WARNING]
 > **正在升级到 1.6.0-rc.3 或更高版本？** 更多安全强化措施会立即生效，没有宽限期。未配置身份验证，或已启用但尚未确认匿名身份验证的实例，在升级后会像新安装一样以故障关闭方式运行：容器保持运行，受保护的 API 请求返回 `401`，公共身份验证发现和状态路由仍可访问，`/health` 返回 `503`。SPA 外壳仍可能加载，但无法读取受保护的数据。升级前请设置 `DD_ANONYMOUS_AUTH_CONFIRM=true`，或配置 `DD_AUTH_BASIC_*`/OIDC。会话 cookie 从 `connect.sid` 更名为 `drydock.sid`，因此所有现有用户会被注销一次。HTTP 通知触发器、Hass webhook 和注册表图标获取现在通过受保护的 DNS 查询解析主机名，阻止云元数据和 link-local 目标，并且绝不跟随重定向。仅在确实需要时为特定 `DD_NOTIFICATION_HTTP_*` 触发器设置 `allowmetadata=true`。完整迁移说明请参阅 **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**。
 
-<h2 align="center">📑 内容</h2>
+<h2 align="center">内容</h2>
 
-- [📖 文档](#documentation)
-- [🚀 快速入门](#quick-start)
-- [🆕 最近更新](#recent-updates)
-- [📸 屏幕截图和现场演示](#screenshots)
-- [🤔 为什么是 Drydock](#why-drydock)
-- [✨ 特点](#features)
-- [🔌支持的集成](#supported-integrations)
-- [⚖️功能比较](#feature-comparison)
-- [🔄迁移](#migration)
-- [🗺️路线图](#roadmap)
-- [⭐ 星史](#star-history)
-- [🔧 技术栈](#技术栈)
-- [🤝 社区 QA](#社区质量检查)
+- [文档](#documentation)
+- [快速入门](#quick-start)
+- [最近更新](#recent-updates)
+- [屏幕截图和现场演示](#screenshots)
+- [为什么是 Drydock](#why-drydock)
+- [特点](#features)
+- [支持的集成](#supported-integrations)
+- [功能比较](#feature-comparison)
+- [迁移](#migration)
+- [路线图](#roadmap)
+- [星史](#star-history)
+- [技术栈](#built-with)
+- [社区与支持](#community-support)
+- [CodesWhat 生态系统](#codeswhat-ecosystem)
+
+<h2 align="center" id="documentation">文档</h2>
+
+| 资源           | 链接                                                                                 |
+| ------------ | ---------------------------------------------------------------------------------- |
+| 网站           | [getdrydock.com](https://getdrydock.com/)                           |
+| 现场演示         | [demo.getdrydock.com](https://demo.getdrydock.com) |
+| 文档           | [getdrydock.com/docs](https://getdrydock.com/docs)                 |
+| 配置           | [配置](https://getdrydock.com/docs/configuration)                                    |
+| 快速入门         | [快速入门](https://getdrydock.com/docs/quickstart)                                     |
+| 更新日志         | [`CHANGELOG.md`](CHANGELOG.md)                                                     |
+| 弃用           | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                               |
+| 路线图          | 请参阅上面的[路线图](#roadmap) 部分                                                           |
+| 贡献           | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                               |
+| 行为准则         | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                         |
+| 治理           | [`GOVERNANCE.md`](GOVERNANCE.md)                                                   |
+| 安全保证         | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)                                   |
+| 安全政策         | [`SECURITY.md`](SECURITY.md)                                                       |
+| 问题           | [GitHub 问题](https://github.com/CodesWhat/drydock/issues)                           |
+| 讨论           | [GitHub 讨论](https://github.com/CodesWhat/drydock/discussions) — 欢迎功能请求和想法          |
 
 <hr>
 
-<h2 align="center" id="quick-start">🚀 快速入门</h2>
+<h2 align="center" id="quick-start">快速入门</h2>
 
 **推荐：使用套接字代理**来限制哪些 Docker API 端点 Drydock 可以访问。这可以避免容器完全访问 Docker 套接字。
 
@@ -175,7 +196,7 @@ docker run -d \
 
 <hr>
 
-<h2 align="center" id="recent-updates">🆕 最近更新</h2>
+<h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open><summary><strong>v1.7.0-rc.1 亮点</strong></summary>
 
@@ -250,7 +271,7 @@ docker run -d \
 
 <hr>
 
-<h2 align="center" id="screenshots">📸 屏幕截图和现场演示</h2>
+<h2 align="center" id="screenshots">屏幕截图和现场演示</h2>
 
 <p align="center">
   <img src="docs/assets/drydock-demo.gif" alt="Drydock detecting and applying a container update" width="880">
@@ -281,7 +302,7 @@ docker run -d \
 
 <hr>
 
-<h2 align="center" id="why-drydock">🤔 为什么是Drydock</h2>
+<h2 align="center" id="why-drydock">为什么是Drydock</h2>
 
 容器镜像悄然过时。基础镜像修补 CVE、应用程序剪切版本、标签移动。除非您手动监视每个注册表，否则正在运行的容器会落后，直到出现问题或被利用。
 
@@ -289,7 +310,7 @@ docker run -d \
 
 <hr>
 
-<h2 align="center" id="features">✨ 特点</h2>
+<h2 align="center" id="features">特点</h2>
 
 | |特色|描述 |
 | --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -311,31 +332,31 @@ docker run -d \
 
 <hr>
 
-<h2 align="center" id="supported-integrations">🔌 支持的集成</h2>
+<h2 align="center" id="supported-integrations">支持的集成</h2>
 
-### 📦 注册表 (23)
+### 注册表 (23)
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · 阿里云
 
-### ⚡ 行动 (3)
+### 行动 (3)
 
 Docker·Docker Compose·命令
 
-### 🔔 通知 (17)
+### 通知 (17)
 
 Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
 
-### 🔐 身份验证
+### 身份验证
 
 匿名（通过 `DD_ANONYMOUS_AUTH_CONFIRM=true` 选择加入） · 基本（用户名 + 密码哈希） · OIDC（Authelia、Auth0、Authentik）。默认情况下，任何身份验证流程发生故障时都会拒绝访问（fail-closed）。
 
-### 🥊Update Bouncer
+### Update Bouncer
 
 Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新。包括 Cosign 签名验证和 SBOM 生成（CycloneDX 和 SPDX）。
 
 <hr>
 
-<h2 align="center" id="feature-comparison">⚖️功能比较</h2>
+<h2 align="center" id="feature-comparison">功能比较</h2>
 
 <details><summary><strong>drydock 与其他容器更新工具相比如何？</strong></summary>
 
@@ -385,7 +406,7 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 
 <hr>
 
-<h2 align="center" id="migration">🔄 迁移</h2>
+<h2 align="center" id="migration">迁移</h2>
 
 <details><summary><strong>从 WUD 迁移（Docker 怎么样？）</strong></summary>
 
@@ -395,7 +416,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 <hr>
 
-<h2 align="center" id="roadmap">🗺️路线图</h2>
+<h2 align="center" id="roadmap">路线图</h2>
 
 <details><summary><strong>版本主题及亮点</strong></summary>
 
@@ -418,29 +439,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 <hr>
 
-<h2 align="center" id="documentation">📖 文档</h2>
-
-| 资源           | 链接                                                                                 |
-| ------------ | ---------------------------------------------------------------------------------- |
-| 网站           | [getdrydock.com](https://getdrydock.com/)                           |
-| 现场演示         | [demo.getdrydock.com](https://demo.getdrydock.com) |
-| 文档           | [getdrydock.com/docs](https://getdrydock.com/docs)                 |
-| 配置           | [配置](https://getdrydock.com/docs/configuration)                                    |
-| 快速入门         | [快速入门](https://getdrydock.com/docs/quickstart)                                     |
-| 更新日志         | [`CHANGELOG.md`](CHANGELOG.md)                                                     |
-| 弃用           | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                               |
-| 路线图          | 请参阅上面的[路线图](#roadmap) 部分                                                           |
-| 贡献           | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                               |
-| 行为准则         | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                         |
-| 治理           | [`GOVERNANCE.md`](GOVERNANCE.md)                                                   |
-| 安全保证         | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)                                   |
-| 安全政策         | [`SECURITY.md`](SECURITY.md)                                                       |
-| 问题           | [GitHub 问题](https://github.com/CodesWhat/drydock/issues)                           |
-| 讨论           | [GitHub 讨论](https://github.com/CodesWhat/drydock/discussions) — 欢迎功能请求和想法          |
-
-<hr>
-
-<a id="star-history"></a>
+<h2 align="center" id="star-history">星史</h2>
 
 <div align="center"><a href="https://github.com/CodesWhat/drydock/stargazers">
     <picture>
@@ -454,7 +453,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 <div align="center">
 
-### 技术栈
+<h2 align="center" id="built-with">技术栈</h2>
 
 [![TypeScript](https://img.shields.io/badge/TypeScript_6.0-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
 [![Vue 3](https://img.shields.io/badge/Vue_3-42b883?logo=vuedotjs&logoColor=fff)](https://vuejs.org/)
@@ -469,7 +468,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 [![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196?logo=conventionalcommits&logoColor=fff)](https://www.conventionalcommits.org/)
 [![Keep a Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-E05735)](https://keepachangelog.com/)
 
-### 社区
+<h2 align="center" id="community-support">社区与支持</h2>
 
 实时聊天和早期支持：**[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
 
@@ -481,7 +480,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 [@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
 
-### CodesWhat 生态系统的一部分
+<h2 align="center" id="codeswhat-ecosystem">CodesWhat 生态系统的一部分</h2>
 
 <table>
   <tbody><tr><th>工具</th><th>角色</th></tr>

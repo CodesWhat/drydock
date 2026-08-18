@@ -63,38 +63,38 @@ const localizedSurfaceFragments: Record<
 > = {
   'README.de.md': {
     featureTableHeader: '| | Funktion | Beschreibung |',
-    builtWithHeading: '### Gebaut mit',
+    builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
     releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.1</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
-    builtWithHeading: '### Construido con',
+    builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
     releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.1</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
-    builtWithHeading: '### Construit avec',
+    builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
     releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.1</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
-    builtWithHeading: '### Zbudowany z',
+    builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
       '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.1</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
-    builtWithHeading: '### Construído com',
+    builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
     releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.1</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
-    builtWithHeading: '### 技术栈',
+    builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
     releaseHeading: '<summary><strong>v1.7.0-rc.1 亮点</strong></summary>',
   },
