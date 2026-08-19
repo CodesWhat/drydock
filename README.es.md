@@ -204,7 +204,6 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 - **Experiencia del operador**: PWA instalable, enlaces de puertos con nombre, tiempo de actividad del contenedor en vivo, atajos de teclado y detección con espera para contenedores recién descubiertos.
 - **Migración incompatible de disparadores**: `DD_TRIGGER_*` ahora impide el arranque y las etiquetas antiguas `dd.trigger.include` / `dd.trigger.exclude` ya no enrutan trabajo; use `DD_ACTION_*`, `DD_NOTIFICATION_*` y sus etiquetas con ámbito.
 - **Refuerzo de seguridad y ciclo de vida**: la autenticación, las solicitudes de agentes, los registros, WebSockets y las solicitudes a registros tienen límites explícitos; se ocultan valores sensibles de comandos y hooks; el descubrimiento de Home Assistant se resincroniza después del arranque y retira trabajo de proveedores sin publicaciones obsoletas. ([#708](https://github.com/CodesWhat/drydock/issues/708))
-- **Historial de estrellas propio**: el proveedor de mismo origen `/api/star-history` sirve gráficos de Drydock, Sockguard y Portwing mediante una lista permitida, sin depender de un rastreador externo.
 
 Notas completas en [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14).
 
@@ -441,11 +440,11 @@ Solo temas generales; consulte [CHANGELOG.md](CHANGELOG.md) para conocer el deta
 
 <h2 align="center" id="star-history">Historia de las estrellas</h2>
 
-<div align="center"><a href="https://github.com/CodesWhat/drydock/stargazers">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
-      <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
-    </picture>
+<p align="center">Tendencia de crecimiento vía Warpchart:</p>
+
+<div align="center">
+  <a href="https://warpchart.dev/r/CodesWhat/drydock">
+    <img alt="Warpchart Growth Chart" src="https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock" />
   </a>
 </div>
 

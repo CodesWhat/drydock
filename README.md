@@ -210,7 +210,6 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 - **Operator UX** — installable PWA support, clickable named port links, live container uptime, keyboard shortcuts, and debounced first-seen container discovery.
 - **Breaking trigger migration** — `DD_TRIGGER_*` now fails startup and legacy `dd.trigger.include` / `dd.trigger.exclude` labels no longer route work; use `DD_ACTION_*`, `DD_NOTIFICATION_*`, and their scoped labels.
 - **Security and lifecycle hardening** — bounded authentication, agent, log, WebSocket, and registry operations; sensitive command and hook values are redacted; Home Assistant discovery resynchronizes after startup and retires provider work without stale publishes. ([#708](https://github.com/CodesWhat/drydock/issues/708))
-- **First-party star history** — the same-origin `/api/star-history` provider now serves allowlisted Drydock, Sockguard, and Portwing charts without a third-party tracker dependency.
 
 Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14).
 
@@ -455,12 +454,11 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 <h2 align="center" id="star-history">Star History</h2>
 
+<p align="center">Growth trend via Warpchart:</p>
+
 <div align="center">
-  <a href="https://github.com/CodesWhat/drydock/stargazers">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
-      <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
-    </picture>
+  <a href="https://warpchart.dev/r/CodesWhat/drydock">
+    <img alt="Warpchart Growth Chart" src="https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock" />
   </a>
 </div>
 

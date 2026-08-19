@@ -181,9 +181,8 @@ const requiredFragments = [
   '[`GOVERNANCE.md`](GOVERNANCE.md)',
   '[`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)',
   '[`SECURITY.md`](SECURITY.md)',
-  'https://github.com/CodesWhat/drydock/stargazers',
-  'https://getdrydock.com/api/star-history?theme=dark',
-  'https://getdrydock.com/api/star-history?theme=light',
+  'https://warpchart.dev/r/CodesWhat/drydock',
+  'https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock',
 ];
 
 describe.each(translatedReadmes)('%s', (readme) => {
@@ -253,11 +252,11 @@ describe.each(translatedReadmes)('%s', (readme) => {
 describe.each(allReadmes)('%s star history', (readme) => {
   const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
 
-  test('uses only the canonical first-party tracker', () => {
-    expect(content).toContain('https://getdrydock.com/api/star-history?theme=dark');
-    expect(content).toContain('https://getdrydock.com/api/star-history?theme=light');
+  test('uses only the Warpchart growth chart', () => {
+    expect(content).toContain('https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock');
     expect(content).not.toContain('api.star-history.com');
     expect(content).not.toContain('star-history.com/#');
+    expect(content).not.toContain('getdrydock.com/api/star-history');
   });
 });
 
