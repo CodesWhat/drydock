@@ -24,7 +24,6 @@ export const ANALYTICS_CTA_TUPLES = [
   ["docs", "docs_root", "footer"],
   ["docs", "github_repository", "footer"],
   ["docs", "community_discord", "footer"],
-  ["marketing", "github_repository", "star_history"],
 ] as const;
 
 const ALLOWED_CTA_TUPLES = new Set(ANALYTICS_CTA_TUPLES.map((tuple) => tuple.join("\0")));
@@ -56,13 +55,7 @@ export type AnalyticsCtaId =
   | "install_quick"
   | "install_secure"
   | "docs_security";
-export type AnalyticsCtaPlacement =
-  | "header"
-  | "hero"
-  | "comparison"
-  | "get_started"
-  | "footer"
-  | "star_history";
+export type AnalyticsCtaPlacement = "header" | "hero" | "comparison" | "get_started" | "footer";
 
 type CaptureProperties = Record<string, unknown>;
 

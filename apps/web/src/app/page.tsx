@@ -9,7 +9,6 @@ import { Hero } from "@/components/hero";
 import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Roadmap } from "@/components/roadmap";
-import { StarHistory } from "@/components/star-history";
 import { BASE_URL, GITHUB_RELEASES_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
 import { faqItems } from "./data/faq";
 
@@ -93,9 +92,6 @@ export default function Home() {
         <Demo />
         <div className="reveal" suppressHydrationWarning>
           <Roadmap />
-        </div>
-        <div className="reveal" suppressHydrationWarning>
-          <StarHistory />
         </div>
         <div className="reveal" suppressHydrationWarning>
           <CompareSection />

@@ -41,7 +41,6 @@ const APPROVED_CTA_TUPLES = [
   ["docs", "docs_root", "footer"],
   ["docs", "github_repository", "footer"],
   ["docs", "community_discord", "footer"],
-  ["marketing", "github_repository", "star_history"],
 ];
 
 test("analytics requires the complete exact public environment contract", () => {
