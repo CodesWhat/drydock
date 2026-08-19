@@ -9,6 +9,14 @@ runtime:
   - 'healthcheck.c'
   - 'package.json'
   - 'package-lock.json'
+  # The Grype gate reads this, so a change to it has to re-run the scan that
+  # consumes it. Without this line a PR that only edits ignore rules skips
+  # `grype-image` entirely and merges without CI ever exercising the new
+  # rules — which is exactly what happened on the CVE-2026-14456 change.
+  # The cost is that a .grype.yaml edit also triggers the e2e suites sharing
+  # this filter. That's accepted: these edits are rare, and the alternative
+  # is a separate filter output for one file.
+  - '.grype.yaml'
   - '.github/filters/runtime.yml'
   - '.github/workflows/ci-verify.yml'
   - '.github/workflows/e2e-playwright.yml'
