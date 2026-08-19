@@ -907,7 +907,18 @@ export class AgentClient {
   ): Promise<ContainerReport[]> {
     const containerReports: ContainerReport[] = [];
     for (const container of containers) {
-      containerReports.push(await this.processAuthoritativeContainer(container));
+      try {
+        containerReports.push(await this.processAuthoritativeContainer(container));
+      } catch (error: unknown) {
+        this.log.error(
+          `Failed to process authoritative container ${sanitizeLogParam(container.id)} (${sanitizeLogParam(getErrorMessage(error))})`,
+        );
+      }
+    }
+    if (containers.length > 0 && containerReports.length === 0) {
+      this.log.warn(
+        `All ${containers.length} authoritative container(s) failed to process; no containers from this batch reached the store`,
+      );
     }
     await emitContainerReports(containerReports);
     return containerReports;
