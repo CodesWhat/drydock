@@ -119,7 +119,8 @@ services:
     restart: unless-stopped
 ```
 
-<details><summary>Alternativa: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> proxy de socket</summary>
+<details>
+<summary>Alternativa: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> proxy de socket</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) es un filtro de socket Docker de denegación predeterminado del mismo ecosistema CodesWhat, con un ajuste preestablecido creado para drydock:
 
@@ -158,7 +159,8 @@ Consulte el ajuste preestablecido [`app/configs/portwing.yaml`](https://github.c
 
 </details>
 
-<details><summary>Alternativa: inicio rápido con montaje directo en enchufe</summary>
+<details>
+<summary>Alternativa: inicio rápido con montaje directo en enchufe</summary>
 
 ```bash
 docker run -d \
@@ -198,7 +200,8 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
 
-<details open><summary><strong>Aspectos destacados de v1.7.0-rc.1</strong></summary>
+<details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.1</strong></summary>
 
 - **Actualizaciones conscientes de dependencias**: las etiquetas o los metadatos de Compose crean un grafo de dependencias validado, muestran las oleadas exactas en la vista previa y ejecutan actualizaciones o reinicios de dependientes en orden determinista, con manejo seguro de ciclos, fallos y vistas previas obsoletas. ([Discusión #219](https://github.com/CodesWhat/drydock/discussions/219))
 - **Experiencia del operador**: PWA instalable, enlaces de puertos con nombre, tiempo de actividad del contenedor en vivo, atajos de teclado y detección con espera para contenedores recién descubiertos.
@@ -209,7 +212,8 @@ Notas completas en [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14).
 
 </details>
 
-<details><summary><strong>Aspectos destacados de v1.6.0</strong></summary>
+<details>
+<summary><strong>Aspectos destacados de v1.6.0</strong></summary>
 
 - **El transporte de agentes/Edge de Portwing madura**: comprobaciones y actualizaciones nativas de Docker controladas por el controlador para Portwing 0.9.0+, transmisión continua de registros Edge, firma de solicitudes Ed25519 (v2) y nombres visibles propiedad del agente vinculados a su clave. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637))
 - **Política de actualización declarativa con estabilización de madurez**: precedencia `dd.updatePolicy.*` de tres niveles, cuenta atrás en vivo hasta liberar un candidato retenido y una notificación `maturity-cleared` dedicada. ([Discusión #307](https://github.com/CodesWhat/drydock/discussions/307), [Discusión #406](https://github.com/CodesWhat/drydock/discussions/406))
@@ -222,7 +226,8 @@ Notas completas en [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11).
 
 </details>
 
-<details><summary><strong>Aspectos destacados de v1.6.0-rc.13</strong></summary>
+<details>
+<summary><strong>Aspectos destacados de v1.6.0-rc.13</strong></summary>
 
 - **La comparación de digest parte de candidatos del mismo repositorio**: `getOrderedRepoDigests` filtra `RepoDigests` por el repositorio de la imagen en vez de confiar en el primer elemento; un ancla obsoleta ya guardada se repara sola. ([#670](https://github.com/CodesWhat/drydock/pull/670))
 - **`nanoid` fijado en 3.3.18** en todos los espacios de trabajo para CVE-2026-67213 y, en e2e, CVE-2026-67214. ([#673](https://github.com/CodesWhat/drydock/pull/673))
@@ -232,7 +237,8 @@ Notas completas en [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11).
 
 </details>
 
-<details><summary><strong>Aspectos destacados de v1.6.0-rc.12</strong></summary>
+<details>
+<summary><strong>Aspectos destacados de v1.6.0-rc.12</strong></summary>
 
 - **Renovación de dependencias de seguridad**: `brace-expansion` 5.0.9, `ip-address` 10.3.1 y `fast-uri` 4.1.2 corrigen sus CVE asociadas. ([#659](https://github.com/CodesWhat/drydock/pull/659))
 - **Reloj de madurez**: el distintivo hot/mature resuelve primero `updatePolicy.maturityMinAgeDays` por contenedor y luego el umbral global, igual que el bloqueo; los fallos de fecha de publicación se registran con `warn` en vez de `debug`. ([#604](https://github.com/CodesWhat/drydock/issues/604))
@@ -242,7 +248,8 @@ Notas completas en [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11).
 
 </details>
 
-<details><summary><strong>Aspectos destacados de v1.6.0-rc.11</strong></summary>
+<details>
+<summary><strong>Aspectos destacados de v1.6.0-rc.11</strong></summary>
 
 - **Transporte Portwing**: las marcas exactas `transport=docker-api`, `execution=controller`, `events=portwing` de Portwing 0.9.0 enrutan comprobaciones nativas, actualizaciones individuales/por lotes, acciones de ciclo de vida, vistas previas y restauraciones mediante Standard HTTP autenticado o Edge. Portwing sigue siendo la fuente de eventos y el inventario sin procesar no puede borrar resultados del controlador. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
 - **Notificaciones**: plantillas de cuerpo y título por regla/por proveedor con vista previa en vivo, además de categorías de campana en la aplicación respaldadas por auditorías y umbrales de gravedad de actualización.
@@ -256,7 +263,8 @@ Guía completa de migración en [DEPRECATIONS.md](./DEPRECATIONS.md).
 
 </details>
 
-<details><summary><strong>Aspectos destacados de v1.5.2</strong></summary>
+<details>
+<summary><strong>Aspectos destacados de v1.5.2</strong></summary>
 
 - **Política de actualización segura para la recreación**: las puertas de madurez, las etiquetas/resúmenes omitidos y las posposiciones ahora sobreviven a la recreación de contenedores para cargas de trabajo de agentes locales y remotos.
 - **Confiabilidad de etiquetas fijadas**: las etiquetas completamente fijadas detectan reconstrucciones de resúmenes de la misma etiqueta nuevamente, mientras que la interfaz de usuario puede mostrar una etiqueta de la misma familia más nueva y no procesable sin cambiar el comportamiento de actualización o activación.
@@ -357,7 +365,8 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 
 <h2 align="center" id="feature-comparison">Comparación de funciones</h2>
 
-<details><summary><strong>¿Cómo se compara drydock con otras herramientas de actualización de contenedores?</strong></summary>
+<details>
+<summary><strong>¿Cómo se compara drydock con otras herramientas de actualización de contenedores?</strong></summary>
 
 > ✅ = compatible &nbsp; ❌ = no compatible &nbsp; ⚠️ = parcial/limitado &nbsp; † = archivado, ya no se mantiene
 
@@ -407,7 +416,8 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 
 <h2 align="center" id="migration">Migración</h2>
 
-<details><summary><strong>Migrando desde WUD (¿Qué pasa Docker?)</strong></summary>
+<details>
+<summary><strong>Migrando desde WUD (¿Qué pasa Docker?)</strong></summary>
 
 Drydock v1.6 ya no carga variables de entorno `WUD_*` o etiquetas `wud.*` en tiempo de ejecución. Vuelva a escribirlos antes de iniciar el servicio actualizado; El estado persistente aún migra automáticamente. Utilice `docker exec -it drydock node dist/index.js config migrate --dry-run` para obtener una vista previa y luego `docker exec -it drydock node dist/index.js config migrate --file .env --file compose.yaml` para reescribir la configuración con los nombres `DD_*` y `dd.*`.
 
@@ -417,7 +427,8 @@ Drydock v1.6 ya no carga variables de entorno `WUD_*` o etiquetas `wud.*` en tie
 
 <h2 align="center" id="roadmap">Hoja de ruta</h2>
 
-<details><summary><strong>Temas y aspectos destacados de la versión</strong></summary>
+<details>
+<summary><strong>Temas y aspectos destacados de la versión</strong></summary>
 
 Esta dirección cubre al menos los próximos doce meses, hasta agosto de 2027.
 Solo temas generales; consulte [CHANGELOG.md](CHANGELOG.md) para conocer el detalle de cada versión.
