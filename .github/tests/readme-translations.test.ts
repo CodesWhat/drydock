@@ -254,8 +254,11 @@ describe.each(allReadmes)('%s star history', (readme) => {
 
   test('uses only the Warpchart growth chart', () => {
     expect(content).toContain('https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock');
-    expect(content).not.toContain('api.star-history.com');
-    expect(content).not.toContain('star-history.com/#');
+    // Match the retired hosts, not particular URL shapes. `star-history.com/#`
+    // only caught the embed form, so a bare https://star-history.com/CodesWhat/
+    // drydock link would have walked straight back in. The host assertion also
+    // subsumes api.star-history.com.
+    expect(content).not.toContain('star-history.com');
     expect(content).not.toContain('getdrydock.com/api/star-history');
   });
 });
