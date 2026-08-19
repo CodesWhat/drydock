@@ -91,8 +91,10 @@ jobs:
         # branch fine, so translations landed on l10n_crowdin and stopped there.
         # The setting stays false (a workflow that can approve its own PRs
         # defeats the two-approver rule); the fix is a dedicated identity.
-        # An App installation token is minted per run and never expires, unlike
-        # a PAT that would silently re-break this sync a year from now.
+        # Chosen over a PAT for lifetime, not permissions. The App's stored
+        # credentials (id + private key) don't expire, so this can't silently
+        # re-break a year from now the way a PAT would. The token they mint is
+        # deliberately short-lived: fresh per run, dead in an hour.
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
         with:
           app-id: ${{ secrets.CROWDIN_APP_ID }}
