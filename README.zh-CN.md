@@ -204,7 +204,6 @@ docker run -d \
 - **运维体验** — 可安装的 PWA、可点击的命名端口链接、实时容器运行时间、键盘快捷键，以及对新发现容器的防抖检测。
 - **不兼容的触发器迁移** — `DD_TRIGGER_*` 现在会阻止启动，旧的 `dd.trigger.include` / `dd.trigger.exclude` 标签也不再分派任务；请改用 `DD_ACTION_*`、`DD_NOTIFICATION_*` 及其作用域标签。
 - **安全与生命周期强化** — 身份验证、代理请求、日志、WebSocket 和镜像仓库请求均有明确的资源限制；敏感的命令和钩子值会被遮盖；Home Assistant 发现会在启动后重新同步，并在停用提供程序任务时避免发布过期数据。([#708](https://github.com/CodesWhat/drydock/issues/708))
-- **第一方 Star History** — 同源 `/api/star-history` 提供程序仅为允许的 Drydock、Sockguard 和 Portwing 仓库生成图表，不再依赖第三方跟踪服务。
 
 完整发行说明请参阅 [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14)。
 
@@ -441,11 +440,11 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 <h2 align="center" id="star-history">星史</h2>
 
-<div align="center"><a href="https://github.com/CodesWhat/drydock/stargazers">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
-      <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
-    </picture>
+<p align="center">通过 Warpchart 查看增长趋势：</p>
+
+<div align="center">
+  <a href="https://warpchart.dev/r/CodesWhat/drydock">
+    <img alt="Warpchart Growth Chart" src="https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock" />
   </a>
 </div>
 
