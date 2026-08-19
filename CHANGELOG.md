@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Scoped the Grype image gate around CVE-2026-14456 (openssl/libssl3/libcrypto3, Alpine 3.24) pending an upstream fix.** `ci-verify.yml`'s `grype-image` job started failing `--fail-on high` after this CVE (CWE-770, unbounded memory growth in OpenSSL's QUIC *server* incoming-channel-queue handling) entered the Grype DB; the packages are pinned at `3.5.7-r0` and no Alpine branch — 3.24-stable or edge — has repackaged the upstream 3.5.8 fix yet. Drydock links these libs only as a TLS client (curl, the `openssl` CLI) for registry queries and the healthcheck, never as a QUIC/HTTP3 server, so the vulnerable path isn't reachable; OpenSSL's own advisory rates the flaw Low, versus the generic CVSS 7.5 the gate scores. Added a CVE-scoped (not location-scoped) `.grype.yaml` ignore entry for exactly this CVE on these three package names, so a different HIGH/CRITICAL finding in openssl still fails the gate. Two removal triggers: bump the Dockerfile's pinned `openssl=` version once Alpine ships >= 3.5.8 for 3.24, or 2026-11-17 (90 days out) regardless.
 
+### Documentation
+
+- **Retroactively documented the `WUD_AGENT_SECRET`/`WUD_AGENT_SECRET_FILE` removal.** v1.6.0-rc.1 silently dropped agent mode's `DD_AGENT_SECRET ?? WUD_AGENT_SECRET` fallback (and the `_FILE` equivalent) with no deprecation period, and it was never recorded in the v1.6.0 changelog entry or `DEPRECATIONS.md` at the time. An agent configured with only the legacy `WUD_AGENT_SECRET` went from authenticating to a startup failure whose message doesn't name the variable actually set. See the new `DEPRECATIONS.md` entry.
+
 ## [1.7.0-rc.1] — 2026-08-14
 
 ### Added
