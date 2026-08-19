@@ -183,7 +183,7 @@ export function Footer({ maxWidthClassName = "max-w-6xl" }: { maxWidthClassName?
                 src={SITE_CONFIG.logo}
                 alt=""
                 width={30}
-                height={30}
+                height={20}
                 className={SITE_CONFIG.logoInvertOnDark ? "dark:invert" : undefined}
               />
               <span className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
