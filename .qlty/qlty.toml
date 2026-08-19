@@ -130,3 +130,22 @@ set.ignored = true
 [[triage]]
 match.rules = ["osv-scanner:CVE-2026-53550"]
 set.ignored = true
+
+# checkov CKV_GHA_7 asserts "workflow_dispatch inputs MUST be empty" and fires on
+# the mere presence of any input — confirmed against a controlled probe, where all
+# four of required/optional x with/without-default trip it identically. Its premise
+# is that build output must not be influenced by user parameters, which does not
+# hold for a manually dispatched pipeline: release-cut.yml takes release_tag,
+# candidate_tag, candidate_digest and soak_override_reason, and cutting a release
+# is exactly the operation those are meant to steer. Dispatching requires write
+# access, so the "user" here is a maintainer, not an anonymous caller.
+#
+# Suppressed globally rather than per-file because qlty triage matches on rule id.
+# The real guard on dispatch inputs is that each consuming workflow validates them
+# (release-cut.yml asserts the tag base matches package.json and that the tag does
+# not already exist; the i18n purge job requires an exact confirm string and bounds
+# what it will touch). Adding a dispatch input is not made safe by this entry —
+# validate it in the workflow.
+[[triage]]
+match.rules = ["checkov:CKV_GHA_7"]
+set.ignored = true
