@@ -63,11 +63,47 @@ run_coverage() {
 	local workspace=$1
 	local log_file="${ROOT_DIR}/.coverage-logs/${workspace}.log"
 	local gap_file="${ROOT_DIR}/.coverage-gaps.${workspace}.json"
+	local json_file="${ROOT_DIR}/.coverage-logs/${workspace}.json"
 
-	if (cd "${workspace}" && npx vitest run --coverage --reporter=dot >"${log_file}" 2>&1); then
-		rm -f "${gap_file}"
+	if (cd "${workspace}" && npx vitest run --coverage --reporter=dot --reporter=json --outputFile.json="${json_file}" >"${log_file}" 2>&1); then
+		rm -f "${gap_file}" "${json_file}"
 		echo "✅ ${workspace}: coverage met"
 		return 0
+	fi
+
+	# vitest exits non-zero for both failed tests and missed coverage
+	# thresholds. Distinguish them so we don't send an agent hunting for
+	# coverage gaps that don't exist. Prefer the JSON reporter's
+	# numFailedTests; fall back to parsing the vitest log summary line if
+	# the JSON report is missing or unparseable.
+	local failed_tests=""
+	if [ -s "${json_file}" ]; then
+		failed_tests=$(node -e '
+const fs = require("fs");
+try {
+  const report = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+  process.stdout.write(String(report.numFailedTests ?? 0));
+} catch {
+  process.stdout.write("");
+}
+' "${json_file}" 2>/dev/null || true)
+	fi
+
+	if ! [[ ${failed_tests} =~ ^[0-9]+$ ]]; then
+		local summary_line
+		summary_line=$({ grep -E '^ *Tests +[0-9]+ failed' "${log_file}" || true; } | tail -1)
+		if [ -n "${summary_line}" ]; then
+			failed_tests=$(printf '%s\n' "${summary_line}" | grep -oE '[0-9]+' | head -1)
+		else
+			failed_tests=0
+		fi
+	fi
+
+	if [ "${failed_tests}" -gt 0 ]; then
+		echo "❌ ${workspace}: ${failed_tests} test(s) failed (not a coverage gap)"
+		echo "   vitest log: ${log_file}"
+		fail=1
+		return 1
 	fi
 
 	echo "❌ ${workspace}: coverage below threshold"
