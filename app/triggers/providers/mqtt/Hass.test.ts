@@ -432,25 +432,39 @@ test('addContainerSensor should not fall through to wud.display.picture for an e
   );
 });
 
-test('addContainerSensor should warn once when multiple agents share a watcher name and the agent segment flag is disabled', async () => {
+test('addContainerSensor should warn once when multiple agents share a watcher name and the agent segment flag is explicitly disabled', async () => {
   const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
   vi.spyOn(containerStore, 'getContainers').mockReturnValue([
     { id: 'c1', watcher: 'collision-watcher', agent: 'ml' },
     { id: 'c2', watcher: 'collision-watcher' },
   ] as any);
 
-  await hass.addContainerSensor({
+  const hassOptOut = new Hass({
+    client: mqttClientMock,
+    configuration: {
+      topic: 'topic',
+      hass: {
+        discovery: true,
+        prefix: 'homeassistant',
+        agenttopicsegment: false,
+      },
+    },
+    log,
+    isContainerAllowed: () => true,
+  });
+
+  await hassOptOut.addContainerSensor({
     name: 'nginx',
     watcher: 'collision-watcher',
     displayIcon: 'mdi:docker',
   });
 
   expect(logWarnSpy).toHaveBeenCalledWith(
-    'Multiple agents share watcher name "collision-watcher" but the Home Assistant MQTT topic layout has no agent segment, so their topics/sensors will collide. Set DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true to opt into the corrected layout before it becomes the default in v1.7.0.',
+    'Multiple agents share watcher name "collision-watcher" but HASS_AGENTTOPICSEGMENT=false has opted out of the Home Assistant MQTT agent topic segment, so their topics/sensors will collide. The segmented layout is the default since v1.7.0; remove the explicit DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false override to resolve the collision.',
   );
 
   logWarnSpy.mockClear();
-  await hass.addContainerSensor({
+  await hassOptOut.addContainerSensor({
     name: 'nginx',
     watcher: 'collision-watcher',
     displayIcon: 'mdi:docker',
@@ -468,6 +482,36 @@ test('addContainerSensor should not warn when a watcher name has only one distin
   await hass.addContainerSensor({
     name: 'nginx',
     watcher: 'single-agent-watcher',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(logWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Multiple agents share'));
+});
+
+test('addContainerSensor should not warn on the default (agenttopicsegment=true) layout even when multiple agents share a watcher name', async () => {
+  const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+  vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+    { id: 'c1', watcher: 'collision-watcher-default', agent: 'ml' },
+    { id: 'c2', watcher: 'collision-watcher-default' },
+  ] as any);
+
+  const hassDefault = new Hass({
+    client: mqttClientMock,
+    configuration: {
+      topic: 'topic',
+      hass: {
+        discovery: true,
+        prefix: 'homeassistant',
+        agenttopicsegment: true,
+      },
+    },
+    log,
+    isContainerAllowed: () => true,
+  });
+
+  await hassDefault.addContainerSensor({
+    name: 'nginx',
+    watcher: 'collision-watcher-default',
     displayIcon: 'mdi:docker',
   });
 

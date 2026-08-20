@@ -17,6 +17,7 @@ import { getSanitizedCanonicalContainerName } from './naming.js';
 
 const containerDefaultTopic = 'dd/container';
 const hassDefaultPrefix = 'homeassistant';
+const hassAgentTopicSegmentDefault = true;
 
 function generateClientId() {
   return `dd_${randomBytes(4).toString('hex')}`;
@@ -89,7 +90,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
       enabled: false,
       prefix: hassDefaultPrefix,
       discovery: false,
-      agenttopicsegment: false,
+      agenttopicsegment: hassAgentTopicSegmentDefault,
       commands: false,
       attributes: 'short',
       filter: {
@@ -146,7 +147,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
           enabled: this.joi.boolean().default(false),
           prefix: this.joi.string().default(hassDefaultPrefix),
           discovery: this.joi.boolean().default((parent) => !!parent?.enabled),
-          agenttopicsegment: this.joi.boolean().default(false),
+          agenttopicsegment: this.joi.boolean().default(hassAgentTopicSegmentDefault),
           commands: this.joi.boolean().default(false),
           attributes: this.joi
             .string()
@@ -166,7 +167,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
           enabled: false,
           prefix: hassDefaultPrefix,
           discovery: false,
-          agenttopicsegment: false,
+          agenttopicsegment: hassAgentTopicSegmentDefault,
           commands: false,
           attributes: 'short',
           filter: {

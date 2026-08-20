@@ -62,22 +62,6 @@ The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backwa
 
 ---
 
-### Agent-less Home Assistant MQTT topic layout (multi-agent)
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.5.0 |
-| **Default flips in** | v1.7.0 |
-| **Affects** | Multi-agent deployments using the Home Assistant MQTT integration (`DD_NOTIFICATION_MQTT_<name>_HASS_ENABLED=true`) where more than one node uses the default watcher name `local` |
-
-The current Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` and the watcher-level sensor topics) has no agent segment. In a multi-agent deployment where the controller and one or more agents all use the default watcher name `local`, two containers with the same name on different agents publish to — and overwrite — the same MQTT topic, watcher running-status topics collide, and the watcher-level sensor counts sum across all agents. This is the Home Assistant facet of [#386](https://github.com/CodesWhat/drydock/issues/386).
-
-Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` opts into the corrected layout: an `agent/<name>` segment is inserted into every Home Assistant topic for containers owned by a remote agent, watcher running-status topics and watcher-level sensor counts are scoped per agent, and discovery-entity cleanup is scoped per agent. Controller-local container topics are unchanged whether or not the flag is set. The corrected layout is targeted to become the default in **v1.7.0**.
-
-**Note:** enabling the flag changes the Home Assistant entity IDs for agent-owned containers (the MQTT topic path changes). Update any Home Assistant automations, dashboards, or templates that reference the old (agent-less) entity IDs for agent containers. Single-node deployments are unaffected.
-
-**Migration:** Multi-agent deployments should set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` and re-point any affected Home Assistant references before v1.7.0 makes it the default.
-
 ## Removed compatibility behaviors
 
 ### Legacy trigger prefix inputs (`DD_TRIGGER_*`, `dd.trigger.*`)
@@ -124,6 +108,24 @@ As of v1.7.0 both reasons are **hard** blockers, shipping together with the per-
 **This does not change `AUTO=oninclude`'s meaning.** A trigger left on `AUTO=oninclude` keeps its pre-6.0.1 conflated behavior permanently: a matching `dd.action.include` label still grants both manual and automatic access under that mode, exactly as before — that row of the migration table is explicitly unchanged. Only the *default-deny* outcome (no matching include/auto label at all) and the *explicit-exclude* outcome (`dd.action.exclude` match) flip from soft to hard. An operator who wants the split between manual-only and automatic access opts in by switching a trigger to `AUTO=onauto`; nothing about this flip forces that switch.
 
 **Migration:** If legacy `dd.trigger.include` / `dd.trigger.exclude` labels are still present, first rename them to the corresponding `dd.action.*` labels (v1.7.0 no longer reads them — the migration CLI above does this rewrite). Then, if you relied on manual updates running through a trigger that the container's labels excluded, either (a) remove the `dd.action.exclude` label from the container, (b) add the trigger to the container's `dd.action.include` list (or `dd.action.auto` list, for a trigger configured with `AUTO=onauto`), or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies exactly which trigger / label combination is in conflict.
+
+---
+
+### Agent-less Home Assistant MQTT topic layout (multi-agent)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0 |
+| **Default flipped in** | v1.7.0 |
+| **Affects** | Multi-agent deployments using the Home Assistant MQTT integration (`DD_NOTIFICATION_MQTT_<name>_HASS_ENABLED=true`) where more than one node used the default watcher name `local` |
+
+Through v1.6.x, the Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` and the watcher-level sensor topics) had no agent segment. In a multi-agent deployment where the controller and one or more agents all used the default watcher name `local`, two containers with the same name on different agents published to — and overwrote — the same MQTT topic, watcher running-status topics collided, and the watcher-level sensor counts summed across all agents. This was the Home Assistant facet of [#386](https://github.com/CodesWhat/drydock/issues/386).
+
+As of v1.7.0, `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT` defaults to `true`: an `agent/<name>` segment is now inserted into every Home Assistant topic for containers owned by a remote agent, watcher running-status topics and watcher-level sensor counts are scoped per agent, and discovery-entity cleanup is scoped per agent. Controller-local container topics are unchanged either way. Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false` remains available as a temporary opt-out back to the old, unscoped layout; a shared watcher name across agents on that opt-out reproduces the original collision, which `warnIfAgentlessHassTopicLayoutCollides` (`app/triggers/providers/mqtt/Hass.ts`) now warns about explicitly, once per watcher name.
+
+**What upgrading multi-agent deployments see in Home Assistant:** agent-owned container and watcher entities move to new topic paths — new entity IDs — the first time drydock starts under v1.7.0 without the opt-out set. **The old (pre-v1.7.0) discovery entities are not retroactively removed.** Discovery cleanup only clears topics drydock currently has in memory: the per-container "previous topic" tracking is an in-memory map that starts empty on every process restart, and the watcher-level and aggregate sensors never tracked a prior topic scheme at all. The pre-v1.7.0 entities stay retained on the broker and show up in Home Assistant as orphaned, frozen-at-last-state duplicates alongside the new ones until manually removed (delete the entities in Home Assistant, or clear the retained messages on the broker, once the new entities are confirmed working).
+
+**Migration:** No action is required for the default flip itself. Update any Home Assistant automations, dashboards, or templates that reference the old (agent-less) entity IDs for agent-owned containers, and manually remove the orphaned old-path discovery entities described above. Deployments not yet ready to migrate can set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false` to keep the pre-v1.7.0 layout temporarily.
 
 ---
 
