@@ -747,6 +747,76 @@ describe('AgentClient', () => {
       expect(client.isConnected).toBe(true);
     });
 
+    test('should isolate SBOM offload failures within a standard-mode handshake (#802)', async () => {
+      mockOffloadSbomDocuments.mockRejectedValueOnce(new Error('controller storage unavailable'));
+      const containers = [
+        {
+          id: 'c1',
+          name: 'broken-sbom',
+          watcher: 'local',
+          security: { sbom: { documents: { 'spdx-json': { broken: true } } } },
+        },
+        { id: 'c2', name: 'healthy', watcher: 'local' },
+      ];
+      axios.get
+        .mockResolvedValueOnce({ data: containers }) // containers
+        .mockResolvedValueOnce({ data: [] }) // watchers
+        .mockResolvedValueOnce({ data: [] }); // triggers
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledTimes(1);
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c2' }),
+      );
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
+        }),
+      ]);
+      expect(mockLogChild.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to process authoritative container c1'),
+      );
+      expect(client.isConnected).toBe(true);
+    });
+
+    test('warns once when every container in a standard-mode handshake batch fails (#802)', async () => {
+      mockOffloadSbomDocuments.mockRejectedValue(new Error('controller storage unavailable'));
+      const containers = [
+        {
+          id: 'c1',
+          name: 'broken-sbom-1',
+          watcher: 'local',
+          security: { sbom: { documents: { 'spdx-json': { broken: true } } } },
+        },
+        {
+          id: 'c2',
+          name: 'broken-sbom-2',
+          watcher: 'local',
+          security: { sbom: { documents: { 'spdx-json': { broken: true } } } },
+        },
+      ];
+      axios.get
+        .mockResolvedValueOnce({ data: containers }) // containers
+        .mockResolvedValueOnce({ data: [] }) // watchers
+        .mockResolvedValueOnce({ data: [] }); // triggers
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReports).toHaveBeenCalledWith([]);
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('All 2 authoritative container(s) failed to process'),
+      );
+    });
+
     test('sets isRegisteringComponents for the deregister -> re-register span and resets after completion (#605)', async () => {
       const observedDuringDeregister: boolean[] = [];
       const observedDuringWatcherFetch: boolean[] = [];
@@ -7714,6 +7784,74 @@ describe('AgentClient', () => {
 
       // pruneOldContainers was called (deletes containers not in the provided list)
       expect(storeContainer.getContainers).toHaveBeenCalled();
+    });
+
+    test('should isolate SBOM offload failures within an edge-mode container sync (#802)', async () => {
+      mockOffloadSbomDocuments.mockRejectedValueOnce(new Error('controller storage unavailable'));
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((c) => ({
+        ...c,
+        updateAvailable: false,
+      }));
+
+      const containers = [
+        {
+          id: 'c1',
+          name: 'broken-sbom',
+          watcher: 'local',
+          security: { sbom: { documents: { 'spdx-json': { broken: true } } } },
+        },
+        { id: 'c2', name: 'healthy', watcher: 'local' },
+      ];
+
+      await client.handleContainerSync(
+        containers as Parameters<typeof client.handleContainerSync>[0],
+      );
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledTimes(1);
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c2' }),
+      );
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
+        }),
+      ]);
+      expect(mockLogChild.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to process authoritative container c1'),
+      );
+    });
+
+    test('warns once when every container in an edge-mode container sync batch fails (#802)', async () => {
+      mockOffloadSbomDocuments.mockRejectedValue(new Error('controller storage unavailable'));
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+
+      const containers = [
+        {
+          id: 'c1',
+          name: 'broken-sbom-1',
+          watcher: 'local',
+          security: { sbom: { documents: { 'spdx-json': { broken: true } } } },
+        },
+        {
+          id: 'c2',
+          name: 'broken-sbom-2',
+          watcher: 'local',
+          security: { sbom: { documents: { 'spdx-json': { broken: true } } } },
+        },
+      ];
+
+      await client.handleContainerSync(
+        containers as Parameters<typeof client.handleContainerSync>[0],
+      );
+
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReports).toHaveBeenCalledWith([]);
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('All 2 authoritative container(s) failed to process'),
+      );
     });
   });
 
