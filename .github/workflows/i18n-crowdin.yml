@@ -15,6 +15,23 @@ on:
   schedule:
     - cron: '0 7 * * 1'   # Mondays 07:00 UTC — pull translations weekly
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: >-
+          Leave blank for a normal sync. To also purge README.md's stored
+          Crowdin translations before syncing (one-shot cleanup for the
+          content_segmentation corruption, see PR #804/#810), type exactly:
+          PURGE-README-TRANSLATIONS
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        description: >-
+          Only used when confirm is set: list what the purge would delete
+          without deleting anything. Ignored for a normal sync.
+        required: false
+        type: boolean
+        default: true
 
 concurrency:
   group: crowdin-sync
@@ -23,7 +40,224 @@ concurrency:
 permissions: {}
 
 jobs:
+  # One-shot, dispatch-only purge of README.md's stored Crowdin translations.
+  # Skipped on every trigger except an explicit workflow_dispatch where the
+  # operator typed the exact confirm string below — a push, the Monday
+  # schedule, or a plain dispatch with the field left at its default all
+  # evaluate this condition to false and the job shows as skipped, not run.
+  #
+  # WHY THIS EXISTS: content_segmentation is now 0 for README.md (PR #804)
+  # and the file was re-imported clean, but a resync after that fix still
+  # downloaded corrupted output. crowdin.yml's `update_option:
+  # update_as_unapproved` on the README entry only governs SOURCE-file
+  # re-uploads, not translation uploads — Crowdin staff, on this exact
+  # symptom: "The update_option parameter works only with the source files
+  # ... If you're uploading translations, it will be useless" / "It's
+  # needed to delete the previous translation and then upload a new one."
+  # https://community.crowdin.com/t/update-option-update-as-unapproved-does-nothing/8010
+  # Re-uploading clean README.*.md only adds a new unapproved candidate
+  # alongside the old corrupted one; with 0% approval across all six
+  # languages there's no clear winner, so exports keep returning the stale
+  # candidate. This job is that delete step, run once, then meant to be
+  # deleted from this file.
+  #
+  # API operations used (Crowdin API v2, verified against the
+  # crowdin-api-client-js SDK source, not just prose docs):
+  #   GET    /projects/{projectId}/files                     — resolve README.md's fileId by path
+  #   GET    /projects/{projectId}/strings?fileId=...         — every string that belongs to that file
+  #   DELETE /projects/{projectId}/translations?stringId=...&languageId=...
+  #          (operationId api.projects.translations.deleteMany) — deletes
+  #          every stored translation for one string in one language. There
+  #          is no fileId-scoped bulk-clear endpoint; DELETE .../translations
+  #          with only a languageId and no stringId is project-wide and is
+  #          deliberately never called here — scoping to one file means
+  #          looping this call over every stringId the file-scoped List
+  #          Strings call above returned.
+  #   GET    /projects/{projectId}/languages/{languageId}/translations?fileId=...
+  #          — post-purge check that zero translations remain for the file.
+  #
+  # This can only ever touch strings belonging to README.md's fileId, so it
+  # cannot reach ui/src/locales/**/*.json — those live under different
+  # fileIds that this job never queries.
+  purge:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm == 'PURGE-README-TRANSLATIONS' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: crowdin
+    permissions: {}
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920  # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Resolve README.md's Crowdin fileId
+        id: file
+        env:
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+        run: |
+          set -euo pipefail
+          status=$(curl -sS -o /tmp/files.json -w '%{http_code}' \
+            -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
+            "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/files?limit=500")
+          if [ "${status}" != "200" ]; then
+            echo "::error::Listing project files failed with HTTP ${status}."
+            cat /tmp/files.json
+            exit 1
+          fi
+
+          match_count=$(jq -r '[.data[].data | select(.path == "/README.md")] | length' /tmp/files.json)
+          if [ "${match_count}" != "1" ]; then
+            echo "::error::Expected exactly one file at path /README.md, found ${match_count}. Refusing to guess which file to purge."
+            exit 1
+          fi
+
+          file_id=$(jq -r '[.data[].data | select(.path == "/README.md")][0].id' /tmp/files.json)
+          revision=$(jq -r '[.data[].data | select(.path == "/README.md")][0].revisionId // "unknown"' /tmp/files.json)
+          echo "Resolved README.md -> fileId=${file_id} (revisionId=${revision})"
+          echo "file_id=${file_id}" >> "$GITHUB_OUTPUT"
+
+      - name: List every string that belongs to README.md
+        env:
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          FILE_ID: ${{ steps.file.outputs.file_id }}
+        run: |
+          set -euo pipefail
+          : > /tmp/string-ids.txt
+          offset=0
+          limit=500
+          while :; do
+            status=$(curl -sS -o /tmp/strings-page.json -w '%{http_code}' \
+              -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
+              "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/strings?fileId=${FILE_ID}&limit=${limit}&offset=${offset}")
+            if [ "${status}" != "200" ]; then
+              echo "::error::Listing strings failed with HTTP ${status} at offset ${offset}."
+              cat /tmp/strings-page.json
+              exit 1
+            fi
+
+            jq -r '.data[].data.id' /tmp/strings-page.json >> /tmp/string-ids.txt
+            page_count=$(jq -r '.data | length' /tmp/strings-page.json)
+            if [ "${page_count}" -lt "${limit}" ]; then
+              break
+            fi
+            offset=$((offset + limit))
+          done
+
+          total=$(wc -l < /tmp/string-ids.txt | tr -d ' ')
+          echo "README.md has ${total} strings."
+
+          # Sanity bound, not a tautology: the known-good count is 382
+          # (post re-import, PR #804). A fileId-resolver bug that pointed
+          # this at the wrong (much bigger) file should fail loud here,
+          # not silently delete translations that don't belong to us.
+          if [ "${total}" -lt 300 ] || [ "${total}" -gt 600 ]; then
+            echo "::error::${total} strings is outside the expected 300-600 range for README.md (known baseline 382). Refusing to proceed."
+            exit 1
+          fi
+
+      - name: Delete stored translations for those strings (dry run preview or real)
+        env:
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          languages="de es-ES fr pl pt-BR zh-CN"
+          total_strings=$(wc -l < /tmp/string-ids.txt | tr -d ' ')
+          total_calls=$((total_strings * 6))
+          echo "Target: README.md, ${total_strings} strings x 6 languages (${languages}) = ${total_calls} delete calls."
+
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "dry_run=true: no deletions performed. Re-run with dry_run=false (confirm still required) to execute for real."
+            exit 0
+          fi
+
+          deleted=0
+          while IFS= read -r string_id; do
+            [ -z "${string_id}" ] && continue
+            for lang in ${languages}; do
+              status=$(curl -sS -o /tmp/delete-resp.json -w '%{http_code}' -X DELETE \
+                -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
+                "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/translations?stringId=${string_id}&languageId=${lang}")
+
+              attempt=1
+              while [ "${status}" = "429" ] || [ "${status}" -ge 500 ]; do
+                if [ "${attempt}" -ge 5 ]; then
+                  echo "::error::Giving up on stringId=${string_id} languageId=${lang} after ${attempt} attempts (last HTTP ${status})."
+                  cat /tmp/delete-resp.json
+                  exit 1
+                fi
+                sleep $((attempt * 2))
+                attempt=$((attempt + 1))
+                status=$(curl -sS -o /tmp/delete-resp.json -w '%{http_code}' -X DELETE \
+                  -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
+                  "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/translations?stringId=${string_id}&languageId=${lang}")
+              done
+
+              case "${status}" in
+                204|404) deleted=$((deleted + 1)) ;;
+                *)
+                  echo "::error::Unexpected HTTP ${status} deleting stringId=${string_id} languageId=${lang}."
+                  cat /tmp/delete-resp.json
+                  exit 1
+                  ;;
+              esac
+              sleep 0.1
+            done
+          done < /tmp/string-ids.txt
+
+          echo "Done. ${deleted} delete calls completed (204 and 404 both count as success — 404 means there was nothing to delete)."
+
+      - name: Verify zero translations remain for README.md
+        if: ${{ !inputs.dry_run }}
+        env:
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          FILE_ID: ${{ steps.file.outputs.file_id }}
+        run: |
+          set -euo pipefail
+          languages="de es-ES fr pl pt-BR zh-CN"
+          failed=0
+          for lang in ${languages}; do
+            status=$(curl -sS -o /tmp/verify.json -w '%{http_code}' \
+              -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
+              "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/languages/${lang}/translations?fileId=${FILE_ID}&limit=1")
+            if [ "${status}" != "200" ]; then
+              echo "::error::Verification list call for ${lang} failed with HTTP ${status}."
+              cat /tmp/verify.json
+              failed=1
+              continue
+            fi
+            remaining=$(jq -r '.data | length' /tmp/verify.json)
+            if [ "${remaining}" != "0" ]; then
+              echo "::error::${lang} still has translations attached to README.md after the purge."
+              failed=1
+            else
+              echo "${lang}: clean, 0 translations remain for README.md."
+            fi
+          done
+
+          if [ "${failed}" != "0" ]; then
+            echo "::error::Purge verification failed. Failing this job so the sync job below (which needs it) is skipped instead of re-uploading onto an unverified purge."
+            exit 1
+          fi
+          echo "Verified: README.md has zero stored translations across all six target languages."
+
   sync:
+    # Runs on every trigger this workflow always ran on (push, the Monday
+    # schedule, a plain dispatch), unchanged. `needs: [purge]` only adds a
+    # dependency edge — without the `if:` below, a *skipped* purge (the
+    # normal case: not a confirmed purge dispatch) would make GitHub's
+    # default success() check skip this job too, since a skipped dependency
+    # doesn't count as succeeded. `!failure() && !cancelled()` restores the
+    # original "always runs" behavior when purge was skipped or succeeded,
+    # while still refusing to sync if a *real* purge attempt failed outright
+    # — don't re-upload onto a botched purge.
+    needs: [purge]
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: crowdin
