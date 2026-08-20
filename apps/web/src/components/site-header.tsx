@@ -22,7 +22,7 @@ export function SiteHeader({
             src={SITE_CONFIG.logo}
             alt=""
             width={43}
-            height={43}
+            height={29}
             className={SITE_CONFIG.logoInvertOnDark ? "dark:invert" : undefined}
           />
           <span className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">

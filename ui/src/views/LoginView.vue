@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { ROUTES } from '../router/routes';
-import whaleLogo from '../assets/whale-logo.png?inline';
+import whaleLogo from '../assets/whale-logo.png';
 import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';

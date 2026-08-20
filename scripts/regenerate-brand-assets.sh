@@ -48,7 +48,17 @@ for f in "${WIDE_MARKS[@]}"; do
 	echo "wide   $f"
 done
 
-# Small inline UI mark (imported with ?inline → base64 in the bundle, keep it light).
+# Small UI mark for the Vue app. Kept at 256px because the largest render is h-20
+# (80px tall) on the login screen; 256x171 is ~2x that for retina.
+#
+# This entry is load-bearing and drifted once. The file had been overwritten with the
+# 1041px wide mark (byte-identical, md5 ae101ad5...) while it was still imported with
+# Vite's ?inline suffix — which forces a base64 data URL regardless of
+# build.assetsInlineLimit. The result was a 479 KB PNG welded into the entry chunk as
+# 639,578 bytes of base64: 54% of that chunk's gzipped transfer, parse-blocking, on a
+# pre-auth login screen. The imports are plain now (no ?inline), so Vite emits a
+# separate cacheable asset, but keep this at 256px — re-running with the wide mark
+# would quietly re-inflate the app bundle.
 if [ -f ui/src/assets/whale-logo.png ]; then
 	magick "$SRC" -resize 256x -background none ui/src/assets/whale-logo.png
 	echo "inline ui/src/assets/whale-logo.png"
