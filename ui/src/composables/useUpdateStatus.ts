@@ -20,6 +20,7 @@ export interface UpdateStatusContainer {
   newDigest?: string | null;
   updateInsight?: Container['updateInsight'];
   updateEligibility?: UpdateEligibility;
+  registryError?: string;
 }
 
 export type UpdateStatusAction =
@@ -45,6 +46,7 @@ interface UpdateStatusCondition {
 type UpdateStatusState =
   | 'up-to-date'
   | 'insight'
+  | 'unknown'
   | 'ready'
   | 'soft-blocked'
   | 'hard-blocked'
@@ -309,7 +311,14 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
   let icon: string;
   let summary: string;
 
-  if (!hasUpdate && container.updateInsight) {
+  if (!hasUpdate && container.registryError) {
+    // A failed check is more actionable than a routine pin-gate note, so the
+    // error wins even when an updateInsight is also present (#814, #808).
+    state = 'unknown';
+    tone = 'warning';
+    icon = 'warning';
+    summary = t('containerComponents.updateStatus.summary.unknown');
+  } else if (!hasUpdate && container.updateInsight) {
     state = 'insight';
     tone = 'info';
     icon = 'pin';
