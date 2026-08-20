@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -253,16 +254,40 @@ describe.each(allReadmes)('%s star history', (readme) => {
   const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
 
   test('uses only the committed star-history chart', () => {
-    expect(content).toContain('docs/assets/star-history.svg');
+    // The chart must be the committed asset wired into the actual <img>, not
+    // merely mentioned somewhere in the file.
+    expect(content).toMatch(/<img[^>]*src="docs\/assets\/star-history\.svg"/);
     // Match the retired hosts, not particular URL shapes. `star-history.com/#`
     // only caught the embed form, so a bare https://star-history.com/CodesWhat/
     // drydock link would have walked straight back in. The host assertion also
     // subsumes api.star-history.com. warpchart.dev is retired too: Warpchart
     // was the D12 replacement candidate before that decision was reversed in
-    // favor of a committed SVG refreshed by a scheduled workflow.
+    // favor of a committed SVG refreshed by a scheduled workflow. The retired
+    // self-hosted route is forbidden in any attribute (src/href), absolute or
+    // same-origin, but stays mentionable in prose: the v1.6.0 release-history
+    // bullets describe what shipped and frozen history is never rewritten.
     expect(content).not.toContain('star-history.com');
+    expect(content).not.toMatch(/=["'][^"']*\/api\/star-history/);
     expect(content).not.toContain('getdrydock.com/api/star-history');
     expect(content).not.toContain('warpchart.dev');
+  });
+});
+
+describe('apps/web source', () => {
+  const webSrcRoot = `${repoRoot}/apps/web/src`;
+  const webSourceFiles = readdirSync(webSrcRoot, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .filter((path) => /\.(ts|tsx|mjs|js|jsx|json|css|mdx?)$/.test(path));
+
+  test('carries no retired star-history surface', () => {
+    expect(webSourceFiles.length).toBeGreaterThan(0);
+    for (const path of webSourceFiles) {
+      const source = readFileSync(path, 'utf8');
+      for (const retired of ['star-history.com', '/api/star-history', 'warpchart.dev']) {
+        expect(source, `${path} references retired surface ${retired}`).not.toContain(retired);
+      }
+    }
   });
 });
 
