@@ -141,4 +141,37 @@ describe('curl healthcheck compatibility', () => {
       detected: false,
     });
   });
+
+  describe('startup warning', () => {
+    test('names the container and points to the healthcheck binary when curl is detected', async () => {
+      const { getCurlHealthcheckOverrideStartupWarning } = await import('./curl-healthcheck.js');
+
+      const warning = await getCurlHealthcheckOverrideStartupWarning();
+
+      expect(warning).toContain("Container 'drydock-self'");
+      expect(warning).toContain('curl --fail http://localhost:3000/health || exit 1');
+      expect(warning).toContain('curl was removed from the Docker image in v1.7.0');
+      expect(warning).toContain('/bin/healthcheck');
+    });
+
+    test('returns undefined when no curl override is detected', async () => {
+      mockInspect.mockResolvedValue({
+        Config: {
+          Healthcheck: {
+            Test: ['CMD', '/bin/healthcheck', '3000'],
+          },
+        },
+      });
+      const { getCurlHealthcheckOverrideStartupWarning } = await import('./curl-healthcheck.js');
+
+      await expect(getCurlHealthcheckOverrideStartupWarning()).resolves.toBeUndefined();
+    });
+
+    test('returns undefined when the hostname is not a valid self-container identifier', async () => {
+      process.env.HOSTNAME = 'pod/name';
+      const { getCurlHealthcheckOverrideStartupWarning } = await import('./curl-healthcheck.js');
+
+      await expect(getCurlHealthcheckOverrideStartupWarning()).resolves.toBeUndefined();
+    });
+  });
 });

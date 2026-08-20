@@ -34,21 +34,21 @@ Active deprecations and their removal timeline. Each entry includes the version 
 
 ---
 
+## Removed compatibility behaviors
+
 ### `curl` in Docker image
 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.5.0 |
 | **Removed in** | v1.7.0 |
-| **Affects** | Custom `healthcheck:` overrides in compose files that use `curl` |
+| **Affects** | Custom `healthcheck:` overrides in compose files that used `curl` |
 
-The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` uses the lightweight static binary (`/bin/healthcheck`) instead.
+The official Docker image kept `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` has used the lightweight static binary (`/bin/healthcheck`) instead since v1.5.0. v1.7.0 removes `curl` from the image entirely; a container whose own `HEALTHCHECK` override still shells out to `curl` now fails, and drydock logs a startup warning naming the container when it detects the override.
 
-**Migration:** Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](https://getdrydock.com/docs/monitoring).
+**Migration:** Switch custom healthcheck overrides to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`, or drop the override to use the built-in image healthcheck. See [Monitoring](https://getdrydock.com/docs/monitoring).
 
 ---
-
-## Removed compatibility behaviors
 
 ### Legacy trigger prefix inputs (`DD_TRIGGER_*`, `dd.trigger.*`)
 

@@ -62,6 +62,9 @@ vi.mock('./maintenance.js', () => ({
 vi.mock('./socket-version-probe.js', () => ({
   probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('./disable-socket-redirects.js', () => ({
+  disableSocketRedirects: vi.fn(),
+}));
 
 import mockFs from 'node:fs';
 import axios from 'axios';
@@ -763,6 +766,77 @@ describe('Docker Watcher', () => {
 
       expect(maintenance.hasNarrowMinuteField).not.toHaveBeenCalled();
       expect(mockLog.warn).not.toHaveBeenCalled();
+    });
+  });
+
+  // Startup warning escalation for the curl-healthcheck compatibility
+  // detector: curl was removed from the Docker image in v1.7.0, so a
+  // user-defined HEALTHCHECK override that shells out to curl should log a
+  // startup warning naming the affected container, not just feed the
+  // dismissible UI banner.
+  describe('curl healthcheck override startup warning', () => {
+    const originalHostname = process.env.HOSTNAME;
+
+    afterEach(() => {
+      if (originalHostname === undefined) {
+        delete process.env.HOSTNAME;
+      } else {
+        process.env.HOSTNAME = originalHostname;
+      }
+    });
+
+    test('warns at init naming the container when its own healthcheck override shells out to curl', async () => {
+      process.env.HOSTNAME = 'drydock-self';
+      mockFs.existsSync.mockReturnValue(true);
+      mockContainer.inspect.mockResolvedValue({
+        Config: {
+          Healthcheck: {
+            Test: ['CMD-SHELL', 'curl --fail http://localhost:3000/health || exit 1'],
+          },
+        },
+      });
+      await docker.register('watcher', 'docker', 'test', {});
+      const mockLog = createMockLog(['info', 'warn', 'debug', 'error']);
+      docker.log = mockLog;
+
+      await docker.init();
+
+      expect(mockLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Container 'drydock-self'"),
+      );
+      expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('curl'));
+      expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('/bin/healthcheck'));
+    });
+
+    test('does not warn at init when the healthcheck override does not use curl', async () => {
+      process.env.HOSTNAME = 'drydock-self';
+      mockFs.existsSync.mockReturnValue(true);
+      mockContainer.inspect.mockResolvedValue({
+        Config: {
+          Healthcheck: {
+            Test: ['CMD', '/bin/healthcheck', '3000'],
+          },
+        },
+      });
+      await docker.register('watcher', 'docker', 'test', {});
+      const mockLog = createMockLog(['info', 'warn', 'debug', 'error']);
+      docker.log = mockLog;
+
+      await docker.init();
+
+      expect(mockLog.warn).not.toHaveBeenCalledWith(expect.stringContaining('curl'));
+    });
+
+    test('does not warn at init when no Docker socket is present', async () => {
+      process.env.HOSTNAME = 'drydock-self';
+      mockFs.existsSync.mockReturnValue(false);
+      await docker.register('watcher', 'docker', 'test', {});
+      const mockLog = createMockLog(['info', 'warn', 'debug', 'error']);
+      docker.log = mockLog;
+
+      await docker.init();
+
+      expect(mockLog.warn).not.toHaveBeenCalledWith(expect.stringContaining('curl'));
     });
   });
 

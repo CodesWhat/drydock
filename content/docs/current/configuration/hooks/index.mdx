@@ -30,7 +30,7 @@ Lifecycle hooks let you run shell commands before or after a container is update
 | Env var | Required | Description | Supported values | Default |
 | --- | --- | --- | --- | --- |
 | `DD_HOOKS_ENABLED` | ⚪ | Enable execution of lifecycle hook labels (`dd.hook.*`) | `true`, `false` | `false` |
-| `DD_HOOKS_ALLOWED_COMMANDS` | ⚪ | Comma-separated list of allowed first-token binary names or paths | e.g. `curl,sh,/usr/local/bin/notify.sh` | (unset — see below) |
+| `DD_HOOKS_ALLOWED_COMMANDS` | ⚪ | Comma-separated list of allowed first-token binary names or paths | e.g. `sh,jq,/usr/local/bin/notify.sh` | (unset — see below) |
 
 <Callout type="warn">Hooks sourced from labels are skipped by default. Set `DD_HOOKS_ENABLED=true` to opt in.</Callout>
 
@@ -38,16 +38,18 @@ Lifecycle hooks let you run shell commands before or after a container is update
 
 ### Allowlist matching rules
 
-- **No slash in entry** (`curl`, `sh`): the basename of the hook command's first token is compared. `curl` matches both `curl` and `/usr/bin/curl`.
+- **No slash in entry** (`sh`, `jq`): the basename of the hook command's first token is compared. `jq` matches both `jq` and `/usr/bin/jq`.
 - **Slash in entry** (`/usr/local/bin/notify.sh`): an exact full-path match is required. The basename alone is not sufficient.
 
 Example:
 
 ```bash
-DD_HOOKS_ALLOWED_COMMANDS=curl,/usr/local/bin/notify.sh
+DD_HOOKS_ALLOWED_COMMANDS=jq,/usr/local/bin/notify.sh
 ```
 
-This permits `curl https://…` and `/usr/local/bin/notify.sh`, but not `notify.sh` or `/other/path/curl`.
+This permits `jq ...` and `/usr/local/bin/notify.sh`, but not `notify.sh` or `/other/path/jq`.
+
+<Callout type="warn">`curl` was removed from the Docker image in v1.7.0 (see [Deprecations](/docs/deprecations#curl-healthcheck-override)). A hook that needs to make an HTTP call needs a mounted script or binary that provides its own HTTP client rather than a bare `curl` command.</Callout>
 
 ## Hook environment variables
 

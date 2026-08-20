@@ -250,7 +250,7 @@ services:
 
 ### Lifecycle hooks
 
-Run a database migration before updating and a cache clear after:
+Run a database migration before updating and a cache clear after. Hook commands run inside the **drydock** container itself (see [Lifecycle Hooks](/docs/configuration/hooks#execution-details)), which no longer bundles `curl` as of v1.7.0 — an HTTP call needs a mounted script (or another allowlisted binary) rather than a bare `curl` command:
 
 ```yaml
 services:
@@ -258,8 +258,8 @@ services:
     image: myapp:latest
     labels:
       - dd.watch=true
-      - dd.hook.pre=curl -X POST http://myapp:8080/prepare-update
-      - dd.hook.post=curl -X POST http://myapp:8080/clear-cache
+      - dd.hook.pre=/usr/local/bin/prepare-update.sh
+      - dd.hook.post=/usr/local/bin/clear-cache.sh
       - dd.hook.pre.abort=true
       - dd.hook.timeout=30000
 ```

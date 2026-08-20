@@ -90,3 +90,33 @@ export async function getCurlHealthcheckOverrideCompatibility(): Promise<CurlHea
     return { detected: false };
   }
 }
+
+/**
+ * Build a startup log warning when the current container's own HEALTHCHECK
+ * override still shells out to curl. curl was removed from the Docker image
+ * in v1.7.0, so those overrides will start failing; point the operator at
+ * the compiled healthcheck binary that replaces it.
+ *
+ * Returns `undefined` when no override is detected, so callers can log
+ * unconditionally without an extra `if`.
+ */
+export async function getCurlHealthcheckOverrideStartupWarning(): Promise<string | undefined> {
+  const compatibility = await getCurlHealthcheckOverrideCompatibility();
+  if (!compatibility.detected) {
+    return undefined;
+  }
+
+  // Both `commandPreview` and a resolvable identifier are guaranteed once
+  // `detected` is true: `getCurlHealthcheckOverrideCompatibility()` only
+  // sets it after `getSelfContainerIdentifier()` already matched and the
+  // same non-empty healthcheck command produced a preview.
+  const containerName = getSelfContainerIdentifier();
+
+  return (
+    `Container '${containerName}' has a HEALTHCHECK override that shells out to curl ` +
+    `(${compatibility.commandPreview}). curl was removed from the Docker image in v1.7.0, ` +
+    'so this override will start failing. ' +
+    "Switch it to 'test: /bin/healthcheck ${DD_SERVER_PORT:-3000}' or drop the override to use " +
+    'the built-in healthcheck.'
+  );
+}
