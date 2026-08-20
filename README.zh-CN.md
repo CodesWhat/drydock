@@ -451,11 +451,9 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 <h2 align="center" id="star-history">星史</h2>
 
-<p align="center">通过 Warpchart 查看增长趋势：</p>
-
 <div align="center">
-  <a href="https://warpchart.dev/r/CodesWhat/drydock">
-    <img alt="Warpchart Growth Chart" src="https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock" />
+  <a href="https://github.com/CodesWhat/drydock/stargazers">
+    <img alt="Star History Chart" src="docs/assets/star-history.svg" />
   </a>
 </div>
 

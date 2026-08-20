@@ -181,8 +181,8 @@ const requiredFragments = [
   '[`GOVERNANCE.md`](GOVERNANCE.md)',
   '[`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)',
   '[`SECURITY.md`](SECURITY.md)',
-  'https://warpchart.dev/r/CodesWhat/drydock',
-  'https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock',
+  'https://github.com/CodesWhat/drydock/stargazers',
+  'docs/assets/star-history.svg',
 ];
 
 describe.each(translatedReadmes)('%s', (readme) => {
@@ -252,14 +252,17 @@ describe.each(translatedReadmes)('%s', (readme) => {
 describe.each(allReadmes)('%s star history', (readme) => {
   const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
 
-  test('uses only the Warpchart growth chart', () => {
-    expect(content).toContain('https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock');
+  test('uses only the committed star-history chart', () => {
+    expect(content).toContain('docs/assets/star-history.svg');
     // Match the retired hosts, not particular URL shapes. `star-history.com/#`
     // only caught the embed form, so a bare https://star-history.com/CodesWhat/
     // drydock link would have walked straight back in. The host assertion also
-    // subsumes api.star-history.com.
+    // subsumes api.star-history.com. warpchart.dev is retired too: Warpchart
+    // was the D12 replacement candidate before that decision was reversed in
+    // favor of a committed SVG refreshed by a scheduled workflow.
     expect(content).not.toContain('star-history.com');
     expect(content).not.toContain('getdrydock.com/api/star-history');
+    expect(content).not.toContain('warpchart.dev');
   });
 });
 
