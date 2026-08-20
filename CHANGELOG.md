@@ -8,11 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > **Fork point:** upstream post-8.1.1 (2025-11-27)
 > **Upstream baseline:** WUD 8.1.1 + 65 merged PRs on `main` (Vue 3 migration, Alpine base image, Rocket.Chat trigger, threshold system, semver improvements, request→axios migration, and more)
 
-## [Unreleased]
+## [1.6.1] — unreleased
 
 ### Fixed
 
 - **Demo site favicon now matches the refreshed branding.** The v1.5.1 brand refresh (#439) moved the website to the cropped whale "headshot" icon and the app UI followed, but demo.getdrydock.com kept showing the old full-body whale: its stale `favicon.svg` — which modern browsers preferred over the PNGs — was never replaced. The demo now ships the same headshot icon set as the website and app UI, the `favicon.svg` is removed, and the icon links carry a `?v=2` cache-buster so browsers re-fetch instead of serving the aggressively cached old icon. (#689)
+- **Nested OCI image indexes now resolve to the real image manifest.** An image whose per-platform entry is itself an index, which is what Buildx produces when SBOM or provenance attestations are enabled, failed with `Unexpected error; no manifest found` and left the container unable to complete a digest check. Drydock now follows the nested index to the platform's actual manifest, bounded to three levels, and correctly ignores the attestation manifest alongside it. ([#814](https://github.com/CodesWhat/drydock/issues/814))
 
 ## [1.6.0] — 2026-08-11
 
