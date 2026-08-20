@@ -147,6 +147,20 @@ The migration CLI intentionally retains knowledge of the removed WUD names so it
 
 ---
 
+### Agent-mode `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` fallback
+
+| | |
+| --- | --- |
+| **Deprecated in** | Never — removed directly, no deprecation period |
+| **Removed in** | v1.6.0-rc.1 |
+| **Affects** | Agent-mode deployments (`app/agent/api/index.ts`) configured with only `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE`, no `DD_AGENT_SECRET` / `DD_AGENT_SECRET_FILE` |
+
+This is a separate, undocumented removal from the general `WUD_*` table above. Unlike the general configuration loader — which never read `WUD_*` variables at all — agent mode's secret lookup carried its own explicit fallback through v1.5.2: `process.env.DD_AGENT_SECRET ?? process.env.WUD_AGENT_SECRET` (and the equivalent for `_FILE`). v1.6.0-rc.1 dropped both fallbacks with no warning release first. An agent that had only `WUD_AGENT_SECRET` set went straight from authenticating successfully to `init()` throwing `Agent mode requires DD_AGENT_SECRET or DD_AGENT_SECRET_FILE` at startup — an error message that never mentions the `WUD_` variable the operator actually configured. This entry was never recorded at the time of the v1.6.0 release; it is added here retroactively.
+
+**Migration:** Rename `WUD_AGENT_SECRET` to `DD_AGENT_SECRET` and `WUD_AGENT_SECRET_FILE` to `DD_AGENT_SECRET_FILE`.
+
+---
+
 ### Legacy aggregate container stats endpoint
 
 | | |
