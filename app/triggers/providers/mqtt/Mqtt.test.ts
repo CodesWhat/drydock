@@ -31,7 +31,7 @@ const configurationValid = {
   exclude: '',
   hass: {
     discovery: false,
-    agenttopicsegment: false,
+    agenttopicsegment: true,
     commands: false,
     enabled: false,
     prefix: 'homeassistant',
@@ -122,7 +122,7 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     enabled: true,
     prefix: 'homeassistant',
     discovery: true,
-    agenttopicsegment: false,
+    agenttopicsegment: true,
     commands: false,
     attributes: 'short',
     filter: {
@@ -130,6 +130,31 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
       exclude: '',
     },
   });
+});
+
+test('validateConfiguration should default hass.agenttopicsegment to true', async () => {
+  const validatedConfiguration = mqtt.validateConfiguration({
+    url: configurationValid.url,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      prefix: 'homeassistant',
+    },
+  });
+  expect(validatedConfiguration.hass.agenttopicsegment).toBe(true);
+});
+
+test('validateConfiguration should respect an explicit hass.agenttopicsegment=false opt-out', async () => {
+  const validatedConfiguration = mqtt.validateConfiguration({
+    url: configurationValid.url,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      prefix: 'homeassistant',
+      agenttopicsegment: false,
+    },
+  });
+  expect(validatedConfiguration.hass.agenttopicsegment).toBe(false);
 });
 
 test('validateConfiguration should throw error when invalid', async () => {
