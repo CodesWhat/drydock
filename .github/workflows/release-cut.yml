@@ -36,6 +36,11 @@ on:
         required: false
         type: string
         default: ""
+      source_ref:
+        description: "Maintenance cuts only: dev branch to build from (e.g. dev/v1.6) when cutting a patch for a line main has moved past. Leave empty for normal cuts."
+        required: false
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -86,7 +91,79 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
+      - name: Validate maintenance source_ref input
+        id: source_ref
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SOURCE_REF}" ]; then
+            {
+              echo "is_maintenance_cut=false"
+              echo "source_branch="
+            } >> "$GITHUB_OUTPUT"
+            echo "No source_ref supplied; normal cut from main."
+            exit 0
+          fi
+
+          # Anti-footgun bound: only a dev/vX.Y branch name, never an arbitrary
+          # ref (mirrors the i18n translation-base resolver's own dev/vX.Y bound).
+          if ! [[ "${SOURCE_REF}" =~ ^dev/v[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::source_ref '${SOURCE_REF}' is not in the required 'dev/vX.Y' form (e.g. dev/v1.6)."
+            exit 1
+          fi
+
+          # release_tag's vX.Y line must match source_ref's line: v1.6.1 from
+          # dev/v1.6 is a maintenance cut; v1.7.0 from dev/v1.6 is nonsense.
+          tag_line="$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^v?([0-9]+)\.([0-9]+)\..*/\1.\2/')"
+          source_line="${SOURCE_REF#dev/v}"
+          if [ "${tag_line}" != "${source_line}" ]; then
+            echo "::error::release_tag '${RELEASE_TAG}' is on line ${tag_line}, but source_ref '${SOURCE_REF}' is line ${source_line}. The tag's vX.Y line must match source_ref's line."
+            exit 1
+          fi
+
+          # source_ref must actually exist on origin, and must not be the
+          # active line: if it's still the highest dev/vX.Y, the normal
+          # main-based path is correct and source_ref is a mistake. Same
+          # numeric branch listing/sort as the translation-base resolver in
+          # i18n-crowdin.yml, so dev/v1.10 correctly beats dev/v1.9.
+          dev_branches="$(git ls-remote --heads origin 'refs/heads/dev/v*' \
+            | sed 's#.*refs/heads/##' \
+            | { grep -E '^dev/v[0-9]+\.[0-9]+$' || true; })"
+          if [ -z "${dev_branches}" ]; then
+            echo "::error::Could not list any dev/vX.Y branch on origin to validate source_ref."
+            exit 1
+          fi
+          if ! grep -qxF "${SOURCE_REF}" <<< "${dev_branches}"; then
+            echo "::error::source_ref '${SOURCE_REF}' does not exist as a branch on origin."
+            exit 1
+          fi
+          highest_dev_branch="$(sort -t/ -k2 -V <<< "${dev_branches}" | tail -1)"
+          if [ "${SOURCE_REF}" = "${highest_dev_branch}" ]; then
+            echo "::error::${SOURCE_REF} is still the active line (highest dev branch on origin). This is not a maintenance cut — leave source_ref empty and cut from main."
+            exit 1
+          fi
+
+          # Patch component must be nonzero: maintenance cuts are for patch
+          # releases (vX.Y.Z, Z>0, GA or prerelease alike) — v1.6.0 or
+          # v1.6.0-rc.N is a new minor line and belongs on main, never on a
+          # retired dev branch.
+          patch="$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^v?[0-9]+\.[0-9]+\.([0-9]+).*/\1/')"
+          if [ "${patch}" -eq 0 ]; then
+            echo "::error::release_tag '${RELEASE_TAG}' has patch version 0. Maintenance cuts (source_ref) are for patch releases (vX.Y.Z with Z>0); cut vX.Y.0 from main normally."
+            exit 1
+          fi
+
+          {
+            echo "is_maintenance_cut=true"
+            echo "source_branch=${SOURCE_REF}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Maintenance cut validated: ${RELEASE_TAG} from ${SOURCE_REF} (active line is ${highest_dev_branch})."
+
       - name: Assert main is in sync with the active dev branch
+        if: steps.source_ref.outputs.is_maintenance_cut != 'true'
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
@@ -135,9 +212,22 @@ jobs:
 
       - name: Resolve target SHA and lowercase repository
         id: target
+        env:
+          IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
         run: |
           set -euo pipefail
-          sha="$(git rev-parse HEAD)"
+          if [ "${IS_MAINTENANCE_CUT}" = "true" ]; then
+            # Maintenance cut: build from the named dev branch's tip, not main
+            # HEAD. The job still runs at refs/heads/main (asserted above and
+            # checked out here) — this only changes which tree gets built and
+            # released, not the workflow run's own ref, which is what the
+            # cosign OIDC identity is pinned to.
+            git fetch --quiet origin "${SOURCE_BRANCH}"
+            sha="$(git rev-parse "origin/${SOURCE_BRANCH}")"
+          else
+            sha="$(git rev-parse HEAD)"
+          fi
           # Docker registries reject uppercase repository names. ${GITHUB_REPOSITORY}
           # preserves the org casing (e.g. "CodesWhat/drydock") so we expose a
           # pre-lowered value for every step that builds an image reference.
@@ -367,6 +457,7 @@ jobs:
           target-sha: ${{ steps.source.outputs.source_sha }}
           max-attempts: '18'
           sleep-seconds: '300'
+          allow-dispatch-events: ${{ steps.source_ref.outputs.is_maintenance_cut }}
 
       - name: Wait for successful E2E Playwright on release source SHA
         uses: ./.github/actions/wait-for-successful-branch-ci
@@ -376,6 +467,7 @@ jobs:
           target-sha: ${{ steps.source.outputs.source_sha }}
           max-attempts: '18'
           sleep-seconds: '300'
+          allow-dispatch-events: ${{ steps.source_ref.outputs.is_maintenance_cut }}
 
       - name: Assert tag version matches package versions
         env:
