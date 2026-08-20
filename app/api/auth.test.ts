@@ -1340,53 +1340,20 @@ describe('Auth Router', () => {
       expect(res.status).not.toHaveBeenCalled();
     });
 
-    test('should register legacy public auth methods endpoint for compatibility with rate limiting', () => {
+    test('should not register the removed legacy public auth methods endpoint', () => {
+      // Removed in v1.7.0 (see DEPRECATIONS.md): GET /api/auth/methods used
+      // to be registered directly on the app, ahead of the /api mount, so it
+      // never reached the unversioned /api/* 410 tombstone. Now that the
+      // registration is gone, a request to this path falls through to that
+      // tombstone instead (covered in app/api/index.test.ts).
       const app = createApp();
       auth.init(app);
 
-      const authLimiter = mockRouter.use.mock.calls[0][0];
-      expect(app.get).toHaveBeenCalledWith('/api/auth/methods', authLimiter, expect.any(Function));
-    });
-
-    test('should log a deprecation warning on every legacy auth methods request and still return strategies', () => {
-      registry.getState.mockReturnValue({ authentication: {} });
-      const app = createApp();
-      auth.init(app);
-
-      const call = app.get.mock.calls.find((c) => c[0] === '/api/auth/methods');
-      const handler = call[call.length - 1];
-      const res = createResponse();
-
-      handler({}, res);
-
-      expect(log.warn).toHaveBeenCalledWith(
-        'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /api/v1/auth/status instead.',
+      expect(app.get).not.toHaveBeenCalledWith(
+        '/api/auth/methods',
+        expect.anything(),
+        expect.anything(),
       );
-      expect(res.setHeader).toHaveBeenCalledWith('Deprecation', '@1783123200');
-      expect(res.setHeader).toHaveBeenCalledWith('Sunset', 'Thu, 01 Jul 2027 00:00:00 GMT');
-      expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
-
-      // RFC 9745: Deprecation is the instant the resource BECAME deprecated
-      // (past/current), never the same instant as the future Sunset removal
-      // date.
-      const deprecationEpochMs =
-        Number(
-          (
-            res.setHeader.mock.calls.find((call: unknown[]) => call[0] === 'Deprecation') as [
-              string,
-              string,
-            ]
-          )[1].replace('@', ''),
-        ) * 1000;
-      const sunsetEpochMs = Date.parse('Thu, 01 Jul 2027 00:00:00 GMT');
-      expect(deprecationEpochMs).toBeLessThan(sunsetEpochMs);
-
-      log.warn.mockClear();
-      res.json.mockClear();
-      handler({}, res);
-
-      expect(log.warn).toHaveBeenCalledTimes(1);
-      expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
     });
 
     test('should emit deprecation headers and warnings for the legacy strategies response shape', () => {

@@ -16,7 +16,7 @@ Starting in v1.4.0, the canonical API base path is `/api/v1/*`. The unversioned 
 | `/api/v1/*` | **Canonical** | Versioned API path — use this for new integrations |
 | `/api/*` | Removed in v1.6.0 | Returns `410 Gone` with a JSON body pointing at the `/api/v1/` equivalent |
 
-The four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints keep responding at `/api/*` when `DD_COMPAT_WUDCARD=true` (three reshaped into a bare-array shape, the fourth unmodified), served by their own router rather than by falling through to the removed alias. Two standalone auth aliases, `GET /api/auth/methods` and `GET /api/auth/status`, are also unaffected — unconditionally, not behind any flag — because both are registered directly on the app rather than through the removed alias router; see [Authentication routes](#authentication-routes) below. Everything else under `/api/*` now returns `410 Gone`; use `/api/v1/*`. See [Deprecations](/docs/deprecations#unversioned-api-paths) for details.
+The four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints keep responding at `/api/*` when `DD_COMPAT_WUDCARD=true` (three reshaped into a bare-array shape, the fourth unmodified), served by their own router rather than by falling through to the removed alias. `GET /api/auth/status` is also unaffected — unconditionally, not behind any flag — because it's registered directly on the app rather than through the removed alias router; see [Authentication routes](#authentication-routes) below. Everything else under `/api/*` now returns `410 Gone`, including the former `GET /api/auth/methods` alias, removed in v1.7.0; use `/api/v1/*`. See [Deprecations](/docs/deprecations#unversioned-api-paths) for details.
 
 ## Error Contract
 
@@ -601,7 +601,7 @@ curl http://drydock:3000/auth/strategies
 
 The `{ strategies, warnings }` response shape from `GET /auth/strategies` is deprecated and scheduled for removal in v1.8.0. Migrate to `GET /api/v1/auth/status`; see [Deprecations](/docs/deprecations#legacy-auth-strategies-shape).
 
-A legacy alias is available at `GET /api/auth/methods` (rate-limited), deprecated and scheduled for removal in v1.7.0 — see [Deprecations](/docs/deprecations#api-auth-methods).
+The legacy `GET /api/auth/methods` alias was removed in v1.7.0 and now returns `410 Gone`; see [Deprecations](/docs/deprecations#api-auth-methods).
 
 ### Login
 

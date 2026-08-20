@@ -27,19 +27,6 @@ export const authPaths = {
       },
     },
   },
-  '/api/auth/methods': {
-    get: {
-      tags: ['Authentication'],
-      summary: 'Get enabled authentication strategies (legacy alias)',
-      operationId: 'getAuthMethodsAlias',
-      security: [],
-      responses: {
-        200: jsonResponse('Authentication strategies', {
-          $ref: '#/components/schemas/AuthStrategiesResponse',
-        }),
-      },
-    },
-  },
   '/auth/status': {
     get: {
       tags: ['Authentication'],
