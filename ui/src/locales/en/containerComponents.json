@@ -400,6 +400,7 @@
       },
       "summary": {
         "upToDate": "Up to date.",
+        "unknown": "Update status unknown. The last check could not complete.",
         "insight": "Newer version available — this tag is pinned.",
         "inProgress": "Update in progress.",
         "hardBlocked": "Update blocked — fix required.",
