@@ -87,12 +87,13 @@ describe('OpenAPI document', () => {
     ]);
   });
 
+  test('should not document the removed /api/auth/methods alias', () => {
+    // Removed in v1.7.0 (see DEPRECATIONS.md); the route now falls through
+    // to the unversioned /api/* 410 tombstone, so it has no OpenAPI entry.
+    expect(openApiDocument.paths['/api/auth/methods']).toBeUndefined();
+  });
+
   test('should model auth status, strategy, and logout response shapes', () => {
-    expect(openApiDocument.paths['/api/auth/methods']?.get?.responses?.[200]).toEqual(
-      jsonResponse('Authentication strategies', {
-        $ref: '#/components/schemas/AuthStrategiesResponse',
-      }),
-    );
     expect(openApiDocument.paths['/auth/strategies']?.get?.responses?.[200]).toEqual(
       jsonResponse('Authentication strategies', {
         $ref: '#/components/schemas/AuthStrategiesResponse',

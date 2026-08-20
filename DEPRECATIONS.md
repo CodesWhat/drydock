@@ -2,7 +2,7 @@
 
 Active deprecations and their removal timeline. Each entry includes the version it was deprecated, the version it will be removed, and migration guidance.
 
-**API versioning policy:** `/api/v1` is the frozen, canonical API contract. Breaking response-shape changes are never made to `/api/v1` — they only ever land as a new `/api/v2`. The unversioned `/api` alias is removed in v1.6.0. Two kinds of endpoint keep responding at `/api/*` after that removal, both because they are registered directly on the app rather than through the removed alias router: the flag-gated wud-card compatibility endpoints (see the Unversioned `/api/*` path entry below), and the standalone auth aliases `GET /api/auth/methods` and `GET /api/auth/status` (see their entries below).
+**API versioning policy:** `/api/v1` is the frozen, canonical API contract. Breaking response-shape changes are never made to `/api/v1` — they only ever land as a new `/api/v2`. The unversioned `/api` alias is removed in v1.6.0. Two kinds of endpoint used to keep responding at `/api/*` after that removal, both because they were registered directly on the app rather than through the removed alias router: the flag-gated wud-card compatibility endpoints (see the Unversioned `/api/*` path entry below), and the standalone auth aliases `GET /api/auth/methods` and `GET /api/auth/status`. `GET /api/auth/methods` was removed on its own v1.7.0 schedule (see Removed compatibility behaviors below) and now falls through to the same tombstone as the rest of the unversioned surface; `GET /api/auth/status` remains, with no removal scheduled (see its entry below).
 
 ## Active
 
@@ -17,20 +17,6 @@ Active deprecations and their removal timeline. Each entry includes the version 
 `PUT /api/settings` is a compatibility alias for `PATCH /api/settings`. Use `PATCH` for partial settings updates. An earlier revision of this entry scheduled the removal for v1.6.0; that predated the API versioning policy freezing `/api/v1`, under which removing a method from the versioned surface is a breaking change reserved for `/api/v2`.
 
 **Migration:** Replace `PUT /api/settings` calls with `PATCH /api/settings`.
-
----
-
-### Unversioned `GET /api/auth/methods` alias
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.7.0 |
-| **Affects** | API consumers using `GET /api/auth/methods` |
-
-`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It logs a deprecation warning on each request, returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers, and points callers directly to `GET /api/v1/auth/status`. It is registered directly on the app, so it survives the general unversioned `/api/*` removal on its own v1.7.0 timeline. `GET /api/auth/status` is a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled.
-
-**Migration:** Replace `GET /api/auth/methods` with `GET /api/v1/auth/status`.
 
 ---
 
@@ -204,7 +190,21 @@ Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN`
 
 **Exceptions:** the opt-in wud-card compatibility endpoints (`DD_COMPAT_WUDCARD`, default `false`) remain mounted at `/api/*` and are unaffected by this removal — the compat router dispatches its four whitelisted routes directly into the same `apiRouter` instance mounted at `/api/v1` (shared, not a second independent one — see `app/api/compat/wudcard.ts`) rather than by falling through to the (now-removed) `/api` alias, so auth and rate limiting are genuinely identical rather than merely implemented identically. They exist solely to keep the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration (and Homepage's native `whatsupdocker` widget, which expects the same bare-array shape) working, are off by default, and are best-effort with no compatibility guarantee — see [Server configuration](https://getdrydock.com/docs/configuration/server) for details.
 
-Separately, `GET /api/auth/methods` and `GET /api/auth/status` also keep responding 200 at `/api/*` — unconditionally, not behind any flag — because both are registered directly on the app before the `/api` mounts rather than living inside the removed alias router. See the Unversioned `GET /api/auth/methods` alias entry above for its own v1.7.0 removal timeline; `GET /api/auth/status` has no removal scheduled and is documented as a standing compatibility alias for `GET /api/v1/auth/status`.
+Separately, `GET /api/auth/status` also keeps responding 200 at `/api/*` — unconditionally, not behind any flag — because it is registered directly on the app before the `/api` mounts rather than living inside the removed alias router. It has no removal scheduled and is documented as a standing compatibility alias for `GET /api/v1/auth/status`. `GET /api/auth/methods` used to keep responding for the same reason; see the entry immediately below for its v1.7.0 removal.
+
+---
+
+### Unversioned `GET /api/auth/methods` alias
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.6.0 |
+| **Removed in** | v1.7.0 |
+| **Affects** | API consumers using `GET /api/auth/methods` |
+
+`GET /api/auth/methods` was a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen could render before a session existed. It logged a deprecation warning on each request and returned RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers pointing callers at `GET /api/v1/auth/status`. Because it was registered directly on the app, ahead of the `/api` mount, it survived the general unversioned `/api/*` removal above on its own v1.7.0 timeline. That registration is gone as of v1.7.0: the route is no longer mounted anywhere, so a request to it now falls through to the same unversioned `/api/*` **410 Gone** tombstone described above. `GET /api/auth/status` is unaffected and remains a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled.
+
+**Migration:** Replace `GET /api/auth/methods` with `GET /api/v1/auth/status`.
 
 ---
 
