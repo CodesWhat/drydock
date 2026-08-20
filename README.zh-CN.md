@@ -119,7 +119,8 @@ services:
     restart: unless-stopped
 ```
 
-<details><summary>替代方案：<a href="https://github.com/CodesWhat/sockguard">sockguard</a>套接字代理</summary>
+<details>
+<summary>替代方案：<a href="https://github.com/CodesWhat/sockguard">sockguard</a>套接字代理</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) 是来自同一 CodesWhat 生态系统的默认拒绝 Docker 套接字过滤器，具有为 drydock 构建的预设：
 
@@ -158,7 +159,8 @@ services:
 
 </details>
 
-<details><summary>替代方案：通过直接挂载套接字快速启动</summary>
+<details>
+<summary>替代方案：通过直接挂载套接字快速启动</summary>
 
 ```bash
 docker run -d \
@@ -198,7 +200,8 @@ docker run -d \
 
 <h2 align="center" id="recent-updates">最近更新</h2>
 
-<details open><summary><strong>v1.7.0-rc.1 亮点</strong></summary>
+<details open>
+<summary><strong>v1.7.0-rc.1 亮点</strong></summary>
 
 - **依赖感知更新** — 通过标签或 Compose 元数据构建经过验证的依赖关系图，预览准确的更新波次，并按确定的顺序执行更新或重启依赖项，同时安全处理循环依赖、失败和过期预览。([讨论 #219](https://github.com/CodesWhat/drydock/discussions/219))
 - **运维体验** — 可安装的 PWA、可点击的命名端口链接、实时容器运行时间、键盘快捷键，以及对新发现容器的防抖检测。
@@ -209,7 +212,8 @@ docker run -d \
 
 </details>
 
-<details><summary><strong>v1.6.0 亮点</strong></summary>
+<details>
+<summary><strong>v1.6.0 亮点</strong></summary>
 
 - **Portwing Edge/代理传输趋于成熟**：Portwing 0.9.0+ 支持由控制器执行原生 Docker 检查和更新、连续 Edge 日志、Ed25519 v2 请求签名，以及与签名密钥绑定的代理显示名称。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637))
 - **带成熟度稳定门的声明式更新策略**：三级 `dd.updatePolicy.*` 优先级、候选解锁倒计时和专用 `maturity-cleared` 通知。([讨论 #307](https://github.com/CodesWhat/drydock/discussions/307)、[讨论 #406](https://github.com/CodesWhat/drydock/discussions/406))
@@ -222,7 +226,8 @@ docker run -d \
 
 </details>
 
-<details><summary><strong>v1.6.0-rc.13 亮点</strong></summary>
+<details>
+<summary><strong>v1.6.0-rc.13 亮点</strong></summary>
 
 - **摘要比较仅使用匹配仓库的候选项**：`getOrderedRepoDigests` 会筛选 `RepoDigests`，并可自动修复过期锚点。([#670](https://github.com/CodesWhat/drydock/pull/670))
 - **所有工作区将 `nanoid` 固定为 3.3.18**，修复 CVE-2026-67213 和 CVE-2026-67214。([#673](https://github.com/CodesWhat/drydock/pull/673))
@@ -232,7 +237,8 @@ docker run -d \
 
 </details>
 
-<details><summary><strong>v1.6.0-rc.12 亮点</strong></summary>
+<details>
+<summary><strong>v1.6.0-rc.12 亮点</strong></summary>
 
 - **安全依赖更新**：`brace-expansion` 5.0.9、`ip-address` 10.3.1 和 `fast-uri` 4.1.2。([#659](https://github.com/CodesWhat/drydock/pull/659))
 - **成熟度时钟**在显示和阻止逻辑中共同使用 `updatePolicy.maturityMinAgeDays`，日期错误从 `debug` 提升为 `warn`。([#604](https://github.com/CodesWhat/drydock/issues/604))
@@ -242,7 +248,8 @@ docker run -d \
 
 </details>
 
-<details><summary><strong>v1.6.0-rc.11 亮点</strong></summary>
+<details>
+<summary><strong>v1.6.0-rc.11 亮点</strong></summary>
 
 - **Portwing 传输**：`transport=docker-api`、`execution=controller`、`events=portwing` 标记启用经过身份验证的 Standard HTTP 或 Edge，以承载由控制器执行的检查、更新、生命周期操作、预览和回滚。Portwing 仍是生命周期事件源，原始清单无法抹除控制器增强的更新结果。([#632](https://github.com/CodesWhat/drydock/issues/632)、[#637](https://github.com/CodesWhat/drydock/issues/637)、[Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
 - **通知** — 每个规则/每个提供商的标题和正文模板，带有实时预览，加上审计支持的应用内响铃类别和更新严重性阈值。
@@ -256,7 +263,8 @@ docker run -d \
 
 </details>
 
-<details><summary><strong>v1.5.2亮点</strong></summary>
+<details>
+<summary><strong>v1.5.2亮点</strong></summary>
 
 - **重新创建安全的更新策略** - 成熟度门、跳过的标签/摘要和暂停现在可以在本地和远程代理工作负载的容器重新创建中继续存在。
 - **固定标签可靠性** — 完全固定标签再次检测相同标签摘要重建，而 UI 可以显示不可操作的较新同系列标签，而无需更改更新或触发行为。
@@ -357,7 +365,8 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 
 <h2 align="center" id="feature-comparison">功能比较</h2>
 
-<details><summary><strong>drydock 与其他容器更新工具相比如何？</strong></summary>
+<details>
+<summary><strong>drydock 与其他容器更新工具相比如何？</strong></summary>
 
 > ✅ = 支持 &nbsp; ❌ = 不支持 &nbsp; ⚠️ = 部分/有限 &nbsp; † = 已存档，不再维护
 
@@ -407,7 +416,8 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 
 <h2 align="center" id="migration">迁移</h2>
 
-<details><summary><strong>从 WUD 迁移（Docker 怎么样？）</strong></summary>
+<details>
+<summary><strong>从 WUD 迁移（Docker 怎么样？）</strong></summary>
 
 Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。在启动升级服务之前重写它们；持久状态仍然会自动迁移。使用`docker exec -it drydock node dist/index.js config migrate --dry-run`进行预览，然后使用`docker exec -it drydock node dist/index.js config migrate --file .env --file compose.yaml`将配置重写为`DD_*`和`dd.*`命名。
 
@@ -417,7 +427,8 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 <h2 align="center" id="roadmap">路线图</h2>
 
-<details><summary><strong>版本主题及亮点</strong></summary>
+<details>
+<summary><strong>版本主题及亮点</strong></summary>
 
 此方向至少覆盖未来十二个月，直至 2027 年 8 月。
 此处仅列出高级主题；各版本详情请参阅 [CHANGELOG.md](CHANGELOG.md)。
