@@ -647,7 +647,7 @@ describe('image-comparison', () => {
       expect(container.image.digest.repo).toBe('sha256:anchor-b');
     });
 
-    test('(f) every anchor fails to normalize — findNewVersion rejects instead of reporting no update', async () => {
+    test('(f) every anchor fails to normalize — findNewVersion resolves with container.error set instead of rejecting', async () => {
       const getImageManifestDigest = vi
         .fn()
         .mockResolvedValueOnce({
@@ -660,9 +660,15 @@ describe('image-comparison', () => {
       mockRegistry(getImageManifestDigest);
       const container = createMultiAnchorContainer();
 
-      await expect(findNewVersion(container as never, log)).rejects.toThrow(
+      const result = await findNewVersion(container as never, log);
+
+      expect(getImageManifestDigest).toHaveBeenCalledTimes(3);
+      expect((container as { error?: { message: string } }).error?.message).toContain(
         'anchor-b manifest unknown',
       );
+      // getTags only returns the container's own current tag, so there is no
+      // newer tag to fabricate — the tag-based result stands unchanged.
+      expect(result.tag).toBe(container.image.tag.value);
     });
 
     test('(g) legacy container with no repoDigests field falls back to single-anchor comparison unchanged', async () => {
@@ -735,6 +741,111 @@ describe('image-comparison', () => {
       expect(getImageManifestDigest).toHaveBeenCalledTimes(1);
       expect(container.image.digest.value).toBe('sha256:anchor-a');
       expect(container.image.digest.repo).toBe('sha256:anchor-a');
+    });
+  });
+
+  describe('digest watch failure degrades to container.error instead of erasing the tag result (#814, #808)', () => {
+    test('digest lookup throws, a newer tag was found — findNewVersion resolves with the new tag and records container.error', async () => {
+      const getImageManifestDigest = vi.fn().mockRejectedValue(new Error('registry unavailable'));
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockResolvedValue(['1.0.0', '1.1.0', '2.0.0']),
+            getImageManifestDigest,
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+      const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      const container = {
+        image: {
+          id: 'image-1',
+          registry: { name: 'hub' },
+          name: 'library/nginx',
+          tag: { value: '1.0.0', semver: true },
+          digest: { watch: true, repo: 'sha256:local' },
+        },
+      };
+
+      const result = await findNewVersion(container as never, log);
+
+      expect(result.tag).toBe('2.0.0');
+      expect((container as { error?: { message: string } }).error?.message).toBe(
+        'registry unavailable',
+      );
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('registry unavailable'));
+    });
+
+    test('digest lookup throws, no newer tag available — findNewVersion resolves with the tag unchanged and records container.error', async () => {
+      const getImageManifestDigest = vi.fn().mockRejectedValue(new Error('registry unavailable'));
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockResolvedValue(['1.0.0', '1.1.0', '2.0.0']),
+            getImageManifestDigest,
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+      const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      const container = {
+        image: {
+          id: 'image-1',
+          registry: { name: 'hub' },
+          name: 'library/nginx',
+          tag: { value: '2.0.0', semver: true },
+          digest: { watch: true, repo: 'sha256:local' },
+        },
+      };
+
+      const result = await findNewVersion(container as never, log);
+
+      expect(result.tag).toBe('2.0.0');
+      expect((container as { error?: { message: string } }).error?.message).toBe(
+        'registry unavailable',
+      );
+    });
+
+    test('regression: a digest-only (sha256-pinned) container still rejects when its digest lookup fails', async () => {
+      const getImageManifestDigest = vi.fn().mockRejectedValue(new Error('manifest unreachable'));
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockResolvedValue(['latest']),
+            getImageManifestDigest,
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+      const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+      await expect(findNewVersion(createDigestOnlyContainer() as never, log)).rejects.toThrow(
+        'manifest unreachable',
+      );
+    });
+
+    test('regression: a getTags failure still rejects findNewVersion', async () => {
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockRejectedValue(new Error('tag listing failed')),
+            getImageManifestDigest: createManifestLookup(),
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+      const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      const container = {
+        image: {
+          id: 'image-1',
+          registry: { name: 'hub' },
+          name: 'library/nginx',
+          tag: { value: '1.0.0', semver: true },
+          digest: { watch: true, repo: 'sha256:local' },
+        },
+      };
+
+      await expect(findNewVersion(container as never, log)).rejects.toThrow('tag listing failed');
     });
   });
 

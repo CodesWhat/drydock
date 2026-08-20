@@ -463,14 +463,22 @@ export async function findNewVersion(
     result.suggestedTag = suggestedTag;
   }
 
-  // Must watch digest? => Find local/remote digests on registry
-  if (container.image.digest.watch && container.image.digest.repo) {
-    await handleDigestWatch(container, registryProvider, tagsCandidates, result, lookupOptions);
-  }
-
-  // The first one in the array is the highest
+  // The first one in the array is the highest. Record this before the digest
+  // watch below: it's derived purely from semver comparison against the tag
+  // list, so a digest lookup failure must never erase an already-found tag.
   if (tagsCandidates && tagsCandidates.length > 0) {
     [result.tag] = tagsCandidates;
+  }
+
+  // Must watch digest? => Find local/remote digests on registry
+  if (container.image.digest.watch && container.image.digest.repo) {
+    try {
+      await handleDigestWatch(container, registryProvider, tagsCandidates, result, lookupOptions);
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error);
+      logContainer.warn(`Digest watch failed (${errorMessage})`);
+      container.error = { message: errorMessage };
+    }
   }
 
   const publishedTag = result.tag || container.image.tag.value;
