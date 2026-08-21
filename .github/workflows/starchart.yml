@@ -1,16 +1,21 @@
-# Refreshes the committed star-history chart at docs/assets/star-history.svg.
+# Refreshes the committed star-history chart pair at
+# docs/assets/star-history.svg and docs/assets/star-history-dark.svg.
 #
 # The chart is a committed artifact on purpose: the retired /api/star-history
 # route read a runtime credential that was never set in production and served a
 # placeholder at HTTP 200 forever, and the Warpchart embed that briefly
 # replaced it was reversed. A committed SVG cannot fail silently — stale is
-# visible in git, missing is a broken image. This caller only regenerates it on
-# a weekly cadence; the shared workflow owns the generation logic.
+# visible in git, missing is a broken image. This caller regenerates the chart
+# when a release publishes, not on a cron: a committed artifact refreshed on a
+# schedule mutates underneath a tag, which is exactly what "main is the
+# released version" forbids. The shared workflow owns the generation logic and
+# now emits a light/dark pair so the README's <picture> block can follow
+# GitHub's theme toggle.
 name: Starchart Refresh
 
 on:
-  schedule:
-    - cron: "17 6 * * 1"
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions: {}
@@ -19,6 +24,7 @@ jobs:
   starchart:
     permissions:
       contents: write
-    uses: CodesWhat/.github/.github/workflows/starchart-refresh.yml@96e2765052a5d01ad9db2dffa355636d9e9bde88  # main 2026-08-20
+    uses: CodesWhat/.github/.github/workflows/starchart-refresh.yml@a66a777304d657a90161a8859dbc0dfa7d5020f7  # main 2026-08-21
     with:
       branch: dev/v1.7
+      accent: "#49bcfb"

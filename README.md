@@ -469,7 +469,10 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 <div align="center">
   <a href="https://github.com/CodesWhat/drydock/stargazers">
-    <img alt="Star History Chart" src="docs/assets/star-history.svg" />
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/star-history-dark.svg" />
+      <img src="docs/assets/star-history.svg" alt="Star history for CodesWhat/drydock" width="900" />
+    </picture>
   </a>
 </div>
 
