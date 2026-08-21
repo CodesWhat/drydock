@@ -29,7 +29,6 @@ const secretScanScriptPath = fileURLToPath(
 );
 const gitleaksConfigPath = fileURLToPath(new URL('../../.gitleaks.toml', import.meta.url));
 const gitleaksIgnorePath = fileURLToPath(new URL('../../.gitleaksignore', import.meta.url));
-const emojiPrefix = /^\p{Extended_Pictographic}/u;
 const workflowTestsCommand = 'npm run test:workflows';
 const loadWorkflow = loadWorkflowFrom.bind(undefined, workflowPath);
 const getWorkflowStep = getWorkflowStepFrom.bind(undefined, workflowPath);
@@ -43,20 +42,74 @@ function getTestJobStep(name: string): WorkflowStep | undefined {
   return workflow.jobs?.test?.steps?.find((step) => step.name === name);
 }
 
-test('ci-verify job names are emoji-prefixed for GitHub checks readability', () => {
+test('required ci-verify jobs publish stable plain-text check names', () => {
   const workflow = loadWorkflow();
 
-  const jobsWithoutEmoji = Object.entries(workflow.jobs ?? {})
-    .map(([jobId, job]) => ({
-      jobId,
-      name: job.name ?? '',
-    }))
-    .filter(({ name }) => !emojiPrefix.test(name));
+  expect(workflow.jobs?.lint?.name).toBe('Quality: Lint');
+  expect(workflow.jobs?.test?.name).toBe('Quality: Test & Coverage');
+  expect(workflow.jobs?.build?.name).toBe('Build');
+  expect(workflow.jobs?.e2e?.name).toBe('E2E: Cucumber');
+});
 
-  expect(jobsWithoutEmoji).toStrictEqual([]);
+test('the retired "legacy-security-actions" bridge job and its plain check name stay removed', () => {
+  const workflow = loadWorkflow();
+  const source = readFileSync(workflowPath, 'utf8');
+
+  // Ruleset 13077055 was narrowed to require the composite "Security: Actions
+  // / Workflow Security" context directly, so the fail-closed bridge that
+  // republished the old plain "Security: Actions" context is gone.
+  expect(workflow.jobs?.['legacy-security-actions']).toBeUndefined();
+
+  // No job may republish the retired plain "Security: Actions" context. The
+  // security-actions caller's own name: field legitimately reads "Security:
+  // Actions" too -- for a `uses:` job GitHub only ever consumes it as the
+  // "<caller name> / <called job name>" composite prefix, never as a
+  // standalone check -- so it's the one expected exception here.
+  const otherJobsWithBareName = Object.entries(workflow.jobs ?? {}).filter(
+    ([jobId, job]) => jobId !== 'security-actions' && job?.name === 'Security: Actions',
+  );
+  expect(otherJobsWithBareName).toStrictEqual([]);
+
+  // Anchored to `name:` at (optionally indented) line-start with optional
+  // quotes so this can't false-positive on an input key that merely ends in
+  // "name:", e.g. `workflow-security-check-name: Security: Actions`.
+  const bareNameLines = [...source.matchAll(/^[ \t]*name:\s*["']?Security: Actions["']?\s*$/gmu)];
+  expect(bareNameLines).toHaveLength(1);
+});
+
+test('security-actions calls the reusable go-ci workflow-security gate', () => {
+  const workflow = loadWorkflow();
+  const job = workflow.jobs?.['security-actions'] as
+    | { uses?: string; with?: Record<string, unknown>; name?: string }
+    | undefined;
+
+  expect(job?.name).toBe('Security: Actions');
+  expect(job?.uses).toBe(
+    'CodesWhat/.github/.github/workflows/go-ci.yml@47820bd85d49eb6cd0a935c31789c7d7ce037401',
+  );
+  expect(job?.with?.['run-workflow-security']).toBe(true);
+  expect(job?.with?.['workflow-security-egress-policy']).toBe('block');
+  expect(job?.with?.['workflow-security-allowed-endpoints']).toBe(
+    'ghcr.io:443 github.com:443 pkg-containers.githubusercontent.com:443',
+  );
+  // drydock is Go-less, so both Go jobs go-ci.yml gained must stay disabled.
+  expect(job?.with?.['run-test']).toBe(false);
+  expect(job?.with?.['run-lint']).toBe(false);
+
+  const runFlags = Object.keys(job?.with ?? {}).filter(
+    (key) =>
+      key.startsWith('run-') && !['run-workflow-security', 'run-test', 'run-lint'].includes(key),
+  );
+  expect(runFlags).toStrictEqual([]);
 });
 
 test('script node tests are wired into local and CI gates', () => {
+  expect(getTestJobStep('Checkout')).toMatchObject({
+    with: {
+      'fetch-depth': 0,
+      'persist-credentials': false,
+    },
+  });
   expect(getTestJobStep('Run scripts tests')).toMatchObject({
     run: 'node --test scripts/*.test.mjs',
   });
@@ -105,8 +158,8 @@ test('secret scanning gates full history and the tracked working tree', () => {
 
   expect(job).toMatchObject({
     name: '🔑 Security: Secrets',
-    needs: ['zizmor'],
-    'runs-on': 'ubuntu-latest',
+    needs: ['security-actions'],
+    'runs-on': 'ubuntu-24.04',
     'timeout-minutes': 10,
   });
   expect(getWorkflowStep('secrets', 'Checkout')).toMatchObject({
@@ -146,6 +199,50 @@ test('secret scanning gates full history and the tracked working tree', () => {
   ).toBe(true);
 });
 
+test('a pull request cannot weaken the secrets gate that scans it', () => {
+  const workflow = loadWorkflow();
+  const steps = workflow.jobs?.secrets?.steps ?? [];
+
+  const checkoutIndex = steps.findIndex((step) => step.name === 'Checkout');
+  const restoreIndex = steps.findIndex(
+    (step) => step.name === 'Restore scanner policy from the base ref',
+  );
+  const installGitleaksIndex = steps.findIndex((step) => step.name === 'Install Gitleaks');
+  const scanIndex = steps.findIndex((step) => step.name === 'Scan secrets');
+
+  // The restore must run after the checkout gives it something to restore
+  // into, and strictly before anything that installs or invokes the scanner,
+  // otherwise a PR-modified script or policy file could still be read.
+  expect(checkoutIndex).toBeGreaterThanOrEqual(0);
+  expect(restoreIndex).toBeGreaterThan(checkoutIndex);
+  expect(installGitleaksIndex).toBeGreaterThan(restoreIndex);
+  expect(scanIndex).toBeGreaterThan(restoreIndex);
+
+  const restoreStep = getWorkflowStep('secrets', 'Restore scanner policy from the base ref');
+  expect(restoreStep).toMatchObject({
+    if: "github.event_name == 'pull_request'",
+    env: {
+      BASE_REF: '${{ github.base_ref }}',
+    },
+  });
+
+  // Only pull_request has a meaningful base_ref/head divergence -- push,
+  // schedule, workflow_dispatch, and workflow_call all run trusted content
+  // already, so gating any wider would be a no-op at best.
+  expect(restoreStep?.if).not.toContain('push');
+  expect(restoreStep?.if).not.toContain('schedule');
+  expect(restoreStep?.if).not.toContain('workflow_dispatch');
+
+  const run = restoreStep?.run ?? '';
+  expect(run).toContain('set -euo pipefail');
+  // Depth-1 fetch of just the base branch tip -- cheap, and the restore only
+  // ever needs the current state of those three files on base, not history.
+  expect(run).toContain('git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"');
+  expect(run).toContain(
+    'git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore',
+  );
+});
+
 test('ci-verify can dispatch the complete release-candidate matrix manually', () => {
   const workflow = loadWorkflow();
 
@@ -166,12 +263,12 @@ test('ci-verify can dispatch the complete release-candidate matrix manually', ()
     expect(workflow.jobs?.[jobId]?.if).toContain("github.event_name == 'workflow_dispatch'");
   }
 
-  for (const jobId of ['zizmor', 'changes', 'lint', 'test', 'build']) {
+  for (const jobId of ['security-actions', 'changes', 'lint', 'test', 'build']) {
     expect(workflow.jobs?.[jobId]?.if).toBeUndefined();
   }
 
-  expect(workflow.jobs?.codeql?.needs).toStrictEqual(['zizmor']);
-  expect(workflow.jobs?.fuzz?.needs).toStrictEqual(['zizmor']);
+  expect(workflow.jobs?.codeql?.needs).toStrictEqual(['security-actions']);
+  expect(workflow.jobs?.fuzz?.needs).toStrictEqual(['security-actions']);
   expect(workflow.jobs?.web?.needs).toStrictEqual(['changes']);
   expect(workflow.jobs?.['dast-zap-baseline']?.needs).toStrictEqual(['build']);
   expect(workflow.jobs?.e2e?.needs).toStrictEqual(['build', 'changes']);
