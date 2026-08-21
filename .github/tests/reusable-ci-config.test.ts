@@ -27,10 +27,10 @@ const goCiUses = `CodesWhat/.github/.github/workflows/go-ci.yml@${frozenGoCiSha}
 const frozenGreptileSummonSha = 'bbc181dc4d462f673dac2dff5f88a8408dd9c763';
 const greptileSummonUses = `CodesWhat/.github/.github/workflows/greptile-summon.yml@${frozenGreptileSummonSha}`;
 
-const frozenStarchartRefreshSha = 'a66a777304d657a90161a8859dbc0dfa7d5020f7';
+const frozenStarchartRefreshSha = '11004e42d7d19e86eb3b7777c467ec9522b784e1';
 const starchartRefreshUses = `CodesWhat/.github/.github/workflows/starchart-refresh.yml@${frozenStarchartRefreshSha}`;
 
-const frozenMainIsReleasedSha = 'a66a777304d657a90161a8859dbc0dfa7d5020f7';
+const frozenMainIsReleasedSha = '11004e42d7d19e86eb3b7777c467ec9522b784e1';
 const mainIsReleasedUses = `CodesWhat/.github/.github/workflows/main-is-released.yml@${frozenMainIsReleasedSha}`;
 
 const frozenReusableWorkflowUses = [

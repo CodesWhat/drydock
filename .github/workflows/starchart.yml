@@ -30,7 +30,7 @@ jobs:
   starchart:
     permissions:
       contents: write
-    uses: CodesWhat/.github/.github/workflows/starchart-refresh.yml@a66a777304d657a90161a8859dbc0dfa7d5020f7  # main 2026-08-21
+    uses: CodesWhat/.github/.github/workflows/starchart-refresh.yml@11004e42d7d19e86eb3b7777c467ec9522b784e1  # main 2026-08-21
     with:
       # Only ever dispatched (see header) on the dev branch this cut is
       # rotating the chart for — deriving branch from ref_name instead of a
