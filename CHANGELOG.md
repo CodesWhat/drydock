@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Demo site favicon now matches the refreshed branding.** The v1.5.1 brand refresh (#439) moved the website to the cropped whale "headshot" icon and the app UI followed, but demo.getdrydock.com kept showing the old full-body whale: its stale `favicon.svg` — which modern browsers preferred over the PNGs — was never replaced. The demo now ships the same headshot icon set as the website and app UI, the `favicon.svg` is removed, and the icon links carry a `?v=2` cache-buster so browsers re-fetch instead of serving the aggressively cached old icon. (#689)
 
-## [1.6.1] — 2026-08-20
+## [1.6.1-rc.1] — 2026-08-21
 
 ### Fixed
 
@@ -2408,8 +2408,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1...HEAD
-[1.6.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.6.1
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.1...HEAD
+[1.6.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.6.1-rc.1
 [1.6.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.13...v1.6.0
 [1.6.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.12...v1.6.0-rc.13
 [1.6.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.11...v1.6.0-rc.12
