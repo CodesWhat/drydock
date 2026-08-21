@@ -35,6 +35,13 @@
       "matchPackageNames": ["@babel/core"],
       "matchUpdateTypes": ["major"],
       "enabled": false
+    },
+    {
+      "description": "js-yaml in e2e is a global npm override consumed by artillery's internals, which use a default import and safeLoad; js-yaml v4 removed safeLoad and v5 is ESM-only with named exports, so any major bump past 3.x breaks the Artillery load-test jobs at module load. Those jobs only run on main pushes and workflow_dispatch, never on PRs, so the break lands after merge (main push run 32444352693, 2026-08-21). e2e/tests/artillery-startup.test.js is the PR-time backstop. Re-enable once artillery migrates to the js-yaml v4+ API.",
+      "matchPackageNames": ["js-yaml"],
+      "matchFileNames": ["e2e/package.json"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
     }
   ],
   "customManagers": [
