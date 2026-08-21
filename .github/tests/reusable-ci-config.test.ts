@@ -30,7 +30,15 @@ const greptileSummonUses = `CodesWhat/.github/.github/workflows/greptile-summon.
 const frozenStarchartRefreshSha = 'a66a777304d657a90161a8859dbc0dfa7d5020f7';
 const starchartRefreshUses = `CodesWhat/.github/.github/workflows/starchart-refresh.yml@${frozenStarchartRefreshSha}`;
 
-const frozenReusableWorkflowUses = [goCiUses, greptileSummonUses, starchartRefreshUses];
+const frozenMainIsReleasedSha = 'a66a777304d657a90161a8859dbc0dfa7d5020f7';
+const mainIsReleasedUses = `CodesWhat/.github/.github/workflows/main-is-released.yml@${frozenMainIsReleasedSha}`;
+
+const frozenReusableWorkflowUses = [
+  goCiUses,
+  greptileSummonUses,
+  starchartRefreshUses,
+  mainIsReleasedUses,
+];
 
 const workflowsDir = fileURLToPath(new URL('../workflows', import.meta.url));
 
