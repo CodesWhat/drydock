@@ -13,8 +13,8 @@ test('main returns non-zero when commit range contains invalid messages', () => 
 
   const exitCode = main(['--base', 'abc123', '--head', 'def456'], {
     getCommits: () => [
-      { sha: '1111111', message: '✨ feat(api): add health endpoint' },
-      { sha: '2222222', message: 'fix(api): missing emoji prefix' },
+      { sha: '1111111', message: 'feat(api): add health endpoint' },
+      { sha: '2222222', message: 'Feat(api): capitalized type is invalid' },
     ],
     stdout: (message) => stdout.push(message),
     stderr: (message) => stderr.push(message),
@@ -32,8 +32,8 @@ test('main succeeds when all commit messages in range are valid', () => {
 
   const exitCode = main(['--base', 'abc123', '--head', 'def456'], {
     getCommits: () => [
-      { sha: '1111111', message: '✨ feat(api): add health endpoint' },
-      { sha: '2222222', message: '🐛 fix(ci): handle missing env var' },
+      { sha: '1111111', message: 'feat(api): add health endpoint' },
+      { sha: '2222222', message: 'fix(ci): handle missing env var' },
     ],
     stdout: (message) => stdout.push(message),
     stderr: (message) => stderr.push(message),

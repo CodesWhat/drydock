@@ -126,34 +126,36 @@ Each component type extends a base class with `init()`, `deregister()`, and type
 
 ## Commit convention
 
-We use **Gitmoji + Conventional Commits**:
+We use **Conventional Commits**. No emoji — plain format:
 
 ```text
-<emoji> <type>(<scope>): <description>
+<type>(<scope>): <description>
 ```
 
-| Emoji | Type | Use |
-|---|---|---|
-| ✨ | `feat` | New feature |
-| 🐛 | `fix` | Bug fix |
-| 📝 | `docs` | Documentation |
-| 💄 | `style` | UI/cosmetic changes |
-| ♻️ | `refactor` | Code refactor (no feature/fix) |
-| ⚡ | `perf` | Performance improvement |
-| ✅ | `test` | Adding/updating tests |
-| 🔧 | `chore` | Build, config, tooling |
-| 🔒 | `security` | Security fix |
-| ⬆️ | `deps` | Dependency upgrade |
-| 🗑️ | `revert` | Intentional revert |
+| Type | Use |
+|---|---|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation |
+| `style` | UI/cosmetic changes |
+| `refactor` | Code refactor (no feature/fix), including code removal |
+| `perf` | Performance improvement |
+| `test` | Adding/updating tests |
+| `build` | Build system or dependency changes |
+| `ci` | CI/CD configuration changes |
+| `chore` | Tooling, config, misc |
+| `revert` | Intentional revert |
 
 Scope is optional. Subject line: imperative, lowercase, no trailing period.
 
+Breaking changes: add `!` before the colon (`feat(api)!: drop v1 tokens`), or a `BREAKING CHANGE:` footer.
+
 ```text
-✨ feat(docker): add health check endpoint
-🐛 fix: resolve socket EACCES (#38)
+feat(docker): add health check endpoint
+fix: resolve socket EACCES (#38)
 ```
 
-Don't stress about getting the emoji/format perfect — the commit-msg hook will tell you if something's off, and the maintainer can fix it during merge.
+Don't stress about getting the format perfect — the commit-msg hook will tell you if something's off, and the maintainer can fix it during merge.
 
 ## Testing (optional for contributors)
 
