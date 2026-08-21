@@ -56,6 +56,12 @@ const DEV_BRANCHES = [
   'ddddddd\trefs/heads/not-a-dev-branch',
 ].join('\n');
 
+// The real active line, per main's own package.json — the authoritative
+// source the guard now uses. Matches DEV_BRANCHES' "highest name" (dev/v1.7)
+// by default so existing branch-name-based expectations still line up; tests
+// that need to prove the fix (P1-4) deliberately make these two disagree.
+const DEFAULT_MAIN_VERSION = '1.7.0';
+
 interface GuardResult {
   status: number;
   stdout: string;
@@ -66,6 +72,8 @@ function runGuard(options: {
   releaseTag: string;
   sourceRef: string;
   lsRemoteOutput?: string;
+  lsRemoteExit?: number;
+  mainVersion?: string | null;
 }): GuardResult {
   const workdir = mkdtempSync(join(tmpdir(), 'release-cut-source-ref-'));
   try {
@@ -73,6 +81,15 @@ function runGuard(options: {
     mkdirSync(stubDir);
     writeFileSync(join(stubDir, 'git'), stubGitScript, { mode: 0o755 });
     chmodSync(join(stubDir, 'git'), 0o755);
+
+    // The guard reads package.json (relative path) to derive main's active
+    // line, so the script runs with workdir as cwd and a controlled file.
+    if (options.mainVersion !== null) {
+      writeFileSync(
+        join(workdir, 'package.json'),
+        JSON.stringify({ version: options.mainVersion ?? DEFAULT_MAIN_VERSION }),
+      );
+    }
 
     const scriptPath = join(workdir, 'guard.sh');
     writeFileSync(scriptPath, loadGuardRunBlock());
@@ -87,11 +104,14 @@ function runGuard(options: {
       GITHUB_OUTPUT: outputPath,
       FAKE_GIT_LS_REMOTE_OUTPUT: options.lsRemoteOutput ?? DEV_BRANCHES,
     };
+    if (options.lsRemoteExit !== undefined) {
+      env.FAKE_GIT_LS_REMOTE_EXIT = String(options.lsRemoteExit);
+    }
 
     let status = 0;
     let stdout = '';
     try {
-      stdout = execFileSync('bash', [scriptPath], { env, encoding: 'utf8' });
+      stdout = execFileSync('bash', [scriptPath], { cwd: workdir, env, encoding: 'utf8' });
     } catch (error) {
       const execError = error as { status?: number; stdout?: string };
       status = execError.status ?? 1;
@@ -146,12 +166,71 @@ test('rejects a source_ref that does not exist on origin', () => {
   expect(result.stdout).toContain("source_ref 'dev/v1.4' does not exist as a branch on origin");
 });
 
-test('rejects source_ref naming the active (highest) dev line', () => {
-  const result = runGuard({ releaseTag: 'v1.7.1', sourceRef: 'dev/v1.7' });
+test("rejects source_ref matching main's active line (package.json-derived)", () => {
+  const result = runGuard({
+    releaseTag: 'v1.7.1',
+    sourceRef: 'dev/v1.7',
+    mainVersion: '1.7.0',
+  });
 
   expect(result.status).not.toBe(0);
-  expect(result.stdout).toContain('dev/v1.7 is still the active line');
+  expect(result.stdout).toContain(
+    "dev/v1.7 matches main's active line (package.json version 1.7.0)",
+  );
   expect(result.stdout).toContain('leave source_ref empty and cut from main');
+});
+
+// P1-4 regression: the active line must come from main's package.json, not
+// from "the highest dev/vX.Y branch name on origin" — that namespace is
+// writable by anyone with push access. A decoy dev/v999.0 branch must not let
+// the true active line (dev/v1.7, per package.json) slip past as "not
+// highest" and skip the drift guard.
+test('a decoy highest-numbered branch cannot mask the true active line', () => {
+  const branchesWithDecoy = [DEV_BRANCHES, 'eeeeeee\trefs/heads/dev/v999.0'].join('\n');
+
+  const result = runGuard({
+    releaseTag: 'v1.7.1',
+    sourceRef: 'dev/v1.7',
+    lsRemoteOutput: branchesWithDecoy,
+    mainVersion: '1.7.0',
+  });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).toContain("dev/v1.7 matches main's active line");
+});
+
+// The same decoy must not block a GENUINELY inactive line either — the
+// package.json check should only reject an exact line match, not merely "a
+// higher-numbered decoy branch exists somewhere".
+test('a decoy branch does not block a legitimate maintenance cut on an inactive line', () => {
+  const branchesWithDecoy = [DEV_BRANCHES, 'eeeeeee\trefs/heads/dev/v999.0'].join('\n');
+
+  const result = runGuard({
+    releaseTag: 'v1.6.1',
+    sourceRef: 'dev/v1.6',
+    lsRemoteOutput: branchesWithDecoy,
+    mainVersion: '1.7.0',
+  });
+
+  expect(result.status).toBe(0);
+  expect(result.output.is_maintenance_cut).toBe('true');
+});
+
+test('fails closed when package.json on main has no readable version', () => {
+  const result = runGuard({
+    releaseTag: 'v1.6.1',
+    sourceRef: 'dev/v1.6',
+    // package.json exists (valid JSON) but carries no .version — the
+    // realistic broken-checkout shape; jq itself would abort the script
+    // before this branch on a genuinely missing file, which is covered by
+    // the ambient shell's own exit-nonzero behavior, not this message.
+    mainVersion: '',
+  });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).toContain(
+    'Could not read .version from package.json on main to determine the active line',
+  );
 });
 
 test('rejects a patch-zero release_tag even when the line and branch are otherwise valid', () => {
@@ -184,7 +263,7 @@ test('accepts a valid maintenance prerelease cut', () => {
   expect(result.output.source_branch).toBe('dev/v1.6');
 });
 
-test('an unanswerable remote query fails the guard instead of silently passing', () => {
+test('an unanswerable remote query (empty but successful) fails the guard instead of silently passing', () => {
   const result = runGuard({
     releaseTag: 'v1.6.1',
     sourceRef: 'dev/v1.6',
@@ -197,24 +276,49 @@ test('an unanswerable remote query fails the guard instead of silently passing',
   );
 });
 
+// P3-6: a previously failing command must fail closed, not just an empty
+// (but successful) result — this exercises the real `git ls-remote` exit
+// code, not a stand-in for it.
+test('a genuinely failing ls-remote propagates and fails closed', () => {
+  const result = runGuard({
+    releaseTag: 'v1.6.1',
+    sourceRef: 'dev/v1.6',
+    lsRemoteExit: 128,
+  });
+
+  expect(result.status).not.toBe(0);
+  expect(result.output.is_maintenance_cut).toBeUndefined();
+});
+
 test('release-cut skips the main-sync drift guard exactly when the maintenance cut is validated', () => {
   const syncStep = getStep('Assert main is in sync with the active dev branch');
   expect(syncStep?.if).toBe("steps.source_ref.outputs.is_maintenance_cut != 'true'");
 });
 
-test('release-cut resolves target SHA from the maintenance branch tip when set', () => {
+test('release-cut resolves target SHA from the maintenance branch tip when set, via an unambiguous fully-qualified ref', () => {
   const targetStep = getStep('Resolve target SHA and lowercase repository');
 
   expect(targetStep?.env).toMatchObject({
     IS_MAINTENANCE_CUT: '${{ steps.source_ref.outputs.is_maintenance_cut }}',
     SOURCE_BRANCH: '${{ steps.source_ref.outputs.source_branch }}',
   });
-  expect(targetStep?.run).toContain('git fetch --quiet origin "${SOURCE_BRANCH}"');
-  expect(targetStep?.run).toContain('sha="$(git rev-parse "origin/${SOURCE_BRANCH}")"');
+  // P1-3: fetch into an explicit remote-tracking ref and resolve that exact
+  // fully-qualified path — never the "origin/${SOURCE_BRANCH}" shorthand,
+  // which a colliding tag can outrank per gitrevisions' disambiguation order.
+  expect(targetStep?.run).toContain(
+    'git fetch --quiet origin "refs/heads/${SOURCE_BRANCH}:refs/remotes/origin/${SOURCE_BRANCH}"',
+  );
+  expect(targetStep?.run).toContain(
+    'sha="$(git rev-parse --verify --end-of-options "refs/remotes/origin/${SOURCE_BRANCH}^{commit}")"',
+  );
+  expect(targetStep?.run).not.toContain('git rev-parse "origin/${SOURCE_BRANCH}"');
   expect(targetStep?.run).toContain('sha="$(git rev-parse HEAD)"');
 });
 
-test('release-cut threads the maintenance flag into both CI-wait steps', () => {
+test('release-cut threads the maintenance flag into both CI-wait steps, positioned before the detached checkout', () => {
+  const steps = releaseSteps();
+  const indexOf = (name: string) => steps.findIndex((step) => step.name === name);
+
   const ciWaitStep = getStep('Wait for successful branch CI on release source SHA');
   const e2eWaitStep = getStep('Wait for successful E2E Playwright on release source SHA');
 
@@ -223,6 +327,21 @@ test('release-cut threads the maintenance flag into both CI-wait steps', () => {
       'allow-dispatch-events': '${{ steps.source_ref.outputs.is_maintenance_cut }}',
     });
   }
+
+  // P1-2: `uses: ./.github/actions/...` resolves from whatever is on disk in
+  // the runner workspace. Both waits must run BEFORE "Checkout exact release
+  // source" (a literal `git checkout --detach`), or a maintenance cut would
+  // resolve the composite action from the old copy on the maintenance
+  // branch — one that predates allow-dispatch-events entirely — and the wait
+  // would filter push-only forever.
+  const checkoutIndex = indexOf('Checkout exact release source');
+  expect(checkoutIndex).toBeGreaterThanOrEqual(0);
+  expect(indexOf('Wait for successful branch CI on release source SHA')).toBeLessThan(
+    checkoutIndex,
+  );
+  expect(indexOf('Wait for successful E2E Playwright on release source SHA')).toBeLessThan(
+    checkoutIndex,
+  );
 });
 
 test('source_ref input defaults empty and documents the maintenance-only scope', () => {
@@ -236,4 +355,90 @@ test('source_ref input defaults empty and documents the maintenance-only scope',
   expect(input?.default).toBe('');
   expect(input?.description).toContain('Maintenance cuts only');
   expect(input?.description).toContain('dev/v1.6');
+});
+
+// P1-1: provenance/attestation steps must never run for a maintenance cut —
+// they would publish a false "built from main" claim (see the "Defect 3"
+// comment in the workflow). Cosign signing steps are NOT gated the same way:
+// they only assert identity, which stays true regardless of source_ref.
+const provenanceOnlySteps = [
+  'Attest container build provenance',
+  'Verify container build provenance attestation',
+  'Attest container SBOM',
+  'Verify container SBOM attestation',
+  'Attest release artifact provenance',
+  'Export release provenance asset',
+  'Verify release artifact provenance attestation',
+  'Verify candidate artifact provenance attestation',
+];
+
+const cosignOnlySteps = [
+  'Sign container images',
+  'Verify container image signatures',
+  'Sign release artifact',
+  'Verify release artifact signature',
+  'Verify candidate artifact signature',
+];
+
+test('every provenance attestation step is skipped for a maintenance cut', () => {
+  for (const stepName of provenanceOnlySteps) {
+    const step = getStep(stepName);
+    expect(step, `expected step "${stepName}" to exist`).toBeDefined();
+    expect(step?.if, `expected step "${stepName}" to gate on is_maintenance_cut`).toContain(
+      "steps.source_ref.outputs.is_maintenance_cut != 'true'",
+    );
+  }
+});
+
+test('cosign signing/verification steps are never gated on maintenance-cut status', () => {
+  for (const stepName of cosignOnlySteps) {
+    const step = getStep(stepName);
+    expect(step, `expected step "${stepName}" to exist`).toBeDefined();
+    expect(step?.if ?? '').not.toContain('is_maintenance_cut');
+  }
+});
+
+test('the release-notes and job-summary steps record the true maintenance source SHA', () => {
+  const notesStep = getStep('Generate release notes from changelog');
+  const summaryStep = getStep('Release summary');
+
+  expect(notesStep?.env).toMatchObject({
+    IS_MAINTENANCE_CUT: '${{ steps.source_ref.outputs.is_maintenance_cut }}',
+    SOURCE_BRANCH: '${{ steps.source_ref.outputs.source_branch }}',
+  });
+  expect(notesStep?.run).toContain('maintenance cut, built from');
+  expect(notesStep?.run).toContain('no SLSA build-provenance attestation');
+
+  expect(summaryStep?.env).toMatchObject({
+    IS_MAINTENANCE_CUT: '${{ steps.source_ref.outputs.is_maintenance_cut }}',
+  });
+  expect(summaryStep?.run).toContain('Maintenance cut: built from');
+});
+
+test('the GA promotion download/promote steps omit the intoto.jsonl asset for a maintenance cut', () => {
+  const downloadStep = getStep('Download candidate release artifact for promotion');
+  const promoteStep = getStep('Promote candidate artifact to GA release filenames');
+
+  expect(downloadStep?.env).toMatchObject({
+    IS_MAINTENANCE_CUT: '${{ steps.source_ref.outputs.is_maintenance_cut }}',
+  });
+  const downloadCommand = String(downloadStep?.with?.command ?? '');
+  expect(downloadCommand).toContain('"drydock-${CANDIDATE_TAG}.tar.gz.intoto.jsonl"');
+  expect(downloadCommand).toContain('if [ "${IS_MAINTENANCE_CUT}" != "true" ]; then');
+
+  expect(promoteStep?.env).toMatchObject({
+    IS_MAINTENANCE_CUT: '${{ steps.source_ref.outputs.is_maintenance_cut }}',
+  });
+  expect(promoteStep?.run).toContain('exts+=(tar.gz.intoto.jsonl)');
+});
+
+test('the release upload step omits the intoto.jsonl asset for a maintenance cut', () => {
+  const uploadStep = getStep('Prepare draft GitHub Release and upload signed assets');
+
+  expect(uploadStep?.env).toMatchObject({
+    IS_MAINTENANCE_CUT: '${{ steps.source_ref.outputs.is_maintenance_cut }}',
+  });
+  const uploadCommand = String(uploadStep?.with?.command ?? '');
+  expect(uploadCommand).toContain('"dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl"');
+  expect(uploadCommand).toContain('if [ "${IS_MAINTENANCE_CUT}" != "true" ]; then');
 });

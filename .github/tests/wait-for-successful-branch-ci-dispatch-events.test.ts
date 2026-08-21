@@ -44,11 +44,15 @@ function loadPollRunBlock(): string {
 
 const TARGET_SHA = 'a'.repeat(40);
 
-function runsJsonWith(event: string, conclusion: string | null): string {
+function runsJsonWith(
+  event: string,
+  conclusion: string | null,
+  headSha: string = TARGET_SHA,
+): string {
   return JSON.stringify({
     workflow_runs: [
       {
-        head_sha: TARGET_SHA,
+        head_sha: headSha,
         event,
         head_branch: 'dev/v1.6',
         status: conclusion ? 'completed' : 'in_progress',
@@ -170,6 +174,39 @@ test('a pull_request-triggered run is never accepted as evidence, dispatch flag 
   const result = runPoll({
     allowDispatchEvents: 'true',
     runsJson: runsJsonWith('pull_request', 'success'),
+  });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).toContain('Timed out waiting for successful');
+});
+
+// P3-5: the tests above set ALLOW_DISPATCH_EVENTS directly as a plain env var
+// and always target a matching SHA. That would stay green even if the input
+// stopped being wired to that env var, if the default silently flipped to
+// 'true', or if the head_sha predicate were dropped — none of those would be
+// caught by a test that only ever exercises the env var and a matching SHA
+// directly. These two close that gap.
+test('allow-dispatch-events input defaults to false and is wired verbatim into the poll step env', () => {
+  const action = yaml.parse(readFileSync(actionPath, 'utf8')) as {
+    inputs?: Record<string, { default?: string }>;
+    runs?: { steps?: CompositeStep[] };
+  };
+
+  expect(action.inputs?.['allow-dispatch-events']?.default).toBe('false');
+
+  const pollStep = action.runs?.steps?.find(
+    (candidate) => candidate.name === 'Wait for successful branch CI on target SHA',
+  );
+  expect(pollStep?.env).toMatchObject({
+    ALLOW_DISPATCH_EVENTS: '${{ inputs.allow-dispatch-events }}',
+  });
+});
+
+test('a matching event/conclusion at a DIFFERENT SHA is rejected even with allow-dispatch-events=true', () => {
+  const otherSha = 'b'.repeat(40);
+  const result = runPoll({
+    allowDispatchEvents: 'true',
+    runsJson: runsJsonWith('workflow_dispatch', 'success', otherSha),
   });
 
   expect(result.status).not.toBe(0);
