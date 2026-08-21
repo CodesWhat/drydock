@@ -100,26 +100,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Restore scanner policy from the base ref
-        # A PR must not be able to alter the gate that scans it: restore the
-        # scanner script and ignore policy from the protected base ref, so
-        # policy changes only take effect after they merge.
-        #
-        # pull_request only. push/schedule/workflow_dispatch/workflow_call all
-        # run already-trusted content, where head and base are the same trust
-        # domain. `merge_group` is deliberately NOT covered: no ruleset enables
-        # a merge queue today, so those events never fire, and `github.base_ref`
-        # is empty there anyway. If a merge queue is ever turned on, extend this
-        # to merge_group via `github.event.merge_group.base_ref` — until then a
-        # queue would evaluate the PR's own unmerged scanner policy.
-        if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"
-          git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore
-
+      # v1.7 adds a "Restore scanner policy from the base ref" step here
+      # (pin scripts/scan-secrets.sh, .gitleaks.toml, .gitleaksignore to the
+      # PR's base ref before scanning, so a PR can't weaken the gate that
+      # scans it). Intentionally NOT backported to this maintenance line:
+      # scripts/scan-secrets.sh runs `gitleaks git --log-opts="--all"`, which
+      # walks every ref reachable from the fetch, including commits that
+      # originated on the v1.7 line and were only ever merged into shared
+      # history (e.g. a70d406e/cbc87588). dev/v1.6's own .gitleaksignore
+      # baseline predates those commits, so pinning the ignore policy to
+      # dev/v1.6's base ref recreates them as unresolvable findings on every
+      # PR — and since the base ref's copy is what's always scanned against,
+      # no PR against dev/v1.6 could ever land the baseline update that would
+      # fix it. Scanning with the PR checkout's own (possibly PR-modified)
+      # policy is a real trade-off, but the active v1.7 line keeps the
+      # restore-from-base control; this branch is maintenance-only backport
+      # scope and doesn't need to reproduce it.
       - name: Install Gitleaks
         env:
           GITLEAKS_VERSION: '8.30.1'
@@ -434,29 +430,14 @@ jobs:
       - name: Biome check
         run: npx biome check .
 
-      - name: Install app dependencies
-        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 30
-          command: cd app && npm ci
-
-      - name: Install ui dependencies
-        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 30
-          command: cd ui && npm ci
-
-      - name: Knip (app)
-        run: npm run knip
-        working-directory: app
-
-      - name: Knip (ui)
-        run: npm run knip
-        working-directory: ui
+      # v1.7 adds "Install app dependencies" / "Install ui dependencies" here
+      # plus "Knip (app)" / "Knip (ui)" steps running `npm run knip` in each
+      # workspace. Not backported: Knip enforcement is a v1.7-line goal, and
+      # this branch's app/ui code was never cleaned up against it (dozens of
+      # pre-existing unused-export findings) — turning the gate on here would
+      # fail every PR on pre-existing debt unrelated to what the PR changed.
+      # The two install steps existed only to give Knip each workspace's own
+      # node_modules, so they're dropped too rather than left as dead weight.
 
       - name: Setup Qlty
         uses: qltysh/qlty-action/install@08a0a862c159eae9b9003081da6663d96efef637  # v2.3.0

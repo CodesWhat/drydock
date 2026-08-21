@@ -51,6 +51,24 @@ test('required ci-verify jobs publish stable plain-text check names', () => {
   expect(workflow.jobs?.e2e?.name).toBe('E2E: Cucumber');
 });
 
+test('lint job intentionally omits Knip enforcement', () => {
+  // v1.7 runs `npm run knip` in app/ and ui/ (plus the install steps that give
+  // each workspace its own node_modules). Not backported: Knip enforcement is
+  // a v1.7-line goal, and this branch's app/ui code was never cleaned up
+  // against it, so turning the gate on here would fail every PR on
+  // pre-existing debt unrelated to what the PR changed. Biome/Qlty stay as
+  // backported -- only Knip and its now-unneeded install steps are dropped.
+  const workflow = loadWorkflow();
+  const lintStepNames = (workflow.jobs?.lint?.steps ?? []).map((step) => step.name);
+
+  expect(lintStepNames).not.toContain('Knip (app)');
+  expect(lintStepNames).not.toContain('Knip (ui)');
+  expect(lintStepNames).not.toContain('Install app dependencies');
+  expect(lintStepNames).not.toContain('Install ui dependencies');
+  expect(lintStepNames).toContain('Biome check');
+  expect(lintStepNames).toContain('Qlty check (all plugins, enforced)');
+});
+
 test('the retired "legacy-security-actions" bridge job and its plain check name stay removed', () => {
   const workflow = loadWorkflow();
   const source = readFileSync(workflowPath, 'utf8');
@@ -199,48 +217,29 @@ test('secret scanning gates full history and the tracked working tree', () => {
   ).toBe(true);
 });
 
-test('a pull request cannot weaken the secrets gate that scans it', () => {
+test('the secrets job intentionally omits the base-ref scanner-policy restore', () => {
+  // v1.7 pins scripts/scan-secrets.sh, .gitleaks.toml, and .gitleaksignore to
+  // the PR's base ref before scanning, so a PR can't weaken the gate that
+  // scans it. Deliberately not present on this maintenance line: scan-secrets.sh
+  // runs `gitleaks git --log-opts="--all"`, which walks every ref reachable
+  // from the fetch, including commits that originated on the v1.7 line. This
+  // branch's own .gitleaksignore baseline predates those commits, so pinning
+  // the policy to dev/v1.6's base ref would recreate them as unresolvable
+  // findings on every PR -- and since the base ref's copy is always what gets
+  // scanned against, no PR against dev/v1.6 could ever land the baseline
+  // update that would fix it. See the comment left in ci-verify.yml where the
+  // restore step would otherwise sit.
+  expect(getWorkflowStep('secrets', 'Restore scanner policy from the base ref')).toBeUndefined();
+
   const workflow = loadWorkflow();
   const steps = workflow.jobs?.secrets?.steps ?? [];
-
   const checkoutIndex = steps.findIndex((step) => step.name === 'Checkout');
-  const restoreIndex = steps.findIndex(
-    (step) => step.name === 'Restore scanner policy from the base ref',
-  );
   const installGitleaksIndex = steps.findIndex((step) => step.name === 'Install Gitleaks');
   const scanIndex = steps.findIndex((step) => step.name === 'Scan secrets');
 
-  // The restore must run after the checkout gives it something to restore
-  // into, and strictly before anything that installs or invokes the scanner,
-  // otherwise a PR-modified script or policy file could still be read.
   expect(checkoutIndex).toBeGreaterThanOrEqual(0);
-  expect(restoreIndex).toBeGreaterThan(checkoutIndex);
-  expect(installGitleaksIndex).toBeGreaterThan(restoreIndex);
-  expect(scanIndex).toBeGreaterThan(restoreIndex);
-
-  const restoreStep = getWorkflowStep('secrets', 'Restore scanner policy from the base ref');
-  expect(restoreStep).toMatchObject({
-    if: "github.event_name == 'pull_request'",
-    env: {
-      BASE_REF: '${{ github.base_ref }}',
-    },
-  });
-
-  // Only pull_request has a meaningful base_ref/head divergence -- push,
-  // schedule, workflow_dispatch, and workflow_call all run trusted content
-  // already, so gating any wider would be a no-op at best.
-  expect(restoreStep?.if).not.toContain('push');
-  expect(restoreStep?.if).not.toContain('schedule');
-  expect(restoreStep?.if).not.toContain('workflow_dispatch');
-
-  const run = restoreStep?.run ?? '';
-  expect(run).toContain('set -euo pipefail');
-  // Depth-1 fetch of just the base branch tip -- cheap, and the restore only
-  // ever needs the current state of those three files on base, not history.
-  expect(run).toContain('git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"');
-  expect(run).toContain(
-    'git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore',
-  );
+  expect(installGitleaksIndex).toBeGreaterThan(checkoutIndex);
+  expect(scanIndex).toBeGreaterThan(installGitleaksIndex);
 });
 
 test('ci-verify can dispatch the complete release-candidate matrix manually', () => {
