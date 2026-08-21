@@ -31,7 +31,7 @@
       "groupSlug": "playwright"
     },
     {
-      "description": "@babel/core is only present as an unscoped override consumed by @stryker-mutator/instrumenter, which requires ~7.29.0 with matching 7.x sibling plugins; npm overrides are global, so a core@8 bump forces an unsupported mix under the instrumenter and breaks the monthly mutation-testing workflow. Re-enable once Stryker supports Babel 8.",
+      "description": "@babel/core is only present as an unscoped override consumed by @stryker-mutator/instrumenter, which requires ~7.29.0 with matching 7.x sibling plugins; npm overrides are global, so a core@8 bump forces an unsupported mix under the instrumenter and breaks the monthly mutation-testing workflow. Re-enable once Stryker supports Babel 8 (recorded 2026-08-13; re-check at each Stryker major).",
       "matchPackageNames": ["@babel/core"],
       "matchUpdateTypes": ["major"],
       "enabled": false
