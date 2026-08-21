@@ -67,7 +67,7 @@ jobs:
       packages: write      # ghcr push
       id-token: write      # cosign keyless signing
       attestations: write  # attest-build-provenance + OCI attestation storage
-      actions: read        # wait-for-successful-branch-ci queries workflow runs
+      actions: write       # wait-for-successful-branch-ci queries workflow runs; also dispatch starchart refresh (write implies read)
 
     steps:
       - name: Harden Runner
@@ -1504,6 +1504,31 @@ jobs:
               echo "::error::Release ${RELEASE_TAG} is still a draft after publish."
               exit 1
             fi
+
+      - name: Dispatch starchart refresh
+        if: steps.source_ref.outputs.is_maintenance_cut != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          # starchart.yml's release: published trigger can never fire: this job creates
+          # the release with GH_TOKEN (github.token), and GitHub suppresses workflow runs
+          # for events caused by GITHUB_TOKEN — the same suppression that keeps the
+          # pushed release tag above from re-triggering anything itself. workflow_dispatch
+          # is one of the two documented exceptions (repository_dispatch is the other),
+          # so the cut dispatches the chart refresh explicitly instead of relying on the
+          # release event.
+          #
+          # Mainline cuts only (see the `if:` above): a maintenance dev/vX.Y branch
+          # doesn't carry starchart.yml, so dispatching there would fail on a missing
+          # workflow and redden an otherwise-good maintenance GA; and a maintenance line
+          # never owns the published README anyway — GitHub renders main's README, and
+          # maintenance cuts never promote to main, so a chart refresh there would update
+          # a page nobody sees.
+          minor="$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^v?([0-9]+)\.([0-9]+)\..*/\1.\2/')"
+          dev_branch="dev/v${minor}"
+          gh workflow run starchart.yml --ref "${dev_branch}"
 
       - name: Release summary
         env:

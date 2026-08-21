@@ -5,17 +5,23 @@
 # route read a runtime credential that was never set in production and served a
 # placeholder at HTTP 200 forever, and the Warpchart embed that briefly
 # replaced it was reversed. A committed SVG cannot fail silently — stale is
-# visible in git, missing is a broken image. This caller regenerates the chart
-# when a release publishes, not on a cron: a committed artifact refreshed on a
-# schedule mutates underneath a tag, which is exactly what "main is the
-# released version" forbids. The shared workflow owns the generation logic and
-# now emits a light/dark pair so the README's <picture> block can follow
-# GitHub's theme toggle.
+# visible in git, missing is a broken image. The shared workflow owns the
+# generation logic and emits a light/dark pair so the README's <picture> block
+# can follow GitHub's theme toggle.
+#
+# Refreshed by the "Dispatch starchart refresh" step in release-cut.yml after
+# each release is published — tying the committed artifact to the release cut,
+# not wall-clock time, the way "main is the released version" requires. There
+# used to be a `release: types: [published]` trigger here too, but it was
+# removed: release-cut.yml creates releases with `GH_TOKEN: ${{ github.token
+# }}`, and GitHub suppresses workflow runs for events caused by GITHUB_TOKEN,
+# so that trigger could never fire. workflow_dispatch is one of the two
+# documented exceptions to that suppression (the other is
+# repository_dispatch), which is why release-cut.yml dispatches this workflow
+# explicitly instead of relying on the release event.
 name: Starchart Refresh
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions: {}
@@ -26,5 +32,12 @@ jobs:
       contents: write
     uses: CodesWhat/.github/.github/workflows/starchart-refresh.yml@a66a777304d657a90161a8859dbc0dfa7d5020f7  # main 2026-08-21
     with:
-      branch: dev/v1.7
+      # Only ever dispatched (see header) on the dev branch this cut is
+      # rotating the chart for — deriving branch from ref_name instead of a
+      # hardcoded dev/vX.Y kills a second rotate-at-branch-cut chore (renovate.json
+      # already has one). This is only safe because the release: trigger above
+      # is gone: on a release event, github.ref_name would have been the TAG
+      # name, not the dev branch, so removing that trigger and deriving the
+      # branch this way have to travel together.
+      branch: ${{ github.ref_name }}
       accent: "#49bcfb"
