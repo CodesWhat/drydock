@@ -43,12 +43,14 @@ services:
     image: codeswhat/drydock:latest
     ...
     healthcheck:
-      test: /bin/healthcheck ${DD_SERVER_PORT:-3000}
+      test: /bin/healthcheck $${DD_SERVER_PORT:-3000}
       interval: 10s
       timeout: 10s
       retries: 3
       start_period: 10s
 ```
+
+The doubled `$` in `$${DD_SERVER_PORT:-3000}` is compose escaping: a single `$` gets expanded by compose from the host environment before the container ever starts, so a port set only in the service's `environment:` block would silently resolve to `3000`. The doubled form defers expansion to the container shell, which the string-form `test:` runs under `CMD-SHELL`.
 
 ## Prometheus metrics
 

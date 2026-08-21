@@ -46,7 +46,7 @@ Active deprecations and their removal timeline. Each entry includes the version 
 
 The official Docker image kept `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` has used the lightweight static binary (`/bin/healthcheck`) instead since v1.5.0. v1.7.0 removes `curl` from the image entirely; a container whose own `HEALTHCHECK` override still shells out to `curl` now fails, and drydock logs a startup warning naming the container when it detects the override.
 
-**Migration:** Switch custom healthcheck overrides to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`, or drop the override to use the built-in image healthcheck. See [Monitoring](https://getdrydock.com/docs/monitoring).
+**Migration:** Switch custom healthcheck overrides to `test: /bin/healthcheck $${DD_SERVER_PORT:-3000}` (the doubled `$` is compose escaping, so the variable is expanded inside the container instead of from the host environment before the container starts), or drop the override to use the built-in image healthcheck. See [Monitoring](https://getdrydock.com/docs/monitoring).
 
 ---
 

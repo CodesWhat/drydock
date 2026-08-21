@@ -49,7 +49,7 @@ DD_HOOKS_ALLOWED_COMMANDS=jq,/usr/local/bin/notify.sh
 
 This permits `jq ...` and `/usr/local/bin/notify.sh`, but not `notify.sh` or `/other/path/jq`.
 
-<Callout type="warn">`curl` was removed from the Docker image in v1.7.0 (see [Deprecations](/docs/deprecations#curl-healthcheck-override)). A hook that needs to make an HTTP call needs a mounted script or binary that provides its own HTTP client rather than a bare `curl` command.</Callout>
+<Callout type="warn">`curl` was removed from the Docker image in v1.7.0 (see [Deprecations](/docs/deprecations#curl-healthcheck-override)). BusyBox itself is still present, so `/bin/busybox wget` remains available for a simple HTTP call from a hook — it lacks curl's flags (no `-u`/basic-auth shorthand, no custom headers beyond `--header`, no request-method flexibility), so a hook with heavier HTTP needs still requires a mounted script or binary with its own HTTP client.</Callout>
 
 ## Hook environment variables
 
