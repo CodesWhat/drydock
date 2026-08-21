@@ -97,8 +97,8 @@ test('Playwright waits for one complete QA scan before browser tests and parks b
   expect(authSetup).toContain('/api/v1/containers?limit=100');
   expect(authSetup).not.toContain('/api/v1/containers/watch');
   expect(authSetup).toContain('page.request.get');
-  expect(authSetup).toContain('180_000');
-  expect(authSetup).toContain('setup.setTimeout(240_000)');
+  expect(authSetup).toContain('240_000');
+  expect(authSetup).toContain('setup.setTimeout(300_000)');
   expect(authSetup).toContain('Nginx (Hooked)');
   expect(authSetup).toContain("container.labels?.['dd.group'] === 'web-stack'");
   expect(authSetup).toContain('container.result');

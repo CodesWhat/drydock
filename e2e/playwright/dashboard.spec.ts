@@ -106,7 +106,18 @@ test.describe('Dashboard', () => {
     // this test now polls the backend until the triggered update operation
     // reaches a terminal state, which involves a real image pull + container
     // recreate against the QA stack (issue #763).
-    test.setTimeout(90_000);
+    //
+    // 200s, not 90s: the operation walks queued -> pulling -> prepare ->
+    // ... -> health-gate -> succeeded (the security scan/SBOM phases are
+    // skipped here since qa-compose.yml leaves DD_SECURITY_SCANNER unset),
+    // and a container with a Docker HEALTHCHECK goes through
+    // waitForContainerHealthy(), whose own budget is
+    // NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000ms
+    // (app/triggers/providers/docker/Docker.ts). The old 90s test timeout
+    // (60s poll + 15s in-flight wait) was already tighter than that single
+    // phase's allowed budget, so it raced the app's own state machine under
+    // CI load rather than a fixed image-pull duration (issue #832).
+    test.setTimeout(200_000);
 
     const widget = page.locator('[aria-label="Updates Available widget"]');
     const updateButtons = widget.locator('[data-test="dashboard-update-btn"]');
@@ -178,7 +189,11 @@ test.describe('Dashboard', () => {
         },
         {
           message: `update operation ${operationId} should reach a terminal status`,
-          timeout: 60_000,
+          // Must clear the app's own health-gate budget (120_000ms, see
+          // test.setTimeout comment above) plus room for pull/scan/hook
+          // phases ahead of it, or this poll times out before the operation
+          // it's watching is even allowed to fail.
+          timeout: 150_000,
         },
       )
       .toBe(true);
