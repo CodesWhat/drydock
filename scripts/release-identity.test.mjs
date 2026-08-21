@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const BASE_VERSION = '1.6.0';
-const RC_VERSION = '1.6.0';
+const BASE_VERSION = '1.6.1';
+const RC_VERSION = '1.6.1';
 const DEMO_RELEASE_FIXTURES = [
   {
     path: 'apps/demo/src/mocks/data/server.ts',

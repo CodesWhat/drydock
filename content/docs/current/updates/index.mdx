@@ -5,6 +5,15 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1 Highlights — August 20, 2026
+
+Three bug fixes: nested OCI image indexes (produced by Buildx SBOM/provenance
+attestations) now resolve to the real image manifest instead of failing digest
+checks; a failed update check no longer reports a container as falsely
+"Up to date"; and a single malformed container report no longer zeroes out an
+entire agent's inventory sync. See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161--2026-08-20)
+for the full release notes.
+
 ## v1.6.0 Highlights — August 11, 2026
 
 Consolidates the `1.6.0-rc.1` … `1.6.0-rc.13` prereleases into one GA release. The
