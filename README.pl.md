@@ -14,7 +14,7 @@
 
 </div>
 
-<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
+<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.2-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -201,6 +201,19 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.2</strong></summary>
+
+- **Rozstrzyganie polityki akcji dla poszczególnych kontenerów** — API i interfejs użytkownika pokazują teraz rozstrzygnięty stan (blocked/manual/auto) oraz zwycięski wyzwalacz dla każdego kontenera, a także nową etykietę `dd.action.auto` i tryb `AUTO=onauto` umożliwiający wyłącznie ręczny dostęp bez automatycznego wywoływania.
+- **Niezgodne zmiany w tym cyklu** — `DD_TRIGGER_*`/`dd.trigger.*` zostały całkowicie usunięte, `trigger-excluded`/`trigger-not-included` stają się twardymi blokadami aktualizacji, układ tematów MQTT Home Assistant domyślnie zyskuje segment `agent/<name>`, `GET /api/auth/methods` zwraca teraz 410, a `curl` zniknął z obrazu.
+- **Poprawki poprawności sprawdzania aktualizacji** — błąd rejestru w trakcie sprawdzania nie zgłasza już fałszywie „Up to date”, uszkodzony kontener nie zeruje już całej synchronizacji inwentarza agenta, a zagnieżdżone indeksy obrazów OCI są teraz poprawnie rozwiązywane do właściwego manifestu. ([#814](https://github.com/CodesWhat/drydock/issues/814))
+- **Poprawki zależności i samoaktualizacji** — odrzucony element zależności zachowuje teraz swój kontekst ponownego uruchomienia, odświeżenia Compose nie przenoszą już nieaktualnych wartości środowiskowych odziedziczonych z obrazu, a nadpisania polityki aktualizacji przetrwają teraz własną samoaktualizację drydock. ([#718](https://github.com/CodesWhat/drydock/pull/718), [#736](https://github.com/CodesWhat/drydock/pull/736), [#743](https://github.com/CodesWhat/drydock/pull/743))
+- **Bezpieczeństwo** — zamknięto ścieżkę wstrzykiwania zdalnych właściwości w synchronizacji zapytań URL listy kontenerów oraz zawężono bramkę obrazu Grype wokół CVE dla Alpine oczekującego na poprawkę u dostawcy. ([#750](https://github.com/CodesWhat/drydock/pull/750))
+
+Pełne informacje o wersji znajdują się w [CHANGELOG.md](./CHANGELOG.md#170-rc2--2026-08-20).
+
+</details>
+
+<details>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.1</strong></summary>
 
 - **Aktualizacje uwzględniające zależności** — etykiety lub metadane Compose tworzą zweryfikowany graf zależności, pokazują dokładne fale aktualizacji i uruchamiają aktualizacje albo ponowne uruchomienia elementów zależnych w deterministycznej kolejności, bezpiecznie obsługując cykle, błędy i nieaktualne podglądy. ([Dyskusja #219](https://github.com/CodesWhat/drydock/discussions/219))

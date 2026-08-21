@@ -66,68 +66,68 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.1</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.2</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.1</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.2</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.1</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.2</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.1</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.2</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.1</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.2</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.1 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.2 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
-  { dependencyAware: string; securityHardening: string }
+  { updateCheckFixes: string; securityHardening: string }
 > = {
   'README.de.md': {
-    dependencyAware: '**Abhängigkeitsbewusste Updates**',
-    securityHardening: '**Sicherheits- und Lifecycle-Härtung**',
+    updateCheckFixes: '**Korrekturen bei der Update-Prüfung**',
+    securityHardening: '**Sicherheit**',
   },
   'README.es.md': {
-    dependencyAware: '**Actualizaciones conscientes de dependencias**',
-    securityHardening: '**Refuerzo de seguridad y ciclo de vida**',
+    updateCheckFixes: '**Correcciones de exactitud en la comprobación de actualizaciones**',
+    securityHardening: '**Seguridad**',
   },
   'README.fr.md': {
-    dependencyAware: '**Mises à jour tenant compte des dépendances**',
-    securityHardening: '**Renforcement de la sécurité et du cycle de vie**',
+    updateCheckFixes: '**Corrections de justesse des vérifications de mise à jour**',
+    securityHardening: '**Sécurité**',
   },
   'README.pl.md': {
-    dependencyAware: '**Aktualizacje uwzględniające zależności**',
-    securityHardening: '**Wzmocnienie bezpieczeństwa i cyklu życia**',
+    updateCheckFixes: '**Poprawki poprawności sprawdzania aktualizacji**',
+    securityHardening: '**Bezpieczeństwo**',
   },
   'README.pt-BR.md': {
-    dependencyAware: '**Atualizações com reconhecimento de dependências**',
-    securityHardening: '**Reforço de segurança e ciclo de vida**',
+    updateCheckFixes: '**Correções de exatidão na verificação de atualizações**',
+    securityHardening: '**Segurança**',
   },
   'README.zh-CN.md': {
-    dependencyAware: '**依赖感知更新**',
-    securityHardening: '**安全与生命周期强化**',
+    updateCheckFixes: '**更新检查正确性修复**',
+    securityHardening: '**安全**',
   },
 };
 
@@ -163,7 +163,7 @@ const forbiddenSourceEnglishProse = [
 ];
 
 const requiredFragments = [
-  'version-1.7.0--rc.1-blue',
+  'version-1.7.0--rc.2-blue',
   'https://www.bestpractices.dev/projects/11915',
   '`drydock.sid`',
   '`allowmetadata=true`',
@@ -174,6 +174,7 @@ const requiredFragments = [
   'v1.6.0-rc.11',
   './CHANGELOG.md#160--2026-08-11',
   './CHANGELOG.md#170-rc1--2026-08-14',
+  './CHANGELOG.md#170-rc2--2026-08-20',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -226,15 +227,13 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const surface = localizedSurfaceFragments[readme];
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
-    const dependencyBullet = getBullet(releaseBlock, release.dependencyAware);
+    const updateCheckBullet = getBullet(releaseBlock, release.updateCheckFixes);
     const securityBullet = getBullet(releaseBlock, release.securityHardening);
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
-    expect(getUrls(dependencyBullet)).toEqual([
-      'https://github.com/CodesWhat/drydock/discussions/219',
-    ]);
-    expect(getUrls(securityBullet)).toEqual(['https://github.com/CodesWhat/drydock/issues/708']);
+    expect(getUrls(updateCheckBullet)).toEqual(['https://github.com/CodesWhat/drydock/issues/814']);
+    expect(getUrls(securityBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/750']);
   });
 
   test('preserves the exact source URL multiset', () => {

@@ -14,7 +14,7 @@
 
 </div>
 
-<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
+<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.2-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -201,6 +201,19 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.2 亮点</strong></summary>
+
+- **按容器解析操作策略** — API 和界面现在会显示每个容器已解析的状态（blocked/manual/auto）以及胜出的触发器，并新增 `dd.action.auto` 标签和 `AUTO=onauto` 模式，可实现仅手动访问而不自动派发。
+- **本周期的不兼容变更** — `DD_TRIGGER_*`/`dd.trigger.*` 已被彻底移除，`trigger-excluded`/`trigger-not-included` 现在会硬性阻止更新，Home Assistant 的 MQTT 主题布局默认新增 `agent/<name>` 段，`GET /api/auth/methods` 现在返回 410，且镜像中已移除 `curl`。
+- **更新检查正确性修复** — 检查过程中的注册表错误不再误报为"Up to date"，格式错误的容器不再清空整个代理清单同步，嵌套的 OCI 镜像索引现在能正确解析到实际清单。([#814](https://github.com/CodesWhat/drydock/issues/814))
+- **依赖关系与自我更新修复** — 被拒绝的依赖成员现在会保留其重启上下文，Compose 刷新不再带入镜像继承的过期环境变量默认值，更新策略覆盖设置现在能在 drydock 自我更新后保留。([#718](https://github.com/CodesWhat/drydock/pull/718)、[#736](https://github.com/CodesWhat/drydock/pull/736)、[#743](https://github.com/CodesWhat/drydock/pull/743))
+- **安全** — 修复了容器列表 URL 查询同步中的远程属性注入路径，并将 Grype 镜像门限收窄到一个尚待上游修复的 Alpine CVE。([#750](https://github.com/CodesWhat/drydock/pull/750))
+
+完整发行说明请参阅 [CHANGELOG.md](./CHANGELOG.md#170-rc2--2026-08-20)。
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.1 亮点</strong></summary>
 
 - **依赖感知更新** — 通过标签或 Compose 元数据构建经过验证的依赖关系图，预览准确的更新波次，并按确定的顺序执行更新或重启依赖项，同时安全处理循环依赖、失败和过期预览。([讨论 #219](https://github.com/CodesWhat/drydock/discussions/219))
