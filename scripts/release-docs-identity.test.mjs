@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.1';
-const PREV_RC_VERSION = '1.6.0';
-const RC_DATE = '2026-08-14';
-const RC_DISPLAY_DATE = 'August 14, 2026';
+const RC_VERSION = '1.7.0-rc.2';
+const PREV_RC_VERSION = '1.7.0-rc.1';
+const RC_DATE = '2026-08-20';
+const RC_DISPLAY_DATE = 'August 20, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -24,12 +24,6 @@ function extractMarkdownSection(document, heading) {
   assert.notEqual(sectionStart, -1, `missing Markdown section: ${heading}`);
   const nextSectionStart = document.indexOf('\n## ', sectionStart + heading.length + 1);
   return document.slice(sectionStart, nextSectionStart === -1 ? undefined : nextSectionStart);
-}
-
-function extractMarkdownListItem(section, marker) {
-  const item = section.split('\n').find((line) => line.startsWith('- ') && line.includes(marker));
-  assert.ok(item, `missing Markdown list item containing: ${marker}`);
-  return item;
 }
 
 function assertReleaseRedirectAllowlist(name, section) {
@@ -141,37 +135,26 @@ test('release candidate notes cover the post-promotion fixes', () => {
     `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
   );
 
-  for (const issue of [606, 635, 687, 688]) {
+  for (const issue of [718, 736, 743, 814]) {
     const issueLink = `https://github.com/CodesWhat/drydock/issues/${issue}`;
-    assert.ok(changelog.includes(issueLink), `CHANGELOG.md must link issue #${issue}`);
-    assert.ok(updates.includes(issueLink), `updates page must link issue #${issue}`);
+    const pullLink = `https://github.com/CodesWhat/drydock/pull/${issue}`;
+    assert.ok(
+      changelog.includes(issueLink) || changelog.includes(pullLink),
+      `CHANGELOG.md must link issue/PR #${issue}`,
+    );
+    assert.ok(
+      updates.includes(issueLink) || updates.includes(pullLink),
+      `updates page must link issue/PR #${issue}`,
+    );
   }
 
-  const manifestIssueLink = 'https://github.com/CodesWhat/drydock/issues/606';
-  assertReleaseRedirectAllowlist(
-    'CHANGELOG.md manifest metadata note',
-    extractMarkdownListItem(changelog, manifestIssueLink),
-  );
-  assertReleaseRedirectAllowlist(
-    'updates page manifest metadata note',
-    extractMarkdownListItem(updates, manifestIssueLink),
-  );
   for (const fragment of [
-    '`DD_PORTWING_POLL_INTERVAL`',
-    '`exec_end.reason`',
-    "controller's configured registry identity",
-    '4xx, 5xx, network, and non-object failures',
+    '`dd.action.auto`',
+    'updatePolicyRetentionCache',
+    'OCI image indexes',
+    'remote-property-injection',
   ]) {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
-  }
-
-  for (const fragment of [
-    '`DD_PORTWING_POLL_INTERVAL`',
-    '`exec_end.reason`',
-    'normalize against configured registries',
-    '301, 302, 303, 307, or 308',
-    '4xx, 5xx, network, and non-object failures',
-  ]) {
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
   }
 });

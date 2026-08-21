@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.2] — 2026-08-20
+
 ### Added
 
 - **Action-policy resolution is surfaced on the API and UI (spec-6.0.1-action-policy.md, slice 5).** `GET /api/v1/containers` and SSE container payloads now include an `actionPolicy` object (`state`: `blocked`/`manual`/`auto`, plus `triggerId` and, when blocked, `reason`) on `updateEligibility`, reflecting the winning action trigger's resolved verdict for that container independent of whether it produced a blocker. `GET /api/v1/containers/{id}/triggers` gains a per-trigger `resolvedState` field with the same three values, so every candidate action trigger's individual verdict is visible, not just the winner. The container list/detail UI shows a new **Auto** badge (Update Status panel, full-page Actions tab, side panel trigger rows) wherever a container's or trigger's resolved state is `auto`, with tooltips explaining the blocked/manual/auto states. New `dd.action.auto` container label and `onauto` `AUTO` mode: under `AUTO=onauto`, `dd.action.include` keeps granting manual access but automatic dispatch additionally requires a `dd.action.auto` match, letting a container opt into manual-only access without picking up automatic execution. Drydock now logs a startup `WARN` for any action trigger left on `AUTO=oninclude` that has `dd.action.include`-matching containers with no corresponding `dd.action.auto` label (would silently drop to manual-only if switched to `onauto`), and a second `WARN` when a trigger is on `AUTO=none` but a container carries an inert `dd.action.auto` label for it. Docs: new `dd.action.auto` label and `onauto` value are documented on the labels reference, triggers configuration, and update-eligibility pages, including a callout on all three clarifying that `AUTO=none`/`AUTO=all` also set the baseline **access** default (not just automatic execution) — `AUTO=none` still opens manual access to every container, `AUTO=all` opens both.
@@ -2484,7 +2486,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.2...HEAD
+[1.7.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.1...v1.7.0-rc.2
 [1.7.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0-rc.1
 [1.6.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.13...v1.6.0
 [1.6.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.12...v1.6.0-rc.13

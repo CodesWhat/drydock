@@ -14,7 +14,7 @@
 
 </div>
 
-<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
+<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.2-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -201,6 +201,19 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.2</strong></summary>
+
+- **Pro-Container-Richtlinienauflösung für Aktionen** – API und UI zeigen jetzt den aufgelösten Status (blocked/manual/auto) und den entscheidenden Trigger für jeden Container an, plus ein neues Label `dd.action.auto` und der Modus `AUTO=onauto` für reinen manuellen Zugriff ohne automatische Ausführung.
+- **Breaking Changes in diesem Zyklus** – `DD_TRIGGER_*`/`dd.trigger.*` sind vollständig entfernt, `trigger-excluded`/`trigger-not-included` werden zu harten Update-Blockern, das MQTT-Themenlayout von Home Assistant erhält standardmäßig ein `agent/<name>`-Segment, `GET /api/auth/methods` liefert jetzt 410, und `curl` ist nicht mehr im Image enthalten.
+- **Korrekturen bei der Update-Prüfung** – ein Registry-Fehler während der Prüfung meldet nicht mehr fälschlich „Up to date“, ein fehlerhafter Container leert nicht mehr die gesamte Agenten-Inventarsynchronisierung, und verschachtelte OCI-Image-Indizes werden jetzt korrekt auf das eigentliche Manifest aufgelöst. ([#814](https://github.com/CodesWhat/drydock/issues/814))
+- **Abhängigkeits- und Selbst-Update-Korrekturen** – ein abgelehntes Abhängigkeitsmitglied behält seinen Neustart-Kontext, Compose-Aktualisierungen übernehmen keine veralteten, aus dem Image geerbten Umgebungsvariablen mehr, und Update-Richtlinien-Überschreibungen überstehen jetzt das eigene Self-Update von Drydock. ([#718](https://github.com/CodesWhat/drydock/pull/718), [#736](https://github.com/CodesWhat/drydock/pull/736), [#743](https://github.com/CodesWhat/drydock/pull/743))
+- **Sicherheit** – ein Pfad für „Remote Property Injection“ in der URL-Abfragesynchronisierung der Container-Liste wurde geschlossen, und das Grype-Image-Gate wurde gezielt um eine CVE eingegrenzt, für die Alpine noch keinen Fix veröffentlicht hat. ([#750](https://github.com/CodesWhat/drydock/pull/750))
+
+Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#170-rc2--2026-08-20).
+
+</details>
+
+<details>
 <summary><strong>Highlights von v1.7.0-rc.1</strong></summary>
 
 - **Sicherheits- und Lifecycle-Härtung** – Authentifizierung, Agent-Anfragen, Protokolle, WebSockets und Registry-Anfragen sind explizit begrenzt; vertrauliche Befehls- und Hook-Werte werden redigiert; die Home-Assistant-Erkennung synchronisiert sich nach dem Start neu und beendet Provider-Arbeit ohne veraltete Veröffentlichungen. ([#708](https://github.com/CodesWhat/drydock/issues/708))
