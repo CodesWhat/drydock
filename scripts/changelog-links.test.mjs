@@ -53,10 +53,11 @@ test('every linked changelog heading has exactly one link definition', () => {
   );
 });
 
-test('v1.6.0 GA and v1.5.2 GA have a complete chronological comparison-link chain', () => {
+test('v1.6.1 GA, v1.6.0 GA, and v1.5.2 GA have a complete chronological comparison-link chain', () => {
   const definitions = new Map(getLinkDefinitions(changelog).map(({ label, url }) => [label, url]));
   const expected = new Map([
-    ['Unreleased', `${repositoryUrl}/compare/v1.6.0...HEAD`],
+    ['Unreleased', `${repositoryUrl}/compare/v1.6.1...HEAD`],
+    ['1.6.1', `${repositoryUrl}/compare/v1.6.0...v1.6.1`],
     ['1.6.0', `${repositoryUrl}/compare/v1.6.0-rc.13...v1.6.0`],
     ['1.6.0-rc.13', `${repositoryUrl}/compare/v1.6.0-rc.12...v1.6.0-rc.13`],
     ['1.6.0-rc.12', `${repositoryUrl}/compare/v1.6.0-rc.11...v1.6.0-rc.12`],
@@ -152,5 +153,24 @@ test('real changelog exposes nonempty v1.6.0 GA release notes', () => {
     'Anonymous access fails closed',
   ]) {
     assert.ok(entry.includes(marker), `v1.6.0 GA notes must include: ${marker}`);
+  }
+});
+
+test('real changelog exposes nonempty v1.6.1 GA release notes', () => {
+  const entry = extractChangelogEntry(changelog, 'v1.6.1');
+
+  assert.match(entry, /^## \[1\.6\.1\] [–—-] \d{4}-\d{2}-\d{2}$/mu);
+  assert.match(entry, /^### Fixed$/mu);
+  // v1.6.1 is a direct patch cut straight to GA (no rc series to roll up), unlike
+  // v1.6.0/v1.5.2 above — the entry is the release notes verbatim, not a synthesis.
+  assert.doesNotMatch(entry, /^## \[1\.6\.0\]/mu);
+  assert.match(changelog, /^## \[1\.6\.0\]/mu);
+
+  for (const marker of [
+    'Drydock no longer reports "Up to date" when an update check failed',
+    'Nested OCI image indexes now resolve to the real image manifest',
+    'A single malformed container no longer zeroes out an entire agent inventory sync',
+  ]) {
+    assert.ok(entry.includes(marker), `v1.6.1 GA notes must include: ${marker}`);
   }
 });

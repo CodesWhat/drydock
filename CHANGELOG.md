@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Demo site favicon now matches the refreshed branding.** The v1.5.1 brand refresh (#439) moved the website to the cropped whale "headshot" icon and the app UI followed, but demo.getdrydock.com kept showing the old full-body whale: its stale `favicon.svg` — which modern browsers preferred over the PNGs — was never replaced. The demo now ships the same headshot icon set as the website and app UI, the `favicon.svg` is removed, and the icon links carry a `?v=2` cache-buster so browsers re-fetch instead of serving the aggressively cached old icon. (#689)
+
+## [1.6.1] — 2026-08-20
+
+### Fixed
+
 - **Drydock no longer reports "Up to date" when an update check failed.** A registry error while verifying a candidate's digest discarded the newer tag that had already been found, and the UI presented the result as a confirmed "no update available." A check that could not complete now surfaces as an explicitly unknown status instead of a negative answer. This also covers transient registry failures reported separately. ([#814](https://github.com/CodesWhat/drydock/issues/814), [#808](https://github.com/CodesWhat/drydock/issues/808))
 - **Nested OCI image indexes now resolve to the real image manifest.** An image whose per-platform entry is itself an index, which is what Buildx produces when SBOM or provenance attestations are enabled, failed with `Unexpected error; no manifest found` and left the container unable to complete a digest check. Drydock now follows the nested index to the platform's actual manifest, bounded to three levels, and correctly ignores the attestation manifest alongside it. ([#814](https://github.com/CodesWhat/drydock/issues/814))
 - **A single malformed container no longer zeroes out an entire agent inventory sync.** `AgentClient.processAuthoritativeContainers()` — the loop driving both the standard-mode handshake (`_doHandshake()`, every initial load and reconnect) and edge-mode `handleContainerSync()` (every `dd:container_sync` frame) — had no per-container error isolation, unlike the sibling SSE watcher-snapshot path. One container that threw while building its report (for example, during controller-side SBOM document offload) aborted the whole batch before any container reached the store, so a single bad container could make an otherwise-healthy fleet's inventory sync silently report zero containers. Each container in the batch is now processed independently, matching the existing isolation pattern in `handleWatcherSnapshotEvent()`: a failure is logged with the container id and the batch continues with the rest. A batch where every container fails now also logs a single proportionate warning, since a silently empty result was what let this go unnoticed for a release cycle. Found while investigating [#802](https://github.com/CodesWhat/drydock/issues/802); this closes the isolation gap but does not confirm the SBOM path as that issue's trigger — Portwing does not currently send `security.sbom` on its container wire format, so #802 remains open pending its actual root cause.
@@ -2403,7 +2408,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.13...v1.6.0
 [1.6.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.12...v1.6.0-rc.13
 [1.6.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.11...v1.6.0-rc.12

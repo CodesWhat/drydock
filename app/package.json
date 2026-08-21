@@ -1,7 +1,7 @@
 {
   "name": "drydock-app",
-  "version": "1.6.0",
-  "description": "Drydock backend \u2014 Docker container update manager",
+  "version": "1.6.1",
+  "description": "Drydock backend — Docker container update manager",
   "engines": {
     "node": ">=24.0.0"
   },
