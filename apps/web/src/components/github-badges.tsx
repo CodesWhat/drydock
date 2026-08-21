@@ -44,14 +44,24 @@ const quality: Badge[] = [
     alt: "OpenSSF Scorecard",
   },
   {
+    href: "https://www.bestpractices.dev/projects/11915",
+    src: "https://www.bestpractices.dev/projects/11915/badge",
+    alt: "OpenSSF Best Practices",
+  },
+  {
     href: "https://qlty.sh/gh/CodesWhat/projects/drydock",
-    src: "https://qlty.sh/gh/CodesWhat/projects/drydock/test_coverage.svg",
-    alt: "Test coverage",
+    src: "https://qlty.sh/gh/CodesWhat/projects/drydock/maintainability.svg",
+    alt: "Maintainability",
   },
   {
     href: `https://dashboard.stryker-mutator.io/reports/github.com/${REPO_SLUG}/main`,
     src: `https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2F${encodeURIComponent(REPO_SLUG)}%2Fmain`,
     alt: "Mutation score",
+  },
+  {
+    href: `https://codecov.io/gh/${REPO_SLUG}`,
+    src: `https://codecov.io/gh/${REPO_SLUG}/graph/badge.svg`,
+    alt: "Coverage",
   },
 ];
 

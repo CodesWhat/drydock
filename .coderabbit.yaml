@@ -34,7 +34,7 @@ reviews:
   assess_linked_issues: true
   related_issues: true
   related_prs: true
-  suggested_labels: false
+  suggested_labels: true
   auto_apply_labels: true
   labeling_instructions:
     - label: "second-opinion"
