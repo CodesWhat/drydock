@@ -36,6 +36,11 @@ on:
         required: false
         type: string
         default: ""
+      source_ref:
+        description: "Maintenance cuts only: dev branch to build from (e.g. dev/v1.6) when cutting a patch for a line main has moved past. Leave empty for normal cuts."
+        required: false
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -51,7 +56,7 @@ env:
 jobs:
   release:
     name: "🚀 Release: Build, Publish, Tag"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 120  # Multi-arch build, signing, attestations, release upload, and CI-success polling budget
     environment: release-publish
     env:
@@ -81,12 +86,96 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
         with:
           fetch-depth: 0
           persist-credentials: true
 
+      - name: Validate maintenance source_ref input
+        id: source_ref
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SOURCE_REF}" ]; then
+            {
+              echo "is_maintenance_cut=false"
+              echo "source_branch="
+            } >> "$GITHUB_OUTPUT"
+            echo "No source_ref supplied; normal cut from main."
+            exit 0
+          fi
+
+          # Anti-footgun bound: only a dev/vX.Y branch name, never an arbitrary
+          # ref (mirrors the i18n translation-base resolver's own dev/vX.Y bound).
+          if ! [[ "${SOURCE_REF}" =~ ^dev/v[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::source_ref '${SOURCE_REF}' is not in the required 'dev/vX.Y' form (e.g. dev/v1.6)."
+            exit 1
+          fi
+
+          # release_tag's vX.Y line must match source_ref's line: v1.6.1 from
+          # dev/v1.6 is a maintenance cut; v1.7.0 from dev/v1.6 is nonsense.
+          tag_line="$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^v?([0-9]+)\.([0-9]+)\..*/\1.\2/')"
+          source_line="${SOURCE_REF#dev/v}"
+          if [ "${tag_line}" != "${source_line}" ]; then
+            echo "::error::release_tag '${RELEASE_TAG}' is on line ${tag_line}, but source_ref '${SOURCE_REF}' is line ${source_line}. The tag's vX.Y line must match source_ref's line."
+            exit 1
+          fi
+
+          # source_ref must actually exist on origin.
+          dev_branches="$(git ls-remote --heads origin 'refs/heads/dev/v*' \
+            | sed 's#.*refs/heads/##' \
+            | { grep -E '^dev/v[0-9]+\.[0-9]+$' || true; })"
+          if [ -z "${dev_branches}" ]; then
+            echo "::error::Could not list any dev/vX.Y branch on origin to validate source_ref."
+            exit 1
+          fi
+          if ! grep -qxF "${SOURCE_REF}" <<< "${dev_branches}"; then
+            echo "::error::source_ref '${SOURCE_REF}' does not exist as a branch on origin."
+            exit 1
+          fi
+
+          # Must not be the active line. The active line is derived from
+          # main's own package.json version (this job already has main checked
+          # out here), NOT from "the highest dev/vX.Y branch name on origin" —
+          # that branch namespace is writable by anyone with push access, so a
+          # stray or decoy branch (dev/v999.0, or even an innocently early
+          # dev/v1.8 cut before main's version bump lands) would silently
+          # relabel the true active line as "not highest" and let a
+          # would-be-normal cut skip the drift guard by masquerading as a
+          # maintenance one. package.json's version only changes via an actual
+          # commit, so it can't be gamed by creating a branch.
+          main_version="$(jq -r '.version // empty' package.json)"
+          if [ -z "${main_version}" ]; then
+            echo "::error::Could not read .version from package.json on main to determine the active line."
+            exit 1
+          fi
+          main_line="$(printf '%s' "${main_version}" | sed -E 's/^([0-9]+)\.([0-9]+)\..*/\1.\2/')"
+          if [ "${source_line}" = "${main_line}" ]; then
+            echo "::error::${SOURCE_REF} matches main's active line (package.json version ${main_version}). This is not a maintenance cut — leave source_ref empty and cut from main."
+            exit 1
+          fi
+
+          # Patch component must be nonzero: maintenance cuts are for patch
+          # releases (vX.Y.Z, Z>0, GA or prerelease alike) — v1.6.0 or
+          # v1.6.0-rc.N is a new minor line and belongs on main, never on a
+          # retired dev branch.
+          patch="$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^v?[0-9]+\.[0-9]+\.([0-9]+).*/\1/')"
+          if [ "${patch}" -eq 0 ]; then
+            echo "::error::release_tag '${RELEASE_TAG}' has patch version 0. Maintenance cuts (source_ref) are for patch releases (vX.Y.Z with Z>0); cut vX.Y.0 from main normally."
+            exit 1
+          fi
+
+          {
+            echo "is_maintenance_cut=true"
+            echo "source_branch=${SOURCE_REF}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Maintenance cut validated: ${RELEASE_TAG} from ${SOURCE_REF} (main's active line is ${main_line})."
+
       - name: Assert main is in sync with the active dev branch
+        if: steps.source_ref.outputs.is_maintenance_cut != 'true'
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
@@ -135,9 +224,32 @@ jobs:
 
       - name: Resolve target SHA and lowercase repository
         id: target
+        env:
+          IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
         run: |
           set -euo pipefail
-          sha="$(git rev-parse HEAD)"
+          if [ "${IS_MAINTENANCE_CUT}" = "true" ]; then
+            # Maintenance cut: build from the named dev branch's tip, not main
+            # HEAD. The job still runs at refs/heads/main (asserted above and
+            # checked out here) — this only changes which tree gets built and
+            # released, not the workflow run's own ref, which is what the
+            # cosign OIDC identity is pinned to.
+            #
+            # Fetch into an EXPLICIT remote-tracking ref and resolve THAT exact
+            # path, not the "origin/${SOURCE_BRANCH}" shorthand: gitrevisions'
+            # disambiguation order checks refs/tags/<name> and refs/heads/<name>
+            # before refs/remotes/<name>, so a tag someone pushed literally
+            # named "origin/dev/v1.6" would silently outrank the real
+            # remote-tracking branch and get built, signed, and tagged instead
+            # — `git rev-parse` only warns "ambiguous", it does not fail.
+            # `refs/remotes/origin/${SOURCE_BRANCH}` is a fully qualified path,
+            # so it is looked up directly with no shorthand search at all.
+            git fetch --quiet origin "refs/heads/${SOURCE_BRANCH}:refs/remotes/origin/${SOURCE_BRANCH}"
+            sha="$(git rev-parse --verify --end-of-options "refs/remotes/origin/${SOURCE_BRANCH}^{commit}")"
+          else
+            sha="$(git rev-parse HEAD)"
+          fi
           # Docker registries reject uppercase repository names. ${GITHUB_REPOSITORY}
           # preserves the org casing (e.g. "CodesWhat/drydock") so we expose a
           # pre-lowered value for every step that builds an image reference.
@@ -351,14 +463,19 @@ jobs:
             echo "soak_override_reason_path=${soak_override_reason_path}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Checkout exact release source
-        env:
-          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
-        run: |
-          set -euo pipefail
-          git checkout --detach "${SOURCE_SHA}"
-          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
-
+      # `uses: ./.github/actions/...` resolves the composite action's YAML from
+      # whatever is currently on disk in the runner workspace — not from the
+      # commit the workflow itself was dispatched from. Both CI-wait steps
+      # below MUST run before "Checkout exact release source": that step does
+      # a literal `git checkout --detach`, so if the waits ran after it, a
+      # maintenance cut would resolve this local action from the OLD copy
+      # checked out from the (possibly long-retired) maintenance branch — one
+      # that predates the allow-dispatch-events input entirely, so it would
+      # silently ignore the flag, filter push-only, and time out every time,
+      # since a named dev branch's push trigger only ever covers main. Keeping
+      # the waits on the main checkout is also correct for normal cuts (source
+      # and main are the same tree there), so this ordering is universally
+      # safe, not just maintenance-safe.
       - name: Wait for successful branch CI on release source SHA
         uses: ./.github/actions/wait-for-successful-branch-ci
         with:
@@ -367,6 +484,7 @@ jobs:
           target-sha: ${{ steps.source.outputs.source_sha }}
           max-attempts: '18'
           sleep-seconds: '300'
+          allow-dispatch-events: ${{ steps.source_ref.outputs.is_maintenance_cut }}
 
       - name: Wait for successful E2E Playwright on release source SHA
         uses: ./.github/actions/wait-for-successful-branch-ci
@@ -376,6 +494,15 @@ jobs:
           target-sha: ${{ steps.source.outputs.source_sha }}
           max-attempts: '18'
           sleep-seconds: '300'
+          allow-dispatch-events: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+
+      - name: Checkout exact release source
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git checkout --detach "${SOURCE_SHA}"
+          test "$(git rev-parse HEAD)" = "${SOURCE_SHA}"
 
       - name: Assert tag version matches package versions
         env:
@@ -443,7 +570,7 @@ jobs:
       - name: Log in to GHCR
         id: login_ghcr
         continue-on-error: true
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -452,7 +579,7 @@ jobs:
       - name: Log in to Docker Hub
         id: login_dockerhub
         continue-on-error: true
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -460,7 +587,7 @@ jobs:
       - name: Log in to Quay.io
         id: login_quay
         continue-on-error: true
-        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
@@ -716,9 +843,47 @@ jobs:
                 "${image}" >/dev/null
             done
 
+      # ────────────────────────────────────────────────────────────────────
+      # Defect 3 — SLSA build provenance is structurally impossible to make
+      # honest for a maintenance cut, so it is not attempted at all.
+      #
+      # `actions/attest-build-provenance` (and `actions/attest`) derive the
+      # attested build source from the run's OIDC token `sha` claim, which
+      # GitHub fixes to the dispatch-time SHA of the ref the workflow ran at —
+      # here always refs/heads/main, per the branch guard at the top of this
+      # job. That claim is baked into the token at run start; nothing this job
+      # does afterward, including "Checkout exact release source" detaching to
+      # a different commit, can change it. For a maintenance cut, the tree
+      # actually built is a named dev branch's tip, a DIFFERENT commit than
+      # main HEAD — so any attestation produced in this run would assert
+      # "built from main HEAD" about an artifact that was not.
+      #
+      # That is precisely the "silently wrong provenance, worse than a hard
+      # failure" this workflow already refuses to produce at GA (see Defect 2
+      # above) — and it would be worse here, because the false attestation
+      # gets pushed to the registry (and Sigstore's public transparency log)
+      # BEFORE this job's own downstream verify step (which correctly checks
+      # against the true SOURCE_SHA) catches the mismatch and fails the run.
+      # A failed run must never leave behind a published false claim that
+      # can't be un-published.
+      #
+      # So: for a maintenance cut (steps.source_ref.outputs.is_maintenance_cut
+      # == 'true'), every attest/verify step in this provenance chain —
+      # container image, container SBOM, and (further below) the release
+      # tarball, plus their GA-side re-verification/promotion — is skipped
+      # entirely, both at RC-cut time and when promoting that RC to GA later.
+      # Cosign SIGNING is NOT skipped: cosign only proves "this identity
+      # (release-cut.yml@refs/heads/main) signed this artifact," which stays
+      # true regardless of source_ref, unlike a provenance predicate that
+      # names a specific source commit. The true build source SHA is instead
+      # recorded in the job summary and the published release notes as plain,
+      # human-readable fact — see "Release summary" and "Generate release
+      # notes from changelog" below.
+      # ────────────────────────────────────────────────────────────────────
+
       - name: Attest container build provenance
         id: attest_container_image
-        if: steps.tag.outputs.is_prerelease == 'true'
+        if: steps.tag.outputs.is_prerelease == 'true' && steps.source_ref.outputs.is_maintenance_cut != 'true'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
         with:
           subject-name: ghcr.io/${{ steps.target.outputs.repo_lower }}
@@ -726,6 +891,7 @@ jobs:
           push-to-registry: true
 
       - name: Verify container build provenance attestation
+        if: steps.source_ref.outputs.is_maintenance_cut != 'true'
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
@@ -766,8 +932,8 @@ jobs:
 
       - name: Attest container SBOM
         id: attest_container_sbom
-        if: steps.tag.outputs.is_prerelease == 'true'
-        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4.1.1
+        if: steps.tag.outputs.is_prerelease == 'true' && steps.source_ref.outputs.is_maintenance_cut != 'true'
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d  # v4.2.1
         with:
           subject-name: ghcr.io/${{ steps.target.outputs.repo_lower }}
           subject-digest: ${{ steps.digest.outputs.value }}
@@ -776,6 +942,7 @@ jobs:
           push-to-registry: true
 
       - name: Verify container SBOM attestation
+        if: steps.source_ref.outputs.is_maintenance_cut != 'true'
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
@@ -861,6 +1028,7 @@ jobs:
         env:
           CANDIDATE_TAG: ${{ inputs.candidate_tag }}
           GH_TOKEN: ${{ github.token }}
+          IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
           timeout_minutes: 5
@@ -869,16 +1037,29 @@ jobs:
           command: |
             set -euo pipefail
             mkdir -p dist/candidate
+            # See "Defect 3" above the container-image attestation steps: a
+            # maintenance-cut RC never attested (that would have published a
+            # false provenance claim), so its release carries no
+            # .intoto.jsonl asset to download here.
+            patterns=(
+              "drydock-${CANDIDATE_TAG}.tar.gz"
+              "drydock-${CANDIDATE_TAG}.tar.gz.sha256"
+              "drydock-${CANDIDATE_TAG}.tar.gz.bundle"
+              "drydock-${CANDIDATE_TAG}.tar.gz.sig"
+              "drydock-${CANDIDATE_TAG}.tar.gz.pem"
+            )
+            if [ "${IS_MAINTENANCE_CUT}" != "true" ]; then
+              patterns+=("drydock-${CANDIDATE_TAG}.tar.gz.intoto.jsonl")
+            fi
+            pattern_args=()
+            for pattern in "${patterns[@]}"; do
+              pattern_args+=(--pattern "${pattern}")
+            done
             gh release download "${CANDIDATE_TAG}" \
               --repo "${GITHUB_REPOSITORY}" \
               --dir dist/candidate \
               --clobber \
-              --pattern "drydock-${CANDIDATE_TAG}.tar.gz" \
-              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.sha256" \
-              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.bundle" \
-              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.sig" \
-              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.pem" \
-              --pattern "drydock-${CANDIDATE_TAG}.tar.gz.intoto.jsonl"
+              "${pattern_args[@]}"
 
       - name: Verify downloaded candidate artifact checksum
         if: steps.tag.outputs.is_prerelease == 'false'
@@ -901,7 +1082,7 @@ jobs:
           fi
 
       - name: Verify candidate artifact provenance attestation
-        if: steps.tag.outputs.is_prerelease == 'false'
+        if: steps.tag.outputs.is_prerelease == 'false' && steps.source_ref.outputs.is_maintenance_cut != 'true'
         env:
           CANDIDATE_TAG: ${{ inputs.candidate_tag }}
           GH_TOKEN: ${{ github.token }}
@@ -969,6 +1150,7 @@ jobs:
         env:
           CANDIDATE_TAG: ${{ inputs.candidate_tag }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
         run: |
           set -euo pipefail
           # The promoted asset keeps the RC build's internal tar prefix
@@ -977,7 +1159,15 @@ jobs:
           # existing cosign signature and provenance attestation (both computed
           # over file bytes, never over the filename) stay valid without being
           # redone.
-          for ext in tar.gz tar.gz.sha256 tar.gz.bundle tar.gz.sig tar.gz.pem tar.gz.intoto.jsonl; do
+          #
+          # tar.gz.intoto.jsonl is promoted too, except for a maintenance cut:
+          # see "Defect 3" above — the RC never produced one, so there is
+          # nothing at dist/candidate/ to copy.
+          exts=(tar.gz tar.gz.sha256 tar.gz.bundle tar.gz.sig tar.gz.pem)
+          if [ "${IS_MAINTENANCE_CUT}" != "true" ]; then
+            exts+=(tar.gz.intoto.jsonl)
+          fi
+          for ext in "${exts[@]}"; do
             cp "dist/candidate/drydock-${CANDIDATE_TAG}.${ext}" "dist/drydock-${RELEASE_TAG}.${ext}"
           done
           # Regenerate the checksum file so its embedded filename matches the
@@ -1037,13 +1227,13 @@ jobs:
 
       - name: Attest release artifact provenance
         id: attest_release_artifact
-        if: steps.tag.outputs.is_prerelease == 'true'
+        if: steps.tag.outputs.is_prerelease == 'true' && steps.source_ref.outputs.is_maintenance_cut != 'true'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373  # v4.1.1
         with:
           subject-path: dist/drydock-${{ steps.next.outputs.release_tag }}.tar.gz
 
       - name: Export release provenance asset
-        if: steps.tag.outputs.is_prerelease == 'true'
+        if: steps.tag.outputs.is_prerelease == 'true' && steps.source_ref.outputs.is_maintenance_cut != 'true'
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           BUNDLE_PATH: ${{ steps.attest_release_artifact.outputs.bundle-path }}
@@ -1053,7 +1243,7 @@ jobs:
           cp "${BUNDLE_PATH}" "${artifact}.intoto.jsonl"
 
       - name: Verify release artifact provenance attestation
-        if: steps.tag.outputs.is_prerelease == 'true'
+        if: steps.tag.outputs.is_prerelease == 'true' && steps.source_ref.outputs.is_maintenance_cut != 'true'
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           GH_TOKEN: ${{ github.token }}
@@ -1083,6 +1273,9 @@ jobs:
           SOAK_OVERRIDE_AGE_SECONDS: ${{ steps.source.outputs.soak_override_age_seconds }}
           SOAK_OVERRIDE_AGE_DAYS: ${{ steps.source.outputs.soak_override_age_days }}
           SOAK_OVERRIDE_REASON_PATH: ${{ steps.source.outputs.soak_override_reason_path }}
+          IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         run: |
           set -euo pipefail
           notes_path="dist/release-notes-${RELEASE_TAG}.md"
@@ -1149,12 +1342,30 @@ jobs:
             } >> "${notes_path}"
           fi
 
+          # Maintenance cut: record the TRUE build source plainly, since no
+          # machine-verifiable SLSA provenance attestation exists for it (see
+          # "Defect 3" above the container-image attestation steps) — the
+          # OIDC claim this run's own attestation would have carried is always
+          # main HEAD, not this branch's tip, so attesting would have
+          # published a false claim instead. This note is the honest
+          # replacement: a human-readable fact, not a cryptographic one.
+          if [ "${IS_MAINTENANCE_CUT}" = "true" ]; then
+            {
+              echo ""
+              echo "---"
+              echo ""
+              echo "**Note:** this is a maintenance cut, built from \`${SOURCE_BRANCH}\` at \`${SOURCE_SHA}\`, not from \`main\`."
+              echo "- The container image and release artifact are cosign-signed (identity \`release-cut.yml@refs/heads/main\`, since the workflow run itself always executes at that ref), but carry **no SLSA build-provenance attestation** — this workflow's own OIDC token always claims \`main\` HEAD as the build source, which would be false for this artifact, so attestation is skipped rather than publish a false claim."
+            } >> "${notes_path}"
+          fi
+
           echo "path=${notes_path}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare draft GitHub Release and upload signed assets
         env:
           GH_TOKEN: ${{ github.token }}
           IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+          IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           RELEASE_NOTES_PATH: ${{ steps.release_notes.outputs.path }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
@@ -1189,15 +1400,25 @@ jobs:
               --title "${RELEASE_TAG}" \
               --notes-file "${RELEASE_NOTES_PATH}" \
               "${prerelease_args[@]}"
-            gh release upload "${RELEASE_TAG}" \
-              "dist/drydock-${RELEASE_TAG}.tar.gz" \
-              "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
-              "dist/drydock-${RELEASE_TAG}.tar.gz.bundle" \
-              "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
-              "dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl" \
-              "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
-              "dist/drydock-${RELEASE_TAG}.image.spdx.json" \
-              --clobber
+
+            # See "Defect 3" above the container-image attestation steps: a
+            # maintenance cut never produces dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl
+            # (attesting it would publish a false build-source claim), so it is
+            # never in the upload list for one.
+            assets=(
+              "dist/drydock-${RELEASE_TAG}.tar.gz"
+              "dist/drydock-${RELEASE_TAG}.tar.gz.sha256"
+              "dist/drydock-${RELEASE_TAG}.tar.gz.bundle"
+              "dist/drydock-${RELEASE_TAG}.tar.gz.sig"
+            )
+            if [ "${IS_MAINTENANCE_CUT}" != "true" ]; then
+              assets+=("dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl")
+            fi
+            assets+=(
+              "dist/drydock-${RELEASE_TAG}.tar.gz.pem"
+              "dist/drydock-${RELEASE_TAG}.image.spdx.json"
+            )
+            gh release upload "${RELEASE_TAG}" "${assets[@]}" --clobber
 
       # ────────────────────────────────────────────────────────────────────
       # PUBLIC FINALIZATION
@@ -1291,6 +1512,8 @@ jobs:
           NEXT_VERSION: ${{ steps.next.outputs.next_version }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           DIGEST: ${{ steps.digest.outputs.value }}
+          IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
         run: |
           {
             echo "### Release Summary"
@@ -1299,4 +1522,7 @@ jobs:
             echo "- Version: \`${NEXT_VERSION}\`"
             echo "- Tag: \`${RELEASE_TAG}\`"
             echo "- Image digest: \`${DIGEST}\`"
+            if [ "${IS_MAINTENANCE_CUT}" = "true" ]; then
+              echo "- Maintenance cut: built from \`${SOURCE_BRANCH}\`, not \`main\` — no SLSA build-provenance attestation (see \"Defect 3\" comment in this workflow); cosign signature only."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"

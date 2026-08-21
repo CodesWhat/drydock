@@ -1,0 +1,24 @@
+# Refreshes the committed star-history chart at docs/assets/star-history.svg.
+#
+# The chart is a committed artifact on purpose: the retired /api/star-history
+# route read a runtime credential that was never set in production and served a
+# placeholder at HTTP 200 forever, and the Warpchart embed that briefly
+# replaced it was reversed. A committed SVG cannot fail silently — stale is
+# visible in git, missing is a broken image. This caller only regenerates it on
+# a weekly cadence; the shared workflow owns the generation logic.
+name: Starchart Refresh
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  starchart:
+    permissions:
+      contents: write
+    uses: CodesWhat/.github/.github/workflows/starchart-refresh.yml@96e2765052a5d01ad9db2dffa355636d9e9bde88  # main 2026-08-20
+    with:
+      branch: dev/v1.7

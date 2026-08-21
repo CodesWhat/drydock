@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -63,70 +64,70 @@ const localizedSurfaceFragments: Record<
 > = {
   'README.de.md': {
     featureTableHeader: '| | Funktion | Beschreibung |',
-    builtWithHeading: '### Gebaut mit',
+    builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.1</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.2</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
-    builtWithHeading: '### Construido con',
+    builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.1</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.2</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
-    builtWithHeading: '### Construit avec',
+    builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.1</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.2</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
-    builtWithHeading: '### Zbudowany z',
+    builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.1</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.2</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
-    builtWithHeading: '### Construído com',
+    builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.1</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.2</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
-    builtWithHeading: '### 技术栈',
+    builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.1 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.2 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
-  { dependencyAware: string; securityHardening: string }
+  { updateCheckFixes: string; securityHardening: string }
 > = {
   'README.de.md': {
-    dependencyAware: '**Abhängigkeitsbewusste Updates**',
-    securityHardening: '**Sicherheits- und Lifecycle-Härtung**',
+    updateCheckFixes: '**Korrekturen bei der Update-Prüfung**',
+    securityHardening: '**Sicherheit**',
   },
   'README.es.md': {
-    dependencyAware: '**Actualizaciones conscientes de dependencias**',
-    securityHardening: '**Refuerzo de seguridad y ciclo de vida**',
+    updateCheckFixes: '**Correcciones de exactitud en la comprobación de actualizaciones**',
+    securityHardening: '**Seguridad**',
   },
   'README.fr.md': {
-    dependencyAware: '**Mises à jour tenant compte des dépendances**',
-    securityHardening: '**Renforcement de la sécurité et du cycle de vie**',
+    updateCheckFixes: '**Corrections de justesse des vérifications de mise à jour**',
+    securityHardening: '**Sécurité**',
   },
   'README.pl.md': {
-    dependencyAware: '**Aktualizacje uwzględniające zależności**',
-    securityHardening: '**Wzmocnienie bezpieczeństwa i cyklu życia**',
+    updateCheckFixes: '**Poprawki poprawności sprawdzania aktualizacji**',
+    securityHardening: '**Bezpieczeństwo**',
   },
   'README.pt-BR.md': {
-    dependencyAware: '**Atualizações com reconhecimento de dependências**',
-    securityHardening: '**Reforço de segurança e ciclo de vida**',
+    updateCheckFixes: '**Correções de exatidão na verificação de atualizações**',
+    securityHardening: '**Segurança**',
   },
   'README.zh-CN.md': {
-    dependencyAware: '**依赖感知更新**',
-    securityHardening: '**安全与生命周期强化**',
+    updateCheckFixes: '**更新检查正确性修复**',
+    securityHardening: '**安全**',
   },
 };
 
@@ -162,7 +163,7 @@ const forbiddenSourceEnglishProse = [
 ];
 
 const requiredFragments = [
-  'version-1.7.0--rc.1-blue',
+  'version-1.7.0--rc.2-blue',
   'https://www.bestpractices.dev/projects/11915',
   '`drydock.sid`',
   '`allowmetadata=true`',
@@ -173,6 +174,7 @@ const requiredFragments = [
   'v1.6.0-rc.11',
   './CHANGELOG.md#160--2026-08-11',
   './CHANGELOG.md#170-rc1--2026-08-14',
+  './CHANGELOG.md#170-rc2--2026-08-20',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -182,8 +184,7 @@ const requiredFragments = [
   '[`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)',
   '[`SECURITY.md`](SECURITY.md)',
   'https://github.com/CodesWhat/drydock/stargazers',
-  'https://getdrydock.com/api/star-history?theme=dark',
-  'https://getdrydock.com/api/star-history?theme=light',
+  'docs/assets/star-history.svg',
 ];
 
 describe.each(translatedReadmes)('%s', (readme) => {
@@ -226,15 +227,13 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const surface = localizedSurfaceFragments[readme];
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
-    const dependencyBullet = getBullet(releaseBlock, release.dependencyAware);
+    const updateCheckBullet = getBullet(releaseBlock, release.updateCheckFixes);
     const securityBullet = getBullet(releaseBlock, release.securityHardening);
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
-    expect(getUrls(dependencyBullet)).toEqual([
-      'https://github.com/CodesWhat/drydock/discussions/219',
-    ]);
-    expect(getUrls(securityBullet)).toEqual(['https://github.com/CodesWhat/drydock/issues/708']);
+    expect(getUrls(updateCheckBullet)).toEqual(['https://github.com/CodesWhat/drydock/issues/814']);
+    expect(getUrls(securityBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/750']);
   });
 
   test('preserves the exact source URL multiset', () => {
@@ -253,11 +252,41 @@ describe.each(translatedReadmes)('%s', (readme) => {
 describe.each(allReadmes)('%s star history', (readme) => {
   const content = readFileSync(`${repoRoot}/${readme}`, 'utf8');
 
-  test('uses only the canonical first-party tracker', () => {
-    expect(content).toContain('https://getdrydock.com/api/star-history?theme=dark');
-    expect(content).toContain('https://getdrydock.com/api/star-history?theme=light');
-    expect(content).not.toContain('api.star-history.com');
-    expect(content).not.toContain('star-history.com/#');
+  test('uses only the committed star-history chart', () => {
+    // The chart must be the committed asset wired into the actual <img>, not
+    // merely mentioned somewhere in the file.
+    expect(content).toMatch(/<img[^>]*src="docs\/assets\/star-history\.svg"/);
+    // Match the retired hosts, not particular URL shapes. `star-history.com/#`
+    // only caught the embed form, so a bare https://star-history.com/CodesWhat/
+    // drydock link would have walked straight back in. The host assertion also
+    // subsumes api.star-history.com. warpchart.dev is retired too: Warpchart
+    // was the D12 replacement candidate before that decision was reversed in
+    // favor of a committed SVG refreshed by a scheduled workflow. The retired
+    // self-hosted route is forbidden in any attribute (src/href), absolute or
+    // same-origin, but stays mentionable in prose: the v1.6.0 release-history
+    // bullets describe what shipped and frozen history is never rewritten.
+    expect(content).not.toContain('star-history.com');
+    expect(content).not.toMatch(/=["'][^"']*\/api\/star-history/);
+    expect(content).not.toContain('getdrydock.com/api/star-history');
+    expect(content).not.toContain('warpchart.dev');
+  });
+});
+
+describe('apps/web source', () => {
+  const webSrcRoot = `${repoRoot}/apps/web/src`;
+  const webSourceFiles = readdirSync(webSrcRoot, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .filter((path) => /\.(ts|tsx|mjs|js|jsx|json|css|mdx?)$/.test(path));
+
+  test('carries no retired star-history surface', () => {
+    expect(webSourceFiles.length).toBeGreaterThan(0);
+    for (const path of webSourceFiles) {
+      const source = readFileSync(path, 'utf8');
+      for (const retired of ['star-history.com', '/api/star-history', 'warpchart.dev']) {
+        expect(source, `${path} references retired surface ${retired}`).not.toContain(retired);
+      }
+    }
   });
 });
 

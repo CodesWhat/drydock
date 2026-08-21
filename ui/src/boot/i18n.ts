@@ -1,14 +1,13 @@
 import { createI18n } from 'vue-i18n';
 import {
   DEFAULT_LOCALE,
-  isSupportedLocale,
   LOCALE_OPTIONS,
   SUPPORTED_LOCALES,
   type SupportedLocale,
 } from '../i18n/locales';
 
 export type { SupportedLocale };
-export { DEFAULT_LOCALE, isSupportedLocale, LOCALE_OPTIONS, SUPPORTED_LOCALES };
+export { LOCALE_OPTIONS, SUPPORTED_LOCALES };
 
 // Vite eager-imports every JSON namespace under locales/<locale>/. New
 // translation files are picked up automatically — no edit to this file needed

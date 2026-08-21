@@ -108,62 +108,19 @@ export const ddNotificationExclude = 'dd.notification.exclude';
 export const ddTriggerExclude = 'dd.trigger.exclude';
 
 /**
- * Optional source repository override used for release-notes lookup.
+ * Optional list of triggers to auto-execute against. Action category only —
+ * auto-execution is an action-only concept, so there is no
+ * `dd.notification.auto` counterpart. Listing a trigger here grants both
+ * auto-execution AND manual access for that trigger (see
+ * `app/model/action-policy.ts`, added in a later slice).
  */
-export const ddSourceRepo = 'dd.source.repo';
-
-/**
- * Optional group name for container grouping / stack views.
- */
-export const ddGroup = 'dd.group';
-
-/**
- * Optional shell command to run before a container update.
- */
-export const ddHookPre = 'dd.hook.pre';
-
-/**
- * Optional shell command to run after a container update.
- */
-export const ddHookPost = 'dd.hook.post';
-
-/**
- * Whether to abort the update if the pre-hook fails (default: true).
- */
-export const ddHookPreAbort = 'dd.hook.pre.abort';
-
-/**
- * Timeout in milliseconds for hook execution (default: 60000).
- */
-export const ddHookTimeout = 'dd.hook.timeout';
+export const ddActionAuto = 'dd.action.auto';
 
 /**
  * Per-container opt-out for webhook API calls (default: true).
  * Set to 'false' to return 403 when the webhook API targets this container.
  */
 export const ddWebhookEnabled = 'dd.webhook.enabled';
-
-/**
- * Update mode for infrastructure containers (e.g. 'infrastructure' for socket proxies).
- * When set to 'infrastructure', the container is updated via the helper-swap path
- * which connects directly to /var/run/docker.sock, bypassing any socket proxy.
- */
-export const ddUpdateMode = 'dd.update.mode';
-
-/**
- * Whether to automatically rollback on health check failure (default: false).
- */
-export const ddRollbackAuto = 'dd.rollback.auto';
-
-/**
- * Health monitoring window in milliseconds (default: 300000 = 5 min).
- */
-export const ddRollbackWindow = 'dd.rollback.window';
-
-/**
- * Health polling interval in milliseconds (default: 10000 = 10s).
- */
-export const ddRollbackInterval = 'dd.rollback.interval';
 
 /**
  * Comma-separated list of container names this container depends on.

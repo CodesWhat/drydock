@@ -30,15 +30,6 @@
 import type { KeyObject } from 'node:crypto';
 import { createHash, createPrivateKey, sign as cryptoSign, randomBytes } from 'node:crypto';
 
-/** Header names used by Portwing's Ed25519 request verifier. */
-export const ED25519_AUTH_HEADER_NAMES = {
-  keyId: 'X-Portwing-Key-ID',
-  timestamp: 'X-Portwing-Timestamp',
-  nonce: 'X-Portwing-Nonce',
-  signature: 'X-Portwing-Signature',
-  signatureVersion: 'X-Portwing-Signature-Version',
-} as const;
-
 /** SHA-256 hex digest of the empty string — the body hash for empty-body requests. */
 export const EMPTY_BODY_SHA256_HEX =
   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';

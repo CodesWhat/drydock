@@ -208,7 +208,7 @@ function scheduleReconnect(
   }, reconnectDelayMs);
 }
 
-export interface ContainerStatsSummaryRowSnapshot {
+interface ContainerStatsSummaryRowSnapshot {
   id: string;
   name: string;
   cpuPercent: number;

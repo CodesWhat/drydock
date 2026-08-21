@@ -718,10 +718,11 @@ class Hass {
   }
 
   // #386 / DEPRECATIONS.md "Agent-less Home Assistant MQTT topic layout" —
-  // warn once per watcher name the first time we observe more than one
-  // distinct agent sharing it while the corrected (agent-segmented) layout
-  // is not enabled, since that is exactly the case where topics/sensors
-  // collide across agents.
+  // the agent-segmented layout is the default as of v1.7.0. This only warns
+  // when someone has explicitly opted back out (HASS_AGENTTOPICSEGMENT=false)
+  // and more than one distinct agent shares the watcher name, since that
+  // explicit opt-out is what re-creates the topic/sensor collision across
+  // agents that the segmented layout exists to prevent.
   private warnIfAgentlessHassTopicLayoutCollides(container: { watcher?: unknown }) {
     if (this.configuration.hass.agenttopicsegment) {
       return;
@@ -740,7 +741,7 @@ class Hass {
     }
     warnedAgentlessHassTopicLayoutWatchers.add(watcherName);
     this.log.warn(
-      `Multiple agents share watcher name "${watcherName}" but the Home Assistant MQTT topic layout has no agent segment, so their topics/sensors will collide. Set DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true to opt into the corrected layout before it becomes the default in v1.7.0.`,
+      `Multiple agents share watcher name "${watcherName}" but HASS_AGENTTOPICSEGMENT=false has opted out of the Home Assistant MQTT agent topic segment, so their topics/sensors will collide. The segmented layout is the default since v1.7.0; remove the explicit DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false override to resolve the collision.`,
     );
   }
 

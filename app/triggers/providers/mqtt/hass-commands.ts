@@ -1,5 +1,5 @@
 export const HASS_INSTALL_PAYLOAD = 'install';
-export const HASS_COMMAND_TOPIC_SUFFIX = '/cmd';
+const HASS_COMMAND_TOPIC_SUFFIX = '/cmd';
 export const HASS_COMMAND_QOS = 1;
 
 export function getHassCommandTopicFilters(baseTopic: string): string[] {

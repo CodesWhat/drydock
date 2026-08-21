@@ -116,6 +116,32 @@ test('Playwright waits for one complete QA scan before browser tests and parks b
   expect(environment).toContain('DD_WATCHER_REMOTE_WATCHEVENTS=false');
 });
 
+test('QA dockercompose trigger does not basename-collide with the fleet compose file', () => {
+  const qaCompose = yaml.parse(readFileSync(qaComposePath, 'utf8')) as {
+    services?: Record<string, { environment?: string[]; volumes?: string[] }>;
+  };
+  const drydock = qaCompose.services?.drydock;
+  const fileVar = (drydock?.environment ?? []).find((entry) =>
+    entry.startsWith('DD_ACTION_DOCKERCOMPOSE_QA_FILE='),
+  );
+  expect(fileVar).toBeDefined();
+
+  // The trigger-specificity walk matches compose triggers to containers by
+  // compose-file basename. Pointing the trigger at qa-compose.yml makes it
+  // the winning action for the entire fleet, and every dashboard update then
+  // EROFS-fails against the read-only mount instead of using the docker
+  // trigger (broke e2e/playwright/dashboard.spec.ts intermittently).
+  const triggerFile = fileVar?.split('=')[1] ?? '';
+  const triggerBasename = triggerFile.split('/').at(-1) ?? '';
+  expect(triggerBasename).not.toBe('qa-compose.yml');
+
+  // The dedicated target file must be mounted and exist in the repo.
+  const mount = (drydock?.volumes ?? []).find((volume) => volume.includes(triggerBasename));
+  expect(mount).toBeDefined();
+  const demoComposePath = fileURLToPath(new URL(`../../test/${triggerBasename}`, import.meta.url));
+  expect(() => readFileSync(demoComposePath, 'utf8')).not.toThrow();
+});
+
 test('Playwright health fixture waits until Docker observes the unhealthy transition', () => {
   const qaCompose = yaml.parse(readFileSync(qaComposePath, 'utf8')) as {
     services?: Record<

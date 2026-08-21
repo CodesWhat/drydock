@@ -62,6 +62,12 @@ export interface ApiContainerTrigger {
   agent?: string;
   configuration?: Record<string, unknown>;
   threshold?: string;
+  /**
+   * Action-policy resolver verdict (spec-6.0.1-action-policy.md) for this trigger against the
+   * requested container. Only present for docker/dockercompose (update-action) triggers —
+   * notification and command triggers have no automatic-execution policy.
+   */
+  resolvedState?: 'blocked' | 'manual' | 'auto';
 }
 
 export type ApiContainerUpdateOperationStatus = ContainerUpdateOperationStatus;

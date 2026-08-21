@@ -9,7 +9,7 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
 
-export type InstallOutcome = 'accepted' | 'dismissed' | 'unavailable';
+type InstallOutcome = 'accepted' | 'dismissed' | 'unavailable';
 
 export interface InstallPrompt {
   /** Whether the browser has signaled the app is installable right now. */

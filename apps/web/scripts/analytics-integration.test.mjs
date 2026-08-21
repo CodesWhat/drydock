@@ -24,7 +24,7 @@ function walk(directory) {
 test("PostHog replaces both Vercel telemetry packages at one exact version", () => {
   const packageJson = JSON.parse(source("package.json"));
 
-  assert.equal(packageJson.dependencies["posthog-js"], "1.417.0");
+  assert.equal(packageJson.dependencies["posthog-js"], "1.417.1");
   assert.equal(packageJson.dependencies["@vercel/analytics"], undefined);
   assert.equal(packageJson.dependencies["@vercel/speed-insights"], undefined);
 });
@@ -101,7 +101,6 @@ test("all approved Drydock CTA families have exact annotations", () => {
   const comparison = source("src/components/comparison-page.tsx");
   const getStarted = source("src/components/get-started.tsx");
   const footer = source("src/components/footer.tsx");
-  const starHistory = source("src/components/star-history.tsx");
 
   assert.match(header, /ctaId="docs_root"\s+placement="header"/u);
   assert.match(header, /ctaId="github_repository"\s+placement="header"/u);
@@ -115,5 +114,4 @@ test("all approved Drydock CTA families have exact annotations", () => {
   assert.match(footer, /ctaId: "docs_root"/u);
   assert.match(footer, /ctaId: "github_repository"/u);
   assert.match(footer, /ctaId="community_discord"\s+placement="footer"/u);
-  assert.match(starHistory, /ctaId="github_repository"\s+placement="star_history"/u);
 });

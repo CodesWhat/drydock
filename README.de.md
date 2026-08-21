@@ -14,19 +14,21 @@
 
 </div>
 
-<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
+<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.2-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
   <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
-  <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/test_coverage.svg" alt="Code Coverage"></a>
+  <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/maintainability.svg" alt="Maintainability"></a>
   <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
+  <a href="https://codecov.io/gh/CodesWhat/drydock"><img src="https://codecov.io/gh/CodesWhat/drydock/graph/badge.svg" alt="Coverage"></a>
   <br>
   <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-150K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://github.com/veggiemonk/awesome-docker#container-management"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Docker"></a>
   <a href="https://crowdin.com/project/drydock"><img src="https://badges.crowdin.net/drydock/localized.svg" alt="Crowdin localization"></a>
+  <a href="https://github.com/sponsors/CodesWhat"><img src="https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white" alt="Sponsor"></a>
 </p>
 
 <hr>
@@ -39,25 +41,46 @@
 > [!WARNING]
 > **Aktualisierung auf 1.6.0-rc.3 oder neuer?** Weitere Sicherheitsverschärfungen gelten ohne Übergangsfrist. Eine Instanz ohne konfigurierte Authentifizierung oder mit aktivierter, aber unbestätigter anonymer Authentifizierung schlägt beim Upgrade jetzt genauso geschlossen fehl wie eine Neuinstallation: Der Container läuft, geschützte API-Anfragen geben `401` zurück, öffentliche Routen für Authentifizierungserkennung und -status bleiben erreichbar und `/health` gibt `503` zurück. Die SPA-Shell kann weiterhin laden, aber keine geschützten Anwendungsdaten lesen. Setzen Sie vor dem Upgrade `DD_ANONYMOUS_AUTH_CONFIRM=true` oder konfigurieren Sie `DD_AUTH_BASIC_*`/OIDC. Das Sitzungscookie wird von `connect.sid` in `drydock.sid` umbenannt, wodurch alle bestehenden Benutzer einmalig abgemeldet werden. HTTP-Benachrichtigungstrigger sowie der Hass-Webhook und Registry-Icon-Abrufe lösen Hostnamen jetzt über eine geschützte DNS-Suche auf, die Cloud-Metadaten- und Link-Local-Ziele blockiert und Weiterleitungen nie folgt. Setzen Sie `allowmetadata=true` nur für einen bestimmten `DD_NOTIFICATION_HTTP_*`-Trigger, wenn dies wirklich erforderlich ist. Vollständige Migrationshinweise finden Sie in **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**.
 
-<h2 align="center">📑 Inhalt</h2>
+<h2 align="center">Inhalt</h2>
 
-- [📖 Dokumentation](https://getdrydock.com/docs)
-- [🚀 Schnellstart](#quick-start)
-- [🆕 Aktuelle Updates](#recent-updates)
-- [📸 Screenshots & Live-Demo](#screenshots)
-- [🤔 Warum Drydock](#why-drydock)
-- [✨ Eigenschaften](#features)
-- [🔌 Unterstützte Integrationen](#supported-integrations)
-- [⚖️ Funktionsvergleich](#feature-comparison)
-- [🔄 Migration](#migration)
-- [🗺️ Roadmap](#roadmap)
-- [⭐ Sterngeschichte](#star-history)
-- [🔧 Gebaut mit](#gebaut-mit)
-- [🤝 Community QA](#community-qa)
+- [Dokumentation](#documentation)
+- [Schnellstart](#quick-start)
+- [Aktuelle Updates](#recent-updates)
+- [Screenshots & Live-Demo](#screenshots)
+- [Warum Drydock](#why-drydock)
+- [Eigenschaften](#features)
+- [Unterstützte Integrationen](#supported-integrations)
+- [Funktionsvergleich](#feature-comparison)
+- [Migration](#migration)
+- [Roadmap](#roadmap)
+- [Sterngeschichte](#star-history)
+- [Gebaut mit](#built-with)
+- [Gemeinschaft & Support](#community-support)
+- [CodesWhat-Ökosystem](#codeswhat-ecosystem)
+
+<h2 align="center" id="documentation">Dokumentation</h2>
+
+| Ressource             | Link                                                                                                            |
+| --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Website               | [getdrydock.com](https://getdrydock.com/)                                                       |
+| Live-Demo             | [demo.getdrydock.com](https://demo.getdrydock.com)                              |
+| Dokumente             | [getdrydock.com/docs](https://getdrydock.com/docs)                                              |
+| Konfiguration         | [Konfiguration](https://getdrydock.com/docs/configuration)                                                      |
+| Schnellstart          | [Schnellstart](https://getdrydock.com/docs/quickstart)                                                          |
+| Änderungsprotokoll    | [`CHANGELOG.md`](CHANGELOG.md)                                                                                  |
+| Deprecations          | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                                                            |
+| Roadmap               | Siehe den Abschnitt [„Roadmap“](#roadmap) oben                                                                  |
+| Mitwirken             | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                            |
+| Code of Conduct       | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                      |
+| Governance            | [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                |
+| Sicherheitsnachweis   | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)                                                                |
+| Sicherheitsrichtlinie | [`SECURITY.md`](SECURITY.md)                                                                                    |
+| Probleme              | [GitHub Issues](https://github.com/CodesWhat/drydock/issues)                                                    |
+| Diskussionen          | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) – Funktionsanfragen und Ideen willkommen |
 
 <hr>
 
-<h2 align="center" id="quick-start">🚀 Schnellstart</h2>
+<h2 align="center" id="quick-start">Schnellstart</h2>
 
 **Empfohlen: Verwenden Sie einen Socket-Proxy**, um einzuschränken, auf welche Docker-API-Endpunkte Drydock zugreifen kann. Dadurch wird vermieden, dass der Container vollen Zugriff auf den Docker-Socket erhält.
 
@@ -96,7 +119,8 @@ services:
     restart: unless-stopped
 ```
 
-<details><summary>Alternativ: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> Socket-Proxy</summary>
+<details>
+<summary>Alternativ: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> Socket-Proxy</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) ist ein standardmäßig verweigernder Docker-Socket-Filter aus demselben CodesWhat-Ökosystem mit einer für drydock erstellten Voreinstellung:
 
@@ -135,7 +159,8 @@ Siehe sockguards [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sock
 
 </details>
 
-<details><summary>Alternative: Schnellstart mit direkter Steckdosenmontage</summary>
+<details>
+<summary>Alternative: Schnellstart mit direkter Steckdosenmontage</summary>
 
 ```bash
 docker run -d \
@@ -173,21 +198,35 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 
 <hr>
 
-<h2 align="center" id="recent-updates">🆕 Aktuelle Updates</h2>
+<h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
-<details open><summary><strong>Highlights von v1.7.0-rc.1</strong></summary>
+<details open>
+<summary><strong>Highlights von v1.7.0-rc.2</strong></summary>
+
+- **Pro-Container-Richtlinienauflösung für Aktionen** – API und UI zeigen jetzt den aufgelösten Status (blocked/manual/auto) und den entscheidenden Trigger für jeden Container an, plus ein neues Label `dd.action.auto` und der Modus `AUTO=onauto` für reinen manuellen Zugriff ohne automatische Ausführung.
+- **Breaking Changes in diesem Zyklus** – `DD_TRIGGER_*`/`dd.trigger.*` sind vollständig entfernt, `trigger-excluded`/`trigger-not-included` werden zu harten Update-Blockern, das MQTT-Themenlayout von Home Assistant erhält standardmäßig ein `agent/<name>`-Segment, `GET /api/auth/methods` liefert jetzt 410, und `curl` ist nicht mehr im Image enthalten.
+- **Korrekturen bei der Update-Prüfung** – ein Registry-Fehler während der Prüfung meldet nicht mehr fälschlich „Up to date“, ein fehlerhafter Container leert nicht mehr die gesamte Agenten-Inventarsynchronisierung, und verschachtelte OCI-Image-Indizes werden jetzt korrekt auf das eigentliche Manifest aufgelöst. ([#814](https://github.com/CodesWhat/drydock/issues/814))
+- **Abhängigkeits- und Selbst-Update-Korrekturen** – ein abgelehntes Abhängigkeitsmitglied behält seinen Neustart-Kontext, Compose-Aktualisierungen übernehmen keine veralteten, aus dem Image geerbten Umgebungsvariablen mehr, und Update-Richtlinien-Überschreibungen überstehen jetzt das eigene Self-Update von Drydock. ([#718](https://github.com/CodesWhat/drydock/pull/718), [#736](https://github.com/CodesWhat/drydock/pull/736), [#743](https://github.com/CodesWhat/drydock/pull/743))
+- **Sicherheit** – ein Pfad für „Remote Property Injection“ in der URL-Abfragesynchronisierung der Container-Liste wurde geschlossen, und das Grype-Image-Gate wurde gezielt um eine CVE eingegrenzt, für die Alpine noch keinen Fix veröffentlicht hat. ([#750](https://github.com/CodesWhat/drydock/pull/750))
+
+Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#170-rc2--2026-08-20).
+
+</details>
+
+<details>
+<summary><strong>Highlights von v1.7.0-rc.1</strong></summary>
 
 - **Sicherheits- und Lifecycle-Härtung** – Authentifizierung, Agent-Anfragen, Protokolle, WebSockets und Registry-Anfragen sind explizit begrenzt; vertrauliche Befehls- und Hook-Werte werden redigiert; die Home-Assistant-Erkennung synchronisiert sich nach dem Start neu und beendet Provider-Arbeit ohne veraltete Veröffentlichungen. ([#708](https://github.com/CodesWhat/drydock/issues/708))
 - **Operator-UX** – installierbare PWA, anklickbare benannte Port-Links, Live-Container-Laufzeit, Tastenkürzel und entprellte Erkennung neu erschienener Container.
 - **Breaking-Änderung bei Triggern** – `DD_TRIGGER_*` verhindert jetzt den Start, und die alten Labels `dd.trigger.include` / `dd.trigger.exclude` leiten keine Arbeit mehr weiter. Verwenden Sie `DD_ACTION_*`, `DD_NOTIFICATION_*` und die zugehörigen bereichsspezifischen Labels.
 - **Abhängigkeitsbewusste Updates** – Labels oder Compose-Metadaten erzeugen einen validierten Abhängigkeitsgraphen, zeigen die genauen Update-Wellen in der Vorschau und führen Updates oder Neustarts von Abhängigkeiten in deterministischer Reihenfolge aus. Zyklen, Fehler und veraltete Vorschauen werden sicher behandelt. ([Diskussion #219](https://github.com/CodesWhat/drydock/discussions/219))
-- **First-Party-Star-History** – der Same-Origin-Provider `/api/star-history` stellt Diagramme für die freigegebenen Repositories Drydock, Sockguard und Portwing ohne Drittanbieter-Tracker bereit.
 
 Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14).
 
 </details>
 
-<details><summary><strong>Highlights von v1.6.0</strong></summary>
+<details>
+<summary><strong>Highlights von v1.6.0</strong></summary>
 
 - **Portwing-Edge-/Agent-Transport ist ausgereift** – Controller-gesteuerte native Docker-Prüfungen und -Updates für Portwing 0.9.0+, kontinuierliches Edge-Log-Streaming, Ed25519-Anfragesignierung (v2) und agenteneigene Anzeigenamen, die an den Signaturschlüssel gebunden sind. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637))
 - **Deklarative Update-Richtlinie mit Reifegrad-Stabilisierung** – dreistufige `dd.updatePolicy.*`-Priorität, ein Live-Countdown bis zur Freigabe eines zurückgehaltenen Kandidaten und eine eigene `maturity-cleared`-Benachrichtigung. ([Diskussion #307](https://github.com/CodesWhat/drydock/discussions/307), [Diskussion #406](https://github.com/CodesWhat/drydock/discussions/406))
@@ -200,7 +239,8 @@ Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11)
 
 </details>
 
-<details><summary><strong>Highlights von v1.6.0-rc.13</strong></summary>
+<details>
+<summary><strong>Highlights von v1.6.0-rc.13</strong></summary>
 
 - **Digest-Vergleiche verwenden passende Repository-Kandidaten** – `getOrderedRepoDigests` filtert die `RepoDigests` eines Containers nach dem Repository seiner Image-Referenz, statt einem beliebigen ersten Eintrag zu vertrauen; ein bereits fehlerhafter gespeicherter Anker repariert sich selbst. ([#670](https://github.com/CodesWhat/drydock/pull/670))
 - **`nanoid` ist in allen Workspaces auf 3.3.18 fixiert**, um CVE-2026-67213 und im E2E-Workspace CVE-2026-67214 zu beheben. ([#673](https://github.com/CodesWhat/drydock/pull/673))
@@ -210,7 +250,8 @@ Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11)
 
 </details>
 
-<details><summary><strong>Highlights von v1.6.0-rc.12</strong></summary>
+<details>
+<summary><strong>Highlights von v1.6.0-rc.12</strong></summary>
 
 - **Aktualisierte Sicherheitsabhängigkeiten** – `brace-expansion` 5.0.9, `ip-address` 10.3.1 und `fast-uri` 4.1.2 beheben die zugehörigen CVEs. ([#659](https://github.com/CodesWhat/drydock/pull/659))
 - **Reifegrad-Uhr** – das Hot/Mature-Badge verwendet wie das Gate zuerst `updatePolicy.maturityMinAgeDays` des Containers und dann den globalen Grenzwert; Fehler beim Ermitteln des Veröffentlichungsdatums werden mit `warn` statt `debug` protokolliert. ([#604](https://github.com/CodesWhat/drydock/issues/604))
@@ -220,7 +261,8 @@ Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#160--2026-08-11)
 
 </details>
 
-<details><summary><strong>Highlights von v1.6.0-rc.11</strong></summary>
+<details>
+<summary><strong>Highlights von v1.6.0-rc.11</strong></summary>
 
 - **Portwing-Transport** – Portwing 0.9.0 markiert mit `transport=docker-api`, `execution=controller`, `events=portwing` den nativen Transport für Registry-Prüfungen, Einzel-/Batch-Updates, Lebenszyklusaktionen, Vorschauen und Rollbacks über authentifiziertes Standard HTTP oder Edge. Portwing bleibt Ereignisquelle, und Rohinventar kann Controller-Ergebnisse nicht löschen. ([#632](https://github.com/CodesWhat/drydock/issues/632), [#637](https://github.com/CodesWhat/drydock/issues/637), [Portwing #76](https://github.com/CodesWhat/portwing/issues/76))
 - **Benachrichtigungen** – Titel- und Textvorlagen pro Regel/pro Anbieter mit Live-Vorschau sowie prüfungsgestützten In-App-Klingelkategorien und Schwellenwerten für den Aktualisierungsschweregrad.
@@ -234,7 +276,8 @@ Vollständige Migrationsanleitung in [DEPRECATIONS.md](./DEPRECATIONS.md).
 
 </details>
 
-<details><summary><strong>v1.5.2 Highlights</strong></summary>
+<details>
+<summary><strong>v1.5.2 Highlights</strong></summary>
 
 - **Erholungssichere Update-Richtlinie** – Reife-Gates, übersprungene Tags/Digests und Snoozes überleben jetzt die Container-Erstellung für lokale und Remote-Agent-Workloads.
 - **Zuverlässigkeit angehefteter Tags** – Vollständig angeheftete Tags erkennen Digest-Neuerstellungen mit demselben Tag erneut, während die Benutzeroberfläche ein nicht umsetzbares neueres Tag derselben Familie anzeigen kann, ohne das Aktualisierungs- oder Auslöseverhalten zu ändern.
@@ -248,7 +291,7 @@ Vollständiger Verlauf in [CHANGELOG.md](./CHANGELOG.md).
 
 <hr>
 
-<h2 align="center" id="screenshots">📸 Screenshots und Live-Demo</h2>
+<h2 align="center" id="screenshots">Screenshots und Live-Demo</h2>
 
 <p align="center">
   <img src="docs/assets/drydock-demo.gif" alt="Drydock detecting and applying a container update" width="880">
@@ -279,7 +322,7 @@ Vollständig interaktiv – echte Benutzeroberfläche, Scheindaten, keine Instal
 
 <hr>
 
-<h2 align="center" id="why-drydock">🤔 Warum Drydock</h2>
+<h2 align="center" id="why-drydock">Warum Drydock</h2>
 
 Containerbilder veralten stillschweigend. Ein Basisimage patcht ein CVE, eine App schneidet eine Version, ein Tag wird verschoben. Sofern Sie nicht jede Registrierung manuell überwachen, bleiben Ihre laufenden Container zurück, bis etwas kaputt geht oder ausgenutzt wird.
 
@@ -287,7 +330,7 @@ Die meisten Tools erzwingen einen Kompromiss. Die Auto-Updater (Watchtower, Ouro
 
 <hr>
 
-<h2 align="center" id="features">✨ Funktionen</h2>
+<h2 align="center" id="features">Funktionen</h2>
 
 | | Funktion | Beschreibung |
 | --- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -309,33 +352,34 @@ Die meisten Tools erzwingen einen Kompromiss. Die Auto-Updater (Watchtower, Ouro
 
 <hr>
 
-<h2 align="center" id="supported-integrations">🔌 Unterstützte Integrationen</h2>
+<h2 align="center" id="supported-integrations">Unterstützte Integrationen</h2>
 
-### 📦 Register (23)
+### Register (23)
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
 
-### ⚡ Aktionen (3)
+### Aktionen (3)
 
 Docker · Docker Compose · Befehl
 
-### 🔔 Benachrichtigungen (17)
+### Benachrichtigungen (17)
 
 Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
 
-### 🔐 Authentifizierung
+### Authentifizierung
 
 Anonym (Opt-in über `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Basic (Benutzername + Passwort-Hash) · OIDC (Authelia, Auth0, Authentik). Alle Authentifizierungsabläufe verweigern bei einem Fehler standardmäßig den Zugriff (Fail-Closed).
 
-### 🥊 Update Bouncer
+### Update Bouncer
 
 Trivy- oder Grype-gestützte Schwachstellenscans blockieren unsichere Updates, bevor sie bereitgestellt werden. Beinhaltet Cosign-Signaturüberprüfung und SBOM-Generierung (CycloneDX & SPDX).
 
 <hr>
 
-<h2 align="center" id="feature-comparison">⚖️ Funktionsvergleich</h2>
+<h2 align="center" id="feature-comparison">Funktionsvergleich</h2>
 
-<details><summary><strong>Wie schneidet drydock im Vergleich zu anderen Container-Update-Tools ab?</strong></summary>
+<details>
+<summary><strong>Wie schneidet drydock im Vergleich zu anderen Container-Update-Tools ab?</strong></summary>
 
 > ✅ = unterstützt &nbsp; ❌ = nicht unterstützt &nbsp; ⚠️ = teilweise / begrenzt &nbsp; † = archiviert, nicht mehr gepflegt
 
@@ -383,9 +427,10 @@ Trivy- oder Grype-gestützte Schwachstellenscans blockieren unsichere Updates, b
 
 <hr>
 
-<h2 align="center" id="migration">🔄Migration</h2>
+<h2 align="center" id="migration">Migration</h2>
 
-<details><summary><strong>Migration von WUD (What's Up Docker?)</strong></summary>
+<details>
+<summary><strong>Migration von WUD (What's Up Docker?)</strong></summary>
 
 Drydock v1.6 lädt zur Laufzeit keine `WUD_*`-Umgebungsvariablen oder `wud.*`-Labels mehr. Schreiben Sie sie neu, bevor Sie den aktualisierten Dienst starten. Der persistente Status wird weiterhin automatisch migriert. Verwenden Sie `docker exec -it drydock node dist/index.js config migrate --dry-run` für die Vorschau und dann `docker exec -it drydock node dist/index.js config migrate --file .env --file compose.yaml`, um die Konfiguration in die Namen `DD_*` und `dd.*` umzuschreiben.
 
@@ -393,9 +438,10 @@ Drydock v1.6 lädt zur Laufzeit keine `WUD_*`-Umgebungsvariablen oder `wud.*`-La
 
 <hr>
 
-<h2 align="center" id="roadmap">🗺️ Roadmap</h2>
+<h2 align="center" id="roadmap">Roadmap</h2>
 
-<details><summary><strong>Versionsthemen und Highlights</strong></summary>
+<details>
+<summary><strong>Versionsthemen und Highlights</strong></summary>
 
 Diese Planung deckt mindestens die nächsten zwölf Monate bis August 2027 ab.
 Nur übergeordnete Themen; Details pro Version finden Sie in [CHANGELOG.md](CHANGELOG.md).
@@ -416,35 +462,11 @@ Nur übergeordnete Themen; Details pro Version finden Sie in [CHANGELOG.md](CHAN
 
 <hr>
 
-<h2 align="center" id="documentation">📖 Dokumentation</h2>
+<h2 align="center" id="star-history">Sterngeschichte</h2>
 
-| Ressource             | Link                                                                                                            |
-| --------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Website               | [getdrydock.com](https://getdrydock.com/)                                                       |
-| Live-Demo             | [demo.getdrydock.com](https://demo.getdrydock.com)                              |
-| Dokumente             | [getdrydock.com/docs](https://getdrydock.com/docs)                                              |
-| Konfiguration         | [Konfiguration](https://getdrydock.com/docs/configuration)                                                      |
-| Schnellstart          | [Schnellstart](https://getdrydock.com/docs/quickstart)                                                          |
-| Änderungsprotokoll    | [`CHANGELOG.md`](CHANGELOG.md)                                                                                  |
-| Deprecations          | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                                                            |
-| Roadmap               | Siehe den Abschnitt [„Roadmap“](#roadmap) oben                                                                  |
-| Mitwirken             | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                            |
-| Code of Conduct       | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                      |
-| Governance            | [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                |
-| Sicherheitsnachweis   | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)                                                                |
-| Sicherheitsrichtlinie | [`SECURITY.md`](SECURITY.md)                                                                                    |
-| Probleme              | [GitHub Issues](https://github.com/CodesWhat/drydock/issues)                                                    |
-| Diskussionen          | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) – Funktionsanfragen und Ideen willkommen |
-
-<hr>
-
-<a id="star-history"></a>
-
-<div align="center"><a href="https://github.com/CodesWhat/drydock/stargazers">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
-      <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
-    </picture>
+<div align="center">
+  <a href="https://github.com/CodesWhat/drydock/stargazers">
+    <img alt="Star History Chart" src="docs/assets/star-history.svg" />
   </a>
 </div>
 
@@ -452,7 +474,7 @@ Nur übergeordnete Themen; Details pro Version finden Sie in [CHANGELOG.md](CHAN
 
 <div align="center">
 
-### Gebaut mit
+<h2 align="center" id="built-with">Gebaut mit</h2>
 
 [![TypeScript](https://img.shields.io/badge/TypeScript_6.0-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
 [![Vue 3](https://img.shields.io/badge/Vue_3-42b883?logo=vuedotjs&logoColor=fff)](https://vuejs.org/)
@@ -467,11 +489,11 @@ Nur übergeordnete Themen; Details pro Version finden Sie in [CHANGELOG.md](CHAN
 [![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196?logo=conventionalcommits&logoColor=fff)](https://www.conventionalcommits.org/)
 [![Keep a Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-E05735)](https://keepachangelog.com/)
 
-### Gemeinschaft
+<h2 align="center" id="community-support">Gemeinschaft & Support</h2>
 
-Fragen, Feedback und frühzeitige Unterstützung: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
+Echtzeit-Chat und frühzeitige Unterstützung: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
 
-Bitte reichen Sie konkrete Fehler und Funktionsanfragen in **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)** ein, damit diese nicht im Chat verloren gehen.
+Fehler und konkrete Funktionsanfragen gehören zu **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)**; offene Fragen, Ideen und Showcases gehören zu **[GitHub Discussions](https://github.com/CodesWhat/drydock/discussions)**; Echtzeit-Chat findet im **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)** statt.
 
 ### Community-QA
 
@@ -479,7 +501,7 @@ Vielen Dank an die Benutzer, die beim Testen der Release-Kandidaten v1.4.0 und v
 
 [@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
 
-### Teil des CodesWhat-Ökosystems
+<h2 align="center" id="codeswhat-ecosystem">Teil des CodesWhat-Ökosystems</h2>
 
 <table>
   <tbody><tr><th>Werkzeug</th><th>Rolle</th></tr>
@@ -503,8 +525,6 @@ Die vollständige Kompatibilitätsmatrix für alle drei Tools finden Sie in [por
     <img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28">
   </picture>
 </a>
-
-[![Sponsor](https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/CodesWhat)
 
 <a href="#drydock">Zurück nach oben</a>
 

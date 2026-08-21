@@ -19,11 +19,7 @@ export type ContainerSortMode =
   | 'created'
   | '-created';
 
-export const CONTAINER_SORT_FIELDS = ['name', 'status', 'age', 'created'] as const;
-export type ContainerSortField = (typeof CONTAINER_SORT_FIELDS)[number];
-
-export const CONTAINER_ORDER_VALUES = ['asc', 'desc'] as const;
-export type ContainerOrderDirection = (typeof CONTAINER_ORDER_VALUES)[number];
+const CONTAINER_ORDER_VALUES = ['asc', 'desc'] as const;
 
 export {
   applyContainerMaturityFilter,
@@ -33,7 +29,7 @@ export {
   applyContainerWatchedKindFilter,
   isContainerWatchedKind,
 } from './watched-kind-filter.js';
-export type { ContainerMaturityFilter, ContainerWatchedKind };
+export type { ContainerWatchedKind };
 
 const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
   sort: joi
@@ -160,7 +156,7 @@ export type ContainerRuntimeStatus =
   | 'dead'
   | 'created';
 
-export type ContainerUpdateStatus = 'update-available' | 'up-to-date';
+type ContainerUpdateStatus = 'update-available' | 'up-to-date';
 
 export interface ValidatedContainerListQuery {
   sortMode: ContainerSortMode;

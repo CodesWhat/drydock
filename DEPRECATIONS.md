@@ -2,7 +2,7 @@
 
 Active deprecations and their removal timeline. Each entry includes the version it was deprecated, the version it will be removed, and migration guidance.
 
-**API versioning policy:** `/api/v1` is the frozen, canonical API contract. Breaking response-shape changes are never made to `/api/v1` — they only ever land as a new `/api/v2`. The unversioned `/api` alias is removed in v1.6.0. Two kinds of endpoint keep responding at `/api/*` after that removal, both because they are registered directly on the app rather than through the removed alias router: the flag-gated wud-card compatibility endpoints (see the Unversioned `/api/*` path entry below), and the standalone auth aliases `GET /api/auth/methods` and `GET /api/auth/status` (see their entries below).
+**API versioning policy:** `/api/v1` is the frozen, canonical API contract. Breaking response-shape changes are never made to `/api/v1` — they only ever land as a new `/api/v2`. The unversioned `/api` alias is removed in v1.6.0. Two kinds of endpoint used to keep responding at `/api/*` after that removal, both because they were registered directly on the app rather than through the removed alias router: the flag-gated wud-card compatibility endpoints (see the Unversioned `/api/*` path entry below), and the standalone auth aliases `GET /api/auth/methods` and `GET /api/auth/status`. `GET /api/auth/methods` was removed on its own v1.7.0 schedule (see Removed compatibility behaviors below) and now falls through to the same tombstone as the rest of the unversioned surface; `GET /api/auth/status` remains, with no removal scheduled (see its entry below).
 
 ## Active
 
@@ -20,20 +20,6 @@ Active deprecations and their removal timeline. Each entry includes the version 
 
 ---
 
-### Unversioned `GET /api/auth/methods` alias
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.7.0 |
-| **Affects** | API consumers using `GET /api/auth/methods` |
-
-`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It logs a deprecation warning on each request, returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers, and points callers directly to `GET /api/v1/auth/status`. It is registered directly on the app, so it survives the general unversioned `/api/*` removal on its own v1.7.0 timeline. `GET /api/auth/status` is a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled.
-
-**Migration:** Replace `GET /api/auth/methods` with `GET /api/v1/auth/status`.
-
----
-
 ### Legacy auth strategies response shape (`GET /auth/strategies`)
 
 | | |
@@ -48,21 +34,7 @@ Active deprecations and their removal timeline. Each entry includes the version 
 
 ---
 
-### Manual updates bypass `dd.action.include` / `dd.action.exclude` (and legacy `dd.trigger.include` / `dd.trigger.exclude`)
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.5.0 |
-| **Removed in** | v1.7.0 |
-| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` (or the legacy `dd.trigger.include` / `dd.trigger.exclude`) where the labels filter out the matching docker / dockercompose action trigger |
-
-In v1.5.x the eligibility model classifies `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill says *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queues the update (the confirm modal lists the soft blocker and switches the accept label to *Update anyway*). This preserves the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
-
-These reasons are scheduled to become **hard** blockers later in the v1.7 cycle, shipping together with the per-action execution policy (which separates action authorization from automatic promotion so the manual-only escape hatch isn't removed on its own). Until that lands they remain soft and a confirmed manual update still works. Once hard, the Update button is locked when the labels filter out the action trigger, and the API rejects manual updates with the blocker's message. The labels then mean what the pill says: *this trigger does not handle this container*.
-
-**Migration:** If you currently rely on manual updates running through a trigger that the container's labels exclude, either (a) remove the `dd.action.exclude` / legacy `dd.trigger.exclude` label from the container, (b) add the trigger to the container's `dd.action.include` / legacy `dd.trigger.include` list, or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row tells you exactly which trigger / label combination is in conflict.
-
----
+## Removed compatibility behaviors
 
 ### `curl` in Docker image
 
@@ -70,31 +42,13 @@ These reasons are scheduled to become **hard** blockers later in the v1.7 cycle,
 | --- | --- |
 | **Deprecated in** | v1.5.0 |
 | **Removed in** | v1.7.0 |
-| **Affects** | Custom `healthcheck:` overrides in compose files that use `curl` |
+| **Affects** | Custom `healthcheck:` overrides in compose files that used `curl` |
 
-The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` uses the lightweight static binary (`/bin/healthcheck`) instead.
+The official Docker image kept `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` has used the lightweight static binary (`/bin/healthcheck`) instead since v1.5.0. v1.7.0 removes `curl` from the image entirely; a container whose own `HEALTHCHECK` override still shells out to `curl` now fails, and drydock logs a startup warning naming the container when it detects the override.
 
-**Migration:** Custom `curl`-based healthcheck overrides remain supported in v1.5.x. v1.6.0 is the final warning release. Removal is scheduled for v1.7.0. Prefer the built-in image healthcheck, or switch custom intervals to `test: /bin/healthcheck ${DD_SERVER_PORT:-3000}`. See [Monitoring](https://getdrydock.com/docs/monitoring).
+**Migration:** Switch custom healthcheck overrides to `test: /bin/healthcheck $${DD_SERVER_PORT:-3000}` (the doubled `$` is compose escaping, so the variable is expanded inside the container instead of from the host environment before the container starts), or drop the override to use the built-in image healthcheck. See [Monitoring](https://getdrydock.com/docs/monitoring).
 
 ---
-
-### Agent-less Home Assistant MQTT topic layout (multi-agent)
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.5.0 |
-| **Default flips in** | v1.7.0 |
-| **Affects** | Multi-agent deployments using the Home Assistant MQTT integration (`DD_NOTIFICATION_MQTT_<name>_HASS_ENABLED=true`) where more than one node uses the default watcher name `local` |
-
-The current Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` and the watcher-level sensor topics) has no agent segment. In a multi-agent deployment where the controller and one or more agents all use the default watcher name `local`, two containers with the same name on different agents publish to — and overwrite — the same MQTT topic, watcher running-status topics collide, and the watcher-level sensor counts sum across all agents. This is the Home Assistant facet of [#386](https://github.com/CodesWhat/drydock/issues/386).
-
-Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` opts into the corrected layout: an `agent/<name>` segment is inserted into every Home Assistant topic for containers owned by a remote agent, watcher running-status topics and watcher-level sensor counts are scoped per agent, and discovery-entity cleanup is scoped per agent. Controller-local container topics are unchanged whether or not the flag is set. The corrected layout is targeted to become the default in **v1.7.0**.
-
-**Note:** enabling the flag changes the Home Assistant entity IDs for agent-owned containers (the MQTT topic path changes). Update any Home Assistant automations, dashboards, or templates that reference the old (agent-less) entity IDs for agent containers. Single-node deployments are unaffected.
-
-**Migration:** Multi-agent deployments should set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` and re-point any affected Home Assistant references before v1.7.0 makes it the default.
-
-## Removed compatibility behaviors
 
 ### Legacy trigger prefix inputs (`DD_TRIGGER_*`, `dd.trigger.*`)
 
@@ -125,6 +79,42 @@ The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_
 
 ---
 
+### Manual updates bypassing `dd.action.include` / `dd.action.exclude`
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0 |
+| **Removed in** | v1.7.0 |
+| **Affects** | Containers labeled with `dd.action.include` / `dd.action.exclude` where the labels filter out the matching docker / dockercompose action trigger (v1.7.0 ignores the legacy `dd.trigger.*` labels — see the runtime removal above) |
+
+In v1.5.x–v1.6.x the eligibility model classified `trigger-not-included` and `trigger-excluded` as **soft** blockers: the row pill said *Trigger filtered* / *Trigger excluded*, but clicking the per-row Update button still queued the update (the confirm modal listed the soft blocker and switched the accept label to *Update anyway*). This preserved the pre-v1.5 behavior where include/exclude was an *auto-trigger* filter only — manual click bypassed it.
+
+As of v1.7.0 both reasons are **hard** blockers, shipping together with the per-action execution policy (`dd.action.auto` container label, `AUTO=onauto` trigger mode — spec-6.0.1-action-policy.md) that separates action authorization from automatic promotion, so the manual-only escape hatch isn't removed on its own. The Update button is now locked when the labels filter out the action trigger, and the API rejects a manual update request with the blocker's message (`409`). The labels now mean what the pill always said: *this trigger does not handle this container*.
+
+**This does not change `AUTO=oninclude`'s meaning.** A trigger left on `AUTO=oninclude` keeps its pre-6.0.1 conflated behavior permanently: a matching `dd.action.include` label still grants both manual and automatic access under that mode, exactly as before — that row of the migration table is explicitly unchanged. Only the *default-deny* outcome (no matching include/auto label at all) and the *explicit-exclude* outcome (`dd.action.exclude` match) flip from soft to hard. An operator who wants the split between manual-only and automatic access opts in by switching a trigger to `AUTO=onauto`; nothing about this flip forces that switch.
+
+**Migration:** If legacy `dd.trigger.include` / `dd.trigger.exclude` labels are still present, first rename them to the corresponding `dd.action.*` labels (v1.7.0 no longer reads them — the migration CLI above does this rewrite). Then, if you relied on manual updates running through a trigger that the container's labels excluded, either (a) remove the `dd.action.exclude` label from the container, (b) add the trigger to the container's `dd.action.include` list (or `dd.action.auto` list, for a trigger configured with `AUTO=onauto`), or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies exactly which trigger / label combination is in conflict.
+
+---
+
+### Agent-less Home Assistant MQTT topic layout (multi-agent)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0 |
+| **Default flipped in** | v1.7.0 |
+| **Affects** | Multi-agent deployments using the Home Assistant MQTT integration (`DD_NOTIFICATION_MQTT_<name>_HASS_ENABLED=true`) where more than one node used the default watcher name `local` |
+
+Through v1.6.x, the Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` and the watcher-level sensor topics) had no agent segment. In a multi-agent deployment where the controller and one or more agents all used the default watcher name `local`, two containers with the same name on different agents published to — and overwrote — the same MQTT topic, watcher running-status topics collided, and the watcher-level sensor counts summed across all agents. This was the Home Assistant facet of [#386](https://github.com/CodesWhat/drydock/issues/386).
+
+As of v1.7.0, `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT` defaults to `true`: an `agent/<name>` segment is now inserted into every Home Assistant topic for containers owned by a remote agent, watcher running-status topics and watcher-level sensor counts are scoped per agent, and discovery-entity cleanup is scoped per agent. Controller-local container topics are unchanged either way. Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false` remains available as a temporary opt-out back to the old, unscoped layout; a shared watcher name across agents on that opt-out reproduces the original collision, which `warnIfAgentlessHassTopicLayoutCollides` (`app/triggers/providers/mqtt/Hass.ts`) now warns about explicitly, once per watcher name.
+
+**What upgrading multi-agent deployments see in Home Assistant:** agent-owned container and watcher entities move to new topic paths — new entity IDs — the first time drydock starts under v1.7.0 without the opt-out set. **The old (pre-v1.7.0) discovery entities are not retroactively removed.** Discovery cleanup only clears topics drydock currently has in memory: the per-container "previous topic" tracking is an in-memory map that starts empty on every process restart, and the watcher-level and aggregate sensors never tracked a prior topic scheme at all. The pre-v1.7.0 entities stay retained on the broker and show up in Home Assistant as orphaned, frozen-at-last-state duplicates alongside the new ones until manually removed (delete the entities in Home Assistant, or clear the retained messages on the broker, once the new entities are confirmed working).
+
+**Migration:** No action is required for the default flip itself. Update any Home Assistant automations, dashboards, or templates that reference the old (agent-less) entity IDs for agent-owned containers, and manually remove the orphaned old-path discovery entities described above. Deployments not yet ready to migrate can set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false` to keep the pre-v1.7.0 layout temporarily.
+
+---
+
 ### v1.6.0 configuration and authentication removals
 
 The following v1.4-era compatibility inputs are no longer executed in v1.6.0:
@@ -142,6 +132,20 @@ The following v1.4-era compatibility inputs are no longer executed in v1.6.0:
 | Token-only Hub/DHI public instance configuration (for example `DD_REGISTRY_HUB_PUBLIC_TOKEN` without `..._PUBLIC_LOGIN`) | Registry validation fails closed instead of silently switching to anonymous access. The `TOKEN` key itself remains valid when paired with `LOGIN`. | Configure the named instance with `LOGIN`+`PASSWORD`, `LOGIN`+`TOKEN`, or `AUTH`; remove credentials entirely for intentional anonymous access. |
 
 The migration CLI intentionally retains knowledge of the removed WUD names so it can rewrite old configuration files; this is migration support, not runtime compatibility.
+
+---
+
+### Agent-mode `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` fallback
+
+| | |
+| --- | --- |
+| **Deprecated in** | Never — removed directly, no deprecation period |
+| **Removed in** | v1.6.0-rc.1 |
+| **Affects** | Agent-mode deployments (`app/agent/api/index.ts`) configured with only `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE`, no `DD_AGENT_SECRET` / `DD_AGENT_SECRET_FILE` |
+
+This is a separate, undocumented removal from the general `WUD_*` table above. Unlike the general configuration loader — which never read `WUD_*` variables at all — agent mode's secret lookup carried its own explicit fallback through v1.5.2: `process.env.DD_AGENT_SECRET ?? process.env.WUD_AGENT_SECRET` (and the equivalent for `_FILE`). v1.6.0-rc.1 dropped both fallbacks with no warning release first. An agent that had only `WUD_AGENT_SECRET` set went straight from authenticating successfully to `init()` throwing `Agent mode requires DD_AGENT_SECRET or DD_AGENT_SECRET_FILE` at startup — an error message that never mentions the `WUD_` variable the operator actually configured. This entry was never recorded at the time of the v1.6.0 release; it is added here retroactively.
+
+**Migration:** Rename `WUD_AGENT_SECRET` to `DD_AGENT_SECRET` and `WUD_AGENT_SECRET_FILE` to `DD_AGENT_SECRET_FILE`.
 
 ---
 
@@ -188,7 +192,21 @@ Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN`
 
 **Exceptions:** the opt-in wud-card compatibility endpoints (`DD_COMPAT_WUDCARD`, default `false`) remain mounted at `/api/*` and are unaffected by this removal — the compat router dispatches its four whitelisted routes directly into the same `apiRouter` instance mounted at `/api/v1` (shared, not a second independent one — see `app/api/compat/wudcard.ts`) rather than by falling through to the (now-removed) `/api` alias, so auth and rate limiting are genuinely identical rather than merely implemented identically. They exist solely to keep the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration (and Homepage's native `whatsupdocker` widget, which expects the same bare-array shape) working, are off by default, and are best-effort with no compatibility guarantee — see [Server configuration](https://getdrydock.com/docs/configuration/server) for details.
 
-Separately, `GET /api/auth/methods` and `GET /api/auth/status` also keep responding 200 at `/api/*` — unconditionally, not behind any flag — because both are registered directly on the app before the `/api` mounts rather than living inside the removed alias router. See the Unversioned `GET /api/auth/methods` alias entry above for its own v1.7.0 removal timeline; `GET /api/auth/status` has no removal scheduled and is documented as a standing compatibility alias for `GET /api/v1/auth/status`.
+Separately, `GET /api/auth/status` also keeps responding 200 at `/api/*` — unconditionally, not behind any flag — because it is registered directly on the app before the `/api` mounts rather than living inside the removed alias router. It has no removal scheduled and is documented as a standing compatibility alias for `GET /api/v1/auth/status`. `GET /api/auth/methods` used to keep responding for the same reason; see the entry immediately below for its v1.7.0 removal.
+
+---
+
+### Unversioned `GET /api/auth/methods` alias
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.6.0 |
+| **Removed in** | v1.7.0 |
+| **Affects** | API consumers using `GET /api/auth/methods` |
+
+`GET /api/auth/methods` was a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen could render before a session existed. It logged a deprecation warning on each request and returned RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers pointing callers at `GET /api/v1/auth/status`. Because it was registered directly on the app, ahead of the `/api` mount, it survived the general unversioned `/api/*` removal above on its own v1.7.0 timeline. That registration is gone as of v1.7.0: the route is no longer mounted anywhere, so a request to it now falls through to the same unversioned `/api/*` **410 Gone** tombstone described above. `GET /api/auth/status` is unaffected and remains a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled.
+
+**Migration:** Replace `GET /api/auth/methods` with `GET /api/v1/auth/status`.
 
 ---
 

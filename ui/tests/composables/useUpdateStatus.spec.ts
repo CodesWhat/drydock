@@ -215,7 +215,8 @@ describe('deriveUpdateStatus', () => {
           updateEligibility: eligibility([
             blocker({ reason: 'snoozed', severity: 'soft' }),
             blocker({ reason: 'security-scan-blocked', severity: 'hard' }),
-            blocker({ reason: 'trigger-not-included', severity: 'soft' }),
+            // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+            blocker({ reason: 'trigger-not-included', severity: 'hard' }),
             blocker({ reason: 'last-update-rolled-back', severity: 'hard' }),
             blocker({ reason: 'no-update-trigger-configured', severity: 'hard' }),
           ]),
@@ -335,6 +336,84 @@ describe('deriveUpdateStatus', () => {
     expect(status.insightNote).toBeUndefined();
   });
 
+  it('reports unknown when a registry error accompanies a negative update claim (#814, #808)', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: null,
+          registryError: 'registry unavailable',
+          updateEligibility: eligibility([
+            blocker({ reason: 'no-update-available', severity: 'hard', actionable: false }),
+          ]),
+        },
+      }),
+    );
+
+    expect(status.state).toBe('unknown');
+    expect(status.tone).toBe('warning');
+    expect(status.summary).toBe('Update status unknown. The last check could not complete.');
+    expect(status.hasUpdate).toBe(false);
+  });
+
+  it('still reports up to date when there is no registry error', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: null,
+          updateEligibility: eligibility([
+            blocker({ reason: 'no-update-available', severity: 'hard', actionable: false }),
+          ]),
+        },
+      }),
+    );
+
+    expect(status.state).toBe('up-to-date');
+    expect(status.summary).toBe('Up to date.');
+  });
+
+  it('never downgrades a genuine known update to unknown even when a registry error is also present (#814, #808)', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          registryError: 'registry unavailable',
+          updateEligibility: eligibility(),
+        },
+      }),
+    );
+
+    expect(status.hasUpdate).toBe(true);
+    expect(status.state).not.toBe('unknown');
+    expect(status.state).toBe('ready');
+  });
+
+  it('lets a registry error win over a pin-gate insight when both are present and there is no actionable update (#814, #808)', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'immich-machine-learning',
+          newTag: null,
+          newDigest: null,
+          registryError: 'registry unavailable',
+          updateInsight: { tag: 'v3.0.2-openvino', kind: 'major' },
+          updateEligibility: eligibility([
+            blocker({ reason: 'no-update-available', severity: 'hard', actionable: false }),
+          ]),
+        },
+      }),
+    );
+
+    expect(status.state).toBe('unknown');
+    expect(status.summary).toBe('Update status unknown. The last check could not complete.');
+  });
+
   it('describes a pinned-tag insight as newer-but-non-actionable (#498)', () => {
     const status = deriveUpdateStatus(
       input({
@@ -408,8 +487,11 @@ describe('deriveUpdateStatus', () => {
     ['skip-digest', 'soft', 'warning', 'tab'],
     ['maturity-not-reached', 'soft', 'warning', 'tab'],
     ['threshold-not-reached', 'soft', 'warning', 'external'],
-    ['trigger-excluded', 'soft', 'warning', 'external'],
-    ['trigger-not-included', 'soft', 'warning', 'external'],
+    // trigger-excluded / trigger-not-included are hard as of v1.7.0
+    // (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md. `tone` follows
+    // `severity` (hard -> danger) in toCondition(), so both columns moved together.
+    ['trigger-excluded', 'hard', 'danger', 'external'],
+    ['trigger-not-included', 'hard', 'danger', 'external'],
     ['agent-mismatch', 'hard', 'danger', 'external'],
     ['no-update-trigger-configured', 'hard', 'danger', 'external'],
     ['self-update-unavailable', 'hard', 'danger', 'external'],
@@ -545,6 +627,53 @@ describe('deriveUpdateStatus', () => {
 
     const condition = status.conditions[0];
     expect(condition.body).toBe('Maturity policy requires updates to be at least 7 days old.');
+  });
+
+  it('surfaces the Auto badge when actionPolicy resolves to auto', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: {
+            ...eligibility(),
+            actionPolicy: { state: 'auto', triggerId: 'docker.update' },
+          },
+        },
+      }),
+    );
+
+    expect(status.actionPolicyBadge).toEqual({
+      state: 'auto',
+      label: 'Auto',
+      tooltip:
+        "Drydock will apply this update automatically once it's detected — no manual click needed.",
+    });
+  });
+
+  it('omits the Auto badge when actionPolicy resolves to manual', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: {
+            ...eligibility(),
+            actionPolicy: { state: 'manual', triggerId: 'docker.update' },
+          },
+        },
+      }),
+    );
+
+    expect(status.actionPolicyBadge).toBeUndefined();
+  });
+
+  it('omits the Auto badge when there is no actionPolicy at all', () => {
+    const status = deriveUpdateStatus(input());
+
+    expect(status.actionPolicyBadge).toBeUndefined();
   });
 
   it('formats a live lift countdown without dropping the exact date', () => {

@@ -193,7 +193,6 @@
       "setGroupAction": "Set group",
       "rollbackAction": "Rollback",
       "deleteAction": "Delete",
-      "pinnedTooltip": "Pinned",
       "skippedLabel": "Skipped",
       "upToDateTooltip": "Up to date",
       "imageUpdateTooltip": "The tag {tag} now points to a different image build. Redeploy to pull the new image; the version tag itself has not changed.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "Suggested: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "Newer available",
       "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
     },
     "eligibilityBadges": {
@@ -390,8 +388,19 @@
       "updateButton": "Update now",
       "blockedButton": "Update blocked",
       "notificationsOnlyButton": "Notifications only",
+      "actionPolicyBadge": {
+        "auto": "Auto",
+        "manual": "Manual",
+        "blocked": "Blocked"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock will apply this update automatically once it's detected — no manual click needed.",
+        "manual": "This update can be applied manually, but won't fire automatically.",
+        "blocked": "No action trigger currently authorizes this container — check the dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "summary": {
         "upToDate": "Up to date.",
+        "unknown": "Update status unknown. The last check could not complete.",
         "insight": "Newer version available — this tag is pinned.",
         "inProgress": "Update in progress.",
         "hardBlocked": "Update blocked — fix required.",
@@ -560,6 +569,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Auto",
+      "resolvedStateTooltip": {
+        "auto": "Runs automatically for this container when a qualifying update is detected.",
+        "manual": "Can be run manually for this container, but will not fire automatically.",
+        "blocked": "Blocked for this container — check the dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "toasts": {
         "ran": "Trigger ran: {key}",
         "ranSuccessfully": "Trigger {key} ran successfully",

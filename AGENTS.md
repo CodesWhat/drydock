@@ -122,16 +122,17 @@ Add `!` before the colon (`feat(api)!: drop v1 tokens`), or a `BREAKING CHANGE:`
 1. `clean-tree` — rejects uncommitted changes (CI only ever sees committed state)
 2. `ts-nocheck` — checks for `@ts-nocheck` directives against the allowlist
 3. `biome` — lint/format via `npx biome check .`
-4. `qlty` — static analysis via `./scripts/qlty-check-gate.sh all` (medium+ severity gate, budgeted at **4 minutes**)
-5. `qlty-smells` — code-smell advisory scan (non-blocking)
-6. `scripts-test` — `node --test scripts/*.test.mjs`
-7. `workflow-tests` — `npm run test:workflows` (CI/workflow invariants, outside the app suite)
-8. `typecheck-ui` — `npm run typecheck --prefix ui`
-9. `web-scripts-test` — `npm run test:scripts --prefix apps/web`, only when a push touches `apps/web/**`
-10. `coverage` — sharded `app`+`ui` parallel vitest with the 100% threshold above (takes roughly **210 seconds**); on failure writes `.coverage-gaps.json`
-11. `build` — sharded `app`+`ui` parallel `tsc`/`vite`, no tests (they already ran in step 10)
-12. `docker-build` — optional, only when `DD_LOCAL_DOCKER=1`
-13. `zizmor` — GitHub Actions workflow security scan, only when `.github/workflows/*.yml` changed and `zizmor` is installed
+4. `knip` — dead-code/unused-dependency check across `app`+`ui` via `./scripts/knip-gate.sh`
+5. `qlty` — static analysis via `./scripts/qlty-check-gate.sh all` (medium+ severity gate, budgeted at **4 minutes**)
+6. `qlty-smells` — code-smell advisory scan (non-blocking)
+7. `scripts-test` — `node --test scripts/*.test.mjs`
+8. `workflow-tests` — `npm run test:workflows` (CI/workflow invariants, outside the app suite)
+9. `typecheck-ui` — `npm run typecheck --prefix ui`
+10. `web-scripts-test` — `npm run test:scripts --prefix apps/web`, only when a push touches `apps/web/**`
+11. `coverage` — sharded `app`+`ui` parallel vitest with the 100% threshold above (takes roughly **210 seconds**); on failure writes `.coverage-gaps.json`
+12. `build` — sharded `app`+`ui` parallel `tsc`/`vite`, no tests (they already ran in step 11)
+13. `docker-build` — optional, only when `DD_LOCAL_DOCKER=1`
+14. `zizmor` — GitHub Actions workflow security scan, only when `.github/workflows/*.yml` changed and `zizmor` is installed
 
 Coverage runs before build so tests execute exactly once per push, and a coverage failure surfaces before a slower build failure would bury it.
 
@@ -143,6 +144,8 @@ Never use `--no-verify`. If a hook fails, fix the root cause — that's what it'
 
 Pull requests are **squash-only** — the repo has merge commits and rebase merges disabled. Don't rely on `git merge-base --is-ancestor` for anything branch-related in this repo; every merge to `main` mints a new commit that `dev/vX.Y` never had, so ancestry checks fail even on a fully in-sync branch. Compare trees instead (`git diff --quiet <a> <b>`) — see `RELEASING.md` for where this matters.
 
+Applying the `second-opinion` label to a PR triggers `.github/workflows/greptile.yml` (config in `greptile.json`), which summons Greptile as a second-opinion reviewer alongside the standard review.
+
 ## Release & branch model
 
 Feature work and fixes land on `dev/vX.Y` via PR — never target `main` directly (see `CONTRIBUTING.md`). Cutting an actual release (`main` sync, RC/GA tagging, the soak requirement) is a maintainer operation documented in `RELEASING.md`.
@@ -153,7 +156,7 @@ Longer-form working notes and the roadmap tracker live under `.planning/` at the
 
 ## Key constraints
 
-- Biome is a direct devDependency in the root workspace; qlty handles all other linters (actionlint, checkov, dockerfmt, hadolint, markdownlint, osv-scanner, shellcheck, shfmt, trivy, trufflehog, yamllint) but not biome — qlty's biome integration doesn't reliably apply fixes.
+- Biome is a direct devDependency in the root workspace; qlty handles all other linters (actionlint, checkov, dockerfmt, hadolint, markdownlint, osv-scanner, shellcheck, shfmt, trufflehog, yamllint) but not biome — qlty's biome integration doesn't reliably apply fixes.
 - `content/docs/` is the source of truth for published docs; the generated copy under `apps/web/content/docs/` is gitignored.
 - `CHANGELOG.md` at the repo root is the single source of truth for the changelog.
 - Regex from user config (tag include/exclude/transform) is compiled via `re2js` for linear-time execution — never introduce a raw `RegExp` on user-supplied patterns.

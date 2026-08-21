@@ -7,7 +7,7 @@ import {
   purgeTerminalOutboxEntriesOlderThan,
 } from '../store/notification-outbox.js';
 
-export type OutboxDeliveryHandler = (entry: NotificationOutboxEntry) => Promise<void>;
+type OutboxDeliveryHandler = (entry: NotificationOutboxEntry) => Promise<void>;
 
 export interface OutboxWorkerOptions {
   deliver: OutboxDeliveryHandler;

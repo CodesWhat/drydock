@@ -5,6 +5,16 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.0-rc.2 Highlights — August 20, 2026
+
+- **Per-container action-policy resolution** — the API and UI now surface the resolved `blocked`/`manual`/`auto` state and winning trigger for every container and candidate action trigger, plus a new `dd.action.auto` label and `AUTO=onauto` mode so a container can opt into manual-only access without picking up automatic dispatch (spec-6.0.1-action-policy.md, slice 5).
+- **BREAKING changes take effect this cycle** — the legacy `DD_TRIGGER_*` prefix and `dd.trigger.*` labels are fully removed, `trigger-excluded`/`trigger-not-included` become hard update blockers ending the v1.5.0–v1.6.x soft-severity grace period, the Home Assistant MQTT topic layout now scopes multi-agent deployments under an `agent/<name>` segment by default, `GET /api/auth/methods` returns 410, and `curl` is gone from the Docker image in favor of the compiled healthcheck binary.
+- **Dependency-graph and admission fixes** — a rejected dependency member no longer loses its restart context in wave 0, and Docker Compose refreshes no longer carry forward a stale image-inherited environment default ([#718](https://github.com/CodesWhat/drydock/pull/718), [#736](https://github.com/CodesWhat/drydock/pull/736)).
+- **Self-update state survives itself** — the `updatePolicyRetentionCache` that lets a recreated container inherit its predecessor's policy overrides now persists write-through to the store instead of being silently dropped on drydock's own self-update restart ([#743](https://github.com/CodesWhat/drydock/pull/743)).
+- **Update checks stop reporting false confidence** — a registry error mid-check no longer reports "Up to date," a single malformed container no longer zeroes out an entire agent inventory sync, and nested OCI image indexes (Buildx SBOM/provenance builds) now resolve to the real manifest instead of erroring ([#814](https://github.com/CodesWhat/drydock/issues/814)).
+- **Security** — closed a remote-property-injection path in the container list's URL query sync, and scoped the Grype image gate around CVE-2026-14456 pending an upstream Alpine fix ([#750](https://github.com/CodesWhat/drydock/pull/750)).
+- **Everything else** — Greptile second-opinion review is available behind a label, `release-cut.yml` can cut a maintenance patch from a retired dev branch, the container SBOM attestation is now documented in the verification guide, the trivy qlty plugin gave way to Grype, the login screen's oversized logo asset was fixed, and the star-history chart moved to a committed SVG.
+
 ## v1.7.0-rc.1 Highlights — August 14, 2026
 
 - **Dependency-aware updates** — labels or Compose metadata resolve into deterministic update waves, with preview-bound confirmation, restart-only dependents, cycle handling, and explicit skipped-dependency results ([Discussion #219](https://github.com/CodesWhat/drydock/discussions/219)).

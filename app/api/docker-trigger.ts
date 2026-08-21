@@ -29,7 +29,7 @@ interface FindDockerTriggerForContainerOptions {
   triggerTypes?: string[];
 }
 
-interface DockerTriggerCandidate {
+export interface DockerTriggerCandidate {
   type: string;
   agent?: string;
   configuration?: object;
@@ -43,8 +43,24 @@ interface DockerTriggerCandidate {
 
 type TriggerWithComposeAffinity = DockerTriggerCandidate;
 
-type ContainerTriggerContext = Pick<Container, 'agent' | 'labels'> &
+export type ContainerTriggerContext = Pick<Container, 'agent' | 'labels'> &
   Partial<Pick<Container, 'name' | 'watcher'>>;
+
+/**
+ * Relative specificity of a compatible docker/dockercompose trigger, used by
+ * `model/action-policy.ts`'s `selectActionTrigger` to rank multiple
+ * compatible candidates (spec-6.0.1-action-policy.md decision 3): a
+ * dockercompose trigger whose configured file was actually verified against
+ * one of the container's own compose files outranks a dockercompose trigger
+ * that matched only because it has no configured file (or because the
+ * container's compose files couldn't be determined), which in turn outranks
+ * a generic (non-compose) docker trigger. Ties within a tier are broken by
+ * registry insertion order at the call site.
+ */
+export type DockerTriggerSpecificity =
+  | 'compose-file-matched'
+  | 'compose-catch-all'
+  | 'docker-generic';
 
 function normalizeComposeFilePath(value: unknown): string | null {
   if (typeof value !== 'string') {
@@ -256,6 +272,40 @@ export function isTriggerCompatibleWithContainer(
   }
 
   return true;
+}
+
+/**
+ * Compute a compatible trigger's specificity tier for the hybrid
+ * multi-trigger walk (`model/action-policy.ts`'s `selectActionTrigger`).
+ * Callers are expected to have already filtered to compatible triggers via
+ * `isTriggerCompatibleWithContainer` — a dockercompose trigger with a
+ * configured file that does NOT match the container's compose files would
+ * already have been excluded there, so `'compose-file-matched'` is the only
+ * reachable outcome once a configured file and a non-empty compose-file list
+ * are both present.
+ */
+export function getDockerTriggerSpecificity(
+  trigger: DockerTriggerCandidate,
+  container: ContainerTriggerContext,
+): DockerTriggerSpecificity {
+  if (trigger.type !== 'dockercompose') {
+    return 'docker-generic';
+  }
+
+  const configuredComposeFilePath = getConfiguredComposeFilePath(trigger);
+  if (!configuredComposeFilePath) {
+    return 'compose-catch-all';
+  }
+
+  const composeFilesForContainer = getComposeFilesForContainer(trigger, container);
+  if (composeFilesForContainer.length === 0) {
+    return 'compose-catch-all';
+  }
+
+  const isVerifiedMatch = composeFilesForContainer.some((composeFilePath) =>
+    doesComposeFileMatchConfiguredFile(composeFilePath, configuredComposeFilePath),
+  );
+  return isVerifiedMatch ? 'compose-file-matched' : 'compose-catch-all';
 }
 
 /**

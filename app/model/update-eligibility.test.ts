@@ -72,15 +72,17 @@ function makeContainerWithDigestUpdate(overrides: Partial<Container> = {}): Cont
   });
 }
 
-// A minimal trigger mock with all the methods eligibility needs
+// A minimal trigger mock with everything eligibility (and the action-policy
+// resolver it now delegates the exclude/include verdict to) needs. `auto`
+// defaults to unset, which `resolveForTrigger` normalizes to 'all' (legacy
+// access-always-open, same as the pre-6.0.1 default isTriggerIncluded/
+// isTriggerExcluded mock behavior this replaced).
 function makeTrigger(
   overrides: Partial<{
     type: string;
     agent: string | undefined;
-    configuration: { threshold?: string };
+    configuration: { threshold?: string; auto?: boolean | string };
     getId: () => string;
-    isTriggerIncluded: (c: Container, include: string | undefined) => boolean;
-    isTriggerExcluded: (c: Container, exclude: string | undefined) => boolean;
   }> = {},
 ) {
   return {
@@ -88,8 +90,6 @@ function makeTrigger(
     agent: undefined,
     configuration: { threshold: 'all' },
     getId: () => 'docker.update',
-    isTriggerIncluded: (_c: Container, include: string | undefined) => !include,
-    isTriggerExcluded: (_c: Container, _exclude: string | undefined) => false,
     ...overrides,
   };
 }
@@ -1240,14 +1240,16 @@ describe('computeUpdateEligibility', () => {
       const blocker = result.blockers.find((b) => b.reason === 'trigger-excluded');
       expect(blocker).toBeDefined();
       expect(blocker?.details?.triggerExclude).toBe('docker.update');
+      // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+      expect(blocker?.severity).toBe('hard');
     });
 
     test('reads the action-scoped exclude, never the deprecated mirror (#494)', () => {
-      const isTriggerExcluded = vi.fn().mockReturnValue(false);
-      const trigger = makeTrigger({
-        isTriggerExcluded,
-        isTriggerIncluded: () => true,
-      });
+      // The deprecated triggerExclude/notificationTriggerExclude mirror carries a
+      // value that WOULD exclude this trigger if it were (wrongly) consulted.
+      // actionTriggerExclude is left unset, so the resolver — which only ever
+      // reads the action-scoped field — must not exclude.
+      const trigger = makeTrigger();
       const container = makeContainerWithTagUpdate({
         triggerExclude: 'docker.update',
         notificationTriggerExclude: 'docker.update',
@@ -1261,17 +1263,13 @@ describe('computeUpdateEligibility', () => {
         }),
       );
 
-      expect(isTriggerExcluded).toHaveBeenCalledWith(container, undefined);
       expect(result.blockers.find((b) => b.reason === 'trigger-excluded')).toBeUndefined();
     });
   });
 
   describe('trigger-not-included', () => {
-    test('emits trigger-not-included when isTriggerIncluded returns false and not excluded', () => {
-      const trigger = makeTrigger({
-        isTriggerExcluded: () => false,
-        isTriggerIncluded: () => false,
-      });
+    test('emits trigger-not-included when the include label does not match and not excluded', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
       const container = makeContainerWithTagUpdate({
         actionTriggerInclude: 'other.trigger',
       });
@@ -1285,17 +1283,33 @@ describe('computeUpdateEligibility', () => {
       const blocker = result.blockers.find((b) => b.reason === 'trigger-not-included');
       expect(blocker).toBeDefined();
       expect(blocker?.details?.triggerInclude).toBe('other.trigger');
+      // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+      expect(blocker?.severity).toBe('hard');
+    });
+
+    test('actionHint references dd.action.auto alongside include/exclude (locked-button tooltip copy)', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'onauto', threshold: 'all' } });
+      const container = makeContainerWithTagUpdate({ actionTriggerInclude: 'other.trigger' });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+      const blocker = result.blockers.find((b) => b.reason === 'trigger-not-included');
+      expect(blocker?.actionHint).toContain('dd.action.auto');
     });
 
     test('reads the action-scoped include, never the deprecated mirror (#494)', () => {
-      const isTriggerIncluded = vi.fn().mockReturnValue(true);
-      const trigger = makeTrigger({
-        isTriggerExcluded: () => false,
-        isTriggerIncluded,
-      });
+      // Under 'oninclude', access is closed by default. The deprecated
+      // triggerInclude/notificationTriggerInclude mirror carries a value that
+      // WOULD grant access if it were (wrongly) consulted; actionTriggerInclude
+      // is left unset, so the resolver must still report trigger-not-included.
+      const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
       const container = makeContainerWithTagUpdate({
-        triggerInclude: 'slack.alert',
-        notificationTriggerInclude: 'slack.alert',
+        triggerInclude: 'docker.update',
+        notificationTriggerInclude: 'docker.update',
       });
 
       const result = computeUpdateEligibility(
@@ -1306,18 +1320,14 @@ describe('computeUpdateEligibility', () => {
         }),
       );
 
-      expect(isTriggerIncluded).toHaveBeenCalledWith(container, undefined);
-      expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeUndefined();
+      expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeDefined();
     });
 
     test('trigger-excluded takes precedence over trigger-not-included', () => {
-      const trigger = makeTrigger({
-        isTriggerExcluded: () => true,
-        isTriggerIncluded: () => false,
-      });
+      const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
       const container = makeContainerWithTagUpdate({
-        triggerExclude: 'docker.update',
-        triggerInclude: 'other',
+        actionTriggerExclude: 'docker.update',
+        actionTriggerInclude: 'other',
       });
       const result = computeUpdateEligibility(
         container,
@@ -1328,6 +1338,95 @@ describe('computeUpdateEligibility', () => {
       );
       expect(result.blockers.find((b) => b.reason === 'trigger-excluded')).toBeDefined();
       expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeUndefined();
+    });
+  });
+
+  describe('actionPolicy', () => {
+    test('reflects auto state with the winning triggerId and no blocker', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'all', threshold: 'all' } });
+      const container = makeContainerWithTagUpdate();
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+      expect(result.actionPolicy).toStrictEqual({ state: 'auto', triggerId: 'docker.update' });
+      expect(result.blockers.find((b) => b.reason === 'trigger-excluded')).toBeUndefined();
+      expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeUndefined();
+    });
+
+    test('reflects manual state under onauto with no matching auto label', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'onauto', threshold: 'all' } });
+      const container = makeContainerWithTagUpdate({ actionTriggerInclude: 'docker.update' });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+      expect(result.actionPolicy).toStrictEqual({ state: 'manual', triggerId: 'docker.update' });
+    });
+
+    test('reflects blocked/excluded and matches the trigger-excluded blocker triggerId', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'all', threshold: 'all' } });
+      const container = makeContainerWithTagUpdate({ actionTriggerExclude: 'docker.update' });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+      expect(result.actionPolicy).toStrictEqual({
+        state: 'blocked',
+        reason: 'excluded',
+        triggerId: 'docker.update',
+      });
+    });
+
+    test('reflects blocked/not-included when no candidate authorizes the container', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
+      const container = makeContainerWithTagUpdate({ actionTriggerInclude: 'other.trigger' });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+      expect(result.actionPolicy).toStrictEqual({
+        state: 'blocked',
+        reason: 'not-included',
+        triggerId: 'docker.update',
+      });
+    });
+
+    test('is omitted entirely when no compatible trigger exists (no-update-trigger-configured)', () => {
+      const container = makeContainerWithTagUpdate();
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: undefined,
+          now: FIXED_NOW,
+        }),
+      );
+      expect(result.actionPolicy).toBeUndefined();
+    });
+
+    test('is omitted entirely on agent-mismatch', () => {
+      const trigger = makeTrigger({ agent: 'agent-x' });
+      const container = makeContainerWithTagUpdate({ agent: 'agent-y' });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+      expect(result.actionPolicy).toBeUndefined();
     });
   });
 
@@ -1652,6 +1751,10 @@ describe('computeUpdateEligibility', () => {
       expect(BLOCKER_SEVERITY['last-update-rolled-back']).toBe('hard');
       expect(BLOCKER_SEVERITY['agent-mismatch']).toBe('hard');
       expect(BLOCKER_SEVERITY['no-update-trigger-configured']).toBe('hard');
+      // trigger-excluded / trigger-not-included flipped soft -> hard in v1.7.0
+      // (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+      expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('hard');
+      expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('hard');
     });
 
     test('soft severities cover policy reasons that manual update bypasses', () => {
@@ -1660,9 +1763,6 @@ describe('computeUpdateEligibility', () => {
       expect(BLOCKER_SEVERITY['skip-digest']).toBe('soft');
       expect(BLOCKER_SEVERITY['maturity-not-reached']).toBe('soft');
       expect(BLOCKER_SEVERITY['threshold-not-reached']).toBe('soft');
-      // trigger-excluded / trigger-not-included are soft until v1.7.0 — see DEPRECATIONS.md
-      expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('soft');
-      expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('soft');
     });
 
     test('computeUpdateEligibility stamps severity on every emitted blocker', () => {

@@ -1,25 +1,25 @@
-export interface DockerCpuUsage {
+interface DockerCpuUsage {
   total_usage?: number;
   percpu_usage?: number[];
 }
 
-export interface DockerCpuStats {
+interface DockerCpuStats {
   cpu_usage?: DockerCpuUsage;
   system_cpu_usage?: number;
   online_cpus?: number;
 }
 
-export interface DockerMemoryStats {
+interface DockerMemoryStats {
   usage?: number;
   limit?: number;
 }
 
-export interface DockerNetworkStats {
+interface DockerNetworkStats {
   rx_bytes?: number;
   tx_bytes?: number;
 }
 
-export interface DockerBlockIoEntry {
+interface DockerBlockIoEntry {
   op?: string;
   value?: number;
 }

@@ -8,6 +8,12 @@ import {
 } from '../../dependencies/dependency-graph.js';
 import * as event from '../../event/index.js';
 import {
+  type ActionPolicyTrigger,
+  findInertAutoLabelContainers,
+  findOnincludeAutoMigrationGaps,
+  selectActionTrigger,
+} from '../../model/action-policy.js';
+import {
   type Container,
   fullName,
   isRollbackContainer as isRollbackContainerHelper,
@@ -43,13 +49,17 @@ import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplic
 import { DigestBuffer } from './trigger-digest-buffer.js';
 import { renderBatch, renderSimple, renderTemplate } from './trigger-expression-parser.js';
 import {
+  doesReferenceMatchId as doesReferenceMatchIdHelper,
+  matchesTriggerReferenceList,
+  parseIncludeOrIncludeTriggerString as parseIncludeOrIncludeTriggerStringHelper,
+} from './trigger-reference-matching.js';
+import {
   isThresholdReached as isThresholdReachedHelper,
   parseThresholdWithDigestBehavior as parseThresholdWithDigestBehaviorHelper,
   SUPPORTED_THRESHOLDS,
 } from './trigger-threshold.js';
 
-type SupportedThreshold = (typeof SUPPORTED_THRESHOLDS)[number];
-type TriggerAutoMode = 'all' | 'oninclude' | 'none';
+type TriggerAutoMode = 'all' | 'oninclude' | 'onauto' | 'none';
 type DigestEventKind = 'update-available-digest' | 'security-alert-digest';
 
 /**
@@ -612,10 +622,6 @@ export function resolveNotificationTemplate(
   return templates[notificationEvent.kind] ?? fallback;
 }
 
-function isSupportedThreshold(value: string): value is SupportedThreshold {
-  return SUPPORTED_THRESHOLDS.includes(value as SupportedThreshold);
-}
-
 export interface TriggerConfiguration extends ComponentConfiguration {
   auto?: boolean | TriggerAutoMode;
   order?: number;
@@ -646,13 +652,6 @@ interface SecurityDigestEntry {
   summary: SecurityAlertSummary;
   status?: string;
   bufferedAt: string;
-}
-
-function splitAndTrimCommaSeparatedList(value: string): string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
 }
 
 /**
@@ -858,31 +857,7 @@ class Trigger<
    * @returns
    */
   static parseIncludeOrIncludeTriggerString(includeOrExcludeTriggerString: string) {
-    const hasThresholdSeparator = includeOrExcludeTriggerString.includes(':');
-    const separatorIndex = hasThresholdSeparator ? includeOrExcludeTriggerString.indexOf(':') : -1;
-    const hasMultipleSeparators =
-      hasThresholdSeparator &&
-      includeOrExcludeTriggerString.slice(separatorIndex + 1).includes(':');
-
-    const triggerId = hasThresholdSeparator
-      ? includeOrExcludeTriggerString.slice(0, separatorIndex).trim()
-      : includeOrExcludeTriggerString.trim();
-    const includeOrExcludeTrigger: { id: string; threshold: SupportedThreshold } = {
-      id: triggerId,
-      threshold: 'all',
-    };
-
-    if (hasThresholdSeparator && !hasMultipleSeparators) {
-      const thresholdCandidate = includeOrExcludeTriggerString
-        .slice(separatorIndex + 1)
-        .trim()
-        .toLowerCase();
-      if (isSupportedThreshold(thresholdCandidate)) {
-        includeOrExcludeTrigger.threshold = thresholdCandidate;
-      }
-    }
-
-    return includeOrExcludeTrigger;
+    return parseIncludeOrIncludeTriggerStringHelper(includeOrExcludeTriggerString);
   }
 
   /**
@@ -894,31 +869,7 @@ class Trigger<
    * @param triggerId
    */
   static doesReferenceMatchId(triggerReference: string, triggerId: string) {
-    const triggerReferenceNormalized = triggerReference.toLowerCase();
-    const triggerIdNormalized = triggerId.toLowerCase();
-
-    if (triggerReferenceNormalized === triggerIdNormalized) {
-      return true;
-    }
-
-    const triggerIdParts = triggerIdNormalized.split('.');
-    const triggerName = triggerIdParts.at(-1);
-    if (!triggerName) {
-      return false;
-    }
-    if (triggerReferenceNormalized === triggerName) {
-      return true;
-    }
-
-    if (triggerIdParts.length >= 2) {
-      const provider = triggerIdParts.at(-2);
-      const providerAndName = `${provider}.${triggerName}`;
-      if (triggerReferenceNormalized === providerAndName) {
-        return true;
-      }
-    }
-
-    return false;
+    return doesReferenceMatchIdHelper(triggerReference, triggerId);
   }
 
   private isTriggerEnabledForRule(
@@ -1863,6 +1814,40 @@ class Trigger<
     }
 
     const category = this.getCategory();
+
+    // Update-action triggers (docker/dockercompose) route auto-dispatch
+    // eligibility entirely through the action-policy resolver's hybrid
+    // specificity walk (spec-6.0.1-action-policy.md) instead of the plain
+    // include/exclude check below. This is a deliberate REPLACEMENT, not an
+    // addition, for two reasons:
+    //   1. `onauto` access can be granted by a `dd.action.auto` label alone
+    //      (no `dd.action.include` needed) — the plain include/exclude check
+    //      below has no concept of the auto-label list, so a container
+    //      relying on auto-only access would be rejected here before ever
+    //      reaching the resolver.
+    //   2. The resolver distinguishes 'manual' from 'auto' state (`onauto`
+    //      access via include-only, with no matching auto label, resolves to
+    //      'manual' — eligible for admission but not for unattended
+    //      dispatch). The plain include/exclude check only has a binary
+    //      included/excluded concept and cannot express that distinction, so
+    //      routing through it would let an include-only `onauto` container
+    //      auto-fire, which is exactly the bug this slice closes.
+    // Command triggers are `category === 'action'` but NOT update-action
+    // triggers (`isUpdateActionTrigger()` is false for them — see
+    // `UPDATE_ACTION_TRIGGER_TYPES`), so they fall through to the unchanged
+    // plain include/exclude path below, preserving today's behavior exactly.
+    if (category === 'action' && this.isUpdateActionTrigger()) {
+      if (!this.isActionPolicyDispatchWinner(containerResult)) {
+        return {
+          allowed: false,
+          reason: 'action policy resolver did not select this trigger for automatic dispatch',
+        };
+      }
+      return {
+        allowed: true,
+      };
+    }
+
     const { include: triggerInclude, exclude: triggerExclude } =
       getContainerTriggerFiltersForCategory(containerResult, category);
     const included = this.isTriggerIncluded(containerResult, triggerInclude);
@@ -2420,25 +2405,35 @@ class Trigger<
     );
     const dispatchEntries = bufferedEntries.flatMap(([containerName, bufferedContainer]) => {
       const currentContainer = currentContainersByBusinessId.get(containerName);
+      const stillHasUpdate = !currentContainer || currentContainer.updateAvailable;
 
-      if (!currentContainer) {
-        return [
-          {
-            containerName,
-            bufferedContainer,
-            currentContainer: bufferedContainer,
-          },
-        ];
-      }
+      if (stillHasUpdate) {
+        const evaluatedContainer = currentContainer ?? bufferedContainer;
 
-      if (currentContainer.updateAvailable) {
-        return [
-          {
-            containerName,
-            bufferedContainer,
-            currentContainer,
-          },
-        ];
+        // Re-check the action-policy dispatch winner at flush time, not just
+        // at buffer time (handleContainerReportDigest / shouldHandleDigest-
+        // ContainerReport). A container can sit in the digest buffer across
+        // multiple cron ticks; by flush time another registered action
+        // trigger may now be the resolver's ranked winner for it (e.g. a
+        // more specific trigger registered since buffering, or a config
+        // change). Mirrors the isAutomaticActionDispatchBlocked() re-check
+        // above the same way: buffering does not freeze the world, so
+        // dispatch authorization is re-evaluated at the moment of actual
+        // dispatch. A no-op for notification and command triggers — see
+        // `isActionPolicyDispatchWinner`.
+        if (this.isActionPolicyDispatchWinner(evaluatedContainer)) {
+          return [
+            {
+              containerName,
+              bufferedContainer,
+              currentContainer: evaluatedContainer,
+            },
+          ];
+        }
+
+        this.log.debug(
+          `Evicting ${containerName} from digest buffer at flush (no longer the action-policy dispatch winner)`,
+        );
       }
 
       if (this.digestBuffer.get(containerName) === bufferedContainer) {
@@ -2609,22 +2604,17 @@ class Trigger<
   }
 
   isTriggerIncludedOrExcluded(containerResult: Container, trigger: string) {
-    const triggerId = this.getId().toLowerCase();
-    const triggers = splitAndTrimCommaSeparatedList(trigger).map((triggerToMatch) =>
-      Trigger.parseIncludeOrIncludeTriggerString(triggerToMatch),
-    );
-    const triggerMatched = triggers.find((triggerToMatch) =>
-      Trigger.doesReferenceMatchId(triggerToMatch.id, triggerId),
-    );
-    if (!triggerMatched) {
-      return false;
-    }
-    return Trigger.isThresholdReached(containerResult, triggerMatched.threshold.toLowerCase());
+    return matchesTriggerReferenceList(this.getId(), trigger, containerResult);
   }
 
   isTriggerIncluded(containerResult: Container, triggerInclude: string | undefined) {
     if (!triggerInclude) {
-      return this.getAutoMode() !== 'oninclude';
+      // 'onauto' behaves exactly like 'oninclude' here in this slice (closed
+      // by default absent an explicit include label) — its real semantics
+      // (auto-label-only grants access too) land with the resolver in
+      // app/model/action-policy.ts in a later slice.
+      const autoMode = this.getAutoMode();
+      return autoMode !== 'oninclude' && autoMode !== 'onauto';
     }
     return this.isTriggerIncludedOrExcluded(containerResult, triggerInclude);
   }
@@ -2634,6 +2624,61 @@ class Trigger<
       return false;
     }
     return this.isTriggerIncludedOrExcluded(containerResult, triggerExclude);
+  }
+
+  /**
+   * spec-6.0.1-action-policy.md decision 1 migration-checklist startup WARN.
+   * Called from `init()` for any action-category trigger configured with the
+   * legacy `AUTO=oninclude` value. There is no persisted record of a
+   * trigger's *previous* `auto` value, so this can't detect an actual
+   * before/after switch — instead it proactively lists, against whatever the
+   * store currently knows about (a first-ever boot with an empty store won't
+   * surface any names until a later restart), every container this trigger
+   * matches on `dd.action.include` but has no matching `dd.action.auto`
+   * label for: exactly the containers that would silently lose automatic
+   * execution if this trigger's `AUTO` value were switched to `onauto`
+   * without also adding an auto label first.
+   */
+  private warnOnincludeMigrationGap(): void {
+    const containers = storeContainer.getContainersRaw() as Container[];
+    const gaps = findOnincludeAutoMigrationGaps(this as unknown as ActionPolicyTrigger, containers);
+    if (gaps.length === 0) {
+      return;
+    }
+    const names = gaps.map((container) => fullName(container)).join(', ');
+    this.log.warn(
+      'AUTO=oninclude grants both manual and automatic execution via dd.action.include. ' +
+        'The following containers match dd.action.include for this trigger but have no ' +
+        `matching dd.action.auto label: ${names}. Switching this trigger to AUTO=onauto ` +
+        'without first adding a dd.action.auto label to each would silently drop their ' +
+        'automatic execution to manual-only. See the trigger AUTO migration checklist in ' +
+        'the drydock triggers configuration docs before switching.',
+    );
+  }
+
+  /**
+   * spec-6.0.1-action-policy.md decision 1 inert-label startup WARN. Called
+   * from `init()` for any action-category trigger configured with
+   * `AUTO=none`. Lists, against whatever the store currently knows about,
+   * every container that carries a `dd.action.auto` label matching this
+   * trigger — under `AUTO=none` that label can never grant automatic
+   * execution (access is capped at manual, fail closed), so the label is
+   * inert for this trigger and almost certainly a misconfiguration.
+   */
+  private warnInertAutoLabel(): void {
+    const containers = storeContainer.getContainersRaw() as Container[];
+    const withAutoLabel = findInertAutoLabelContainers(
+      this as unknown as ActionPolicyTrigger,
+      containers,
+    );
+    if (withAutoLabel.length === 0) {
+      return;
+    }
+    const names = withAutoLabel.map((container) => fullName(container)).join(', ');
+    this.log.warn(
+      'AUTO=none never registers automatic execution. The dd.action.auto label on the ' +
+        `following containers is inert for this trigger and access stays capped at manual: ${names}.`,
+    );
   }
 
   /**
@@ -2674,10 +2719,13 @@ class Trigger<
       const shouldRegisterBatchHandler = Trigger.isBatchCapableMode(this.configuration.mode);
       const shouldRegisterDigestHandler = Trigger.isDigestCapableMode(this.configuration.mode);
       this.log.info(
-        autoMode === 'oninclude'
+        autoMode === 'oninclude' || autoMode === 'onauto'
           ? 'Registering for auto execution (only containers with explicit include labels)'
           : 'Registering for auto execution (all watched containers)',
       );
+      if (this.getCategory() === 'action' && autoMode === 'oninclude') {
+        this.warnOnincludeMigrationGap();
+      }
       if (normalizedMode === 'simple') {
         this.unregisterContainerReport = event.registerContainerReport(
           async (containerReport) => this.handleContainerReport(containerReport),
@@ -2723,6 +2771,9 @@ class Trigger<
       this.seedRecentApplicationSuppressionFromStore();
     } else {
       this.log.info('Registering for manual execution (lifecycle notifications still active)');
+      if (this.getCategory() === 'action') {
+        this.warnInertAutoLabel();
+      }
     }
 
     // Lifecycle event handlers register regardless of `auto` mode. `auto`
@@ -2851,7 +2902,10 @@ class Trigger<
     const schemaWithDefaultOptions = schema.append({
       auto: this.joi
         .alternatives()
-        .try(this.joi.bool(), this.joi.string().insensitive().valid('all', 'oninclude', 'none'))
+        .try(
+          this.joi.bool(),
+          this.joi.string().insensitive().valid('all', 'oninclude', 'onauto', 'none'),
+        )
         .default(this.getCategory() === 'action' ? 'oninclude' : true),
       order: this.joi.number().default(100),
       threshold: this.joi
@@ -2946,6 +3000,58 @@ class Trigger<
 
   private isUpdateActionTrigger(): boolean {
     return UPDATE_ACTION_TRIGGER_TYPES.has(this.type.toLowerCase());
+  }
+
+  /**
+   * Build the candidate trigger map for the action-policy hybrid specificity
+   * walk (`selectActionTrigger`, spec-6.0.1-action-policy.md). Sourced from
+   * the live registry (`registry.getState().trigger`) so every other
+   * registered docker/dockercompose trigger competes on equal footing, with
+   * `this` unioned in explicitly (self wins any id collision) so the walk
+   * always sees this instance as a candidate even if the registry snapshot
+   * is momentarily stale (e.g. mid-registration) or, in unit tests, not
+   * populated at all — a lone trigger instance must still be able to resolve
+   * itself as the winner of a one-candidate walk.
+   */
+  private getActionPolicyCandidateTriggers(): Record<string, ActionPolicyTrigger> {
+    const registered = registry.getState().trigger as unknown as
+      | Record<string, ActionPolicyTrigger>
+      | undefined;
+    return {
+      ...registered,
+      [this.getId()]: this as unknown as ActionPolicyTrigger,
+    };
+  }
+
+  /**
+   * True when this trigger is the action-policy resolver's winning candidate
+   * for `container`, i.e. `selectActionTrigger(..., {requireAuto: true})`
+   * resolves to this trigger's id. Closes the pre-existing latent fan-out
+   * double-dispatch (spec-6.0.1-action-policy.md): before this gate, every
+   * registered action trigger decided independently whether to fire, so two
+   * compatible triggers could both run the same update. After this gate,
+   * only the resolver's ranked winner fires.
+   *
+   * A no-op (`true`) for triggers outside the update-action category/type
+   * scope (notification triggers, and command triggers — see the call site
+   * in `getMustTriggerDecision`), so callers can invoke this unconditionally
+   * from shared code paths (e.g. the digest flush re-check below) without
+   * re-deriving the category/type guard themselves.
+   */
+  private isActionPolicyDispatchWinner(container: Container): boolean {
+    if (this.getCategory() !== 'action' || !this.isUpdateActionTrigger()) {
+      return true;
+    }
+    const winner = selectActionTrigger(this.getActionPolicyCandidateTriggers(), container, {
+      requireAuto: true,
+    });
+    // `selectActionTrigger`'s hard-stop exclude case returns a result whose
+    // `triggerId` identifies the excluding candidate but whose `state` is
+    // `'blocked'`, not `'auto'` — a triggerId match alone is not sufficient,
+    // the resolved state must also be `'auto'` (requireAuto only skips a
+    // `'manual'` verdict to try the next candidate; it does not turn an
+    // exclude hard-stop into anything other than blocked).
+    return winner?.triggerId === this.getId() && winner.state === 'auto';
   }
 
   /**

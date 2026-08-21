@@ -193,7 +193,6 @@
       "setGroupAction": "Задать группу",
       "rollbackAction": "Откат",
       "deleteAction": "Удалить",
-      "pinnedTooltip": "Закреплён",
       "skippedLabel": "Пропущено",
       "upToDateTooltip": "Актуально",
       "imageUpdateTooltip": "Тег {tag} теперь указывает на другую сборку образа. Разверните заново, чтобы загрузить новый образ; сам тег версии не изменился.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "Рекомендуемый: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "Доступна новее",
       "tooltip": "Доступна новая версия: {tag}. Этот Tag закреплён, drydock не обновит его автоматически."
     },
     "eligibilityBadges": {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
+import AppBadge from '../AppBadge.vue';
 import AppButton from '../AppButton.vue';
 import { useNow } from '../../composables/useNow';
 import type { UpdateMode } from '../../services/settings';
@@ -70,7 +71,18 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
         :class="status.state === 'in-progress' ? 'dd-spin' : ''"
       />
       <div class="flex-1 min-w-0">
-        <div class="dd-text-label">{{ $t('containerComponents.updateStatus.title') }}</div>
+        <div class="flex items-center gap-1.5">
+          <div class="dd-text-label">{{ $t('containerComponents.updateStatus.title') }}</div>
+          <AppBadge
+            v-if="status.actionPolicyBadge"
+            tone="success"
+            size="xs"
+            v-tooltip.top="status.actionPolicyBadge.tooltip"
+            data-test="update-status-action-policy-badge"
+          >
+            {{ status.actionPolicyBadge.label }}
+          </AppBadge>
+        </div>
         <p class="text-xs font-medium mt-0.5" data-test="update-status-summary">
           {{ status.summary }}
         </p>

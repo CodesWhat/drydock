@@ -5,7 +5,8 @@ import * as store from './index.js';
 const {
   STORE_CONFIG,
   createLokiMock,
-  createFsMock,
+  fsMock,
+  resetFsMock,
   createConfigMock,
   createCollectionsMock,
   createContainerMock,
@@ -31,16 +32,35 @@ const {
     };
   }
 
-  function createFsMock(overrides = {}) {
-    return {
-      default: {
-        existsSync: vi.fn(),
-        mkdirSync: vi.fn(),
-        chmodSync: vi.fn(),
-        ...overrides,
-      },
-    };
+  // A single, stable object backs every 'node:fs' mock for the whole file.
+  // vi.resetModules() clears vitest's module *instance* cache, so the next
+  // `import('./index.js')` re-resolves 'node:fs' and re-invokes whatever
+  // factory is registered for it — but registration (vi.mock/vi.doMock)
+  // itself survives resetModules. Previously each test swapped in a *new*
+  // mock object via `vi.doMock('node:fs', () => createFsMock(overrides))`,
+  // which meant correctness depended on that fresh factory winning the race
+  // against a freshly re-imported store/index.js resolving 'node:fs' — a
+  // real, previously-diagnosed flake (a stale/incomplete prior fs mock
+  // occasionally got captured instead, so store/index.ts's
+  // `fs.existsSync(legacyPath)` read a bare `vi.fn()` returning undefined,
+  // renameSync was never reached, and the "migrate from wud.json" assertion
+  // saw renameSync called 0 times; see PR #417 / #436 history). Reusing one
+  // object and only ever reconfiguring its methods removes the swap: no
+  // matter when 'node:fs' gets re-resolved relative to test setup, it always
+  // resolves to this exact object.
+  const fsMock: Record<string, ReturnType<typeof vi.fn>> = {};
+
+  function resetFsMock(overrides: Record<string, unknown> = {}) {
+    for (const key of Object.keys(fsMock)) {
+      delete fsMock[key];
+    }
+    Object.assign(
+      fsMock,
+      { existsSync: vi.fn(), mkdirSync: vi.fn(), chmodSync: vi.fn() },
+      overrides,
+    );
   }
+  resetFsMock();
 
   function createConfigMock(config = STORE_CONFIG) {
     return { getStoreConfiguration: vi.fn(() => config) };
@@ -89,7 +109,7 @@ const {
     vi.doMock('lokijs', () =>
       createLokiMock(overrides.loki, overrides.lokiSave, overrides.lokiInstance),
     );
-    vi.doMock('node:fs', () => createFsMock(overrides.fs));
+    resetFsMock(overrides.fs);
     vi.doMock('../configuration', () => ({
       ...createConfigMock(overrides.config ?? STORE_CONFIG),
       getPortwingAuthorizedKeysPath: vi.fn(() => overrides.portwingAuthorizedKeysPath),
@@ -122,7 +142,8 @@ const {
   return {
     STORE_CONFIG,
     createLokiMock,
-    createFsMock,
+    fsMock,
+    resetFsMock,
     createConfigMock,
     createCollectionsMock,
     createContainerMock,
@@ -135,7 +156,7 @@ const {
 // --- Top-level mocks (hoisted, used for the non-resetModules tests) ---
 
 vi.mock('lokijs', () => createLokiMock());
-vi.mock('node:fs', () => createFsMock());
+vi.mock('node:fs', () => ({ default: fsMock }));
 vi.mock('../configuration', () => ({
   ...createConfigMock(),
   getPortwingAuthorizedKeysPath: vi.fn(() => undefined),
@@ -523,7 +544,7 @@ describe('Store Module', () => {
   test('should fall back to schema defaults when store configuration is null', async () => {
     vi.resetModules();
     vi.doMock('lokijs', () => createLokiMock());
-    vi.doMock('node:fs', () => createFsMock({ renameSync: vi.fn() }));
+    resetFsMock({ renameSync: vi.fn() });
     vi.doMock('../configuration', () => ({ getStoreConfiguration: vi.fn(() => null) }));
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
@@ -786,9 +807,7 @@ describe('Store Module', () => {
 
     const mockWarn = vi.fn();
     vi.doMock('lokijs', () => createLokiMock());
-    vi.doMock('node:fs', () =>
-      createFsMock({ existsSync: vi.fn(() => true), mkdirSync: vi.fn(), renameSync: vi.fn() }),
-    );
+    resetFsMock({ existsSync: vi.fn(() => true), mkdirSync: vi.fn(), renameSync: vi.fn() });
     vi.doMock('../configuration', () => ({
       ...createConfigMock(STORE_CONFIG),
       getPortwingAuthorizedKeysPath: vi.fn(() => '/bad/authorized_keys'),

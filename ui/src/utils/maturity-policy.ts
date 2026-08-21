@@ -45,7 +45,7 @@ export function maturityMinAgeDaysToMilliseconds(days: number): number {
   return daysToMs(days);
 }
 
-export type MaturityClockSource = 'publishedAt' | 'detectedAt';
+type MaturityClockSource = 'publishedAt' | 'detectedAt';
 
 export interface MaturityClock {
   startMs: number | undefined;

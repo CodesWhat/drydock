@@ -18,7 +18,7 @@ interface CrowdinConfig {
 
 const workflowPath = fileURLToPath(new URL('../workflows/i18n-crowdin.yml', import.meta.url));
 const crowdinConfigPath = fileURLToPath(new URL('../../crowdin.yml', import.meta.url));
-const crowdinActionRef = 'crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f';
+const crowdinActionRef = 'crowdin/github-action@c7af9bc98b01694653031fef2a0dc6c7888ce9bc';
 const integrationBranchCheckoutStepName =
   'Check out the integration branch so l10n_crowdin forks from it';
 
@@ -103,6 +103,14 @@ test('Crowdin sync manages the six translated READMEs independently of UI catalo
     },
     excluded_target_languages: ['ar', 'it', 'ja', 'ko', 'nl', 'ru', 'tr', 'uk', 'vi', 'zh-TW'],
     update_option: 'update_as_unapproved',
+    // Must stay 0. Crowdin's default is 1, which splits the README into
+    // sentence-level segments and routes the upload through what their docs
+    // call experimental ML — that reassembled the <details> release-history
+    // blocks out of order, broke HTML, and spliced English source into the
+    // German and zh-CN output (#801). The UI locale JSON was unaffected in the
+    // same sync because segmentation does not apply to JSON, which is what
+    // identified the cause. Deleting this key silently restores the default.
+    content_segmentation: 0,
   });
   expect(workflow.on?.push?.paths).toContain('README.md');
   expect(workflow.on?.push?.paths).not.toContain('README.*.md');

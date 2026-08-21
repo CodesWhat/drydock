@@ -1,4 +1,4 @@
-export type ReleaseNotesProvider = 'github' | 'gitlab' | 'gitea';
+type ReleaseNotesProvider = 'github' | 'gitlab' | 'gitea';
 
 export interface ReleaseNotes {
   title: string;

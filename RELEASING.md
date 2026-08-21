@@ -41,7 +41,7 @@ Dispatch with just `release_tag` set, e.g. `v1.6.0-rc.14`. Leave `candidate_tag`
 
 `release_tag` must match `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$` — i.e. `vX.Y.Z` or `vX.Y.Z-<prerelease>` (`v1.6.0` or `v1.6.0-rc.14`). The tag's base version must match every manifest checked by the release precheck: `package.json`, `package-lock.json`, `app/package.json`, `app/package-lock.json`, `ui/package.json`, `ui/package-lock.json`, `e2e/package.json`, `e2e/package-lock.json`, `apps/demo/package.json`, and `apps/demo/package-lock.json`. The tag must not already exist pointing anywhere else.
 
-The workflow builds the multi-arch image (`linux/amd64,linux/arm64`) fresh from `main`, pushes it under a run-scoped staging tag, signs it with cosign (keyless, GitHub OIDC), attests SLSA build provenance and a Trivy SPDX SBOM, generates a `git archive` tarball with matching signature/attestation, and publishes it all as a GitHub prerelease. **Registry tags never carry the `v` prefix** — the workflow strips it itself (`${RELEASE_TAG#v}`), so `v1.6.0-rc.13` publishes as `ghcr.io/codeswhat/drydock:1.6.0-rc.13`, `docker.io/codeswhat/drydock:1.6.0-rc.13`, and the Quay equivalent.
+The workflow builds the multi-arch image (`linux/amd64,linux/arm64`) fresh from `main`, pushes it under a run-scoped staging tag, signs it with cosign (keyless, GitHub OIDC), attests SLSA Build L2 provenance and a Trivy SPDX SBOM, generates a `git archive` tarball with matching signature/attestation, and publishes it all as a GitHub prerelease. **Registry tags never carry the `v` prefix** — the workflow strips it itself (`${RELEASE_TAG#v}`), so `v1.6.0-rc.13` publishes as `ghcr.io/codeswhat/drydock:1.6.0-rc.13`, `docker.io/codeswhat/drydock:1.6.0-rc.13`, and the Quay equivalent.
 
 ## Promoting to GA
 
@@ -79,7 +79,7 @@ The reason is carried between steps as a temp file, not inlined into a `GITHUB_O
 GA never rebuilds the image or the release artifact. It:
 
 1. Downloads the candidate's already-published `.tar.gz`, `.sha256`, `.bundle`, `.sig`, `.pem`, and `.intoto.jsonl` from the RC's GitHub release
-2. Verifies the checksum, the cosign signature, and the SLSA provenance attestation against the RC's original `SOURCE_SHA` (honest at RC-cut time, since source and target SHA were identical then)
+2. Verifies the checksum, the cosign signature, and the SLSA Build L2 provenance attestation against the RC's original `SOURCE_SHA` (honest at RC-cut time, since source and target SHA were identical then)
 3. Rebuilds a fresh `git archive` of the candidate tag's commit today and compares decompressed tar bytes against the downloaded artifact, proving the soaked bytes are still exactly what that source SHA's tree contains
 4. Republishes those same verified bytes under the GA tag/filenames, re-tags the exact RC image digest under the GA image tags (`{major}.{minor}.{patch}`, `{major}.{minor}`, `{major}`, and `latest`) without rebuilding, and re-verifies the exact digest was published in every registry
 5. Pushes the GA git tag pointing at the RC's original commit (not at today's `main` HEAD) and publishes the GitHub release
@@ -110,6 +110,30 @@ git diff --quiet origin/main origin/dev/vX.Y
 If the two have drifted, the run fails with a diffstat and refuses to tag — forward-port the missing content into `dev/vX.Y` (or reconcile whichever side is ahead) and re-dispatch. If `dev/vX.Y` doesn't exist on origin at all (retired post-GA, or not yet cut), the check is a no-op.
 
 The same step also asserts `renovate.json`'s `baseBranchPatterns` names exactly the `dev/vX.Y` branch this cut targets. Renovate has to name one concrete branch (a pattern would double every dependency PR against every matching `dev/vX.Y`), so it has to be rotated at every branch cut — this is the one moment in the pipeline where the correct target is unambiguous, so a stale value fails the cut with the exact value to set rather than silently leaving the bot aimed at a dead branch.
+
+## Maintenance cuts
+
+Normal cuts always build `main` HEAD. A maintenance cut is the exception: a patch for a line `main` has already moved past — e.g. `main` is on the v1.7 line and a security fix needs to ship as `v1.6.1` — without touching the cosign signing identity, which stays pinned to `refs/heads/main` regardless.
+
+The workflow still only dispatches from `main`. What changes is the optional `source_ref` input: set it to the retained `dev/vX.Y` branch (e.g. `dev/v1.6`) to build and release from that branch's tip instead of `main` HEAD. Leave it empty for every normal cut — that's the default, and behavior is unchanged when it's empty.
+
+`source_ref` is bounded hard, and the run fails naming exactly which condition broke:
+
+- Must match `dev/vX.Y` exactly — no arbitrary ref.
+- Must exist as a branch on origin.
+- Its `vX.Y` line must match `release_tag`'s line (`v1.6.1` from `dev/v1.6` is valid; `v1.7.0` from `dev/v1.6` is not).
+- Must **not** be the active line — if `dev/v1.6` is still the highest `dev/vX.Y` on origin, this is a normal cut and `source_ref` is a mistake.
+- `release_tag`'s patch component must be nonzero (`v1.6.1`, `v1.6.1-rc.1` — not `v1.6.0`). A maintenance cut is for patches; a new `vX.Y.0` line is cut from `main` normally.
+
+When `source_ref` is set:
+
+- The main-sync drift guard is **skipped**, not run and passed — there's no drift claim to make between `main` and a line it's already moved past.
+- The target/source SHA, the `CHANGELOG.md` read for the release-notes/validation steps, and the `git archive` build source all come from `source_ref`'s tip instead of `main` HEAD. **This means the CHANGELOG heading for the maintenance release must be committed onto the maintenance branch itself** (e.g. `## [1.6.1] - 2026-08-20` on `dev/v1.6`), the same way a normal release needs the heading on `main` before dispatch.
+- The green-CI precondition changes shape: `dev/v1.6`'s push trigger only ever fires for `main` in `ci-verify.yml`/`e2e-playwright.yml`, so a maintenance-branch SHA can never have a qualifying push run. **Before dispatching, manually dispatch `ci-verify.yml` and `e2e-playwright.yml` on the maintenance branch (Actions → workflow → Run workflow, ref = `dev/v1.6`) and confirm both are green.** The cut then polls for a successful `workflow_dispatch` run on that exact SHA instead of a push run.
+
+- **Maintenance artifacts ship without build-provenance attestations** (`.intoto.jsonl` is absent from the release assets, and `gh attestation verify` has nothing to verify for these tags). GitHub's OIDC `sha` claim is fixed to the dispatch ref — always `main` HEAD for this workflow — so a provenance statement for a maintenance artifact would falsely claim it was built from a commit it wasn't. Publishing nothing is honest; publishing that would not be. Cosign signing and verification are unaffected (they attest to the signing identity, which really is `release-cut.yml@refs/heads/main`), and the true source branch and SHA are recorded in the release notes and job summary.
+
+A maintenance GA works the same way as a normal GA (candidate download/verify/promote, no rebuild), it just also needs `source_ref` set on the GA dispatch — the drift guard and CHANGELOG read are unconditional steps that run before the RC/GA branch, so a maintenance GA without `source_ref` would fail the (now-meaningless) drift check against a `main` that has moved on. `candidate_tag`/`candidate_digest` resolve by git tag and registry digest, which are branch-agnostic, so nothing else about the promotion path changes.
 
 ## If something goes wrong
 

@@ -38,6 +38,7 @@ describe('curl healthcheck compatibility', () => {
     mockExistsSync.mockReturnValue(true);
     mockProbeSocketApiVersion.mockResolvedValue('1.44');
     mockInspect.mockResolvedValue({
+      Name: '/drydock',
       Config: {
         Healthcheck: {
           Test: ['CMD-SHELL', 'curl --fail http://localhost:3000/health || exit 1'],
@@ -62,6 +63,7 @@ describe('curl healthcheck compatibility', () => {
     expect(result).toEqual({
       detected: true,
       commandPreview: 'CMD-SHELL curl --fail http://localhost:3000/health || exit 1',
+      containerName: 'drydock',
     });
     expect(mockDockerode).toHaveBeenCalledWith({
       socketPath: '/var/run/docker.sock',
@@ -69,6 +71,41 @@ describe('curl healthcheck compatibility', () => {
     });
     expect(mockGetContainer).toHaveBeenCalledWith(expect.any(String));
     expect(mockDisableSocketRedirects).toHaveBeenCalled();
+  });
+
+  test('falls back to no container name when the inspect payload has none', async () => {
+    mockInspect.mockResolvedValue({
+      Config: {
+        Healthcheck: {
+          Test: ['CMD-SHELL', 'curl --fail http://localhost:3000/health || exit 1'],
+        },
+      },
+    });
+    const { getCurlHealthcheckOverrideCompatibility } = await import('./curl-healthcheck.js');
+
+    await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toEqual({
+      detected: true,
+      commandPreview: 'CMD-SHELL curl --fail http://localhost:3000/health || exit 1',
+      containerName: undefined,
+    });
+  });
+
+  test('falls back to no container name when the inspect Name is only a slash', async () => {
+    mockInspect.mockResolvedValue({
+      Name: '/',
+      Config: {
+        Healthcheck: {
+          Test: ['CMD-SHELL', 'curl --fail http://localhost:3000/health || exit 1'],
+        },
+      },
+    });
+    const { getCurlHealthcheckOverrideCompatibility } = await import('./curl-healthcheck.js');
+
+    await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toEqual({
+      detected: true,
+      commandPreview: 'CMD-SHELL curl --fail http://localhost:3000/health || exit 1',
+      containerName: undefined,
+    });
   });
 
   test('returns not detected when hostname is not a valid container identifier', async () => {
@@ -105,6 +142,86 @@ describe('curl healthcheck compatibility', () => {
     });
   });
 
+  test('detects curl at a non-/usr/bin path prefix', async () => {
+    mockInspect.mockResolvedValue({
+      Name: '/drydock',
+      Config: {
+        Healthcheck: {
+          Test: ['CMD-SHELL', '/bin/curl --fail http://localhost:3000/health'],
+        },
+      },
+    });
+    const { getCurlHealthcheckOverrideCompatibility } = await import('./curl-healthcheck.js');
+
+    await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toMatchObject({
+      detected: true,
+    });
+  });
+
+  test('detects curl chained after a shell metacharacter with no whitespace', async () => {
+    mockInspect.mockResolvedValue({
+      Name: '/drydock',
+      Config: {
+        Healthcheck: {
+          Test: ['CMD-SHELL', 'true&&curl -f http://localhost:3000/health'],
+        },
+      },
+    });
+    const { getCurlHealthcheckOverrideCompatibility } = await import('./curl-healthcheck.js');
+
+    await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toMatchObject({
+      detected: true,
+    });
+  });
+
+  test('detects curl immediately followed by a redirect with no whitespace', async () => {
+    mockInspect.mockResolvedValue({
+      Name: '/drydock',
+      Config: {
+        Healthcheck: {
+          Test: ['CMD-SHELL', 'curl>/dev/null http://localhost:3000/health'],
+        },
+      },
+    });
+    const { getCurlHealthcheckOverrideCompatibility } = await import('./curl-healthcheck.js');
+
+    await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toMatchObject({
+      detected: true,
+    });
+  });
+
+  test('detects curl even when it only appears past the 160-character preview cutoff', async () => {
+    mockInspect.mockResolvedValue({
+      Name: '/drydock',
+      Config: {
+        Healthcheck: {
+          Test: ['CMD-SHELL', `${'a'.repeat(160)} curl --fail http://localhost:3000/health`],
+        },
+      },
+    });
+    const { getCurlHealthcheckOverrideCompatibility } = await import('./curl-healthcheck.js');
+
+    await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toMatchObject({
+      detected: true,
+    });
+  });
+
+  test('does not detect wget as a curl healthcheck override', async () => {
+    mockInspect.mockResolvedValue({
+      Name: '/drydock',
+      Config: {
+        Healthcheck: {
+          Test: ['CMD-SHELL', 'wget http://localhost:3000/health'],
+        },
+      },
+    });
+    const { getCurlHealthcheckOverrideCompatibility } = await import('./curl-healthcheck.js');
+
+    await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toEqual({
+      detected: false,
+    });
+  });
+
   test('returns undefined preview for empty and blank healthcheck commands', async () => {
     const { getHealthcheckCommandPreview } = await import('./curl-healthcheck.js');
 
@@ -127,6 +244,7 @@ describe('curl healthcheck compatibility', () => {
     await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toEqual({
       detected: true,
       commandPreview: 'CMD-SHELL curl --fail http://localhost:3000/health || exit 1',
+      containerName: 'drydock',
     });
     expect(mockDockerode).toHaveBeenCalledWith({
       socketPath: '/var/run/docker.sock',
@@ -139,6 +257,62 @@ describe('curl healthcheck compatibility', () => {
 
     await expect(getCurlHealthcheckOverrideCompatibility()).resolves.toEqual({
       detected: false,
+    });
+  });
+
+  describe('startup warning', () => {
+    test('names the container and points to the healthcheck binary when curl is detected', async () => {
+      const { getCurlHealthcheckOverrideStartupWarning } = await import('./curl-healthcheck.js');
+
+      const warning = await getCurlHealthcheckOverrideStartupWarning();
+
+      expect(warning).toContain("Container 'drydock'");
+      expect(warning).toContain('curl was removed from the Docker image in v1.7.0');
+      expect(warning).toContain('/bin/healthcheck');
+    });
+
+    test('never logs the healthcheck command itself, even though it names the override', async () => {
+      const { getCurlHealthcheckOverrideStartupWarning } = await import('./curl-healthcheck.js');
+
+      const warning = await getCurlHealthcheckOverrideStartupWarning();
+
+      expect(warning).not.toContain('curl --fail http://localhost:3000/health || exit 1');
+      expect(warning).not.toContain('http://localhost:3000/health');
+    });
+
+    test('falls back to the HOSTNAME-derived identifier when the inspect payload has no container name', async () => {
+      mockInspect.mockResolvedValue({
+        Config: {
+          Healthcheck: {
+            Test: ['CMD-SHELL', 'curl --fail http://localhost:3000/health || exit 1'],
+          },
+        },
+      });
+      const { getCurlHealthcheckOverrideStartupWarning } = await import('./curl-healthcheck.js');
+
+      const warning = await getCurlHealthcheckOverrideStartupWarning();
+
+      expect(warning).toContain("Container 'drydock-self'");
+    });
+
+    test('returns undefined when no curl override is detected', async () => {
+      mockInspect.mockResolvedValue({
+        Config: {
+          Healthcheck: {
+            Test: ['CMD', '/bin/healthcheck', '3000'],
+          },
+        },
+      });
+      const { getCurlHealthcheckOverrideStartupWarning } = await import('./curl-healthcheck.js');
+
+      await expect(getCurlHealthcheckOverrideStartupWarning()).resolves.toBeUndefined();
+    });
+
+    test('returns undefined when the hostname is not a valid self-container identifier', async () => {
+      process.env.HOSTNAME = 'pod/name';
+      const { getCurlHealthcheckOverrideStartupWarning } = await import('./curl-healthcheck.js');
+
+      await expect(getCurlHealthcheckOverrideStartupWarning()).resolves.toBeUndefined();
     });
   });
 });

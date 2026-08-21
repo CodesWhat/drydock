@@ -15,19 +15,21 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.1-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.2-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
   <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/projects/11915"><img src="https://www.bestpractices.dev/projects/11915/badge" alt="OpenSSF Best Practices"></a>
-  <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/test_coverage.svg" alt="Code Coverage"></a>
+  <a href="https://qlty.sh/gh/CodesWhat/projects/drydock"><img src="https://qlty.sh/gh/CodesWhat/projects/drydock/maintainability.svg" alt="Maintainability"></a>
   <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
+  <a href="https://codecov.io/gh/CodesWhat/drydock"><img src="https://codecov.io/gh/CodesWhat/drydock/graph/badge.svg" alt="Coverage"></a>
   <br>
   <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-150K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
   <a href="https://github.com/veggiemonk/awesome-docker#container-management"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Docker"></a>
   <a href="https://crowdin.com/project/drydock"><img src="https://badges.crowdin.net/drydock/localized.svg" alt="Crowdin localization"></a>
+  <a href="https://github.com/sponsors/CodesWhat"><img src="https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white" alt="Sponsor"></a>
 </p>
 
 <hr>
@@ -40,25 +42,48 @@
 > [!WARNING]
 > **Updating to 1.6.0-rc.3 or later?** More security-hardening fixes land with no grace period. An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — now **fails closed** on upgrade, exactly like a fresh install: the container runs; protected API requests return `401`; authentication discovery/status routes remain public; and `/health` returns `503`. The SPA shell may still load, but it cannot read protected application data. Set `DD_ANONYMOUS_AUTH_CONFIRM=true` or configure `DD_AUTH_BASIC_*`/OIDC before upgrading. The session cookie is renamed `connect.sid` → `drydock.sid`, signing every existing user out once. HTTP notification triggers (plus the Hass webhook and registry icon fetches) now resolve hostnames through a guarded DNS lookup that blocks cloud-metadata/link-local targets and never follow redirects — set `allowmetadata=true` on a specific `DD_NOTIFICATION_HTTP_*` trigger if you legitimately need one. See **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)** for full migration guidance.
 
-<h2 align="center">📑 Contents</h2>
+<h2 align="center">Contents</h2>
 
-- [📖 Documentation](https://getdrydock.com/docs)
-- [🚀 Quick Start](#quick-start)
-- [🆕 Recent Updates](#recent-updates)
-- [📸 Screenshots & Live Demo](#screenshots)
-- [🤔 Why Drydock](#why-drydock)
-- [✨ Features](#features)
-- [🔌 Supported Integrations](#supported-integrations)
-- [⚖️ Feature Comparison](#feature-comparison)
-- [🔄 Migration](#migration)
-- [🗺️ Roadmap](#roadmap)
-- [⭐ Star History](#star-history)
-- [🔧 Built With](#built-with)
-- [🤝 Community QA](#community-qa)
+- [Documentation](#documentation)
+- [Quick Start](#quick-start)
+- [Recent Updates](#recent-updates)
+- [Screenshots & Live Demo](#screenshots)
+- [Why Drydock](#why-drydock)
+- [Features](#features)
+- [Supported Integrations](#supported-integrations)
+- [Feature Comparison](#feature-comparison)
+- [Migration](#migration)
+- [Roadmap](#roadmap)
+- [Star History](#star-history)
+- [Built With](#built-with)
+- [Community & Support](#community-support)
+- [CodesWhat Ecosystem](#codeswhat-ecosystem)
 
 <hr>
 
-<h2 align="center" id="quick-start">🚀 Quick Start</h2>
+<h2 align="center" id="documentation">Documentation</h2>
+
+| Resource | Link |
+| --- | --- |
+| Website | [getdrydock.com](https://getdrydock.com/) |
+| Live Demo | [demo.getdrydock.com](https://demo.getdrydock.com) |
+| Docs | [getdrydock.com/docs](https://getdrydock.com/docs) |
+| Configuration | [Configuration](https://getdrydock.com/docs/configuration) |
+| Quick Start | [Quick Start](https://getdrydock.com/docs/quickstart) |
+| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
+| Deprecations | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
+| Roadmap | See [Roadmap](#roadmap) section below |
+| Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Code of Conduct | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
+| Governance | [`GOVERNANCE.md`](GOVERNANCE.md) |
+| Security Assurance | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md) |
+| Security Policy | [`SECURITY.md`](SECURITY.md) |
+| Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
+| Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
+
+<hr>
+
+<h2 align="center" id="quick-start">Quick Start</h2>
 
 **Recommended: use a socket proxy** to restrict which Docker API endpoints Drydock can access. This avoids giving the container full access to the Docker socket.
 
@@ -176,16 +201,28 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <hr>
 
-<h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
+<h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.2 highlights</strong></summary>
+
+- **Per-container action-policy resolution** — the API and UI surface the resolved blocked/manual/auto state and winning trigger for every container, plus a new `dd.action.auto` label and `AUTO=onauto` mode for manual-only access without automatic dispatch.
+- **Breaking changes land this cycle** — `DD_TRIGGER_*`/`dd.trigger.*` are fully removed, `trigger-excluded`/`trigger-not-included` become hard update blockers, the Home Assistant MQTT topic layout gains an `agent/<name>` segment by default, `GET /api/auth/methods` returns 410, and `curl` is gone from the image.
+- **Update-check correctness fixes** — a registry error mid-check no longer reports "Up to date," a malformed container no longer zeroes out an entire agent inventory sync, and nested OCI image indexes now resolve to the real manifest. ([#814](https://github.com/CodesWhat/drydock/issues/814))
+- **Dependency and self-update fixes** — a rejected dependency member keeps its restart context, Compose refreshes no longer carry forward stale environment defaults, and update-policy overrides now survive drydock's own self-update. ([#718](https://github.com/CodesWhat/drydock/pull/718), [#736](https://github.com/CodesWhat/drydock/pull/736), [#743](https://github.com/CodesWhat/drydock/pull/743))
+- **Security** — closed a remote-property-injection path in the container list's URL query sync, and scoped the Grype image gate around a pending-upstream-fix Alpine CVE. ([#750](https://github.com/CodesWhat/drydock/pull/750))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc2--2026-08-20).
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.1 highlights</strong></summary>
 
 - **Dependency-aware updates** — labels or Compose metadata build a validated dependency graph, preview exact update waves, and run updates or dependent restarts in deterministic order with cycle, failure, and stale-preview handling. ([Discussion #219](https://github.com/CodesWhat/drydock/discussions/219))
 - **Operator UX** — installable PWA support, clickable named port links, live container uptime, keyboard shortcuts, and debounced first-seen container discovery.
 - **Breaking trigger migration** — `DD_TRIGGER_*` now fails startup and legacy `dd.trigger.include` / `dd.trigger.exclude` labels no longer route work; use `DD_ACTION_*`, `DD_NOTIFICATION_*`, and their scoped labels.
 - **Security and lifecycle hardening** — bounded authentication, agent, log, WebSocket, and registry operations; sensitive command and hook values are redacted; Home Assistant discovery resynchronizes after startup and retires provider work without stale publishes. ([#708](https://github.com/CodesWhat/drydock/issues/708))
-- **First-party star history** — the same-origin `/api/star-history` provider now serves allowlisted Drydock, Sockguard, and Portwing charts without a third-party tracker dependency.
 
 Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc1--2026-08-14).
 
@@ -257,7 +294,7 @@ Full history in [CHANGELOG.md](./CHANGELOG.md).
 
 <hr>
 
-<h2 align="center" id="screenshots">📸 Screenshots & Live Demo</h2>
+<h2 align="center" id="screenshots">Screenshots & Live Demo</h2>
 
 <p align="center">
   <img src="docs/assets/drydock-demo.gif" alt="Drydock detecting and applying a container update" width="880">
@@ -288,7 +325,7 @@ Fully interactive — real UI, mock data, no install required. Runs entirely in-
 
 <hr>
 
-<h2 align="center" id="why-drydock">🤔 Why Drydock</h2>
+<h2 align="center" id="why-drydock">Why Drydock</h2>
 
 Container images drift out of date silently. A base image patches a CVE, an app cuts a release, a tag moves. Unless you're watching every registry by hand, your running containers fall behind until something breaks or gets exploited.
 
@@ -296,7 +333,7 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 
 <hr>
 
-<h2 align="center" id="features">✨ Features</h2>
+<h2 align="center" id="features">Features</h2>
 
 | | Feature | Description |
 |---|---|---|
@@ -318,31 +355,31 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 
 <hr>
 
-<h2 align="center" id="supported-integrations">🔌 Supported Integrations</h2>
+<h2 align="center" id="supported-integrations">Supported Integrations</h2>
 
-### 📦 Registries (23)
+### Registries (23)
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
 
-### ⚡ Actions (3)
+### Actions (3)
 
 Docker · Docker Compose · Command
 
-### 🔔 Notifications (17)
+### Notifications (17)
 
 Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
 
-### 🔐 Authentication
+### Authentication
 
 Anonymous (opt-in via `DD_ANONYMOUS_AUTH_CONFIRM=true`) · Basic (username + password hash) · OIDC (Authelia, Auth0, Authentik). All auth flows fail closed by default.
 
-### 🥊 Update Bouncer
+### Update Bouncer
 
 Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they deploy. Includes cosign signature verification and SBOM generation (CycloneDX & SPDX).
 
 <hr>
 
-<h2 align="center" id="feature-comparison">⚖️ Feature Comparison</h2>
+<h2 align="center" id="feature-comparison">Feature Comparison</h2>
 
 <details>
 <summary><strong>How does drydock compare to other container update tools?</strong></summary>
@@ -393,7 +430,7 @@ Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they
 
 <hr>
 
-<h2 align="center" id="migration">🔄 Migration</h2>
+<h2 align="center" id="migration">Migration</h2>
 
 <details>
 <summary><strong>Migrating from WUD (What's Up Docker?)</strong></summary>
@@ -404,7 +441,7 @@ Drydock v1.6 no longer loads `WUD_*` environment variables or `wud.*` labels at 
 
 <hr>
 
-<h2 align="center" id="roadmap">🗺️ Roadmap</h2>
+<h2 align="center" id="roadmap">Roadmap</h2>
 
 <details>
 <summary><strong>Version themes & highlights</strong></summary>
@@ -428,36 +465,11 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 <hr>
 
-<h2 align="center" id="documentation">📖 Documentation</h2>
-
-| Resource | Link |
-| --- | --- |
-| Website | [getdrydock.com](https://getdrydock.com/) |
-| Live Demo | [demo.getdrydock.com](https://demo.getdrydock.com) |
-| Docs | [getdrydock.com/docs](https://getdrydock.com/docs) |
-| Configuration | [Configuration](https://getdrydock.com/docs/configuration) |
-| Quick Start | [Quick Start](https://getdrydock.com/docs/quickstart) |
-| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
-| Deprecations | [`DEPRECATIONS.md`](DEPRECATIONS.md) |
-| Roadmap | See [Roadmap](#roadmap) section above |
-| Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
-| Code of Conduct | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
-| Governance | [`GOVERNANCE.md`](GOVERNANCE.md) |
-| Security Assurance | [`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md) |
-| Security Policy | [`SECURITY.md`](SECURITY.md) |
-| Issues | [GitHub Issues](https://github.com/CodesWhat/drydock/issues) |
-| Discussions | [GitHub Discussions](https://github.com/CodesWhat/drydock/discussions) — feature requests & ideas welcome |
-
-<hr>
-
-<a id="star-history"></a>
+<h2 align="center" id="star-history">Star History</h2>
 
 <div align="center">
   <a href="https://github.com/CodesWhat/drydock/stargazers">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://getdrydock.com/api/star-history?theme=dark">
-      <img alt="Star History Chart" src="https://getdrydock.com/api/star-history?theme=light" />
-    </picture>
+    <img alt="Star History Chart" src="docs/assets/star-history.svg" />
   </a>
 </div>
 
@@ -465,7 +477,7 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 <div align="center">
 
-### Built With
+<h2 align="center" id="built-with">Built With</h2>
 
 [![TypeScript](https://img.shields.io/badge/TypeScript_6.0-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
 [![Vue 3](https://img.shields.io/badge/Vue_3-42b883?logo=vuedotjs&logoColor=fff)](https://vuejs.org/)
@@ -480,11 +492,11 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 [![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196?logo=conventionalcommits&logoColor=fff)](https://www.conventionalcommits.org/)
 [![Keep a Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-E05735)](https://keepachangelog.com/)
 
-### Community
+<h2 align="center" id="community-support">Community & Support</h2>
 
-Questions, feedback, and early support: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
+Real-time chat and early support: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
 
-Please file concrete bugs and feature requests in **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)** so they do not get lost in chat.
+Bugs and concrete feature requests go to **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)**; open-ended questions, ideas, and show-and-tell go to **[GitHub Discussions](https://github.com/CodesWhat/drydock/discussions)**; real-time chat happens on the **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**.
 
 ### Community QA
 
@@ -492,7 +504,7 @@ Thanks to the users who helped test v1.4.0 and v1.5.0 release candidates and rep
 
 [@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
 
-### Part of the CodesWhat ecosystem
+<h2 align="center" id="codeswhat-ecosystem">CodesWhat Ecosystem</h2>
 
 <table>
   <tr><th>Tool</th><th>Role</th></tr>
@@ -516,8 +528,6 @@ See [portwing's COMPATIBILITY.md](https://github.com/CodesWhat/portwing/blob/mai
     <img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28">
   </picture>
 </a>
-
-[![Sponsor](https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/CodesWhat)
 
 <a href="#drydock">Back to top</a>
 

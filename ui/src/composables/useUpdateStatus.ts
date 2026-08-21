@@ -2,6 +2,7 @@ import { type ComputedRef, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { UpdateMode } from '../services/settings';
 import type {
+  ActionPolicyState,
   Container,
   UpdateBlocker,
   UpdateBlockerReason,
@@ -19,6 +20,7 @@ export interface UpdateStatusContainer {
   newDigest?: string | null;
   updateInsight?: Container['updateInsight'];
   updateEligibility?: UpdateEligibility;
+  registryError?: string;
 }
 
 export type UpdateStatusAction =
@@ -30,7 +32,7 @@ export type UpdateStatusAction =
     }
   | { kind: 'external'; label: string; href: string };
 
-export interface UpdateStatusCondition {
+interface UpdateStatusCondition {
   reason: UpdateBlockerReason;
   severity: UpdateBlockerSeverity;
   tone: 'danger' | 'warning' | 'info';
@@ -41,14 +43,30 @@ export interface UpdateStatusCondition {
   action?: UpdateStatusAction;
 }
 
-export type UpdateStatusState =
+type UpdateStatusState =
   | 'up-to-date'
   | 'insight'
+  | 'unknown'
   | 'ready'
   | 'soft-blocked'
   | 'hard-blocked'
   | 'in-progress'
   | 'notify';
+
+/**
+ * Additive "Auto" badge (spec-6.0.1-action-policy.md API surface) reflecting
+ * UpdateEligibility.actionPolicy. Only ever shown for `state === 'auto'` —
+ * `manual`/`blocked` don't get a badge here (blocked is already covered by
+ * the trigger-excluded/trigger-not-included condition; manual is the
+ * unremarkable default). `tooltip` still varies by state so the same
+ * mapping is reusable anywhere all three states need explaining (e.g. the
+ * per-trigger resolvedState tooltip in the associated-triggers list).
+ */
+interface ActionPolicyBadge {
+  state: ActionPolicyState;
+  label: string;
+  tooltip: string;
+}
 
 export interface UpdateStatusViewModel {
   state: UpdateStatusState;
@@ -60,6 +78,7 @@ export interface UpdateStatusViewModel {
   hasUpdate: boolean;
   manualUpdateDisabled: boolean;
   insightNote?: string;
+  actionPolicyBadge?: ActionPolicyBadge;
 }
 
 export interface UpdateStatusInput {
@@ -256,6 +275,20 @@ export function formatLiftCountdown(liftableAt: string, nowMs: number): string |
   return `${minutes}m`;
 }
 
+function actionPolicyBadgeFor(
+  actionPolicy: UpdateEligibility['actionPolicy'],
+  t: Translate,
+): ActionPolicyBadge | undefined {
+  if (actionPolicy?.state !== 'auto') {
+    return undefined;
+  }
+  return {
+    state: actionPolicy.state,
+    label: t('containerComponents.updateStatus.actionPolicyBadge.auto'),
+    tooltip: t('containerComponents.updateStatus.actionPolicyTooltip.auto'),
+  };
+}
+
 export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewModel {
   const { container, mode, t } = input;
   const allBlockers = container.updateEligibility?.blockers ?? [];
@@ -278,7 +311,14 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
   let icon: string;
   let summary: string;
 
-  if (!hasUpdate && container.updateInsight) {
+  if (!hasUpdate && container.registryError) {
+    // A failed check is more actionable than a routine pin-gate note, so the
+    // error wins even when an updateInsight is also present (#814, #808).
+    state = 'unknown';
+    tone = 'warning';
+    icon = 'warning';
+    summary = t('containerComponents.updateStatus.summary.unknown');
+  } else if (!hasUpdate && container.updateInsight) {
     state = 'insight';
     tone = 'info';
     icon = 'pin';
@@ -336,6 +376,7 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
     hasUpdate,
     manualUpdateDisabled: !hasUpdate || mode === 'notify' || hardBlocked || activeOperation,
     insightNote,
+    actionPolicyBadge: actionPolicyBadgeFor(container.updateEligibility?.actionPolicy, t),
   };
 }
 

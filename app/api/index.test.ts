@@ -983,14 +983,14 @@ describe('API Index', () => {
     }
   });
 
-  test('real Express: GET /api/auth/methods (registered directly on the app before the /api mounts) is never shadowed by the removed-alias tombstone', async () => {
-    // Regression trap: app/api/auth.ts:419 registers this route directly on
-    // the app via auth.init(app), which registerRoutes() calls BEFORE any
-    // /api mount. Express tries middleware/routes in registration order, so
-    // as long as that ordering holds, this exact route always wins over
-    // anything mounted at '/api' afterward — including the 410 tombstone.
-    // This alias is on its own, separate deprecation schedule (removal in
-    // v1.7.0, see DEPRECATIONS.md) and must keep working through v1.6.0.
+  test('real Express: GET /api/auth/methods is no longer registered and is answered by the removed-alias tombstone', async () => {
+    // Regression trap, flipped for the v1.7.0 removal: app/api/auth.ts used
+    // to register this route directly on the app via auth.init(app), which
+    // registerRoutes() calls BEFORE any /api mount — so as long as that
+    // registration existed, it always won over anything mounted at '/api'
+    // afterward, including the 410 tombstone. That registration is gone as
+    // of v1.7.0 (see DEPRECATIONS.md), so nothing shadows the tombstone for
+    // this path anymore and a request now falls all the way through to it.
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -1010,10 +1010,8 @@ describe('API Index', () => {
 
     const realExpress = (await vi.importActual('express')) as typeof import('express');
     const app = realExpress.default();
-    // Mirrors the real, standalone registration in app/api/auth.ts:419.
-    app.get('/api/auth/methods', (_req, res) => {
-      res.status(200).json({ strategies: ['local'], warnings: [] });
-    });
+    // No standalone /api/auth/methods registration anymore — the tombstone
+    // is the only thing that can answer this path.
     app.use('/api', tombstone);
 
     const server = http.createServer(app);
@@ -1025,8 +1023,7 @@ describe('API Index', () => {
 
     try {
       const res = await fetch(`${baseUrl}/api/auth/methods`);
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ strategies: ['local'], warnings: [] });
+      expect(res.status).toBe(410);
     } finally {
       await new Promise<void>((resolve) => {
         server.close(() => resolve());

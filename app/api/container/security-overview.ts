@@ -8,7 +8,7 @@ interface ContainerListPagination {
   offset: number;
 }
 
-export interface ContainerSecuritySummary {
+interface ContainerSecuritySummary {
   unknown: number;
   low: number;
   medium: number;
@@ -16,7 +16,7 @@ export interface ContainerSecuritySummary {
   critical: number;
 }
 
-export interface SecurityViewVulnerability {
+interface SecurityViewVulnerability {
   id: string;
   severity: string;
   package: string;
@@ -28,7 +28,7 @@ export interface SecurityViewVulnerability {
   publishedDate: string;
 }
 
-export interface SecurityImageVulnerabilityGroup {
+interface SecurityImageVulnerabilityGroup {
   image: string;
   containerIds: string[];
   updateSummary?: ContainerSecuritySummary;

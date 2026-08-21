@@ -6,6 +6,7 @@ import yaml from 'yaml';
 
 interface ReusableCallerJob {
   name?: string;
+  if?: string;
   uses?: string;
   with?: Record<string, unknown>;
   secrets?: string | Record<string, unknown>;
@@ -16,11 +17,20 @@ interface WorkflowWithReusableJobs {
   jobs?: Record<string, ReusableCallerJob>;
 }
 
-// The go-ci.yml SHA every CodesWhat/.github reusable-workflow caller in this
-// repo must be pinned to. Bumping the reusable workflow means bumping this
-// constant and re-verifying every caller in the same change.
+// The SHAs every CodesWhat/.github reusable-workflow caller in this repo
+// must be pinned to, one per reusable workflow. Bumping a reusable workflow
+// means bumping its constant here and re-verifying every caller of it in
+// the same change.
 const frozenGoCiSha = '47820bd85d49eb6cd0a935c31789c7d7ce037401';
 const goCiUses = `CodesWhat/.github/.github/workflows/go-ci.yml@${frozenGoCiSha}`;
+
+const frozenGreptileSummonSha = 'bbc181dc4d462f673dac2dff5f88a8408dd9c763';
+const greptileSummonUses = `CodesWhat/.github/.github/workflows/greptile-summon.yml@${frozenGreptileSummonSha}`;
+
+const frozenStarchartRefreshSha = '96e2765052a5d01ad9db2dffa355636d9e9bde88';
+const starchartRefreshUses = `CodesWhat/.github/.github/workflows/starchart-refresh.yml@${frozenStarchartRefreshSha}`;
+
+const frozenReusableWorkflowUses = [goCiUses, greptileSummonUses, starchartRefreshUses];
 
 const workflowsDir = fileURLToPath(new URL('../workflows', import.meta.url));
 
@@ -59,24 +69,21 @@ function reusableCallerJobs(): Array<{
   );
 }
 
-test('every CodesWhat/.github reusable-workflow caller is pinned to the frozen SHA', () => {
+test('every CodesWhat/.github reusable-workflow caller is pinned to a frozen SHA', () => {
   const violations = reusableCallerJobs()
-    .filter(({ job }) => job.uses !== goCiUses)
+    .filter(({ job }) => !frozenReusableWorkflowUses.includes(job.uses ?? ''))
     .map(({ file, jobId, job }) => `${file}/${jobId} uses ${job.uses}`);
 
   expect(violations).toStrictEqual([]);
 });
 
-test('no CodesWhat/.github uses ref in source is unpinned or off the frozen SHA', () => {
+test('no CodesWhat/.github uses ref in source is unpinned or off a frozen SHA', () => {
   const violations = loadWorkflowFiles().flatMap(({ file, source }) =>
     source
       .split('\n')
       .map((line, index) => ({ line, lineNumber: index + 1 }))
       .filter(({ line }) => line.includes('CodesWhat/.github/'))
-      .filter(
-        ({ line }) =>
-          !line.includes(`CodesWhat/.github/.github/workflows/go-ci.yml@${frozenGoCiSha}`),
-      )
+      .filter(({ line }) => !frozenReusableWorkflowUses.some((uses) => line.includes(uses)))
       .map(({ lineNumber }) => `${file}:${lineNumber}`),
   );
 
@@ -129,4 +136,34 @@ test('security-actions caller disables the Go test and lint jobs', () => {
   // Go module.
   expect(job?.with?.['run-test']).toBe(false);
   expect(job?.with?.['run-lint']).toBe(false);
+});
+
+test('greptile summon caller only fires on the second-opinion label', () => {
+  const job = reusableCallerJobs().find(
+    ({ file, jobId }) => file === 'greptile.yml' && jobId === 'summon',
+  )?.job;
+
+  expect(job).toBeDefined();
+  expect(job?.if).toBe("github.event.label.name == 'second-opinion'");
+});
+
+test('greptile summon caller grants only pull-requests: write', () => {
+  const job = reusableCallerJobs().find(
+    ({ file, jobId }) => file === 'greptile.yml' && jobId === 'summon',
+  )?.job;
+
+  expect(job).toBeDefined();
+  expect(job?.permissions).toStrictEqual({ 'pull-requests': 'write' });
+});
+
+test('greptile summon caller forwards the exact PR number and head SHA', () => {
+  const job = reusableCallerJobs().find(
+    ({ file, jobId }) => file === 'greptile.yml' && jobId === 'summon',
+  )?.job;
+
+  expect(job).toBeDefined();
+  expect(job?.with).toStrictEqual({
+    pr_number: '${{ github.event.pull_request.number }}',
+    head_sha: '${{ github.event.pull_request.head.sha }}',
+  });
 });

@@ -9,7 +9,7 @@ const log = logger.child({ component: 'stats.aggregator' });
 
 const DEFAULT_TOP_N = 5;
 
-export interface ContainerStatsSummaryRow {
+interface ContainerStatsSummaryRow {
   id: string;
   name: string;
   cpuPercent: number;
@@ -18,7 +18,7 @@ export interface ContainerStatsSummaryRow {
   memoryPercent: number;
 }
 
-export interface ContainerStatsSummary {
+interface ContainerStatsSummary {
   timestamp: string;
   watchedCount: number;
   avgCpuPercent: number;
@@ -29,7 +29,7 @@ export interface ContainerStatsSummary {
   topMemory: ContainerStatsSummaryRow[];
 }
 
-export type SummaryListener = (summary: ContainerStatsSummary) => void;
+type SummaryListener = (summary: ContainerStatsSummary) => void;
 
 export interface ContainerStatsAggregator {
   start(): void;

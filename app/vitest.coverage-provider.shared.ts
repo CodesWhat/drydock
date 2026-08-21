@@ -1,13 +1,13 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 
-export const COVERAGE_READ_RETRY_DELAY_MS = 15;
-export const COVERAGE_READ_RETRY_MAX_ATTEMPTS = 40;
-export const COVERAGE_WRITE_SETTLE_DELAY_MS = 5;
-export const COVERAGE_WRITE_SETTLE_IDLE_WINDOW_MS = 50;
-export const COVERAGE_WRITE_RETRY_DELAY_MS = 15;
-export const COVERAGE_WRITE_RETRY_MAX_ATTEMPTS = 40;
-export const DEFAULT_PROJECT = Symbol.for('default-project');
+const COVERAGE_READ_RETRY_DELAY_MS = 15;
+const COVERAGE_READ_RETRY_MAX_ATTEMPTS = 40;
+const COVERAGE_WRITE_SETTLE_DELAY_MS = 5;
+const COVERAGE_WRITE_SETTLE_IDLE_WINDOW_MS = 50;
+const COVERAGE_WRITE_RETRY_DELAY_MS = 15;
+const COVERAGE_WRITE_RETRY_MAX_ATTEMPTS = 40;
+const DEFAULT_PROJECT = Symbol.for('default-project');
 
 export type CoverageDebugLogger = ((message: string) => void) & { enabled?: boolean };
 
@@ -69,7 +69,7 @@ export async function writeCoverageFileWithRetry(filename: string, content: stri
   }
 }
 
-export function resolveReportsDirectory(
+function resolveReportsDirectory(
   provider: Pick<CoverageProviderForCleanup, 'coverageFilesDirectory'> & {
     options?: { reportsDirectory?: string };
   },
@@ -223,7 +223,7 @@ async function visitCoverageProjectFiles({
   }
 }
 
-export async function visitCoverageFiles(
+async function visitCoverageFiles(
   provider: CoverageProviderForReads,
   onDebug: CoverageDebugLogger,
   visitFile: (filename: string) => Promise<void>,

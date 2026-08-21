@@ -1,4 +1,5 @@
 import { computed, nextTick, ref } from 'vue';
+import { CONTAINER_TABLE_ACTIONS_SIZE } from '@/composables/useColumnVisibility';
 import { setTestPreferences } from '../helpers/preferences';
 
 describe('useColumnVisibility', () => {
@@ -215,8 +216,7 @@ describe('useColumnVisibility', () => {
     expect(hostColumn?.maxSize).toBeGreaterThanOrEqual(240);
   });
 
-  it('should expose a shared actions column sizing value for responsive math', async () => {
-    const { CONTAINER_TABLE_ACTIONS_SIZE } = await loadColumnVisibility();
+  it('should expose a shared actions column sizing value for responsive math', () => {
     expect(CONTAINER_TABLE_ACTIONS_SIZE).toBe(180);
   });
 

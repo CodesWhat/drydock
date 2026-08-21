@@ -503,7 +503,18 @@ export const containerPaths = {
       operationId: 'getContainerTriggers',
       parameters: [containerIdPathParam],
       responses: {
-        200: jsonResponse('Container triggers', { $ref: '#/components/schemas/CollectionResult' }),
+        200: jsonResponse('Container triggers', {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ContainerAssociatedTrigger' },
+            },
+            total: { type: 'integer', minimum: 0 },
+          },
+          required: ['data', 'total'],
+          additionalProperties: true,
+        }),
         401: errorResponse('Authentication required'),
         404: errorResponse('Container not found'),
       },

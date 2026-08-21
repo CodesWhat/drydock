@@ -193,7 +193,6 @@
       "setGroupAction": "Đặt nhóm",
       "rollbackAction": "Khôi phục",
       "deleteAction": "Xóa",
-      "pinnedTooltip": "Đã ghim",
       "skippedLabel": "Đã bỏ qua",
       "upToDateTooltip": "Đã cập nhật",
       "imageUpdateTooltip": "Tag {tag} hiện trỏ đến bản build image khác. Triển khai lại để tải image mới; tag phiên bản không thay đổi.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "Gợi ý: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "Có bản mới hơn",
       "tooltip": "Đã có phiên bản mới hơn: {tag}. Tag này đã được ghim, drydock sẽ không tự động cập nhật."
     },
     "eligibilityBadges": {

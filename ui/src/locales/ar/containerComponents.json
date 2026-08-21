@@ -193,7 +193,6 @@
       "setGroupAction": "تعيين المجموعة",
       "rollbackAction": "تراجع",
       "deleteAction": "حذف",
-      "pinnedTooltip": "مثبّت",
       "skippedLabel": "متخطى",
       "upToDateTooltip": "محدّث",
       "imageUpdateTooltip": "أصبح الوسم {tag} يشير الآن إلى بنية صورة مختلفة. أعد النشر لسحب الصورة الجديدة؛ وسم الإصدار نفسه لم يتغيّر.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "مقترح: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "تتوفر نسخة أحدث",
       "tooltip": "تتوفر نسخة أحدث: {tag}. هذا الـ Tag مثبّت، ولن يقوم drydock بتحديثه تلقائيًا."
     },
     "eligibilityBadges": {

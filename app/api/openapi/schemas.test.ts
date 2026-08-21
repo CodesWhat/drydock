@@ -83,3 +83,35 @@ describe('container update-eligibility OpenAPI schemas', () => {
     });
   });
 });
+
+describe('action-policy OpenAPI schemas (spec-6.0.1-action-policy.md)', () => {
+  test('documents the actionPolicy field on UpdateEligibility', () => {
+    expect(openApiSchemas.UpdateEligibility.properties.actionPolicy).toStrictEqual({
+      $ref: '#/components/schemas/ActionPolicy',
+    });
+    expect(openApiSchemas.ActionPolicy).toMatchObject({
+      type: 'object',
+      required: ['state'],
+      properties: {
+        state: { type: 'string', enum: ['blocked', 'manual', 'auto'] },
+        triggerId: { type: 'string' },
+        reason: { type: 'string', enum: ['excluded', 'not-included'] },
+      },
+    });
+  });
+
+  test('documents resolvedState on the container-associated trigger item', () => {
+    expect(openApiSchemas.ContainerAssociatedTrigger.allOf[0]).toStrictEqual({
+      $ref: '#/components/schemas/ComponentItem',
+    });
+    expect(
+      openApiSchemas.ContainerAssociatedTrigger.allOf[1].properties.resolvedState,
+    ).toMatchObject({ type: 'string', enum: ['blocked', 'manual', 'auto'] });
+  });
+
+  test('documents the dd.action.auto label on ContainerResource', () => {
+    expect(openApiSchemas.ContainerResource.properties.actionTriggerAuto).toMatchObject({
+      type: 'string',
+    });
+  });
+});

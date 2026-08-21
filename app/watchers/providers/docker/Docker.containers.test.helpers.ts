@@ -5,25 +5,7 @@ import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import { mockConstructor } from '../../../test/mock-constructor.js';
 import { _resetRegistryWebhookFreshStateForTests } from '../../registry-webhook-fresh.js';
-import { getDockerWatcherRegistryId, getDockerWatcherSourceKey } from './container-init.js';
-import Docker, {
-  testable_filterBySegmentCount,
-  testable_filterRecreatedContainerAliases,
-  testable_getContainerDisplayName,
-  testable_getContainerName,
-  testable_getCurrentPrefix,
-  testable_getFirstDigitIndex,
-  testable_getImageForRegistryLookup,
-  testable_getImageReferenceCandidatesFromPattern,
-  testable_getImgsetSpecificity,
-  testable_getInspectValueByPath,
-  testable_getLabel,
-  testable_getOldContainers,
-  testable_normalizeConfigNumberValue,
-  testable_normalizeContainer,
-  testable_pruneOldContainers,
-  testable_shouldUpdateDisplayNameFromContainerName,
-} from './Docker.js';
+import Docker from './Docker.js';
 
 const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
 const mockDetectSourceRepoFromImageMetadata = vi.hoisted(() => vi.fn());
@@ -75,56 +57,6 @@ import * as maintenance from './maintenance.js';
 const mockAxios = axios as Mocked<typeof axios>;
 
 // --- Shared factory functions to reduce test duplication ---
-
-/** Base OIDC auth configuration for remote Docker API tests. */
-function createOidcConfig(oidcOverrides = {}, configOverrides = {}) {
-  return {
-    host: 'docker-api.example.com',
-    port: 443,
-    protocol: 'https',
-    auth: {
-      type: 'oidc',
-      oidc: {
-        tokenurl: 'https://idp.example.com/oauth/token',
-        ...oidcOverrides,
-      },
-    },
-    ...configOverrides,
-  };
-}
-
-/** Device flow OIDC config (adds deviceurl + clientid to base OIDC). */
-function createDeviceFlowConfig(oidcOverrides = {}, configOverrides = {}) {
-  return createOidcConfig(
-    {
-      deviceurl: 'https://idp.example.com/oauth/device/code',
-      clientid: 'dd-device-client',
-      ...oidcOverrides,
-    },
-    configOverrides,
-  );
-}
-
-/** Standard device authorization response from the IdP. */
-function createDeviceCodeResponse(overrides = {}) {
-  return {
-    device_code: 'device-code-123',
-    user_code: 'ABCD-1234',
-    verification_uri: 'https://idp.example.com/device',
-    interval: 1,
-    expires_in: 300,
-    ...overrides,
-  };
-}
-
-/** Token response from the IdP. */
-function createTokenResponse(overrides = {}) {
-  return {
-    access_token: 'test-token',
-    expires_in: 3600,
-    ...overrides,
-  };
-}
 
 /** Creates a mock log object with commonly needed methods. */
 function createMockLog(methods = ['info', 'warn', 'debug', 'error']) {
@@ -216,47 +148,6 @@ function createHaParseMock() {
       return { domain: 'ghcr.io', path: 'home-assistant/home-assistant' };
     }
     return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
-  };
-}
-
-function createDockerOidcStateAdapter(docker) {
-  return {
-    get accessToken() {
-      return docker.remoteOidcAccessToken;
-    },
-    set accessToken(value) {
-      docker.remoteOidcAccessToken = value;
-    },
-    get refreshToken() {
-      return docker.remoteOidcRefreshToken;
-    },
-    set refreshToken(value) {
-      docker.remoteOidcRefreshToken = value;
-    },
-    get accessTokenExpiresAt() {
-      return docker.remoteOidcAccessTokenExpiresAt;
-    },
-    set accessTokenExpiresAt(value) {
-      docker.remoteOidcAccessTokenExpiresAt = value;
-    },
-    get deviceCodeCompleted() {
-      return docker.remoteOidcDeviceCodeCompleted;
-    },
-    set deviceCodeCompleted(value) {
-      docker.remoteOidcDeviceCodeCompleted = value;
-    },
-  };
-}
-
-function createDockerOidcContext(docker) {
-  return {
-    watcherName: docker.name,
-    log: docker.log,
-    state: createDockerOidcStateAdapter(docker),
-    getOidcAuthString: (paths) => docker.getOidcAuthString(paths),
-    getOidcAuthNumber: (paths) => docker.getOidcAuthNumber(paths),
-    normalizeNumber: testable_normalizeConfigNumberValue,
-    sleep: (ms) => docker.sleep(ms),
   };
 }
 
@@ -477,52 +368,13 @@ export function setupDockerWatcherContainerSuite(
 }
 
 export {
-  createDeviceCodeResponse,
-  createDeviceFlowConfig,
   createDockerContainer,
-  createDockerOidcContext,
-  createDockerOidcStateAdapter,
   createHaParseMock,
   createHarborHubRegistryState,
-  createImageDetails,
   createMockLog,
   createMockLogWithChild,
-  createMockRegistry,
-  createOidcConfig,
-  createTokenResponse,
-  Docker,
-  event,
-  fullName,
-  getDockerWatcherRegistryId,
-  getDockerWatcherSourceKey,
-  maintenance,
-  mockAxios,
-  mockDdEnvVars,
-  mockDetectSourceRepoFromImageMetadata,
-  mockGetFullReleaseNotesForContainer,
   mockGetReleaseNotesForTag,
-  mockParse,
-  mockPrometheus,
   mockResolveSourceRepoForContainer,
-  mockTag,
   mockToContainerReleaseNotes,
-  registry,
   setupContainerDetailTest,
-  storeContainer,
-  testable_filterBySegmentCount,
-  testable_filterRecreatedContainerAliases,
-  testable_getContainerDisplayName,
-  testable_getContainerName,
-  testable_getCurrentPrefix,
-  testable_getFirstDigitIndex,
-  testable_getImageForRegistryLookup,
-  testable_getImageReferenceCandidatesFromPattern,
-  testable_getImgsetSpecificity,
-  testable_getInspectValueByPath,
-  testable_getLabel,
-  testable_getOldContainers,
-  testable_normalizeConfigNumberValue,
-  testable_normalizeContainer,
-  testable_pruneOldContainers,
-  testable_shouldUpdateDisplayNameFromContainerName,
 };

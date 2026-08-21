@@ -1,6 +1,6 @@
 import type { DirectiveBinding, ObjectDirective } from 'vue';
 
-export interface TooltipBinding {
+interface TooltipBinding {
   value: string;
   showDelay?: number;
 }

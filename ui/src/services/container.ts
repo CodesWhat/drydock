@@ -545,7 +545,7 @@ async function revealContainerEnv(containerId: string) {
   return readJsonResponse(response, 'Container env API');
 }
 
-export type { ContainerGroup, DependencyGroupUpdateResult };
+export type { ContainerGroup };
 export {
   deleteContainer,
   getAllContainers,

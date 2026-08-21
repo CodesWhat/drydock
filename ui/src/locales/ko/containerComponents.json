@@ -193,7 +193,6 @@
       "setGroupAction": "그룹 설정",
       "rollbackAction": "롤백",
       "deleteAction": "삭제",
-      "pinnedTooltip": "고정됨",
       "skippedLabel": "건너뜀",
       "upToDateTooltip": "최신 버전",
       "imageUpdateTooltip": "태그 {tag}가 이제 다른 이미지 빌드를 가리킵니다. 새 이미지를 가져오려면 다시 배포하세요. 버전 태그 자체는 변경되지 않았습니다.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "추천: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "최신 버전 있음",
       "tooltip": "새 버전 사용 가능: {tag}. 이 Tag는 고정되어 있어 drydock이 자동으로 업데이트하지 않습니다."
     },
     "eligibilityBadges": {

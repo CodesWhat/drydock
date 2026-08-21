@@ -4,7 +4,7 @@ import * as requestUpdate from '../../updates/request-update.js';
 import { createTriggerHandlers } from './triggers.js';
 
 function createTrigger(overrides: Record<string, unknown> = {}) {
-  return {
+  const trigger = {
     id: 'slack.notify',
     type: 'slack',
     name: 'notify',
@@ -12,6 +12,7 @@ function createTrigger(overrides: Record<string, unknown> = {}) {
     trigger: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
+  return { getId: () => trigger.id as string, ...trigger };
 }
 
 function createHarness(
@@ -348,6 +349,132 @@ describe('api/container/triggers', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(payload.total).toBe(1);
       expect(associatedTriggers.map((trigger) => trigger.id)).toEqual(['dockercompose.monitoring']);
+    });
+  });
+
+  describe('getContainerTriggers — resolvedState', () => {
+    test('resolves auto for a docker trigger with the legacy default auto mode', async () => {
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'docker.update': createTrigger({ id: 'docker.update', type: 'docker', name: 'update' }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data).toEqual([expect.objectContaining({ resolvedState: 'auto' })]);
+    });
+
+    test('resolves manual for a dockercompose trigger configured with AUTO=none', async () => {
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'dockercompose.recreate': createTrigger({
+            id: 'dockercompose.recreate',
+            type: 'dockercompose',
+            name: 'recreate',
+            configuration: { auto: 'none' },
+          }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data).toEqual([expect.objectContaining({ resolvedState: 'manual' })]);
+    });
+
+    test('resolves blocked for an oninclude docker trigger the container has no include label for', async () => {
+      // resolveTriggerAssociation only gates on an actual include/exclude label being
+      // present, so an AUTO=oninclude trigger with no `dd.action.include` still appears
+      // in the list (association isn't auto-mode aware) — resolvedState is what tells a
+      // consumer this listed trigger is actually closed by default.
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'docker.update': createTrigger({
+            id: 'docker.update',
+            type: 'docker',
+            name: 'update',
+            configuration: { auto: 'oninclude' },
+          }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data).toEqual([expect.objectContaining({ resolvedState: 'blocked' })]);
+    });
+
+    test('resolves auto for onauto when the auto label matches, manual when only include matches', async () => {
+      const harnessAuto = createHarness({
+        container: { id: 'c1', actionTriggerAuto: 'docker.update' },
+        triggerMap: {
+          'docker.update': createTrigger({
+            id: 'docker.update',
+            type: 'docker',
+            name: 'update',
+            configuration: { auto: 'onauto' },
+          }),
+        },
+      });
+      const resAuto = await callGetContainerTriggers(harnessAuto.handlers);
+      expect(resAuto.json.mock.calls[0][0].data).toEqual([
+        expect.objectContaining({ resolvedState: 'auto' }),
+      ]);
+
+      const harnessManual = createHarness({
+        container: { id: 'c1', actionTriggerInclude: 'docker.update' },
+        triggerMap: {
+          'docker.update': createTrigger({
+            id: 'docker.update',
+            type: 'docker',
+            name: 'update',
+            configuration: { auto: 'onauto' },
+          }),
+        },
+      });
+      const resManual = await callGetContainerTriggers(harnessManual.handlers);
+      expect(resManual.json.mock.calls[0][0].data).toEqual([
+        expect.objectContaining({ resolvedState: 'manual' }),
+      ]);
+    });
+
+    test('falls back to the type/name id and the associated copy when unregistered in triggerMap', async () => {
+      const triggerWithoutId = createTrigger({
+        id: undefined,
+        type: 'docker',
+        name: 'orphan',
+        configuration: { auto: 'none' },
+      });
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {},
+      });
+      harness.deps.mapComponentsToList.mockReturnValue([triggerWithoutId]);
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data).toEqual([expect.objectContaining({ resolvedState: 'manual' })]);
+    });
+
+    test('leaves resolvedState unset for non-update-action triggers (notification/command)', async () => {
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'slack.notify': createTrigger({ id: 'slack.notify', type: 'slack', name: 'notify' }),
+        },
+      });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+
+      expect(payload.data).toHaveLength(1);
+      expect('resolvedState' in payload.data[0]).toBe(false);
     });
   });
 

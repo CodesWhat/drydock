@@ -193,7 +193,6 @@
       "setGroupAction": "Grup belirle",
       "rollbackAction": "Geri al",
       "deleteAction": "Sil",
-      "pinnedTooltip": "Sabitlendi",
       "skippedLabel": "Atlandı",
       "upToDateTooltip": "güncel",
       "imageUpdateTooltip": "{tag} etiketi artık farklı bir imaj derlemesine işaret ediyor. Yeni imajı çekmek için yeniden dağıtın; sürüm etiketinin kendisi değişmedi.",
@@ -361,7 +360,6 @@
       "tooltipWithTag": "Önerilen: {tag}\n{hint}"
     },
     "updateInsight": {
-      "badgeText": "Daha yenisi mevcut",
       "tooltip": "Daha yeni sürüm mevcut: {tag}. Bu Tag sabitlendi, drydock onu otomatik olarak güncellemez."
     },
     "eligibilityBadges": {

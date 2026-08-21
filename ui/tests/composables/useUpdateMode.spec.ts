@@ -1,3 +1,5 @@
+import { effectScope } from 'vue';
+
 const mockGetSettings = vi.fn();
 const mockUpdateSettings = vi.fn();
 
@@ -26,6 +28,28 @@ describe('useUpdateMode', () => {
     expect(first.loaded.value).toBe(true);
   });
 
+  it('loads internetlessMode alongside updateMode from the shared settings fetch', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: true, updateMode: 'auto' });
+    const { useUpdateMode } = await import('@/composables/useUpdateMode');
+    const state = useUpdateMode({ autoLoad: false });
+
+    await state.loadUpdateMode();
+
+    expect(state.internetlessMode.value).toBe(true);
+  });
+
+  it('records an internetlessMode value obtained by a consumer without refetching', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: false, updateMode: 'manual' });
+    const { useUpdateMode } = await import('@/composables/useUpdateMode');
+    const state = useUpdateMode({ autoLoad: false });
+
+    await state.loadUpdateMode();
+    state.setInternetlessMode(true);
+
+    expect(state.internetlessMode.value).toBe(true);
+    expect(mockGetSettings).toHaveBeenCalledTimes(1);
+  });
+
   it('force-loads a newer mode after the initial request', async () => {
     mockGetSettings
       .mockResolvedValueOnce({ internetlessMode: false, updateMode: 'manual' })
@@ -37,6 +61,20 @@ describe('useUpdateMode', () => {
     await state.loadUpdateMode({ force: true });
 
     expect(mockGetSettings).toHaveBeenCalledTimes(2);
+    expect(state.updateMode.value).toBe('auto');
+  });
+
+  it('skips refetching once already loaded unless force is requested', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: false, updateMode: 'auto' });
+    const { useUpdateMode } = await import('@/composables/useUpdateMode');
+    const state = useUpdateMode({ autoLoad: false });
+
+    await state.loadUpdateMode();
+    expect(mockGetSettings).toHaveBeenCalledTimes(1);
+
+    await state.loadUpdateMode();
+
+    expect(mockGetSettings).toHaveBeenCalledTimes(1);
     expect(state.updateMode.value).toBe('auto');
   });
 
@@ -78,6 +116,45 @@ describe('useUpdateMode', () => {
     expect(addDocument).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
     expect(removeWindow).toHaveBeenCalledWith('focus', expect.any(Function));
     expect(removeDocument).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+  });
+
+  it('autoloads by default and registers/tears down revalidation within its effect scope', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: false, updateMode: 'notify' });
+    const addWindow = vi.spyOn(window, 'addEventListener');
+    const removeWindow = vi.spyOn(window, 'removeEventListener');
+    const { useUpdateMode } = await import('@/composables/useUpdateMode');
+
+    const scope = effectScope();
+    let state!: ReturnType<typeof useUpdateMode>;
+    scope.run(() => {
+      state = useUpdateMode();
+    });
+
+    await vi.waitFor(() => expect(mockGetSettings).toHaveBeenCalledTimes(1));
+    expect(state.updateMode.value).toBe('notify');
+    expect(addWindow).toHaveBeenCalledWith('focus', expect.any(Function));
+
+    scope.stop();
+
+    expect(removeWindow).toHaveBeenCalledWith('focus', expect.any(Function));
+  });
+
+  it('only registers/removes revalidation listeners for the first consumer in and the last consumer out', async () => {
+    mockGetSettings.mockResolvedValue({ internetlessMode: false, updateMode: 'manual' });
+    const addWindow = vi.spyOn(window, 'addEventListener');
+    const removeWindow = vi.spyOn(window, 'removeEventListener');
+    const { startUpdateModeRevalidation } = await import('@/composables/useUpdateMode');
+
+    const stopFirst = startUpdateModeRevalidation();
+    const stopSecond = startUpdateModeRevalidation();
+
+    expect(addWindow).toHaveBeenCalledTimes(1);
+
+    stopFirst();
+    expect(removeWindow).not.toHaveBeenCalled();
+
+    stopSecond();
+    expect(removeWindow).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a successful save when an older forced load resolves afterward', async () => {

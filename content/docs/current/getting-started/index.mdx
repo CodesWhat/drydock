@@ -312,7 +312,7 @@ Run commands before or after an update (database backups, cache flushes, health 
 ```yaml
 labels:
   - dd.hook.pre=docker exec mydb pg_dump -U postgres mydb > /backup/pre-update.sql
-  - dd.hook.post=curl -s http://healthcheck.example.com/ping
+  - dd.hook.post=/usr/local/bin/notify-healthcheck.sh
 ```
 
 ### Vulnerability scanning (Update Bouncer)

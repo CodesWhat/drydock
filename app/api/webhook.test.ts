@@ -1306,7 +1306,9 @@ describe('Webhook Router', () => {
       const mockTrigger = vi.fn().mockResolvedValue(undefined);
       mockGetState.mockReturnValue({
         watcher: {},
-        trigger: { 'docker.default': { type: 'docker', trigger: mockTrigger } },
+        trigger: {
+          'docker.default': { type: 'docker', trigger: mockTrigger, getId: () => 'docker.default' },
+        },
       });
 
       const handler = getHandler('post', '/update/:containerName');
@@ -1338,7 +1340,13 @@ describe('Webhook Router', () => {
       const mockTrigger = vi.fn().mockResolvedValue(undefined);
       mockGetState.mockReturnValue({
         watcher: {},
-        trigger: { 'dockercompose.default': { type: 'dockercompose', trigger: mockTrigger } },
+        trigger: {
+          'dockercompose.default': {
+            type: 'dockercompose',
+            trigger: mockTrigger,
+            getId: () => 'dockercompose.default',
+          },
+        },
       });
 
       const handler = getHandler('post', '/update/:containerName');
@@ -1370,7 +1378,7 @@ describe('Webhook Router', () => {
       mockGetState.mockReturnValue({
         watcher: {},
         trigger: {
-          'docker.default': { type: 'docker', trigger: vi.fn() },
+          'docker.default': { type: 'docker', trigger: vi.fn(), getId: () => 'docker.default' },
         },
       });
       const spy = vi
@@ -1398,7 +1406,7 @@ describe('Webhook Router', () => {
       mockGetState.mockReturnValue({
         watcher: {},
         trigger: {
-          'docker.default': { type: 'docker', trigger: vi.fn() },
+          'docker.default': { type: 'docker', trigger: vi.fn(), getId: () => 'docker.default' },
         },
       });
       const spy = vi
@@ -1430,7 +1438,9 @@ describe('Webhook Router', () => {
       const mockTrigger = vi.fn().mockResolvedValue(undefined);
       mockGetState.mockReturnValue({
         watcher: {},
-        trigger: { 'docker.default': { type: 'docker', trigger: mockTrigger } },
+        trigger: {
+          'docker.default': { type: 'docker', trigger: mockTrigger, getId: () => 'docker.default' },
+        },
       });
 
       const handler = getHandler('post', '/update/:containerName');
@@ -1460,6 +1470,7 @@ describe('Webhook Router', () => {
           'docker.default': {
             type: 'docker',
             trigger: vi.fn().mockRejectedValue(new Error('Trigger failed')),
+            getId: () => 'docker.default',
           },
         },
       });
@@ -1499,6 +1510,7 @@ describe('Webhook Router', () => {
           'docker.default': {
             type: 'docker',
             trigger: vi.fn().mockRejectedValue('trigger failed as string'),
+            getId: () => 'docker.default',
           },
         },
       });
@@ -1526,7 +1538,11 @@ describe('Webhook Router', () => {
       mockGetState.mockReturnValue({
         watcher: {},
         trigger: {
-          'docker.default': { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+          'docker.default': {
+            type: 'docker',
+            trigger: vi.fn().mockResolvedValue(undefined),
+            getId: () => 'docker.default',
+          },
         },
       });
 
@@ -1589,7 +1605,11 @@ describe('Webhook Router', () => {
       mockGetState.mockReturnValue({
         watcher: {},
         trigger: {
-          'docker.default': { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+          'docker.default': {
+            type: 'docker',
+            trigger: vi.fn().mockResolvedValue(undefined),
+            getId: () => 'docker.default',
+          },
         },
       });
 
@@ -1616,8 +1636,18 @@ describe('Webhook Router', () => {
       mockGetState.mockReturnValue({
         watcher: {},
         trigger: {
-          'docker.default': { type: 'docker', agent: 'agent1', trigger: mockTriggerFn },
-          'docker.other': { type: 'docker', agent: 'agent2', trigger: mockOtherTriggerFn },
+          'docker.default': {
+            type: 'docker',
+            agent: 'agent1',
+            trigger: mockTriggerFn,
+            getId: () => 'docker.default',
+          },
+          'docker.other': {
+            type: 'docker',
+            agent: 'agent2',
+            trigger: mockOtherTriggerFn,
+            getId: () => 'docker.other',
+          },
           'slack.default': { type: 'slack', trigger: vi.fn() },
         },
       });
@@ -1719,7 +1749,14 @@ describe('Webhook Router', () => {
       mockGetState.mockReturnValue({
         watcher: {},
         // agent: 'ml' matches the remoteContainer.agent for the trigger lookup in requestContainerUpdate
-        trigger: { 'docker.default': { type: 'docker', agent: 'ml', trigger: mockTrigger } },
+        trigger: {
+          'docker.default': {
+            type: 'docker',
+            agent: 'ml',
+            trigger: mockTrigger,
+            getId: () => 'docker.default',
+          },
+        },
       });
 
       const handler = getHandler('post', '/update/:containerName');
@@ -1754,7 +1791,14 @@ describe('Webhook Router', () => {
       const mockTrigger = vi.fn().mockResolvedValue(undefined);
       mockGetState.mockReturnValue({
         watcher: {},
-        trigger: { 'docker.default': { type: 'docker', agent: undefined, trigger: mockTrigger } },
+        trigger: {
+          'docker.default': {
+            type: 'docker',
+            agent: undefined,
+            trigger: mockTrigger,
+            getId: () => 'docker.default',
+          },
+        },
       });
 
       const handler = getHandler('post', '/update/:containerName');
@@ -1795,7 +1839,14 @@ describe('Webhook Router', () => {
       // container2 is on agent 'a2'; trigger matches that agent
       mockGetState.mockReturnValue({
         watcher: {},
-        trigger: { 'docker.default': { type: 'docker', agent: 'a2', trigger: mockTrigger } },
+        trigger: {
+          'docker.default': {
+            type: 'docker',
+            agent: 'a2',
+            trigger: mockTrigger,
+            getId: () => 'docker.default',
+          },
+        },
       });
 
       const handler = getHandler('post', '/update/:containerName');

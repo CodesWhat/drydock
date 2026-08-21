@@ -31,26 +31,26 @@
     "socket.io-parser": "4.2.7"
   },
   "devDependencies": {
-    "@dotenvx/dotenvx": "2.17.4",
+    "@dotenvx/dotenvx": "2.21.0",
     "@playwright/test": "1.61.1",
-    "artillery": "2.0.33",
+    "artillery": "2.0.34",
     "lodash": "4.18.1"
   },
   "overrides": {
     "brace-expansion": "5.0.9",
-    "js-yaml": "3.15.1",
+    "js-yaml": "5.3.0",
     "fast-xml-parser": "5.10.1",
     "joi": "18.2.3",
-    "minimatch": "10.2.5",
+    "minimatch": "10.2.6",
     "picomatch": "4.0.5",
-    "postcss": "8.5.23",
+    "postcss": "8.5.26",
     "uuid": "14.0.1",
-    "ws": "8.21.1",
+    "ws": "8.21.3",
     "yaml": "2.9.0",
     "form-data": "4.0.6",
     "protobufjs": "7.6.5",
     "@opentelemetry/core": "2.10.0",
     "undici": "7.29.0",
-    "nanoid": "3.3.18"
+    "nanoid": "6.0.1"
   }
 }

@@ -1,6 +1,12 @@
 import { findDockerTriggerForContainer } from '../api/docker-trigger.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
+import {
+  type ActionPolicyBlockedReason,
+  type ActionPolicyState,
+  type ActionPolicyTrigger,
+  selectActionTrigger,
+} from './action-policy.js';
 import type { Container } from './container.js';
 import { isRollbackContainer } from './container.js';
 import {
@@ -33,8 +39,9 @@ export type UpdateBlockerReason =
  * - 'soft': API allows manual update; UI shows the pill but the button stays enabled (with a
  *   warning + confirm modal listing the soft blockers).
  *
- * `trigger-not-included` and `trigger-excluded` are 'soft' in v1.5.x with a deprecation
- * notice — they become 'hard' in v1.7.0. See DEPRECATIONS.md.
+ * `trigger-not-included` and `trigger-excluded` were 'soft' in v1.5.x-v1.6.x with a
+ * deprecation notice; the flip to 'hard' landed in v1.7.0 (spec-6.0.1-action-policy.md
+ * slice 6). See DEPRECATIONS.md.
  */
 export type UpdateBlockerSeverity = 'hard' | 'soft';
 
@@ -52,9 +59,9 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'skip-digest': 'soft',
   'maturity-not-reached': 'soft',
   'threshold-not-reached': 'soft',
-  // Deprecation: become 'hard' in v1.7.0. See DEPRECATIONS.md.
-  'trigger-excluded': 'soft',
-  'trigger-not-included': 'soft',
+  // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6). See DEPRECATIONS.md.
+  'trigger-excluded': 'hard',
+  'trigger-not-included': 'hard',
   // soft: manual UI/API updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
 };
@@ -113,10 +120,28 @@ function makeBlocker(
   return { ...blocker, severity: severityOverride ?? BLOCKER_SEVERITY[blocker.reason] };
 }
 
+/**
+ * Additive, non-blocker reflection of the action-policy resolver's verdict
+ * for this container (spec-6.0.1-action-policy.md API surface). Distinct
+ * from `blockers`: `manual`/`auto` never produce a blocker, and even a
+ * `blocked` verdict here duplicates information already carried by the
+ * `trigger-excluded`/`trigger-not-included` blocker rather than gating
+ * `eligible` on its own. Drives the UI's "Auto" badge. Omitted entirely
+ * when no compatible action trigger exists at all — the
+ * `no-update-trigger-configured`/`agent-mismatch` blockers own that
+ * messaging (see the `no compatible trigger` comment at the call site).
+ */
+interface UpdateEligibilityActionPolicy {
+  state: ActionPolicyState;
+  triggerId?: string;
+  reason?: ActionPolicyBlockedReason;
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
+  actionPolicy?: UpdateEligibilityActionPolicy;
 }
 
 export interface UpdateEligibilityContext {
@@ -167,8 +192,6 @@ interface TriggerInstanceMethods {
   agent?: string;
   configuration?: { threshold?: string };
   getId?: () => string;
-  isTriggerIncluded: (container: Container, include: string | undefined) => boolean;
-  isTriggerExcluded: (container: Container, exclude: string | undefined) => boolean;
 }
 
 function formatSnoozeDate(isoString: string): string {
@@ -458,6 +481,13 @@ export function computeUpdateEligibility(
       context.triggers as Record<string, TriggerInstanceMethods> | undefined,
     );
 
+  // Non-blocker action-policy reflection (spec-6.0.1-action-policy.md API surface).
+  // Stays `undefined` — and therefore omitted from the response — when no compatible
+  // action trigger exists at all (no-update-trigger-configured / agent-mismatch below
+  // own that messaging); populated in the `else` branch once a compatible trigger is
+  // confirmed to exist.
+  let actionPolicy: UpdateEligibilityActionPolicy | undefined;
+
   if (!typeOnlyTrigger) {
     // 11. no-update-trigger-configured — no docker/dockercompose trigger exists at all.
     // AgentClient._doHandshake() deregisters an agent's components before re-registering,
@@ -533,13 +563,29 @@ export function computeUpdateEligibility(
     }
 
     // 8. trigger-excluded / 9. trigger-not-included
-    // Action admission reads the action-scoped labels explicitly, never the deprecated mirror.
-    const { actionTriggerInclude: triggerInclude, actionTriggerExclude: triggerExclude } =
-      container;
-    const included = t.isTriggerIncluded(container, triggerInclude);
-    const excluded = t.isTriggerExcluded(container, triggerExclude);
+    //
+    // Derived from the action-policy resolver's hybrid multi-trigger walk
+    // (spec-6.0.1-action-policy.md decision 3) rather than a single trigger's
+    // raw include/exclude booleans: an explicit `dd.action.exclude` match
+    // anywhere in the ranked walk is an authoritative hard stop
+    // (trigger-excluded), while a container is only trigger-not-included
+    // when NO compatible candidate resolves to manual/auto access. This can
+    // authorize the container via a different, less-specific trigger than
+    // `t` above when the walk finds an authorized fallback — a deliberate,
+    // spec-called-out improvement over the pre-6.0.1 single-trigger check.
+    // `t` (the raw agent-compatible candidate from
+    // findDockerTriggerForContainer) still backs threshold-not-reached and
+    // rollback-container above, and backs this block's triggerId only in the
+    // trigger-not-included fallback case (no candidate to name a winner
+    // from); wiring those to the walk's winner too is left to a later slice.
+    const selection = selectActionTrigger(
+      context.triggers as unknown as Record<string, ActionPolicyTrigger> | undefined,
+      container,
+      { requireAuto: false },
+    );
 
-    if (excluded) {
+    if (selection?.reason === 'excluded') {
+      const triggerExclude = container.actionTriggerExclude;
       blockers.push(
         makeBlocker({
           reason: 'trigger-excluded',
@@ -549,24 +595,39 @@ export function computeUpdateEligibility(
             'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.',
           details: {
             triggerExclude,
-            triggerId: t.getId?.(),
+            triggerId: selection.triggerId,
           },
         }),
       );
-    } else if (!included) {
+      actionPolicy = { state: 'blocked', reason: 'excluded', triggerId: selection.triggerId };
+    } else if (!selection) {
+      const triggerInclude = container.actionTriggerInclude;
       blockers.push(
         makeBlocker({
           reason: 'trigger-not-included',
-          message: `Trigger not matched by container label dd.action.include='${triggerInclude}'.`,
+          message:
+            triggerInclude === undefined
+              ? 'Trigger not matched by container label dd.action.include.'
+              : `Trigger not matched by container label dd.action.include='${triggerInclude}'.`,
           actionable: true,
+          // References dd.action.auto alongside dd.action.include/exclude (locked-button
+          // tooltip copy, spec-6.0.1-action-policy.md): under a trigger's AUTO=onauto,
+          // dd.action.auto alone also grants manual access (decision 2) — the only
+          // include/exclude vocabulary this blocker used to name.
           actionHint:
-            'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.',
+            'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container ' +
+            '(or `dd.action.auto`, for a trigger configured with AUTO=onauto).',
           details: {
             triggerInclude,
             triggerId: t.getId?.(),
           },
         }),
       );
+      actionPolicy = { state: 'blocked', reason: 'not-included', triggerId: t.getId?.() };
+    } else {
+      // manual/auto: no blocker, but still worth reflecting so the UI can show the
+      // "Auto" badge (and distinguish it from a manual-only resolution).
+      actionPolicy = { state: selection.state, triggerId: selection.triggerId };
     }
   }
 
@@ -594,5 +655,6 @@ export function computeUpdateEligibility(
     eligible,
     blockers,
     evaluatedAt,
+    ...(actionPolicy ? { actionPolicy } : {}),
   };
 }

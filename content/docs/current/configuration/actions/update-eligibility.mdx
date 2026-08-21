@@ -70,8 +70,8 @@ This is also independent of the maturity gate. A candidate can be past its matur
 | `skip-digest` | **Digest skipped** | Soft | The remote digest is in the container's `skipDigests` list. | Remove the digest from the skip list in the **Update policy** menu. |
 | `maturity-not-reached` | **Maturing** | Soft | Container's effective `maturityMode` is `mature` and the update has not yet aged past `maturityMinAgeDays` days. The blocker message identifies the active policy tier (`env`, `label`, or `override`). The gate measures elapsed time from the earliest known point the update existed: for Docker Hub and GHCR (including lscr.io), Drydock uses the registry's real publish timestamp (`last_updated` / `updated_at`), so an image already soaked in the registry longer than the threshold clears immediately on first detection. For all other registries (ACR, ECR, GCR, Quay, Harbor, etc.) the OCI image-config `created` field is a build date, not a reliable push date, so the gate falls back to `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update. The gate clock survives container recreation as long as the same candidate remains pending; a changed tag, digest, or mutable-tag image restarts the soak. The candidate remains visible while held, and the detail view shows a live countdown plus the exact local `liftableAt` date and time. The blocker's `details.clockSource` (`publishedAt` or `detectedAt`) and `details.clockStartAt` (ISO timestamp) identify which clock won; the Update Status panel renders them as the single clock-sourced explanation line instead of a generic countdown. As soon as the gate lifts, Drydock fires a dedicated `maturity-cleared` notification instead of waiting for the next scan's generic `update-available` notification — see [Event Types](/docs/configuration/triggers#event-types) and [Maturity Gate Sweep](/docs/configuration/triggers#maturity-gate-sweep). | Wait for the gate to lift, use **Update Now**, change the active label/watcher setting, add a UI override, or **Revert** an override to the declarative value. |
 | `threshold-not-reached` | **Below threshold** | Soft | The matching trigger's `threshold` (e.g. `major`) is more restrictive than the detected update kind (e.g. `minor`). | Lower the trigger's `THRESHOLD` env var, or wait for an update that meets it. |
-| `trigger-excluded` | **Trigger excluded** | Soft | Container's `dd.action.exclude` label matches the candidate trigger. | Remove the exclusion from the container label, or rename the trigger so the rule no longer matches. |
-| `trigger-not-included` | **Trigger filtered** | Soft | Action triggers default to `AUTO=oninclude`, so the container needs an explicit `dd.action.include` label naming the trigger. The label is missing or doesn't list this trigger. | Add `dd.action.include=<trigger-name>` to the container's labels, or set `DD_ACTION_DOCKER[COMPOSE]_<NAME>_AUTO=true` on the trigger to fire on every matching container. |
+| `trigger-excluded` | **Trigger excluded** | Hard | Container's `dd.action.exclude` label matches the candidate trigger. | Remove the exclusion from the container label, or rename the trigger so the rule no longer matches. |
+| `trigger-not-included` | **Trigger filtered** | Hard | Action triggers default to `AUTO=oninclude`, so the container needs an explicit `dd.action.include` label naming the trigger. The label is missing or doesn't list this trigger. Under `AUTO=onauto`, automatic dispatch instead requires a `dd.action.auto` label match — `dd.action.include` alone only grants manual access in that mode. | Add `dd.action.include=<trigger-name>` to the container's labels (or `dd.action.auto=<trigger-name>` when the trigger is configured with `AUTO=onauto`), or set `DD_ACTION_DOCKER[COMPOSE]_<NAME>_AUTO=true` on the trigger to fire on every matching container. |
 | `agent-mismatch` | **Agent mismatch** | Hard | A `docker` / `dockercompose` trigger exists, but its `agent` doesn't match the container's agent. | Configure a trigger on the container's agent, or move the container to the trigger's agent. |
 | `no-update-trigger-configured` | **No trigger** | Hard | No `docker` or `dockercompose` action trigger is configured at all. | Configure `DD_ACTION_DOCKER_<NAME>_*` or `DD_ACTION_DOCKERCOMPOSE_<NAME>_*`. See [Triggers — Docker](/docs/configuration/triggers/docker) and [Triggers — Docker Compose](/docs/configuration/triggers/docker-compose). |
 | `self-update-unavailable` | **Self-update unavailable** | Hard | The container is Drydock itself and an update is available, but self-update can run neither over a bind-mounted Docker socket nor a TCP Docker host. | Bind-mount `/var/run/docker.sock` into the Drydock container, or point the watcher at a TCP Docker host. See [Self-Update](/docs/configuration/self-update). |
@@ -81,6 +81,10 @@ This is also independent of the maturity gate. A candidate can be past its matur
 | `maintenance-window-closed` | **Maintenance window closed** | Soft | Automatic-update dispatch evaluated the container while its watcher's maintenance window was closed. Drydock defers automatic updates outside the window regardless of whether the update was found by cron, manual watch, webhook, or post-update fast resync. Container-list and SSE responses enrich this live watcher state for both local and agent-owned containers. Manual UI/API updates pass no maintenance-window state and are not gated by this blocker. See [what the dialog is telling you](#maintenance-window-closed-in-the-update-dialog). | Click **Update anyway** to apply it now, wait for the next window, or adjust `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` / `_TZ` — remembering the expression is matched per minute, so `* 2-3 * * *` keeps the window open where `0 2-3 * * *` opens it for one minute. |
 
 <Callout type="info">The Update Status panel shows **Up to date** only when neither an actionable update nor an informational `updateInsight` exists. An insight-only pinned container instead shows an informational newer-version state with no update action. The panel also avoids duplicating `active-operation` when an in-progress operation badge already communicates the same state elsewhere.</Callout>
+
+<Callout type="warn" title="trigger-excluded / trigger-not-included became hard blockers in v1.7.0">
+Before v1.7.0 these two reasons were soft: the row showed a *Trigger filtered* / *Trigger excluded* pill, but a manual click still queued the update. As of v1.7.0 they're hard — the Update button is locked and the API rejects a manual update request with the blocker's message. This does not change `AUTO=oninclude`'s meaning: a matching `dd.action.include` label still grants both manual and automatic access under that mode. See [Deprecation Schedule](/docs/deprecations#action-include-exclude-soft-blocker).
+</Callout>
 
 ## Common scenarios
 
@@ -129,16 +133,21 @@ The `updateEligibility` object is returned on every container in `GET /api/v1/co
   "blockers": [
     {
       "reason": "trigger-not-included",
-      "severity": "soft",
+      "severity": "hard",
       "message": "Trigger not matched by container label dd.action.include='undefined'.",
       "actionable": true,
-      "actionHint": "Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.",
+      "actionHint": "Adjust the `dd.action.include` / `dd.action.exclude` labels on the container (or `dd.action.auto`, for a trigger configured with AUTO=onauto).",
       "details": {
         "triggerInclude": null,
         "triggerId": "dockercompose.mystack"
       }
     }
   ],
+  "actionPolicy": {
+    "state": "blocked",
+    "reason": "not-included",
+    "triggerId": "dockercompose.mystack"
+  },
   "evaluatedAt": "2026-04-26T14:44:00.000Z"
 }
 ```
@@ -153,9 +162,24 @@ Fields:
 - `blockers[].actionHint` — short next-step suggestion. Used as the second line in tooltips and the **Action** field on full-page cards.
 - `blockers[].liftableAt` — ISO timestamp when a time-limited blocker (snooze, maturity) will clear automatically.
 - `blockers[].details` — reason-specific payload (skipped tag, threshold value, agent IDs, etc.). Schema is per-reason and may grow over time.
+- `actionPolicy` — the resolved per-trigger access policy for this container's best-matching `docker` / `dockercompose` trigger, omitted when no compatible trigger exists at all (`no-update-trigger-configured`) or the agents don't match (`agent-mismatch`). See below.
 - `evaluatedAt` — ISO timestamp of the evaluation. Recomputed on every container update and watcher run.
 
 For maturity blockers, the UI treats `liftableAt` as the **gate eligibility time**. It is not a guaranteed deployment timestamp: automatic actions run after a watcher observes the now-mature candidate, and maintenance windows, security checks, trigger filters, queues, or an offline agent can delay application further.
+
+### `actionPolicy` — resolved action-trigger state
+
+`actionPolicy` reflects what the container's matching action trigger actually resolved to, independent of whether that resolution produced a blocker:
+
+- `state` — `'blocked'`, `'manual'`, or `'auto'`. `'auto'` means Drydock will apply an eligible update to this container without a manual click (this is what the UI's **Auto** badge reflects). `'manual'` means an update can be applied by hand but won't fire automatically. `'blocked'` means no matching trigger currently authorizes this container at all.
+- `triggerId` — the trigger the state was resolved against (e.g. `dockercompose.mystack`), when a compatible trigger was found.
+- `reason` — present only when `state` is `'blocked'`: `'excluded'` (an explicit `dd.action.exclude` match) or `'not-included'` (no qualifying include/auto label under the trigger's `AUTO` mode).
+
+The same resolved state is also attached per-trigger as `resolvedState` on `GET /api/v1/containers/{id}/triggers`, so a container's full trigger list can be rendered with each candidate's individual verdict rather than only the single winning trigger.
+
+<Callout type="warn" title="AUTO also sets the baseline access default, not just automatic execution">
+A trigger's `AUTO` mode doesn't only decide whether `actionPolicy.state` can become `'auto'` — under `AUTO=all` and `AUTO=none`, it also decides whether `dd.action.include` is consulted for `'manual'` access at all. `AUTO=none` resolves to `'manual'` for every watched container it's compatible with, regardless of `dd.action.include`; `AUTO=all` resolves to `'auto'` for every one of them the same way. Only `AUTO=oninclude` and `AUTO=onauto` make `dd.action.include` (and, under `onauto`, `dd.action.auto`) the deciding factor. See [Triggers — `_AUTO`](/docs/configuration/triggers#common-trigger-configuration) and [Watchers — Labels](/docs/configuration/watchers#labels).
+</Callout>
 
 ## Related
 

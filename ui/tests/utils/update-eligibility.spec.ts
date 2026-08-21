@@ -45,6 +45,9 @@ describe('BLOCKER_SEVERITY', () => {
     expect(BLOCKER_SEVERITY['agent-mismatch']).toBe('hard');
     expect(BLOCKER_SEVERITY['no-update-trigger-configured']).toBe('hard');
     expect(BLOCKER_SEVERITY['self-update-unavailable']).toBe('hard');
+    // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
+    expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('hard');
+    expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('hard');
   });
 
   it('maps soft blockers correctly', () => {
@@ -53,8 +56,6 @@ describe('BLOCKER_SEVERITY', () => {
     expect(BLOCKER_SEVERITY['skip-digest']).toBe('soft');
     expect(BLOCKER_SEVERITY['maturity-not-reached']).toBe('soft');
     expect(BLOCKER_SEVERITY['threshold-not-reached']).toBe('soft');
-    expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('soft');
-    expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('soft');
     expect(BLOCKER_SEVERITY['maintenance-window-closed']).toBe('soft');
   });
 });
@@ -213,7 +214,7 @@ describe('getPrimarySoftBlocker', () => {
   it('returns the first soft blocker in array order', () => {
     const hard = makeBlocker({ reason: 'rollback-container' });
     const first = makeBlocker({ reason: 'threshold-not-reached' });
-    const second = makeBlocker({ reason: 'trigger-excluded' });
+    const second = makeBlocker({ reason: 'snoozed' });
     const result = getPrimarySoftBlocker(makeEligibility({ blockers: [hard, first, second] }));
     expect(result?.reason).toBe('threshold-not-reached');
   });
@@ -225,7 +226,7 @@ describe('updateButtonState', () => {
     const withHard = makeEligibility({ blockers: [makeBlocker({ reason: 'agent-mismatch' })] });
     expect(updateButtonState(withHard, false)).toBe('none');
     const withSoft = makeEligibility({
-      blockers: [makeBlocker({ reason: 'trigger-not-included' })],
+      blockers: [makeBlocker({ reason: 'threshold-not-reached' })],
     });
     expect(updateButtonState(withSoft, false)).toBe('none');
   });
@@ -245,7 +246,7 @@ describe('updateButtonState', () => {
 
   it('returns soft when there are only soft blockers', () => {
     const eligibility = makeEligibility({
-      blockers: [makeBlocker({ reason: 'trigger-not-included' })],
+      blockers: [makeBlocker({ reason: 'threshold-not-reached' })],
     });
     expect(updateButtonState(eligibility, true)).toBe('soft');
   });
@@ -253,7 +254,7 @@ describe('updateButtonState', () => {
   it('hard takes precedence over soft when both are present', () => {
     const eligibility = makeEligibility({
       blockers: [
-        makeBlocker({ reason: 'trigger-not-included' }),
+        makeBlocker({ reason: 'threshold-not-reached' }),
         makeBlocker({ reason: 'agent-mismatch' }),
       ],
     });
@@ -262,7 +263,7 @@ describe('updateButtonState', () => {
 
   it('suppresses soft to ready when hasActiveOperationBadge is true', () => {
     const eligibility = makeEligibility({
-      blockers: [makeBlocker({ reason: 'trigger-not-included' })],
+      blockers: [makeBlocker({ reason: 'threshold-not-reached' })],
     });
     expect(updateButtonState(eligibility, true, true)).toBe('ready');
   });
@@ -276,7 +277,7 @@ describe('updateButtonState', () => {
 
   it('suppresses every update action in notify mode', () => {
     const soft = makeEligibility({
-      blockers: [makeBlocker({ reason: 'trigger-not-included' })],
+      blockers: [makeBlocker({ reason: 'threshold-not-reached' })],
     });
     const hard = makeEligibility({ blockers: [makeBlocker({ reason: 'agent-mismatch' })] });
 
@@ -437,10 +438,13 @@ describe('primaryBlockerForButton', () => {
   });
 
   it('returns the primary soft blocker when only soft blockers exist', () => {
-    const first = makeBlocker({ reason: 'trigger-not-included', message: 'Trigger not included.' });
+    const first = makeBlocker({
+      reason: 'threshold-not-reached',
+      message: 'Threshold not reached.',
+    });
     const second = makeBlocker({ reason: 'snoozed', message: 'Snoozed.' });
     const result = primaryBlockerForButton(makeEligibility({ blockers: [first, second] }));
-    expect(result?.reason).toBe('trigger-not-included');
+    expect(result?.reason).toBe('threshold-not-reached');
   });
 
   it('hard takes precedence over soft when both are present', () => {

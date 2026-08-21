@@ -20,13 +20,8 @@ ENV DD_LOG_FORMAT=text
 HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; /bin/healthcheck ${DD_SERVER_PORT:-3000}"]
 
 # Install system packages and cosign.
-# hadolint ignore=DL3018: curl remains intentionally unpinned. Alpine's per-arch
-# mirrors rotate -rN releases at different times; pinning to one version breaks
-# multi-arch builds during the sync window (see rc.21).
-# hadolint ignore=DL3018
 RUN apk add --no-cache \
     bash=5.3.9-r1 \
-    curl \
     git=2.54.0-r0 \
     jq=1.8.1-r0 \
     openssl=3.5.7-r0 \
@@ -78,8 +73,11 @@ FROM base AS release
 ENV DD_LOG_FORMAT=text
 
 # Remove unnecessary network utilities (busybox symlinks) and npm to reduce attack surface.
-# curl is kept for backward compatibility with user-defined HEALTHCHECK overrides;
-# v1.6.0 is the final warning release, and removal is scheduled for v1.7.0.
+# curl was removed from the apk install list above in v1.7.0 (deprecated since
+# v1.5.x, warned about through v1.6.0); the image healthcheck has used the
+# compiled /bin/healthcheck binary since v1.5.0, so nothing in the image
+# depends on curl anymore. User-defined HEALTHCHECK overrides that still shell
+# out to curl will break — see DEPRECATIONS.md.
 RUN rm -f /usr/bin/wget /usr/bin/nc \
     && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
