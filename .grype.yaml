@@ -14,10 +14,10 @@
 # pick up by bumping the pinned Trivy image index or Alpine package (the cosign
 # 2.6.3-r1 -> 3.0.6-r1 bump already cleared the bulk of them). Gating the build
 # on a module graph we don't control is the same manifest-vs-shipped mismatch we
-# dropped Snyk over. The Node runtime, musl, curl, git, every other OS package,
-# and the entire app dependency graph stay fully gated — confirmed by the scan,
-# which after the base bump leaves residual HIGH/CRITICAL findings only at these
-# two binary locations.
+# dropped Snyk over. The Node runtime, musl, git, and every other OS package
+# (curl was removed from the image in v1.7.0) — plus the entire app dependency
+# graph — stay fully gated, confirmed by the scan, which after the base bump
+# leaves residual HIGH/CRITICAL findings only at these two binary locations.
 #
 # Revisit on each pinned-tool or base-image bump: fixed upstream binaries make
 # these scopes stop matching anything.
@@ -30,10 +30,11 @@
 # is no version to bump to yet. The gate scores it High off the generic CVSS
 # 3.1 vector (AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H, 7.5); OpenSSL's own advisory
 # rates it Low, because it only bites a QUIC server accepting unauthenticated
-# Initial packets. Drydock links libssl3/libcrypto3 through curl and the
-# openssl CLI as TLS *clients* only — registry queries and the healthcheck —
-# and runs no QUIC/HTTP3 server anywhere, so the vulnerable code path is not
-# reachable here regardless of the CVSS bucket.
+# Initial packets. Drydock links libssl3/libcrypto3 through the openssl CLI
+# and Node's own TLS stack as TLS *clients* only — registry queries and the
+# healthcheck — and runs no QUIC/HTTP3 server anywhere, so the vulnerable code
+# path is not reachable here regardless of the CVSS bucket. (curl was removed
+# from the image in v1.7.0 and is no longer part of that TLS-client surface.)
 #
 # Scoped to this exact CVE on these three package names (not by location), so
 # a different HIGH/CRITICAL finding in openssl/libssl3/libcrypto3 still fails

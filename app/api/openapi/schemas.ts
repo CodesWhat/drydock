@@ -327,6 +327,7 @@ export const openApiSchemas = {
     properties: {
       detected: { type: 'boolean' },
       commandPreview: { type: 'string' },
+      containerName: { type: 'string' },
     },
     required: ['detected'],
     additionalProperties: false,

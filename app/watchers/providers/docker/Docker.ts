@@ -55,6 +55,7 @@ import {
   mapContainerToContainerReport as mapContainerToContainerReportState,
   watchContainer as watchContainerState,
 } from './container-processing.js';
+import { warnIfCurlHealthcheckOverride } from './curl-healthcheck-warning.js';
 import {
   endDigestCachePollCycleForRegistries,
   startDigestCachePollCycleForRegistries,
@@ -612,6 +613,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.ensureLogger();
     this.isWatcherDeregistered = false;
     this.warnIfNarrowMaintenanceWindow();
+    await warnIfCurlHealthcheckOverride(this.log);
     await this.initWatcher();
     this.log.info(`Cron scheduled (${this.configuration.cron})`);
     this.watchCron = cron.schedule(this.configuration.cron, () => this.watchFromCron(), {
