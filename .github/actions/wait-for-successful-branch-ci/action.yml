@@ -19,6 +19,15 @@ inputs:
     description: Seconds to sleep between polling attempts
     required: false
     default: '300'
+  allow-dispatch-events:
+    description: >-
+      Also accept workflow_dispatch-triggered runs as CI evidence, not just push
+      runs. Maintenance cuts only: a named dev branch's push trigger only covers
+      main, so a maintenance-branch SHA can never have a qualifying push run —
+      the CI evidence there is a workflow_dispatch run instead. Leave 'false' for
+      normal cuts, where it is a no-op.
+    required: false
+    default: 'false'
 
 runs:
   using: composite
@@ -59,6 +68,7 @@ runs:
         TARGET_SHA: ${{ inputs.target-sha }}
         MAX_ATTEMPTS: ${{ inputs.max-attempts }}
         SLEEP_SECONDS: ${{ inputs.sleep-seconds }}
+        ALLOW_DISPATCH_EVENTS: ${{ inputs.allow-dispatch-events }}
       run: |
         set -euo pipefail
 
@@ -73,9 +83,17 @@ runs:
             -H "Accept: application/vnd.github+json" \
             "${runs_url}")"
 
-          filtered="$(echo "${runs_json}" | jq --arg sha "${TARGET_SHA}" '{
+          # Normal cuts only accept push-triggered runs: ci-verify.yml's push
+          # trigger covers main only, so a main-HEAD SHA always has one to find.
+          # Maintenance cuts build from a named dev branch, which push never
+          # covers, so allow-dispatch-events also accepts workflow_dispatch runs
+          # there — the CI-green precondition a human confirmed by manually
+          # dispatching ci-verify.yml/e2e-playwright.yml on that branch first.
+          filtered="$(echo "${runs_json}" | jq --arg sha "${TARGET_SHA}" --arg allowDispatch "${ALLOW_DISPATCH_EVENTS}" '{
             workflow_runs: [.workflow_runs[]
-              | select(.head_sha == $sha and .event == "push" and ((.head_branch // "") | length > 0))]
+              | select(.head_sha == $sha
+                  and (.event == "push" or ($allowDispatch == "true" and .event == "workflow_dispatch"))
+                  and ((.head_branch // "") | length > 0))]
           }')"
 
           success_count="$(echo "${filtered}" | jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"

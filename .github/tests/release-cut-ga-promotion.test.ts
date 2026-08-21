@@ -4,9 +4,15 @@ import { loadWorkflow, type WorkflowStep } from './workflow-test-utils';
 
 const workflowPath = fileURLToPath(new URL('../workflows/release-cut.yml', import.meta.url));
 
-const prereleaseOnlySignSteps = [
-  'Sign release artifact',
-  'Verify release artifact signature',
+// Cosign-only: these steps only assert signing identity, which stays true
+// regardless of source_ref, so they gate on is_prerelease alone.
+const prereleaseOnlyCosignSteps = ['Sign release artifact', 'Verify release artifact signature'];
+
+// Provenance/attestation steps additionally skip maintenance cuts: publishing
+// them would claim the artifact was built from main HEAD (the OIDC sha
+// claim), which is false whenever source_ref names a maintenance branch. See
+// the "Defect 3" comment above the container-image attestation steps.
+const prereleaseOnlyAttestationSteps = [
   'Attest release artifact provenance',
   'Export release provenance asset',
   'Verify release artifact provenance attestation',
@@ -20,6 +26,12 @@ const gaPromotionSteps = [
   'Verify candidate artifact is reproducible from source SHA',
   'Promote candidate artifact to GA release filenames',
 ];
+
+// Of the GA-promotion steps, only this one re-verifies a cryptographic
+// build-provenance claim; it must additionally skip maintenance cuts (the
+// candidate RC never carried one — see "Defect 3"). The rest are GA-gated
+// only.
+const gaPromotionAttestationStep = 'Verify candidate artifact provenance attestation';
 
 const assetSuffixes = [
   'tar.gz',
@@ -64,11 +76,24 @@ test('release-cut reads CHANGELOG from the target-sha snapshot, not the checked-
   }
 });
 
-test('release-cut gates artifact sign/attest/verify steps to prereleases only', () => {
-  for (const stepName of prereleaseOnlySignSteps) {
+test('release-cut gates cosign-only artifact steps to prereleases only, with no maintenance-cut exception', () => {
+  for (const stepName of prereleaseOnlyCosignSteps) {
     const step = getStep(stepName);
 
     expect(step?.if).toBe("steps.tag.outputs.is_prerelease == 'true'");
+  }
+});
+
+test('release-cut additionally gates artifact provenance attestation steps off maintenance cuts', () => {
+  for (const stepName of prereleaseOnlyAttestationSteps) {
+    const step = getStep(stepName);
+
+    expect(
+      step?.if,
+      `expected step "${stepName}" to require is_prerelease AND skip maintenance cuts`,
+    ).toBe(
+      "steps.tag.outputs.is_prerelease == 'true' && steps.source_ref.outputs.is_maintenance_cut != 'true'",
+    );
   }
 });
 
@@ -80,7 +105,13 @@ test('release-cut promotes the candidate artifact at GA in a fixed step order, e
     const step = getStep(stepName);
 
     expect(step, `expected step "${stepName}" to exist`).toBeDefined();
-    expect(step?.if).toBe("steps.tag.outputs.is_prerelease == 'false'");
+    if (stepName === gaPromotionAttestationStep) {
+      expect(step?.if).toBe(
+        "steps.tag.outputs.is_prerelease == 'false' && steps.source_ref.outputs.is_maintenance_cut != 'true'",
+      );
+    } else {
+      expect(step?.if).toBe("steps.tag.outputs.is_prerelease == 'false'");
+    }
   }
 
   const indices = gaPromotionSteps.map(indexOf);
@@ -89,7 +120,7 @@ test('release-cut promotes the candidate artifact at GA in a fixed step order, e
   }
 });
 
-test('release-cut downloads and promotes exactly the six candidate asset suffixes', () => {
+test('release-cut downloads and promotes the five always-present candidate assets, plus intoto.jsonl unless it is a maintenance cut', () => {
   const downloadStep = getStep('Download candidate release artifact for promotion');
   const promoteStep = getStep('Promote candidate artifact to GA release filenames');
 
@@ -97,14 +128,28 @@ test('release-cut downloads and promotes exactly the six candidate asset suffixe
   // asset-CDN failures must not abort a GA run), so its script lives in
   // `with.command`, not `run`.
   expect(downloadStep?.uses).toContain('nick-fields/retry@');
+  expect(downloadStep?.env).toMatchObject({
+    IS_MAINTENANCE_CUT: '${{ steps.source_ref.outputs.is_maintenance_cut }}',
+  });
   const downloadCommand = String(downloadStep?.with?.command ?? '');
-  for (const suffix of assetSuffixes) {
-    expect(downloadCommand).toContain(`--pattern "drydock-\${CANDIDATE_TAG}.${suffix}"`);
+  const alwaysPresentSuffixes = assetSuffixes.filter((suffix) => suffix !== 'tar.gz.intoto.jsonl');
+  for (const suffix of alwaysPresentSuffixes) {
+    expect(downloadCommand).toContain(`"drydock-\${CANDIDATE_TAG}.${suffix}"`);
   }
+  // intoto.jsonl is conditionally appended, not part of the unconditional
+  // patterns array — a maintenance-cut RC never produced one to download.
+  expect(downloadCommand).toContain('if [ "${IS_MAINTENANCE_CUT}" != "true" ]; then');
+  expect(downloadCommand).toContain('patterns+=("drydock-${CANDIDATE_TAG}.tar.gz.intoto.jsonl")');
+  expect(downloadCommand).toMatch(/for pattern in "\$\{patterns\[@\]\}"/);
 
+  expect(promoteStep?.env).toMatchObject({
+    IS_MAINTENANCE_CUT: '${{ steps.source_ref.outputs.is_maintenance_cut }}',
+  });
   expect(promoteStep?.run).toContain(
-    'for ext in tar.gz tar.gz.sha256 tar.gz.bundle tar.gz.sig tar.gz.pem tar.gz.intoto.jsonl',
+    'exts=(tar.gz tar.gz.sha256 tar.gz.bundle tar.gz.sig tar.gz.pem)',
   );
+  expect(promoteStep?.run).toContain('if [ "${IS_MAINTENANCE_CUT}" != "true" ]; then');
+  expect(promoteStep?.run).toContain('exts+=(tar.gz.intoto.jsonl)');
 });
 
 test('release-cut verifies candidate provenance against SOURCE_SHA, keeping TARGET_SHA for prereleases', () => {
