@@ -451,11 +451,9 @@ Thèmes généraux uniquement ; consultez [CHANGELOG.md](CHANGELOG.md) pour les
 
 <h2 align="center" id="star-history">Historique des étoiles</h2>
 
-<p align="center">Tendance de croissance via Warpchart :</p>
-
 <div align="center">
-  <a href="https://warpchart.dev/r/CodesWhat/drydock">
-    <img alt="Warpchart Growth Chart" src="https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock" />
+  <a href="https://github.com/CodesWhat/drydock/stargazers">
+    <img alt="Star History Chart" src="docs/assets/star-history.svg" />
   </a>
 </div>
 

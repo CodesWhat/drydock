@@ -451,11 +451,9 @@ Tylko motywy ogólne; szczegóły poszczególnych wersji zawiera [CHANGELOG.md](
 
 <h2 align="center" id="star-history">Historia gwiazd</h2>
 
-<p align="center">Trend wzrostu według Warpchart:</p>
-
 <div align="center">
-  <a href="https://warpchart.dev/r/CodesWhat/drydock">
-    <img alt="Warpchart Growth Chart" src="https://warpchart.dev/api/chart?repo=CodesWhat%2Fdrydock" />
+  <a href="https://github.com/CodesWhat/drydock/stargazers">
+    <img alt="Star History Chart" src="docs/assets/star-history.svg" />
   </a>
 </div>
 
