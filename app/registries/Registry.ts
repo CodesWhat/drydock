@@ -30,7 +30,7 @@ export interface RegistryTagsList {
 interface ManifestEntry {
   digest: string;
   mediaType: string;
-  platform: {
+  platform?: {
     architecture: string;
     os: string;
     variant?: string;
@@ -79,6 +79,13 @@ function isLegacyImageConfig(mediaType: string | undefined): boolean {
 }
 
 /**
+ * Depth bound for following nested manifest indexes. Buildx with attestations
+ * produces exactly one level of nesting; this leaves headroom without letting a
+ * malformed or hostile registry response walk indefinitely.
+ */
+const MAX_MANIFEST_INDEX_DEPTH = 3;
+
+/**
  * Filter a manifest list to find the best match for the requested platform.
  * Returns the matched manifest entry or undefined.
  */
@@ -89,7 +96,7 @@ function filterManifestByPlatform(
   variant?: string,
 ): ManifestEntry | undefined {
   const matches = manifests.filter(
-    (m) => m.platform.architecture === architecture && m.platform.os === os,
+    (m) => m.platform?.architecture === architecture && m.platform?.os === os,
   );
 
   if (matches.length === 0) {
@@ -101,7 +108,7 @@ function filterManifestByPlatform(
 
   // Refine using variant when multiple matches exist
   if (matches.length > 1 && variant !== undefined) {
-    const variantMatch = matches.find((m) => m.platform.variant === variant);
+    const variantMatch = matches.find((m) => m.platform?.variant === variant);
     if (variantMatch) {
       best = variantMatch;
     }
@@ -311,11 +318,19 @@ class Registry<
 
   /**
    * Handle schemaVersion 2 manifests (multi-platform list or single manifest).
+   * @param depth How many nested manifest indexes have already been followed
+   *   to reach `response`. Buildx with SBOM/provenance attestations emits a
+   *   per-platform entry that is itself an index (real image manifest plus an
+   *   attestation manifest), so a matched entry can require following one more
+   *   level before a concrete manifest or legacy image config is reached.
+   *   Bounded by `MAX_MANIFEST_INDEX_DEPTH` so a malformed or hostile registry
+   *   response cannot recurse indefinitely.
    */
   private async handleSchemaV2(
     image: ContainerImage,
     response: RegistryManifestResponse,
     tagOrDigest: string,
+    depth = 0,
   ): Promise<RegistryManifest> {
     this.log.debug(`${image.name} - Manifests found with schemaVersion = 2`);
     this.log.debug(`${image.name} - Manifests media type detected [${response.mediaType}]`);
@@ -335,6 +350,25 @@ class Registry<
         image.variant,
       );
       if (matched) {
+        if (isManifestList(matched.mediaType)) {
+          if (depth >= MAX_MANIFEST_INDEX_DEPTH) {
+            throw new Error(
+              `Unexpected error; manifest index nested past ${MAX_MANIFEST_INDEX_DEPTH} levels`,
+            );
+          }
+          this.log.debug(
+            `${image.name} - Matched entry [digest=${matched.digest}] is itself a manifest index, following [depth=${depth + 1}]`,
+          );
+          const nested = await this.callRegistry<RegistryManifestResponse>({
+            image,
+            url: `${image.registry.url}/${image.name}/manifests/${matched.digest}`,
+            headers: {
+              Accept:
+                'application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json',
+            },
+          });
+          return this.handleSchemaV2(image, nested, matched.digest, depth + 1);
+        }
         this.log.debug(
           `${image.name} - Manifest found with [digest=${matched.digest}, mediaType=${matched.mediaType}]`,
         );

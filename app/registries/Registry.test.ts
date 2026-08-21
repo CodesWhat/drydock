@@ -1495,6 +1495,161 @@ describe('getImageManifestDigest', () => {
       'Unexpected error; no manifest found',
     );
   });
+
+  // --- Nested OCI manifest index handling (issue #814) ---
+
+  test('should follow a nested manifest index to the real image manifest, ignoring the attestation manifest', async () => {
+    // ghcr.io/goauthentik/server-style shape: the amd64 entry in the top-level
+    // index is itself an OCI index containing an attestation manifest
+    // (platform arch/os "unknown") alongside the real image manifest.
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:real-image-manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return manifestListResponse([
+          platformManifest(
+            'amd64',
+            'linux',
+            'sha256:nested-index',
+            'application/vnd.oci.image.index.v1+json',
+          ),
+        ]);
+      }
+      if (options.url === 'url/image/manifests/sha256:nested-index') {
+        return manifestListResponse(
+          [
+            platformManifest(
+              'unknown',
+              'unknown',
+              'sha256:attestation-manifest',
+              'application/vnd.oci.image.manifest.v1+json',
+            ),
+            platformManifest(
+              'amd64',
+              'linux',
+              'sha256:real-image-manifest',
+              'application/vnd.oci.image.manifest.v1+json',
+            ),
+          ],
+          'application/vnd.oci.image.index.v1+json',
+        );
+      }
+      if (options.url === 'url/image/manifests/sha256:real-image-manifest') {
+        // fetchImageCreatedFromManifestConfig follow-up; no config present
+        return { schemaVersion: 2 };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    const result = await registryMocked.getImageManifestDigest(imageInput());
+    expect(result).toStrictEqual({ version: 2, digest: 'sha256:real-image-manifest' });
+    // Confirm the HEAD request resolved the real manifest, not the attestation
+    const headCall = (registryMocked.callRegistry as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => c[0].method === 'head',
+    );
+    expect(headCall[0].url).toContain('sha256:real-image-manifest');
+  });
+
+  test('should throw when nested manifest indexes exceed the depth bound', async () => {
+    // Every response is itself another manifest index, so without the depth
+    // guard this would recurse forever instead of throwing.
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      const ref = options.url.split('/').pop();
+      const currentDepth = ref === 'tag' ? 0 : Number(ref.replace('sha256:nested-', ''));
+      const nextDigest = `sha256:nested-${currentDepth + 1}`;
+      return manifestListResponse([
+        platformManifest('amd64', 'linux', nextDigest, 'application/vnd.oci.image.index.v1+json'),
+      ]);
+    });
+
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'Unexpected error; manifest index nested past 3 levels',
+    );
+  });
+
+  test('should skip a manifest-list entry missing the platform field instead of throwing', async () => {
+    // Per the OCI spec, platform is not guaranteed on every manifest-list entry.
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = headDigestThenBody(
+      'sha256:valid-head-digest',
+      manifestListResponse([
+        {
+          digest: 'sha256:no-platform',
+          mediaType: 'application/vnd.docker.distribution.manifest.v2+json',
+        },
+        platformManifest(
+          'amd64',
+          'linux',
+          'sha256:valid-platform',
+          'application/vnd.docker.distribution.manifest.v2+json',
+        ),
+      ]),
+    );
+
+    const result = await registryMocked.getImageManifestDigest(imageInput());
+    expect(result).toStrictEqual({ version: 2, digest: 'sha256:valid-head-digest' });
+    const headCall = (registryMocked.callRegistry as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => c[0].method === 'head',
+    );
+    expect(headCall[0].url).toContain('sha256:valid-platform');
+  });
+
+  test('should resolve a top index whose per-arch entry is a nested index down to a real manifest (issue #814 regression)', async () => {
+    // Reproduces the reported shape: top-level index -> per-arch index -> real
+    // image manifest, resolved end-to-end through getImageManifestDigest.
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = vi.fn((options) => {
+      if (options.method === 'head') {
+        return { headers: { 'docker-content-digest': 'sha256:goauthentik-manifest' } };
+      }
+      if (options.url === 'url/image/manifests/tag') {
+        return manifestListResponse([
+          platformManifest(
+            'arm64',
+            'linux',
+            'sha256:arm64-manifest',
+            'application/vnd.oci.image.manifest.v1+json',
+          ),
+          platformManifest(
+            'amd64',
+            'linux',
+            'sha256:amd64-index',
+            'application/vnd.oci.image.index.v1+json',
+          ),
+        ]);
+      }
+      if (options.url === 'url/image/manifests/sha256:amd64-index') {
+        return manifestListResponse(
+          [
+            platformManifest(
+              'amd64',
+              'linux',
+              'sha256:goauthentik-manifest',
+              'application/vnd.oci.image.manifest.v1+json',
+            ),
+            platformManifest(
+              'unknown',
+              'unknown',
+              'sha256:attestation',
+              'application/vnd.oci.image.manifest.v1+json',
+            ),
+          ],
+          'application/vnd.oci.image.index.v1+json',
+        );
+      }
+      if (options.url === 'url/image/manifests/sha256:goauthentik-manifest') {
+        // fetchImageCreatedFromManifestConfig follow-up; no config present
+        return { schemaVersion: 2 };
+      }
+      throw new Error(`Unexpected request: ${JSON.stringify(options)}`);
+    });
+
+    const result = await registryMocked.getImageManifestDigest(imageInput());
+    expect(result).toStrictEqual({ version: 2, digest: 'sha256:goauthentik-manifest' });
+  });
 });
 
 describe('getImageManifestDigest logging', () => {

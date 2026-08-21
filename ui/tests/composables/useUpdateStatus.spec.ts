@@ -335,6 +335,84 @@ describe('deriveUpdateStatus', () => {
     expect(status.insightNote).toBeUndefined();
   });
 
+  it('reports unknown when a registry error accompanies a negative update claim (#814, #808)', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: null,
+          registryError: 'registry unavailable',
+          updateEligibility: eligibility([
+            blocker({ reason: 'no-update-available', severity: 'hard', actionable: false }),
+          ]),
+        },
+      }),
+    );
+
+    expect(status.state).toBe('unknown');
+    expect(status.tone).toBe('warning');
+    expect(status.summary).toBe('Update status unknown. The last check could not complete.');
+    expect(status.hasUpdate).toBe(false);
+  });
+
+  it('still reports up to date when there is no registry error', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: null,
+          updateEligibility: eligibility([
+            blocker({ reason: 'no-update-available', severity: 'hard', actionable: false }),
+          ]),
+        },
+      }),
+    );
+
+    expect(status.state).toBe('up-to-date');
+    expect(status.summary).toBe('Up to date.');
+  });
+
+  it('never downgrades a genuine known update to unknown even when a registry error is also present (#814, #808)', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          registryError: 'registry unavailable',
+          updateEligibility: eligibility(),
+        },
+      }),
+    );
+
+    expect(status.hasUpdate).toBe(true);
+    expect(status.state).not.toBe('unknown');
+    expect(status.state).toBe('ready');
+  });
+
+  it('lets a registry error win over a pin-gate insight when both are present and there is no actionable update (#814, #808)', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'immich-machine-learning',
+          newTag: null,
+          newDigest: null,
+          registryError: 'registry unavailable',
+          updateInsight: { tag: 'v3.0.2-openvino', kind: 'major' },
+          updateEligibility: eligibility([
+            blocker({ reason: 'no-update-available', severity: 'hard', actionable: false }),
+          ]),
+        },
+      }),
+    );
+
+    expect(status.state).toBe('unknown');
+    expect(status.summary).toBe('Update status unknown. The last check could not complete.');
+  });
+
   it('describes a pinned-tag insight as newer-but-non-actionable (#498)', () => {
     const status = deriveUpdateStatus(
       input({
