@@ -148,6 +148,20 @@ function normalizeDockerProxyBody(body: unknown): Buffer {
   return Buffer.from(JSON.stringify(body));
 }
 
+// Decodes a Docker API proxy response body from an edge agent response frame.
+// When the edge-response-body-b64 capability was negotiated for the
+// connection, the agent carries the raw response bytes as standard base64 in
+// `bodyBase64` (e.g. so a non-JSON body like the literal "OK" from /_ping
+// survives the tunnel). If `bodyBase64` is absent, this falls through to the
+// existing legacy `body` handling unchanged — a bare string there still means
+// literal UTF-8 bytes, exactly as before.
+function decodeDockerProxyResponseBody(record: Record<string, unknown>): Buffer {
+  if (typeof record.bodyBase64 === 'string') {
+    return Buffer.from(record.bodyBase64, 'base64');
+  }
+  return normalizeDockerProxyBody(record.body);
+}
+
 function normalizeDockerProxyHeaders(headers: unknown): Record<string, string> {
   if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
     return {};
@@ -572,7 +586,7 @@ export class AgentClient {
       return {
         statusCode: Number(record.statusCode),
         headers: normalizeDockerProxyHeaders(record.headers),
-        body: normalizeDockerProxyBody(record.body),
+        body: decodeDockerProxyResponseBody(record),
       };
     }
 
