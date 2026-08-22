@@ -973,6 +973,89 @@ describe('hello verification — happy path', () => {
     expect(welcome.data.config.supportedProtocols).toBe('portwing/1.0');
   });
 
+  // edge-response-body-b64: the welcome frame must advertise this exact
+  // capability token so a new portwing agent knows it can send a non-JSON
+  // response body as base64. If the token is dropped, renamed, or the
+  // `capabilities` field removed from welcome, portwing silently falls back
+  // to the legacy body path forever on this controller — this test fails if
+  // that additive field regresses.
+  test('welcome advertises the edge-response-body-b64 capability', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'f1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await vi.waitFor(() => {
+      expect(ws.sentMessages.length).toBeGreaterThan(0);
+    });
+
+    const welcome = JSON.parse(ws.sentMessages[0]) as {
+      type: string;
+      data: { capabilities: string[] };
+    };
+    expect(welcome.type).toBe('welcome');
+    expect(welcome.data.capabilities).toContain('edge-response-body-b64');
+  });
+
+  // A hello frame from an old portwing agent has no `capabilities` field at
+  // all (it predates the field being read on this side). The handshake must
+  // still complete with a welcome — no protocol-mismatch, no compat
+  // regression — since this is an additive, capability-gated negotiation,
+  // not a protocol version bump.
+  test('an old-shaped hello with no capabilities field still completes the handshake', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'f2b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    // capabilities: undefined drops the key entirely on JSON.stringify,
+    // reproducing the exact shape of a pre-capabilities hello frame.
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { capabilities: undefined }));
+    await vi.waitFor(() => {
+      expect(ws.sentMessages.length).toBeGreaterThan(0);
+    });
+
+    const welcome = JSON.parse(ws.sentMessages[0]) as {
+      type: string;
+      data: { capabilities: string[] };
+    };
+    expect(welcome.type).toBe('welcome');
+    expect(welcome.data.capabilities).toContain('edge-response-body-b64');
+  });
+
   test('uses the controller-configured poll interval in the welcome and agent metadata', async () => {
     mockGetPortwingPollInterval.mockReturnValueOnce(5);
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
