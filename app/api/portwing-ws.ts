@@ -43,6 +43,18 @@ export const PORTWING_WS_ROUTE_PATTERN = /^\/api(?:\/v1)?\/portwing\/ws$/;
 
 const PROTOCOL_STRING = 'portwing/1.0';
 const SERVER_COMPAT_LEVEL = '1.4.0';
+// Capability tokens this controller advertises in the welcome frame's
+// `capabilities` array. Additive and capability-gated — NOT a protocol
+// version bump — so an agent that doesn't recognize a token simply ignores
+// it and keeps today's behavior. Exact string, byte-for-byte match required
+// on the agent side; see portwing's edge tunnel wire contract.
+//
+// edge-response-body-b64: this controller decodes a response frame's
+// `bodyBase64` field (standard base64) when present, letting the agent carry
+// a non-JSON Docker response body (e.g. a bare "OK" from /_ping) across the
+// tunnel without breaking JSON framing.
+const EDGE_RESPONSE_BODY_B64_CAPABILITY = 'edge-response-body-b64';
+const WELCOME_CAPABILITIES: readonly string[] = [EDGE_RESPONSE_BODY_B64_CAPABILITY];
 const HELLO_TIMEOUT_MS = 30_000;
 const NONCE_PATTERN = /^[0-9a-f]{32}$/;
 // Key IDs are hex(SHA-256(raw32Bytes)[:8]) → exactly 16 lowercase hex chars.
@@ -807,6 +819,7 @@ async function processHello(
         supportedProtocols: PROTOCOL_STRING,
         serverCompatLevel: SERVER_COMPAT_LEVEL,
       },
+      capabilities: WELCOME_CAPABILITIES,
     },
   };
   try {
