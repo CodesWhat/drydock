@@ -129,13 +129,7 @@ function makeReleaseFixture(overrides = {}) {
     'apps/demo/package-lock.json': '{"version":"1.7.0","packages":{"":{"version":"1.7.0"}}}',
     'CHANGELOG.md':
       '# Changelog\n\n## [Unreleased]\n\n## [1.7.0-rc.1] — 2026-08-13\n\n### Added\n\n- release work\n',
-    'README.md': 'version-1.7.0--rc.1-blue\nv1.7.0-rc.1 highlights\n',
-    'README.de.md': 'version-1.7.0--rc.1-blue\n',
-    'README.es.md': 'version-1.7.0--rc.1-blue\n',
-    'README.fr.md': 'version-1.7.0--rc.1-blue\n',
-    'README.pl.md': 'version-1.7.0--rc.1-blue\n',
-    'README.pt-BR.md': 'version-1.7.0--rc.1-blue\n',
-    'README.zh-CN.md': 'version-1.7.0--rc.1-blue\n',
+    'README.md': 'v1.7.0-rc.1 highlights\n',
     'apps/web/scripts/docs-versions.mjs': '{ slug: "v1.7", source: "current", title: "v1.7" }',
     'apps/web/src/lib/site-config.ts': 'version: "1.7.0-rc.1"',
     'content/docs/current/updates/index.mdx':
@@ -163,13 +157,7 @@ test('release metadata validation accepts the GA quickstart label for a stable t
   const root = makeReleaseFixture({
     'CHANGELOG.md':
       '# Changelog\n\n## [Unreleased]\n\n## [1.7.0] — 2026-08-13\n\n### Added\n\n- release work\n',
-    'README.md': 'version-1.7.0-blue\nv1.7.0 highlights\n',
-    'README.de.md': 'version-1.7.0-blue\n',
-    'README.es.md': 'version-1.7.0-blue\n',
-    'README.fr.md': 'version-1.7.0-blue\n',
-    'README.pl.md': 'version-1.7.0-blue\n',
-    'README.pt-BR.md': 'version-1.7.0-blue\n',
-    'README.zh-CN.md': 'version-1.7.0-blue\n',
+    'README.md': 'v1.7.0 highlights\n',
     'apps/web/src/lib/site-config.ts': 'version: "1.7.0"',
     'content/docs/current/updates/index.mdx':
       '## Unreleased\n\n## v1.7.0 Highlights — August 13, 2026\n',
@@ -208,18 +196,10 @@ test('release metadata validation rejects a stale lockfile workspace version', (
   );
 });
 
-test('release metadata validation rejects a stale translated README badge', () => {
-  const root = makeReleaseFixture({ 'README.fr.md': 'version-1.6.0-blue\n' });
-  assert.throws(
-    () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
-    /README\.fr\.md is missing version-1\.7\.0--rc\.1-blue/u,
-  );
-});
-
 test('release metadata validation rejects missing exact changelog and public RC identity', () => {
   const root = makeReleaseFixture({
     'CHANGELOG.md': '# Changelog\n\n## [Unreleased]\n',
-    'README.md': 'version-1.6.0-blue\nv1.6.0 highlights\n',
+    'README.md': 'v1.6.0 highlights\n',
   });
   assert.throws(
     () => releasePrecheck.validateReleaseMetadata(root, 'v1.7.0-rc.1'),
