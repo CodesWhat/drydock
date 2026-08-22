@@ -163,7 +163,10 @@ const forbiddenSourceEnglishProse = [
 ];
 
 const requiredFragments = [
-  'version-1.7.0--rc.2-blue',
+  'img.shields.io/github/v/release/CodesWhat/drydock?include_prereleases',
+  'img.shields.io/github/license/CodesWhat/drydock',
+  'img.shields.io/docker/pulls/codeswhat/drydock',
+  'img.shields.io/github/stars/CodesWhat/drydock',
   'https://www.bestpractices.dev/projects/11915',
   '`drydock.sid`',
   '`allowmetadata=true`',
@@ -203,7 +206,8 @@ describe.each(translatedReadmes)('%s', (readme) => {
   });
 
   test('does not retain superseded release or star-history markup', () => {
-    expect(content).not.toContain('version-1.6.0--rc.2-blue');
+    expect(content).not.toContain('img.shields.io/badge/version-');
+    expect(content).not.toContain('GHCR-150K%2B_pulls');
     expect(content).not.toContain('https://api.star-history.com/svg');
     expect(content).not.toContain('https://star-history.com/#');
   });
