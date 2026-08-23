@@ -55,7 +55,14 @@ test('public release surfaces identify the v1.7 release candidate', () => {
   const rcSuffixMatch = /^(.*-rc\.)(\d+)$/u.exec(RC_VERSION);
 
   // The README version badge reads live from shields' github/v/release endpoint,
-  // so there is no static badge string to assert against RC_VERSION.
+  // so there is no static badge string to assert against RC_VERSION — but the
+  // live badge itself must be present.
+  assert.ok(
+    readme.includes(
+      'https://img.shields.io/github/v/release/CodesWhat/drydock?include_prereleases',
+    ),
+    'README must carry the live release badge',
+  );
   assert.match(readme, new RegExp(`v${escapedRcVersion} highlights`, 'u'));
   assert.match(siteConfig, new RegExp(`version: "${escapedRcVersion}"`, 'u'));
   assert.ok(updates.includes(`## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`));
@@ -215,7 +222,10 @@ test('v1.6.0 is released and public release routing advances to v1.7', () => {
 
 test('README reads the pull count live from Docker Hub instead of a typed figure', () => {
   const readme = read('README.md');
-  assert.match(readme, /img\.shields\.io\/docker\/pulls\/codeswhat\/drydock/u);
+  assert.ok(
+    readme.includes('https://img.shields.io/docker/pulls/codeswhat/drydock'),
+    'README must carry the live Docker Hub pulls badge',
+  );
   assert.doesNotMatch(readme, /GHCR-150K%2B_pulls/u);
 });
 
