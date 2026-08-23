@@ -10,6 +10,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.3] — 2026-08-23
+
+### Added
+
+- **Portwing edge tunnels now carry non-JSON Docker response bodies.** A Docker endpoint that answers with a non-JSON body — for example `GET /_ping`'s plain-text `OK` — previously couldn't cross the edge tunnel intact. The controller's welcome frame now advertises an `edge-response-body-b64` capability and decodes base64-negotiated response bodies from agents that support it, falling back to the existing path otherwise. Additive and capability-gated, no protocol-version bump; pairs with the portwing-side change (portwing #206). ([#852](https://github.com/CodesWhat/drydock/pull/852))
+
+### Changed
+
+- **README badges read live instead of being hand-bumped.** The version, license, pull-count, and stars badges in the English README and all six translations now render from live shields.io endpoints (`github/v/release` with prereleases, `github/license`, Docker Hub pulls, `github/stars`) instead of static images. The typed "GHCR 150K+ pulls" figure is replaced by the live Docker Hub count, and the release tooling no longer bumps or validates a static version badge per cut — there is nothing left to drift. ([#851](https://github.com/CodesWhat/drydock/pull/851))
+- **The Star History chart ships as a light/dark pair and refreshes at the release cut.** The README's star chart is now a `<picture>` block with theme-matched light and dark SVGs, so it follows GitHub's theme toggle instead of the OS preference, and the committed chart regenerates from the release-cut workflow rather than a cron — it can't mutate underneath a tag. ([#844](https://github.com/CodesWhat/drydock/pull/844), [#847](https://github.com/CodesWhat/drydock/pull/847))
+- **DAST and workflow-lint gates fail closed.** The ZAP scans (baseline and full) no longer pass `-I`, which had told ZAP to ignore every warning, so findings now actually fail the gate (targeted suppressions belong in `.zap/rules.tsv`); the pre-push zizmor step errors with an install hint when the binary is missing instead of silently skipping. ([#842](https://github.com/CodesWhat/drydock/pull/842))
+- **A daily monitor asserts `main` carries a release tag.** Drydock is the first caller of the org's main-is-released invariant monitor: a scheduled read-only workflow that goes red when `main`'s HEAD is untagged, deliberately not a required PR context (a promotion merge is untagged by definition until the cut lands). ([#846](https://github.com/CodesWhat/drydock/pull/846))
+
+### Fixed
+
+- **The release pipeline no longer trips over its own test infrastructure.** The rc.2 cut failed on `main`'s push-triggered CI: a global js-yaml v5 override broke Artillery's load-test jobs (reverted to the v3 range Artillery actually supports, [#829](https://github.com/CodesWhat/drydock/pull/829)), and two Playwright waits were budgeted tighter than the backend operations they cover, so promotion runs raced the app's own state machine (ceilings raised past the app's budgets, fixes [#832](https://github.com/CodesWhat/drydock/issues/832), [#836](https://github.com/CodesWhat/drydock/pull/836)).
+
 ## [1.7.0-rc.2] — 2026-08-20
 
 ### Added
@@ -2486,7 +2503,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.2...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.3...HEAD
+[1.7.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.2...v1.7.0-rc.3
 [1.7.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.1...v1.7.0-rc.2
 [1.7.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0-rc.1
 [1.6.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.13...v1.6.0

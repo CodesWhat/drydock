@@ -5,6 +5,14 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.0-rc.3 Highlights — August 23, 2026
+
+- **Portwing edge tunnels carry non-JSON Docker response bodies** — the controller's welcome frame now advertises an `edge-response-body-b64` capability and decodes base64-negotiated response bodies (for example `GET /_ping`'s plain-text `OK`) from agents that support it, falling back to the existing path otherwise. Additive and capability-gated, no protocol-version bump ([#852](https://github.com/CodesWhat/drydock/pull/852)).
+- **README badges read live instead of being hand-bumped** — the version, license, pull-count, and stars badges in the English README and all six translations now render from live shields.io endpoints instead of static images, and the star history chart ships as a `<picture>` block with theme-matched light and dark SVGs that regenerate from the release-cut workflow instead of a cron ([#851](https://github.com/CodesWhat/drydock/pull/851), [#844](https://github.com/CodesWhat/drydock/pull/844), [#847](https://github.com/CodesWhat/drydock/pull/847)).
+- **DAST and workflow-lint gates fail closed** — the ZAP scans no longer pass `-I` (which told ZAP to ignore every warning), so findings now actually fail the gate, and the pre-push zizmor step errors with an install hint instead of silently skipping when the binary is missing ([#842](https://github.com/CodesWhat/drydock/pull/842)).
+- **A daily monitor asserts `main` carries a release tag** — a scheduled, read-only workflow goes red when `main`'s HEAD is untagged, deliberately not a required PR context since a promotion merge is untagged by definition until the cut lands ([#846](https://github.com/CodesWhat/drydock/pull/846)).
+- **The release pipeline no longer trips over its own test infrastructure** — the rc.2 cut failed on `main`'s push-triggered CI: a global js-yaml v5 override broke Artillery's load-test jobs, reverted to the v3 range Artillery actually supports ([#829](https://github.com/CodesWhat/drydock/pull/829)), and two Playwright waits were budgeted tighter than the backend operations they cover, so promotion runs raced the app's own state machine, fixed by raising the ceilings past the app's budgets ([#832](https://github.com/CodesWhat/drydock/issues/832), [#836](https://github.com/CodesWhat/drydock/pull/836)).
+
 ## v1.7.0-rc.2 Highlights — August 20, 2026
 
 - **Per-container action-policy resolution** — the API and UI now surface the resolved `blocked`/`manual`/`auto` state and winning trigger for every container and candidate action trigger, plus a new `dd.action.auto` label and `AUTO=onauto` mode so a container can opt into manual-only access without picking up automatic dispatch (spec-6.0.1-action-policy.md, slice 5).

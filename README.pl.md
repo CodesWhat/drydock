@@ -202,6 +202,19 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.3</strong></summary>
+
+- **Tunele brzegowe Portwing przenoszą teraz treści inne niż JSON** — ramka powitalna kontrolera ogłasza teraz możliwość `edge-response-body-b64` i dekoduje treści odpowiedzi Dockera negocjowane w base64 (na przykład zwykłą tekstową odpowiedź „OK" z `_ping`) od agentów, którzy to obsługują; addytywnie i w zależności od możliwości. ([#852](https://github.com/CodesWhat/drydock/pull/852))
+- **Odznaki w README są teraz odczytywane na żywo** — odznaki wersji, licencji, liczby pobrań i gwiazdek są teraz renderowane z żywych punktów końcowych shields.io zamiast ze statycznych obrazów, a wykres historii gwiazdek jest teraz parą jasny/ciemny dopasowaną do motywu, regenerowaną przy wycięciu wydania zamiast przez cron. ([#851](https://github.com/CodesWhat/drydock/pull/851), [#844](https://github.com/CodesWhat/drydock/pull/844), [#847](https://github.com/CodesWhat/drydock/pull/847))
+- **Bramki DAST i lintowania workflowów zawodzą teraz domknięte** — skany ZAP nie ignorują już wszystkich ostrzeżeń, a krok zizmor przed pushem kończy się błędem z podpowiedzią instalacji zamiast być po cichu pomijany, gdy brakuje binarki. ([#842](https://github.com/CodesWhat/drydock/pull/842))
+- **Codzienny monitor sprawdza, czy `main` ma tag wydania** — zaplanowany, tylko do odczytu workflow zapala się na czerwono, jeśli HEAD `main` nie ma tagu. ([#846](https://github.com/CodesWhat/drydock/pull/846))
+- **Poprawki w pipeline wydania** — naprawiono awarię CI z cięcia rc.2: cofnięto błędne nadpisanie js-yaml, które psuło testy obciążeniowe Artillery, a dwa oczekiwania Playwright zostały wydłużone ponad własne budżety operacji aplikacji. ([#829](https://github.com/CodesWhat/drydock/pull/829), [#836](https://github.com/CodesWhat/drydock/pull/836))
+
+Pełne informacje o wersji znajdują się w [CHANGELOG.md](./CHANGELOG.md#170-rc3--2026-08-23).
+
+</details>
+
+<details>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.2</strong></summary>
 
 - **Rozstrzyganie polityki akcji dla poszczególnych kontenerów** — API i interfejs użytkownika pokazują teraz rozstrzygnięty stan (blocked/manual/auto) oraz zwycięski wyzwalacz dla każdego kontenera, a także nową etykietę `dd.action.auto` i tryb `AUTO=onauto` umożliwiający wyłącznie ręczny dostęp bez automatycznego wywoływania.

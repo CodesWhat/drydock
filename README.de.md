@@ -202,6 +202,19 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.3</strong></summary>
+
+- **Portwing-Edge-Tunnel übertragen jetzt Nicht-JSON-Antworten** – der Willkommens-Frame des Controllers kündigt jetzt die Capability `edge-response-body-b64` an und dekodiert base64-kodierte Docker-Antwortkörper (zum Beispiel die reine Textantwort „OK" von `_ping`) von Agenten, die dies unterstützen; additiv und capability-gated. ([#852](https://github.com/CodesWhat/drydock/pull/852))
+- **README-Badges lesen jetzt live** – Version-, Lizenz-, Download- und Sterne-Badges werden jetzt von Live-shields.io-Endpunkten gerendert statt aus statischen Bildern, und das Star-History-Diagramm erscheint jetzt als thematisch passendes Hell/Dunkel-Paar, das beim Release-Cut statt per Cron neu generiert wird. ([#851](https://github.com/CodesWhat/drydock/pull/851), [#844](https://github.com/CodesWhat/drydock/pull/844), [#847](https://github.com/CodesWhat/drydock/pull/847))
+- **DAST- und Workflow-Lint-Gates schlagen jetzt hart fehl** – die ZAP-Scans ignorieren nicht mehr jede Warnung, und der Pre-Push-zizmor-Schritt bricht mit einem Installationshinweis ab, statt bei fehlender Binärdatei stillschweigend übersprungen zu werden. ([#842](https://github.com/CodesWhat/drydock/pull/842))
+- **Ein täglicher Monitor prüft, dass `main` einen Release-Tag trägt** – ein geplanter, rein lesender Workflow schlägt an, wenn der HEAD von `main` ungetaggt ist. ([#846](https://github.com/CodesWhat/drydock/pull/846))
+- **Korrekturen an der Release-Pipeline** – der CI-Bruch des rc.2-Cuts ist behoben: ein fehlerhaftes js-yaml-Override, das Artillery-Lasttests brach, wurde zurückgenommen, und zwei Playwright-Wartezeiten wurden über die eigenen Budgets der App hinaus verlängert. ([#829](https://github.com/CodesWhat/drydock/pull/829), [#836](https://github.com/CodesWhat/drydock/pull/836))
+
+Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#170-rc3--2026-08-23).
+
+</details>
+
+<details>
 <summary><strong>Highlights von v1.7.0-rc.2</strong></summary>
 
 - **Pro-Container-Richtlinienauflösung für Aktionen** – API und UI zeigen jetzt den aufgelösten Status (blocked/manual/auto) und den entscheidenden Trigger für jeden Container an, plus ein neues Label `dd.action.auto` und der Modus `AUTO=onauto` für reinen manuellen Zugriff ohne automatische Ausführung.
