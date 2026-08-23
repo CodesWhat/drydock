@@ -1,1 +1,3 @@
 10049	IGNORE	Storable and Cacheable Content (informational) - content-hashed static assets are intentionally cacheable
+10055	IGNORE	CSP style-src unsafe-inline - accepted: vendor libraries (iconify-icon, Vue Transition) set element.style programmatically; documented in the CSP directives in app/api/index.ts. Stays visible in code scanning (not in IGNORED_ZAP_PLUGIN_IDS).
+10109	IGNORE	Modern Web Application (informational) - SPA detection notice, not a finding; recurs on every scan.
