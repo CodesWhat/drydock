@@ -46,7 +46,20 @@ function hasCompleteQaFixtureSnapshot(payload: unknown): boolean {
   );
 }
 
-setup.setTimeout(240_000);
+// qa-compose.yml watches 31 containers (37 services minus unwatched infra
+// like dex, mosquitto, and trivy-server) across every registry provider the
+// suite exercises (docker hub, ghcr, mirror.gcr.io, ...). initWatcher() runs
+// one full scan across all of them at boot before the cron schedule takes
+// over (DD_WATCHER_LOCAL_CRON is parked at Feb 29 specifically so no second
+// scan can race this one) — there's no per-container event to hook, only the
+// aggregate snapshot this poll already checks for. Under CI load that
+// full-fleet scan can outrun a short ceiling even though nothing is actually
+// stuck: this is the exact race that flaked issue #832's fixture-snapshot
+// check on the rc.2 promotion run, which shares runner/network capacity with
+// whatever else is running during a release cut. 300s/240s (up from
+// 240s/180s) keeps the same 60s gap between the outer test timeout and the
+// poll ceiling for login + storageState overhead.
+setup.setTimeout(300_000);
 
 setup('authenticate', async ({ page, request, baseURL }) => {
   const availability = await checkServerAvailability(request, baseURL);
@@ -72,7 +85,7 @@ setup('authenticate', async ({ page, request, baseURL }) => {
       },
       {
         message: 'Drydock startup watcher scans did not produce the complete QA fixture snapshot',
-        timeout: 180_000,
+        timeout: 240_000,
         intervals: [2_000],
       },
     )

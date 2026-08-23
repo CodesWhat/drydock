@@ -153,10 +153,16 @@ pre-push:
       fail_text: "Docker QA build failed — fix Dockerfile before push"
 
     # ── Zizmor: GitHub Actions security scanner (blocking) ───────────
+    # Hard-fails with an install hint when the binary is missing, rather
+    # than skipping silently — a missing zizmor must not let a
+    # workflow-security regression through the gate unnoticed.
     zizmor:
       glob: '.github/workflows/*.yml'
-      run: zizmor .github/workflows/
-      skip:
-        - run: '! command -v zizmor >/dev/null 2>&1'
+      run: |
+        if ! command -v zizmor >/dev/null 2>&1; then
+          echo "zizmor not installed — install it (brew install zizmor) or the workflow-security gate cannot run" >&2
+          exit 1
+        fi
+        zizmor .github/workflows/
       priority: 14
       timeout: 30s

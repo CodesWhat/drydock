@@ -14,9 +14,9 @@
 
 </div>
 
-<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.2-blue" alt="Version"></a>
+<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/drydock?include_prereleases&label=release" alt="Release"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/CodesWhat/drydock" alt="License"></a>
   <br>
   <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
@@ -25,7 +25,8 @@
   <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
   <a href="https://codecov.io/gh/CodesWhat/drydock"><img src="https://codecov.io/gh/CodesWhat/drydock/graph/badge.svg" alt="Coverage"></a>
   <br>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-150K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/stargazers"><img src="https://img.shields.io/github/stars/CodesWhat/drydock?style=flat" alt="Stars"></a>
   <a href="https://github.com/veggiemonk/awesome-docker#container-management"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Docker"></a>
   <a href="https://crowdin.com/project/drydock"><img src="https://badges.crowdin.net/drydock/localized.svg" alt="Crowdin localization"></a>
   <a href="https://github.com/sponsors/CodesWhat"><img src="https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white" alt="Sponsor"></a>
@@ -201,6 +202,19 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.3 亮点</strong></summary>
+
+- **Portwing 边缘隧道现在可传输非 JSON 响应体** — 控制器的欢迎帧现在会宣告 `edge-response-body-b64` 能力，并为支持该能力的代理解码经 base64 协商的 Docker 响应体（例如 `_ping` 的纯文本响应 "OK"）；此变更是增量式的，并受能力协商门控。([#852](https://github.com/CodesWhat/drydock/pull/852))
+- **README 徽章现在实时读取** — 版本、许可证、下载量和星标徽章现在从实时的 shields.io 端点渲染，而不再是静态图片，星标历史图表现在以匹配主题的浅色/深色一对形式呈现，并在发布切割时而非通过定时任务重新生成。([#851](https://github.com/CodesWhat/drydock/pull/851)、[#844](https://github.com/CodesWhat/drydock/pull/844)、[#847](https://github.com/CodesWhat/drydock/pull/847))
+- **DAST 与工作流 lint 关卡现在默认拒绝失败** — ZAP 扫描不再忽略所有警告，pre-push 的 zizmor 步骤在缺少二进制文件时会报错并给出安装提示，而不是静默跳过。([#842](https://github.com/CodesWhat/drydock/pull/842))
+- **每日监控确认 `main` 携带发布标签** — 一个按计划运行的只读工作流会在 `main` 的 HEAD 未打标签时报红。([#846](https://github.com/CodesWhat/drydock/pull/846))
+- **发布流水线修复** — 修复了 rc.2 切割时的 CI 故障：回滚了破坏 Artillery 负载测试的错误 js-yaml 覆盖，并将两处 Playwright 等待时间放宽到超过应用自身的操作预算。([#829](https://github.com/CodesWhat/drydock/pull/829)、[#836](https://github.com/CodesWhat/drydock/pull/836))
+
+完整发行说明请参阅 [CHANGELOG.md](./CHANGELOG.md#170-rc3--2026-08-23)。
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.2 亮点</strong></summary>
 
 - **按容器解析操作策略** — API 和界面现在会显示每个容器已解析的状态（blocked/manual/auto）以及胜出的触发器，并新增 `dd.action.auto` 标签和 `AUTO=onauto` 模式，可实现仅手动访问而不自动派发。

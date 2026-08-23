@@ -14,9 +14,9 @@
 
 </div>
 
-<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.7.0--rc.2-blue" alt="Version"></a>
+<p align="center"><a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/drydock?include_prereleases&label=release" alt="Release"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/CodesWhat/drydock" alt="License"></a>
   <br>
   <a href="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml"><img src="https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat" alt="OpenSSF Scorecard"></a>
@@ -25,7 +25,8 @@
   <a href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"><img src="https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain" alt="Mutation testing"></a>
   <a href="https://codecov.io/gh/CodesWhat/drydock"><img src="https://codecov.io/gh/CodesWhat/drydock/graph/badge.svg" alt="Coverage"></a>
   <br>
-  <a href="https://github.com/CodesWhat/drydock/pkgs/container/drydock"><img src="https://img.shields.io/badge/GHCR-150K%2B_pulls-2ea44f?logo=github&logoColor=white" alt="GHCR pulls"></a>
+  <a href="https://hub.docker.com/r/codeswhat/drydock"><img src="https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub" alt="Docker Hub pulls"></a>
+  <a href="https://github.com/CodesWhat/drydock/stargazers"><img src="https://img.shields.io/github/stars/CodesWhat/drydock?style=flat" alt="Stars"></a>
   <a href="https://github.com/veggiemonk/awesome-docker#container-management"><img src="https://awesome.re/mentioned-badge.svg" alt="Mentioned in Awesome Docker"></a>
   <a href="https://crowdin.com/project/drydock"><img src="https://badges.crowdin.net/drydock/localized.svg" alt="Crowdin localization"></a>
   <a href="https://github.com/sponsors/CodesWhat"><img src="https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white" alt="Sponsor"></a>
@@ -201,6 +202,19 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.3</strong></summary>
+
+- **Túneis de borda do Portwing agora carregam corpos que não são JSON** — o frame de boas-vindas do controlador agora anuncia a capacidade `edge-response-body-b64` e decodifica corpos de resposta do Docker negociados em base64 (por exemplo, a resposta em texto simples "OK" do `_ping`) de agentes que oferecem suporte a isso; aditivo e controlado por capacidade. ([#852](https://github.com/CodesWhat/drydock/pull/852))
+- **Os selos do README agora são lidos ao vivo** — os selos de versão, licença, downloads e estrelas agora são renderizados a partir de endpoints ao vivo do shields.io em vez de imagens estáticas, e o gráfico de histórico de estrelas agora é exibido como um par claro/escuro combinando com o tema, regenerado no corte da versão em vez de por cron. ([#851](https://github.com/CodesWhat/drydock/pull/851), [#844](https://github.com/CodesWhat/drydock/pull/844), [#847](https://github.com/CodesWhat/drydock/pull/847))
+- **Os gates de DAST e de lint de workflow agora falham fechados** — os scans do ZAP não ignoram mais todos os avisos, e a etapa zizmor no pre-push falha com uma dica de instalação em vez de ser ignorada silenciosamente quando o binário está ausente. ([#842](https://github.com/CodesWhat/drydock/pull/842))
+- **Um monitor diário verifica se `main` carrega uma tag de versão** — um workflow agendado e somente leitura fica vermelho se o HEAD de `main` não estiver marcado. ([#846](https://github.com/CodesWhat/drydock/pull/846))
+- **Correções no pipeline de release** — a quebra de CI do corte rc.2 foi corrigida: uma sobrescrita incorreta do js-yaml que quebrava os testes de carga do Artillery foi revertida, e duas esperas do Playwright foram ampliadas além dos próprios orçamentos de operação do app. ([#829](https://github.com/CodesWhat/drydock/pull/829), [#836](https://github.com/CodesWhat/drydock/pull/836))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc3--2026-08-23).
+
+</details>
+
+<details>
 <summary><strong>Destaques da v1.7.0-rc.2</strong></summary>
 
 - **Resolução de política de ação por contêiner** — a API e a interface agora expõem o estado resolvido (blocked/manual/auto) e o acionador vencedor de cada contêiner, além de um novo rótulo `dd.action.auto` e o modo `AUTO=onauto` para acesso somente manual sem disparo automático.

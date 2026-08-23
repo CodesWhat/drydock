@@ -8874,6 +8874,46 @@ describe('AgentClient', () => {
       expect(text).toEqual({ statusCode: 200, headers: {}, body: Buffer.from('plain-text') });
     });
 
+    // edge-response-body-b64: when the capability is negotiated, portwing sends
+    // the raw response bytes as standard base64 in `bodyBase64` and omits the
+    // legacy `body` field. This lets a non-JSON Docker response (e.g. the
+    // literal "OK" from /_ping) survive the tunnel without breaking JSON
+    // framing. Reverting the bodyBase64 check in AgentClient's decode would
+    // make this fail because normalizeDockerProxyBody(record.body) would run
+    // on `undefined` and return an empty buffer instead of "OK".
+    test('edge mode decodes bodyBase64 to the exact original non-JSON bytes', async () => {
+      const sendRequest = vi.fn().mockResolvedValue({
+        statusCode: 200,
+        headers: { 'content-type': 'text/plain' },
+        bodyBase64: Buffer.from('OK').toString('base64'),
+      });
+      client.edgeAdapter = { sendRequest, sendStreamRequest: vi.fn() } as never;
+
+      const response = await client.requestDockerApi('GET', '/_ping');
+
+      expect(response.body).toEqual(Buffer.from('OK'));
+      expect(response.body.toString()).toBe('OK');
+    });
+
+    // Regression guard: a legacy response frame (no bodyBase64, negotiated or
+    // not) must keep decoding a bare `body` string as literal UTF-8 bytes,
+    // exactly as before this feature. If normalizeDockerProxyBody's
+    // bare-string handling ever changed, or the new bodyBase64 check
+    // accidentally consumed the legacy path, this would fail.
+    test('edge mode still decodes a legacy bare-string body as literal bytes when bodyBase64 is absent', async () => {
+      const sendRequest = vi.fn().mockResolvedValue({
+        statusCode: 200,
+        headers: { 'content-type': 'text/plain' },
+        body: 'OK',
+      });
+      client.edgeAdapter = { sendRequest, sendStreamRequest: vi.fn() } as never;
+
+      const response = await client.requestDockerApi('GET', '/_ping');
+
+      expect(response.body).toEqual(Buffer.from('OK'));
+      expect(response.body.toString()).toBe('OK');
+    });
+
     test.each([
       ['null response', null],
       ['primitive response', 'invalid'],

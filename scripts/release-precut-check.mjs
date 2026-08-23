@@ -77,14 +77,10 @@ export function validateReleaseMetadata(root, tag) {
     problems.push(`CHANGELOG.md has no non-empty [${version}] entry`);
   }
 
+  // README version badges read live from shields' github/v/release endpoint,
+  // so there is no static badge string to bump or validate per cut.
   const publicChecks = [
-    ['README.md', [`version-${version.replaceAll('-', '--')}-blue`, `v${version} highlights`]],
-    ['README.de.md', [`version-${version.replaceAll('-', '--')}-blue`]],
-    ['README.es.md', [`version-${version.replaceAll('-', '--')}-blue`]],
-    ['README.fr.md', [`version-${version.replaceAll('-', '--')}-blue`]],
-    ['README.pl.md', [`version-${version.replaceAll('-', '--')}-blue`]],
-    ['README.pt-BR.md', [`version-${version.replaceAll('-', '--')}-blue`]],
-    ['README.zh-CN.md', [`version-${version.replaceAll('-', '--')}-blue`]],
+    ['README.md', [`v${version} highlights`]],
     ['apps/web/src/lib/site-config.ts', [`version: "${version}"`]],
     [
       'apps/web/scripts/docs-versions.mjs',

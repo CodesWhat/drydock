@@ -1,0 +1,30 @@
+# Runs the org's invariant monitor: main's HEAD must carry a release tag
+# (REPOSITORY_ONBOARDING.md section 3, "main is the released version, not the
+# newest work"). Scheduled daily rather than on push to main — a push trigger
+# would red-flag every dev->main promotion during the window between the
+# merge landing and the tag being cut, which happens before every RC and GA.
+# Scott chose scheduled-daily over that.
+#
+# allow-prerelease stays at its default (false) per the org ruling of
+# 2026-08-21: prerelease tags live on the dev branch (release-cut.yml's
+# source_ref path), and main carries only GA tags — an rc on main is the
+# exact drift this check exists to catch.
+#
+# This is an invariant monitor, deliberately NOT a required status check:
+# requiring it would deadlock every promotion, because a promotion PR's merge
+# result is untagged by definition until the tag lands after the merge. The
+# signal here is a red Actions badge, not a merge gate.
+name: Main Is Released
+
+on:
+  schedule:
+    - cron: '10 5 * * *'  # Daily at 05:10 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  released:
+    permissions:
+      contents: read
+    uses: CodesWhat/.github/.github/workflows/main-is-released.yml@11004e42d7d19e86eb3b7777c467ec9522b784e1  # main 2026-08-21

@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.2';
-const PREV_RC_VERSION = '1.7.0-rc.1';
-const RC_DATE = '2026-08-20';
-const RC_DISPLAY_DATE = 'August 20, 2026';
+const RC_VERSION = '1.7.0-rc.3';
+const PREV_RC_VERSION = '1.7.0-rc.2';
+const RC_DATE = '2026-08-23';
+const RC_DISPLAY_DATE = 'August 23, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -54,9 +54,16 @@ test('public release surfaces identify the v1.7 release candidate', () => {
   // constant — no shape-specific literal is hand-maintained, and no shape throws.
   const rcSuffixMatch = /^(.*-rc\.)(\d+)$/u.exec(RC_VERSION);
 
-  assert.match(
-    readme,
-    new RegExp(`version-${escapeRegExp(RC_VERSION.replaceAll('-', '--'))}-blue`, 'u'),
+  // The README version badge reads live from shields' github/v/release endpoint,
+  // so there is no static badge string to assert against RC_VERSION — but the
+  // live badge itself must be present, compared as a whole URL rather than a
+  // substring so the scanner can't mistake this for URL sanitization.
+  const badgeUrls = [...readme.matchAll(/<img src="([^"]+)"/gu)].map((m) => m[1]);
+  assert.ok(
+    badgeUrls.includes(
+      'https://img.shields.io/github/v/release/CodesWhat/drydock?include_prereleases&label=release',
+    ),
+    'README must carry the live release badge',
   );
   assert.match(readme, new RegExp(`v${escapedRcVersion} highlights`, 'u'));
   assert.match(siteConfig, new RegExp(`version: "${escapedRcVersion}"`, 'u'));
@@ -135,7 +142,7 @@ test('release candidate notes cover the post-promotion fixes', () => {
     `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
   );
 
-  for (const issue of [718, 736, 743, 814]) {
+  for (const issue of [829, 832, 836]) {
     const issueLink = `https://github.com/CodesWhat/drydock/issues/${issue}`;
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${issue}`;
     assert.ok(
@@ -148,12 +155,7 @@ test('release candidate notes cover the post-promotion fixes', () => {
     );
   }
 
-  for (const fragment of [
-    '`dd.action.auto`',
-    'updatePolicyRetentionCache',
-    'OCI image indexes',
-    'remote-property-injection',
-  ]) {
+  for (const fragment of ['`edge-response-body-b64`', 'shields.io', 'zizmor', 'js-yaml']) {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
   }
@@ -215,8 +217,16 @@ test('v1.6.0 is released and public release routing advances to v1.7', () => {
   }
 });
 
-test('README retains the published 150K+ pull count', () => {
-  assert.match(read('README.md'), /GHCR-150K%2B_pulls/u);
+test('README reads the pull count live from Docker Hub instead of a typed figure', () => {
+  const readme = read('README.md');
+  const badgeUrls = [...readme.matchAll(/<img src="([^"]+)"/gu)].map((m) => m[1]);
+  assert.ok(
+    badgeUrls.includes(
+      'https://img.shields.io/docker/pulls/codeswhat/drydock?logo=docker&logoColor=white&label=Docker+Hub',
+    ),
+    'README must carry the live Docker Hub pulls badge',
+  );
+  assert.doesNotMatch(readme, /GHCR-150K%2B_pulls/u);
 });
 
 test('current and archived docs prevent unsafe copy-paste configuration', () => {
