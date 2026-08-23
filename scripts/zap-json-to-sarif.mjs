@@ -12,8 +12,12 @@ const ZAP_INFORMATION_URI = 'https://www.zaproxy.org/';
 // fires on every content-hashed static asset (e.g. /assets/*-<hash>.js).
 // Those assets are immutable and intentionally cacheable and hold no
 // sensitive data, so the alert is a false positive that otherwise recurs
-// under a new hash on every build.
-export const IGNORED_ZAP_PLUGIN_IDS = new Set(['10049']);
+// under a new hash on every build. 10109 ("Modern Web Application") is a
+// pure SPA-detection notice, not a finding, and recurs on every scan.
+// Accepted real risks (e.g. 10055 CSP style-src unsafe-inline) stay OUT of
+// this set so they remain visible in code scanning; they are gate-suppressed
+// in .zap/rules.tsv instead.
+export const IGNORED_ZAP_PLUGIN_IDS = new Set(['10049', '10109']);
 
 function asArray(value) {
   if (Array.isArray(value)) {

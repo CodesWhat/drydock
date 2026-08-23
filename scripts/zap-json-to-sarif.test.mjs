@@ -275,6 +275,39 @@ describe('zap-json-to-sarif', () => {
     assert.ok(IGNORED_ZAP_PLUGIN_IDS.has('10049'));
   });
 
+  test('IGNORED_ZAP_PLUGIN_IDS contains plugin 10109', () => {
+    assert.ok(IGNORED_ZAP_PLUGIN_IDS.has('10109'));
+  });
+
+  test('keeps plugin 10055 out of IGNORED_ZAP_PLUGIN_IDS so the accepted risk stays visible', () => {
+    assert.ok(!IGNORED_ZAP_PLUGIN_IDS.has('10055'));
+  });
+
+  test('drops plugin 10109 alerts from rules and results entirely', () => {
+    const sarif = convertZapJsonToSarif({
+      site: [
+        {
+          '@name': 'http://localhost:3333',
+          alerts: [
+            {
+              pluginid: '10109',
+              alertRef: '10109',
+              alert: 'Modern Web Application',
+              name: 'Modern Web Application',
+              riskcode: '0',
+              instances: [{ uri: 'http://localhost:3333/', method: 'GET' }],
+            },
+          ],
+        },
+      ],
+    });
+    assert.ok(
+      !sarif.runs[0].tool.driver.rules.some((r) => r.id.startsWith('10109')),
+      'rule 10109 must be excluded',
+    );
+    assert.equal(sarif.runs[0].results.length, 0);
+  });
+
   test('drops plugin 10049 alerts from rules and results entirely', () => {
     const sarif = convertZapJsonToSarif({
       site: [
