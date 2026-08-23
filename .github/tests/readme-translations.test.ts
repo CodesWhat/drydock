@@ -66,68 +66,71 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.2</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.3</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.2</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.3</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.2</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.3</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.2</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.3</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.2</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.3</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.2 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.3 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
-  { updateCheckFixes: string; securityHardening: string }
+  { portwingEdgeBodies: string; mainIsReleasedMonitor: string }
 > = {
   'README.de.md': {
-    updateCheckFixes: '**Korrekturen bei der Update-Prüfung**',
-    securityHardening: '**Sicherheit**',
+    portwingEdgeBodies: '**Portwing-Edge-Tunnel übertragen jetzt Nicht-JSON-Antworten**',
+    mainIsReleasedMonitor: '**Ein täglicher Monitor prüft, dass `main` einen Release-Tag trägt**',
   },
   'README.es.md': {
-    updateCheckFixes: '**Correcciones de exactitud en la comprobación de actualizaciones**',
-    securityHardening: '**Seguridad**',
+    portwingEdgeBodies:
+      '**Los túneles de borde de Portwing ahora transportan cuerpos que no son JSON**',
+    mainIsReleasedMonitor:
+      '**Un monitor diario verifica que `main` lleve una etiqueta de versión**',
   },
   'README.fr.md': {
-    updateCheckFixes: '**Corrections de justesse des vérifications de mise à jour**',
-    securityHardening: '**Sécurité**',
+    portwingEdgeBodies: '**Les tunnels Portwing edge transportent désormais des corps non JSON**',
+    mainIsReleasedMonitor:
+      '**Un contrôle quotidien vérifie que `main` porte une étiquette de version**',
   },
   'README.pl.md': {
-    updateCheckFixes: '**Poprawki poprawności sprawdzania aktualizacji**',
-    securityHardening: '**Bezpieczeństwo**',
+    portwingEdgeBodies: '**Tunele brzegowe Portwing przenoszą teraz treści inne niż JSON**',
+    mainIsReleasedMonitor: '**Codzienny monitor sprawdza, czy `main` ma tag wydania**',
   },
   'README.pt-BR.md': {
-    updateCheckFixes: '**Correções de exatidão na verificação de atualizações**',
-    securityHardening: '**Segurança**',
+    portwingEdgeBodies: '**Túneis de borda do Portwing agora carregam corpos que não são JSON**',
+    mainIsReleasedMonitor: '**Um monitor diário verifica se `main` carrega uma tag de versão**',
   },
   'README.zh-CN.md': {
-    updateCheckFixes: '**更新检查正确性修复**',
-    securityHardening: '**安全**',
+    portwingEdgeBodies: '**Portwing 边缘隧道现在可传输非 JSON 响应体**',
+    mainIsReleasedMonitor: '**每日监控确认 `main` 携带发布标签**',
   },
 };
 
@@ -178,6 +181,7 @@ const requiredFragments = [
   './CHANGELOG.md#160--2026-08-11',
   './CHANGELOG.md#170-rc1--2026-08-14',
   './CHANGELOG.md#170-rc2--2026-08-20',
+  './CHANGELOG.md#170-rc3--2026-08-23',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -231,13 +235,13 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const surface = localizedSurfaceFragments[readme];
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
-    const updateCheckBullet = getBullet(releaseBlock, release.updateCheckFixes);
-    const securityBullet = getBullet(releaseBlock, release.securityHardening);
+    const portwingEdgeBullet = getBullet(releaseBlock, release.portwingEdgeBodies);
+    const mainMonitorBullet = getBullet(releaseBlock, release.mainIsReleasedMonitor);
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
-    expect(getUrls(updateCheckBullet)).toEqual(['https://github.com/CodesWhat/drydock/issues/814']);
-    expect(getUrls(securityBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/750']);
+    expect(getUrls(portwingEdgeBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/852']);
+    expect(getUrls(mainMonitorBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/846']);
   });
 
   test('preserves the exact source URL multiset', () => {

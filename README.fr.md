@@ -202,6 +202,19 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 <h2 align="center" id="recent-updates">Mises à jour récentes</h2>
 
 <details open>
+<summary><strong>Points forts de la v1.7.0-rc.3</strong></summary>
+
+- **Les tunnels Portwing edge transportent désormais des corps non JSON** : la trame de bienvenue du contrôleur annonce désormais la capacité `edge-response-body-b64` et décode les corps de réponse Docker négociés en base64 (par exemple la réponse texte brut « OK » de `_ping`) provenant des agents qui la prennent en charge ; additif et conditionné par la capacité. ([#852](https://github.com/CodesWhat/drydock/pull/852))
+- **Les badges du README se lisent désormais en direct** : les badges de version, de licence, de téléchargements et d'étoiles se génèrent désormais à partir de points de terminaison shields.io en direct au lieu d'images statiques, et le graphique d'historique des étoiles se présente désormais comme une paire claire/sombre adaptée au thème, régénérée lors de la coupe de version plutôt que par cron. ([#851](https://github.com/CodesWhat/drydock/pull/851), [#844](https://github.com/CodesWhat/drydock/pull/844), [#847](https://github.com/CodesWhat/drydock/pull/847))
+- **Les portes DAST et de lint des workflows échouent désormais de façon fermée** : les analyses ZAP n'ignorent plus tous les avertissements, et l'étape zizmor en pre-push échoue avec une indication d'installation au lieu d'être ignorée silencieusement lorsque le binaire est absent. ([#842](https://github.com/CodesWhat/drydock/pull/842))
+- **Un contrôle quotidien vérifie que `main` porte une étiquette de version** : un workflow planifié et en lecture seule passe au rouge si le HEAD de `main` n'est pas étiqueté. ([#846](https://github.com/CodesWhat/drydock/pull/846))
+- **Corrections du pipeline de version** : la rupture CI de la coupe rc.2 est corrigée : une surcharge js-yaml erronée qui cassait les tests de charge Artillery est annulée, et deux attentes Playwright sont élargies au-delà des budgets propres de l'application. ([#829](https://github.com/CodesWhat/drydock/pull/829), [#836](https://github.com/CodesWhat/drydock/pull/836))
+
+Notes complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc3--2026-08-23).
+
+</details>
+
+<details>
 <summary><strong>Points forts de la v1.7.0-rc.2</strong></summary>
 
 - **Résolution de la politique d'action par conteneur** : l'API et l'interface exposent désormais l'état résolu (blocked/manual/auto) et le déclencheur gagnant pour chaque conteneur, ainsi qu'un nouveau label `dd.action.auto` et le mode `AUTO=onauto` pour un accès manuel uniquement, sans déclenchement automatique.
