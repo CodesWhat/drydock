@@ -388,8 +388,19 @@
       "updateButton": "立即更新",
       "blockedButton": "更新已阻止",
       "notificationsOnlyButton": "仅通知",
+      "actionPolicyBadge": {
+        "auto": "Auto",
+        "manual": "Manual",
+        "blocked": "Blocked"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock will apply this update automatically once it's detected — no manual click needed.",
+        "manual": "This update can be applied manually, but won't fire automatically.",
+        "blocked": "No action trigger currently authorizes this container — check the dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "summary": {
         "upToDate": "已是最新。",
+        "unknown": "Update status unknown. The last check could not complete.",
         "insight": "有更新版本可用 — 此标签已固定。",
         "inProgress": "更新进行中。",
         "hardBlocked": "更新已阻止 — 需要修复。",
@@ -558,6 +569,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Auto",
+      "resolvedStateTooltip": {
+        "auto": "Runs automatically for this container when a qualifying update is detected.",
+        "manual": "Can be run manually for this container, but will not fire automatically.",
+        "blocked": "Blocked for this container — check the dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "toasts": {
         "ran": "Trigger ran: {key}",
         "ranSuccessfully": "Trigger {key} ran successfully",
