@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **WebSocket log-stream connections behind a TLS-terminating proxy no longer 403 when `X-Forwarded-Proto` is absent.** With trust proxy enabled, `isOriginAllowed` fell back to the local socket's `encrypted` flag whenever the proxy omitted `X-Forwarded-Proto`, which is plain HTTP on a backend behind TLS termination, so a browser's `https://` Origin never matched and every WebSocket upgrade was rejected while REST traffic worked fine. The protocol is now treated as unknown (and skipped from the comparison) in that case instead of being inferred from the local socket; host validation is unaffected. ([#867](https://github.com/CodesWhat/drydock/issues/867))
 - **Demo site favicon now matches the refreshed branding.** The v1.5.1 brand refresh (#439) moved the website to the cropped whale "headshot" icon and the app UI followed, but demo.getdrydock.com kept showing the old full-body whale: its stale `favicon.svg` — which modern browsers preferred over the PNGs — was never replaced. The demo now ships the same headshot icon set as the website and app UI, the `favicon.svg` is removed, and the icon links carry a `?v=2` cache-buster so browsers re-fetch instead of serving the aggressively cached old icon. (#689)
 
 ## [1.6.1-rc.1] — 2026-08-21

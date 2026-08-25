@@ -1,3 +1,18 @@
+// Hoisted so tests can assert on log calls — the module-level `log` in
+// ws-upgrade-utils.ts is `logger.child(...)`, called once at import time, so
+// it always returns this same singleton.
+const mockLogChild = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+vi.mock('../log/index.js', () => ({
+  default: {
+    child: vi.fn(() => mockLogChild),
+  },
+}));
+
 import {
   applySessionMiddleware,
   createFixedWindowRateLimiter,
@@ -202,6 +217,16 @@ describe('ws-upgrade-utils', () => {
         } as any;
         expect(isOriginAllowed(request, noProxy)).toBe(true);
       });
+
+      test('rejects an https Origin against an unencrypted local socket, unchanged from today', () => {
+        // Trust proxy off: the local socket's TLS state is still the source of
+        // truth for the effective protocol, and behavior here must not change.
+        const request = {
+          headers: { origin: 'https://drydock.example.com', host: 'drydock.example.com' },
+          socket: { encrypted: false },
+        } as any;
+        expect(isOriginAllowed(request, noProxy)).toBe(false);
+      });
     });
 
     describe('trust proxy enabled', () => {
@@ -270,6 +295,81 @@ describe('ws-upgrade-utils', () => {
         } as any;
         expect(isOriginAllowed(request, withProxy)).toBe(false);
       });
+
+      test('allows a matching origin when X-Forwarded-Proto is absent and the local socket is unencrypted (TLS-terminating proxy)', () => {
+        // Reporter's deployment shape (#867): trust proxy is on, the proxy
+        // terminates TLS and sends X-Forwarded-Host but not X-Forwarded-Proto,
+        // and the backend socket itself is plain HTTP. The local socket's
+        // encrypted=false must not be used as a stand-in for the client-facing
+        // protocol.
+        const request = {
+          headers: {
+            origin: 'https://drydock.example.com',
+            host: '10.0.0.1:3000',
+            'x-forwarded-host': 'drydock.example.com',
+          },
+          socket: { encrypted: false },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(true);
+      });
+
+      test('still allows a matching origin when X-Forwarded-Proto is present alongside an unencrypted local socket', () => {
+        const request = {
+          headers: {
+            origin: 'https://drydock.example.com',
+            host: '10.0.0.1:3000',
+            'x-forwarded-host': 'drydock.example.com',
+            'x-forwarded-proto': 'https',
+          },
+          socket: { encrypted: false },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(true);
+      });
+
+      test('still rejects a mismatched X-Forwarded-Host when X-Forwarded-Proto is absent and the local socket is unencrypted', () => {
+        // Protocol being unknown must not weaken the host check.
+        const request = {
+          headers: {
+            origin: 'https://evil.com',
+            host: '10.0.0.1:3000',
+            'x-forwarded-host': 'drydock.example.com',
+          },
+          socket: { encrypted: false },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(false);
+      });
+    });
+
+    test('logs a debug message with the mismatch details on rejection', () => {
+      const request = {
+        headers: {
+          origin: 'https://evil.com',
+          host: '10.0.0.1:3000',
+          'x-forwarded-host': 'drydock.example.com',
+          'x-forwarded-proto': 'https',
+        },
+        socket: { encrypted: false },
+      } as any;
+
+      expect(isOriginAllowed(request, { trustproxy: 1 })).toBe(false);
+
+      expect(mockLogChild.debug).toHaveBeenCalledTimes(1);
+      const [message] = mockLogChild.debug.mock.calls[0];
+      expect(message).toContain('origin=https://evil.com');
+      expect(message).toContain('effectiveHost=drydock.example.com');
+      expect(message).toContain('effectiveProtocol=https:');
+      expect(message).toContain('trustProxy=true');
+      expect(message).toContain('x-forwarded-host=drydock.example.com');
+      expect(message).toContain('x-forwarded-proto=https');
+    });
+
+    test('does not log when the origin is allowed', () => {
+      const request = {
+        headers: { origin: 'http://localhost:3000', host: 'localhost:3000' },
+      } as any;
+
+      expect(isOriginAllowed(request)).toBe(true);
+      expect(mockLogChild.debug).not.toHaveBeenCalled();
     });
   });
 
