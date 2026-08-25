@@ -90,6 +90,14 @@ describe('zap-json-to-sarif', () => {
       TARGET: { uri: 'http://localhost:3333/' },
     });
     assert.match(sarif.runs[0].results[0].message.text, /Evidence:/);
+    // automationDetails.id must stay absent so upload-sarif's `category:` input
+    // is the only thing that sets the run's code-scanning category. GitHub
+    // derives the category from runAutomationDetails.id up to the final slash
+    // and does not let `category:` override an id already present in the
+    // SARIF, so a hardcoded slashless id here collapses every ZAP scan
+    // (app baseline, zap-web-getdrydock, zap-web-demo-baseline) into one
+    // empty-category configuration that clobbers the others' alerts.
+    assert.equal('automationDetails' in sarif.runs[0], false);
   });
 
   test('maps non-medium ZAP risk codes to SARIF levels and security severities', () => {
