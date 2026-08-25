@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.1-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.2-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,16 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.2 highlights</strong></summary>
+
+- **WebSocket log streams behind a TLS-terminating proxy no longer 403** — with trust proxy enabled and `X-Forwarded-Proto` absent on the upgrade request, the origin check no longer falls back to the local socket's TLS state; the protocol is treated as unknown and host validation keeps working. ([#867](https://github.com/CodesWhat/drydock/issues/867))
+- **Demo site favicon matches the refreshed branding** — the stale full-body whale `favicon.svg` is replaced by the same headshot icon set as the website and app UI. ([#689](https://github.com/CodesWhat/drydock/issues/689))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc2--2026-08-25).
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.1 highlights</strong></summary>
 
 - **Drydock no longer reports "Up to date" when an update check failed** — a registry error during digest verification now surfaces as an explicit unknown status instead of a false negative. ([#814](https://github.com/CodesWhat/drydock/issues/814), [#808](https://github.com/CodesWhat/drydock/issues/808))

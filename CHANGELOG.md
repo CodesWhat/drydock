@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.2] — 2026-08-25
+
 ### Fixed
 
 - **WebSocket log-stream connections behind a TLS-terminating proxy no longer 403 when `X-Forwarded-Proto` is absent.** With trust proxy enabled, `isOriginAllowed` fell back to the local socket's `encrypted` flag whenever the proxy omitted `X-Forwarded-Proto`, which is plain HTTP on a backend behind TLS termination, so a browser's `https://` Origin never matched and every WebSocket upgrade was rejected while REST traffic worked fine. The protocol is now treated as unknown (and skipped from the comparison) in that case instead of being inferred from the local socket; host validation is unaffected. ([#867](https://github.com/CodesWhat/drydock/issues/867))
@@ -2409,7 +2411,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.2...HEAD
+[1.6.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.1...v1.6.1-rc.2
 [1.6.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.6.1-rc.1
 [1.6.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.13...v1.6.0
 [1.6.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.12...v1.6.0-rc.13
