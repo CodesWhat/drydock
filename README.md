@@ -181,11 +181,21 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <details open>
 <summary><strong>v1.6.1-rc.2 highlights</strong></summary>
 
+- **WebSocket log streams behind a TLS-terminating proxy no longer 403** — with trust proxy enabled and `X-Forwarded-Proto` absent on the upgrade request, the origin check no longer falls back to the local socket's TLS state; the protocol is treated as unknown and host validation keeps working. ([#867](https://github.com/CodesWhat/drydock/issues/867))
+- **Demo site favicon matches the refreshed branding** — the stale full-body whale `favicon.svg` is replaced by the same headshot icon set as the website and app UI. ([#689](https://github.com/CodesWhat/drydock/issues/689))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc2--2026-08-25).
+
+</details>
+
+<details>
+<summary><strong>v1.6.1-rc.1 highlights</strong></summary>
+
 - **Drydock no longer reports "Up to date" when an update check failed** — a registry error during digest verification now surfaces as an explicit unknown status instead of a false negative. ([#814](https://github.com/CodesWhat/drydock/issues/814), [#808](https://github.com/CodesWhat/drydock/issues/808))
 - **Nested OCI image indexes now resolve to the real image manifest** — images built with Buildx SBOM/provenance attestations no longer fail digest checks with `Unexpected error; no manifest found`. ([#814](https://github.com/CodesWhat/drydock/issues/814))
 - **A single malformed container no longer zeroes out an entire agent inventory sync** — per-container error isolation now matches the existing watcher-snapshot path. ([#802](https://github.com/CodesWhat/drydock/issues/802))
 
-Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc2--2026-08-25).
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc1--2026-08-21).
 
 </details>
 

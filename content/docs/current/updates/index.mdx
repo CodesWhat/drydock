@@ -5,7 +5,16 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
-## v1.6.1-rc.2 Highlights — August 21, 2026
+## v1.6.1-rc.2 Highlights — August 25, 2026
+
+Two bug fixes: WebSocket log-stream connections behind a TLS-terminating proxy
+no longer 403 when the proxy omits `X-Forwarded-Proto` on the upgrade request
+(with trust proxy enabled, the local socket's TLS state is no longer treated as
+the client-facing protocol); and the demo site favicon now matches the
+refreshed branding. See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc2--2026-08-25)
+for the full release notes.
+
+## v1.6.1-rc.1 Highlights — August 21, 2026
 
 Three bug fixes: nested OCI image indexes (produced by Buildx SBOM/provenance
 attestations) now resolve to the real image manifest instead of failing digest

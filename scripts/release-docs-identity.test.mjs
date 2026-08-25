@@ -5,7 +5,7 @@ import test from 'node:test';
 const RC_VERSION = '1.6.1-rc.2';
 const PREV_RC_VERSION = '1.6.1-rc.1';
 const RC_DATE = '2026-08-25';
-const RC_DISPLAY_DATE = 'August 21, 2026';
+const RC_DISPLAY_DATE = 'August 25, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
