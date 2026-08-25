@@ -274,9 +274,6 @@ export function convertZapJsonToSarif(zapReport) {
             rules: [...ruleMap.values()],
           },
         },
-        automationDetails: {
-          id: 'zap-baseline',
-        },
         ...(originalUriBaseIds ? { originalUriBaseIds } : {}),
         results: cleanResults,
       },
