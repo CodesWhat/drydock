@@ -996,6 +996,105 @@ describe('docker tag candidates module', () => {
     expect(result.tags).toEqual([]);
   });
 
+  // #859: linuxserver/plex repro at the actionable-candidate layer — a bare
+  // integer build-number tag ("168") must never outrank a real dotted
+  // release ("1.43.3") in this fallback recommendation either.
+  describe('non-semver current tag with includeTags never ranks a bare integer over a real dotted version (#859)', () => {
+    test('picks the real dotted version over a bare integer', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'latest',
+            semver: false,
+          },
+        },
+        includeTags: String.raw`^\d+(\.\d+)*$`,
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['168', '1.43.3'], log);
+
+      expect(result.tags[0]).toBe('1.43.3');
+      expect(result.tags).not.toContain('168');
+    });
+
+    test('picks a numerically higher bare integer when the population is genuinely integer-only', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'latest',
+            semver: false,
+          },
+        },
+        includeTags: String.raw`^\d+$`,
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['9', '10'], log);
+
+      expect(result.tags[0]).toBe('10');
+    });
+
+    // This branch's eligibility stays permissive (tolerates prerelease tags,
+    // unlike tag/suggest.ts's stable-only badge — see selectVersionPopulation
+    // in tag/version-population.ts), so a prerelease-only real version is
+    // itself an eligible, non-bare-integer "preferred" candidate here and
+    // wins outright rather than triggering the "no safe suggestion" rule.
+    test('a prerelease-only real version still outranks a bare integer', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'latest',
+            semver: false,
+          },
+        },
+        includeTags: String.raw`^(\d+|\d+\.\d+\.\d+-rc\.\d+)$`,
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['168', '1.44.0-rc.1'], log);
+
+      expect(result.tags[0]).toBe('1.44.0-rc.1');
+      expect(result.tags).not.toContain('168');
+    });
+
+    test('an includeTags filter that narrows the population to integers-only lets the integer win', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'latest',
+            semver: false,
+          },
+        },
+        includeTags: String.raw`^\d+$`,
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['168', '1.43.3'], log);
+
+      expect(result.tags[0]).toBe('168');
+    });
+
+    test('applies dd.tag.transform before classifying bare integers vs real versions', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'latest',
+            semver: false,
+          },
+        },
+        includeTags: '^build-',
+        transformTags: 'build-(.+) => $1',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['build-168', 'build-1.43.3'], log);
+
+      expect(result.tags[0]).toBe('build-1.43.3');
+      expect(result.tags).not.toContain('build-168');
+    });
+  });
+
   // Coverage for pre-existing branch: warn when filteredTags is empty after include/exclude
   test('warns when all tags are filtered out before semver candidate pass', () => {
     const container = createContainer({
