@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **WebSocket log-stream connections behind a TLS-terminating proxy no longer 403 when `X-Forwarded-Proto` is absent.** With trust proxy enabled, `isOriginAllowed` fell back to the local socket's `encrypted` flag whenever the proxy omitted `X-Forwarded-Proto`, which is plain HTTP on a backend behind TLS termination, so a browser's `https://` Origin never matched and every WebSocket upgrade was rejected while REST traffic worked fine. The protocol is now treated as unknown (and skipped from the comparison) in that case instead of being inferred from the local socket; host validation is unaffected. ([#867](https://github.com/CodesWhat/drydock/issues/867))
+
 ## [1.7.0-rc.3] — 2026-08-23
 
 ### Added
