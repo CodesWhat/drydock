@@ -101,34 +101,60 @@ const localizedSurfaceFragments: Record<
   },
 };
 
-const localizedReleaseFragments: Record<string, { wsProxyFix: string; bareIntegerTags: string }> = {
+const localizedReleaseFragments: Record<
+  string,
+  {
+    wsProxyFix: string;
+    bareIntegerTags: string;
+    storeChmodCrash: string;
+    debugDumpRedaction: string;
+  }
+> = {
   'README.de.md': {
     wsProxyFix: '**WebSocket-Log-Streams funktionieren jetzt hinter TLS-terminierenden Proxys**',
     bareIntegerTags: '**Reine Ganzzahl-Tags überholen keine gepunkteten Versionen mehr**',
+    storeChmodCrash: '**Der Start stürzt nicht mehr ab, wenn das Store-Volume `chmod` verweigert**',
+    debugDumpRedaction:
+      '**Debug-Dumps schwärzen jetzt die Werte von Umgebungsvariablen, nicht ihre Namen**',
   },
   'README.es.md': {
     wsProxyFix:
       '**Los flujos de logs por WebSocket funcionan ahora detrás de proxies con terminación TLS**',
     bareIntegerTags:
       '**Las etiquetas de enteros simples ya no superan a las versiones con puntos**',
+    storeChmodCrash: '**El arranque ya no falla cuando el volumen del store rechaza `chmod`**',
+    debugDumpRedaction:
+      '**El volcado de depuración ocultaba los nombres de las variables de entorno en lugar de los valores**',
   },
   'README.fr.md': {
     wsProxyFix:
       '**Les flux de logs WebSocket fonctionnent désormais derrière des proxys à terminaison TLS**',
     bareIntegerTags: '**Les tags entiers nus ne dépassent plus les versions à points**',
+    storeChmodCrash: '**Le démarrage ne plante plus lorsque le volume du store refuse `chmod`**',
+    debugDumpRedaction:
+      "**Le dump de débogage masquait les noms des variables d'environnement au lieu de leurs valeurs**",
   },
   'README.pl.md': {
     wsProxyFix: '**Strumienie logów WebSocket działają teraz za proxy z terminacją TLS**',
     bareIntegerTags: '**Nagie tagi liczbowe nie wyprzedzają już wersji z kropkami**',
+    storeChmodCrash:
+      '**Uruchomienie nie kończy się już awarią, gdy wolumin store odmawia `chmod`**',
+    debugDumpRedaction:
+      '**Zrzut debugowania ukrywał nazwy zmiennych środowiskowych zamiast ich wartości**',
   },
   'README.pt-BR.md': {
     wsProxyFix:
       '**Fluxos de logs via WebSocket agora funcionam atrás de proxies com terminação TLS**',
     bareIntegerTags: '**Tags de inteiros simples não superam mais versões com pontos**',
+    storeChmodCrash: '**A inicialização não trava mais quando o volume do store recusa `chmod`**',
+    debugDumpRedaction:
+      '**O dump de depuração ocultava os nomes das variáveis de ambiente em vez dos valores**',
   },
   'README.zh-CN.md': {
     wsProxyFix: '**WebSocket 日志流现在可在 TLS 终止代理后正常工作**',
     bareIntegerTags: '**纯数字标签不再超过带点号的版本号**',
+    storeChmodCrash: '**当存储卷拒绝 `chmod` 时启动不再崩溃**',
+    debugDumpRedaction: '**调试转储此前隐藏的是环境变量的名称而非值**',
   },
 };
 
@@ -242,6 +268,7 @@ describe.each(translatedReadmes)('%s', (readme) => {
     expect(getUrls(wsProxyBullet)).toEqual([
       'https://github.com/CodesWhat/drydock/issues/867',
       'https://github.com/CodesWhat/drydock/pull/868',
+      'https://github.com/CodesWhat/drydock/pull/887',
     ]);
     expect(getUrls(bareIntegerBullet)).toEqual([
       'https://github.com/CodesWhat/drydock/issues/859',
