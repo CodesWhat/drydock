@@ -219,8 +219,15 @@ export function createBeforeSend(token: string, routes: ReadonlySet<string>) {
     properties.$raw_user_agent = rawUserAgent;
     properties.$host = host;
 
-    if (input.event === "$pageview") {
+    if (input.event === "$pageview" || input.event === "$pageleave") {
+      // PostHog's Web analytics Page / Entry page / Exit page tables key off
+      // $pathname, so without it those tables return no rows at all. Send
+      // the already-canonicalized `path` rather than the raw pathname:
+      // `path` has already been reduced to the known-route allowlist with
+      // OTHER_PATH as the catch-all, so $pathname carries nothing the event
+      // was not already sending and can never leak an unlisted route.
       properties.$current_url = `${PRODUCTION_ORIGIN}${properties.path}`;
+      properties.$pathname = properties.path;
       return createCaptureResult(input, properties);
     }
 
