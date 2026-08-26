@@ -4,7 +4,7 @@
 FROM aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c AS trivy-bin
 
 # Common Stage
-FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS base
+FROM node:24-alpine@sha256:2a49bdf71e9fd965a58c1703fd9ddd205b34e5782b692a72dd1d248abb0beb43 AS base
 WORKDIR /home/node/app
 
 LABEL maintainer="CodesWhat"
@@ -33,7 +33,7 @@ RUN apk add --no-cache \
     && mkdir -m 0700 /store && chown node:node /store
 
 # Build stage for healthcheck binary (~65KB static binary)
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS healthcheck-build
+FROM alpine:3.24@sha256:79ff19e9084a00eece421b2523fb93e22d730e2c0e525905de047e848e56d95f AS healthcheck-build
 RUN apk add --no-cache gcc=15.2.0-r5 musl-dev=1.2.6-r2
 COPY healthcheck.c /src/healthcheck.c
 RUN gcc -Os -static -s -o /bin/healthcheck /src/healthcheck.c
