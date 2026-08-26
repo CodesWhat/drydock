@@ -161,9 +161,84 @@ test("pageviews are rebuilt from the canonical production URL and a minimal enve
       surface: "marketing",
       path: "/compare",
       $current_url: `${PRODUCTION_ORIGIN}/compare`,
+      $pathname: "/compare",
       ...COOKIELESS_HASH_PROPERTIES,
     },
   });
+});
+
+test("pageleaves are rebuilt from posthog-js's own envelope onto the canonical contract", () => {
+  // posthog-js emits $pageleave itself once capture_pageleave is true, so it
+  // reaches before_send carrying PostHog's own properties ($current_url,
+  // $raw_user_agent, $host, token, $cookieless_mode,
+  // $process_person_profile) rather than ours. before_send has to rebuild it
+  // from that envelope like any other event; before this branch existed the
+  // fallthrough `return null` dropped every $pageleave silently, which is
+  // why flipping capture_pageleave alone does nothing.
+  const timestamp = new Date("2026-08-14T12:05:00.000Z");
+  const beforeSend = createBeforeSend("phc_public-token_123", ROUTES);
+  const result = beforeSend({
+    uuid: "018f0000-0000-7000-8000-000000000008",
+    event: "$pageleave",
+    timestamp,
+    properties: {
+      ...COOKIELESS_HASH_PROPERTIES,
+      $current_url: "https://getdrydock.com/compare/?utm_source=secret#secret",
+      token: "phc_public-token_123",
+      $cookieless_mode: true,
+      $process_person_profile: false,
+      $referrer: "https://secret.example",
+      title: "Private title",
+    },
+  });
+
+  assert.deepEqual(result, {
+    uuid: "018f0000-0000-7000-8000-000000000008",
+    event: "$pageleave",
+    timestamp,
+    properties: {
+      token: "phc_public-token_123",
+      $cookieless_mode: true,
+      $process_person_profile: false,
+      schema_version: 1,
+      site: "drydock",
+      surface: "marketing",
+      path: "/compare",
+      $current_url: `${PRODUCTION_ORIGIN}/compare`,
+      $pathname: "/compare",
+      ...COOKIELESS_HASH_PROPERTIES,
+    },
+  });
+});
+
+test("$pathname always equals the canonicalized path and never leaks an unlisted route", () => {
+  // $pathname exists purely so PostHog's Web analytics Page / Entry page /
+  // Exit page tables resolve at all; they read that property and nothing
+  // else. It must stay bound to the already-canonicalized `path`: if it ever
+  // carried the raw pathname instead, every unlisted route would start
+  // leaking into the analytics project, which is exactly what the route
+  // allowlist exists to prevent.
+  const beforeSend = createBeforeSend("phc_public-token_123", ROUTES);
+  for (const event of ["$pageview", "$pageleave"]) {
+    for (const rawPath of ["/", "/compare", "/private/customer-secret", "/docs/v1.7/unknown"]) {
+      const result = beforeSend({
+        uuid: "018f0000-0000-7000-8000-000000000009",
+        event,
+        properties: {
+          ...COOKIELESS_HASH_PROPERTIES,
+          path: rawPath,
+          token: "phc_public-token_123",
+        },
+      });
+      assert.ok(result, `${event} for ${rawPath} must not be dropped`);
+      assert.equal(result.properties.$pathname, result.properties.path);
+      assert.equal(
+        String(result.properties.$pathname).includes("customer-secret"),
+        false,
+        `unlisted route leaked into $pathname for ${event} ${rawPath}`,
+      );
+    }
+  }
 });
 
 test("before_send requires and forwards the cookieless server-hash fields", () => {

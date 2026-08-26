@@ -1,3 +1,5 @@
 10049	IGNORE	Storable and Cacheable Content (informational) - content-hashed static assets are intentionally cacheable
 10055	IGNORE	CSP style-src unsafe-inline - accepted: vendor libraries (iconify-icon, Vue Transition) set element.style programmatically; documented in the CSP directives in app/api/index.ts. Stays visible in code scanning (not in IGNORED_ZAP_PLUGIN_IDS).
 10109	IGNORE	Modern Web Application (informational) - SPA detection notice, not a finding; recurs on every scan.
+10015	IGNORE	Re-examine Cache-control Directives - demo.getdrydock.com (apps/demo/vercel.json) is a 100% static SPA serving mock data only, no auth, no per-user or sensitive responses; Vercel's CDN caches the shell and assets by design, same rationale as 10049. The dynamic getdrydock.com surface sends `Cache-Control: private, no-cache, no-store` on its documents, so this stays a no-op there.
+10050	IGNORE	Retrieved from Cache - same static/CDN-cached-by-design rationale as 10015 and 10049; demo.getdrydock.com has nothing dynamic or per-user to be served stale.
