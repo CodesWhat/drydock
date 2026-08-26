@@ -313,7 +313,7 @@ jobs:
         if: steps.fuzz-status.outputs.failed == 'true' && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE_TITLE: "CI: Fuzz tests failing on main"
+          ISSUE_TITLE: "🚨 CI: Fuzz tests failing on main"
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
