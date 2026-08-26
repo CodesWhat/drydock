@@ -490,8 +490,12 @@ export function warnTriggerCategoryScopeChangeIfNeeded(
 
 /**
  * Prune old containers from the store.
- * Containers that still exist in Docker (e.g. stopped) get their status updated
- * instead of being removed, so the UI can still show them with a start button.
+ * Containers that still exist in Docker (e.g. stopped) AND are still in watch
+ * scope get their status updated instead of being removed, so the UI can
+ * still show them with a start button. A container that inspects
+ * successfully but has fallen out of watch scope (watchbydefault disabled,
+ * dd.watch label removed, etc.) is deleted just like a container that's gone
+ * from Docker entirely — inspect success alone is not "still tracked".
  * @param newContainers
  * @param containersFromTheStore
  * @param dockerApi
@@ -503,9 +507,11 @@ export async function pruneOldContainers(
   options: {
     forceRemoveContainerIds?: Set<string>;
     sameSourceContainersFromStore?: Container[];
+    stillInWatchScopeContainerIds?: Set<string>;
   } = {},
 ) {
   const forceRemoveContainerIds = options.forceRemoveContainerIds || new Set<string>();
+  const stillInWatchScopeContainerIds = options.stillInWatchScopeContainerIds;
   const containersToRemove = getOldContainers(newContainers, containersFromTheStore);
   const containersToNamePrune = getOldContainers(
     newContainers,
@@ -542,6 +548,19 @@ export async function pruneOldContainers(
     }
     try {
       const inspectResult = await dockerApi.getContainer(containerToRemove.id).inspect();
+      const isStillInWatchScope =
+        !stillInWatchScopeContainerIds ||
+        (typeof containerToRemove.id === 'string' &&
+          stillInWatchScopeContainerIds.has(containerToRemove.id));
+      if (!isStillInWatchScope) {
+        // Container still exists in Docker, but is no longer in watch scope
+        // (e.g. watchbydefault disabled and dd.watch label absent, or the
+        // label was removed). Delete like any other stale record — no
+        // replacementExpected, this isn't the "container about to reappear
+        // under a new id" path.
+        storeContainer.deleteContainer(containerToRemove.id);
+        continue;
+      }
       const newStatus = inspectResult?.State?.Status;
       if (newStatus) {
         storeContainer.updateContainer({ ...containerToRemove, status: newStatus });

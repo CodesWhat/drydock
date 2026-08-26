@@ -7,10 +7,14 @@ import { expect, test } from 'vitest';
 // Bumped from 1600 for the v1.7.0 curl-healthcheck startup warning (one
 // import + one call site in init()); the warning logic itself lives in
 // curl-healthcheck-warning.ts to keep this file's growth to a minimum.
-test('Docker watcher implementation should stay under 1605 lines', () => {
+// Bumped from 1605 for the #869 unwatched-container-prune fix (one import +
+// the watch-scope Set computed at the pruneOldContainers call site); the
+// scope-set logic itself lives in getStillInWatchScopeContainerIds in
+// docker-helpers.ts.
+test('Docker watcher implementation should stay under 1610 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1605);
+  expect(lineCount).toBeLessThanOrEqual(1610);
 });
