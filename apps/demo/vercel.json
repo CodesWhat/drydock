@@ -11,6 +11,19 @@
         {
           "key": "Content-Security-Policy",
           "value": "frame-ancestors 'self' https://getdrydock.com https://*.vercel.app"
+        },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "credentialless"
+        },
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://demo.getdrydock.com"
         }
       ]
     }
