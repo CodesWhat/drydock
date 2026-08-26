@@ -87,6 +87,7 @@ import {
   getInspectValueByPath,
   getOldContainers,
   getSemverTagFromInspectPath,
+  getStillInWatchScopeContainerIds,
   isContainerToWatch,
   normalizeConfigNumberValue,
   shouldUpdateDisplayNameFromContainerName,
@@ -1321,11 +1322,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       (result): result is Container => !(result instanceof Error) && result != null,
     );
 
-    // Prune old containers from the store
+    // Prune old containers from the store (#869; see getStillInWatchScopeContainerIds in docker-helpers.ts).
+    const stillInWatchScopeContainerIds = getStillInWatchScopeContainerIds(
+      containersWithResolvedLabels,
+      filteredContainers,
+      containersFromTheStore,
+    );
     try {
       await pruneOldContainers(containersToReturn, containersFromTheStore, this.dockerApi, {
         forceRemoveContainerIds: skippedContainerIds,
         sameSourceContainersFromStore: sameSourceContainersFromTheStore,
+        stillInWatchScopeContainerIds,
       });
     } catch (e: unknown) {
       this.log.warn(`Error when trying to prune the old containers (${getErrorMessage(e)})`);
