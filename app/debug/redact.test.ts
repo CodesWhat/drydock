@@ -319,6 +319,74 @@ describe('debug/redact', () => {
     });
   });
 
+  test('env var pair objects keep the name visible when the name is not sensitive', () => {
+    const source = { key: 'DEBIAN_FRONTEND', value: 'noninteractive' };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({ key: 'DEBIAN_FRONTEND', value: 'noninteractive' });
+  });
+
+  test('env var pair objects redact the value (not the name) when the name is sensitive', () => {
+    const source = { key: 'HF_TOKEN', value: 'xyz' };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({ key: 'HF_TOKEN', value: '[REDACTED]' });
+  });
+
+  test('env var pair objects preserve an empty sensitive value per redactMatchedValue contract', () => {
+    const source = { key: 'MY_PASSWORD', value: '' };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({ key: 'MY_PASSWORD', value: '' });
+  });
+
+  test('env var pair objects nested inside an array are redacted by name, matching the real dump shape', () => {
+    const source = {
+      env: [
+        { key: 'DEBIAN_FRONTEND', value: 'noninteractive' },
+        { key: 'HF_TOKEN', value: 'xyz' },
+      ],
+    };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({
+      env: [
+        { key: 'DEBIAN_FRONTEND', value: 'noninteractive' },
+        { key: 'HF_TOKEN', value: '[REDACTED]' },
+      ],
+    });
+  });
+
+  test('a non-pair object with a key property still redacts that property as before', () => {
+    const source = { key: 'some-api-key-value', other: 'kept' };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({ key: '[REDACTED]', other: 'kept' });
+  });
+
+  test('pair objects with extra properties keep name/value pair handling and walk extras generically', () => {
+    const source = {
+      key: 'HF_TOKEN',
+      value: 'xyz',
+      extra: { token: 'nested-secret' },
+      note: 'kept',
+    };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({
+      key: 'HF_TOKEN',
+      value: '[REDACTED]',
+      extra: { token: '[REDACTED]' },
+      note: 'kept',
+    });
+  });
+
   test('keeps empty and null sensitive values unchanged', () => {
     const source = {
       secret: '',

@@ -58,6 +58,12 @@ function redactMatchedValue(value: unknown): unknown {
   return REDACTED_VALUE;
 }
 
+function isNameValuePair(
+  node: Record<string, unknown>,
+): node is Record<string, unknown> & { key: string } {
+  return typeof node.key === 'string' && 'value' in node;
+}
+
 function redactNode(node: unknown, nodeKey?: string): unknown {
   if (nodeKey && isSensitiveKey(nodeKey)) {
     return redactMatchedValue(node);
@@ -69,6 +75,22 @@ function redactNode(node: unknown, nodeKey?: string): unknown {
 
   if (!isPlainObject(node)) {
     return node;
+  }
+
+  if (isNameValuePair(node)) {
+    const redactedPair: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'key') {
+        redactedPair[key] = value;
+      } else if (key === 'value') {
+        redactedPair[key] = isSensitiveKey(node.key)
+          ? redactMatchedValue(value)
+          : redactNode(value);
+      } else {
+        redactedPair[key] = redactNode(value, key);
+      }
+    }
+    return redactedPair;
   }
 
   const redactedObject: Record<string, unknown> = {};
