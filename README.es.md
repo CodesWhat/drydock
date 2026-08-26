@@ -202,6 +202,18 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
 
 <details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.4</strong></summary>
+
+- **Los flujos de logs por WebSocket funcionan ahora detrás de proxies con terminación TLS**: con el proxy de confianza habilitado y sin `X-Forwarded-Proto` en la solicitud de upgrade, la comprobación de origen ya no recurre al estado TLS del socket local (HTTP simple detrás de la terminación TLS, lo que provocaba que cada conexión del navegador recibiera un 403); el protocolo se trata ahora como desconocido y la validación de host no cambia. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#868](https://github.com/CodesWhat/drydock/pull/868))
+- **Las etiquetas de enteros simples ya no superan a las versiones con puntos**: una etiqueta de contador de compilación como `168` ya no se convierte en un falso `168.0.0` que supera a una versión real como `1.43.3`, tanto en el badge de etiqueta sugerida como en la ruta de recuperación accionable `includeTags`, que ahora comparten una única regla de partición para no volver a divergir. ([#859](https://github.com/CodesWhat/drydock/issues/859), [#871](https://github.com/CodesWhat/drydock/pull/871))
+- **Las imágenes base eliminan seis CVE HIGH de OpenSSL**: los pines de digest de `node:24-alpine` y `alpine:3.24`, y el pin de apk de `openssl`, avanzan a OpenSSL 3.5.8-r0. ([#881](https://github.com/CodesWhat/drydock/pull/881))
+- **El sitio de demostración envía el conjunto completo de cabeceras de seguridad**: las cabeceras que DAST marcaba como ausentes en la superficie de demostración ahora se envían. ([#878](https://github.com/CodesWhat/drydock/pull/878))
+
+Notas completas en [CHANGELOG.md](./CHANGELOG.md#170-rc4--2026-08-26).
+
+</details>
+
+<details>
 <summary><strong>Aspectos destacados de v1.7.0-rc.3</strong></summary>
 
 - **Los túneles de borde de Portwing ahora transportan cuerpos que no son JSON**: el frame de bienvenida del controlador ahora anuncia la capacidad `edge-response-body-b64` y decodifica cuerpos de respuesta de Docker negociados en base64 (por ejemplo, la respuesta de texto plano «OK» de `_ping`) de los agentes que la admiten; aditivo y controlado por capacidad. ([#852](https://github.com/CodesWhat/drydock/pull/852))

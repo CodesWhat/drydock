@@ -202,6 +202,18 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.4</strong></summary>
+
+- **Fluxos de logs via WebSocket agora funcionam atrás de proxies com terminação TLS** — com o trust proxy habilitado e `X-Forwarded-Proto` ausente na solicitação de upgrade, a verificação de origem não recorre mais ao estado TLS do socket local (HTTP puro atrás da terminação TLS, o que fazia toda conexão do navegador retornar 403); o protocolo agora é tratado como desconhecido e a validação do host permanece inalterada. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#868](https://github.com/CodesWhat/drydock/pull/868))
+- **Tags de inteiros simples não superam mais versões com pontos** — uma tag de contador de build como `168` não é mais convertida em um falso `168.0.0` que supera uma versão real como `1.43.3`, tanto no selo de tag sugerida quanto no caminho de recuperação acionável `includeTags`, que agora compartilham uma única regra de partição para não voltarem a divergir. ([#859](https://github.com/CodesWhat/drydock/issues/859), [#871](https://github.com/CodesWhat/drydock/pull/871))
+- **As imagens base eliminam seis CVEs HIGH do OpenSSL** — os pins de digest de `node:24-alpine` e `alpine:3.24`, e o pin de apk do `openssl`, avançam para o OpenSSL 3.5.8-r0. ([#881](https://github.com/CodesWhat/drydock/pull/881))
+- **O site de demonstração agora envia o conjunto completo de cabeçalhos de segurança** — os cabeçalhos que o DAST sinalizava como ausentes na superfície de demonstração agora são enviados. ([#878](https://github.com/CodesWhat/drydock/pull/878))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc4--2026-08-26).
+
+</details>
+
+<details>
 <summary><strong>Destaques da v1.7.0-rc.3</strong></summary>
 
 - **Túneis de borda do Portwing agora carregam corpos que não são JSON** — o frame de boas-vindas do controlador agora anuncia a capacidade `edge-response-body-b64` e decodifica corpos de resposta do Docker negociados em base64 (por exemplo, a resposta em texto simples "OK" do `_ping`) de agentes que oferecem suporte a isso; aditivo e controlado por capacidade. ([#852](https://github.com/CodesWhat/drydock/pull/852))

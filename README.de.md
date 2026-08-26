@@ -202,6 +202,18 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.4</strong></summary>
+
+- **WebSocket-Log-Streams funktionieren jetzt hinter TLS-terminierenden Proxys** – wenn Trust Proxy aktiviert ist und `X-Forwarded-Proto` beim Upgrade-Request fehlt, fällt die Origin-Prüfung nicht mehr auf den TLS-Status des lokalen Sockets zurück (reines HTTP hinter TLS-Terminierung, wodurch jede Browser-Verbindung mit 403 abgelehnt wurde); das Protokoll gilt jetzt als unbekannt, die Host-Validierung bleibt unverändert. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#868](https://github.com/CodesWhat/drydock/pull/868))
+- **Reine Ganzzahl-Tags überholen keine gepunkteten Versionen mehr** – ein Build-Zähler-Tag wie `168` wird nicht mehr zu einem fiktiven `168.0.0` aufgewertet, das eine echte Version wie `1.43.3` schlägt; sowohl das vorgeschlagene Tag-Badge als auch der handlungsrelevante `includeTags`-Wiederherstellungspfad teilen sich jetzt eine gemeinsame Partitionierungsregel, damit sie nicht mehr auseinanderdriften können. ([#859](https://github.com/CodesWhat/drydock/issues/859), [#871](https://github.com/CodesWhat/drydock/pull/871))
+- **Basis-Images beheben sechs HIGH-OpenSSL-CVEs** – die Digest-Pins von `node:24-alpine` und `alpine:3.24` sowie der `openssl`-apk-Pin werden auf OpenSSL 3.5.8-r0 vorgezogen. ([#881](https://github.com/CodesWhat/drydock/pull/881))
+- **Die Demo-Seite sendet jetzt den vollständigen Satz an Sicherheits-Headern** – die von DAST als fehlend markierten Header auf der Demo-Oberfläche werden jetzt gesendet. ([#878](https://github.com/CodesWhat/drydock/pull/878))
+
+Vollständige Versionshinweise in [CHANGELOG.md](./CHANGELOG.md#170-rc4--2026-08-26).
+
+</details>
+
+<details>
 <summary><strong>Highlights von v1.7.0-rc.3</strong></summary>
 
 - **Portwing-Edge-Tunnel übertragen jetzt Nicht-JSON-Antworten** – der Willkommens-Frame des Controllers kündigt jetzt die Capability `edge-response-body-b64` an und dekodiert base64-kodierte Docker-Antwortkörper (zum Beispiel die reine Textantwort „OK" von `_ping`) von Agenten, die dies unterstützen; additiv und capability-gated. ([#852](https://github.com/CodesWhat/drydock/pull/852))

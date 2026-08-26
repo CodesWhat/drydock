@@ -202,6 +202,18 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.4</strong></summary>
+
+- **Strumienie logów WebSocket działają teraz za proxy z terminacją TLS** — gdy trust proxy jest włączone, a `X-Forwarded-Proto` jest nieobecne w żądaniu upgrade, sprawdzanie originu nie wraca już do stanu TLS lokalnego socketu (zwykły HTTP za terminacją TLS, przez co każde połączenie z przeglądarki kończyło się błędem 403); protokół jest teraz traktowany jako nieznany, a walidacja hosta pozostaje bez zmian. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#868](https://github.com/CodesWhat/drydock/pull/868))
+- **Nagie tagi liczbowe nie wyprzedzają już wersji z kropkami** — tag licznika builda, taki jak `168`, nie jest już konwertowany na fikcyjny `168.0.0`, który wyprzedzałby prawdziwą wersję `1.43.3`; zarówno odznaka sugerowanego tagu, jak i ścieżka odzyskiwania `includeTags` korzystają teraz z jednej wspólnej reguły podziału, dzięki czemu nie mogą już się rozjechać. ([#859](https://github.com/CodesWhat/drydock/issues/859), [#871](https://github.com/CodesWhat/drydock/pull/871))
+- **Obrazy bazowe usuwają sześć luk OpenSSL o wysokim priorytecie (HIGH)** — pinowania digestów `node:24-alpine` i `alpine:3.24` oraz pinowanie pakietu apk `openssl` są przesuwane do OpenSSL 3.5.8-r0. ([#881](https://github.com/CodesWhat/drydock/pull/881))
+- **Strona demo wysyła teraz pełny zestaw nagłówków bezpieczeństwa** — nagłówki, których brak zgłaszał DAST na powierzchni demo, są teraz wysyłane. ([#878](https://github.com/CodesWhat/drydock/pull/878))
+
+Pełne informacje o wersji znajdują się w [CHANGELOG.md](./CHANGELOG.md#170-rc4--2026-08-26).
+
+</details>
+
+<details>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.3</strong></summary>
 
 - **Tunele brzegowe Portwing przenoszą teraz treści inne niż JSON** — ramka powitalna kontrolera ogłasza teraz możliwość `edge-response-body-b64` i dekoduje treści odpowiedzi Dockera negocjowane w base64 (na przykład zwykłą tekstową odpowiedź „OK" z `_ping`) od agentów, którzy to obsługują; addytywnie i w zależności od możliwości. ([#852](https://github.com/CodesWhat/drydock/pull/852))
