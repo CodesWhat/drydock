@@ -55,6 +55,23 @@ function getFirstForwardedValue(value: unknown): string | undefined {
   return firstValue || undefined;
 }
 
+function normalizeForwardedProtocol(forwardedProtocol: string): 'http:' | 'https:' | undefined {
+  // Some proxies forward the WebSocket upgrade's client-facing scheme as
+  // ws/wss rather than http/https (Traefik does, see traefik/traefik#6388).
+  // Each pair carries the same security level, so map ws(s) to its HTTP
+  // equivalent before comparing against the browser's http(s) Origin (#867).
+  switch (forwardedProtocol.toLowerCase()) {
+    case 'http':
+    case 'ws':
+      return 'http:';
+    case 'https':
+    case 'wss':
+      return 'https:';
+    default:
+      return undefined;
+  }
+}
+
 function getSocketOriginProtocol(request: IncomingMessage): 'http:' | 'https:' | undefined {
   const socket = request.socket as (Socket & { encrypted?: boolean }) | undefined;
   if (!socket) {
@@ -97,8 +114,8 @@ export function isOriginAllowed(
   if (!effectiveHost) {
     allowed = false;
   } else if (forwardedProtocol !== undefined) {
-    const normalizedProtocol = `${forwardedProtocol.toLowerCase()}:`;
-    if (normalizedProtocol !== 'http:' && normalizedProtocol !== 'https:') {
+    const normalizedProtocol = normalizeForwardedProtocol(forwardedProtocol);
+    if (normalizedProtocol === undefined) {
       allowed = false;
     } else {
       effectiveProtocol = normalizedProtocol;
