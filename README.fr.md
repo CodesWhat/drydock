@@ -202,6 +202,18 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 <h2 align="center" id="recent-updates">Mises à jour récentes</h2>
 
 <details open>
+<summary><strong>Points forts de la v1.7.0-rc.4</strong></summary>
+
+- **Les flux de logs WebSocket fonctionnent désormais derrière des proxys à terminaison TLS** : avec le trust proxy activé et `X-Forwarded-Proto` absent de la requête d'upgrade, la vérification d'origine ne se rabat plus sur l'état TLS du socket local (HTTP en clair derrière la terminaison TLS, ce qui faisait échouer chaque connexion navigateur avec un 403) ; le protocole est désormais traité comme inconnu et la validation de l'hôte reste inchangée. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#868](https://github.com/CodesWhat/drydock/pull/868))
+- **Les tags entiers nus ne dépassent plus les versions à points** : un tag de compteur de build comme `168` ne se convertit plus en un faux `168.0.0` qui dépasserait une vraie version comme `1.43.3`, à la fois dans le badge de tag suggéré et dans le chemin de récupération actionnable `includeTags`, qui partagent désormais une seule règle de partition afin de ne plus diverger. ([#859](https://github.com/CodesWhat/drydock/issues/859), [#871](https://github.com/CodesWhat/drydock/pull/871))
+- **Les images de base éliminent six CVE HIGH d'OpenSSL** : les pins de digest de `node:24-alpine` et `alpine:3.24`, ainsi que le pin apk d'`openssl`, avancent vers OpenSSL 3.5.8-r0. ([#881](https://github.com/CodesWhat/drydock/pull/881))
+- **Le site de démonstration envoie désormais l'ensemble complet des en-têtes de sécurité** : les en-têtes signalés comme manquants par DAST sur la surface de démonstration sont désormais envoyés. ([#878](https://github.com/CodesWhat/drydock/pull/878))
+
+Notes complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc4--2026-08-26).
+
+</details>
+
+<details>
 <summary><strong>Points forts de la v1.7.0-rc.3</strong></summary>
 
 - **Les tunnels Portwing edge transportent désormais des corps non JSON** : la trame de bienvenue du contrôleur annonce désormais la capacité `edge-response-body-b64` et décode les corps de réponse Docker négociés en base64 (par exemple la réponse texte brut « OK » de `_ping`) provenant des agents qui la prennent en charge ; additif et conditionné par la capacité. ([#852](https://github.com/CodesWhat/drydock/pull/852))
