@@ -49,14 +49,38 @@ let storeDirectoryResolved: string | undefined;
 const STORE_DIRECTORY_MODE = 0o700;
 const STORE_FILE_MODE = 0o600;
 
+// Permission tightening is hardening, not a functional requirement: some
+// volume mounts (NFS/CIFS, non-root containers, certain volume drivers)
+// reject chmod outright. Failing to tighten permissions there must warn and
+// keep starting up, not crash — this is a regression from v1.6.0's
+// unconditional chmodSync on the store directory (#874).
+const RECOVERABLE_CHMOD_ERROR_CODES = new Set(['EPERM', 'EACCES', 'ENOTSUP', 'EROFS']);
+
 function enforceStorePermissions(storeDirectory: string, storePath: string): void {
-  fs.chmodSync(storeDirectory, STORE_DIRECTORY_MODE);
+  try {
+    fs.chmodSync(storeDirectory, STORE_DIRECTORY_MODE);
+  } catch (error: unknown) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (!code || !RECOVERABLE_CHMOD_ERROR_CODES.has(code)) {
+      throw error;
+    }
+    log.warn(
+      `Could not tighten permissions on store directory (${storeDirectory}): ${code}; continuing without enforced permissions`,
+    );
+  }
   try {
     fs.chmodSync(storePath, STORE_FILE_MODE);
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return;
+    }
+    if (!code || !RECOVERABLE_CHMOD_ERROR_CODES.has(code)) {
       throw error;
     }
+    log.warn(
+      `Could not tighten permissions on store file (${storePath}): ${code}; continuing without enforced permissions`,
+    );
   }
 }
 

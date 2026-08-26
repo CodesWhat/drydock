@@ -509,14 +509,14 @@ describe('Store Module', () => {
     expect(chmodSync).toHaveBeenCalledWith('/test/store/test.json', 0o600);
   });
 
-  test('should rethrow non-ENOENT errors from store file permission enforcement', async () => {
+  test('should rethrow unexpected (non-recoverable) errors from store file permission enforcement', async () => {
     vi.resetModules();
-    const permissionError = Object.assign(new Error('operation not permitted'), {
-      code: 'EPERM',
+    const unexpectedError = Object.assign(new Error('bad file descriptor'), {
+      code: 'EBADF',
     });
     const chmodSync = vi.fn((target: string) => {
       if (target === '/test/store/test.json') {
-        throw permissionError;
+        throw unexpectedError;
       }
     });
     registerCommonMocks({
@@ -529,8 +529,90 @@ describe('Store Module', () => {
     });
 
     const storeWithBadFilePermissions = await import('./index.js');
-    await expect(storeWithBadFilePermissions.init()).rejects.toThrow('operation not permitted');
+    await expect(storeWithBadFilePermissions.init()).rejects.toThrow('bad file descriptor');
   });
+
+  test('should rethrow unexpected (non-recoverable) errors from store directory permission enforcement', async () => {
+    vi.resetModules();
+    const unexpectedError = Object.assign(new Error('bad file descriptor'), {
+      code: 'EBADF',
+    });
+    const chmodSync = vi.fn((target: string) => {
+      if (target === '/test/store') {
+        throw unexpectedError;
+      }
+    });
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+        chmodSync,
+      },
+    });
+
+    const storeWithBadDirError = await import('./index.js');
+    await expect(storeWithBadDirError.init()).rejects.toThrow('bad file descriptor');
+  });
+
+  test.each(['EPERM', 'EACCES', 'ENOTSUP', 'EROFS'])(
+    'should warn and continue when directory permission enforcement fails with %s',
+    async (code) => {
+      vi.resetModules();
+      const permissionError = Object.assign(new Error(`chmod failed: ${code}`), { code });
+      const chmodSync = vi.fn((target: string) => {
+        if (target === '/test/store') {
+          throw permissionError;
+        }
+      });
+      registerCommonMocks({
+        fs: {
+          existsSync: vi.fn(() => true),
+          mkdirSync: vi.fn(),
+          renameSync: vi.fn(),
+          chmodSync,
+        },
+      });
+
+      const storeWithBadDirPermissions = await import('./index.js');
+      await expect(storeWithBadDirPermissions.init()).resolves.toBeUndefined();
+
+      const logger = (await import('../log/index.js')).default;
+      const scopedLog = logger.child.mock.results[0].value;
+      expect(scopedLog.warn).toHaveBeenCalledOnce();
+      expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
+      expect(chmodSync).toHaveBeenCalledWith('/test/store/test.json', 0o600);
+    },
+  );
+
+  test.each(['EPERM', 'EACCES', 'ENOTSUP', 'EROFS'])(
+    'should warn and continue when store file permission enforcement fails with %s',
+    async (code) => {
+      vi.resetModules();
+      const permissionError = Object.assign(new Error(`chmod failed: ${code}`), { code });
+      const chmodSync = vi.fn((target: string) => {
+        if (target === '/test/store/test.json') {
+          throw permissionError;
+        }
+      });
+      registerCommonMocks({
+        fs: {
+          existsSync: vi.fn(() => true),
+          mkdirSync: vi.fn(),
+          renameSync: vi.fn(),
+          chmodSync,
+        },
+      });
+
+      const storeWithBadFilePermissions = await import('./index.js');
+      await expect(storeWithBadFilePermissions.init()).resolves.toBeUndefined();
+
+      const logger = (await import('../log/index.js')).default;
+      const scopedLog = logger.child.mock.results[0].value;
+      expect(scopedLog.warn).toHaveBeenCalledOnce();
+      expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
+    },
+  );
 
   test('should throw when store configuration is invalid', async () => {
     vi.resetModules();
