@@ -1,8 +1,8 @@
-name: "🧬 Quality: Mutation Testing"
+name: "Quality: Mutation Testing"
 run-name: >-
   ${{
-    github.event_name == 'schedule' && '🧬 Quality: Mutation Testing — Monthly schedule' ||
-    format('🧬 Quality: Mutation Testing — Manual by {0}', github.actor)
+    github.event_name == 'schedule' && 'Quality: Mutation Testing — Monthly schedule' ||
+    format('Quality: Mutation Testing — Manual by {0}', github.actor)
   }}
 
 # Keep mutation testing out of the push/PR fast path.
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   stryker:
-    name: "🧬 Quality: Stryker Advisory (${{ matrix.name }})"
+    name: "Quality: Stryker Advisory (${{ matrix.name }})"
     runs-on: ubuntu-24.04
     environment: mutation
     timeout-minutes: 360  # GitHub Actions maximum; mutation testing is expensive and advisory-only
@@ -274,7 +274,7 @@ jobs:
           retention-days: 14
 
   aggregate:
-    name: "🧬 Quality: Aggregate Mutation Score"
+    name: "Quality: Aggregate Mutation Score"
     needs: stryker
     if: always()
     runs-on: ubuntu-24.04
