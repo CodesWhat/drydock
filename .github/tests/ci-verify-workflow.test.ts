@@ -157,7 +157,7 @@ test('secret scanning gates full history and the tracked working tree', () => {
   const job = workflow.jobs?.secrets;
 
   expect(job).toMatchObject({
-    name: '🔑 Security: Secrets',
+    name: 'Security: Secrets',
     needs: ['security-actions'],
     'runs-on': 'ubuntu-24.04',
     'timeout-minutes': 10,
