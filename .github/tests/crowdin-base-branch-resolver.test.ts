@@ -53,6 +53,8 @@ function runResolver(options: {
   lsRemoteOutput?: string;
   lsRemoteExit?: number;
   defaultBranch?: string;
+  eventName?: string;
+  refName?: string;
 }): ResolverResult {
   const workdir = mkdtempSync(join(tmpdir(), 'crowdin-base-resolver-'));
   try {
@@ -71,6 +73,11 @@ function runResolver(options: {
       PATH: `${stubDir}:${process.env.PATH ?? ''}`,
       DEFAULT_BRANCH: options.defaultBranch ?? 'main',
       GITHUB_OUTPUT: outputPath,
+      // Default to an event with no meaningful branch context, matching the
+      // pre-existing tests below that exercise the highest-wins/default-branch
+      // fallback without caring which event triggered it.
+      GITHUB_EVENT_NAME: options.eventName ?? 'schedule',
+      GITHUB_REF_NAME: options.refName ?? 'main',
       FAKE_GIT_LS_REMOTE_OUTPUT: options.lsRemoteOutput ?? '',
     };
     if (options.lsRemoteExit !== undefined) {
@@ -134,4 +141,37 @@ test('a genuinely failing ls-remote propagates and does not silently fall back t
   // output should have been written at all.
   expect(result.output.name).toBeUndefined();
   expect(result.stdout).not.toContain('main');
+});
+
+test('a push to dev/v1.6 targets dev/v1.6 directly, even when a higher dev/vX.Y branch exists on origin', () => {
+  const result = runResolver({
+    eventName: 'push',
+    refName: 'dev/v1.6',
+    lsRemoteOutput: ['aaaaaaa\trefs/heads/dev/v1.6', 'bbbbbbb\trefs/heads/dev/v1.7'].join('\n'),
+  });
+
+  expect(result.status).toBe(0);
+  expect(result.output.name).toBe('dev/v1.6');
+});
+
+test('a push to dev/v1.7 targets dev/v1.7 directly', () => {
+  const result = runResolver({
+    eventName: 'push',
+    refName: 'dev/v1.7',
+    lsRemoteOutput: 'aaaaaaa\trefs/heads/dev/v1.6\n',
+  });
+
+  expect(result.status).toBe(0);
+  expect(result.output.name).toBe('dev/v1.7');
+});
+
+test('a run with no branch context (schedule) still resolves highest-wins with the default-branch fallback', () => {
+  const result = runResolver({
+    eventName: 'schedule',
+    lsRemoteOutput: 'deadbeef\trefs/heads/main\ncafef00d\trefs/heads/feature/something\n',
+    defaultBranch: 'main',
+  });
+
+  expect(result.status).toBe(0);
+  expect(result.output.name).toBe('main');
 });
