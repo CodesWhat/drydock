@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Accessibility
+
+- **Dark themes now meet the WCAG 2.2 contrast minimum for normal text.** Secondary and muted text, the tone colors (warning, caution, danger, success, info) and the two accent colors all failed 4.5:1 against surfaces they are actually painted on, across all six dark themes. Worst measured pairs were muted text on an elevated surface at 1.57:1 and secondary text in a warning dialog at 1.33:1. Token values are raised to clear 4.5:1 against the worst real pairing for each, keeping each palette's hue. Colors used only for borders, focus rings, icons and toggle fills are held to the 3:1 non-text target instead of being raised needlessly. ([#850](https://github.com/CodesWhat/drydock/issues/850), [#865](https://github.com/CodesWhat/drydock/discussions/865))
+- **Text in the update-status condition rows is readable again.** Each nested condition row painted the same muted tone background its parent section had already painted, compounding two tints into a surface no text color could clear without washing out the whole muted/secondary hierarchy. The rows now use the card surface they already carried, which no value change could have fixed. ([#850](https://github.com/CodesWhat/drydock/issues/850))
+- **Toast messages meet the contrast minimum.** Toast surfaces mixed their tone color at 25%, leaving the tone-colored text on them between 3.65:1 and 3.94:1 in five of the six dark themes. They now use the same 15% mix as every other tone surface in the app. ([#850](https://github.com/CodesWhat/drydock/issues/850))
+- **Primary button labels are no longer white on a light accent.** The login and notification-test buttons hardcoded white text on the primary color, measuring as low as 1.45:1. A new `--dd-primary-fg` token picks black or white per theme, whichever clears 4.5:1 against that theme's primary. ([#850](https://github.com/CodesWhat/drydock/issues/850))
+
+### Fixed
+
+- **The Crowdin sync workflow failed on every push to a dev branch that was not the newest one.** The base resolver always picked the highest `dev/vX.Y` on origin regardless of which ref triggered the run, but the Crowdin action had already downloaded translations into the working tree by then, so checking out a different branch over them died with `Your local changes to the following files would be overwritten by checkout`. A push to a `dev/vX.Y` branch now targets that branch directly; scheduled and manually dispatched runs keep the highest-wins lookup and its default-branch fallback. ([run 33047712284](https://github.com/CodesWhat/drydock/actions/runs/33047712284))
+
 ## [1.7.0-rc.4] — 2026-08-26
 
 ### Security

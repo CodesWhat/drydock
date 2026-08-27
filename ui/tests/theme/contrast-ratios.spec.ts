@@ -248,7 +248,7 @@ describe('primary CTA foreground contrast (WCAG 2.2 normal-text target, 4.5:1)',
 
 // palettes.ts carries its own copy of each family's accent, used for the theme picker's
 // swatches. It is a second source of truth for a value tokens.css already owns, so raising
-// --dd-primary for contrast silently leaves the picker previewing a colour the app no longer
+// --dd-primary for contrast silently leaves the picker previewing a color the app no longer
 // renders. That is exactly what happened during this contrast pass. Until the duplication is
 // removed, this pins the two together so the next change to either one fails here instead.
 const palettesSource = readFileSync(join(process.cwd(), 'src/theme/palettes.ts'), 'utf8');
