@@ -227,35 +227,6 @@ describe('agent API event', () => {
       expect(slowResponse.write.mock.calls[1][0]).toContain('after-drain');
     });
 
-    test('should remove a client even when its optional close-handler metadata is absent', () => {
-      const priorDescriptor = Object.getOwnPropertyDescriptor(Object.prototype, 'closeHandler');
-      Object.defineProperty(Object.prototype, 'closeHandler', {
-        configurable: true,
-        get: () => undefined,
-        set: () => undefined,
-      });
-      try {
-        const closeReq = { ip: '127.0.0.1', on: vi.fn() };
-        const closeResponse = createPressureResponse();
-        eventApi.subscribeEvents(closeReq, closeResponse);
-        const closeHandler = closeReq.on.mock.calls[0][1];
-
-        closeHandler();
-
-        closeResponse.write.mockClear();
-        eventApi.initEvents();
-        const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
-        addedHandler({ id: 'after-close' });
-        expect(closeResponse.write).not.toHaveBeenCalled();
-      } finally {
-        if (priorDescriptor) {
-          Object.defineProperty(Object.prototype, 'closeHandler', priorDescriptor);
-        } else {
-          Reflect.deleteProperty(Object.prototype, 'closeHandler');
-        }
-      }
-    });
-
     test('should destroy and remove a backpressured client when its pending event overflows', () => {
       const slowReq = { ip: '127.0.0.1', on: vi.fn(), off: vi.fn() };
       const slowResponse = createPressureResponse();

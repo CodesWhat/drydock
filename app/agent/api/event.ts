@@ -17,7 +17,7 @@ interface SseClient {
   backpressured: boolean;
   pendingPayloads: string[];
   drainHandler?: () => void;
-  closeHandler?: () => void;
+  closeHandler: () => void;
   closed: boolean;
 }
 
@@ -85,10 +85,7 @@ function removeSseClient(client: SseClient, destroy: boolean): void {
   }
   client.closed = true;
   removeDrainHandler(client);
-  if (client.closeHandler) {
-    client.req.off?.('close', client.closeHandler);
-    client.closeHandler = undefined;
-  }
+  client.req.off?.('close', client.closeHandler);
   client.pendingPayloads = [];
   sseClients = sseClients.filter((candidate) => candidate.id !== client.id);
   if (destroy) {
@@ -424,21 +421,21 @@ export function subscribeEvents(req: Request, res: Response): boolean {
   };
   res.writeHead(200, headers);
 
-  const client: SseClient = {
+  let client: SseClient;
+  const closeHandler = () => {
+    log.info(`Controller drydock with ip ${sanitizeLogParam(req.ip)} disconnected.`);
+    removeSseClient(client, false);
+  };
+  client = {
     id: allocateSseClientId(),
     req,
     res,
     backpressured: false,
     pendingPayloads: [],
+    closeHandler,
     closed: false,
   };
   sseClients.push(client);
-
-  const closeHandler = () => {
-    log.info(`Controller drydock with ip ${sanitizeLogParam(req.ip)} disconnected.`);
-    removeSseClient(client, false);
-  };
-  client.closeHandler = closeHandler;
   req.on('close', closeHandler);
 
   // Send Welcome / Ack
