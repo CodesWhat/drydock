@@ -99,6 +99,14 @@ function createMockLogWithChild(childMethods = ['info', 'warn', 'debug', 'error'
 
 let mockImage;
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
 describe('Docker Watcher', () => {
   let docker;
   let mockDockerApi;
@@ -257,7 +265,128 @@ describe('Docker Watcher', () => {
       expect(mockStream.on).toHaveBeenCalledWith('end', expect.any(Function));
       expect(docker.onDockerEvent).toHaveBeenCalledWith(
         Buffer.from('{"Action":"create","id":"container123"}\n'),
+        expect.any(Number),
       );
+    });
+
+    test('should keep deferred same-container inspections and store writes in stream order', async () => {
+      const eventHandlers: Record<string, (chunk: unknown) => Promise<void>> = {};
+      const mockStream = {
+        on: vi.fn((eventName, handler) => {
+          eventHandlers[eventName] = handler;
+        }),
+        pause: vi.fn(),
+        resume: vi.fn(),
+      };
+      mockDockerApi.getEvents.mockImplementation((_options, callback) => {
+        callback(null, mockStream);
+      });
+      const firstInspect = createDeferred<unknown>();
+      mockContainer.inspect
+        .mockImplementationOnce(() => firstInspect.promise)
+        .mockResolvedValueOnce({
+          Name: '/web',
+          State: { Status: 'exited' },
+          Config: { Labels: {} },
+        });
+      const storedContainer = {
+        id: 'same-container',
+        name: 'web',
+        displayName: 'web',
+        status: 'created',
+        labels: {},
+        image: { name: 'nginx' },
+      };
+      storeContainer.getContainer.mockReturnValue(storedContainer);
+      const writtenStatuses: string[] = [];
+      storeContainer.updateContainer.mockImplementation((container) => {
+        writtenStatuses.push(container.status);
+        return container;
+      });
+
+      await docker.register('watcher', 'docker', 'test', { watchevents: false });
+      docker.configuration.watchevents = true;
+      docker.isDockerEventsListenerActive = true;
+      await docker.listenDockerEvents();
+
+      const firstProcessing = eventHandlers.data(
+        Buffer.from('{"Action":"start","id":"same-container"}\n'),
+      );
+      const secondProcessing = eventHandlers.data(
+        Buffer.from('{"Action":"stop","id":"same-container"}\n'),
+      );
+      await vi.waitFor(() => expect(mockContainer.inspect).toHaveBeenCalled());
+
+      expect(mockContainer.inspect).toHaveBeenCalledTimes(1);
+
+      firstInspect.resolve({
+        Name: '/web',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      });
+      await Promise.all([firstProcessing, secondProcessing]);
+
+      expect(writtenStatuses).toEqual(['running', 'exited']);
+    });
+
+    test('should invalidate stale stream work before a replacement stream mutates state', async () => {
+      const streamHandlers: Array<Record<string, (chunk: unknown) => Promise<void>>> = [];
+      mockDockerApi.getEvents.mockImplementation((_options, callback) => {
+        const handlers: Record<string, (chunk: unknown) => Promise<void>> = {};
+        streamHandlers.push(handlers);
+        callback(null, {
+          on: vi.fn((eventName, handler) => {
+            handlers[eventName] = handler;
+          }),
+          pause: vi.fn(),
+          resume: vi.fn(),
+          removeAllListeners: vi.fn(),
+          destroy: vi.fn(),
+        });
+      });
+      const staleInspect = createDeferred<unknown>();
+      mockContainer.inspect
+        .mockImplementationOnce(() => staleInspect.promise)
+        .mockResolvedValueOnce({
+          Name: '/web',
+          State: { Status: 'exited' },
+          Config: { Labels: {} },
+        });
+      const storedContainer = {
+        id: 'same-container',
+        name: 'web',
+        displayName: 'web',
+        status: 'created',
+        labels: {},
+        image: { name: 'nginx' },
+      };
+      storeContainer.getContainer.mockReturnValue(storedContainer);
+      const writtenStatuses: string[] = [];
+      storeContainer.updateContainer.mockImplementation((container) => {
+        writtenStatuses.push(container.status);
+        return container;
+      });
+
+      await docker.register('watcher', 'docker', 'test', { watchevents: false });
+      docker.configuration.watchevents = true;
+      docker.isDockerEventsListenerActive = true;
+      await docker.listenDockerEvents();
+      const staleProcessing = streamHandlers[0].data(
+        Buffer.from('{"Action":"start","id":"same-container"}\n'),
+      );
+      await vi.waitFor(() => expect(mockContainer.inspect).toHaveBeenCalled());
+      expect(mockContainer.inspect).toHaveBeenCalledTimes(1);
+
+      await docker.listenDockerEvents();
+      await streamHandlers[1].data(Buffer.from('{"Action":"stop","id":"same-container"}\n'));
+      staleInspect.resolve({
+        Name: '/web',
+        State: { Status: 'running' },
+        Config: { Labels: {} },
+      });
+      await staleProcessing;
+
+      expect(writtenStatuses).toEqual(['exited']);
     });
 
     test('should handle docker events error', async () => {

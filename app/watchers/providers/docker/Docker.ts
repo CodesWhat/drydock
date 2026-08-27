@@ -61,6 +61,7 @@ import {
   startDigestCachePollCycleForRegistries,
 } from './digest-cache-lifecycle.js';
 import {
+  invalidateDockerEventStreamOrchestration,
   listenDockerEventsOrchestration,
   onDockerEventOrchestration,
   processDockerEventOrchestration,
@@ -248,9 +249,6 @@ type DockerEventsReconnectError = Parameters<typeof scheduleDockerEventsReconnec
 type DockerEventsFailureStream = Parameters<typeof onDockerEventsStreamFailureHelper>[2];
 type DockerEventsFailureError = Parameters<typeof onDockerEventsStreamFailureHelper>[4];
 type DockerEventParseErrorInput = Parameters<typeof isRecoverableDockerEventParseErrorHelper>[0];
-type DockerEventPayload = Parameters<typeof processDockerEventPayloadOrchestration>[1];
-type DockerEvent = Parameters<typeof processDockerEventOrchestration>[1];
-type DockerEventChunk = Parameters<typeof onDockerEventOrchestration>[1];
 type DockerContainerInspectPayload = Parameters<typeof updateContainerFromInspectState>[1];
 type DockerImageDetailsWatcher = Parameters<typeof addImageDetailsToContainerOrchestration>[0];
 type DockerImageDetailsContainer = Parameters<typeof addImageDetailsToContainerOrchestration>[1];
@@ -789,7 +787,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     return new Date().toISOString();
   }
 
-  private recordRecentDockerEvent(dockerEvent: unknown): void {
+  recordRecentDockerEvent(dockerEvent: unknown): void {
     if (!dockerEvent || typeof dockerEvent !== 'object') {
       return;
     }
@@ -945,6 +943,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   }
 
   private cleanupDockerEventsStream(destroy = false) {
+    invalidateDockerEventStreamOrchestration(this.asDockerEventsWatcher());
     cleanupDockerEventsStreamState(this, destroy);
   }
 
@@ -991,20 +990,25 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     return isRecoverableDockerEventParseErrorHelper(error);
   }
 
-  async processDockerEventPayload(
-    dockerEventPayload: DockerEventPayload,
+  processDockerEventPayload(
+    dockerEventPayload: string,
     shouldTreatRecoverableErrorsAsPartial = false,
+    streamGeneration?: number,
   ) {
     return processDockerEventPayloadOrchestration(
       this.asDockerEventsWatcher(),
       dockerEventPayload,
       shouldTreatRecoverableErrorsAsPartial,
+      streamGeneration,
     );
   }
 
-  async processDockerEvent(dockerEvent: DockerEvent) {
-    this.recordRecentDockerEvent(dockerEvent);
-    await processDockerEventOrchestration(this.asDockerEventsWatcher(), dockerEvent);
+  processDockerEvent(dockerEvent: unknown, streamGeneration?: number) {
+    return processDockerEventOrchestration(
+      this.asDockerEventsWatcher(),
+      dockerEvent,
+      streamGeneration,
+    );
   }
 
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through docker-event watcher adapter
@@ -1031,16 +1035,12 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     });
   }
 
-  /**
-   * Process a docker event.
-   * @param dockerEventChunk
-   * @return {Promise<void>}
-   */
-  async onDockerEvent(dockerEventChunk: DockerEventChunk) {
-    await onDockerEventOrchestration(
+  onDockerEvent(dockerEventChunk: unknown, streamGeneration?: number) {
+    return onDockerEventOrchestration(
       this.asDockerEventsWatcher(),
       dockerEventChunk,
       DOCKER_EVENTS_BUFFER_MAX_BYTES,
+      streamGeneration,
     );
   }
 

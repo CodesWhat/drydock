@@ -11,11 +11,22 @@ vi.mock('./container-event-update.js', () => ({
 import * as storeContainer from '../../../store/container.js';
 import { processDockerEvent as processDockerEventState } from './container-event-update.js';
 import {
+  invalidateDockerEventStreamOrchestration,
   listenDockerEventsOrchestration,
   onDockerEventOrchestration,
   processDockerEventOrchestration,
   processDockerEventPayloadOrchestration,
 } from './docker-event-orchestration.js';
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 function createWatcher(overrides: Record<string, any> = {}) {
   const streamHandlers: Record<string, (...args: any[]) => unknown> = {};
@@ -23,6 +34,8 @@ function createWatcher(overrides: Record<string, any> = {}) {
     on: vi.fn((eventName: string, handler: (...args: any[]) => unknown) => {
       streamHandlers[eventName] = handler;
     }),
+    pause: vi.fn(),
+    resume: vi.fn(),
   };
 
   const watcher = {
@@ -54,6 +67,7 @@ function createWatcher(overrides: Record<string, any> = {}) {
     onDockerEvent: vi.fn().mockResolvedValue(undefined),
     processDockerEventPayload: vi.fn().mockResolvedValue(true),
     processDockerEvent: vi.fn().mockResolvedValue(undefined),
+    recordRecentDockerEvent: vi.fn(),
     updateContainerFromInspect: vi.fn(),
     isRecoverableDockerEventParseError: vi.fn().mockReturnValue(false),
     ...overrides,
@@ -204,7 +218,10 @@ describe('docker event orchestration helpers', () => {
     expect(watcher.resetDockerEventsReconnectBackoff).toHaveBeenCalledTimes(1);
 
     await streamHandlers.data(Buffer.from('{"Action":"start"}\n'));
-    expect(watcher.onDockerEvent).toHaveBeenCalledWith(Buffer.from('{"Action":"start"}\n'));
+    expect(watcher.onDockerEvent).toHaveBeenCalledWith(
+      Buffer.from('{"Action":"start"}\n'),
+      expect.any(Number),
+    );
 
     const streamError = new Error('stream failed');
     streamHandlers.error(streamError);
@@ -214,6 +231,125 @@ describe('docker event orchestration helpers', () => {
     expect(watcher.onDockerEventsStreamFailure).toHaveBeenCalledWith(stream, 'error', streamError);
     expect(watcher.onDockerEventsStreamFailure).toHaveBeenCalledWith(stream, 'close');
     expect(watcher.onDockerEventsStreamFailure).toHaveBeenCalledWith(stream, 'end');
+  });
+
+  test('listenDockerEventsOrchestration serializes chunks and pauses until queued work settles', async () => {
+    const firstChunk = createDeferred<void>();
+    const onDockerEvent = vi
+      .fn()
+      .mockImplementationOnce(() => firstChunk.promise)
+      .mockResolvedValueOnce(undefined);
+    const { watcher, stream, streamHandlers } = createWatcher({ onDockerEvent });
+    await listenDockerEventsOrchestration(watcher as any);
+
+    const firstProcessing = streamHandlers.data(Buffer.from('first'));
+    const secondProcessing = streamHandlers.data(Buffer.from('second'));
+    await vi.waitFor(() => expect(onDockerEvent).toHaveBeenCalled());
+
+    expect(onDockerEvent).toHaveBeenCalledTimes(1);
+    expect(onDockerEvent).toHaveBeenNthCalledWith(1, Buffer.from('first'), expect.any(Number));
+    expect(stream.pause).toHaveBeenCalledTimes(2);
+    expect(stream.resume).not.toHaveBeenCalled();
+
+    firstChunk.resolve();
+    await Promise.all([firstProcessing, secondProcessing]);
+
+    expect(onDockerEvent).toHaveBeenNthCalledWith(2, Buffer.from('second'), expect.any(Number));
+    expect(stream.resume).toHaveBeenCalledTimes(1);
+  });
+
+  test('listenDockerEventsOrchestration recovers the processing tail after a chunk rejection', async () => {
+    const firstChunk = createDeferred<void>();
+    const onDockerEvent = vi
+      .fn()
+      .mockImplementationOnce(() => firstChunk.promise)
+      .mockResolvedValueOnce(undefined);
+    const { watcher, streamHandlers } = createWatcher({ onDockerEvent });
+    await listenDockerEventsOrchestration(watcher as any);
+
+    const firstProcessing = streamHandlers.data(Buffer.from('first'));
+    const secondProcessing = streamHandlers.data(Buffer.from('second'));
+    firstChunk.reject(new Error('chunk failed'));
+
+    await expect(Promise.all([firstProcessing, secondProcessing])).resolves.toBeDefined();
+    expect(onDockerEvent).toHaveBeenCalledTimes(2);
+    expect(watcher.log.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Unable to process Docker event stream chunk (chunk failed)'),
+    );
+  });
+
+  test('listenDockerEventsOrchestration recovers when failure logging rejects the prior tail', async () => {
+    const onDockerEvent = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('first chunk failed'))
+      .mockResolvedValueOnce(undefined);
+    const { watcher, streamHandlers } = createWatcher({ onDockerEvent });
+    watcher.log.debug.mockImplementationOnce(() => {
+      throw new Error('logger failed');
+    });
+    await listenDockerEventsOrchestration(watcher as any);
+
+    const firstProcessing = streamHandlers.data(Buffer.from('first'));
+    const secondProcessing = streamHandlers.data(Buffer.from('second'));
+
+    await Promise.allSettled([firstProcessing, secondProcessing]);
+    expect(onDockerEvent).toHaveBeenCalledTimes(2);
+    expect(watcher.log.debug).toHaveBeenLastCalledWith(
+      expect.stringContaining('Unable to process Docker event stream chunk (logger failed)'),
+    );
+  });
+
+  test('queued work from an invalidated stream exits before processing', async () => {
+    const firstChunk = createDeferred<void>();
+    const onDockerEvent = vi
+      .fn()
+      .mockImplementationOnce(() => firstChunk.promise)
+      .mockResolvedValueOnce(undefined);
+    const { watcher, streamHandlers } = createWatcher({ onDockerEvent });
+    await listenDockerEventsOrchestration(watcher as any);
+
+    const firstProcessing = streamHandlers.data(Buffer.from('first'));
+    const secondProcessing = streamHandlers.data(Buffer.from('stale-second'));
+    await vi.waitFor(() => expect(onDockerEvent).toHaveBeenCalledTimes(1));
+    invalidateDockerEventStreamOrchestration(watcher as any);
+    firstChunk.resolve();
+    await Promise.all([firstProcessing, secondProcessing]);
+
+    expect(onDockerEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('serialized no-newline parsing does not duplicate a completed event or lose the next remainder', async () => {
+    const firstPayload = createDeferred<boolean>();
+    const processDockerEventPayload = vi.fn((payload: string) => {
+      if (payload.includes('first')) {
+        return firstPayload.promise;
+      }
+      return Promise.resolve(false);
+    });
+    const { watcher, streamHandlers } = createWatcher({ processDockerEventPayload });
+    watcher.onDockerEvent = (chunk: unknown, generation?: number) =>
+      onDockerEventOrchestration(watcher as any, chunk, 1024, generation);
+    await listenDockerEventsOrchestration(watcher as any);
+
+    const firstProcessing = streamHandlers.data(Buffer.from('{"Action":"create","id":"first"}'));
+    await Promise.resolve();
+    const secondProcessing = streamHandlers.data(Buffer.from('\n{"Action":"create","id":"second"'));
+    await Promise.resolve();
+
+    expect(processDockerEventPayload).toHaveBeenCalledTimes(1);
+
+    firstPayload.resolve(true);
+    await Promise.all([firstProcessing, secondProcessing]);
+
+    expect(processDockerEventPayload).toHaveBeenCalledWith(
+      '{"Action":"create","id":"first"}',
+      true,
+      expect.any(Number),
+    );
+    expect(
+      processDockerEventPayload.mock.calls.filter(([payload]) => payload.includes('first')),
+    ).toHaveLength(1);
+    expect(watcher.dockerEventsBuffer).toBe('{"Action":"create","id":"second"');
   });
 
   test('listenDockerEventsOrchestration logs and schedules reconnect when getEvents fails', async () => {
@@ -355,6 +491,64 @@ describe('docker event orchestration helpers', () => {
 
     dependencies.debug('debug-line');
     expect(watcher.log.debug).toHaveBeenCalledWith('debug-line');
+  });
+
+  test('generation guards skip stale payloads, events, and delayed state callbacks', async () => {
+    const processDockerEventStateMock = vi.mocked(processDockerEventState);
+    let dependencies: any;
+    processDockerEventStateMock.mockImplementationOnce(async (_event, stateDependencies) => {
+      dependencies = stateDependencies;
+    });
+    const { watcher } = createWatcher();
+
+    await processDockerEventOrchestration(watcher as any, { Action: 'start' }, 0);
+    invalidateDockerEventStreamOrchestration(watcher as any);
+
+    await dependencies.ensureRemoteAuthHeaders();
+    dependencies.updateContainerFromInspect({ id: 'c1' }, {});
+    expect(watcher.ensureRemoteAuthHeaders).not.toHaveBeenCalled();
+    expect(watcher.updateContainerFromInspect).not.toHaveBeenCalled();
+
+    await expect(
+      processDockerEventPayloadOrchestration(watcher as any, '{"Action":"start"}', false, 0),
+    ).resolves.toBe(false);
+    await processDockerEventOrchestration(watcher as any, { Action: 'start' }, 0);
+    expect(watcher.recordRecentDockerEvent).toHaveBeenCalledTimes(1);
+  });
+
+  test('onDockerEventOrchestration exits when generation is stale before or during splitting', async () => {
+    const stale = createWatcher().watcher;
+    invalidateDockerEventStreamOrchestration(stale as any);
+    await onDockerEventOrchestration(stale as any, Buffer.from('{}'), 1024, 0);
+    expect(stale.processDockerEventPayload).not.toHaveBeenCalled();
+
+    const duringSplit = createWatcher().watcher;
+    const chunk = {
+      toString: () => {
+        invalidateDockerEventStreamOrchestration(duringSplit as any);
+        return '{"Action":"start"}\n';
+      },
+    };
+    await onDockerEventOrchestration(duringSplit as any, chunk, 1024, 0);
+    expect(duringSplit.processDockerEventPayload).not.toHaveBeenCalled();
+  });
+
+  test('onDockerEventOrchestration leaves stale buffered parse results untouched', async () => {
+    const { watcher } = createWatcher({ dockerEventsBuffer: '' });
+    watcher.processDockerEventPayload.mockImplementationOnce(async () => {
+      invalidateDockerEventStreamOrchestration(watcher as any);
+      return true;
+    });
+
+    await onDockerEventOrchestration(
+      watcher as any,
+      Buffer.from('{"Action":"create","id":"container123"}'),
+      1024,
+      0,
+    );
+
+    expect(watcher.processDockerEventPayload).toHaveBeenCalledOnce();
+    expect(watcher.dockerEventsBuffer).toBe('');
   });
 
   test('onDockerEventOrchestration processes complete payloads and keeps incomplete payload in buffer', async () => {

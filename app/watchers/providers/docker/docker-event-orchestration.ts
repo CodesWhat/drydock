@@ -14,6 +14,8 @@ interface DockerContainerHandle {
 
 interface DockerEventsStream {
   on: (event: string, listener: (...args: unknown[]) => void) => unknown;
+  pause?: () => void;
+  resume?: () => void;
 }
 
 function getErrorMessage(error: unknown): string | undefined {
@@ -55,15 +57,99 @@ interface DockerEventOrchestrationWatcher {
     reason: string,
     error?: unknown,
   ) => void;
-  onDockerEvent: (dockerEventChunk: unknown) => Promise<void>;
+  onDockerEvent: (dockerEventChunk: unknown, streamGeneration?: number) => Promise<void>;
   processDockerEventPayload: (
     dockerEventPayload: string,
     shouldTreatRecoverableErrorsAsPartial?: boolean,
+    streamGeneration?: number,
   ) => Promise<boolean>;
-  processDockerEvent: (dockerEvent: unknown) => Promise<void>;
+  processDockerEvent: (dockerEvent: unknown, streamGeneration?: number) => Promise<void>;
+  recordRecentDockerEvent: (dockerEvent: unknown) => void;
   updateContainerFromInspect: (containerFound: Container, containerInspect: unknown) => void;
   isRecoverableDockerEventParseError: (error: unknown) => boolean;
   recreateDockerClient?: () => Promise<void>;
+}
+
+interface DockerEventStreamState {
+  generation: number;
+  processingTail: Promise<void>;
+}
+
+const dockerEventStreamState = new WeakMap<
+  DockerEventOrchestrationWatcher,
+  DockerEventStreamState
+>();
+
+function getDockerEventStreamState(
+  watcher: DockerEventOrchestrationWatcher,
+): DockerEventStreamState {
+  let state = dockerEventStreamState.get(watcher);
+  if (!state) {
+    state = { generation: 0, processingTail: Promise.resolve() };
+    dockerEventStreamState.set(watcher, state);
+  }
+  return state;
+}
+
+export function invalidateDockerEventStreamOrchestration(
+  watcher: DockerEventOrchestrationWatcher,
+): void {
+  const state = getDockerEventStreamState(watcher);
+  state.generation += 1;
+  state.processingTail = Promise.resolve();
+  watcher.dockerEventsBuffer = '';
+}
+
+function isCurrentStreamGeneration(
+  watcher: DockerEventOrchestrationWatcher,
+  streamGeneration: number | undefined,
+): boolean {
+  return (
+    streamGeneration === undefined ||
+    getDockerEventStreamState(watcher).generation === streamGeneration
+  );
+}
+
+function logChunkProcessingFailure(watcher: DockerEventOrchestrationWatcher, error: unknown): void {
+  watcher.log.debug(`Unable to process Docker event stream chunk (${getErrorMessage(error)})`);
+}
+
+function enqueueDockerEventChunk(
+  watcher: DockerEventOrchestrationWatcher,
+  stream: DockerEventsStream,
+  streamGeneration: number,
+  chunk: unknown,
+): Promise<void> {
+  stream.pause?.();
+  const state = getDockerEventStreamState(watcher);
+  const previousTail = state.processingTail.catch((error: unknown) => {
+    logChunkProcessingFailure(watcher, error);
+  });
+  let processingTask: Promise<void>;
+  processingTask = previousTail
+    .then(async () => {
+      if (
+        watcher.dockerEventsStream !== stream ||
+        !isCurrentStreamGeneration(watcher, streamGeneration)
+      ) {
+        return;
+      }
+      await watcher.onDockerEvent(chunk, streamGeneration);
+    })
+    .catch((error: unknown) => {
+      logChunkProcessingFailure(watcher, error);
+    })
+    .finally(() => {
+      if (
+        state.processingTail === processingTask &&
+        watcher.dockerEventsStream === stream &&
+        isCurrentStreamGeneration(watcher, streamGeneration)
+      ) {
+        stream.resume?.();
+      }
+    });
+  state.processingTail = processingTask;
+  return processingTask;
 }
 
 /**
@@ -121,8 +207,11 @@ export async function listenDockerEventsOrchestration(
     } else {
       const dockerEventsStream = stream as DockerEventsStream;
       watcher.dockerEventsStream = dockerEventsStream;
+      const streamGeneration = getDockerEventStreamState(watcher).generation;
       watcher.resetDockerEventsReconnectBackoff();
-      dockerEventsStream.on('data', (chunk: unknown) => watcher.onDockerEvent(chunk));
+      dockerEventsStream.on('data', (chunk: unknown) =>
+        enqueueDockerEventChunk(watcher, dockerEventsStream, streamGeneration, chunk),
+      );
       dockerEventsStream.on('error', (streamError: unknown) =>
         watcher.onDockerEventsStreamFailure(dockerEventsStream, 'error', streamError),
       );
@@ -140,14 +229,22 @@ export async function processDockerEventPayloadOrchestration(
   watcher: DockerEventOrchestrationWatcher,
   dockerEventPayload: string,
   shouldTreatRecoverableErrorsAsPartial = false,
+  streamGeneration?: number,
 ): Promise<boolean> {
+  if (!isCurrentStreamGeneration(watcher, streamGeneration)) {
+    return false;
+  }
   const payloadTrimmed = dockerEventPayload.trim();
   if (payloadTrimmed === '') {
     return true;
   }
   try {
     const dockerEvent: unknown = JSON.parse(payloadTrimmed);
-    await watcher.processDockerEvent(dockerEvent);
+    if (streamGeneration === undefined) {
+      await watcher.processDockerEvent(dockerEvent);
+    } else {
+      await watcher.processDockerEvent(dockerEvent, streamGeneration);
+    }
     return true;
   } catch (e: unknown) {
     if (shouldTreatRecoverableErrorsAsPartial && watcher.isRecoverableDockerEventParseError(e)) {
@@ -162,17 +259,36 @@ export async function processDockerEventPayloadOrchestration(
 export async function processDockerEventOrchestration(
   watcher: DockerEventOrchestrationWatcher,
   dockerEvent: unknown,
+  streamGeneration?: number,
 ): Promise<void> {
+  if (!isCurrentStreamGeneration(watcher, streamGeneration)) {
+    return;
+  }
+  watcher.recordRecentDockerEvent(dockerEvent);
   await processDockerEventState(dockerEvent, {
-    watchCronDebounced: async () => watcher.watchCronDebounced(),
-    ensureRemoteAuthHeaders: async () => watcher.ensureRemoteAuthHeaders(),
+    watchCronDebounced: async () => {
+      if (isCurrentStreamGeneration(watcher, streamGeneration)) {
+        await watcher.watchCronDebounced();
+      }
+    },
+    ensureRemoteAuthHeaders: async () => {
+      if (isCurrentStreamGeneration(watcher, streamGeneration)) {
+        await watcher.ensureRemoteAuthHeaders();
+      }
+    },
     inspectContainer: async (containerId: string) => {
       const container = await watcher.dockerApi.getContainer(containerId);
       return container.inspect();
     },
-    getContainerFromStore: (containerId: string) => storeContainer.getContainer(containerId),
-    updateContainerFromInspect: (containerFound: Container, containerInspect: unknown) =>
-      watcher.updateContainerFromInspect(containerFound, containerInspect),
+    getContainerFromStore: (containerId: string) =>
+      isCurrentStreamGeneration(watcher, streamGeneration)
+        ? storeContainer.getContainer(containerId)
+        : undefined,
+    updateContainerFromInspect: (containerFound: Container, containerInspect: unknown) => {
+      if (isCurrentStreamGeneration(watcher, streamGeneration)) {
+        watcher.updateContainerFromInspect(containerFound, containerInspect);
+      }
+    },
     debug: (message: string) => watcher.log.debug(message),
   });
 }
@@ -184,13 +300,27 @@ export async function onDockerEventOrchestration(
   watcher: DockerEventOrchestrationWatcher,
   dockerEventChunk: unknown,
   maxBufferBytes: number,
+  streamGeneration?: number,
 ): Promise<void> {
   watcher.ensureLogger();
+  if (!isCurrentStreamGeneration(watcher, streamGeneration)) {
+    return;
+  }
   const splitPayloads = splitDockerEventChunk(watcher.dockerEventsBuffer, dockerEventChunk);
+  if (!isCurrentStreamGeneration(watcher, streamGeneration)) {
+    return;
+  }
   watcher.dockerEventsBuffer = splitPayloads.buffer;
 
   for (const dockerEventPayload of splitPayloads.payloads) {
-    await watcher.processDockerEventPayload(dockerEventPayload);
+    if (streamGeneration === undefined) {
+      await watcher.processDockerEventPayload(dockerEventPayload);
+    } else {
+      await watcher.processDockerEventPayload(dockerEventPayload, false, streamGeneration);
+    }
+    if (!isCurrentStreamGeneration(watcher, streamGeneration)) {
+      return;
+    }
   }
 
   if (Buffer.byteLength(watcher.dockerEventsBuffer, 'utf8') > maxBufferBytes) {
@@ -199,10 +329,17 @@ export async function onDockerEventOrchestration(
   }
 
   if (shouldAttemptBufferedPayloadParse(watcher.dockerEventsBuffer)) {
-    const processed = await watcher.processDockerEventPayload(
-      watcher.dockerEventsBuffer.trim(),
-      true,
-    );
+    const processed =
+      streamGeneration === undefined
+        ? await watcher.processDockerEventPayload(watcher.dockerEventsBuffer.trim(), true)
+        : await watcher.processDockerEventPayload(
+            watcher.dockerEventsBuffer.trim(),
+            true,
+            streamGeneration,
+          );
+    if (!isCurrentStreamGeneration(watcher, streamGeneration)) {
+      return;
+    }
     if (processed) {
       watcher.dockerEventsBuffer = '';
     }
