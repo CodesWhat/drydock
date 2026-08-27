@@ -34,7 +34,7 @@ build_drydock_image() {
 		fi
 
 		if [ "$attempt" -lt "$max_attempts" ]; then
-			echo "⚠️ Docker build failed, pruning builder cache and retrying once..."
+			echo "Docker build failed, pruning builder cache and retrying once..."
 			docker builder prune -af >/dev/null 2>&1 || true
 			sleep 1
 		fi
@@ -47,7 +47,7 @@ build_drydock_image() {
 # convenient source-build default.
 if [ "${DD_E2E_SKIP_BUILD:-false}" = "true" ]; then
 	if ! docker image inspect "$DRYDOCK_IMAGE" >/dev/null 2>&1; then
-		echo "❌ prebuilt drydock image not found: $DRYDOCK_IMAGE"
+		echo "prebuilt drydock image not found: $DRYDOCK_IMAGE"
 		exit 1
 	fi
 else
@@ -138,11 +138,11 @@ echo "drydock started on http://localhost:${E2E_PORT}"
 echo "Waiting for drydock to be ready..."
 for i in $(seq 1 30); do
 	if curl --silent --show-error --fail --connect-timeout 2 "http://localhost:${E2E_PORT}/health" >/dev/null 2>&1; then
-		echo "✅ drydock is healthy"
+		echo "drydock is healthy"
 		break
 	fi
 	if [ "$i" -eq 30 ]; then
-		echo "❌ drydock failed to become healthy after 60s"
+		echo "drydock failed to become healthy after 60s"
 		docker logs drydock --tail 30
 		exit 1
 	fi
@@ -157,7 +157,7 @@ done
 AUTH_HEADER="Basic $(echo -n 'john:doe' | base64)"
 REQUIRED_FIXTURES_FILE=${DD_E2E_REQUIRED_FIXTURES_FILE:-"$SCRIPT_DIR/../e2e/config/cucumber-core-fixtures.txt"}
 if [ ! -s "$REQUIRED_FIXTURES_FILE" ]; then
-	echo "❌ required Cucumber fixture manifest is missing or empty: $REQUIRED_FIXTURES_FILE"
+	echo "required Cucumber fixture manifest is missing or empty: $REQUIRED_FIXTURES_FILE"
 	exit 1
 fi
 REQUIRED_FIXTURES=()
@@ -168,7 +168,7 @@ while IFS= read -r fixture || [ -n "$fixture" ]; do
 	REQUIRED_FIXTURES+=("$fixture")
 done <"$REQUIRED_FIXTURES_FILE"
 if [ "${#REQUIRED_FIXTURES[@]}" -eq 0 ]; then
-	echo "❌ required Cucumber fixture manifest contains no required fixtures: $REQUIRED_FIXTURES_FILE"
+	echo "required Cucumber fixture manifest contains no required fixtures: $REQUIRED_FIXTURES_FILE"
 	exit 1
 fi
 
@@ -225,19 +225,19 @@ for i in $(seq 1 75); do
 		done <<<"${READINESS}"
 	fi
 	if [ "$READY" -eq "$EXPECTED_CONTAINERS" ]; then
-		echo "✅ drydock resolved all ${READY} required fixtures"
+		echo "drydock resolved all ${READY} required fixtures"
 		break
 	fi
 	if [ "$i" -eq 75 ]; then
-		echo "❌ drydock only resolved ${READY}/${EXPECTED_CONTAINERS} required fixtures after 150s"
+		echo "drydock only resolved ${READY}/${EXPECTED_CONTAINERS} required fixtures after 150s"
 		if [ "${#MISSING_FIXTURES[@]}" -gt 0 ]; then
-			printf '❌ missing required fixtures: %s\n' "$(
+			printf 'missing required fixtures: %s\n' "$(
 				IFS=,
 				echo "${MISSING_FIXTURES[*]}"
 			)"
 		fi
 		if [ "${#UNRESOLVED_FIXTURES[@]}" -gt 0 ]; then
-			printf '❌ unresolved required fixtures: %s\n' "$(
+			printf 'unresolved required fixtures: %s\n' "$(
 				IFS=';'
 				echo "${UNRESOLVED_FIXTURES[*]}"
 			)"

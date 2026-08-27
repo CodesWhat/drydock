@@ -11,13 +11,13 @@ fail=0
 
 echo "→ knip (app)"
 if ! (cd app && npm run knip); then
-	echo "❌ knip (app) failed"
+	echo "knip (app) failed"
 	fail=1
 fi
 
 echo "→ knip (ui)"
 if ! (cd ui && npm run knip); then
-	echo "❌ knip (ui) failed"
+	echo "knip (ui) failed"
 	fail=1
 fi
 
