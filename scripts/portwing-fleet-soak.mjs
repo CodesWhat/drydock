@@ -313,6 +313,9 @@ function spawnAgent(index) {
       DD_POLL_INTERVAL: '2',
       DOCKER_SOCKET: socketPath,
       DRYDOCK_URL: `http://127.0.0.1:${controllerAddress.port}`,
+      // portwing v0.9.9+ refuses plaintext controller URLs in edge mode unless
+      // this opt-in is set; the soak dials loopback over http by design.
+      ALLOW_INSECURE_EDGE_URL: 'true',
       LOG_LEVEL: 'warn',
       MAX_RECONNECT_DELAY: '2',
       NO_COLOR: '1',
