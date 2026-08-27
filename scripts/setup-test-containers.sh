@@ -2,7 +2,7 @@
 
 set -e
 
-echo "🐳 Setting up test containers for local e2e tests..."
+echo "Setting up test containers for local e2e tests..."
 
 # Login to private registries (if credentials available)
 if [ -n "${GITLAB_TOKEN:-}" ]; then
@@ -10,7 +10,7 @@ if [ -n "${GITLAB_TOKEN:-}" ]; then
 	if [ -n "$gitlab_username" ]; then
 		docker login registry.gitlab.com -u "$gitlab_username" -p "$GITLAB_TOKEN"
 	else
-		echo "⚠️  Skipping GitLab login (GITLAB_TOKEN set but GITLAB_USERNAME missing)"
+		echo "Skipping GitLab login (GITLAB_TOKEN set but GITLAB_USERNAME missing)"
 	fi
 fi
 
@@ -34,10 +34,10 @@ docker pull homeassistant/home-assistant:2021.6.1
 # Pull traefik
 docker pull traefik:2.4.5
 
-echo "✅ Docker images pulled and tagged"
+echo "Docker images pulled and tagged"
 
 # Run containers for tests
-echo "🚀 Starting test containers..."
+echo "Starting test containers..."
 
 readonly LABEL_WATCH='dd.watch=true'
 
@@ -55,14 +55,14 @@ run_test_container ecr_sub_sub_test --label "$LABEL_WATCH" 229211676173.dkr.ecr.
 if [ -n "${GITHUB_USERNAME:-}" ]; then
 	run_test_container ghcr_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+\.\d+\.\d+-ls\d+$' ghcr.io/linuxserver/radarr:5.14.0.9383-ls245
 else
-	echo "⚠️  Skipping ghcr_radarr (no GITHUB_USERNAME set)"
+	echo "Skipping ghcr_radarr (no GITHUB_USERNAME set)"
 fi
 
 # GITLAB — requires a token now that rejected credentials do not fall back to anonymous pulls
 if [ -n "${GITLAB_TOKEN:-}" ]; then
 	run_test_container gitlab_test --label "$LABEL_WATCH" --label 'dd.tag.include=^v16\.[01]\.0$' registry.gitlab.com/gitlab-org/gitlab-runner:v16.0.0
 else
-	echo "⚠️  Skipping gitlab_test (no GITLAB_TOKEN set)"
+	echo "Skipping gitlab_test (no GITLAB_TOKEN set)"
 fi
 
 # HUB
@@ -85,7 +85,7 @@ run_test_container hub_traefik_245 --label "$LABEL_WATCH" --label 'dd.tag.includ
 if [ -n "${GITHUB_USERNAME:-}" ]; then
 	run_test_container lscr_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+\.\d+\.\d+-ls\d+$' lscr.io/linuxserver/radarr:5.14.0.9383-ls245
 else
-	echo "⚠️  Skipping lscr_radarr (no GITHUB_USERNAME set)"
+	echo "Skipping lscr_radarr (no GITHUB_USERNAME set)"
 fi
 
 # TrueForge
@@ -96,5 +96,5 @@ run_test_container trueforge_radarr --label "$LABEL_WATCH" --label 'dd.tag.inclu
 # QUAY
 run_test_container quay_prometheus --label "$LABEL_WATCH" --label 'dd.tag.include=^v\d+\.\d+\.\d+$' --user root --tmpfs /prometheus:rw,mode=777 quay.io/prometheus/prometheus:v2.52.0
 
-echo "✅ Test containers started"
+echo "Test containers started"
 docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}" | grep -E "(ecr_|ghcr_|gitlab_|hub_|lscr_|quay_|trueforge_)"

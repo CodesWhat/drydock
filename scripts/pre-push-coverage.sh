@@ -67,7 +67,7 @@ run_coverage() {
 
 	if (cd "${workspace}" && npx vitest run --coverage --reporter=dot --reporter=json --outputFile.json="${json_file}" >"${log_file}" 2>&1); then
 		rm -f "${gap_file}" "${json_file}"
-		echo "✅ ${workspace}: coverage met"
+		echo "${workspace}: coverage met"
 		return 0
 	fi
 
@@ -100,13 +100,13 @@ try {
 	fi
 
 	if [ "${failed_tests}" -gt 0 ]; then
-		echo "❌ ${workspace}: ${failed_tests} test(s) failed (not a coverage gap)"
+		echo "${workspace}: ${failed_tests} test(s) failed (not a coverage gap)"
 		echo "   vitest log: ${log_file}"
 		fail=1
 		return 1
 	fi
 
-	echo "❌ ${workspace}: coverage below threshold"
+	echo "${workspace}: coverage below threshold"
 	echo "   vitest log: ${log_file}"
 	node scripts/coverage-gaps.mjs --workspace "${workspace}" --write "${gap_file}" --print
 	fail=1
@@ -160,7 +160,7 @@ pids=()
 
 for workspace in "${requested_workspaces[@]}"; do
 	gap_files+=(".coverage-gaps.${workspace}.json")
-	echo "📊 ${workspace}: running coverage..."
+	echo "${workspace}: running coverage..."
 done
 
 if [ "${FAIL_FAST}" -eq 1 ] || [ ${#requested_workspaces[@]} -eq 1 ]; then
@@ -200,4 +200,4 @@ fi
 
 # Clean state — remove gap files when everything passes
 rm -f "${GAPS_FILE}" .coverage-gaps.app.json .coverage-gaps.ui.json
-echo "✅ Coverage thresholds met (100%)."
+echo "Coverage thresholds met (100%)."

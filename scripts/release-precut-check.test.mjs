@@ -279,7 +279,7 @@ test('parsePendingReplies returns empty array when no pending replies match', ()
 
 test('formatReport returns the success line when pending is empty', () => {
   const report = formatReport([], 'v1.6.0');
-  assert.equal(report, '✓ No pending discussion replies for v1.6.0.');
+  assert.equal(report, 'No pending discussion replies for v1.6.0.');
 });
 
 test('formatReport uses singular "discussion" for a single item', () => {
