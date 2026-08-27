@@ -279,24 +279,44 @@ jobs:
         id: base
         run: |
           set -euo pipefail
-          # Highest dev/vX.Y on origin, sorted numerically so dev/v1.10 beats
-          # dev/v1.9. Falls back to the default branch during the window between
-          # a GA and the next dev branch being cut, so translations are never
-          # stranded with nowhere to land.
-          #
-          # The grep is guarded: with `pipefail` a no-match grep exits 1 and
-          # aborts the assignment, which killed the fallback below before it
-          # could ever run (2026-07-24, when the sync PR merge briefly deleted
-          # dev/v1.6). A failing ls-remote still propagates, so a network or
-          # auth error fails loudly instead of silently retargeting main.
-          base="$(git ls-remote --heads origin 'refs/heads/dev/v*' \
-            | sed 's#.*refs/heads/##' \
-            | { grep -E '^dev/v[0-9]+\.[0-9]+$' || true; } \
-            | sort -t/ -k2 -V \
-            | tail -1)"
-          if [ -z "${base}" ]; then
-            base="${DEFAULT_BRANCH}"
-            echo "No dev/vX.Y branch on origin — falling back to ${base}."
+          # A push straight to a dev/vX.Y branch is itself the integration
+          # branch. The crowdin action below downloads translations into the
+          # working tree before this step runs, so retargeting to a
+          # *different* branch (even a "higher" dev/vX.Y found by the
+          # fallback below) makes the next step's `git checkout -B` try to
+          # switch branches over an already-dirtied tree and die with "Your
+          # local changes to the following files would be overwritten by
+          # checkout" (run 33047712284, push to dev/v1.6 while dev/v1.7
+          # existed and outranked it). Scoped to `push`: schedule and
+          # workflow_dispatch runs carry no branch context worth trusting
+          # (schedule always resolves to the default branch; workflow_dispatch
+          # defaults there too and can be aimed anywhere), so they fall
+          # through to the highest-wins resolution below, same as a push to
+          # main.
+          if [ "${GITHUB_EVENT_NAME}" = "push" ] \
+            && printf '%s' "${GITHUB_REF_NAME}" | grep -qE '^dev/v[0-9]+\.[0-9]+$'; then
+            base="${GITHUB_REF_NAME}"
+            echo "Push to ${base} — using it directly as the integration branch."
+          else
+            # Highest dev/vX.Y on origin, sorted numerically so dev/v1.10 beats
+            # dev/v1.9. Falls back to the default branch during the window between
+            # a GA and the next dev branch being cut, so translations are never
+            # stranded with nowhere to land.
+            #
+            # The grep is guarded: with `pipefail` a no-match grep exits 1 and
+            # aborts the assignment, which killed the fallback below before it
+            # could ever run (2026-07-24, when the sync PR merge briefly deleted
+            # dev/v1.6). A failing ls-remote still propagates, so a network or
+            # auth error fails loudly instead of silently retargeting main.
+            base="$(git ls-remote --heads origin 'refs/heads/dev/v*' \
+              | sed 's#.*refs/heads/##' \
+              | { grep -E '^dev/v[0-9]+\.[0-9]+$' || true; } \
+              | sort -t/ -k2 -V \
+              | tail -1)"
+            if [ -z "${base}" ]; then
+              base="${DEFAULT_BRANCH}"
+              echo "No dev/vX.Y branch on origin — falling back to ${base}."
+            fi
           fi
           echo "name=${base}" >> "$GITHUB_OUTPUT"
           echo "Translation PRs will target ${base}."
