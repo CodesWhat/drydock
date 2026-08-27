@@ -16,6 +16,7 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
+import { getAbortReason } from './abort.js';
 import { getTrivyDatabaseStatus } from './runtime.js';
 import { clearDigestScanCache, scanImageWithDedup } from './scan.js';
 
@@ -137,18 +138,14 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
-function getAbortReason(signal: AbortSignal): Error {
-  return signal.reason as Error;
-}
-
 function withAbortSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   if (signal.aborted) {
-    return Promise.reject(getAbortReason(signal));
+    return Promise.reject(getAbortReason(signal, 'Scheduled scan aborted'));
   }
 
   return new Promise<T>((resolve, reject) => {
     const handleAbort = () => {
-      reject(getAbortReason(signal));
+      reject(getAbortReason(signal, 'Scheduled scan aborted'));
     };
     signal.addEventListener('abort', handleAbort, { once: true });
 
@@ -204,7 +201,7 @@ async function scanDigestGroup(options: {
       scanIntervalMs,
     );
     if (signal.aborted) {
-      throw getAbortReason(signal);
+      throw getAbortReason(signal, 'Scheduled scan aborted');
     }
 
     if (fromCache) {

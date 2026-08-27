@@ -1,5 +1,6 @@
 import { isAbsolute } from 'node:path';
 import { Writable } from 'node:stream';
+import { getAbortReason } from '../abort.js';
 
 const DEFAULT_MEMORY_BYTES = 512 * 1024 * 1024;
 const DEFAULT_PIDS_LIMIT = 64;
@@ -374,15 +375,6 @@ function waitForTimeout(
   };
 }
 
-function getAbortReason(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason;
-  }
-  const error = new Error('Scanner worker aborted');
-  error.name = 'AbortError';
-  return error;
-}
-
 function waitForAbort(signal: AbortSignal | undefined): {
   promise: Promise<never>;
   clear: () => void;
@@ -395,7 +387,7 @@ function waitForAbort(signal: AbortSignal | undefined): {
       return;
     }
     handleAbort = () => {
-      abortError ??= getAbortReason(signal);
+      abortError ??= getAbortReason(signal, 'Scanner worker aborted');
       reject(abortError);
     };
     signal.addEventListener('abort', handleAbort, { once: true });
@@ -494,7 +486,7 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
   async function run(runOptions: DockerScannerRunOptions): Promise<DockerScannerRunResult> {
     validateRunOptions(runOptions);
     if (runOptions.signal?.aborted) {
-      throw getAbortReason(runOptions.signal);
+      throw getAbortReason(runOptions.signal, 'Scanner worker aborted');
     }
     const startedAt = Date.now();
     const preparationTimeout = waitForTimeout(runOptions.timeoutMs);

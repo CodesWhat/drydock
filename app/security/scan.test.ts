@@ -2091,41 +2091,24 @@ describe('scanImageWithDedup', () => {
     controller.abort(abortError);
     await expect(scheduledScan).rejects.toBe(abortError);
 
-    const originalMapGet = Map.prototype.get;
-    let abortedEntryLookups = 0;
-    const mapGetSpy = vi.spyOn(Map.prototype, 'get').mockImplementation(function (key) {
-      const value = originalMapGet.call(this, key);
-      if (
-        key === options.digest &&
-        (value as { controller?: AbortController } | undefined)?.controller?.signal.aborted
-      ) {
-        abortedEntryLookups++;
-        if (abortedEntryLookups === 2) {
-          return undefined;
-        }
-      }
-      return value;
-    });
-    try {
-      const replacementScan = scanImageWithDedup(options, 0);
-      resolveWarmup('ready');
-      await vi.waitFor(() => expect(commandCallbacks).toHaveLength(1));
-      const joinedReplacementScan = scanImageWithDedup(options, 0);
-      commandCallbacks[0]?.(null, JSON.stringify({ Results: [] }), '');
+    // The aborted entry is retired, so a replacement scan is admitted rather
+    // than joining the dead one, and a later caller joins the replacement.
+    const replacementScan = scanImageWithDedup(options, 0);
+    resolveWarmup('ready');
+    await vi.waitFor(() => expect(commandCallbacks).toHaveLength(1));
+    const joinedReplacementScan = scanImageWithDedup(options, 0);
+    commandCallbacks[0]?.(null, JSON.stringify({ Results: [] }), '');
 
-      await expect(Promise.all([replacementScan, joinedReplacementScan])).resolves.toEqual([
-        expect.objectContaining({
-          fromCache: false,
-          scanResult: expect.objectContaining({ status: 'passed', imageDigest: options.digest }),
-        }),
-        expect.objectContaining({
-          fromCache: false,
-          scanResult: expect.objectContaining({ status: 'passed', imageDigest: options.digest }),
-        }),
-      ]);
-    } finally {
-      mapGetSpy.mockRestore();
-    }
+    await expect(Promise.all([replacementScan, joinedReplacementScan])).resolves.toEqual([
+      expect.objectContaining({
+        fromCache: false,
+        scanResult: expect.objectContaining({ status: 'passed', imageDigest: options.digest }),
+      }),
+      expect.objectContaining({
+        fromCache: false,
+        scanResult: expect.objectContaining({ status: 'passed', imageDigest: options.digest }),
+      }),
+    ]);
 
     clearDigestScanCache();
     let resolveSecondWarmup: (result: 'ready') => void = () => undefined;

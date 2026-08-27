@@ -10,6 +10,7 @@ import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js'
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { toPositiveInteger } from '../util/parse.js';
+import { getAbortReason } from './abort.js';
 import { buildGrypeInvocation, parseGrypeOutput } from './providers/grype.js';
 import { hasValidCommandPath } from './runtime.js';
 import { getDefaultScannerRuntime } from './scanner-runtime.js';
@@ -141,18 +142,9 @@ export const DIGEST_SCAN_CACHE_MAX_ENTRIES = toPositiveInteger(
 
 let trivyQueue: Promise<void> = Promise.resolve();
 
-function getAbortReason(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason;
-  }
-  const error = new Error('Security scan aborted');
-  error.name = 'AbortError';
-  return error;
-}
-
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
-    throw getAbortReason(signal);
+    throw getAbortReason(signal, 'Security scan aborted');
   }
 }
 
@@ -271,7 +263,7 @@ function runCommand(options: {
 }): Promise<string> {
   return new Promise((resolve, reject) => {
     if (options.signal?.aborted) {
-      reject(getAbortReason(options.signal));
+      reject(getAbortReason(options.signal, 'Security scan aborted'));
       return;
     }
 
@@ -292,7 +284,9 @@ function runCommand(options: {
       try {
         child?.kill('SIGTERM');
       } finally {
-        settle(() => reject(getAbortReason(options.signal as AbortSignal)));
+        settle(() =>
+          reject(getAbortReason(options.signal as AbortSignal, 'Security scan aborted')),
+        );
       }
     };
 
@@ -784,7 +778,7 @@ async function scanWithProvider(
     return { provider, vulnerabilities: parseGrypeOutput(output) };
   } catch (error: unknown) {
     if (options.signal?.aborted) {
-      throw getAbortReason(options.signal);
+      throw getAbortReason(options.signal, 'Security scan aborted');
     }
     return {
       provider,
@@ -1167,7 +1161,7 @@ function waitForDigestScan(
       entry.waiterCount -= 1;
     };
     const handleAbort = () => {
-      const reason = getAbortReason(signal as AbortSignal);
+      const reason = getAbortReason(signal as AbortSignal, 'Security scan aborted');
       detach();
       if (entry.waiterCount === 0) {
         entry.controller.abort(reason);
@@ -1284,9 +1278,10 @@ export async function scanImageWithDedup(
   const existingEntry = digestScansInFlight.get(options.digest);
   if (existingEntry) {
     if (existingEntry.controller.signal.aborted) {
-      if (digestScansInFlight.get(options.digest) === existingEntry) {
-        digestScansInFlight.delete(options.digest);
-      }
+      // No await between reading `existingEntry` above and deleting here, so
+      // nothing can replace the map entry in between. The identity recheck
+      // this used to carry could never be false.
+      digestScansInFlight.delete(options.digest);
     } else {
       if (options.retryTransient) {
         existingEntry.retryTransient = true;
