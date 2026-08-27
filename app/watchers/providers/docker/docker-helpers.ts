@@ -95,6 +95,46 @@ export function getOldContainers(newContainers: Container[], containersFromTheSt
 }
 
 /**
+ * Store container ids to treat as "still in watch scope" when pruning (#869).
+ * An id is affirmatively OUT of scope only when it was actually present in
+ * this cycle's raw Docker list (`rawListedContainers`) but filtered out by
+ * the dd.watch / watchbydefault check (absent from `filteredContainers`) —
+ * that's a real "no longer watched" signal. An id absent from the raw list
+ * entirely can't be evaluated against the label filter this cycle at all:
+ * with WATCHALL=false (the default), a merely-stopped container is never
+ * returned by Docker's list API in the first place (see the
+ * WATCHALL/WATCHBYDEFAULT matrix in
+ * content/docs/current/configuration/watchers/index.mdx), yet its store
+ * record must still be kept (status updated) rather than deleted so the UI
+ * keeps showing a start button. Treating "absent from the raw list" as
+ * "still in scope" preserves that existing behavior while still catching a
+ * container that's running but has fallen out of scope via labels.
+ */
+export function getStillInWatchScopeContainerIds(
+  rawListedContainers: { Id?: unknown }[],
+  filteredContainers: { Id?: unknown }[],
+  containersFromTheStore: Container[],
+): Set<string> {
+  const toIdSet = (containers: { Id?: unknown }[]) =>
+    new Set(
+      containers
+        .map((container) => container.Id)
+        .filter((id): id is string => typeof id === 'string' && id !== ''),
+    );
+  const rawListedContainerIds = toIdSet(rawListedContainers);
+  const filteredContainerIds = toIdSet(filteredContainers);
+  return new Set(
+    containersFromTheStore
+      .filter(
+        (container) =>
+          typeof container.id === 'string' &&
+          (filteredContainerIds.has(container.id) || !rawListedContainerIds.has(container.id)),
+      )
+      .map((container) => container.id),
+  );
+}
+
+/**
  * Extract the raw first name from a Docker container summary, stripping only
  * the leading slash. Does NOT canonicalize alias prefixes — used by alias
  * filtering which needs to detect the raw alias pattern.

@@ -127,6 +127,58 @@ describe('ws-upgrade-utils', () => {
       expect(isOriginAllowed(request, { trustproxy: 1 })).toBe(false);
     });
 
+    test('accepts an http Origin when a trusted proxy forwards http', () => {
+      const request = {
+        headers: {
+          origin: 'http://drydock.example.com',
+          host: 'drydock.example.com',
+          'x-forwarded-proto': 'http',
+        },
+        socket: { encrypted: false },
+      } as any;
+
+      expect(isOriginAllowed(request, { trustproxy: 1 })).toBe(true);
+    });
+
+    test('accepts an https Origin when a trusted proxy forwards wss (Traefik)', () => {
+      const request = {
+        headers: {
+          origin: 'https://drydock.example.com',
+          host: 'drydock.example.com',
+          'x-forwarded-proto': 'wss',
+        },
+        socket: { encrypted: false },
+      } as any;
+
+      expect(isOriginAllowed(request, { trustproxy: 1 })).toBe(true);
+    });
+
+    test('accepts an http Origin when a trusted proxy forwards ws', () => {
+      const request = {
+        headers: {
+          origin: 'http://drydock.example.com',
+          host: 'drydock.example.com',
+          'x-forwarded-proto': 'ws',
+        },
+        socket: { encrypted: false },
+      } as any;
+
+      expect(isOriginAllowed(request, { trustproxy: 1 })).toBe(true);
+    });
+
+    test('rejects an http Origin when a trusted proxy forwards wss', () => {
+      const request = {
+        headers: {
+          origin: 'http://drydock.example.com',
+          host: 'drydock.example.com',
+          'x-forwarded-proto': 'wss',
+        },
+        socket: { encrypted: false },
+      } as any;
+
+      expect(isOriginAllowed(request, { trustproxy: 1 })).toBe(false);
+    });
+
     test('rejects non-HTTP URL schemes in Origin', () => {
       const request = {
         headers: { origin: 'wss://drydock.example.com', host: 'drydock.example.com' },

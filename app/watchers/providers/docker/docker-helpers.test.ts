@@ -22,6 +22,7 @@ import {
   getRepoDigest,
   getResolvedImgsetConfiguration,
   getSemverTagFromInspectPath,
+  getStillInWatchScopeContainerIds,
   isContainerToWatch,
   isDigestToWatch,
   shouldUpdateDisplayNameFromContainerName,
@@ -78,6 +79,44 @@ describe('docker helper extraction module', () => {
     expect(
       getOldContainers([{ id: 'keep' } as any], [{ id: 'keep' } as any, { id: 'drop' } as any]),
     ).toEqual([{ id: 'drop' }]);
+  });
+
+  describe('getStillInWatchScopeContainerIds (#869)', () => {
+    test('excludes a container id that was returned by Docker but filtered out of watch scope', () => {
+      const result = getStillInWatchScopeContainerIds(
+        [{ Id: 'running-unwatched' }],
+        [],
+        [{ id: 'running-unwatched' } as any],
+      );
+
+      expect(result.has('running-unwatched')).toBe(false);
+    });
+
+    test('keeps a container id that passed the watch-scope filter', () => {
+      const result = getStillInWatchScopeContainerIds(
+        [{ Id: 'running-watched' }],
+        [{ Id: 'running-watched' }],
+        [{ id: 'running-watched' } as any],
+      );
+
+      expect(result.has('running-watched')).toBe(true);
+    });
+
+    test('keeps a container id absent from the raw Docker list entirely (e.g. stopped with WATCHALL=false)', () => {
+      const result = getStillInWatchScopeContainerIds([], [], [{ id: 'stopped-app' } as any]);
+
+      expect(result.has('stopped-app')).toBe(true);
+    });
+
+    test('ignores non-string or empty Id values when building raw/filtered id sets', () => {
+      const result = getStillInWatchScopeContainerIds(
+        [{ Id: 123 }, { Id: '' }, { Id: 'known' }],
+        [{ Id: undefined }, { Id: 'known' }],
+        [{ id: 'known' } as any],
+      );
+
+      expect(result.has('known')).toBe(true);
+    });
   });
 
   test('getContainerDisplayName should honor trimmed overrides and fall back cleanly', () => {
