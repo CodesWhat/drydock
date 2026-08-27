@@ -42,6 +42,14 @@ interface SummaryStatsStreamRuntime {
   staleSweepInterval?: ReturnType<typeof globalThis.setInterval>;
 }
 
+interface StatsStreamPressureController<Snapshot> {
+  cleanup: () => void;
+  enqueueSnapshot: (snapshot: Snapshot) => void;
+  writeHeartbeat: () => void;
+}
+
+const STATS_STREAM_BACKPRESSURE_TIMEOUT_MS = 30_000;
+
 function ensureContainerExists(
   storeContainer: StatsStoreContainerApi,
   id: string,
@@ -55,13 +63,95 @@ function ensureContainerExists(
   return container;
 }
 
-function writeStatsEvent(res: StreamableResponse, snapshot: unknown): void {
-  res.write(`event: dd:container-stats\ndata: ${JSON.stringify(snapshot)}\n\n`);
+function writeStatsEvent(res: StreamableResponse, snapshot: unknown): boolean {
+  const accepted = res.write(`event: dd:container-stats\ndata: ${JSON.stringify(snapshot)}\n\n`);
   res.flush?.();
+  return accepted;
 }
 
-function writeHeartbeatEvent(res: StreamableResponse): void {
-  res.write('event: dd:heartbeat\ndata: {}\n\n');
+function writeSummaryStatsEvent(res: StreamableResponse, snapshot: unknown): boolean {
+  const accepted = res.write(`event: dd:stats-summary\ndata: ${JSON.stringify(snapshot)}\n\n`);
+  res.flush?.();
+  return accepted;
+}
+
+function writeHeartbeatEvent(res: StreamableResponse): boolean {
+  return res.write('event: dd:heartbeat\ndata: {}\n\n');
+}
+
+function createStatsStreamPressureController<Snapshot>(
+  response: StreamableResponse,
+  writeSnapshot: (snapshot: Snapshot) => boolean,
+  onStall: () => void,
+): StatsStreamPressureController<Snapshot> {
+  let blocked = false;
+  let cleaned = false;
+  let pendingSnapshot: { value: Snapshot } | undefined;
+  let stallTimeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+  const clearStallTimeout = () => {
+    if (stallTimeout === undefined) {
+      return;
+    }
+    globalThis.clearTimeout(stallTimeout);
+    stallTimeout = undefined;
+  };
+
+  const markBlocked = () => {
+    blocked = true;
+    stallTimeout = globalThis.setTimeout(() => {
+      stallTimeout = undefined;
+      onStall();
+    }, STATS_STREAM_BACKPRESSURE_TIMEOUT_MS);
+  };
+
+  const enqueueSnapshot = (snapshot: Snapshot) => {
+    if (cleaned) {
+      return;
+    }
+    if (blocked) {
+      pendingSnapshot = { value: snapshot };
+      return;
+    }
+    if (!writeSnapshot(snapshot)) {
+      markBlocked();
+    }
+  };
+
+  const writeHeartbeat = () => {
+    if (cleaned || blocked) {
+      return;
+    }
+    if (!writeHeartbeatEvent(response)) {
+      markBlocked();
+    }
+  };
+
+  const onDrain = () => {
+    if (!blocked) {
+      return;
+    }
+    blocked = false;
+    clearStallTimeout();
+    const latestSnapshot = pendingSnapshot;
+    pendingSnapshot = undefined;
+    if (latestSnapshot) {
+      enqueueSnapshot(latestSnapshot.value);
+    }
+  };
+
+  response.on('drain', onDrain);
+
+  return {
+    enqueueSnapshot,
+    writeHeartbeat,
+    cleanup: () => {
+      cleaned = true;
+      pendingSnapshot = undefined;
+      clearStallTimeout();
+      response.off('drain', onDrain);
+    },
+  };
 }
 
 function isStreamResponseClosed(response: StreamableResponse): boolean {
@@ -146,26 +236,37 @@ function createStreamContainerStatsHandler({
     });
     streamResponse.flushHeaders?.();
 
+    let cleanup: () => void;
+    const pressureController = createStatsStreamPressureController(
+      streamResponse,
+      (snapshot: NonNullable<ContainerStatsSnapshot>) => writeStatsEvent(streamResponse, snapshot),
+      () => {
+        cleanup();
+        streamResponse.destroy();
+      },
+    );
+
     const latestSnapshot = statsCollector.getLatest(container.id);
     if (latestSnapshot) {
-      writeStatsEvent(streamResponse, latestSnapshot);
+      pressureController.enqueueSnapshot(latestSnapshot);
     }
 
     const releaseWatch = statsCollector.watch(container.id);
     const unsubscribe = statsCollector.subscribe(container.id, ((snapshot) => {
-      writeStatsEvent(streamResponse, snapshot);
+      pressureController.enqueueSnapshot(snapshot);
     }) as ContainerStatsListener);
 
     const heartbeatInterval = globalThis.setInterval(() => {
-      writeHeartbeatEvent(streamResponse);
+      pressureController.writeHeartbeat();
     }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
 
     let disconnected = false;
-    const cleanup = () => {
+    cleanup = () => {
       if (disconnected) {
         return;
       }
       disconnected = true;
+      pressureController.cleanup();
       try {
         globalThis.clearInterval(heartbeatInterval);
       } catch (error: unknown) {
@@ -218,29 +319,36 @@ function createStreamStatsSummaryHandler(
     });
     streamResponse.flushHeaders?.();
 
-    streamResponse.write(
-      `event: dd:stats-summary\ndata: ${JSON.stringify(aggregator.getCurrent())}\n\n`,
+    let cleanup: () => void;
+    const pressureController = createStatsStreamPressureController(
+      streamResponse,
+      (summary: unknown) => writeSummaryStatsEvent(streamResponse, summary),
+      () => {
+        cleanup();
+        streamResponse.destroy();
+      },
     );
-    streamResponse.flush?.();
+
+    pressureController.enqueueSnapshot(aggregator.getCurrent());
 
     const unsubscribe = aggregator.subscribe((summary) => {
-      streamResponse.write(`event: dd:stats-summary\ndata: ${JSON.stringify(summary)}\n\n`);
-      streamResponse.flush?.();
+      pressureController.enqueueSnapshot(summary);
     });
 
     const heartbeatInterval = globalThis.setInterval(() => {
-      streamResponse.write('event: dd:heartbeat\ndata: {}\n\n');
+      pressureController.writeHeartbeat();
     }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
 
     let disconnected = false;
     let streamClient: SummaryStatsStreamClient;
-    const cleanup = () => {
+    cleanup = () => {
       if (disconnected) {
         return;
       }
       disconnected = true;
       runtime.clients.delete(streamClient);
       stopSummaryStatsStaleSweepIfIdle(runtime);
+      pressureController.cleanup();
       try {
         globalThis.clearInterval(heartbeatInterval);
       } catch (error: unknown) {
