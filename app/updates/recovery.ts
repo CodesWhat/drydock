@@ -33,6 +33,15 @@ type RecoveryDockerTrigger = AcceptedContainerUpdateRequest['trigger'] & {
 
 type RecoveryTriggerRegistry = Parameters<typeof findDockerTriggerForContainer>[0];
 
+/**
+ * Thrown when a persisted in-progress operation can't be resolved before any
+ * runtime check runs (missing container, no compatible trigger). The
+ * controller never actually inspected the Docker runtime for these, so it
+ * can't confirm the update failed -- terminalize as `expired`, not `failed`,
+ * to avoid a false "update failed" notification (see issue #410).
+ */
+class RecoveryUnresolvedOperationError extends Error {}
+
 function getRecoveryTriggerRegistry(): RecoveryTriggerRegistry {
   return registry.getState().trigger;
 }
@@ -97,13 +106,15 @@ export async function recoverInProgressOperationsOnStartup(): Promise<InProgress
     try {
       const container = resolvePersistedOperationContainer(operation);
       if (!container) {
-        throw new Error(
+        throw new RecoveryUnresolvedOperationError(
           `container ${operation.containerId || operation.containerName} not found in store or persisted operation`,
         );
       }
       const trigger = findRecoveryUpdateTrigger(container);
       if (!isRecoveryDockerTrigger(trigger)) {
-        throw new Error(`no compatible Docker recovery trigger for ${container.name}`);
+        throw new RecoveryUnresolvedOperationError(
+          `no compatible Docker recovery trigger for ${container.name}`,
+        );
       }
       const watcher = trigger.getWatcher(container);
       if (!watcher?.dockerApi) {
@@ -123,11 +134,20 @@ export async function recoverInProgressOperationsOnStartup(): Promise<InProgress
       }
       reconciled++;
     } catch (error: unknown) {
-      updateOperationStore.markOperationTerminal(operation.id, {
-        status: 'failed',
-        phase: 'failed',
-        lastError: `Recovery abandoned: ${getErrorMessage(error)}`,
-      });
+      const lastError = `Recovery abandoned: ${getErrorMessage(error)}`;
+      if (error instanceof RecoveryUnresolvedOperationError) {
+        updateOperationStore.markOperationTerminal(operation.id, {
+          status: 'expired',
+          phase: 'expired',
+          lastError,
+        });
+      } else {
+        updateOperationStore.markOperationTerminal(operation.id, {
+          status: 'failed',
+          phase: 'failed',
+          lastError,
+        });
+      }
       abandoned++;
     }
   }

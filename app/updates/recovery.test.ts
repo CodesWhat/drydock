@@ -324,19 +324,45 @@ describe('recoverQueuedOperationsOnStartup', () => {
   test.each([
     ['missing container', undefined, undefined, 'not found'],
     ['incompatible trigger', { id: 'c-old', name: 'web', watcher: 'local' }, {}, 'no compatible'],
-    [
-      'watcher without Docker API',
-      { id: 'c-old', name: 'web', watcher: 'local' },
-      {
-        getWatcher: vi.fn(() => ({})),
-        reconcileInProgressContainerUpdateOperation: vi.fn(),
-      },
-      'has no Docker API',
-    ],
-  ])('abandons recovery for %s', async (_label, container, trigger, message) => {
+  ])(
+    'expires (not fails) recovery for %s, since it never reached a runtime check',
+    async (_label, container, trigger, message) => {
+      mockListActiveOperations.mockReturnValue([
+        {
+          id: `op-${_label}`,
+          status: 'in-progress',
+          phase: 'pulling',
+          containerName: 'web',
+          container,
+        },
+      ]);
+      mockGetContainer.mockReturnValue(container);
+      mockFindDockerTriggerForContainer.mockReturnValue(trigger);
+
+      await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+        reconciled: 0,
+        abandoned: 1,
+      });
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        `op-${_label}`,
+        expect.objectContaining({
+          status: 'expired',
+          phase: 'expired',
+          lastError: expect.stringContaining(message),
+        }),
+      );
+    },
+  );
+
+  test('marks recovery failed (not expired) when the watcher has no Docker API, since a runtime check was reached', async () => {
+    const container = { id: 'c-old', name: 'web', watcher: 'local' };
+    const trigger = {
+      getWatcher: vi.fn(() => ({})),
+      reconcileInProgressContainerUpdateOperation: vi.fn(),
+    };
     mockListActiveOperations.mockReturnValue([
       {
-        id: `op-${_label}`,
+        id: 'op-no-docker-api',
         status: 'in-progress',
         phase: 'pulling',
         containerName: 'web',
@@ -351,8 +377,12 @@ describe('recoverQueuedOperationsOnStartup', () => {
       abandoned: 1,
     });
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
-      `op-${_label}`,
-      expect.objectContaining({ lastError: expect.stringContaining(message) }),
+      'op-no-docker-api',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: expect.stringContaining('has no Docker API'),
+      }),
     );
   });
 
