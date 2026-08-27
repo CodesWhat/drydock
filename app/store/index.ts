@@ -54,7 +54,14 @@ const STORE_FILE_MODE = 0o600;
 // reject chmod outright. Failing to tighten permissions there must warn and
 // keep starting up, not crash — this is a regression from v1.6.0's
 // unconditional chmodSync on the store directory (#874).
-const RECOVERABLE_CHMOD_ERROR_CODES = new Set(['EPERM', 'EACCES', 'ENOTSUP', 'EROFS']);
+//
+// EROFS is deliberately NOT in this set. The codes below mean the metadata
+// operation was refused while writes to the volume can still succeed; EROFS
+// means the filesystem itself is read-only, so Loki's autosave (temp file
+// plus rename) fails on every subsequent write. Starting up there would
+// leave a process that looks healthy and silently persists nothing, so it
+// fails fast at boot with the real cause instead.
+const RECOVERABLE_CHMOD_ERROR_CODES = new Set(['EPERM', 'EACCES', 'ENOTSUP']);
 
 function enforceStorePermissions(storeDirectory: string, storePath: string): void {
   try {
