@@ -155,7 +155,7 @@ type UpdateLifecycleExecutorCallbacks = {
   ) => Promise<void>;
   emitContainerUpdateApplied: (payload: ContainerUpdateAppliedEvent) => Promise<void>;
   emitContainerUpdateFailed: (payload: ContainerUpdateFailedEventPayload) => Promise<void>;
-  pruneOldBackups: (containerName: string, backupCount: number | undefined) => void;
+  pruneOldBackups: (container: UpdateLifecycleContainer, backupCount: number | undefined) => void;
   getBackupCount: () => number | undefined;
 };
 
@@ -432,7 +432,7 @@ class UpdateLifecycleExecutor {
           container: container as import('../../../model/container.js').Container,
         });
       }
-      this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
+      this.postUpdate.pruneOldBackups(container, this.postUpdate.getBackupCount());
     } catch (e: unknown) {
       const errorMessage = String((e as Error)?.message ?? e);
       if (emitFailureFallback || !requestedOperationId) {
@@ -443,7 +443,7 @@ class UpdateLifecycleExecutor {
         });
       }
       try {
-        this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
+        this.postUpdate.pruneOldBackups(container, this.postUpdate.getBackupCount());
       } catch (pruneError: unknown) {
         const pruneErrorMessage = String((pruneError as Error)?.message ?? pruneError);
         containerLogger.warn?.(

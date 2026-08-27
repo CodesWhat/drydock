@@ -13,7 +13,7 @@ import {
   emitSecurityAlert,
   emitSelfUpdateStarting,
 } from '../../../event/index.js';
-import { fullName } from '../../../model/container.js';
+import { deriveContainerIdentityKey, fullName } from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import { getRollbackCounter } from '../../../prometheus/rollback.js';
 import { buildImageReference } from '../../../registries/image-reference.js';
@@ -38,6 +38,7 @@ import type { ContainerIdentityFilter } from '../../../store/update-operation.js
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
+import { createContainerBackupScope } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
@@ -552,6 +553,7 @@ class Docker<
       ...pickOrchestratorCallbacks(this, ROLLBACK_MONITOR_ORCHESTRATOR_METHODS),
       startHealthMonitor,
       getTriggerInstance: () => this,
+      resolveContainerBackupScope: (container) => this.resolveContainerBackupScope(container),
     });
     const updateLifecycleCallbacks = pickOrchestratorCallbacks(
       this,
@@ -596,7 +598,8 @@ class Docker<
         cleanupOldImages: updateLifecycleCallbacks.cleanupOldImages,
         getRollbackConfig: updateLifecycleCallbacks.getRollbackConfig,
         maybeStartAutoRollbackMonitor: updateLifecycleCallbacks.maybeStartAutoRollbackMonitor,
-        pruneOldBackups: backupStore.pruneOldBackups,
+        pruneOldBackups: (container, backupCount) =>
+          backupStore.pruneOldBackups(this.resolveContainerBackupScope(container), backupCount),
         getBackupCount: () => this.configuration?.backupcount,
       },
       telemetry: {
@@ -1249,7 +1252,8 @@ class Docker<
     if (!this.configuration.prune) return;
 
     // Don't prune images that are retained as backups — they're needed for rollback
-    const retainedBackups = backupStore.getBackupsByName(container.name) || [];
+    const retainedBackups =
+      backupStore.getBackupsForContainer(this.resolveContainerBackupScope(container)) || [];
     const retainedTags = new Set(retainedBackups.map((b) => b.imageTag));
 
     if (container.updateKind.kind === 'tag') {
@@ -1572,12 +1576,20 @@ class Docker<
       id: crypto.randomUUID(),
       containerId: container.id,
       containerName: container.name,
+      containerIdentityKey: container.identityKey ?? deriveContainerIdentityKey(container),
       imageName: baseImageName,
       imageTag: container.image.tag.value,
       imageDigest: container.image.digest?.repo,
       timestamp: new Date().toISOString(),
       triggerName: this.getId(),
     });
+  }
+
+  resolveContainerBackupScope(container) {
+    return createContainerBackupScope(
+      container,
+      storeContainer.getContainers({ name: container.name }) ?? [],
+    );
   }
 
   async runPreRuntimeUpdateLifecycle(context, container, logContainer, _runtimeContext?: unknown) {

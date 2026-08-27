@@ -11,6 +11,8 @@ function createLogger() {
 function createContainer(overrides = {}) {
   return {
     name: 'web',
+    watcher: 'local',
+    identityKey: '::local::web',
     image: {
       tag: { value: '1.2.3' },
       digest: { repo: 'sha256:abc' },
@@ -28,6 +30,11 @@ function createMonitor(overrides = {}) {
     inspectContainer: vi.fn(),
     startHealthMonitor: vi.fn(),
     getTriggerInstance: vi.fn(() => ({ marker: true })),
+    resolveContainerBackupScope: vi.fn(() => ({
+      containerName: 'web',
+      containerIdentityKey: '::local::web',
+      includeLegacy: true,
+    })),
     ...overrides,
   });
 }
@@ -39,6 +46,7 @@ describe('RollbackMonitor', () => {
       getCurrentContainer: vi.fn(),
       inspectContainer: vi.fn(),
       startHealthMonitor: vi.fn(),
+      resolveContainerBackupScope: vi.fn(),
     });
 
     expect(monitor.getLogger()).toBeUndefined();
@@ -212,6 +220,11 @@ describe('RollbackMonitor', () => {
       containerName: 'web',
       backupImageTag: '2.0.0',
       backupImageDigest: undefined,
+      backupScope: {
+        containerName: 'web',
+        containerIdentityKey: '::local::web',
+        includeLegacy: true,
+      },
       window: 120_000,
       interval: 3_000,
       triggerInstance: { triggerMarker: true },

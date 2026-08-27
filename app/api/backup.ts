@@ -8,6 +8,7 @@ import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from '../triggers/providers/docker/created-container-candidate.js';
+import { buildRollbackImageReference, createContainerBackupScope } from '../util/backup.js';
 import { recordAuditEvent } from './audit-events.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import {
@@ -22,6 +23,13 @@ import { handleContainerActionError } from './helpers.js';
 const log = logger.child({ component: 'backup' });
 
 const router = express.Router();
+
+function getContainerBackupScope(container: Parameters<typeof createContainerBackupScope>[0]) {
+  return createContainerBackupScope(
+    container,
+    storeContainer.getContainers({ name: container.name }),
+  );
+}
 
 /**
  * Get all backups, optionally filtered by containerName query param.
@@ -50,7 +58,7 @@ function getContainerBackups(req: Request, res: Response) {
     return;
   }
 
-  const backups = storeBackup.getBackupsByName(container.name);
+  const backups = storeBackup.getBackupsForContainer(getContainerBackupScope(container));
   res.status(200).json({
     data: backups,
     total: backups.length,
@@ -70,16 +78,17 @@ async function rollbackContainer(req: Request, res: Response) {
   }
 
   const { backupId } = req.body || {};
+  const backupScope = getContainerBackupScope(container);
 
   let backup;
   if (backupId) {
     backup = storeBackup.getBackup(backupId);
-    if (!backup || backup.containerName !== container.name) {
+    if (!backup || !storeBackup.isBackupInScope(backup, backupScope)) {
       sendErrorResponse(res, 404, 'Backup not found for this container');
       return;
     }
   } else {
-    const backups = storeBackup.getBackupsByName(container.name);
+    const backups = storeBackup.getBackupsForContainer(backupScope);
     if (backups.length === 0) {
       sendErrorResponse(res, 404, 'No backups found for this container');
       return;
@@ -99,7 +108,7 @@ async function rollbackContainer(req: Request, res: Response) {
   }
 
   const latestBackup = backup;
-  const backupImage = `${latestBackup.imageName}:${latestBackup.imageTag}`;
+  const backupImage = buildRollbackImageReference(latestBackup);
 
   try {
     const watcher = trigger.getWatcher(container);

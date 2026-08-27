@@ -41,7 +41,7 @@ const SENSITIVE_KEY_PATTERNS = [
 // Short tokens that require an exact segment match (split on '_') to prevent
 // substring false positives. For example, 'PASS' would otherwise match
 // 'COMPASS' or 'BYPASS' under a plain .includes() check.
-const SENSITIVE_SEGMENT_PATTERNS = ['PASS'];
+const SENSITIVE_SEGMENT_PATTERNS = ['PASS', 'PAT'];
 
 export function isSensitiveKey(key: string): boolean {
   const upper = key.toUpperCase();
@@ -50,6 +50,25 @@ export function isSensitiveKey(key: string): boolean {
   }
   const segments = upper.split('_');
   return SENSITIVE_SEGMENT_PATTERNS.some((pattern) => segments.includes(pattern));
+}
+
+function hasUrlCredentials(value: unknown): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  try {
+    // Parsed against a dummy base so scheme-relative values (e.g.
+    // "//user:pass@host/path") resolve instead of throwing, since a bare
+    // new URL() has no scheme to anchor them.
+    const parsed = new URL(value, 'http://redaction.invalid');
+    return parsed.username.length > 0 || parsed.password.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export function isSensitiveEnvEntry(entry: { key: string; value?: unknown }): boolean {
+  return isSensitiveKey(entry.key) || hasUrlCredentials(entry.value);
 }
 
 export function getErrorStatusCode(error: unknown): number | undefined {
@@ -81,7 +100,7 @@ function classifyContainerRuntimeDetails<T>(details: T): T {
     env: detailsWithEnv.env
       .filter((entry) => hasEnvKey(entry))
       .map((entry) => {
-        const sensitive = isSensitiveKey(entry.key);
+        const sensitive = isSensitiveEnvEntry(entry);
         return {
           key: entry.key,
           value: sensitive ? '[REDACTED]' : entry.value,

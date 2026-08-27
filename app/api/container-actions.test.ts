@@ -201,12 +201,15 @@ describe('Container Actions Router', () => {
         name: 'nginx',
         image: { name: 'nginx' },
         agent: 'edge-1',
-        watcher: 'edge-1',
+        watcher: 'docker-watcher-1',
       };
       mockGetContainer.mockReturnValue(container);
       const { trigger, dockerContainer } = createDockerTrigger({ agent: 'edge-1' });
       mockGetState.mockReturnValue({ trigger: { 'docker.edge-1': trigger } });
-      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => true) });
+      const hasControllerDockerTransport = vi.fn(
+        (watcher: string) => watcher === 'docker-watcher-1',
+      );
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport });
 
       const handler = getHandler('post', '/:id/start');
       const req = createMockRequest({ params: { id: 'c1' } });
@@ -214,6 +217,7 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(dockerContainer.start).toHaveBeenCalled();
+      expect(hasControllerDockerTransport).toHaveBeenCalledWith('docker-watcher-1');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Container started successfully',
@@ -557,6 +561,90 @@ describe('Container Actions Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to complete container action' });
+    });
+  });
+
+  describe.each([
+    {
+      route: '/:id/start',
+      method: 'start',
+      auditAction: 'container-start',
+      message: 'Container started successfully',
+    },
+    {
+      route: '/:id/stop',
+      method: 'stop',
+      auditAction: 'container-stop',
+      message: 'Container stopped successfully',
+    },
+    {
+      route: '/:id/restart',
+      method: 'restart',
+      auditAction: 'container-restart',
+      message: 'Container restarted successfully',
+    },
+  ] as const)('$method refresh failures', ({ route, method, auditAction, message }) => {
+    test('keeps authoritative action success when inspect rejects', async () => {
+      const container = { id: 'c1', name: 'nginx', image: { name: 'nginx' } };
+      const latestContainer = { ...container, status: 'running' };
+      mockGetContainer.mockReturnValueOnce(container).mockReturnValue(latestContainer);
+      const { trigger, dockerContainer } = createDockerTrigger();
+      dockerContainer.inspect.mockRejectedValue(
+        method === 'stop' ? 'inspect unavailable' : new Error('inspect unavailable'),
+      );
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const actionCounter = vi.fn();
+      mockGetContainerActionsCounter.mockReturnValue({ inc: actionCounter });
+
+      const handler = getHandler('post', route);
+      const res = createMockResponse();
+      await handler(createMockRequest({ params: { id: 'c1' } }), res);
+
+      expect(dockerContainer[method]).toHaveBeenCalledOnce();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ message, result: latestContainer });
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({ action: auditAction, status: 'success' }),
+      );
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: auditAction, status: 'error' }),
+      );
+      expect(actionCounter).toHaveBeenCalledOnce();
+    });
+
+    test('keeps authoritative action success when refreshed state cannot be stored', async () => {
+      const container = { id: 'c1', name: 'nginx', image: { name: 'nginx' } };
+      const preRefreshContainer = { ...container, status: 'stale' };
+      const latestContainer = { ...container, status: 'running' };
+      const expectedContainer = method === 'restart' ? container : latestContainer;
+      mockGetContainer
+        .mockReturnValueOnce(container)
+        .mockReturnValueOnce(preRefreshContainer)
+        .mockReturnValue(method === 'restart' ? undefined : latestContainer);
+      mockUpdateContainer.mockImplementationOnce(() => {
+        throw new Error('store unavailable');
+      });
+      const { trigger, dockerContainer } = createDockerTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const actionCounter = vi.fn();
+      mockGetContainerActionsCounter.mockReturnValue({ inc: actionCounter });
+
+      const handler = getHandler('post', route);
+      const res = createMockResponse();
+      await handler(createMockRequest({ params: { id: 'c1' } }), res);
+
+      expect(dockerContainer[method]).toHaveBeenCalledOnce();
+      expect(dockerContainer.inspect).toHaveBeenCalledOnce();
+      expect(mockUpdateContainer).toHaveBeenCalledOnce();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({ message, result: expectedContainer });
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({ action: auditAction, status: 'success' }),
+      );
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: auditAction, status: 'error' }),
+      );
+      expect(actionCounter).toHaveBeenCalledOnce();
     });
   });
 

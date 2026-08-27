@@ -6,6 +6,8 @@ function createContainer(overrides = {}) {
   return {
     id: 'container-id',
     name: 'web',
+    watcher: 'local',
+    identityKey: '::local::web',
     image: {
       name: 'ghcr.io/acme/web',
       tag: { value: '1.0.0' },
@@ -478,7 +480,7 @@ describe('UpdateLifecycleExecutor', () => {
         name: 'web',
       }),
     });
-    expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 5);
+    expect(harness.pruneOldBackups).toHaveBeenCalledWith(container, 5);
   });
 
   test('does not directly emit update-applied telemetry when operation id owns the commit', async () => {
@@ -517,7 +519,10 @@ describe('UpdateLifecycleExecutor', () => {
       error: 'scan failed hard',
       container: expect.objectContaining({ name: 'web' }),
     });
-    expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 3);
+    expect(harness.pruneOldBackups).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'web', identityKey: '::local::web' }),
+      3,
+    );
   });
 
   test('rethrows original lifecycle error when failure-path backup pruning throws', async () => {
@@ -537,7 +542,10 @@ describe('UpdateLifecycleExecutor', () => {
       error: 'scan failed hard',
       container: expect.objectContaining({ name: 'web' }),
     });
-    expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 3);
+    expect(harness.pruneOldBackups).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'web', identityKey: '::local::web' }),
+      3,
+    );
   });
 
   test('stringifies non-Error prune failures while rethrowing original lifecycle error', async () => {

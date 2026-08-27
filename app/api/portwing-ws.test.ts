@@ -54,6 +54,7 @@ const mockLogChild = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
+  isLevelEnabled: vi.fn(() => false),
 }));
 vi.mock('../log/index.js', () => ({
   default: {
@@ -503,6 +504,109 @@ describe('hello verification — rejection paths', () => {
     const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
     expect(errorFrame.data.code).toBe('expected-hello');
     expect(ws.close).toHaveBeenCalledWith(1008, 'expected-hello');
+  });
+
+  test.each([
+    ['null', null],
+    ['empty string', ''],
+    ['blank string', '   '],
+    ['oversized string', '1'.repeat(65)],
+    ['number', 42],
+    ['boolean', true],
+    ['array', ['1.4.0']],
+    ['object', { version: '1.4.0' }],
+  ])('rejects %s drydockCompat before key lookup', async (_label, drydockCompat) => {
+    const { privateKey, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = makeNonce();
+    const sig = signHello(privateKey, ts, nonce);
+    const { gateway, getUpgradedWs, mockKeyStore } = createGateway(null);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { drydockCompat }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame).toMatchObject({
+      type: 'error',
+      data: { code: 'invalid-drydock-compat' },
+    });
+    expect(ws.close).toHaveBeenCalledWith(1008, 'invalid-drydock-compat');
+    expect(mockKeyStore.getKey).not.toHaveBeenCalled();
+  });
+
+  test('contains an unexpected hello dependency rejection and accepts the next connection', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    const { gateway, getUpgradedWs, mockKeyStore } = createGateway(record);
+    mockKeyStore.getKey
+      .mockImplementationOnce(() => {
+        throw new Error('unexpected key-store failure');
+      })
+      .mockReturnValue(record);
+
+    const firstTimestamp = Math.floor(Date.now() / 1000);
+    const firstNonce = 'a0000000000000000000000000000001';
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const firstWs = getUpgradedWs()!;
+    sendMessageToGateway(
+      firstWs,
+      buildHello(
+        keyId,
+        firstTimestamp,
+        firstNonce,
+        signHello(privateKey, firstTimestamp, firstNonce),
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const errorFrame = JSON.parse(firstWs.sentMessages[0]) as {
+      type: string;
+      data: { code: string; message: string };
+    };
+    expect(errorFrame).toEqual({
+      type: 'error',
+      data: { code: 'internal-error', message: 'Internal server error' },
+    });
+    expect(firstWs.close).toHaveBeenCalledWith(1011, 'internal-error');
+
+    const secondTimestamp = Math.floor(Date.now() / 1000);
+    const secondNonce = 'a0000000000000000000000000000002';
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const secondWs = getUpgradedWs()!;
+    sendMessageToGateway(
+      secondWs,
+      buildHello(
+        keyId,
+        secondTimestamp,
+        secondNonce,
+        signHello(privateKey, secondTimestamp, secondNonce),
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(JSON.parse(secondWs.sentMessages[0]) as { type: string }).toMatchObject({
+      type: 'welcome',
+    });
   });
 
   test('protocol-mismatch when protocol is portwing/1', async () => {
@@ -3313,7 +3417,7 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
       getCollection: vi.fn(() => collection),
       addCollection: vi.fn(() => collection),
     };
-    return { db, docs };
+    return { db, docs, collection };
   }
 
   function makeKeyRecord(keyId: string, pubkeyBase64: string): AgentKeyRecord {
@@ -3508,5 +3612,64 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
     expect(errorFrame.type).toBe('error');
     expect(errorFrame.data.code).toBe('agent-name-claimed');
     expect(docs).toHaveLength(1);
+  });
+
+  test('evicts idle persisted bindings at cap and does not rehydrate them after restart', async () => {
+    const { db, docs, collection } = createPersistentMockDb();
+    nameBindingsStore.createCollections(db);
+
+    const staleLastSeenAt = Date.now() - (24 * 60 * 60 * 1000 + 1_000);
+    nameBindingsStore.upsertBinding('stale-cap-sentinel', 'stale-cap-key', staleLastSeenAt);
+    const persistedSentinel = docs[0];
+
+    const newcomer = generateKeyPair();
+    const newcomerRecord = makeKeyRecord(newcomer.keyId, newcomer.pubkeyBase64);
+    const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(newcomerRecord);
+
+    const bindings = new Map<string, { keyId: string; lastSeenAt: number }>();
+    for (let i = 0; i < 9_999; i++) {
+      bindings.set(`persisted-cap-filler-${i}`, {
+        keyId: `persisted-cap-key-${i}`,
+        lastSeenAt: staleLastSeenAt,
+      });
+    }
+    fillNameBindingsForTesting(bindings);
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+
+    gw1.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws1 = getWs1()!;
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'd3000000000000000000000000000001';
+    const sig = signHello(newcomer.privateKey, ts, nonce);
+    sendMessageToGateway(
+      ws1,
+      buildHello(newcomer.keyId, ts, nonce, sig, {
+        agentId: 'new-cap-agent-id',
+        agentName: 'new-cap-agent',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect((JSON.parse(ws1.sentMessages[0]) as { type: string }).type).toBe('welcome');
+    expect(collection.remove).toHaveBeenCalledWith(persistedSentinel);
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({ agentName: 'new-cap-agent', keyId: newcomer.keyId });
+    expect(docs.some((doc) => doc.agentName === 'stale-cap-sentinel')).toBe(false);
+
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+    nameBindingsStore.clearCollectionForTesting();
+    nameBindingsStore.createCollections(db);
+    expect(nameBindingsSizeForTesting()).toBe(0);
+
+    createGateway(newcomerRecord);
+
+    expect(nameBindingsSizeForTesting()).toBe(1);
+    expect(docs).toHaveLength(1);
+    expect(docs[0].agentName).toBe('new-cap-agent');
   });
 });

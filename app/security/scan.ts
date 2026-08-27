@@ -10,6 +10,7 @@ import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js'
 import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { toPositiveInteger } from '../util/parse.js';
+import { getAbortReason } from './abort.js';
 import { buildGrypeInvocation, parseGrypeOutput } from './providers/grype.js';
 import { hasValidCommandPath } from './runtime.js';
 import { getDefaultScannerRuntime } from './scanner-runtime.js';
@@ -88,6 +89,7 @@ export interface ContainerSecuritySbom {
 interface ScanImageOptions {
   image: string;
   retryTransient?: boolean;
+  signal?: AbortSignal;
   auth?: {
     username?: string;
     password?: string;
@@ -140,7 +142,13 @@ export const DIGEST_SCAN_CACHE_MAX_ENTRIES = toPositiveInteger(
 
 let trivyQueue: Promise<void> = Promise.resolve();
 
-function enqueueTrivy<T>(operation: () => Promise<T>): Promise<T> {
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw getAbortReason(signal, 'Security scan aborted');
+  }
+}
+
+function enqueueTrivy<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   const previousTail = trivyQueue;
   let resolve: () => void;
   const gate = new Promise<void>((r) => {
@@ -151,6 +159,7 @@ function enqueueTrivy<T>(operation: () => Promise<T>): Promise<T> {
     .catch(() => undefined)
     .then(async () => {
       try {
+        throwIfAborted(signal);
         return await operation();
       } finally {
         resolve?.();
@@ -250,9 +259,38 @@ function runCommand(options: {
   maxBuffer: number;
   env: NodeJS.ProcessEnv;
   commandName: string;
+  signal?: AbortSignal;
 }): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = execFile(
+    if (options.signal?.aborted) {
+      reject(getAbortReason(options.signal, 'Security scan aborted'));
+      return;
+    }
+
+    let settled = false;
+    let child: ReturnType<typeof execFile> | undefined;
+    const cleanupAbortListener = () => {
+      options.signal?.removeEventListener('abort', handleAbort);
+    };
+    const settle = (operation: () => void) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanupAbortListener();
+      operation();
+    };
+    const handleAbort = () => {
+      try {
+        child?.kill('SIGTERM');
+      } finally {
+        settle(() =>
+          reject(getAbortReason(options.signal as AbortSignal, 'Security scan aborted')),
+        );
+      }
+    };
+
+    child = execFile(
       options.command,
       options.args,
       {
@@ -266,7 +304,7 @@ function runCommand(options: {
             killed?: boolean;
             signal?: string;
           };
-          const exitCode = commandError.code ?? child.exitCode ?? 'unknown';
+          const exitCode = commandError.code ?? child?.exitCode ?? 'unknown';
           const stderrValue = `${stderr || ''}`.trim();
           const errorMessage = stderrValue || error.message;
           const maxBufferExceeded = commandError.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
@@ -284,10 +322,12 @@ function runCommand(options: {
             const timeoutMessage = processTimedOut
               ? `${options.commandName} process timed out after ${options.timeout}ms (configured timeout ${configuredTimeout}ms)`
               : `${options.commandName} command timed out after ${configuredTimeout}ms`;
-            reject(
-              new CommandExecutionError(
-                `${timeoutMessage}${errorMessage ? `: ${errorMessage}` : ''}`,
-                true,
+            settle(() =>
+              reject(
+                new CommandExecutionError(
+                  `${timeoutMessage}${errorMessage ? `: ${errorMessage}` : ''}`,
+                  true,
+                ),
               ),
             );
             return;
@@ -299,19 +339,28 @@ function runCommand(options: {
             /(?:temporary|temporarily unavailable|connection (?:reset|refused)|no such host|temporary failure in name resolution|database.*(?:download|update|lock)|failed to download.*db)/i.test(
               errorMessage,
             );
-          reject(
-            new CommandExecutionError(
-              `${options.commandName} command failed (exit=${exitCode}): ${
-                errorMessage || 'unknown error'
-              }`,
-              transient,
+          settle(() =>
+            reject(
+              new CommandExecutionError(
+                `${options.commandName} command failed (exit=${exitCode}): ${
+                  errorMessage || 'unknown error'
+                }`,
+                transient,
+              ),
             ),
           );
           return;
         }
-        resolve(`${stdout || ''}`);
+        settle(() => resolve(`${stdout || ''}`));
       },
     );
+
+    if (!settled && options.signal) {
+      options.signal.addEventListener('abort', handleAbort, { once: true });
+      if (options.signal.aborted) {
+        handleAbort();
+      }
+    }
   });
 }
 
@@ -465,7 +514,7 @@ function runTrivyVulnerabilityCommand(
       commandName: 'Trivy',
     };
     if (configuration.backend === 'command') {
-      return runCommand(invocation);
+      return runCommand({ ...invocation, signal: options.signal });
     }
     return getDefaultScannerRuntime().run({
       provider: 'trivy',
@@ -473,8 +522,9 @@ function runTrivyVulnerabilityCommand(
       env: invocation.env,
       timeoutMs: invocation.timeout,
       maxOutputBytes: invocation.maxBuffer,
+      signal: options.signal,
     });
-  });
+  }, options.signal);
 }
 
 function runTrivySbomCommand(
@@ -501,7 +551,7 @@ function runTrivySbomCommand(
       commandName: 'Trivy',
     };
     if (configuration.backend === 'command') {
-      return runCommand(invocation);
+      return runCommand({ ...invocation, signal: options.signal });
     }
     return getDefaultScannerRuntime().run({
       provider: 'trivy',
@@ -509,8 +559,9 @@ function runTrivySbomCommand(
       env: invocation.env,
       timeoutMs: invocation.timeout,
       maxOutputBytes: invocation.maxBuffer,
+      signal: options.signal,
     });
-  });
+  }, options.signal);
 }
 
 async function runTrivyVulnerabilityCommandWithRetry(
@@ -533,7 +584,7 @@ function runGrypeVulnerabilityCommand(
 ): Promise<string> {
   const invocation = buildGrypeInvocation(options, configuration.grype);
   if (configuration.backend === 'command') {
-    return runCommand(invocation);
+    return runCommand({ ...invocation, signal: options.signal });
   }
   return getDefaultScannerRuntime().run({
     provider: 'grype',
@@ -541,6 +592,7 @@ function runGrypeVulnerabilityCommand(
     env: invocation.env,
     timeoutMs: invocation.timeout,
     maxOutputBytes: invocation.maxBuffer,
+    signal: options.signal,
   });
 }
 
@@ -604,6 +656,7 @@ function runSyftSbomCommand(
       maxBuffer: MAX_SYFT_OUTPUT_BYTES,
       env,
       commandName: 'Syft',
+      signal: options.signal,
     });
   }
   return getDefaultScannerRuntime().run({
@@ -612,6 +665,7 @@ function runSyftSbomCommand(
     env,
     timeoutMs: configuration.syft.timeout,
     maxOutputBytes: MAX_SYFT_OUTPUT_BYTES,
+    signal: options.signal,
   });
 }
 
@@ -655,6 +709,7 @@ function runCosignVerifyCommand(
     maxBuffer: MAX_COSIGN_OUTPUT_BYTES,
     env: buildCosignEnvironment(options),
     commandName: 'Cosign',
+    signal: options.signal,
   });
 }
 
@@ -698,6 +753,7 @@ async function scanWithProvider(
   configuration: ReturnType<typeof getSecurityConfiguration>,
 ): Promise<ProviderScanResult> {
   try {
+    throwIfAborted(options.signal);
     if (provider === 'trivy') {
       if (configuration.backend === 'command') {
         await warmTrivyDatabase();
@@ -707,6 +763,7 @@ async function scanWithProvider(
           await runtime.assets.warm('trivy');
         }
       }
+      throwIfAborted(options.signal);
       const output = await runTrivyVulnerabilityCommandWithRetry(options, configuration);
       return { provider, vulnerabilities: parseTrivyOutput(output) };
     }
@@ -716,9 +773,13 @@ async function scanWithProvider(
         await runtime.assets.warm('grype');
       }
     }
+    throwIfAborted(options.signal);
     const output = await runGrypeVulnerabilityCommandWithRetry(options, configuration);
     return { provider, vulnerabilities: parseGrypeOutput(output) };
   } catch (error: unknown) {
+    if (options.signal?.aborted) {
+      throw getAbortReason(options.signal, 'Security scan aborted');
+    }
     return {
       provider,
       vulnerabilities: [],
@@ -881,6 +942,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
 export async function scanImageForVulnerabilities(
   options: ScanImageOptions,
 ): Promise<ContainerSecurityScan> {
+  throwIfAborted(options.signal);
   const configuration = getSecurityConfiguration();
   const blockSeverities = configuration.blockSeverities;
 
@@ -1075,7 +1137,59 @@ interface DigestScanCacheEntry {
   cachedAt: number;
 }
 
+type DigestScanResult = { scanResult: ContainerSecurityScan; fromCache: boolean };
+
+interface DigestScanInFlightEntry {
+  controller: AbortController;
+  promise: Promise<DigestScanResult>;
+  retryTransient: boolean;
+  waiterCount: number;
+}
+
 const digestScanCache = new Map<string, DigestScanCacheEntry>();
+const digestScansInFlight = new Map<string, DigestScanInFlightEntry>();
+
+function waitForDigestScan(
+  entry: DigestScanInFlightEntry,
+  signal: AbortSignal | undefined,
+): Promise<DigestScanResult> {
+  return new Promise((resolve, reject) => {
+    let attached = true;
+    const detach = () => {
+      attached = false;
+      signal?.removeEventListener('abort', handleAbort);
+      entry.waiterCount -= 1;
+    };
+    const handleAbort = () => {
+      const reason = getAbortReason(signal as AbortSignal, 'Security scan aborted');
+      detach();
+      if (entry.waiterCount === 0) {
+        entry.controller.abort(reason);
+      }
+      reject(reason);
+    };
+
+    entry.waiterCount += 1;
+    signal?.addEventListener('abort', handleAbort, { once: true });
+
+    entry.promise.then(
+      (result) => {
+        if (!attached) {
+          return;
+        }
+        detach();
+        resolve(result);
+      },
+      (error: unknown) => {
+        if (!attached) {
+          return;
+        }
+        detach();
+        reject(error);
+      },
+    );
+  });
+}
 
 function setDigestScanCacheEntry(
   digest: string,
@@ -1128,6 +1242,7 @@ export async function scanImageWithDedup(
   options: ScanImageOptions & { digest: string; trivyDbUpdatedAt?: string },
   scanIntervalMs: number,
 ): Promise<{ scanResult: ContainerSecurityScan; fromCache: boolean }> {
+  throwIfAborted(options.signal);
   const cached = digestScanCache.get(options.digest);
   const dbUpdatedAt = options.trivyDbUpdatedAt;
   const scannerFingerprint = getScannerFingerprint(dbUpdatedAt || '');
@@ -1160,23 +1275,61 @@ export async function scanImageWithDedup(
     };
   }
 
-  const rawScanResult = await scanImageForVulnerabilities(options);
-  const scanResult = { ...rawScanResult, imageDigest: options.digest };
-
-  if (scanResult.status === 'error') {
-    // Record the error so we can enforce the retry floor on subsequent calls.
-    // Do not cache the error in the main cache — a later successful scan
-    // should always overwrite without a TTL barrier.
-    errorRetryFloor.set(options.digest, {
-      errorAt: Date.now(),
-      scanResult,
-      scannerFingerprint,
-    });
-  } else if (!scanResult.error) {
-    // Clear any previous error floor entry and store the successful result.
-    errorRetryFloor.delete(options.digest);
-    setDigestScanCacheEntry(options.digest, scanResult, dbUpdatedAt || '');
+  const existingEntry = digestScansInFlight.get(options.digest);
+  if (existingEntry) {
+    if (existingEntry.controller.signal.aborted) {
+      // No await between reading `existingEntry` above and deleting here, so
+      // nothing can replace the map entry in between. The identity recheck
+      // this used to carry could never be false.
+      digestScansInFlight.delete(options.digest);
+    } else {
+      if (options.retryTransient) {
+        existingEntry.retryTransient = true;
+      }
+      return waitForDigestScan(existingEntry, options.signal);
+    }
   }
 
-  return { scanResult, fromCache: false };
+  const controller = new AbortController();
+  const entry: DigestScanInFlightEntry = {
+    controller,
+    promise: Promise.resolve(undefined as never),
+    retryTransient: options.retryTransient === true,
+    waiterCount: 0,
+  };
+  const providerOptions: ScanImageOptions = {
+    ...options,
+    signal: controller.signal,
+    get retryTransient() {
+      return entry.retryTransient;
+    },
+  };
+  entry.promise = (async () => {
+    const rawScanResult = await scanImageForVulnerabilities(providerOptions);
+    const scanResult = { ...rawScanResult, imageDigest: options.digest };
+
+    if (scanResult.status === 'error') {
+      // Record the error so we can enforce the retry floor on subsequent calls.
+      // Do not cache the error in the main cache — a later successful scan
+      // should always overwrite without a TTL barrier.
+      errorRetryFloor.set(options.digest, {
+        errorAt: Date.now(),
+        scanResult,
+        scannerFingerprint,
+      });
+    } else if (!scanResult.error) {
+      // Clear any previous error floor entry and store the successful result.
+      errorRetryFloor.delete(options.digest);
+      setDigestScanCacheEntry(options.digest, scanResult, dbUpdatedAt || '');
+    }
+
+    return { scanResult, fromCache: false };
+  })().finally(() => {
+    if (digestScansInFlight.get(options.digest) === entry) {
+      digestScansInFlight.delete(options.digest);
+    }
+  });
+  digestScansInFlight.set(options.digest, entry);
+  void entry.promise.catch(() => undefined);
+  return waitForDigestScan(entry, options.signal);
 }
