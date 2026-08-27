@@ -92,7 +92,7 @@ export function formatValidationFailure(rawMessage, errors) {
   const formattedErrors = errors.map((error) => `  - ${error}`).join('\n');
 
   return [
-    '❌ Invalid commit message.',
+    'Invalid commit message.',
     '',
     `Current subject: ${subject || '<empty>'}`,
     '',

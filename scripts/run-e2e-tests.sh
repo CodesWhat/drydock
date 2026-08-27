@@ -23,7 +23,7 @@ restart_colima() {
 		return
 	fi
 
-	echo "🔄 Restarting Colima..."
+	echo "Restarting Colima..."
 	colima stop >/dev/null 2>&1 || true
 	colima start >/dev/null
 }
@@ -33,7 +33,7 @@ wait_for_docker_engine() {
 		return
 	fi
 
-	echo "⏳ Waiting for Docker engine..."
+	echo "Waiting for Docker engine..."
 	for _ in $(seq 1 60); do
 		if docker info >/dev/null 2>&1; then
 			return
@@ -41,7 +41,7 @@ wait_for_docker_engine() {
 		sleep 1
 	done
 
-	echo "❌ Docker engine did not become ready."
+	echo "Docker engine did not become ready."
 	exit 1
 }
 
@@ -61,16 +61,16 @@ acquire_lock() {
 
 		current_time=$(date +%s)
 		if [ $((current_time - started_at)) -ge "$LOCK_TIMEOUT_SECONDS" ]; then
-			echo "❌ Timed out waiting for e2e lock after ${LOCK_TIMEOUT_SECONDS}s"
+			echo "Timed out waiting for e2e lock after ${LOCK_TIMEOUT_SECONDS}s"
 			exit 1
 		fi
 
-		echo "⏳ Waiting for active e2e run to finish..."
+		echo "Waiting for active e2e run to finish..."
 		sleep 1
 	done
 
 	echo "$$" >"$LOCK_DIR/pid"
-	echo "🔒 Acquired e2e lock"
+	echo "Acquired e2e lock"
 }
 
 release_lock() {
@@ -79,12 +79,12 @@ release_lock() {
 
 # Always clean up on exit (success or failure)
 cleanup() {
-	echo "🧹 Cleaning up e2e environment..."
+	echo "Cleaning up e2e environment..."
 	"$SCRIPT_DIR/cleanup-test-containers.sh"
 }
 trap 'cleanup; release_lock' EXIT
 
-echo "🧪 Running complete e2e test suite..."
+echo "Running complete e2e test suite..."
 
 restart_colima
 wait_for_docker_engine
@@ -102,14 +102,14 @@ acquire_lock
 
 # Query the assigned port from the running container (works for IPv4 and IPv6 outputs)
 E2E_PORT=$(docker port drydock 3000/tcp | head -n1 | awk -F: '{print $NF}')
-echo "🔌 Drydock available on port $E2E_PORT"
+echo "Drydock available on port $E2E_PORT"
 
 # Run e2e tests with the dynamically assigned port
-echo "🏃 Running cucumber tests..."
+echo "Running cucumber tests..."
 CUCUMBER_ARGS=()
 if [ -z "${GITLAB_TOKEN:-}" ]; then
 	CUCUMBER_ARGS+=(--tags "not @requires_gitlab")
 fi
 (cd "$SCRIPT_DIR/../e2e" && DD_PORT="$E2E_PORT" npm run cucumber -- "${CUCUMBER_ARGS[@]}")
 
-echo "✅ E2E tests completed!"
+echo "E2E tests completed!"
