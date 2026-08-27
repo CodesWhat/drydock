@@ -4,12 +4,18 @@ const {
   mockGetState,
   mockInsertAudit,
   mockGetAuditCounter,
+  mockGetAgent,
 } = vi.hoisted(() => ({
   mockGetContainer: vi.fn(),
   mockUpdateContainer: vi.fn((c) => c),
   mockGetState: vi.fn(),
   mockInsertAudit: vi.fn(),
   mockGetAuditCounter: vi.fn(() => ({ inc: vi.fn() })),
+  mockGetAgent: vi.fn(),
+}));
+
+vi.mock('../agent/manager.js', () => ({
+  getAgent: mockGetAgent,
 }));
 
 vi.mock('../store/container.js', () => ({
@@ -69,6 +75,7 @@ describe('restartDependentContainer', () => {
     vi.clearAllMocks();
     mockUpdateContainer.mockImplementation((c) => c);
     mockGetAuditCounter.mockReturnValue({ inc: vi.fn() });
+    mockGetAgent.mockReturnValue(undefined);
   });
 
   test('restarts the container via its docker trigger and records a success audit event', async () => {
@@ -105,6 +112,28 @@ describe('restartDependentContainer', () => {
     await expect(restartDependentContainer(container as never)).rejects.toThrow(
       'No docker trigger found for this container',
     );
+  });
+
+  test('rejects an unsupported agent lifecycle before looking up its registered trigger watcher', async () => {
+    const getWatcher = vi.fn(() => {
+      throw new Error('legacy AgentTrigger cannot provide a local watcher');
+    });
+    mockGetState.mockReturnValue({
+      trigger: {
+        'docker.edge-1': {
+          type: 'docker',
+          agent: 'edge-1',
+          getWatcher,
+        },
+      },
+    });
+    mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => false) });
+    const container = createContainer({ agent: 'edge-1', watcher: 'edge-1' });
+
+    await expect(restartDependentContainer(container as never)).rejects.toThrow(
+      "Lifecycle actions (start/stop/restart) are not supported over this container's agent connection",
+    );
+    expect(getWatcher).not.toHaveBeenCalled();
   });
 
   test('does not fail the restart when the post-restart status refresh throws', async () => {

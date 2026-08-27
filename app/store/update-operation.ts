@@ -106,27 +106,27 @@ interface SucceededUpdateOperation extends UpdateOperationBase {
   status: 'succeeded';
   phase: SucceededContainerUpdateOperationPhase;
   completedAt: string;
-  batchId?: undefined;
-  queuePosition?: undefined;
-  queueTotal?: undefined;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
 }
 
 interface RolledBackUpdateOperation extends UpdateOperationBase {
   status: 'rolled-back';
   phase: RolledBackContainerUpdateOperationPhase;
   completedAt: string;
-  batchId?: undefined;
-  queuePosition?: undefined;
-  queueTotal?: undefined;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
 }
 
 interface FailedUpdateOperation extends UpdateOperationBase {
   status: 'failed';
   phase: FailedContainerUpdateOperationPhase;
   completedAt: string;
-  batchId?: undefined;
-  queuePosition?: undefined;
-  queueTotal?: undefined;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
 }
 
 /**
@@ -141,9 +141,9 @@ interface ExpiredUpdateOperation extends UpdateOperationBase {
   status: 'expired';
   phase: ExpiredContainerUpdateOperationPhase;
   completedAt: string;
-  batchId?: undefined;
-  queuePosition?: undefined;
-  queueTotal?: undefined;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
 }
 
 /**
@@ -158,9 +158,9 @@ interface SkippedDependencyUpdateOperation extends UpdateOperationBase {
   status: 'skipped-dependency';
   phase: SkippedDependencyContainerUpdateOperationPhase;
   completedAt: string;
-  batchId?: undefined;
-  queuePosition?: undefined;
-  queueTotal?: undefined;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
 }
 
 type UpdateOperation =
@@ -304,10 +304,10 @@ interface UpdateOperationStoreDb {
 }
 
 let updateOperationCollection: UpdateOperationCollection | undefined;
-// In-memory registry: batchId → Set of operationIds. Populated on insert, cleared when the
-// batch completes. This allows us to reconstruct full batch membership even after individual
-// operations have had their batchId cleared on terminal transition.
+// In-memory registry: batchId → Set of operationIds. Populated on insert or startup
+// rehydration and cleared when the batch completes.
 const batchMemberRegistry = new Map<string, Set<string>>();
+const incompleteRehydratedBatchIds = new Set<string>();
 const UPDATE_OPERATION_COLLECTION_INDICES = [
   'data.id',
   'data.containerName',
@@ -569,10 +569,7 @@ function isResumableActiveOperationOnStartup(operation: ActiveUpdateOperation): 
   if (operation.kind === 'self-update') {
     return false;
   }
-  if (operation.status === 'queued') {
-    return true;
-  }
-  return operation.status === 'in-progress' && operation.phase === 'pulling';
+  return operation.status === 'queued' || operation.status === 'in-progress';
 }
 
 function resetActiveOperationDocumentToQueuedOnStartup(
@@ -593,6 +590,22 @@ function resetActiveOperationDocumentToQueuedOnStartup(
   collection.remove(document);
   collection.insert({ data: reset });
   emitOperationChangedEvent(reset);
+}
+
+function refreshInProgressOperationForStartupRecovery(
+  collection: UpdateOperationCollection,
+  document: UpdateOperationCollectionDocument,
+  operation: InProgressUpdateOperation,
+): void {
+  const now = new Date().toISOString();
+  const refreshed: InProgressUpdateOperation = {
+    ...operation,
+    updatedAt: now,
+    recoveredAt: now,
+  };
+  collection.remove(document);
+  collection.insert({ data: refreshed });
+  emitOperationChangedEvent(refreshed);
 }
 
 function reconcileStaleActiveOperationsOnStartup(collection: UpdateOperationCollection): number {
@@ -622,15 +635,59 @@ function reconcileStaleActiveOperationsOnStartup(collection: UpdateOperationColl
       reconcileOrphanedActiveOperationOnStartup(operation);
       continue;
     }
-    if (operation.status === 'in-progress') {
+    if (operation.status === 'in-progress' && operation.phase === 'pulling') {
       // Resumable in-progress (pulling) → reset to queued so the recovery
       // dispatcher picks it up uniformly with already-queued operations.
       resetActiveOperationDocumentToQueuedOnStartup(collection, document, operation);
+    } else if (operation.status === 'in-progress') {
+      // Give the post-registry Docker reconciliation pass a fresh TTL window.
+      refreshInProgressOperationForStartupRecovery(collection, document, operation);
     }
     // Already-queued resumable operations stay as-is.
   }
 
   return documents.length;
+}
+
+function getPersistedBatchId(operation: UpdateOperation): string | undefined {
+  return typeof operation.batchId === 'string' && operation.batchId !== ''
+    ? operation.batchId
+    : undefined;
+}
+
+function rehydrateActiveBatchMembership(collection: UpdateOperationCollection): void {
+  const activeDocuments = ACTIVE_STATUSES.flatMap((status) =>
+    findOperationDocumentsByStatus(collection, status),
+  );
+  const activeBatchIds = new Set(
+    activeDocuments.map((document) => getPersistedBatchId(document.data)).filter(Boolean),
+  );
+  if (activeBatchIds.size === 0) {
+    return;
+  }
+
+  const allDocuments = [
+    ...activeDocuments,
+    ...TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES.flatMap((status) =>
+      findOperationDocumentsByStatus(collection, status),
+    ),
+  ];
+  for (const batchId of activeBatchIds) {
+    const members = allDocuments
+      .map((document) => document.data)
+      .filter((operation) => getPersistedBatchId(operation) === batchId);
+    const memberIds = new Set(members.map((operation) => operation.id));
+    batchMemberRegistry.set(batchId, memberIds);
+
+    const expectedTotals = new Set(
+      members
+        .map((operation) => operation.queueTotal)
+        .filter((total): total is number => Number.isSafeInteger(total) && total > 0),
+    );
+    if (expectedTotals.size !== 1 || expectedTotals.values().next().value !== memberIds.size) {
+      incompleteRehydratedBatchIds.add(batchId);
+    }
+  }
 }
 
 /**
@@ -643,12 +700,14 @@ export function createCollections(db: UpdateOperationStoreDb): void {
   }) as UpdateOperationCollection;
   updateOperationMutationsSincePrune = 0;
   batchMemberRegistry.clear();
+  incompleteRehydratedBatchIds.clear();
   // Startup repair emits update-operation change events before API/SSE route
   // initialization has registered subscribers. That is acceptable because the
   // UI reloads state over HTTP on connect instead of depending on replay of
   // startup reconciliation events.
   reconcileStaleActiveOperationsOnStartup(updateOperationCollection);
   pruneOperationsForRetention(updateOperationCollection);
+  rehydrateActiveBatchMembership(updateOperationCollection);
   updateOperationMutationsSincePrune = 0;
 }
 
@@ -899,7 +958,7 @@ export function markOperationTerminal(
     return existing;
   }
 
-  // Capture batchId BEFORE writing terminal state — terminal ops have batchId cleared.
+  // Capture batchId before writing terminal state for event correlation.
   const preBatchId =
     typeof (existing as { batchId?: unknown }).batchId === 'string' &&
     (existing as { batchId?: unknown }).batchId !== ''
@@ -915,9 +974,6 @@ export function markOperationTerminal(
     ...patch,
     phase: resolveTerminalContainerUpdateOperationPhase(patch.status, patch.phase),
     completedAt,
-    batchId: undefined,
-    queuePosition: undefined,
-    queueTotal: undefined,
   });
 
   if (updated) {
@@ -941,6 +997,11 @@ export function markOperationTerminal(
       const memberIds = batchMemberRegistry.get(preBatchId);
       if (memberIds && memberIds.size > 0) {
         batchMemberRegistry.delete(preBatchId);
+        const incomplete = incompleteRehydratedBatchIds.delete(preBatchId);
+
+        if (incomplete) {
+          return updated;
+        }
 
         // durationMs: sum of per-operation (completedAt - createdAt) for each batch item.
         let totalDurationMs = 0;

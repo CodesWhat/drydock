@@ -1,5 +1,9 @@
 import crypto from 'node:crypto';
-import { NO_DOCKER_TRIGGER_FOUND_ERROR } from '../api/docker-trigger.js';
+import {
+  AGENT_LIFECYCLE_UNSUPPORTED_ERROR,
+  isAgentLifecycleUnsupported,
+  NO_DOCKER_TRIGGER_FOUND_ERROR,
+} from '../api/docker-trigger.js';
 import {
   buildDependencyGraph,
   buildDependentsByDependency,
@@ -68,6 +72,11 @@ export interface AcceptedContainerUpdateRequest {
 export interface AcceptedUpdateDispatchOptions {
   concurrency?: number;
   dependencyContext?: Container[];
+}
+
+export interface AcceptedUpdateDispatchGroup {
+  accepted: AcceptedContainerUpdateRequest[];
+  dependencyContext: Container[];
 }
 
 export interface RejectedContainerUpdateRequest {
@@ -457,8 +466,27 @@ export async function enqueueContainerUpdates(
     }
   }
 
+  const { edges } = buildDependencyGraph(containers);
+  const containerIdsWithResolvedDependsOn = collectContainerIdsWithResolvedDependsOn(edges);
+  const lifecycleSupported: PreparedContainerUpdateRequest[] = [];
+  for (const prepared of preparedAccepted) {
+    const actionKind = resolveDependencyActionKind(
+      prepared.container,
+      containerIdsWithResolvedDependsOn,
+    );
+    if (actionKind === 'restart' && isAgentLifecycleUnsupported(prepared.container)) {
+      rejected.push({
+        container: prepared.container,
+        message: AGENT_LIFECYCLE_UNSUPPORTED_ERROR,
+        statusCode: 501,
+      });
+      continue;
+    }
+    lifecycleSupported.push(prepared);
+  }
+  preparedAccepted = lifecycleSupported;
+
   if (rejected.length > 0 && preparedAccepted.length > 0) {
-    const { edges } = buildDependencyGraph(containers);
     const dependentsByDependency = buildDependentsByDependency(edges);
     const blockingRejectionByContainerId = new Map<string, RejectedContainerUpdateRequest>();
 
@@ -678,6 +706,31 @@ export function dispatchAccepted(
       `Accepted update dispatch failed for ${formatAcceptedDispatchContext(accepted)}: ${sanitizeLogParam(getErrorMessage(error), 500)}`,
     );
   });
+}
+
+/**
+ * Dispatch independent accepted batches sequentially in the background. Each
+ * batch gets its own dependency graph while the configured concurrency remains
+ * a process-wide startup cap instead of multiplying across recovered batches.
+ */
+export function dispatchAcceptedGroups(
+  groups: AcceptedUpdateDispatchGroup[],
+  options: Pick<AcceptedUpdateDispatchOptions, 'concurrency'> = {},
+): void {
+  void (async () => {
+    for (const group of groups) {
+      try {
+        await runAcceptedContainerUpdates(group.accepted, {
+          ...options,
+          dependencyContext: group.dependencyContext,
+        });
+      } catch (error: unknown) {
+        log.warn(
+          `Accepted update dispatch failed for ${formatAcceptedDispatchContext(group.accepted)}: ${sanitizeLogParam(getErrorMessage(error), 500)}`,
+        );
+      }
+    }
+  })();
 }
 
 export async function requestContainerUpdate(

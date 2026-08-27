@@ -2,27 +2,33 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const {
   mockListActiveOperations,
+  mockGetOperationById,
   mockMarkOperationTerminal,
   mockGetContainer,
+  mockGetContainers,
   mockGetState,
   mockFindDockerTriggerForContainer,
-  mockDispatchAccepted,
+  mockDispatchAcceptedGroups,
 } = vi.hoisted(() => ({
   mockListActiveOperations: vi.fn(),
+  mockGetOperationById: vi.fn(),
   mockMarkOperationTerminal: vi.fn(),
   mockGetContainer: vi.fn(),
+  mockGetContainers: vi.fn(),
   mockGetState: vi.fn(),
   mockFindDockerTriggerForContainer: vi.fn(),
-  mockDispatchAccepted: vi.fn(),
+  mockDispatchAcceptedGroups: vi.fn(),
 }));
 
 vi.mock('../store/update-operation.js', () => ({
   listActiveOperations: mockListActiveOperations,
+  getOperationById: mockGetOperationById,
   markOperationTerminal: mockMarkOperationTerminal,
 }));
 
 vi.mock('../store/container.js', () => ({
   getContainer: mockGetContainer,
+  getContainers: mockGetContainers,
 }));
 
 vi.mock('../registry/index.js', () => ({
@@ -34,7 +40,7 @@ vi.mock('../api/docker-trigger.js', () => ({
 }));
 
 vi.mock('./request-update.js', () => ({
-  dispatchAccepted: mockDispatchAccepted,
+  dispatchAcceptedGroups: mockDispatchAcceptedGroups,
 }));
 
 vi.mock('../log/index.js', () => ({
@@ -48,19 +54,25 @@ vi.mock('../log/index.js', () => ({
   },
 }));
 
-import { parseRecoveryBootConcurrency, recoverQueuedOperationsOnStartup } from './recovery.js';
+import {
+  parseRecoveryBootConcurrency,
+  recoverInProgressOperationsOnStartup,
+  recoverQueuedOperationsOnStartup,
+} from './recovery.js';
 
 describe('recoverQueuedOperationsOnStartup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY;
     mockGetState.mockReturnValue({ trigger: { 'docker.local': {} } });
+    mockGetContainers.mockReturnValue([]);
+    mockGetOperationById.mockReturnValue({ status: 'succeeded' });
   });
 
   test('returns zeros and dispatches nothing when there are no active operations', () => {
     mockListActiveOperations.mockReturnValue([]);
     expect(recoverQueuedOperationsOnStartup()).toEqual({ resumed: 0, abandoned: 0 });
-    expect(mockDispatchAccepted).not.toHaveBeenCalled();
+    expect(mockDispatchAcceptedGroups).not.toHaveBeenCalled();
   });
 
   test('skips self-update operations entirely', () => {
@@ -75,7 +87,7 @@ describe('recoverQueuedOperationsOnStartup', () => {
     ]);
 
     expect(recoverQueuedOperationsOnStartup()).toEqual({ resumed: 0, abandoned: 0 });
-    expect(mockDispatchAccepted).not.toHaveBeenCalled();
+    expect(mockDispatchAcceptedGroups).not.toHaveBeenCalled();
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
@@ -91,7 +103,7 @@ describe('recoverQueuedOperationsOnStartup', () => {
     ]);
 
     expect(recoverQueuedOperationsOnStartup()).toEqual({ resumed: 0, abandoned: 0 });
-    expect(mockDispatchAccepted).not.toHaveBeenCalled();
+    expect(mockDispatchAcceptedGroups).not.toHaveBeenCalled();
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
@@ -117,7 +129,7 @@ describe('recoverQueuedOperationsOnStartup', () => {
         lastError: expect.stringContaining('container'),
       }),
     );
-    expect(mockDispatchAccepted).not.toHaveBeenCalled();
+    expect(mockDispatchAcceptedGroups).not.toHaveBeenCalled();
   });
 
   test('marks an operation failed when its container has no containerId on record', () => {
@@ -161,7 +173,7 @@ describe('recoverQueuedOperationsOnStartup', () => {
         lastError: expect.stringContaining('web'),
       }),
     );
-    expect(mockDispatchAccepted).not.toHaveBeenCalled();
+    expect(mockDispatchAcceptedGroups).not.toHaveBeenCalled();
   });
 
   test('marks an operation failed when no compatible trigger is found', () => {
@@ -187,7 +199,7 @@ describe('recoverQueuedOperationsOnStartup', () => {
         lastError: expect.stringContaining('trigger'),
       }),
     );
-    expect(mockDispatchAccepted).not.toHaveBeenCalled();
+    expect(mockDispatchAcceptedGroups).not.toHaveBeenCalled();
   });
 
   test('dispatches a queued operation when both container and trigger resolve', () => {
@@ -207,8 +219,8 @@ describe('recoverQueuedOperationsOnStartup', () => {
     const result = recoverQueuedOperationsOnStartup();
 
     expect(result).toEqual({ resumed: 1, abandoned: 0 });
-    expect(mockDispatchAccepted).toHaveBeenCalledWith(
-      [{ container, operationId: 'op-go', trigger }],
+    expect(mockDispatchAcceptedGroups).toHaveBeenCalledWith(
+      [{ accepted: [{ container, operationId: 'op-go', trigger }], dependencyContext: [] }],
       { concurrency: 4 },
     );
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
@@ -233,7 +245,7 @@ describe('recoverQueuedOperationsOnStartup', () => {
     const result = recoverQueuedOperationsOnStartup();
 
     expect(result).toEqual({ resumed: 5, abandoned: 0 });
-    expect(mockDispatchAccepted).toHaveBeenCalledWith(expect.any(Array), { concurrency: 4 });
+    expect(mockDispatchAcceptedGroups).toHaveBeenCalledWith(expect.any(Array), { concurrency: 4 });
   });
 
   test('uses DD_UPDATE_RECOVERY_BOOT_CONCURRENCY for startup redispatch', () => {
@@ -256,7 +268,9 @@ describe('recoverQueuedOperationsOnStartup', () => {
       const result = recoverQueuedOperationsOnStartup();
 
       expect(result).toEqual({ resumed: 1, abandoned: 0 });
-      expect(mockDispatchAccepted).toHaveBeenCalledWith(expect.any(Array), { concurrency: 2 });
+      expect(mockDispatchAcceptedGroups).toHaveBeenCalledWith(expect.any(Array), {
+        concurrency: 2,
+      });
     } finally {
       if (previous === undefined) {
         delete process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY;
@@ -272,34 +286,235 @@ describe('recoverQueuedOperationsOnStartup', () => {
     );
   });
 
-  test('dispatches a mid-health-gate crash operation after startup reconciliation reset it to queued', () => {
-    const container = { id: 'c-health', name: 'web', watcher: 'local' };
-    const trigger = { type: 'docker', trigger: vi.fn() };
+  test('returns zeros when there are no in-progress Docker operations', async () => {
+    mockListActiveOperations.mockReturnValue([]);
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 0,
+      abandoned: 0,
+    });
+  });
+
+  test('resolves an in-progress operation through its replacement container id', async () => {
+    const replacement = { id: 'c-new', name: 'web', watcher: 'local' };
+    const dockerApi = {};
+    const reconcile = vi.fn().mockResolvedValue(undefined);
     mockListActiveOperations.mockReturnValue([
       {
-        id: 'op-health-gate-crash',
-        status: 'queued',
-        phase: 'queued',
-        containerId: 'c-health',
+        id: 'op-replacement-only',
+        status: 'in-progress',
+        phase: 'old-stopped',
         containerName: 'web',
-        oldContainerId: 'old-c-health',
-        oldName: 'web',
-        tempName: 'web-drydock-update',
-        newContainerId: 'new-c-health',
-        recoveredAt: '2026-02-23T02:00:00.000Z',
+        newContainerId: 'c-new',
+      },
+    ]);
+    mockGetContainer.mockImplementation((id: string) => (id === 'c-new' ? replacement : undefined));
+    mockFindDockerTriggerForContainer.mockReturnValue({
+      getWatcher: vi.fn(() => ({ dockerApi })),
+      reconcileInProgressContainerUpdateOperation: reconcile,
+    });
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 1,
+      abandoned: 0,
+    });
+    expect(reconcile).toHaveBeenCalledWith(dockerApi, replacement, expect.any(Object));
+  });
+
+  test.each([
+    ['missing container', undefined, undefined, 'not found'],
+    ['incompatible trigger', { id: 'c-old', name: 'web', watcher: 'local' }, {}, 'no compatible'],
+    [
+      'watcher without Docker API',
+      { id: 'c-old', name: 'web', watcher: 'local' },
+      {
+        getWatcher: vi.fn(() => ({})),
+        reconcileInProgressContainerUpdateOperation: vi.fn(),
+      },
+      'has no Docker API',
+    ],
+  ])('abandons recovery for %s', async (_label, container, trigger, message) => {
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: `op-${_label}`,
+        status: 'in-progress',
+        phase: 'pulling',
+        containerName: 'web',
+        container,
       },
     ]);
     mockGetContainer.mockReturnValue(container);
     mockFindDockerTriggerForContainer.mockReturnValue(trigger);
 
-    const result = recoverQueuedOperationsOnStartup();
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 0,
+      abandoned: 1,
+    });
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      `op-${_label}`,
+      expect.objectContaining({ lastError: expect.stringContaining(message) }),
+    );
+  });
 
-    expect(result).toEqual({ resumed: 1, abandoned: 0 });
-    expect(mockDispatchAccepted).toHaveBeenCalledWith(
-      [{ container, operationId: 'op-health-gate-crash', trigger }],
+  test.each(['renamed', 'old-stopped'])(
+    'reconciles a persisted %s operation through its saved container and watcher',
+    async (phase) => {
+      const persistedContainer = { id: 'c-old', name: 'web', watcher: 'local' };
+      const replacementContainer = { id: 'c-new', name: 'web', watcher: 'local' };
+      const dockerApi = { getContainer: vi.fn() };
+      const reconcile = vi.fn().mockResolvedValue(undefined);
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        getWatcher: vi.fn(() => ({ dockerApi })),
+        reconcileInProgressContainerUpdateOperation: reconcile,
+      };
+      mockListActiveOperations.mockReturnValue([
+        {
+          id: `op-${phase}`,
+          status: 'in-progress',
+          phase,
+          containerId: 'c-old',
+          containerName: 'web',
+          oldContainerId: 'c-old',
+          tempName: 'web-drydock-update',
+          newContainerId: 'c-new',
+          container: persistedContainer,
+        },
+      ]);
+      mockGetContainer.mockImplementation((id: string) =>
+        phase === 'old-stopped' && id === 'c-new' ? replacementContainer : undefined,
+      );
+      mockFindDockerTriggerForContainer.mockReturnValue(trigger);
+
+      await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+        reconciled: 1,
+        abandoned: 0,
+      });
+
+      expect(trigger.getWatcher).toHaveBeenCalledWith(persistedContainer);
+      expect(reconcile).toHaveBeenCalledWith(dockerApi, persistedContainer, expect.any(Object));
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    },
+  );
+
+  test('marks an in-progress operation failed only after runtime resolution fails', async () => {
+    const container = { id: 'c-old', name: 'web', watcher: 'local' };
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn(),
+      getWatcher: vi.fn(() => {
+        throw new Error('watcher missing');
+      }),
+      reconcileInProgressContainerUpdateOperation: vi.fn(),
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-runtime-failure',
+        status: 'in-progress',
+        phase: 'new-created',
+        containerId: 'c-old',
+        containerName: 'web',
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockFindDockerTriggerForContainer.mockReturnValue(trigger);
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 0,
+      abandoned: 1,
+    });
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-runtime-failure',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: expect.stringContaining('watcher missing'),
+      }),
+    );
+  });
+
+  test('marks reconciliation failed when the Docker recovery hook leaves the row active', async () => {
+    const container = { id: 'c-old', name: 'web', watcher: 'local' };
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn(),
+      getWatcher: vi.fn(() => ({ dockerApi: {} })),
+      reconcileInProgressContainerUpdateOperation: vi.fn().mockResolvedValue(undefined),
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-still-active',
+        status: 'in-progress',
+        phase: 'renamed',
+        containerId: 'c-old',
+        containerName: 'web',
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockFindDockerTriggerForContainer.mockReturnValue(trigger);
+    mockGetOperationById.mockReturnValue({ id: 'op-still-active', status: 'in-progress' });
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 0,
+      abandoned: 1,
+    });
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-still-active',
+      expect.objectContaining({ lastError: expect.stringContaining('left operation') }),
+    );
+  });
+
+  test('groups queued recovery by batch and supplies live dependency context', () => {
+    const upstream = { id: 'db', name: 'db', watcher: 'local', updateAvailable: false };
+    const dependent = {
+      id: 'api',
+      name: 'api',
+      watcher: 'local',
+      updateAvailable: false,
+      dependsOn: ['db'],
+      dependsOnAction: 'restart',
+    };
+    const other = { id: 'worker', name: 'worker', watcher: 'local' };
+    const liveContainers = [upstream, dependent, other];
+    const trigger = { type: 'docker', trigger: vi.fn() };
+    mockGetContainers.mockReturnValue(liveContainers);
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-api',
+        status: 'queued',
+        containerId: 'api',
+        containerName: 'api',
+        batchId: 'batch-a',
+      },
+      {
+        id: 'op-worker',
+        status: 'queued',
+        containerId: 'worker',
+        containerName: 'worker',
+        batchId: 'batch-b',
+      },
+    ]);
+    mockGetContainer.mockImplementation((id: string) =>
+      liveContainers.find((container) => container.id === id),
+    );
+    mockFindDockerTriggerForContainer.mockReturnValue(trigger);
+
+    expect(recoverQueuedOperationsOnStartup()).toEqual({ resumed: 2, abandoned: 0 });
+
+    expect(mockDispatchAcceptedGroups).toHaveBeenCalledWith(
+      [
+        {
+          accepted: [{ container: dependent, operationId: 'op-api', trigger }],
+          dependencyContext: liveContainers,
+        },
+        {
+          accepted: [{ container: other, operationId: 'op-worker', trigger }],
+          dependencyContext: liveContainers,
+        },
+      ],
       { concurrency: 4 },
     );
-    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
   test('logs plural-form messages when more than one operation is resumed or abandoned', () => {
@@ -321,10 +536,15 @@ describe('recoverQueuedOperationsOnStartup', () => {
 
     const result = recoverQueuedOperationsOnStartup();
     expect(result).toEqual({ resumed: 2, abandoned: 2 });
-    expect(mockDispatchAccepted).toHaveBeenCalledWith(
+    expect(mockDispatchAcceptedGroups).toHaveBeenCalledWith(
       [
-        { container: containerA, operationId: 'op-a', trigger },
-        { container: containerB, operationId: 'op-b', trigger },
+        {
+          accepted: [
+            { container: containerA, operationId: 'op-a', trigger },
+            { container: containerB, operationId: 'op-b', trigger },
+          ],
+          dependencyContext: [],
+        },
       ],
       { concurrency: 4 },
     );
@@ -353,8 +573,8 @@ describe('recoverQueuedOperationsOnStartup', () => {
     const result = recoverQueuedOperationsOnStartup();
 
     expect(result).toEqual({ resumed: 1, abandoned: 1 });
-    expect(mockDispatchAccepted).toHaveBeenCalledWith(
-      [{ container, operationId: 'op-good', trigger }],
+    expect(mockDispatchAcceptedGroups).toHaveBeenCalledWith(
+      [{ accepted: [{ container, operationId: 'op-good', trigger }], dependencyContext: [] }],
       { concurrency: 4 },
     );
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith(

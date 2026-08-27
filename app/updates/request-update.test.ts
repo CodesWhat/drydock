@@ -16,7 +16,11 @@ const {
   mockRestartDependentContainer,
   agentFixture,
 } = vi.hoisted(() => {
-  const agentFixture = { name: 'edge-2', isRegisteringComponents: false };
+  const agentFixture = {
+    name: 'edge-2',
+    isRegisteringComponents: false,
+    hasControllerDockerTransport: vi.fn(() => true),
+  };
   return {
     mockGetOperationById: vi.fn(),
     mockGetActiveOperationByContainerId: vi.fn(),
@@ -75,6 +79,7 @@ vi.mock('./dependency-restart.js', () => ({
 import {
   buildAcceptedUpdateRuntimeContext,
   dispatchAccepted,
+  dispatchAcceptedGroups,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
   requestContainerUpdate,
@@ -124,6 +129,7 @@ describe('request-update', () => {
     mockStatSync.mockReturnValue({ isSocket: () => false });
     mockGetUpdateMode.mockReturnValue('auto');
     agentFixture.isRegisteringComponents = false;
+    agentFixture.hasControllerDockerTransport.mockReturnValue(true);
     mockGetAgent.mockReturnValue(undefined);
     mockInsertOperation.mockImplementation((operation) => ({
       id: operation.id || 'op-1',
@@ -676,6 +682,46 @@ describe('request-update', () => {
     });
   });
 
+  test('dispatchAcceptedGroups keeps one global concurrency lane and isolates group failures', async () => {
+    const firstGate = deferred();
+    const first = {
+      container: createContainer({ id: 'c-first', name: 'first' }),
+      operationId: 'op-first',
+      trigger: {
+        type: 'docker',
+        trigger: vi.fn(async () => {
+          await firstGate.promise;
+          throw new Error('first failed');
+        }),
+      },
+    };
+    const second = {
+      container: createContainer({ id: 'c-second', name: 'second' }),
+      operationId: 'op-second',
+      trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+    };
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'queued',
+      phase: 'queued',
+    }));
+
+    dispatchAcceptedGroups(
+      [
+        { accepted: [first], dependencyContext: [first.container] },
+        { accepted: [second], dependencyContext: [second.container] },
+      ],
+      { concurrency: 1 },
+    );
+
+    await flushAsyncWork();
+    expect(first.trigger.trigger).toHaveBeenCalledOnce();
+    expect(second.trigger.trigger).not.toHaveBeenCalled();
+
+    firstGate.resolve();
+    await vi.waitFor(() => expect(second.trigger.trigger).toHaveBeenCalledOnce());
+  });
+
   test('dispatchAccepted does not call markOperationTerminal when operation is already past queued (e.g. running)', async () => {
     const trigger = {
       type: 'docker',
@@ -1101,6 +1147,83 @@ describe('request-update', () => {
       ]);
       expect(triggerFn).not.toHaveBeenCalled();
       expect(mockRestartDependentContainer).not.toHaveBeenCalled();
+    });
+
+    test('rejects an unsupported agent restart and its downstream dependent before creating operations', async () => {
+      const legacyAgentTrigger = {
+        type: 'docker',
+        agent: 'edge-1',
+        configuration: { auto: 'all' },
+        trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.edge-1',
+        getWatcher: vi.fn(() => {
+          throw new Error('legacy AgentTrigger cannot provide a local watcher');
+        }),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.edge-1': legacyAgentTrigger },
+        watcher: {},
+      });
+      mockGetAgent.mockReturnValue({ hasControllerDockerTransport: vi.fn(() => false) });
+      const db = createDependentContainer({
+        id: 'db',
+        name: 'db',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+      const sidecar = createDependentContainer({
+        id: 'sidecar',
+        name: 'sidecar',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+        dependsOn: ['db'],
+        dependsOnSource: 'label',
+        dependsOnAction: 'restart',
+        updateAvailable: false,
+      });
+      const proxy = createDependentContainer({
+        id: 'proxy',
+        name: 'proxy',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+        dependsOn: ['sidecar'],
+        dependsOnSource: 'label',
+      });
+      const independent = createDependentContainer({
+        id: 'independent',
+        name: 'independent',
+        agent: 'edge-1',
+        watcher: 'edge-1',
+      });
+
+      const result = await enqueueContainerUpdates([db, sidecar, proxy, independent], {
+        trigger: legacyAgentTrigger,
+        source: 'manual',
+      });
+
+      expect(result.accepted.map((entry) => entry.container.id)).toEqual(['db', 'independent']);
+      expect(result.rejected).toEqual([
+        {
+          container: sidecar,
+          message:
+            "Lifecycle actions (start/stop/restart) are not supported over this container's agent connection, typically because the agent has not advertised the usesControllerDockerTransport capability.",
+          statusCode: 501,
+        },
+        {
+          container: proxy,
+          message: 'Required upstream dependency sidecar was not admitted',
+          statusCode: 409,
+        },
+      ]);
+      expect(mockInsertOperation).toHaveBeenCalledTimes(2);
+      expect(mockInsertOperation).not.toHaveBeenCalledWith(
+        expect.objectContaining({ containerId: 'sidecar' }),
+        expect.anything(),
+      );
+      expect(mockInsertOperation).not.toHaveBeenCalledWith(
+        expect.objectContaining({ containerId: 'proxy' }),
+        expect.anything(),
+      );
     });
 
     test('dependsOnAction=restart with no resolved dependsOn edge dispatches through the normal trigger instead (PR #681 review #2)', async () => {
