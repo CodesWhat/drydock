@@ -204,6 +204,45 @@ describe('api/container/shared', () => {
       expect(serialized).toContain(publicUrl);
     });
 
+    test('redacts a scheme-relative URL carrying credentials under a non-sensitive key', () => {
+      // A bare `new URL()` with no base throws on a scheme-relative value like
+      // "//user:pass@host", so without a base the credentials would slip through
+      // under a key such as SERVICE_URL that doesn't match isSensitiveKey either.
+      const schemeRelativeUrl = '//user:password@example.com/private';
+      const container = {
+        id: 'c-scheme-relative',
+        details: {
+          env: [{ key: 'SERVICE_URL', value: schemeRelativeUrl }],
+        },
+      };
+
+      expect(redactContainerRuntimeEnv(container)).toEqual({
+        id: 'c-scheme-relative',
+        details: {
+          env: [{ key: 'SERVICE_URL', value: '[REDACTED]', sensitive: true }],
+        },
+      });
+    });
+
+    test('treats a value that fails to parse even against the dummy base as non-sensitive', () => {
+      // An invalid bracketed IPv6 authority still throws from new URL() even with
+      // a base supplied, so this keeps the hasUrlCredentials catch branch covered
+      // now that ordinary non-URL strings (e.g. plain paths) no longer throw.
+      const container = {
+        id: 'c-malformed-url',
+        details: {
+          env: [{ key: 'ENDPOINT_URL', value: 'http://[::1' }],
+        },
+      };
+
+      expect(redactContainerRuntimeEnv(container)).toEqual({
+        id: 'c-malformed-url',
+        details: {
+          env: [{ key: 'ENDPOINT_URL', value: 'http://[::1', sensitive: false }],
+        },
+      });
+    });
+
     test('drops malformed env entries', () => {
       const container = {
         id: 'c3',

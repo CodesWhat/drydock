@@ -57,7 +57,10 @@ function hasUrlCredentials(value: unknown): boolean {
     return false;
   }
   try {
-    const parsed = new URL(value);
+    // Parsed against a dummy base so scheme-relative values (e.g.
+    // "//user:pass@host/path") resolve instead of throwing, since a bare
+    // new URL() has no scheme to anchor them.
+    const parsed = new URL(value, 'http://redaction.invalid');
     return parsed.username.length > 0 || parsed.password.length > 0;
   } catch {
     return false;
