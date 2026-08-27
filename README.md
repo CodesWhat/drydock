@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.2-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.3-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,17 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.3 highlights</strong></summary>
+
+- **A `ws`/`wss` value in `X-Forwarded-Proto` no longer rejects the WebSocket upgrade** — Traefik forwards the upgrade's client-facing scheme as `wss` rather than `https`, which the origin check hard-rejected as an unsupported protocol; `ws` and `wss` now map to `http:`/`https:` for the comparison. ([#867](https://github.com/CodesWhat/drydock/issues/867))
+- **Startup no longer crashes when the store volume forbids `chmod`** — the 1.6.0 permission tightening now warns and continues on `EPERM`/`EACCES`/`ENOTSUP`, so NFS/CIFS mounts and non-root containers start again. `EROFS` stays fatal on purpose: the store could never persist. ([#874](https://github.com/CodesWhat/drydock/discussions/874))
+- **The debug dump redacts env var values instead of their names** — a var like `HF_TOKEN` used to come out as `"key": "[REDACTED]", "value": "xyz"`, hiding the name and printing the secret. ([#875](https://github.com/CodesWhat/drydock/issues/875))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc3--2026-08-27).
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.2 highlights</strong></summary>
 
 - **WebSocket log streams behind a TLS-terminating proxy no longer 403** — with trust proxy enabled and `X-Forwarded-Proto` absent on the upgrade request, the origin check no longer falls back to the local socket's TLS state; the protocol is treated as unknown and host validation keeps working. ([#867](https://github.com/CodesWhat/drydock/issues/867))

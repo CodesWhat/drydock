@@ -5,6 +5,16 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.3 Highlights — August 27, 2026
+
+Three bug fixes: a `ws`/`wss` value in `X-Forwarded-Proto` no longer rejects the
+WebSocket upgrade, so a default Traefik setup stops 403'ing log streams; startup
+no longer crashes when the store volume forbids `chmod`, which unblocks NFS/CIFS
+mounts and non-root containers; and the debug dump now redacts env var values
+instead of their names, so a var like `HF_TOKEN` no longer prints its secret in
+plain text. See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc3--2026-08-27)
+for the full release notes.
+
 ## v1.6.1-rc.2 Highlights — August 25, 2026
 
 Two bug fixes: WebSocket log-stream connections behind a TLS-terminating proxy
