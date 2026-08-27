@@ -136,7 +136,10 @@ jobs:
           name: portwing-fleet-soak-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/portwing-fleet-soak.json
           if-no-files-found: error
-          retention-days: 90
+          # 30 matches the repo-level artifact retention ceiling. A higher
+          # value here isn't honored, it's silently clamped, so the number
+          # would misreport how long the soak trend is actually kept.
+          retention-days: 30
 
       - name: Summarize
         if: always()
