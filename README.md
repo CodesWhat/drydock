@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.3-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.4-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,15 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.4 highlights</strong></summary>
+
+- **Tag suggestion no longer ranks a bare integer build-number tag above a real dotted version** — a tag like `168` coerced into a fake `168.0.0` and outranked a real release like `1.43.3`, so on `linuxserver/plex` the suggested-tag badge and, with a permissive `dd.tag.include` filter, the update candidate itself could point at a downgrade. ([#859](https://github.com/CodesWhat/drydock/issues/859))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc4--2026-08-27).
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.3 highlights</strong></summary>
 
 - **A `ws`/`wss` value in `X-Forwarded-Proto` no longer rejects the WebSocket upgrade** — Traefik forwards the upgrade's client-facing scheme as `wss` rather than `https`, which the origin check hard-rejected as an unsupported protocol; `ws` and `wss` now map to `http:`/`https:` for the comparison. ([#867](https://github.com/CodesWhat/drydock/issues/867))
