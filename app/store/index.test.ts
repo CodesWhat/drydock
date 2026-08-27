@@ -555,7 +555,7 @@ describe('Store Module', () => {
     await expect(storeWithBadDirError.init()).rejects.toThrow('bad file descriptor');
   });
 
-  test.each(['EPERM', 'EACCES', 'ENOTSUP', 'EROFS'])(
+  test.each(['EPERM', 'EACCES', 'ENOTSUP'])(
     'should warn and continue when directory permission enforcement fails with %s',
     async (code) => {
       vi.resetModules();
@@ -585,7 +585,7 @@ describe('Store Module', () => {
     },
   );
 
-  test.each(['EPERM', 'EACCES', 'ENOTSUP', 'EROFS'])(
+  test.each(['EPERM', 'EACCES', 'ENOTSUP'])(
     'should warn and continue when store file permission enforcement fails with %s',
     async (code) => {
       vi.resetModules();
@@ -613,6 +613,30 @@ describe('Store Module', () => {
       expect(scopedLog.warn).toHaveBeenCalledWith(expect.stringContaining(code));
     },
   );
+
+  test.each([
+    ['directory', '/test/store'],
+    ['store file', '/test/store/test.json'],
+  ])('should reject when %s permission enforcement fails with EROFS', async (_label, target) => {
+    vi.resetModules();
+    const readOnlyError = Object.assign(new Error('chmod failed: EROFS'), { code: 'EROFS' });
+    const chmodSync = vi.fn((chmodTarget: string) => {
+      if (chmodTarget === target) {
+        throw readOnlyError;
+      }
+    });
+    registerCommonMocks({
+      fs: {
+        existsSync: vi.fn(() => true),
+        mkdirSync: vi.fn(),
+        renameSync: vi.fn(),
+        chmodSync,
+      },
+    });
+
+    const storeOnReadOnlyVolume = await import('./index.js');
+    await expect(storeOnReadOnlyVolume.init()).rejects.toThrow('chmod failed: EROFS');
+  });
 
   test('should throw when store configuration is invalid', async () => {
     vi.resetModules();
