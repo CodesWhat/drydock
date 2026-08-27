@@ -7,7 +7,7 @@ function main() {
   const commitMessageFile = process.argv[2];
 
   if (!commitMessageFile) {
-    console.error('❌ Missing commit message file argument.');
+    console.error('Missing commit message file argument.');
     console.error('This script must be executed by the git commit-msg hook.');
     return 1;
   }
@@ -16,7 +16,7 @@ function main() {
   try {
     commitMessage = readFileSync(commitMessageFile, 'utf8');
   } catch (error) {
-    console.error(`❌ Failed to read commit message file: ${commitMessageFile}`);
+    console.error(`Failed to read commit message file: ${commitMessageFile}`);
     console.error(error instanceof Error ? error.message : String(error));
     return 1;
   }

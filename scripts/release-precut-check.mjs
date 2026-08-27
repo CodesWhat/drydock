@@ -87,14 +87,14 @@ export function parsePendingReplies(markdown, tag) {
 
 export function formatReport(pending, tag) {
   if (pending.length === 0) {
-    return `✓ No pending discussion replies for ${tag}.`;
+    return `No pending discussion replies for ${tag}.`;
   }
 
   const noun = pending.length === 1 ? 'discussion' : 'discussions';
   const items = pending.map((p) => `   #${p.discussion} ${p.feature}`).join('\n');
 
   const verb = pending.length === 1 ? 'needs' : 'need';
-  return `⚠  ${pending.length} ${noun} still ${verb} a "shipped in ${tag}" reply:\n${items}\n\nPost replies + check the boxes in current-tracker.md,\nor re-run with --force to cut anyway.`;
+  return `${pending.length} ${noun} still ${verb} a "shipped in ${tag}" reply:\n${items}\n\nPost replies + check the boxes in current-tracker.md,\nor re-run with --force to cut anyway.`;
 }
 
 function parseArgs(argv) {
@@ -145,7 +145,7 @@ function main() {
     contents = readFileSync(trackerPath, 'utf8');
   } catch (err) {
     if (err.code === 'ENOENT') {
-      console.warn(`⚠  Tracker not found at ${trackerPath}; skipping discussion-reply check.`);
+      console.warn(`Tracker not found at ${trackerPath}; skipping discussion-reply check.`);
       return;
     }
     throw err;

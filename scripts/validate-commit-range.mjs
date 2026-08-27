@@ -125,7 +125,7 @@ export function main(
   try {
     ({ baseSha, headSha } = parseArgs(args));
   } catch (error) {
-    stderr('❌ Missing commit range arguments.');
+    stderr('Missing commit range arguments.');
     stderr(error instanceof Error ? error.message : String(error));
     stderr('Usage: node scripts/validate-commit-range.mjs --base <base-sha> --head <head-sha>');
     return 1;
@@ -139,7 +139,7 @@ export function main(
       commits = getCommits(baseSha, headSha);
     }
   } catch (error) {
-    stderr(`❌ Failed to read commits in range ${baseSha}..${headSha}`);
+    stderr(`Failed to read commits in range ${baseSha}..${headSha}`);
     stderr(error instanceof Error ? error.message : String(error));
     return 1;
   }
@@ -151,7 +151,7 @@ export function main(
 
   const failures = findInvalidCommitMessages(commits);
   if (failures.length === 0) {
-    stdout(`✅ Validated ${commits.length} commit message(s) in range ${baseSha}..${headSha}.`);
+    stdout(`Validated ${commits.length} commit message(s) in range ${baseSha}..${headSha}.`);
     return 0;
   }
 
@@ -159,7 +159,7 @@ export function main(
     printFailure(failure, stderr);
   }
 
-  stderr(`\n❌ ${failures.length} of ${commits.length} commit message(s) failed validation.`);
+  stderr(`\n${failures.length} of ${commits.length} commit message(s) failed validation.`);
   return 1;
 }
 
