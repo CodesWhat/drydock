@@ -188,7 +188,11 @@ export async function init() {
   app.get('/api/watchers', watcherApi.getWatchers);
   app.get('/api/watchers/:type/:name', watcherApi.getWatcher);
   app.get('/api/triggers', triggerApi.getTriggers);
-  app.get('/api/events', eventApi.subscribeEvents);
+  app.get('/api/events', (req: Request, res: Response) => {
+    if (!eventApi.subscribeEvents(req, res)) {
+      sendErrorResponse(res, 429, 'Too many SSE connections');
+    }
+  });
   app.post('/api/triggers/:type/:name', triggerApi.runTrigger);
   app.post('/api/triggers/:type/:name/batch', triggerApi.runTriggerBatch);
   app.post('/api/watchers/:type/:name', watcherApi.watchWatcher);
