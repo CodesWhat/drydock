@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { ImageBackup } from '../model/backup.js';
+import type { ContainerBackupScope } from '../util/backup.js';
 import { initCollection } from './util.js';
 
 let backupCollection: ReturnType<typeof initCollection> | undefined;
@@ -10,7 +11,7 @@ let backupCollection: ReturnType<typeof initCollection> | undefined;
  */
 export function createCollections(db: InstanceType<typeof import('lokijs')>): void {
   backupCollection = initCollection(db, 'backups', {
-    indices: ['data.containerName', 'data.id'],
+    indices: ['data.containerName', 'data.containerIdentityKey', 'data.id'],
   });
 }
 
@@ -44,6 +45,22 @@ export function getBackupsByName(containerName: string): ImageBackup[] {
     .find({ 'data.containerName': containerName })
     .map((item) => item.data as ImageBackup)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+}
+
+/** Return whether a backup belongs to a container's canonical identity scope. */
+export function isBackupInScope(backup: ImageBackup, scope: ContainerBackupScope): boolean {
+  if (backup.containerName !== scope.containerName) {
+    return false;
+  }
+  if (backup.containerIdentityKey) {
+    return backup.containerIdentityKey === scope.containerIdentityKey;
+  }
+  return scope.includeLegacy;
+}
+
+/** Get backups belonging to one canonical container identity. */
+export function getBackupsForContainer(scope: ContainerBackupScope): ImageBackup[] {
+  return getBackupsByName(scope.containerName).filter((backup) => isBackupInScope(backup, scope));
 }
 
 /**
@@ -98,14 +115,25 @@ export function deleteBackup(id: string): boolean {
  * @param containerName
  * @param maxCount
  */
-export function pruneOldBackups(containerName: string, maxCount: number | undefined): number {
+export function pruneOldBackups(
+  containerScope: string | ContainerBackupScope,
+  maxCount: number | undefined,
+): number {
   if (!backupCollection) {
     return 0;
   }
   if (typeof maxCount !== 'number' || !Number.isFinite(maxCount)) {
     return 0;
   }
-  const docs = backupCollection.find({ 'data.containerName': containerName });
+  const containerName =
+    typeof containerScope === 'string' ? containerScope : containerScope.containerName;
+  const docs = backupCollection
+    .find({ 'data.containerName': containerName })
+    .filter(
+      (doc) =>
+        typeof containerScope === 'string' ||
+        isBackupInScope(doc.data as ImageBackup, containerScope),
+    );
   docs.sort((a, b) => new Date(b.data.timestamp).getTime() - new Date(a.data.timestamp).getTime());
   const toRemove = docs.slice(maxCount);
   toRemove.forEach((doc) => backupCollection.remove(doc));

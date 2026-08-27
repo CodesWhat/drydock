@@ -2,6 +2,7 @@ vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
 }));
 
+import { buildRollbackImageReference, createContainerBackupScope } from '../util/backup.js';
 import * as backup from './backup.js';
 
 function getPathValue(document: Record<string, any>, path: string) {
@@ -54,7 +55,7 @@ describe('Backup Store', () => {
     };
     backup.createCollections(db);
     expect(db.addCollection).toHaveBeenCalledWith('backups', {
-      indices: ['data.containerName', 'data.id'],
+      indices: ['data.containerName', 'data.containerIdentityKey', 'data.id'],
     });
   });
 
@@ -133,6 +134,108 @@ describe('Backup Store', () => {
   test('getBackupsByName should return empty array for unknown container', () => {
     const result = backup.getBackupsByName('unknown');
     expect(result).toEqual([]);
+  });
+
+  test('isBackupInScope rejects a backup with a different container name', () => {
+    expect(
+      backup.isBackupInScope(
+        {
+          id: 'backup-other',
+          containerId: 'c-other',
+          containerName: 'other',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+          triggerName: 'docker.default',
+          timestamp: '2024-01-01T00:00:00.000Z',
+        },
+        {
+          containerName: 'nginx',
+          containerIdentityKey: '::local::nginx',
+          includeLegacy: true,
+        },
+      ),
+    ).toBe(false);
+  });
+
+  test('createContainerBackupScope ignores other names and rejects ambiguous unknown identities', () => {
+    const container = { id: 'target', name: 'web', watcher: 'local' } as any;
+
+    expect(
+      createContainerBackupScope(container, [
+        container,
+        { id: 'other-name', name: 'db' } as any,
+        { id: 'unknown-web', name: 'web' } as any,
+      ]),
+    ).toMatchObject({ containerName: 'web', includeLegacy: false });
+  });
+
+  test('buildRollbackImageReference falls back to a tag when no digest was recorded', () => {
+    expect(
+      buildRollbackImageReference({ imageName: 'registry.example/app', imageTag: '1.2.3' }),
+    ).toBe('registry.example/app:1.2.3');
+  });
+
+  test('getBackupsForContainer isolates same-named containers by canonical identity', () => {
+    backup.insertBackup({
+      containerId: 'watcher-a-old',
+      containerName: 'web',
+      containerIdentityKey: '::watcher-a::web',
+      imageName: 'registry.example/a-web',
+      imageTag: '1.0.0',
+      triggerName: 'docker.update',
+      timestamp: '2024-01-01T00:00:00.000Z',
+    });
+    backup.insertBackup({
+      containerId: 'watcher-a-new',
+      containerName: 'web',
+      containerIdentityKey: '::watcher-a::web',
+      imageName: 'registry.example/a-web',
+      imageTag: '1.1.0',
+      triggerName: 'docker.update',
+      timestamp: '2024-02-01T00:00:00.000Z',
+    });
+    backup.insertBackup({
+      containerId: 'watcher-b',
+      containerName: 'web',
+      containerIdentityKey: '::watcher-b::web',
+      imageName: 'registry.example/b-web',
+      imageTag: '9.0.0',
+      triggerName: 'docker.update',
+      timestamp: '2024-03-01T00:00:00.000Z',
+    });
+
+    const result = backup.getBackupsForContainer({
+      containerName: 'web',
+      containerIdentityKey: '::watcher-a::web',
+      includeLegacy: false,
+    });
+
+    expect(result.map((entry) => entry.imageTag)).toEqual(['1.1.0', '1.0.0']);
+  });
+
+  test('getBackupsForContainer includes legacy records only for an unambiguous scope', () => {
+    backup.insertBackup({
+      containerId: 'legacy-id',
+      containerName: 'web',
+      imageName: 'registry.example/legacy-web',
+      imageTag: '0.9.0',
+      triggerName: 'docker.update',
+    });
+
+    const ambiguous = backup.getBackupsForContainer({
+      containerName: 'web',
+      containerIdentityKey: '::watcher-a::web',
+      includeLegacy: false,
+    });
+    const unambiguous = backup.getBackupsForContainer({
+      containerName: 'web',
+      containerIdentityKey: '::watcher-a::web',
+      includeLegacy: true,
+    });
+
+    expect(ambiguous).toEqual([]);
+    expect(unambiguous).toHaveLength(1);
+    expect(unambiguous[0].imageTag).toBe('0.9.0');
   });
 
   test('getAllBackups should return all backups sorted by timestamp desc', () => {
@@ -304,6 +407,65 @@ describe('Backup Store', () => {
 
     expect(backup.getBackupsByName('nginx')).toHaveLength(0);
     expect(backup.getBackupsByName('redis')).toHaveLength(1);
+  });
+
+  test('pruneOldBackups does not prune a same-named sibling identity', () => {
+    backup.insertBackup({
+      containerId: 'a-old',
+      containerName: 'web',
+      containerIdentityKey: '::watcher-a::web',
+      imageName: 'registry.example/a-web',
+      imageTag: '1.0.0',
+      triggerName: 'docker.update',
+      timestamp: '2024-01-01T00:00:00.000Z',
+    });
+    backup.insertBackup({
+      containerId: 'a-new',
+      containerName: 'web',
+      containerIdentityKey: '::watcher-a::web',
+      imageName: 'registry.example/a-web',
+      imageTag: '1.1.0',
+      triggerName: 'docker.update',
+      timestamp: '2024-02-01T00:00:00.000Z',
+    });
+    backup.insertBackup({
+      containerId: 'b-only',
+      containerName: 'web',
+      containerIdentityKey: '::watcher-b::web',
+      imageName: 'registry.example/b-web',
+      imageTag: '9.0.0',
+      triggerName: 'docker.update',
+      timestamp: '2024-03-01T00:00:00.000Z',
+    });
+
+    const pruned = backup.pruneOldBackups(
+      {
+        containerName: 'web',
+        containerIdentityKey: '::watcher-a::web',
+        includeLegacy: false,
+      },
+      1,
+    );
+
+    expect(pruned).toBe(1);
+    expect(
+      backup
+        .getBackupsForContainer({
+          containerName: 'web',
+          containerIdentityKey: '::watcher-a::web',
+          includeLegacy: false,
+        })
+        .map((entry) => entry.imageTag),
+    ).toEqual(['1.1.0']);
+    expect(
+      backup
+        .getBackupsForContainer({
+          containerName: 'web',
+          containerIdentityKey: '::watcher-b::web',
+          includeLegacy: false,
+        })
+        .map((entry) => entry.imageTag),
+    ).toEqual(['9.0.0']);
   });
 
   test('pruneOldBackups should not remove backups when maxCount is undefined', () => {

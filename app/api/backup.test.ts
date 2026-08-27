@@ -6,20 +6,35 @@ import Docker from '../triggers/providers/docker/Docker.js';
 const {
   mockRouter,
   mockGetContainer,
+  mockGetContainers,
   mockGetBackupsByName,
+  mockGetBackupsForContainer,
   mockGetAllBackups,
   mockGetBackup,
+  mockIsBackupInScope,
   mockGetState,
   mockGetAgent,
-} = vi.hoisted(() => ({
-  mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
-  mockGetContainer: vi.fn(),
-  mockGetBackupsByName: vi.fn(),
-  mockGetAllBackups: vi.fn(),
-  mockGetBackup: vi.fn(),
-  mockGetState: vi.fn(),
-  mockGetAgent: vi.fn(),
-}));
+} = vi.hoisted(() => {
+  const getBackupsByName = vi.fn();
+  return {
+    mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
+    mockGetContainer: vi.fn(),
+    mockGetContainers: vi.fn().mockReturnValue([]),
+    mockGetBackupsByName: getBackupsByName,
+    mockGetBackupsForContainer: vi.fn((scope) => getBackupsByName(scope.containerName)),
+    mockGetAllBackups: vi.fn(),
+    mockGetBackup: vi.fn(),
+    mockIsBackupInScope: vi.fn(
+      (entry, scope) =>
+        entry.containerName === scope.containerName &&
+        (entry.containerIdentityKey === undefined
+          ? scope.includeLegacy
+          : entry.containerIdentityKey === scope.containerIdentityKey),
+    ),
+    mockGetState: vi.fn(),
+    mockGetAgent: vi.fn(),
+  };
+});
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -29,12 +44,15 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store/container', () => ({
   getContainer: mockGetContainer,
+  getContainers: mockGetContainers,
 }));
 
 vi.mock('../store/backup', () => ({
   getBackupsByName: mockGetBackupsByName,
+  getBackupsForContainer: mockGetBackupsForContainer,
   getAllBackups: mockGetAllBackups,
   getBackup: mockGetBackup,
+  isBackupInScope: mockIsBackupInScope,
   pruneOldBackups: vi.fn(),
 }));
 
@@ -141,6 +159,34 @@ describe('Backup Router', () => {
       expect(res.json).toHaveBeenCalledWith({ data: backups, total: backups.length });
     });
 
+    test('should isolate same-named container backups by canonical identity', () => {
+      const handler = getHandler('get', '/:id/backups');
+      const target = { id: 'a1', name: 'web', watcher: 'watcher-a' };
+      const sibling = { id: 'b1', name: 'web', watcher: 'watcher-b' };
+      const targetBackups = [
+        {
+          id: 'backup-a',
+          containerName: 'web',
+          containerIdentityKey: '::watcher-a::web',
+          imageTag: '1.0.0',
+        },
+      ];
+      mockGetContainer.mockReturnValue(target);
+      mockGetContainers.mockReturnValueOnce([target, sibling]);
+      mockGetBackupsForContainer.mockReturnValueOnce(targetBackups);
+
+      const req = createMockRequest({ params: { id: 'a1' } });
+      const res = createMockResponse();
+      handler(req, res);
+
+      expect(mockGetBackupsForContainer).toHaveBeenCalledWith({
+        containerName: 'web',
+        containerIdentityKey: '::watcher-a::web',
+        includeLegacy: false,
+      });
+      expect(res.json).toHaveBeenCalledWith({ data: targetBackups, total: 1 });
+    });
+
     test('should use first id when route param id is an array', () => {
       const handler = getHandler('get', '/:id/backups');
       mockGetContainer.mockReturnValue({ id: 'c1', name: 'nginx' });
@@ -244,6 +290,76 @@ describe('Backup Router', () => {
       expect(mockGetBackup).toHaveBeenCalledWith('b2');
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Backup not found for this container' });
+    });
+
+    test('should reject an explicit backupId from a same-named sibling identity before pull', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const target = {
+        id: 'a1',
+        name: 'web',
+        watcher: 'watcher-a',
+        image: { registry: { name: 'hub' } },
+      };
+      const sibling = { id: 'b1', name: 'web', watcher: 'watcher-b' };
+      const siblingBackup = {
+        id: 'backup-b',
+        containerName: 'web',
+        containerIdentityKey: '::watcher-b::web',
+        imageName: 'registry.example/b-web',
+        imageTag: '9.0.0',
+      };
+      mockGetContainer.mockReturnValue(target);
+      mockGetContainers.mockReturnValueOnce([target, sibling]);
+      mockGetBackup.mockReturnValue(siblingBackup);
+      mockIsBackupInScope.mockReturnValueOnce(false);
+
+      const req = createMockRequest({ params: { id: 'a1' }, body: { backupId: 'backup-b' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockIsBackupInScope).toHaveBeenCalledWith(siblingBackup, {
+        containerName: 'web',
+        containerIdentityKey: '::watcher-a::web',
+        includeLegacy: false,
+      });
+      expect(mockGetState).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Backup not found for this container' });
+    });
+
+    test('should reject a legacy backup when active same-named identities are ambiguous', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const target = {
+        id: 'a1',
+        name: 'web',
+        watcher: 'watcher-a',
+        image: { registry: { name: 'hub' } },
+      };
+      const sibling = { id: 'b1', name: 'web', watcher: 'watcher-b' };
+      const legacyBackup = {
+        id: 'legacy-backup',
+        containerName: 'web',
+        imageName: 'registry.example/legacy-web',
+        imageTag: '1.0.0',
+      };
+      mockGetContainer.mockReturnValue(target);
+      mockGetContainers.mockReturnValueOnce([target, sibling]);
+      mockGetBackup.mockReturnValue(legacyBackup);
+
+      const req = createMockRequest({
+        params: { id: 'a1' },
+        body: { backupId: 'legacy-backup' },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockIsBackupInScope).toHaveBeenCalledWith(legacyBackup, {
+        containerName: 'web',
+        containerIdentityKey: '::watcher-a::web',
+        includeLegacy: false,
+      });
+      expect(mockGetState).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(404);
     });
 
     test('should return 404 when no docker trigger found', async () => {
@@ -451,16 +567,21 @@ describe('Backup Router', () => {
       const container = {
         id: 'c1',
         name: 'nginx',
+        watcher: 'local',
         image: { registry: { name: 'hub' } },
       };
       const latestBackup = {
         id: 'b1',
         containerId: 'c1',
+        containerName: 'nginx',
+        containerIdentityKey: '::local::nginx',
         imageName: 'library/nginx',
         imageTag: '1.24',
+        imageDigest: 'sha256:old',
       };
 
       mockGetContainer.mockReturnValue(container);
+      mockGetContainers.mockReturnValueOnce([container]);
       mockGetBackupsByName.mockReturnValue([latestBackup]);
 
       const mockCurrentContainer = {};
@@ -483,9 +604,25 @@ describe('Backup Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(mockTrigger.pullImage).toHaveBeenCalled();
+      expect(mockGetBackupsForContainer).toHaveBeenCalledWith({
+        containerName: 'nginx',
+        containerIdentityKey: '::local::nginx',
+        includeLegacy: true,
+      });
+      expect(mockTrigger.pullImage).toHaveBeenCalledWith(
+        {},
+        {},
+        'library/nginx@sha256:old',
+        expect.anything(),
+      );
       expect(mockTrigger.stopAndRemoveContainer).toHaveBeenCalled();
-      expect(mockTrigger.recreateContainer).toHaveBeenCalled();
+      expect(mockTrigger.recreateContainer).toHaveBeenCalledWith(
+        {},
+        mockContainerSpec,
+        'library/nginx@sha256:old',
+        container,
+        expect.anything(),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Container rolled back successfully',
@@ -538,6 +675,19 @@ describe('Backup Router', () => {
         message: 'Container rolled back successfully',
         backup: latestBackup,
       });
+      expect(composeTrigger.pullImage).toHaveBeenCalledWith(
+        {},
+        {},
+        'library/nginx:1.24',
+        expect.anything(),
+      );
+      expect(composeTrigger.recreateContainer).toHaveBeenCalledWith(
+        {},
+        mockContainerSpec,
+        'library/nginx:1.24',
+        container,
+        expect.anything(),
+      );
     });
 
     test('should rollback successfully when a valid backupId is provided', async () => {
@@ -545,6 +695,7 @@ describe('Backup Router', () => {
       const container = {
         id: 'c1',
         name: 'nginx',
+        watcher: 'local',
         image: { registry: { name: 'hub' } },
       };
       const selectedBackup = {
@@ -555,6 +706,7 @@ describe('Backup Router', () => {
       };
 
       mockGetContainer.mockReturnValue(container);
+      mockGetContainers.mockReturnValueOnce([container]);
       mockGetBackup.mockReturnValue(selectedBackup);
 
       const mockCurrentContainer = {};
@@ -578,6 +730,11 @@ describe('Backup Router', () => {
       await handler(req, res);
 
       expect(mockGetBackup).toHaveBeenCalledWith('b2');
+      expect(mockIsBackupInScope).toHaveBeenCalledWith(selectedBackup, {
+        containerName: 'nginx',
+        containerIdentityKey: '::local::nginx',
+        includeLegacy: true,
+      });
       expect(mockGetBackupsByName).not.toHaveBeenCalled();
       expect(mockTrigger.pullImage).toHaveBeenCalled();
       expect(mockTrigger.stopAndRemoveContainer).toHaveBeenCalled();
