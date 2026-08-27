@@ -154,7 +154,7 @@ async function executeAction(
     return;
   }
 
-  let responseContainer = container;
+  let responseContainer: Container;
   try {
     const inspectResult = await dockerContainer.inspect();
     const newStatus = inspectResult?.State?.Status;
