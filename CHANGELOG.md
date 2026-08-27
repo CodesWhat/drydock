@@ -10,6 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **An unauthenticated Portwing hello could throw outside the callback error boundary.** A non-string compatibility value in the hello payload reached `.split()` before anything validated it. The payload is now validated before parsing. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **An authenticated agent could write to containers it does not own.** Update and removal accepted globally keyed container IDs belonging to another agent or to the controller; ownership is now enforced at the ingestion and removal boundaries. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Runtime environment redaction missed `*_PAT` values and credentials embedded in URLs.** Both are now detected and redacted in the debug dump. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Rejected-origin diagnostics could be used to amplify debug logging** outside the route limiter. The diagnostic path is bounded and rate-limited. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+
+### Fixed
+
+- **Startup recovery could mark an untouched container as a successfully updated one.** A `prepare`-phase operation interrupted before Docker did anything was reconciled as though the replacement had happened, so a container that never changed was recorded as updated. Recovery now compares the persisted old and new container identities: an untouched original fails recovery, a real replacement still succeeds. Startup also stopped expiring destructive in-progress Docker updates before anything had inspected the runtime, and recovered dependency groups rehydrate their completed-upstream context instead of running a restart-only dependent as a full update. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **A healthy agent with a large inventory could never reconnect.** When the cached watcher replay exceeded 256 KiB the controller rejected the agent before acknowledgement, permanently, so the biggest deployments were the ones that could not come back. The stream now stays open and sends only the acknowledgement, and the authenticated full-inventory handshake supplies the state. Latest-only coalescing also no longer overwrites a protocol-critical snapshot belonging to a different watcher. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Backups could be selected or pruned across unrelated containers that shared a name.** Ownership keyed on the container name alone, so the same service name under two agents, two watchers or two compose projects collided. Backups now carry a stable scoped identity, and legacy identity-less backups stay selectable only while a single active identity owns that name. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Rollback restored a mutable tag instead of the digest recorded with the backup**, so a rollback could land on whatever that tag pointed at by then rather than the image the container was actually running. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **A slow SSE client could make drydock retain unbounded queued bytes.** The main broadcast stream, the container and summary stats streams, and the agent controller fan-out all ignored `res.write` returning false. All three now deliver bounded, drain-aware latest-state updates and clean up on close, and the agent fan-out has a connection cap. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Concurrent scans could cancel each other.** The digest single-flight entry captured only the first caller's cancellation state and transient-retry option, so one caller aborting could kill an unrelated caller's scan, and a later waiter could join an entry whose controller was already aborted. Waiter cancellation is isolated, retry requirements are aggregated across live waiters, and aborted entries are retired before a new waiter is admitted. A cancelled scheduled scan also now propagates cancellation into the scanner instead of rejecting the wrapper and letting later runs accumulate. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Docker event chunks were parsed concurrently against a shared buffer**, racing both the parser state and the writes that followed. Parsing and application are now serialized. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **A successful container action returned 500 when the follow-up refresh failed.** The best-effort post-action inspect or store refresh was allowed to overwrite the outcome of an action that had already succeeded. Success is now authoritative and refresh degradation is reported separately. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Paginated container lists were only sorted within a page.** The default name sort ran after the store had already paginated, so ordering was not global across pages. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **A restart suppressed batch-completion events for updates that were still in flight.** Volatile batch membership was cleared on startup, so recovered operations completed silently; membership now rehydrates from the persisted operations. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **The system-log stream limiter fell back to an empty identity instead of the client IP** when no configured key applied. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **An unsupported agent transport was admitted and then failed asynchronously** at watcher lookup during a dependency restart. It is now rejected at admission. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+
 ## [1.7.0-rc.4] — 2026-08-26
 
 ### Security
