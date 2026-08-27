@@ -265,6 +265,22 @@ function connectSseClient(handler, ip = '127.0.0.1') {
   };
 }
 
+function spyOnPressureStateLookup(res, transform) {
+  const originalMapGet = Map.prototype.get;
+  return vi.spyOn(Map.prototype, 'get').mockImplementation(function (key) {
+    const value = Reflect.apply(originalMapGet, this, [key]);
+    if (
+      key === res &&
+      value !== undefined &&
+      typeof value === 'object' &&
+      'pendingRetainedChunks' in value
+    ) {
+      return transform(value);
+    }
+    return value;
+  });
+}
+
 describe('SSE Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -701,23 +717,14 @@ describe('SSE Router', () => {
       res.write.mockReturnValueOnce(false);
       sseRouter._broadcastScanStarted('container-1');
 
-      const originalMapGet = Map.prototype.get;
       let pressureLookups = 0;
-      const mapGetSpy = vi.spyOn(Map.prototype, 'get').mockImplementation(function (key) {
-        const value = Reflect.apply(originalMapGet, this, [key]);
-        if (
-          key === res &&
-          value !== undefined &&
-          typeof value === 'object' &&
-          'pendingRetainedChunks' in value
-        ) {
-          pressureLookups += 1;
-          if (pressureLookups === 2) {
-            return { ...value, cleanup: undefined };
-          }
-          if (pressureLookups === 3) {
-            return undefined;
-          }
+      const mapGetSpy = spyOnPressureStateLookup(res, (value) => {
+        pressureLookups += 1;
+        if (pressureLookups === 2) {
+          return { ...value, cleanup: undefined };
+        }
+        if (pressureLookups === 3) {
+          return undefined;
         }
         return value;
       });
@@ -742,11 +749,7 @@ describe('SSE Router', () => {
       res.write.mockReturnValue(false);
       sseRouter._broadcastScanStarted('container-1');
 
-      const originalMapGet = Map.prototype.get;
-      const mapGetSpy = vi.spyOn(Map.prototype, 'get').mockImplementationOnce(function (key) {
-        const value = Reflect.apply(originalMapGet, this, [key]);
-        return key === res ? { ...value, blocked: false } : value;
-      });
+      const mapGetSpy = spyOnPressureStateLookup(res, (value) => ({ ...value, blocked: false }));
       try {
         sseRouter._broadcastScanCompleted('container-1', 'success');
       } finally {
