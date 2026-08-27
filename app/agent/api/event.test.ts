@@ -136,7 +136,7 @@ describe('agent API event', () => {
       expect(rejectedResponse.write).not.toHaveBeenCalled();
     });
 
-    test('should isolate a backpressured client and resume with only its latest bounded event', () => {
+    test('should isolate a backpressured client and deliver every queued event in order on drain', () => {
       const slowReq = { ip: '127.0.0.1', on: vi.fn() };
       const slowResponse = createPressureResponse();
       const normalResponse = createPressureResponse();
@@ -158,9 +158,11 @@ describe('agent API event', () => {
 
       slowResponse.listeners.drain();
 
-      expect(slowResponse.write).toHaveBeenCalledTimes(2);
-      expect(slowResponse.write.mock.calls[1][0]).toContain('latest');
-      expect(slowResponse.write.mock.calls[1][0]).not.toContain('second');
+      // Every event queued during the backpressure window is delivered, in FIFO
+      // order, once the client drains — none of them are coalesced away.
+      expect(slowResponse.write).toHaveBeenCalledTimes(3);
+      expect(slowResponse.write.mock.calls[1][0]).toContain('second');
+      expect(slowResponse.write.mock.calls[2][0]).toContain('latest');
     });
 
     test('should remove drain and client state when a backpressured response closes', () => {
@@ -271,6 +273,66 @@ describe('agent API event', () => {
       expect(slowResponse.off).toHaveBeenCalledWith('drain', expect.any(Function));
       expect(slowReq.off).toHaveBeenCalledWith('close', expect.any(Function));
       expect(slowResponse.write).toHaveBeenCalledTimes(1);
+    });
+
+    test('should destroy and remove a backpressured client when its queued backlog exceeds the byte bound across several small payloads', () => {
+      const slowReq = { ip: '127.0.0.1', on: vi.fn(), off: vi.fn() };
+      const slowResponse = createPressureResponse();
+      eventApi.subscribeEvents(slowReq, slowResponse);
+      slowResponse.write.mockClear();
+      slowResponse.write.mockReturnValueOnce(false);
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+      addedHandler({ id: 'first' });
+
+      // Each individual queued payload is well under MAX_PENDING_SSE_BYTES on its
+      // own; only the cumulative backlog crosses the bound.
+      const chunk = 'x'.repeat(100 * 1024);
+      addedHandler({ id: 'e2', details: chunk });
+      addedHandler({ id: 'e3', details: chunk });
+      addedHandler({ id: 'e4', details: chunk });
+
+      expect(slowResponse.destroy).toHaveBeenCalledTimes(1);
+      expect(slowResponse.off).toHaveBeenCalledWith('drain', expect.any(Function));
+      expect(slowReq.off).toHaveBeenCalledWith('close', expect.any(Function));
+      expect(slowResponse.write).toHaveBeenCalledTimes(1);
+    });
+
+    test('should stop mid-flush and re-arm the drain handler when a queued write itself reports backpressure', () => {
+      const slowReq = { ip: '127.0.0.1', on: vi.fn(), off: vi.fn() };
+      const slowResponse = createPressureResponse();
+      eventApi.subscribeEvents(slowReq, slowResponse);
+      slowResponse.write.mockClear();
+      slowResponse.write
+        .mockImplementationOnce(() => false) // initial write of 'first' -> backpressured
+        .mockImplementationOnce(() => true) // flush of 'a' succeeds
+        .mockImplementationOnce(() => false) // flush of 'b' itself reports backpressure
+        .mockImplementation(() => true); // everything after the next drain succeeds
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+
+      addedHandler({ id: 'first' });
+      addedHandler({ id: 'a' });
+      addedHandler({ id: 'b' });
+      addedHandler({ id: 'c' });
+
+      expect(slowResponse.write).toHaveBeenCalledTimes(1);
+      expect(slowResponse.once).toHaveBeenCalledTimes(1);
+
+      slowResponse.listeners.drain();
+
+      // Flush wrote 'a', then hit backpressure again on 'b': it stops there,
+      // leaving 'c' queued, and re-arms a fresh drain handler.
+      expect(slowResponse.write).toHaveBeenCalledTimes(3);
+      expect(slowResponse.write.mock.calls[1][0]).toContain('"a"');
+      expect(slowResponse.write.mock.calls[2][0]).toContain('"b"');
+      expect(slowResponse.once).toHaveBeenCalledTimes(2);
+
+      slowResponse.listeners.drain();
+
+      // The remainder ('c') is delivered on the next drain, not dropped.
+      expect(slowResponse.write).toHaveBeenCalledTimes(4);
+      expect(slowResponse.write.mock.calls[3][0]).toContain('"c"');
     });
 
     test('should preserve every initial watcher replay when live traffic arrives before drain', () => {

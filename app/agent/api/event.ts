@@ -15,7 +15,7 @@ interface SseClient {
   req: Request;
   res: Response;
   backpressured: boolean;
-  pendingPayload?: string;
+  pendingPayloads: string[];
   drainHandler?: () => void;
   closeHandler?: () => void;
   closed: boolean;
@@ -89,10 +89,39 @@ function removeSseClient(client: SseClient, destroy: boolean): void {
     client.req.off?.('close', client.closeHandler);
     client.closeHandler = undefined;
   }
-  client.pendingPayload = undefined;
+  client.pendingPayloads = [];
   sseClients = sseClients.filter((candidate) => candidate.id !== client.id);
   if (destroy) {
     client.res.destroy?.();
+  }
+}
+
+function armDrainHandler(client: SseClient): void {
+  const drainHandler = () => {
+    removeDrainHandler(client);
+    if (client.closed) {
+      return;
+    }
+    client.backpressured = false;
+    flushPendingPayloads(client);
+  };
+  client.drainHandler = drainHandler;
+  client.res.once?.('drain', drainHandler);
+}
+
+// Flushes the backlog queued while the client was backpressured, in FIFO order,
+// so no event queued during that window is silently dropped. If the flush
+// itself hits res.write() === false partway through, it stops, leaves the
+// remainder queued, and re-arms the drain handler rather than resuming the
+// single-payload write path.
+function flushPendingPayloads(client: SseClient): void {
+  while (client.pendingPayloads.length > 0) {
+    const payload = client.pendingPayloads.shift();
+    if (client.res.write(payload) === false) {
+      client.backpressured = true;
+      armDrainHandler(client);
+      return;
+    }
   }
 }
 
@@ -102,12 +131,16 @@ function writeSsePayload(client: SseClient, payload: string): void {
   }
 
   if (client.backpressured) {
-    if (Buffer.byteLength(payload) > MAX_PENDING_SSE_BYTES) {
+    const pendingBytes = client.pendingPayloads.reduce(
+      (total, pending) => total + Buffer.byteLength(pending),
+      0,
+    );
+    if (pendingBytes + Buffer.byteLength(payload) > MAX_PENDING_SSE_BYTES) {
       log.warn(`Controller SSE client ${client.id} exceeded its pending event limit.`);
       removeSseClient(client, true);
       return;
     }
-    client.pendingPayload = payload;
+    client.pendingPayloads.push(payload);
     return;
   }
 
@@ -116,20 +149,7 @@ function writeSsePayload(client: SseClient, payload: string): void {
   }
 
   client.backpressured = true;
-  const drainHandler = () => {
-    removeDrainHandler(client);
-    if (client.closed) {
-      return;
-    }
-    client.backpressured = false;
-    const pendingPayload = client.pendingPayload;
-    client.pendingPayload = undefined;
-    if (pendingPayload) {
-      writeSsePayload(client, pendingPayload);
-    }
-  };
-  client.drainHandler = drainHandler;
-  client.res.once?.('drain', drainHandler);
+  armDrainHandler(client);
 }
 
 /**
@@ -409,6 +429,7 @@ export function subscribeEvents(req: Request, res: Response): boolean {
     req,
     res,
     backpressured: false,
+    pendingPayloads: [],
     closed: false,
   };
   sseClients.push(client);
