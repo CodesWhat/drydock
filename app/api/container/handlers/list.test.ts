@@ -934,7 +934,7 @@ describe('buildContainerListResponse', () => {
       {
         excludeRollbackContainers: true,
       },
-      { limit: 10, offset: 0 },
+      { limit: 10, offset: 0, sort: 'name' },
     );
     expect(response.total).toBe(2);
     expect(response.data).toHaveLength(2);
@@ -1113,7 +1113,7 @@ describe('buildContainerListResponse', () => {
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
       { excludeRollbackContainers: true },
-      { limit: 10, offset: 0 },
+      { limit: 10, offset: 0, sort: 'name' },
     );
     expect(context.getContainerCountFromStore).toHaveBeenCalledWith({
       excludeRollbackContainers: true,
@@ -1145,16 +1145,16 @@ describe('buildContainerListResponse', () => {
     expect(context.getContainersFromStore).toHaveBeenNthCalledWith(
       1,
       { watcher: 'local', updateAvailable: true, excludeRollbackContainers: true },
-      { limit: 10, offset: 0 },
+      { limit: 10, offset: 0, sort: 'name' },
     );
     expect(context.getContainersFromStore).toHaveBeenNthCalledWith(
       2,
       { status: 'running', excludeRollbackContainers: true },
-      { limit: 10, offset: 0 },
+      { limit: 10, offset: 0, sort: 'name' },
     );
   });
 
-  test('uses the zero-limit non-sorting path without looking up counts', () => {
+  test('uses the default sort with zero limit without looking up counts', () => {
     const containers = [
       createContainer({ id: 'c1', name: 'beta' }),
       createContainer({ id: 'c2', name: 'alpha' }),
@@ -1174,7 +1174,7 @@ describe('buildContainerListResponse', () => {
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
       { excludeRollbackContainers: true },
-      { limit: 0, offset: 0 },
+      { limit: 0, offset: 0, sort: 'name' },
     );
     expect(context.getContainerCountFromStore).not.toHaveBeenCalled();
     expect(response.total).toBe(2);
@@ -1211,6 +1211,59 @@ describe('buildContainerListResponse', () => {
     expect(response.data).toHaveLength(1);
     expect(response.data[0]?.name).toBe('alpha');
     expect(response.hasMore).toBe(true);
+  });
+
+  test('applies default name sorting before pagination across successive pages', () => {
+    const containers = [
+      createContainer({ id: 'c-zulu', name: 'zulu', watcher: 'a-watcher' }),
+      createContainer({ id: 'c-alpha', name: 'alpha', watcher: 'b-watcher' }),
+      createContainer({ id: 'c-mike', name: 'mike', watcher: 'c-watcher' }),
+    ];
+    const getContainersFromStore = vi.fn(
+      (
+        _query: Record<string, unknown>,
+        options: { limit: number; offset: number; sort?: string },
+      ) => {
+        const ordered =
+          options.sort === 'name'
+            ? [...containers].sort((left, right) => left.name.localeCompare(right.name))
+            : containers;
+        return ordered.slice(options.offset, options.offset + options.limit);
+      },
+    );
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore,
+      getContainerCountFromStore: vi.fn(() => containers.length),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    const firstPage = buildContainerListResponse(
+      context,
+      { limit: '2', offset: '0' } as any,
+      '/api/v1/containers',
+    );
+    const secondPage = buildContainerListResponse(
+      context,
+      { limit: '2', offset: '2' } as any,
+      '/api/v1/containers',
+    );
+
+    expect([...firstPage.data, ...secondPage.data].map((container) => container.name)).toEqual([
+      'alpha',
+      'mike',
+      'zulu',
+    ]);
+    expect(getContainersFromStore).toHaveBeenNthCalledWith(
+      1,
+      { excludeRollbackContainers: true },
+      { limit: 2, offset: 0, sort: 'name' },
+    );
+    expect(getContainersFromStore).toHaveBeenNthCalledWith(
+      2,
+      { excludeRollbackContainers: true },
+      { limit: 2, offset: 2, sort: 'name' },
+    );
   });
 
   test('delegates sorting without count lookup when pagination is zeroed', () => {

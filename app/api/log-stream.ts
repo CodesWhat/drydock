@@ -263,7 +263,9 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
       const gateAuthenticated = isAuthenticatedSession(upgradeRequest, {
         anonymousAuthActive: registry.isAnonymousAuthenticationActive(),
       });
-      const rateLimitKey = getRateLimitKey(upgradeRequest, passportAuthenticated);
+      const rateLimitKey =
+        getRateLimitKey(upgradeRequest, passportAuthenticated) ||
+        getDefaultRateLimitKey(upgradeRequest);
       if (isRateLimited(rateLimitKey)) {
         writeUpgradeError(socket, 429, 'Too Many Requests');
         return;
