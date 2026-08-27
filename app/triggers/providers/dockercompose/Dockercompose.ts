@@ -2346,11 +2346,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     newImage,
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    cloneRuntimeConfigOptions,
   ): Promise<void> {
     const containerToCreateInspect = this.cloneContainer(
       currentContainerSpec,
       newImage,
-      logContainer,
+      cloneRuntimeConfigOptions,
     );
     let newContainer: unknown;
 
@@ -2446,6 +2447,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     // before performing any destructive step. On arch mismatch the old
     // container is left running and we throw without touching it.
     await this.verifyPulledImageCompatibility(dockerApi as DockerApiLike, newImage, logContainer);
+    const cloneRuntimeConfigOptions = await this.runtimeConfigManager.getCloneRuntimeConfigOptions(
+      dockerApi,
+      currentContainerSpec,
+      newImage,
+      logContainer,
+    );
 
     // Capture the original container spec for rollback before we do anything
     // destructive. The Config.Image field holds the old image reference.
@@ -2484,6 +2491,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         newImage,
         container,
         logContainer,
+        cloneRuntimeConfigOptions,
       );
     } catch (recreateError: unknown) {
       const rollbackOutcome = await this.attemptRollbackRestoreOldContainer(
