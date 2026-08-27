@@ -16,6 +16,7 @@ interface DockerEventsStream {
   on: (event: string, listener: (...args: unknown[]) => void) => unknown;
   pause?: () => void;
   resume?: () => void;
+  destroy?: () => void;
 }
 
 function getErrorMessage(error: unknown): string | undefined {
@@ -193,11 +194,15 @@ export async function listenDockerEventsOrchestration(
   }
 
   watcher.cleanupDockerEventsStream(true);
+  const requestedStreamGeneration = getDockerEventStreamState(watcher).generation;
   watcher.dockerEventsBuffer = '';
   watcher.log.info('Listening to docker events');
   const options: Dockerode.GetEventsOptions = getDockerEventsOptions();
   watcher.dockerApi.getEvents(options, (err, stream) => {
     if (err) {
+      if (!isCurrentStreamGeneration(watcher, requestedStreamGeneration)) {
+        return;
+      }
       const errorMessage = getErrorMessage(err);
       if (watcher.log && typeof watcher.log.warn === 'function') {
         watcher.log.warn(`Unable to listen to Docker events [${errorMessage}]`);
@@ -205,9 +210,13 @@ export async function listenDockerEventsOrchestration(
       }
       watcher.scheduleDockerEventsReconnect('connection failure', err);
     } else {
+      if (!isCurrentStreamGeneration(watcher, requestedStreamGeneration)) {
+        (stream as DockerEventsStream).destroy?.();
+        return;
+      }
       const dockerEventsStream = stream as DockerEventsStream;
       watcher.dockerEventsStream = dockerEventsStream;
-      const streamGeneration = getDockerEventStreamState(watcher).generation;
+      const streamGeneration = requestedStreamGeneration;
       watcher.resetDockerEventsReconnectBackoff();
       dockerEventsStream.on('data', (chunk: unknown) =>
         enqueueDockerEventChunk(watcher, dockerEventsStream, streamGeneration, chunk),

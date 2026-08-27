@@ -36,6 +36,7 @@ function createWatcher(overrides: Record<string, any> = {}) {
     }),
     pause: vi.fn(),
     resume: vi.fn(),
+    destroy: vi.fn(),
   };
 
   const watcher = {
@@ -371,6 +372,37 @@ describe('docker event orchestration helpers', () => {
       'connection failure',
       connectionError,
     );
+  });
+
+  test('listenDockerEventsOrchestration destroys a stale stream and does not adopt it when the generation is invalidated before the getEvents callback fires', async () => {
+    const { watcher, stream } = createWatcher();
+    watcher.dockerApi.getEvents = vi.fn((_options: unknown, callback: any) => {
+      // Simulates deregisterComponent's cleanupDockerEventsStream(true) call bumping the
+      // generation while this getEvents request is still in flight.
+      invalidateDockerEventStreamOrchestration(watcher as any);
+      callback(undefined, stream);
+    });
+
+    await listenDockerEventsOrchestration(watcher as any);
+
+    expect(stream.destroy).toHaveBeenCalledTimes(1);
+    expect(watcher.dockerEventsStream).toBeUndefined();
+    expect(watcher.resetDockerEventsReconnectBackoff).not.toHaveBeenCalled();
+    expect(stream.on).not.toHaveBeenCalled();
+  });
+
+  test('listenDockerEventsOrchestration ignores a stale getEvents error and does not schedule a reconnect for it', async () => {
+    const connectionError = new Error('Connection failed');
+    const { watcher } = createWatcher();
+    watcher.dockerApi.getEvents = vi.fn((_options: unknown, callback: any) => {
+      invalidateDockerEventStreamOrchestration(watcher as any);
+      callback(connectionError);
+    });
+
+    await listenDockerEventsOrchestration(watcher as any);
+
+    expect(watcher.scheduleDockerEventsReconnect).not.toHaveBeenCalled();
+    expect(watcher.log.warn).not.toHaveBeenCalled();
   });
 
   test('processDockerEventPayloadOrchestration returns true for empty payloads', async () => {
