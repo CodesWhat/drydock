@@ -111,7 +111,7 @@ function getFirstQueryValue(value: unknown): string | undefined {
   return typeof value === 'string' ? value.trim() : undefined;
 }
 
-export function getFirstNonEmptyQueryValue(value: unknown): string | undefined {
+function getFirstNonEmptyQueryValue(value: unknown): string | undefined {
   const queryValue = getFirstQueryValue(value);
   if (!queryValue || queryValue.length === 0) {
     return undefined;
