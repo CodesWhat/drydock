@@ -1,11 +1,11 @@
-name: "🔬 CI Verify"
+name: "CI Verify"
 run-name: >-
   ${{
-    github.event_name == 'pull_request' && format('🔬 CI Verify — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
-    github.event_name == 'push' && format('🔬 CI Verify — {0}', github.event.head_commit.message) ||
-    github.event_name == 'merge_group' && format('🔬 CI Verify — Merge Queue: {0}', github.ref_name) ||
-    github.event_name == 'workflow_call' && format('🔬 CI Verify — workflow_call ({0})', github.sha) ||
-    format('🔬 CI Verify — {0}', github.ref_name)
+    github.event_name == 'pull_request' && format('CI Verify — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
+    github.event_name == 'push' && format('CI Verify — {0}', github.event.head_commit.message) ||
+    github.event_name == 'merge_group' && format('CI Verify — Merge Queue: {0}', github.ref_name) ||
+    github.event_name == 'workflow_call' && format('CI Verify — workflow_call ({0})', github.sha) ||
+    format('CI Verify — {0}', github.ref_name)
   }}
 
 on:
@@ -75,7 +75,7 @@ jobs:
       run-lint: false
 
   secrets:
-    name: "🔑 Security: Secrets"
+    name: "Security: Secrets"
     needs: [security-actions]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -138,7 +138,7 @@ jobs:
         run: scripts/scan-secrets.sh
 
   changes:
-    name: "🔎 Changes: Path Filter"
+    name: "Changes: Path Filter"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -184,7 +184,7 @@ jobs:
           filters: .github/filters/runtime.yml
 
   codeql:
-    name: "🛡️ SAST: CodeQL"
+    name: "SAST: CodeQL"
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [security-actions]
     runs-on: ubuntu-24.04
@@ -224,7 +224,7 @@ jobs:
           category: /language:${{ matrix.language }}
 
   fuzz:
-    name: "🎯 Fuzz Testing"
+    name: "Fuzz Testing"
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [security-actions]
     runs-on: ubuntu-24.04
@@ -363,7 +363,7 @@ jobs:
         run: exit 1
 
   dependency-review:
-    name: "📦 Security: Dependency Review"
+    name: "Security: Dependency Review"
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -585,7 +585,7 @@ jobs:
           fail_ci_if_error: false
 
   web:
-    name: "🌐 Web: Site Build & Scripts Tests"
+    name: "Web: Site Build & Scripts Tests"
     # apps/web ships via Vercel (separate from the Docker image), and Vercel only
     # runs `next build` — never the node:test scripts suite. This job is that gate.
     # Path-filtered: skips (→ counts as pass) on changesets that don't touch the
@@ -743,7 +743,7 @@ jobs:
           retention-days: 1
 
   grype-image:
-    name: "🐳 Security: Grype Image"
+    name: "Security: Grype Image"
     # security-grype.yml's own grype-image job only runs on workflow_dispatch
     # and schedule, so the image every PR actually ships is never scanned
     # pre-merge. This job closes that gap by scanning the same QA image
@@ -827,7 +827,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   dast-zap-baseline:
-    name: "🕷️ DAST: ZAP + Nuclei"
+    name: "DAST: ZAP + Nuclei"
     runs-on: ubuntu-24.04
     timeout-minutes: 25  # Includes QA stack startup and scanner container runtime
     # Run on every merge to main (gates the next release-cut), on legacy
@@ -1364,7 +1364,7 @@ jobs:
   # still gate on it via release-cut.yml's second wait step.
 
   load-test-ci:
-    name: "⚡ Load Test: CI"
+    name: "Load Test: CI"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))
@@ -1489,7 +1489,7 @@ jobs:
           retention-days: 30
 
   load-test-behavior:
-    name: "⚡ Load Test: Behavior + Stress (Advisory)"
+    name: "Load Test: Behavior + Stress (Advisory)"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))

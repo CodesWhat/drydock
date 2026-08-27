@@ -1,5 +1,5 @@
-name: "🏷️ Release: Cut"
-run-name: "🏷️ Release: Cut — manual by ${{ github.actor }}"
+name: "Release: Cut"
+run-name: "Release: Cut — manual by ${{ github.actor }}"
 
 # Recoverable release pipeline. Build output is first published under
 # run-scoped staging tags, signed, attested, and attached to a draft release.
@@ -50,7 +50,7 @@ env:
 
 jobs:
   release:
-    name: "🚀 Release: Build, Publish, Tag"
+    name: "Release: Build, Publish, Tag"
     runs-on: ubuntu-latest
     timeout-minutes: 120  # Multi-arch build, signing, attestations, release upload, and CI-success polling budget
     environment: release-publish
