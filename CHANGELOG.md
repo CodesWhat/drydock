@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `ws`/`wss` value in `X-Forwarded-Proto` no longer rejects the WebSocket upgrade.** Traefik forwards the upgrade's client-facing scheme as `wss` rather than `https` ([traefik/traefik#6388](https://github.com/traefik/traefik/issues/6388)), which the origin check treated as an unsupported protocol and hard-rejected — so a default Traefik setup still 403'd even with the trust-proxy fix in 1.6.1-rc.2. `ws` and `wss` now map to `http:`/`https:` for the Origin comparison; genuinely unknown protocols are still rejected. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#887](https://github.com/CodesWhat/drydock/pull/887))
+- **Startup no longer crashes when the store volume forbids `chmod`.** The permission tightening added in 1.6.0 now warns and continues on `EPERM`/`EACCES`/`ENOTSUP` instead of throwing, so mounts that reject `chmod` (NFS/CIFS volumes, non-root containers, some volume drivers) no longer take the whole process down at startup. `EROFS` is deliberately excluded and stays fatal: it means the filesystem itself is read-only, so the store's autosave (temp file plus rename) would fail on every write after boot, and continuing would leave a container that looks healthy while silently persisting nothing. ([#874](https://github.com/CodesWhat/drydock/discussions/874), [#886](https://github.com/CodesWhat/drydock/pull/886), [#891](https://github.com/CodesWhat/drydock/pull/891))
+- **The debug dump redacted env var names instead of values.** Container env vars appear in the dump as `{ key, value }` pairs, and the generic redaction walker matched the pair's `key` property against the `key` sensitive-token rule, so a var like `HF_TOKEN` showed up as `"key": "[REDACTED]", "value": "xyz"` — the name was hidden and the actual secret was left in plain text. Pair objects are now handled explicitly: the name always stays visible, and the value is redacted only when the name itself matches the sensitive-key rules. ([#875](https://github.com/CodesWhat/drydock/issues/875), [#885](https://github.com/CodesWhat/drydock/pull/885))
+
 ## [1.6.1-rc.2] — 2026-08-25
 
 ### Fixed
