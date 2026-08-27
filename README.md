@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.4-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.5-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,16 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.5 highlights</strong></summary>
+
+- **Compose updates now pick up the runtime defaults the new image ships** — a container recreated by the compose action was rebuilt from the stored config instead of re-reading the pulled image, so values like `APP_VERSION` carried over from the old container and the UI kept reporting an update that was already applied. Backported from the v1.7 line. ([#734](https://github.com/CodesWhat/drydock/issues/734))
+- **The Crowdin translation-sync workflow no longer fails on pushes to `dev/v1.6`** — it always resolved its base branch as the highest `dev/vX.Y` on origin, so a push to `dev/v1.6` while a newer `dev/v1.7` branch also existed tried to check out that branch over files it had already downloaded and failed. A push to a `dev/vX.Y` branch now targets that branch directly. ([#906](https://github.com/CodesWhat/drydock/pull/906))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc5--2026-08-27).
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.4 highlights</strong></summary>
 
 - **Tag suggestion no longer ranks a bare integer build-number tag above a real dotted version** — a tag like `168` coerced into a fake `168.0.0` and outranked a real release like `1.43.3`, so on `linuxserver/plex` the suggested-tag badge and, with a permissive `dd.tag.include` filter, the update candidate itself could point at a downgrade. ([#859](https://github.com/CodesWhat/drydock/issues/859))

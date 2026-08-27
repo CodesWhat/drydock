@@ -5,6 +5,16 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.5 Highlights — August 27, 2026
+
+Two fixes: compose updates now pick up the runtime defaults the new image
+ships, instead of carrying over values like `APP_VERSION` from the old
+container and reporting an update that's already applied; and the Crowdin
+translation-sync workflow no longer fails on pushes to `dev/v1.6` when a newer
+`dev/v1.7` branch also exists on origin. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc5--2026-08-27)
+for the full release notes.
+
 ## v1.6.1-rc.4 Highlights — August 27, 2026
 
 One bug fix: tag suggestion no longer ranks a bare integer build-number tag

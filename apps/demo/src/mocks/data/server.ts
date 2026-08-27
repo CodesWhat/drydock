@@ -1,5 +1,5 @@
 export const serverInfo = {
-  version: '1.6.1-rc.4',
+  version: '1.6.1-rc.5',
   uptime: 864000,
   hostname: 'drydock-demo',
   platform: 'linux',
