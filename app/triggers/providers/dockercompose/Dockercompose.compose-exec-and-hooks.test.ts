@@ -145,6 +145,65 @@ describe('Dockercompose Trigger', () => {
     expect(startContainerSpy).toHaveBeenCalledTimes(1);
   });
 
+  test('updateContainerWithCompose should remove stale image-inherited env defaults while preserving runtime env', async () => {
+    trigger.configuration.dryrun = false;
+    const currentContainer = makeDockerContainerHandle({
+      image: 'example/app:old',
+    });
+    currentContainer.inspect.mockResolvedValue({
+      Id: 'container-id',
+      Name: '/nginx',
+      Config: {
+        Image: 'example/app:old',
+        Env: ['APP_VERSION=old', 'RUNTIME_VALUE=keep'],
+        Labels: {},
+      },
+      HostConfig: {},
+      NetworkSettings: { Networks: {} },
+      State: { Running: true },
+    });
+    mockDockerApi.getContainer.mockReturnValue(currentContainer);
+    mockDockerApi.getImage.mockImplementation((imageRef) => ({
+      inspect: vi.fn().mockResolvedValue(
+        imageRef === 'example/app:old'
+          ? { Config: { Env: ['APP_VERSION=old'] } }
+          : {
+              Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+              Os: 'linux',
+              Config: { Env: ['APP_VERSION=new'] },
+            },
+      ),
+    }));
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.updateContainerWithCompose(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer(),
+      {
+        skipPull: true,
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          newImage: 'example/app:new',
+        },
+      },
+    );
+
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({
+        Env: ['RUNTIME_VALUE=keep'],
+      }),
+      'nginx',
+      expect.anything(),
+    );
+  });
+
   test('updateContainerWithCompose should preserve stopped runtime state', async () => {
     trigger.configuration.dryrun = false;
     const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();

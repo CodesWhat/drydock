@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Compose updates now pick up runtime defaults the new image ships.** A container recreated by the compose action was rebuilt from the stored config rather than re-reading the defaults baked into the pulled image, so anything the image sets for itself — `APP_VERSION`, `RELEASE_VERSION` and the like — carried over from the old container and made the UI keep reporting an update while the running image was already current. A manual `docker compose down && docker compose up -d` fixed it because compose rebuilds that config from the image every time. Backported from the v1.7 line, where the reporter's version could not reach it. ([#734](https://github.com/CodesWhat/drydock/issues/734), [#736](https://github.com/CodesWhat/drydock/pull/736))
+
 ## [1.6.1-rc.4] — 2026-08-27
 
 ### Fixed
