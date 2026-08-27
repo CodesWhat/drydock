@@ -111,6 +111,24 @@ function isCurrentStreamGeneration(
   );
 }
 
+/**
+ * A preflight step (recreateDockerClient / ensureRemoteAuthHeaders) awaits,
+ * during which deregisterComponent() can flip isDockerEventsListenerActive to
+ * false and bump the stream generation, or a newer listenDockerEventsOrchestration
+ * call can bump the generation on its own without deactivating the watcher.
+ * Neither condition implies the other, so both are checked before acting on
+ * a preflight step that resumed after the fact.
+ */
+function isDockerEventsListenerStale(
+  watcher: DockerEventOrchestrationWatcher,
+  entryStreamGeneration: number,
+): boolean {
+  return (
+    !watcher.isDockerEventsListenerActive ||
+    !isCurrentStreamGeneration(watcher, entryStreamGeneration)
+  );
+}
+
 function logChunkProcessingFailure(watcher: DockerEventOrchestrationWatcher, error: unknown): void {
   watcher.log.debug(`Unable to process Docker event stream chunk (${getErrorMessage(error)})`);
 }
@@ -171,10 +189,15 @@ export async function listenDockerEventsOrchestration(
     watcher.dockerEventsReconnectTimeout = undefined;
   }
 
+  const entryStreamGeneration = getDockerEventStreamState(watcher).generation;
+
   if (watcher.recreateDockerClient) {
     try {
       await watcher.recreateDockerClient();
     } catch (e: unknown) {
+      if (isDockerEventsListenerStale(watcher, entryStreamGeneration)) {
+        return;
+      }
       const errorMessage = getErrorMessage(e);
       watcher.log.warn(`Unable to recreate Docker client during reconnect (${errorMessage})`);
       watcher.scheduleDockerEventsReconnect('client recreation failure', e);
@@ -185,11 +208,18 @@ export async function listenDockerEventsOrchestration(
   try {
     await watcher.ensureRemoteAuthHeaders();
   } catch (e: unknown) {
+    if (isDockerEventsListenerStale(watcher, entryStreamGeneration)) {
+      return;
+    }
     const errorMessage = getErrorMessage(e);
     watcher.log.warn(
       `Unable to initialize remote watcher auth for docker events (${errorMessage})`,
     );
     watcher.scheduleDockerEventsReconnect('auth initialization failure', e);
+    return;
+  }
+
+  if (isDockerEventsListenerStale(watcher, entryStreamGeneration)) {
     return;
   }
 

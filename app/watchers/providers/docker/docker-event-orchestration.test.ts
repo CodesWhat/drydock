@@ -178,6 +178,99 @@ describe('docker event orchestration helpers', () => {
     expect(watcher.dockerApi.getEvents).not.toHaveBeenCalled();
   });
 
+  test('listenDockerEventsOrchestration bails out before opening a stream when the watcher is deregistered while recreateDockerClient is pending', async () => {
+    const recreate = createDeferred<void>();
+    const recreateDockerClient = vi.fn().mockReturnValue(recreate.promise);
+    const { watcher } = createWatcher({ recreateDockerClient });
+
+    const listening = listenDockerEventsOrchestration(watcher as any);
+    await vi.waitFor(() => expect(recreateDockerClient).toHaveBeenCalled());
+
+    // Simulates deregisterComponent(): flips the active flag and bumps the
+    // generation (via cleanupDockerEventsStream(true)) while the preflight
+    // await is still pending.
+    watcher.isDockerEventsListenerActive = false;
+    invalidateDockerEventStreamOrchestration(watcher as any);
+    recreate.resolve();
+    await listening;
+
+    expect(watcher.ensureRemoteAuthHeaders).toHaveBeenCalled();
+    expect(watcher.cleanupDockerEventsStream).not.toHaveBeenCalled();
+    expect(watcher.dockerApi.getEvents).not.toHaveBeenCalled();
+    expect(watcher.dockerEventsStream).toBeUndefined();
+  });
+
+  test('listenDockerEventsOrchestration bails out before opening a stream when the watcher is deregistered while ensureRemoteAuthHeaders is pending', async () => {
+    const auth = createDeferred<void>();
+    const ensureRemoteAuthHeaders = vi.fn().mockReturnValue(auth.promise);
+    const { watcher } = createWatcher({ ensureRemoteAuthHeaders });
+
+    const listening = listenDockerEventsOrchestration(watcher as any);
+    await vi.waitFor(() => expect(ensureRemoteAuthHeaders).toHaveBeenCalled());
+
+    watcher.isDockerEventsListenerActive = false;
+    invalidateDockerEventStreamOrchestration(watcher as any);
+    auth.resolve();
+    await listening;
+
+    expect(watcher.cleanupDockerEventsStream).not.toHaveBeenCalled();
+    expect(watcher.dockerApi.getEvents).not.toHaveBeenCalled();
+    expect(watcher.dockerEventsStream).toBeUndefined();
+  });
+
+  test('listenDockerEventsOrchestration bails out when superseded by a newer listen attempt even though the watcher stays active', async () => {
+    const recreate = createDeferred<void>();
+    const recreateDockerClient = vi.fn().mockReturnValue(recreate.promise);
+    const { watcher } = createWatcher({ recreateDockerClient });
+
+    const listening = listenDockerEventsOrchestration(watcher as any);
+    await vi.waitFor(() => expect(recreateDockerClient).toHaveBeenCalled());
+
+    // A second, faster listenDockerEventsOrchestration call reaches
+    // cleanupDockerEventsStream first: the watcher stays active, only the
+    // generation moves on. Neither condition implies the other, so this
+    // must bail out on its own.
+    invalidateDockerEventStreamOrchestration(watcher as any);
+    recreate.resolve();
+    await listening;
+
+    expect(watcher.isDockerEventsListenerActive).toBe(true);
+    expect(watcher.cleanupDockerEventsStream).not.toHaveBeenCalled();
+    expect(watcher.dockerApi.getEvents).not.toHaveBeenCalled();
+  });
+
+  test('listenDockerEventsOrchestration does not schedule a reconnect when recreateDockerClient rejects after the watcher was deregistered', async () => {
+    const recreate = createDeferred<void>();
+    const recreateDockerClient = vi.fn().mockReturnValue(recreate.promise);
+    const { watcher } = createWatcher({ recreateDockerClient });
+
+    const listening = listenDockerEventsOrchestration(watcher as any);
+    await vi.waitFor(() => expect(recreateDockerClient).toHaveBeenCalled());
+
+    watcher.isDockerEventsListenerActive = false;
+    recreate.reject(new Error('socket reset'));
+    await listening;
+
+    expect(watcher.scheduleDockerEventsReconnect).not.toHaveBeenCalled();
+    expect(watcher.log.warn).not.toHaveBeenCalled();
+  });
+
+  test('listenDockerEventsOrchestration does not schedule a reconnect when ensureRemoteAuthHeaders rejects after the watcher was deregistered', async () => {
+    const auth = createDeferred<void>();
+    const ensureRemoteAuthHeaders = vi.fn().mockReturnValue(auth.promise);
+    const { watcher } = createWatcher({ ensureRemoteAuthHeaders });
+
+    const listening = listenDockerEventsOrchestration(watcher as any);
+    await vi.waitFor(() => expect(ensureRemoteAuthHeaders).toHaveBeenCalled());
+
+    watcher.isDockerEventsListenerActive = false;
+    auth.reject(new Error('auth expired'));
+    await listening;
+
+    expect(watcher.scheduleDockerEventsReconnect).not.toHaveBeenCalled();
+    expect(watcher.log.warn).not.toHaveBeenCalled();
+  });
+
   test('listenDockerEventsOrchestration skips recreateDockerClient when not provided', async () => {
     const { watcher } = createWatcher();
 
