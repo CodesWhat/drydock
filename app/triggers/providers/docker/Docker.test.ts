@@ -73,6 +73,7 @@ vi.mock('../../../store/backup', () => ({
   insertBackup: vi.fn(),
   pruneOldBackups: vi.fn(),
   getBackupsByName: vi.fn().mockReturnValue([]),
+  getBackupsForContainer: vi.fn().mockReturnValue([]),
 }));
 
 const mockRunHook = vi.hoisted(() => vi.fn());
@@ -2551,6 +2552,42 @@ describe('additional docker trigger coverage', () => {
     expect(logContainer.info).not.toHaveBeenCalled();
   });
 
+  test('insertContainerImageBackup persists the canonical container identity', () => {
+    vi.mocked(backupStore.insertBackup).mockClear();
+
+    docker.insertContainerImageBackup(
+      {
+        registry: {
+          getImageFullName: vi.fn((_image, tag) => `registry.example/acme/web:${tag}`),
+        },
+      },
+      {
+        id: 'old-container-id',
+        name: 'web-1',
+        watcher: 'local',
+        labels: {
+          'com.docker.compose.project': 'project-a',
+          'com.docker.compose.service': 'web',
+        },
+        image: {
+          name: 'acme/web',
+          tag: { value: 'latest' },
+          digest: { repo: 'sha256:old' },
+        },
+      },
+    );
+
+    expect(backupStore.insertBackup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerName: 'web-1',
+        containerIdentityKey: '::local::compose:project-a/web',
+        imageName: 'registry.example/acme/web',
+        imageTag: 'latest',
+        imageDigest: 'sha256:old',
+      }),
+    );
+  });
+
   test('cleanupOldImages should remove digest image when prune is enabled and digest repo exists', async () => {
     docker.configuration.prune = true;
     const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue(undefined);
@@ -2584,7 +2621,22 @@ describe('additional docker trigger coverage', () => {
 
   test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
     docker.configuration.prune = true;
-    vi.mocked(backupStore.getBackupsByName).mockReturnValue([
+    const storeContainer = await import('../../../store/container.js');
+    const container = {
+      name: 'container-name',
+      watcher: 'local',
+      image: {
+        registry: { name: 'hub', url: 'my-registry' },
+        name: 'test/test',
+        tag: { value: '1.0.0' },
+        digest: {},
+      },
+      updateKind: {
+        kind: 'tag',
+      },
+    };
+    vi.mocked(storeContainer.getContainers).mockReturnValueOnce([container] as any);
+    vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([
       {
         imageTag: '1.0.0',
       },
@@ -2595,25 +2647,13 @@ describe('additional docker trigger coverage', () => {
     };
     const logContainer = createMockLog('info');
 
-    await docker.cleanupOldImages(
-      {},
-      registryProvider,
-      {
-        name: 'container-name',
-        image: {
-          registry: { name: 'hub', url: 'my-registry' },
-          name: 'test/test',
-          tag: { value: '1.0.0' },
-          digest: {},
-        },
-        updateKind: {
-          kind: 'tag',
-        },
-      },
-      logContainer,
-    );
+    await docker.cleanupOldImages({}, registryProvider, container, logContainer);
 
-    expect(backupStore.getBackupsByName).toHaveBeenCalledWith('container-name');
+    expect(backupStore.getBackupsForContainer).toHaveBeenCalledWith({
+      containerName: 'container-name',
+      containerIdentityKey: '::local::container-name',
+      includeLegacy: true,
+    });
     expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
     expect(removeImageSpy).not.toHaveBeenCalled();
     expect(logContainer.info).toHaveBeenCalledWith(
