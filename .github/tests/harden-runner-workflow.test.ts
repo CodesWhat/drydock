@@ -27,11 +27,6 @@ const expectedPolicy: Record<string, EgressPolicy> = {
   // result and touch no network at all, so they start at 'block' rather than
   // joining the audit->block migration. Deleted with the rest of that block
   // when the rename collapses.
-  'ci-verify.yml/renamed-secrets': 'block',
-  'ci-verify.yml/renamed-codeql': 'block',
-  'ci-verify.yml/renamed-dependency-review': 'block',
-  'ci-verify.yml/renamed-web': 'block',
-  'ci-verify.yml/renamed-grype-image': 'block',
   'e2e-playwright.yml/changes': 'block',
   'quality-mutation-monthly.yml/stryker': 'block',
   'quality-mutation-monthly.yml/aggregate': 'block',

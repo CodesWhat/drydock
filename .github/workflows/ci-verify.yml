@@ -75,7 +75,7 @@ jobs:
       run-lint: false
 
   secrets:
-    name: "🔑 Security: Secrets"
+    name: "Security: Secrets"
     needs: [security-actions]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -188,7 +188,7 @@ jobs:
           filters: .github/filters/runtime.yml
 
   codeql:
-    name: "🛡️ SAST: CodeQL"
+    name: "SAST: CodeQL"
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [security-actions]
     runs-on: ubuntu-24.04
@@ -393,7 +393,7 @@ jobs:
         run: exit 1
 
   dependency-review:
-    name: "📦 Security: Dependency Review"
+    name: "Security: Dependency Review"
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -630,7 +630,7 @@ jobs:
           fail_ci_if_error: false
 
   web:
-    name: "🌐 Web: Site Build & Scripts Tests"
+    name: "Web: Site Build & Scripts Tests"
     # apps/web ships via Vercel (separate from the Docker image), and Vercel only
     # runs `next build` — never the node:test scripts suite. This job is that gate.
     # Path-filtered: skips (→ counts as pass) on changesets that don't touch the
@@ -788,7 +788,7 @@ jobs:
           retention-days: 1
 
   grype-image:
-    name: "🐳 Security: Grype Image"
+    name: "Security: Grype Image"
     # security-grype.yml's own grype-image job only runs on workflow_dispatch
     # and schedule, so the image every PR actually ships is never scanned
     # pre-merge. This job closes that gap by scanning the same QA image
@@ -1676,169 +1676,3 @@ jobs:
           path: artifacts/load-test/stress/*.json
           if-no-files-found: warn
           retention-days: 30
-
-  # ---------------------------------------------------------------------------
-  # Required-context rename mirrors (temporary)
-  #
-  # Five required contexts still carry an emoji. A required context can only be
-  # renamed additively, because a required name that no job produces leaves
-  # every PR pending forever: publish the new name first, move the rulesets onto
-  # it, drop the old name, and only then collapse. These five jobs are step 1 —
-  # they publish the emoji-free name for each gate while the real job keeps
-  # publishing the emoji one, so both rulesets stay satisfiable throughout.
-  #
-  # They do no work. Each derives its verdict from the real job via `needs`,
-  # which is the shape #742 used for `legacy-security-actions` (`6678d4c3`,
-  # removed at `85e2e80a` once its rename finished). Step 4 deletes this whole
-  # block and renames the five real jobs.
-  #
-  # `if: ${{ always() }}` is load-bearing. Without it GitHub skips a job whose
-  # `needs` dependency was skipped, and that cascade fires identically when the
-  # dependency FAILED — so the mirror would report SKIPPED on a real failure,
-  # and a skipped required check satisfies a ruleset (#798). The gate would fail
-  # open silently.
-  #
-  # `success` OR `skipped` passes, anything else fails. That is deliberately the
-  # same verdict the old context already published: four of these five jobs are
-  # path- or event-filtered and skip routinely, and a skipped real job has
-  # always satisfied the rulesets. The mirror has to be behaviour-identical to
-  # the name it replaces, not stricter, or step 1 becomes a gate change wearing
-  # a rename's clothes.
-  # ---------------------------------------------------------------------------
-
-  renamed-secrets:
-    name: "Security: Secrets"
-    needs: [secrets]
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
-        with:
-          egress-policy: block
-          # The job itself needs no egress: it checks out nothing and calls no
-          # API. Everything here is runner plumbing for fetching this one
-          # action and reporting the job back.
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            objects.githubusercontent.com:443
-            *.actions.githubusercontent.com:443
-          disable-sudo: true
-      - name: Mirror verdict
-        env:
-          RESULT: ${{ needs.secrets.result }}
-        run: test "${RESULT}" = "success" || test "${RESULT}" = "skipped"
-
-  renamed-codeql:
-    name: "SAST: CodeQL"
-    needs: [codeql]
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions: {}
-    # Matches the real job's matrix so the published context picks up the same
-    # ` (javascript-typescript)` suffix the ruleset requires, rather than
-    # hard-coding that suffix into the job name where it could drift.
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [javascript-typescript]
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
-        with:
-          egress-policy: block
-          # The job itself needs no egress: it checks out nothing and calls no
-          # API. Everything here is runner plumbing for fetching this one
-          # action and reporting the job back.
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            objects.githubusercontent.com:443
-            *.actions.githubusercontent.com:443
-          disable-sudo: true
-      - name: Mirror verdict
-        env:
-          RESULT: ${{ needs.codeql.result }}
-        run: test "${RESULT}" = "success" || test "${RESULT}" = "skipped"
-
-  renamed-dependency-review:
-    name: "Security: Dependency Review"
-    needs: [dependency-review]
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
-        with:
-          egress-policy: block
-          # The job itself needs no egress: it checks out nothing and calls no
-          # API. Everything here is runner plumbing for fetching this one
-          # action and reporting the job back.
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            objects.githubusercontent.com:443
-            *.actions.githubusercontent.com:443
-          disable-sudo: true
-      - name: Mirror verdict
-        env:
-          RESULT: ${{ needs.dependency-review.result }}
-        run: test "${RESULT}" = "success" || test "${RESULT}" = "skipped"
-
-  renamed-web:
-    name: "Web: Site Build & Scripts Tests"
-    needs: [web]
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
-        with:
-          egress-policy: block
-          # The job itself needs no egress: it checks out nothing and calls no
-          # API. Everything here is runner plumbing for fetching this one
-          # action and reporting the job back.
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            objects.githubusercontent.com:443
-            *.actions.githubusercontent.com:443
-          disable-sudo: true
-      - name: Mirror verdict
-        env:
-          RESULT: ${{ needs.web.result }}
-        run: test "${RESULT}" = "success" || test "${RESULT}" = "skipped"
-
-  renamed-grype-image:
-    name: "Security: Grype Image"
-    needs: [grype-image]
-    if: ${{ always() }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
-        with:
-          egress-policy: block
-          # The job itself needs no egress: it checks out nothing and calls no
-          # API. Everything here is runner plumbing for fetching this one
-          # action and reporting the job back.
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            objects.githubusercontent.com:443
-            *.actions.githubusercontent.com:443
-          disable-sudo: true
-      - name: Mirror verdict
-        env:
-          RESULT: ${{ needs.grype-image.result }}
-        run: test "${RESULT}" = "success" || test "${RESULT}" = "skipped"
