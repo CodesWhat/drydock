@@ -1,9 +1,9 @@
-name: "⏱️ Quality: Portwing Fleet Soak"
+name: "Quality: Portwing Fleet Soak"
 run-name: >-
   ${{
-    github.event_name == 'schedule' && '⏱️ Portwing Fleet Soak — Weekly' ||
-    github.event_name == 'pull_request' && format('⏱️ Portwing Fleet Soak — PR #{0}', github.event.pull_request.number) ||
-    format('⏱️ Portwing Fleet Soak — Manual by {0}', github.actor)
+    github.event_name == 'schedule' && 'Portwing Fleet Soak — Weekly' ||
+    github.event_name == 'pull_request' && format('Portwing Fleet Soak — PR #{0}', github.event.pull_request.number) ||
+    format('Portwing Fleet Soak — Manual by {0}', github.actor)
   }}
 
 on:
@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   fleet-soak:
-    name: "⏱️ Cross-repo fleet, exec, reconnect, backpressure"
+    name: "Cross-repo fleet, exec, reconnect, backpressure"
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
