@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.3] — 2026-08-27
+
 ### Fixed
 
 - **A `ws`/`wss` value in `X-Forwarded-Proto` no longer rejects the WebSocket upgrade.** Traefik forwards the upgrade's client-facing scheme as `wss` rather than `https` ([traefik/traefik#6388](https://github.com/traefik/traefik/issues/6388)), which the origin check treated as an unsupported protocol and hard-rejected — so a default Traefik setup still 403'd even with the trust-proxy fix in 1.6.1-rc.2. `ws` and `wss` now map to `http:`/`https:` for the Origin comparison; genuinely unknown protocols are still rejected. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#887](https://github.com/CodesWhat/drydock/pull/887))
@@ -2417,7 +2419,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.2...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.3...HEAD
+[1.6.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.2...v1.6.1-rc.3
 [1.6.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.1...v1.6.1-rc.2
 [1.6.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.6.1-rc.1
 [1.6.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0-rc.13...v1.6.0
