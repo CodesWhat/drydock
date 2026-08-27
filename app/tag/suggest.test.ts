@@ -247,4 +247,146 @@ describe('tag/suggest', () => {
       parseSpy.mockRestore();
     }
   });
+
+  // #859: linuxserver/plex repro — a bare integer build-number tag ("168")
+  // coerces via semver.coerce() into a fake "168.0.0" that outranks a real
+  // dotted release ("1.43.3"). A bare integer must never be compared against
+  // a real version directly; see tag/version-population.ts.
+  describe('bare integer tags never outrank real dotted versions (#859)', () => {
+    test('picks the highest dotted version over a bare integer', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['latest', '168', '1.43.2', '1.43.3'])).toBe('1.43.3');
+    });
+
+    test('picks the highest dotted version over a bare integer regardless of input order', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['1.43.3', '1.43.2', '168', 'latest'])).toBe('1.43.3');
+    });
+
+    test('picks the highest v-prefixed dotted version over a v-prefixed bare integer', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['v168', 'v1.43.2', 'v1.43.3'])).toBe('v1.43.3');
+    });
+
+    test('the literal issue #859 repro: 168 vs 1.43.3', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['168', '1.43.3'])).toBe('1.43.3');
+    });
+
+    test('a two-part version beats a numerically larger bare integer', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['13.4', '168'])).toBe('13.4');
+    });
+
+    test('a two-part version beats multiple numerically larger bare integers', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['168', '169', '13.4'])).toBe('13.4');
+    });
+
+    test('in-tier magnitude comparison is untouched by this change', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['13.4', '13.4.2'])).toBe('13.4.2');
+    });
+
+    test('CalVer beats a numerically larger bare integer', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['latest', '9999', '2026.7.1', '2026.8.0'])).toBe(
+        '2026.8.0',
+      );
+    });
+
+    test('CalVer behavior is unaffected when no bare integer is present', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['2026.7.1', '2026.8.0'])).toBe('2026.8.0');
+    });
+
+    test('a genuinely integer-only pool still works, sorted numerically', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['latest', '166', '168', '167'])).toBe('168');
+    });
+
+    test('a genuinely integer-only pool sorts numerically, not lexically', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['latest', 'v9', 'v10'])).toBe('v10');
+    });
+
+    test('returns null for a mixed signal: prerelease-only real version + bare integer', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['168', '1.44.0-rc.1'])).toBeNull();
+    });
+
+    test('returns null when a coercion-lossy tag counts as a non-integer version signal', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['168', '3.11-bullseye'])).toBeNull();
+    });
+
+    test('preserves existing PEP 440 dev-nightly behavior alongside a bare integer', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['168', '2026.8.0.dev202607050315', '2026.7.1'])).toBe(
+        '2026.7.1',
+      );
+    });
+
+    test('an unadorned tag wins a tie against the same core with build metadata', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['1.43.3+build.5', '1.43.3'])).toBe('1.43.3');
+    });
+
+    test('an unadorned tag wins a tie against build metadata regardless of input order', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['1.43.3', '1.43.3+build.5'])).toBe('1.43.3');
+    });
+
+    test('excludeTags narrows the population before classification', () => {
+      const container = createContainer({
+        image: { tag: { value: 'latest' } },
+        excludeTags: '^168$',
+      });
+
+      expect(suggest(container as any, ['168', '1.43.3'])).toBe('1.43.3');
+    });
+
+    test('includeTags narrows the population to integers-only before classification, so the integer wins', () => {
+      const container = createContainer({
+        image: { tag: { value: 'latest' } },
+        includeTags: String.raw`^\d+$`,
+      });
+
+      expect(suggest(container as any, ['168', '1.43.3'])).toBe('168');
+    });
+
+    test('breaks a same-version, no-build-metadata tie deterministically by tag text', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['v1.2.3', '1.2.3'])).toBe('1.2.3');
+    });
+
+    test('breaks a same-version, no-build-metadata tie deterministically regardless of input order', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['1.2.3', 'v1.2.3'])).toBe('1.2.3');
+    });
+
+    test('breaks a same-version tie deterministically when both candidates share the exact tag text', () => {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+      expect(suggest(container as any, ['1.2.3', '1.2.3'])).toBe('1.2.3');
+    });
+  });
 });

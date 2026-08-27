@@ -202,6 +202,21 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.4</strong></summary>
+
+- **Strumienie logów WebSocket działają teraz za proxy z terminacją TLS** — gdy trust proxy jest włączone, a `X-Forwarded-Proto` jest nieobecne w żądaniu upgrade, sprawdzanie originu nie wraca już do stanu TLS lokalnego socketu (zwykły HTTP za terminacją TLS, przez co każde połączenie z przeglądarki kończyło się błędem 403); protokół jest teraz traktowany jako nieznany, a walidacja hosta pozostaje bez zmian. Traefik przekazuje schemat widoczny dla klienta jako `wss` zamiast `https` (traefik/traefik#6388), co sprawdzanie originu odrzucało wprost, więc sama pierwsza poprawka nadal kończyła się błędem 403 za domyślną konfiguracją Traefik; `ws`/`wss` są teraz mapowane na `http:`/`https:` na potrzeby porównania originu. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#868](https://github.com/CodesWhat/drydock/pull/868), [#887](https://github.com/CodesWhat/drydock/pull/887))
+- **Uruchomienie nie kończy się już awarią, gdy wolumin store odmawia `chmod`** — zaostrzenie uprawnień wprowadzone w 1.6.0 zgłaszało wyjątek przy `EPERM`, przez co montowania odrzucające `chmod` (woluminy NFS/CIFS, kontenery bez roota) wywracały cały proces przy starcie i całkowicie blokowały aktualizacje z 1.6.0; teraz przy `EPERM`/`EACCES`/`ENOTSUP` wypisywane jest tylko ostrzeżenie, a proces działa dalej; wolumin naprawdę tylko do odczytu (`EROFS`) nadal kończy się szybkim błędem przy starcie, ponieważ i tak nic nie dałoby się tam trwale zapisać. ([#874](https://github.com/CodesWhat/drydock/discussions/874), [#886](https://github.com/CodesWhat/drydock/pull/886))
+- **Zrzut debugowania ukrywał nazwy zmiennych środowiskowych zamiast ich wartości** — wpisy środowiskowe to pary `{key, value}`, a mechanizm ukrywania danych porównywał dosłowną nazwę właściwości `key` z regułą wrażliwych tokenów, przez co zmienna taka jak `HF_TOKEN` była zwracana z ukrytą nazwą, ale jawną wartością sekretu; nazwy pozostają teraz widoczne, a wartości są ukrywane, gdy nazwa pasuje do reguły wrażliwości. ([#875](https://github.com/CodesWhat/drydock/issues/875), [#885](https://github.com/CodesWhat/drydock/pull/885))
+- **Nagie tagi liczbowe nie wyprzedzają już wersji z kropkami** — tag licznika builda, taki jak `168`, nie jest już konwertowany na fikcyjny `168.0.0`, który wyprzedzałby prawdziwą wersję `1.43.3`; zarówno odznaka sugerowanego tagu, jak i ścieżka odzyskiwania `includeTags` korzystają teraz z jednej wspólnej reguły podziału, dzięki czemu nie mogą już się rozjechać. ([#859](https://github.com/CodesWhat/drydock/issues/859), [#871](https://github.com/CodesWhat/drydock/pull/871))
+- **Obrazy bazowe usuwają sześć luk OpenSSL o wysokim priorytecie (HIGH)** — pinowania digestów `node:24-alpine` i `alpine:3.24` oraz pinowanie pakietu apk `openssl` są przesuwane do OpenSSL 3.5.8-r0. ([#881](https://github.com/CodesWhat/drydock/pull/881))
+- **Strona demo wysyła teraz pełny zestaw nagłówków bezpieczeństwa** — nagłówki, których brak zgłaszał DAST na powierzchni demo, są teraz wysyłane. ([#878](https://github.com/CodesWhat/drydock/pull/878))
+- **Kontenery, które wychodzą poza zakres obserwacji, są usuwane ze store i UI** — kontener wykluczony przez wyłączone `watchbydefault` lub przez usunięcie etykiety `dd.watch` zachowywał nieaktualny rekord, dopóki nadal dało się go zinspekcjonować w Dockerze; zatrzymane, ale wciąż obserwowane kontenery zachowują dotychczasowe zachowanie przycisku uruchamiania. ([#869](https://github.com/CodesWhat/drydock/issues/869), [#888](https://github.com/CodesWhat/drydock/pull/888))
+
+Pełne informacje o wersji znajdują się w [CHANGELOG.md](./CHANGELOG.md#170-rc4--2026-08-26).
+
+</details>
+
+<details>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.3</strong></summary>
 
 - **Tunele brzegowe Portwing przenoszą teraz treści inne niż JSON** — ramka powitalna kontrolera ogłasza teraz możliwość `edge-response-body-b64` i dekoduje treści odpowiedzi Dockera negocjowane w base64 (na przykład zwykłą tekstową odpowiedź „OK" z `_ping`) od agentów, którzy to obsługują; addytywnie i w zależności od możliwości. ([#852](https://github.com/CodesWhat/drydock/pull/852))

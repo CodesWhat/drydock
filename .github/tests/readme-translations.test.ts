@@ -66,71 +66,95 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.3</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.4</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.3</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.4</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.3</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.4</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.3</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.4</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.3</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.4</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.3 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.4 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
-  { portwingEdgeBodies: string; mainIsReleasedMonitor: string }
+  {
+    wsProxyFix: string;
+    bareIntegerTags: string;
+    storeChmodCrash: string;
+    debugDumpRedaction: string;
+  }
 > = {
   'README.de.md': {
-    portwingEdgeBodies: '**Portwing-Edge-Tunnel übertragen jetzt Nicht-JSON-Antworten**',
-    mainIsReleasedMonitor: '**Ein täglicher Monitor prüft, dass `main` einen Release-Tag trägt**',
+    wsProxyFix: '**WebSocket-Log-Streams funktionieren jetzt hinter TLS-terminierenden Proxys**',
+    bareIntegerTags: '**Reine Ganzzahl-Tags überholen keine gepunkteten Versionen mehr**',
+    storeChmodCrash: '**Der Start stürzt nicht mehr ab, wenn das Store-Volume `chmod` verweigert**',
+    debugDumpRedaction:
+      '**Debug-Dumps schwärzen jetzt die Werte von Umgebungsvariablen, nicht ihre Namen**',
   },
   'README.es.md': {
-    portwingEdgeBodies:
-      '**Los túneles de borde de Portwing ahora transportan cuerpos que no son JSON**',
-    mainIsReleasedMonitor:
-      '**Un monitor diario verifica que `main` lleve una etiqueta de versión**',
+    wsProxyFix:
+      '**Los flujos de logs por WebSocket funcionan ahora detrás de proxies con terminación TLS**',
+    bareIntegerTags:
+      '**Las etiquetas de enteros simples ya no superan a las versiones con puntos**',
+    storeChmodCrash: '**El arranque ya no falla cuando el volumen del store rechaza `chmod`**',
+    debugDumpRedaction:
+      '**El volcado de depuración ocultaba los nombres de las variables de entorno en lugar de los valores**',
   },
   'README.fr.md': {
-    portwingEdgeBodies: '**Les tunnels Portwing edge transportent désormais des corps non JSON**',
-    mainIsReleasedMonitor:
-      '**Un contrôle quotidien vérifie que `main` porte une étiquette de version**',
+    wsProxyFix:
+      '**Les flux de logs WebSocket fonctionnent désormais derrière des proxys à terminaison TLS**',
+    bareIntegerTags: '**Les tags entiers nus ne dépassent plus les versions à points**',
+    storeChmodCrash: '**Le démarrage ne plante plus lorsque le volume du store refuse `chmod`**',
+    debugDumpRedaction:
+      "**Le dump de débogage masquait les noms des variables d'environnement au lieu de leurs valeurs**",
   },
   'README.pl.md': {
-    portwingEdgeBodies: '**Tunele brzegowe Portwing przenoszą teraz treści inne niż JSON**',
-    mainIsReleasedMonitor: '**Codzienny monitor sprawdza, czy `main` ma tag wydania**',
+    wsProxyFix: '**Strumienie logów WebSocket działają teraz za proxy z terminacją TLS**',
+    bareIntegerTags: '**Nagie tagi liczbowe nie wyprzedzają już wersji z kropkami**',
+    storeChmodCrash:
+      '**Uruchomienie nie kończy się już awarią, gdy wolumin store odmawia `chmod`**',
+    debugDumpRedaction:
+      '**Zrzut debugowania ukrywał nazwy zmiennych środowiskowych zamiast ich wartości**',
   },
   'README.pt-BR.md': {
-    portwingEdgeBodies: '**Túneis de borda do Portwing agora carregam corpos que não são JSON**',
-    mainIsReleasedMonitor: '**Um monitor diário verifica se `main` carrega uma tag de versão**',
+    wsProxyFix:
+      '**Fluxos de logs via WebSocket agora funcionam atrás de proxies com terminação TLS**',
+    bareIntegerTags: '**Tags de inteiros simples não superam mais versões com pontos**',
+    storeChmodCrash: '**A inicialização não trava mais quando o volume do store recusa `chmod`**',
+    debugDumpRedaction:
+      '**O dump de depuração ocultava os nomes das variáveis de ambiente em vez dos valores**',
   },
   'README.zh-CN.md': {
-    portwingEdgeBodies: '**Portwing 边缘隧道现在可传输非 JSON 响应体**',
-    mainIsReleasedMonitor: '**每日监控确认 `main` 携带发布标签**',
+    wsProxyFix: '**WebSocket 日志流现在可在 TLS 终止代理后正常工作**',
+    bareIntegerTags: '**纯数字标签不再超过带点号的版本号**',
+    storeChmodCrash: '**当存储卷拒绝 `chmod` 时启动不再崩溃**',
+    debugDumpRedaction: '**调试转储此前隐藏的是环境变量的名称而非值**',
   },
 };
 
@@ -182,6 +206,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc1--2026-08-14',
   './CHANGELOG.md#170-rc2--2026-08-20',
   './CHANGELOG.md#170-rc3--2026-08-23',
+  './CHANGELOG.md#170-rc4--2026-08-26',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -235,13 +260,20 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const surface = localizedSurfaceFragments[readme];
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
-    const portwingEdgeBullet = getBullet(releaseBlock, release.portwingEdgeBodies);
-    const mainMonitorBullet = getBullet(releaseBlock, release.mainIsReleasedMonitor);
+    const wsProxyBullet = getBullet(releaseBlock, release.wsProxyFix);
+    const bareIntegerBullet = getBullet(releaseBlock, release.bareIntegerTags);
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
-    expect(getUrls(portwingEdgeBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/852']);
-    expect(getUrls(mainMonitorBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/846']);
+    expect(getUrls(wsProxyBullet)).toEqual([
+      'https://github.com/CodesWhat/drydock/issues/867',
+      'https://github.com/CodesWhat/drydock/pull/868',
+      'https://github.com/CodesWhat/drydock/pull/887',
+    ]);
+    expect(getUrls(bareIntegerBullet)).toEqual([
+      'https://github.com/CodesWhat/drydock/issues/859',
+      'https://github.com/CodesWhat/drydock/pull/871',
+    ]);
   });
 
   test('preserves the exact source URL multiset', () => {

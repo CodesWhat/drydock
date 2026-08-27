@@ -13,6 +13,7 @@ import {
   getNumericTagShape as getSharedNumericTagShape,
   type NumericTagShape,
 } from '../../../tag/precision.js';
+import { selectVersionPopulation, type VersionTagSource } from '../../../tag/version-population.js';
 import { getErrorMessage } from '../../../util/error.js';
 
 interface SafeRegex {
@@ -535,13 +536,6 @@ function sortSemverDescending(
 }
 
 /**
- * Keep only tags that are valid semver.
- */
-function filterSemverOnly(tags: string[], transformTags: string | undefined): string[] {
-  return tags.filter((tag) => parseSemver(transformTag(transformTags, tag)) !== null);
-}
-
-/**
  * #498: classify a pin-gate insight's version bump as major/minor/patch.
  * diffSemver() treats a shared suffix as a semver prerelease field, so a
  * cross-major bump between two same-suffix tags reports as "premajor" (not
@@ -729,7 +723,21 @@ export function getTagCandidates(
     logContainer.warn(
       `Current tag "${container.image.tag.value}" is not semver but includeTags filter "${container.includeTags}" is set. Advising best semver tag from filtered candidates.`,
     );
-    const semverTags = filterSemverOnly(baseTags, container.transformTags);
+    const versionTagSources: VersionTagSource[] = baseTags.map((tag) => ({
+      tag,
+      versionTag: transformTag(container.transformTags, tag),
+    }));
+    // #859: never let a bare integer build-number tag ("168") outrank a real
+    // dotted release ("1.43.3") — shares its partition rule with
+    // tag/suggest.ts's suggested-tag badge (see selectVersionPopulation) so
+    // the two paths cannot drift. Eligibility here stays permissive (any tag
+    // that parses as semver, prereleases included) to preserve this
+    // fallback's existing best-effort behavior; only the bare-integer-vs-real
+    // partition is shared.
+    const semverTags = selectVersionPopulation(
+      versionTagSources,
+      (source) => parseSemver(source.versionTag) !== null,
+    ).map((source) => source.tag);
     sortSemverDescending(semverTags, container.transformTags, container.image.tag.value);
     return { tags: semverTags };
   }

@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.4] — 2026-08-26
+
+### Security
+
+- **Base images bumped to clear six HIGH OpenSSL CVEs.** The `node:24-alpine` and `alpine:3.24` digest pins are rolled to the current upstream rebuilds, moving the shipped OpenSSL from 3.5.7-r0 (flagged by Grype for CVE-2026-14457, CVE-2026-18798, CVE-2026-54874, CVE-2026-63072, CVE-2026-63075, and CVE-2026-63076) to 3.5.8-r0. ([#881](https://github.com/CodesWhat/drydock/pull/881))
+- **The demo site sends the full security-header set.** `demo.getdrydock.com` was failing the weekly ZAP baseline scan with six WARN-NEW alerts. `apps/demo/vercel.json` now sends `X-Content-Type-Options`, `Permissions-Policy`, a credentialless `Cross-Origin-Embedder-Policy`, and a same-origin `Access-Control-Allow-Origin`; the two cache-control alerts are allowlisted in `.zap/rules.tsv` under the same static-SPA rationale as the existing 10049 entry. ([#878](https://github.com/CodesWhat/drydock/pull/878))
+
+### Fixed
+
+- **WebSocket log-stream connections behind a TLS-terminating proxy no longer 403 when `X-Forwarded-Proto` is absent.** With trust proxy enabled, `isOriginAllowed` fell back to the local socket's `encrypted` flag whenever the proxy omitted `X-Forwarded-Proto`, which is plain HTTP on a backend behind TLS termination, so a browser's `https://` Origin never matched and every WebSocket upgrade was rejected while REST traffic worked fine. The protocol is now treated as unknown (and skipped from the comparison) in that case instead of being inferred from the local socket; host validation is unaffected. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#868](https://github.com/CodesWhat/drydock/pull/868))
+- **A `ws`/`wss` value in `X-Forwarded-Proto` no longer rejects the WebSocket upgrade.** Traefik forwards the upgrade's client-facing scheme as `wss` rather than `https` ([traefik/traefik#6388](https://github.com/traefik/traefik/issues/6388)), which the origin check treated as an unsupported protocol and hard-rejected — so the trust-proxy fix above still 403'd behind a default Traefik setup. `ws` and `wss` now map to `http:`/`https:` for the Origin comparison; genuinely unknown protocols are still rejected. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#887](https://github.com/CodesWhat/drydock/pull/887))
+- **Startup no longer crashes with `EPERM` when the store volume forbids `chmod`.** The permission tightening added in 1.6.0 now warns and continues on `EPERM`/`EACCES`/`ENOTSUP` instead of throwing, so mounts that reject `chmod` (NFS/CIFS volumes, non-root containers, some volume drivers) no longer take the whole process down at startup; a genuinely read-only volume (`EROFS`) still fails fast at startup, because nothing could be persisted there anyway. ([#874](https://github.com/CodesWhat/drydock/discussions/874), [#886](https://github.com/CodesWhat/drydock/pull/886))
+||||||| parent of 8414dda8 (fix(api): map ws/wss forwarded protocols in websocket origin check)
+- **Tag suggestion no longer ranks a bare integer build-number tag above a real dotted version.** A bare integer tag (e.g. `168`) coerces via `semver.coerce()` into a fake `168.0.0`, which previously outranked a real release like `1.43.3` — for `linuxserver/plex`, this meant the suggested-tag badge and, with a permissive `dd.tag.include` filter, the actionable update candidate itself could point at a destructive downgrade. Bare integer tags are now only ever ranked among themselves (never against a real dotted version, and never at all when the population contains any other non-integer version signal, such as a prerelease-only or coercion-lossy tag), sorted numerically rather than lexically. The rule is shared between the suggested-tag badge (`tag/suggest.ts`) and the actionable non-semver/`includeTags` recovery path (`watchers/providers/docker/tag-candidates.ts`) via a new `tag/version-population.ts` module so the two paths can't drift apart again. ([#859](https://github.com/CodesWhat/drydock/issues/859), [#871](https://github.com/CodesWhat/drydock/pull/871))
+- **The debug dump redacted env var names instead of values.** Container env vars appear in the dump as `{ key, value }` pairs, and the generic redaction walker matched the pair's `key` property against the `key` sensitive-token rule, so a var like `HF_TOKEN` showed up as `"key": "[REDACTED]", "value": "xyz"` — the name was hidden and the actual secret was left in plain text. Pair objects are now handled explicitly: the name always stays visible, and the value is redacted only when the name itself matches the sensitive-key rules. ([#875](https://github.com/CodesWhat/drydock/issues/875), [#885](https://github.com/CodesWhat/drydock/pull/885))
+||||||| parent of bbfc25ac (fix(watcher): prune store records for containers that leave watch scope)
+- **Containers that drop out of watch scope are now pruned from the store and UI.** A container excluded by `watchbydefault` being off, or by its `dd.watch` label being removed, previously kept its stale store record forever as long as it still inspected successfully in Docker — inspect success alone was being read as "still tracked" instead of "still in scope," so the only way to clear it was deleting `dd.json`. Stopped-but-still-watched containers are unaffected and keep their start-button visibility in the UI. ([#869](https://github.com/CodesWhat/drydock/issues/869), [#888](https://github.com/CodesWhat/drydock/pull/888))
+
 ## [1.7.0-rc.3] — 2026-08-23
 
 ### Added
@@ -2503,7 +2521,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.3...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.4...HEAD
+[1.7.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.3...v1.7.0-rc.4
 [1.7.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.2...v1.7.0-rc.3
 [1.7.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.1...v1.7.0-rc.2
 [1.7.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0-rc.1

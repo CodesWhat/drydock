@@ -22,7 +22,7 @@ test("PostHog options pin the privacy posture and cookieless web vitals", () => 
       autocapture: false,
       rageclick: false,
       capture_pageview: false,
-      capture_pageleave: false,
+      capture_pageleave: true,
       disable_session_recording: true,
       capture_heatmaps: false,
       capture_dead_clicks: false,

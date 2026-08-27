@@ -820,6 +820,79 @@ describe('Docker Watcher', () => {
       });
     });
 
+    test('should delete the store record for a running container excluded by watchbydefault=false with no dd.watch label (#869)', async () => {
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'unwatched-1', name: 'excluded-app', watcher: 'test' } as any,
+      ]);
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: 'unwatched-1', Labels: {}, Names: ['/excluded-app'] },
+      ]);
+      mockContainer.inspect.mockResolvedValue({ State: { Status: 'running' } });
+
+      await docker.register('watcher', 'docker', 'test', { watchbydefault: false });
+      await docker.getContainers();
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('unwatched-1');
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+    });
+
+    test('should delete the store record for a running container whose dd.watch label was removed (#869)', async () => {
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'unwatched-2', name: 'no-longer-watched', watcher: 'test' } as any,
+      ]);
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: 'unwatched-2', Labels: { 'dd.watch': 'false' }, Names: ['/no-longer-watched'] },
+      ]);
+      mockContainer.inspect.mockResolvedValue({ State: { Status: 'running' } });
+
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.getContainers();
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('unwatched-2');
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+    });
+
+    test('should keep and update status for a stopped container still in watch scope (#869)', async () => {
+      // WATCHALL is false (default): a stopped container is never returned by
+      // Docker's list API at all, so it can't appear in filteredContainers this
+      // cycle. It must still be kept (status updated) rather than deleted.
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'stopped-1', name: 'stopped-app', watcher: 'test' } as any,
+      ]);
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      mockContainer.inspect.mockResolvedValue({ State: { Status: 'exited' } });
+
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.getContainers();
+
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'stopped-1', status: 'exited' }),
+      );
+    });
+
+    test('should keep a store record dropped by a transient enrichment failure, since it was still in pre-enrichment watch scope (#869)', async () => {
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'flaky-app', name: 'flaky', watcher: 'test' } as any,
+      ]);
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: 'flaky-app', Labels: { 'dd.watch': 'true' }, Names: ['/flaky'] },
+      ]);
+      // Container still exists and is running, but image-detail enrichment
+      // fails transiently (e.g. a docker/socket-proxy hiccup) and drops it
+      // from containersToReturn for this cycle.
+      docker.addImageDetailsToContainer = vi.fn().mockRejectedValue(new Error('enrichment failed'));
+      mockContainer.inspect.mockResolvedValue({ State: { Status: 'running' } });
+
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.getContainers();
+
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'flaky-app', status: 'running' }),
+      );
+    });
+
     test('should continue when pruneOldContainers throws during stale record cleanup', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['warn']);
@@ -3966,6 +4039,59 @@ describe('Docker Watcher', () => {
       expect(dockerApi.getContainer).not.toHaveBeenCalled();
       expect(storeContainer.updateContainer).not.toHaveBeenCalled();
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('alias-1');
+    });
+
+    test('pruneOldContainers should delete a stale record when its id is outside the provided watch scope, even though inspect succeeds', async () => {
+      const dockerApi = {
+        getContainer: vi.fn().mockReturnValue({
+          inspect: vi.fn().mockResolvedValue({
+            State: {
+              Status: 'running',
+            },
+          }),
+        }),
+      };
+
+      await testable_pruneOldContainers(
+        [],
+        [{ id: 'out-of-scope-1', name: 'excluded-app' }] as any,
+        dockerApi as any,
+        {
+          stillInWatchScopeContainerIds: new Set(['some-other-id']),
+        },
+      );
+
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('out-of-scope-1');
+    });
+
+    test('pruneOldContainers should keep updating status when the container id is within the provided watch scope', async () => {
+      const dockerApi = {
+        getContainer: vi.fn().mockReturnValue({
+          inspect: vi.fn().mockResolvedValue({
+            State: {
+              Status: 'exited',
+            },
+          }),
+        }),
+      };
+
+      await testable_pruneOldContainers(
+        [],
+        [{ id: 'in-scope-1', name: 'still-watched-app' }] as any,
+        dockerApi as any,
+        {
+          stillInWatchScopeContainerIds: new Set(['in-scope-1']),
+        },
+      );
+
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'in-scope-1',
+          status: 'exited',
+        }),
+      );
     });
   });
 

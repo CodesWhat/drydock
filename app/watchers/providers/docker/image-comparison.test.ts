@@ -1089,6 +1089,113 @@ describe('image-comparison', () => {
     expect(getImageManifestDigest).toHaveBeenCalled();
   });
 
+  // #859: linuxserver/plex repro — a bare integer build-number tag ("168")
+  // must never outrank a real dotted release ("1.43.3"), neither in the
+  // suggested-tag badge nor in the actionable tag advanced to result.tag.
+  test('watched latest tag suggests the dotted version over a bare integer and leaves the actionable tag untouched (#859)', async () => {
+    const actualSuggest =
+      await vi.importActual<typeof import('../../../tag/suggest.js')>('../../../tag/suggest.js');
+    mockSuggestTag.mockImplementation(actualSuggest.suggest);
+    const getImageManifestDigest = createManifestLookup();
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['168', '1.43.3']),
+          getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub' },
+        name: 'linuxserver/plex',
+        tag: { value: 'latest', semver: false },
+        digest: { watch: true, repo: 'sha256:local' },
+      },
+    };
+    const result = await findNewVersion(container as never, log);
+    expect(result.suggestedTag).toBe('1.43.3');
+    // No includeTags is set, so getTagCandidates never enters the recovery
+    // branch — the actionable tag stays put rather than forcing an update.
+    expect(result.tag).toBe('latest');
+  });
+
+  test('a permissive includeTags never lets the actionable tag advance to a bare integer over a real dotted version (#859)', async () => {
+    const actualSuggest =
+      await vi.importActual<typeof import('../../../tag/suggest.js')>('../../../tag/suggest.js');
+    mockSuggestTag.mockImplementation(actualSuggest.suggest);
+    const getImageManifestDigest = createManifestLookup();
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['168', '1.43.3']),
+          getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      includeTags: String.raw`^\d+(\.\d+)*$`,
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub' },
+        name: 'linuxserver/plex',
+        tag: { value: 'latest', semver: false },
+        digest: { watch: true, repo: 'sha256:local' },
+      },
+    };
+    const result = await findNewVersion(container as never, log);
+    expect(result.suggestedTag).toBe('1.43.3');
+    expect(result.tag).toBe('1.43.3');
+    expect(result.tag).not.toBe('168');
+  });
+
+  test('digest comparison never resolves a bare integer tag over a real dotted version (#859)', async () => {
+    const actualSuggest =
+      await vi.importActual<typeof import('../../../tag/suggest.js')>('../../../tag/suggest.js');
+    mockSuggestTag.mockImplementation(actualSuggest.suggest);
+    const getImageManifestDigest = createManifestLookup();
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['168', '1.43.3']),
+          getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    await findNewVersion(createDigestOnlyContainer() as never, log);
+
+    expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('1.43.3');
+  });
+
+  test('digest comparison sorts a genuinely integer-only tag pool numerically, not lexically (#859)', async () => {
+    const actualSuggest =
+      await vi.importActual<typeof import('../../../tag/suggest.js')>('../../../tag/suggest.js');
+    mockSuggestTag.mockImplementation(actualSuggest.suggest);
+    const getImageManifestDigest = createManifestLookup();
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['9', '10']),
+          getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    await findNewVersion(createDigestOnlyContainer() as never, log);
+
+    expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('10');
+  });
+
   test('publishedTag falls back to container.image.tag.value when result.tag is falsy', async () => {
     const getImagePublishedAt = vi.fn().mockResolvedValue('2026-04-01T00:00:00.000Z');
     mockGetState.mockReturnValue({

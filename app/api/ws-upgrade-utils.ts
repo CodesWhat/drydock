@@ -1,10 +1,13 @@
 import { type IncomingMessage, ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
+import logger from '../log/index.js';
 import {
   getAuthenticatedRouteRateLimitKey,
   type IdentityAwareRateLimitRequestLike,
   isIdentityAwareRateLimitKeyingEnabled,
 } from './rate-limit-key.js';
+
+const log = logger.child({ component: 'ws-upgrade-utils' });
 
 export type SessionMiddleware = (
   request: IncomingMessage,
@@ -52,6 +55,23 @@ function getFirstForwardedValue(value: unknown): string | undefined {
   return firstValue || undefined;
 }
 
+function normalizeForwardedProtocol(forwardedProtocol: string): 'http:' | 'https:' | undefined {
+  // Some proxies forward the WebSocket upgrade's client-facing scheme as
+  // ws/wss rather than http/https (Traefik does, see traefik/traefik#6388).
+  // Each pair carries the same security level, so map ws(s) to its HTTP
+  // equivalent before comparing against the browser's http(s) Origin (#867).
+  switch (forwardedProtocol.toLowerCase()) {
+    case 'http':
+    case 'ws':
+      return 'http:';
+    case 'https':
+    case 'wss':
+      return 'https:';
+    default:
+      return undefined;
+  }
+}
+
 function getSocketOriginProtocol(request: IncomingMessage): 'http:' | 'https:' | undefined {
   const socket = request.socket as (Socket & { encrypted?: boolean }) | undefined;
   if (!socket) {
@@ -85,39 +105,60 @@ export function isOriginAllowed(
     (trustProxy ? getFirstForwardedValue(request.headers['x-forwarded-host']) : undefined) ??
     request.headers.host;
 
-  if (!effectiveHost) {
-    return false;
-  }
-
   const forwardedProtocol = trustProxy
     ? getFirstForwardedValue(request.headers['x-forwarded-proto'])
     : undefined;
   let effectiveProtocol: 'http:' | 'https:' | undefined;
-  if (forwardedProtocol !== undefined) {
-    const normalizedProtocol = `${forwardedProtocol.toLowerCase()}:`;
-    if (normalizedProtocol !== 'http:' && normalizedProtocol !== 'https:') {
-      return false;
+  let allowed = true;
+
+  if (!effectiveHost) {
+    allowed = false;
+  } else if (forwardedProtocol !== undefined) {
+    const normalizedProtocol = normalizeForwardedProtocol(forwardedProtocol);
+    if (normalizedProtocol === undefined) {
+      allowed = false;
+    } else {
+      effectiveProtocol = normalizedProtocol;
     }
-    effectiveProtocol = normalizedProtocol;
   } else {
-    effectiveProtocol = getSocketOriginProtocol(request);
+    // When trust proxy is enabled but X-Forwarded-Proto is absent, the local
+    // socket's TLS state does not reflect the client-facing protocol behind a
+    // TLS-terminating proxy (the backend socket is typically plain HTTP).
+    // Treat the protocol as unknown rather than falling back to the socket,
+    // which would otherwise reject a same-origin request purely because the
+    // proxy stripped the protocol header (see #867).
+    effectiveProtocol = trustProxy ? undefined : getSocketOriginProtocol(request);
   }
 
-  let parsedOrigin: URL;
-  try {
-    parsedOrigin = new URL(origin);
-  } catch {
-    return false;
+  let parsedOrigin: URL | undefined;
+  if (allowed) {
+    try {
+      parsedOrigin = new URL(origin);
+    } catch {
+      allowed = false;
+    }
   }
 
-  if (parsedOrigin.protocol !== 'http:' && parsedOrigin.protocol !== 'https:') {
-    return false;
+  if (allowed && parsedOrigin !== undefined) {
+    if (parsedOrigin.protocol !== 'http:' && parsedOrigin.protocol !== 'https:') {
+      allowed = false;
+    } else {
+      allowed =
+        parsedOrigin.host === effectiveHost &&
+        (effectiveProtocol === undefined || parsedOrigin.protocol === effectiveProtocol);
+    }
   }
 
-  return (
-    parsedOrigin.host === effectiveHost &&
-    (effectiveProtocol === undefined || parsedOrigin.protocol === effectiveProtocol)
-  );
+  if (!allowed) {
+    log.debug(
+      `WebSocket origin rejected: origin=${origin} effectiveHost=${effectiveHost ?? 'unknown'} ` +
+        `effectiveProtocol=${effectiveProtocol ?? 'unknown'} trustProxy=${trustProxy} ` +
+        `x-forwarded-host=${request.headers['x-forwarded-host'] ?? 'absent'} ` +
+        `x-forwarded-proto=${request.headers['x-forwarded-proto'] ?? 'absent'}`,
+    );
+  }
+
+  return allowed;
 }
 
 export function writeUpgradeError(socket: Socket, statusCode: number, message: string): void {

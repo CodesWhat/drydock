@@ -202,6 +202,21 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.4 亮点</strong></summary>
+
+- **WebSocket 日志流现在可在 TLS 终止代理后正常工作** — 当启用 trust proxy 且升级请求中缺少 `X-Forwarded-Proto` 时，来源检查不再回退到本地 socket 的 TLS 状态（TLS 终止后端为纯 HTTP，导致每个浏览器连接都被 403 拒绝）；协议现在被视为未知，主机校验保持不变。Traefik 会将升级请求面向客户端的协议转发为 `wss` 而非 `https`（traefik/traefik#6388），而来源检查会直接拒绝该值，因此仅靠第一个修复在默认 Traefik 配置下仍会返回 403；`ws`/`wss` 现在会映射为 `http:`/`https:` 参与来源比较。([#867](https://github.com/CodesWhat/drydock/issues/867)、[#868](https://github.com/CodesWhat/drydock/pull/868)、[#887](https://github.com/CodesWhat/drydock/pull/887))
+- **当存储卷拒绝 `chmod` 时启动不再崩溃** — 1.6.0 版本引入的权限加固在遇到 `EPERM` 时会抛出异常，导致拒绝 `chmod` 的挂载（NFS/CIFS 卷、非 root 容器）在启动时使整个进程崩溃，并彻底阻塞从 1.6.0 的升级；现在遇到 `EPERM`/`EACCES`/`ENOTSUP` 时只会发出警告并继续运行；真正只读的卷（`EROFS`）在启动时仍会快速失败，因为那里本来就无法持久化任何数据。([#874](https://github.com/CodesWhat/drydock/discussions/874)、[#886](https://github.com/CodesWhat/drydock/pull/886))
+- **调试转储此前隐藏的是环境变量的名称而非值** — 环境变量条目是 `{key, value}` 键值对，脱敏遍历逻辑此前将属性字面名称 `key` 与敏感标记规则进行匹配，导致像 `HF_TOKEN` 这样的变量会隐藏名称、而实际密钥以明文呈现；现在名称始终可见，仅当名称匹配敏感规则时才会对值进行脱敏。([#875](https://github.com/CodesWhat/drydock/issues/875)、[#885](https://github.com/CodesWhat/drydock/pull/885))
+- **纯数字标签不再超过带点号的版本号** — 像 `168` 这样的构建计数器标签不再被强制转换为虚假的 `168.0.0` 从而超过真实版本 `1.43.3`；建议标签徽章和可操作的 `includeTags` 恢复路径现在共享同一条分区规则，因此二者不会再出现分歧。([#859](https://github.com/CodesWhat/drydock/issues/859)、[#871](https://github.com/CodesWhat/drydock/pull/871))
+- **基础镜像清除了六个高危 OpenSSL CVE** — `node:24-alpine` 与 `alpine:3.24` 的摘要固定版本以及 `openssl` 的 apk 固定版本均升级至 OpenSSL 3.5.8-r0。([#881](https://github.com/CodesWhat/drydock/pull/881))
+- **演示站点现在发送完整的安全响应头集合** — DAST 标记为缺失的响应头现在已在演示环境中发送。([#878](https://github.com/CodesWhat/drydock/pull/878))
+- **脱离监视范围的容器会从存储和界面中清除** — 因 `watchbydefault` 被关闭或 `dd.watch` 标签被移除而被排除的容器，此前只要仍能在 Docker 中被成功 inspect，就会一直保留过期记录；已停止但仍在监视范围内的容器保持原有的启动按钮行为。([#869](https://github.com/CodesWhat/drydock/issues/869)、[#888](https://github.com/CodesWhat/drydock/pull/888))
+
+完整发行说明请参阅 [CHANGELOG.md](./CHANGELOG.md#170-rc4--2026-08-26)。
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.3 亮点</strong></summary>
 
 - **Portwing 边缘隧道现在可传输非 JSON 响应体** — 控制器的欢迎帧现在会宣告 `edge-response-body-b64` 能力，并为支持该能力的代理解码经 base64 协商的 Docker 响应体（例如 `_ping` 的纯文本响应 "OK"）；此变更是增量式的，并受能力协商门控。([#852](https://github.com/CodesWhat/drydock/pull/852))
