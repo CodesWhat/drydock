@@ -199,10 +199,13 @@ async function scanDigestGroup(options: {
     }
     startedBroadcast = true;
 
-    const { scanResult, fromCache } = await withAbortSignal(
-      scanImageWithDedup({ image, auth, digest, trivyDbUpdatedAt }, scanIntervalMs),
-      signal,
+    const { scanResult, fromCache } = await scanImageWithDedup(
+      { image, auth, digest, trivyDbUpdatedAt, signal },
+      scanIntervalMs,
     );
+    if (signal.aborted) {
+      throw getAbortReason(signal);
+    }
 
     if (fromCache) {
       logScheduler.info(`Digest ${digest.slice(0, 12)} unchanged, using cached scan`);
@@ -608,7 +611,6 @@ export function shutdown(): void {
   if (scanAbortController && !scanAbortController.signal.aborted) {
     scanAbortController.abort(createAbortError('Scheduled scan aborted during shutdown'));
   }
-  scanAbortController = undefined;
   if (cronTask) {
     cronTask.stop();
     cronTask = undefined;
@@ -617,7 +619,6 @@ export function shutdown(): void {
   cachedSecurityConfiguration = undefined;
   cachedScanIntervalMs = undefined;
   running = false;
-  scanInProgress = false;
 }
 
 export function isRunning(): boolean {

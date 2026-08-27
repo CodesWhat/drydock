@@ -184,6 +184,113 @@ test('scanImageForVulnerabilities should await database warm-up before starting 
   expect(events).toEqual(['warmup-started', 'warmup-finished', 'scan-started']);
 });
 
+test('scanImageForVulnerabilities should terminate a command child and detach abort handling', async () => {
+  let commandCallback: ((error: Error | null, stdout: string, stderr: string) => void) | undefined;
+  const kill = vi.fn(() => true);
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    commandCallback = callback;
+    return { exitCode: null, kill };
+  };
+  const controller = new AbortController();
+  const addEventListenerSpy = vi.spyOn(controller.signal, 'addEventListener');
+  const removeEventListenerSpy = vi.spyOn(controller.signal, 'removeEventListener');
+  const abortError = Object.assign(new Error('scan cancelled'), { name: 'AbortError' });
+
+  const scanPromise = scanImageForVulnerabilities({
+    image: 'registry.example.com/app:1.2.3',
+    signal: controller.signal,
+  });
+  await vi.waitFor(() => expect(commandCallback).toBeTypeOf('function'));
+  controller.abort(abortError);
+  commandCallback?.(
+    Object.assign(new Error('terminated'), { killed: true, signal: 'SIGTERM' }),
+    '',
+    '',
+  );
+
+  await expect(scanPromise).rejects.toBe(abortError);
+  expect(kill).toHaveBeenCalledWith('SIGTERM');
+  expect(addEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function), { once: true });
+  expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+});
+
+test('scanImageForVulnerabilities should reject with a fallback abort error when cancellation happens before command launch', async () => {
+  const controller = new AbortController();
+  mockHasValidCommandPath.mockImplementationOnce(() => {
+    controller.abort('cancelled without an Error reason');
+    return true;
+  });
+
+  await expect(
+    scanImageForVulnerabilities({
+      image: 'registry.example.com/app:cancel-before-launch',
+      signal: controller.signal,
+    }),
+  ).rejects.toMatchObject({ name: 'AbortError', message: 'Security scan aborted' });
+  expect(childProcessControl.execFileImpl).toBeNull();
+});
+
+test('scanImageForVulnerabilities should catch cancellation that races command listener setup', async () => {
+  const abortError = Object.assign(new Error('listener setup cancellation'), {
+    name: 'AbortError',
+  });
+  let aborted = false;
+  const signal = {
+    get aborted() {
+      return aborted;
+    },
+    get reason() {
+      return abortError;
+    },
+    addEventListener: vi.fn(() => {
+      aborted = true;
+    }),
+    removeEventListener: vi.fn(),
+  } as unknown as AbortSignal;
+  const kill = vi.fn(() => true);
+  childProcessControl.execFileImpl = () => ({ exitCode: null, kill });
+
+  await expect(
+    scanImageForVulnerabilities({
+      image: 'registry.example.com/app:listener-race',
+      signal,
+    }),
+  ).rejects.toBe(abortError);
+  expect(kill).toHaveBeenCalledWith('SIGTERM');
+});
+
+test('scanImageForVulnerabilities should not execute queued Trivy work after it is aborted', async () => {
+  const callbacks: Array<(error: Error | null, stdout: string, stderr: string) => void> = [];
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    callbacks.push(callback);
+    return { exitCode: null, kill: vi.fn(() => true) };
+  };
+  const controller = new AbortController();
+  const firstScan = scanImageForVulnerabilities({ image: 'registry.example.com/app:first' });
+  await vi.waitFor(() => expect(callbacks).toHaveLength(1));
+  const secondScanOutcome = scanImageForVulnerabilities({
+    image: 'registry.example.com/app:second',
+    signal: controller.signal,
+  }).then(
+    (value) => ({ status: 'fulfilled' as const, value }),
+    (reason) => ({ status: 'rejected' as const, reason }),
+  );
+
+  controller.abort(Object.assign(new Error('queued scan cancelled'), { name: 'AbortError' }));
+  callbacks[0]?.(null, JSON.stringify({ Results: [] }), '');
+  await firstScan;
+  await Promise.resolve();
+  await Promise.resolve();
+  callbacks[1]?.(null, JSON.stringify({ Results: [] }), '');
+  const secondOutcome = await secondScanOutcome;
+
+  expect(callbacks).toHaveLength(1);
+  expect(secondOutcome).toMatchObject({
+    status: 'rejected',
+    reason: { name: 'AbortError' },
+  });
+});
+
 test('scanImageForVulnerabilities should run and normalize Grype without warming Trivy', async () => {
   mockGetSecurityConfiguration.mockReturnValue({
     ...createEnabledConfiguration(),
@@ -1956,6 +2063,364 @@ function createMockScanResult(image = 'registry.example.com/app:1.2.3') {
 }
 
 describe('scanImageWithDedup', () => {
+  test('replaces an aborted in-flight scan while its shared warm-up is still pending', async () => {
+    let resolveWarmup: (result: 'ready') => void = () => undefined;
+    const warmup = new Promise<'ready'>((resolve) => {
+      resolveWarmup = resolve;
+    });
+    mockWarmTrivyDatabase.mockReturnValue(warmup);
+    const commandCallbacks: Array<(error: Error | null, stdout: string, stderr: string) => void> =
+      [];
+    const execFileMock = vi.fn((_command, _args, _options, callback) => {
+      commandCallbacks.push(callback);
+      return { exitCode: null, kill: vi.fn(() => true) };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+    const controller = new AbortController();
+    const abortError = Object.assign(new Error('scheduled warm-up scan cancelled'), {
+      name: 'AbortError',
+    });
+    const options = {
+      image: 'registry.example.com/app:warm-replacement',
+      digest: 'sha256:warm-replacement',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+
+    const scheduledScan = scanImageWithDedup({ ...options, signal: controller.signal }, 0);
+    await vi.waitFor(() => expect(mockWarmTrivyDatabase).toHaveBeenCalledOnce());
+    controller.abort(abortError);
+    await expect(scheduledScan).rejects.toBe(abortError);
+
+    const originalMapGet = Map.prototype.get;
+    let abortedEntryLookups = 0;
+    const mapGetSpy = vi.spyOn(Map.prototype, 'get').mockImplementation(function (key) {
+      const value = originalMapGet.call(this, key);
+      if (
+        key === options.digest &&
+        (value as { controller?: AbortController } | undefined)?.controller?.signal.aborted
+      ) {
+        abortedEntryLookups++;
+        if (abortedEntryLookups === 2) {
+          return undefined;
+        }
+      }
+      return value;
+    });
+    try {
+      const replacementScan = scanImageWithDedup(options, 0);
+      resolveWarmup('ready');
+      await vi.waitFor(() => expect(commandCallbacks).toHaveLength(1));
+      const joinedReplacementScan = scanImageWithDedup(options, 0);
+      commandCallbacks[0]?.(null, JSON.stringify({ Results: [] }), '');
+
+      await expect(Promise.all([replacementScan, joinedReplacementScan])).resolves.toEqual([
+        expect.objectContaining({
+          fromCache: false,
+          scanResult: expect.objectContaining({ status: 'passed', imageDigest: options.digest }),
+        }),
+        expect.objectContaining({
+          fromCache: false,
+          scanResult: expect.objectContaining({ status: 'passed', imageDigest: options.digest }),
+        }),
+      ]);
+    } finally {
+      mapGetSpy.mockRestore();
+    }
+
+    clearDigestScanCache();
+    let resolveSecondWarmup: (result: 'ready') => void = () => undefined;
+    mockWarmTrivyDatabase.mockReturnValue(
+      new Promise<'ready'>((resolve) => {
+        resolveSecondWarmup = resolve;
+      }),
+    );
+    const secondController = new AbortController();
+    const secondAbortError = Object.assign(new Error('second scheduled scan cancelled'), {
+      name: 'AbortError',
+    });
+    const secondOptions = {
+      ...options,
+      image: 'registry.example.com/app:warm-replacement-normal',
+      digest: 'sha256:warm-replacement-normal',
+    };
+    const secondScheduledScan = scanImageWithDedup(
+      { ...secondOptions, signal: secondController.signal },
+      0,
+    );
+    await vi.waitFor(() => expect(mockWarmTrivyDatabase).toHaveBeenCalledTimes(3));
+    secondController.abort(secondAbortError);
+    await expect(secondScheduledScan).rejects.toBe(secondAbortError);
+
+    const secondReplacementScan = scanImageWithDedup(secondOptions, 0);
+    resolveSecondWarmup('ready');
+    await vi.waitFor(() => expect(commandCallbacks).toHaveLength(2));
+    commandCallbacks[1]?.(null, JSON.stringify({ Results: [] }), '');
+    await expect(secondReplacementScan).resolves.toMatchObject({ fromCache: false });
+
+    expect(mockWarmTrivyDatabase).toHaveBeenCalledTimes(4);
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('upgrades a scheduler-first shared scan when a retrying gate joins before failure', async () => {
+    const commandCallbacks: Array<(error: Error | null, stdout: string, stderr: string) => void> =
+      [];
+    const execFileMock = vi.fn((_command, _args, _options, callback) => {
+      commandCallbacks.push(callback);
+      return { exitCode: commandCallbacks.length === 1 ? 1 : 0 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+    const options = {
+      image: 'registry.example.com/app:scheduler-first-retry',
+      digest: 'sha256:scheduler-first-retry',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+
+    const schedulerScan = scanImageWithDedup(options, 0);
+    await vi.waitFor(() => expect(commandCallbacks).toHaveLength(1));
+    const gateScan = scanImageWithDedup({ ...options, retryTransient: true }, 0);
+    const transientError = new Error('temporary registry timeout') as NodeJS.ErrnoException;
+    transientError.code = 'ETIMEDOUT';
+    commandCallbacks[0]?.(transientError, '', 'request timed out');
+    await vi.waitFor(() => expect(commandCallbacks).toHaveLength(2));
+    commandCallbacks[1]?.(null, JSON.stringify({ Results: [] }), '');
+
+    await expect(Promise.all([schedulerScan, gateScan])).resolves.toEqual([
+      expect.objectContaining({ scanResult: expect.objectContaining({ status: 'passed' }) }),
+      expect.objectContaining({ scanResult: expect.objectContaining({ status: 'passed' }) }),
+    ]);
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not downgrade a gate-first shared scan when a scheduler joins', async () => {
+    const commandCallbacks: Array<(error: Error | null, stdout: string, stderr: string) => void> =
+      [];
+    const execFileMock = vi.fn((_command, _args, _options, callback) => {
+      commandCallbacks.push(callback);
+      return { exitCode: commandCallbacks.length === 1 ? 1 : 0 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+    const options = {
+      image: 'registry.example.com/app:gate-first-retry',
+      digest: 'sha256:gate-first-retry',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+
+    const gateScan = scanImageWithDedup({ ...options, retryTransient: true }, 0);
+    await vi.waitFor(() => expect(commandCallbacks).toHaveLength(1));
+    const schedulerScan = scanImageWithDedup(options, 0);
+    const transientError = new Error('temporary registry timeout') as NodeJS.ErrnoException;
+    transientError.code = 'ETIMEDOUT';
+    commandCallbacks[0]?.(transientError, '', 'request timed out');
+    await vi.waitFor(() => expect(commandCallbacks).toHaveLength(2));
+    commandCallbacks[1]?.(null, JSON.stringify({ Results: [] }), '');
+
+    await expect(Promise.all([gateScan, schedulerScan])).resolves.toEqual([
+      expect.objectContaining({ scanResult: expect.objectContaining({ status: 'passed' }) }),
+      expect.objectContaining({ scanResult: expect.objectContaining({ status: 'passed' }) }),
+    ]);
+    expect(execFileMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not retry a scheduler-only shared scan after a transient failure', async () => {
+    const commandCallbacks: Array<(error: Error | null, stdout: string, stderr: string) => void> =
+      [];
+    const execFileMock = vi.fn((_command, _args, _options, callback) => {
+      commandCallbacks.push(callback);
+      return { exitCode: 1 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+    const options = {
+      image: 'registry.example.com/app:scheduler-only-no-retry',
+      digest: 'sha256:scheduler-only-no-retry',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+
+    const schedulerScan = scanImageWithDedup(options, 0);
+    await vi.waitFor(() => expect(commandCallbacks).toHaveLength(1));
+    const transientError = new Error('temporary registry timeout') as NodeJS.ErrnoException;
+    transientError.code = 'ETIMEDOUT';
+    commandCallbacks[0]?.(transientError, '', 'request timed out');
+
+    await expect(schedulerScan).resolves.toMatchObject({
+      fromCache: false,
+      scanResult: { status: 'error' },
+    });
+    expect(execFileMock).toHaveBeenCalledOnce();
+  });
+
+  test('keeps a signal-less waiter alive when the first scheduled waiter aborts', async () => {
+    let commandCallback:
+      | ((error: Error | null, stdout: string, stderr: string) => void)
+      | undefined;
+    const kill = vi.fn(() => true);
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      commandCallback = callback;
+      return { exitCode: null, kill };
+    };
+    const controller = new AbortController();
+    const removeEventListenerSpy = vi.spyOn(controller.signal, 'removeEventListener');
+    const abortError = Object.assign(new Error('scheduled waiter cancelled'), {
+      name: 'AbortError',
+    });
+    const options = {
+      image: 'registry.example.com/app:scheduled-first',
+      digest: 'sha256:scheduled-first',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+
+    const scheduledScan = scanImageWithDedup({ ...options, signal: controller.signal }, 0);
+    await vi.waitFor(() => expect(commandCallback).toBeTypeOf('function'));
+    const gateScan = scanImageWithDedup(options, 0);
+
+    controller.abort(abortError);
+
+    await expect(scheduledScan).rejects.toBe(abortError);
+    expect(kill).not.toHaveBeenCalled();
+    commandCallback?.(null, JSON.stringify({ Results: [] }), '');
+    await expect(gateScan).resolves.toMatchObject({
+      fromCache: false,
+      scanResult: { status: 'passed', imageDigest: options.digest },
+    });
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
+  test('lets a later scheduled waiter abort without cancelling a signal-less first waiter', async () => {
+    let commandCallback:
+      | ((error: Error | null, stdout: string, stderr: string) => void)
+      | undefined;
+    const kill = vi.fn(() => true);
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      commandCallback = callback;
+      return { exitCode: null, kill };
+    };
+    const options = {
+      image: 'registry.example.com/app:gate-first',
+      digest: 'sha256:gate-first',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+    const gateScan = scanImageWithDedup(options, 0);
+    await vi.waitFor(() => expect(commandCallback).toBeTypeOf('function'));
+    const controller = new AbortController();
+    const removeEventListenerSpy = vi.spyOn(controller.signal, 'removeEventListener');
+    const abortError = Object.assign(new Error('joined scheduled waiter cancelled'), {
+      name: 'AbortError',
+    });
+    const scheduledScan = scanImageWithDedup({ ...options, signal: controller.signal }, 0);
+
+    controller.abort(abortError);
+
+    await expect(scheduledScan).rejects.toBe(abortError);
+    expect(kill).not.toHaveBeenCalled();
+    commandCallback?.(null, JSON.stringify({ Results: [] }), '');
+    await expect(gateScan).resolves.toMatchObject({
+      fromCache: false,
+      scanResult: { status: 'passed', imageDigest: options.digest },
+    });
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
+  test('aborts the provider when its only scheduled waiter aborts and clears the in-flight entry', async () => {
+    let commandCallback:
+      | ((error: Error | null, stdout: string, stderr: string) => void)
+      | undefined;
+    const kill = vi.fn(() => true);
+    const execFileMock = vi.fn((_command, _args, _options, callback) => {
+      commandCallback = callback;
+      return { exitCode: null, kill };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+    const controller = new AbortController();
+    const removeEventListenerSpy = vi.spyOn(controller.signal, 'removeEventListener');
+    const abortError = Object.assign(new Error('only waiter cancelled'), { name: 'AbortError' });
+    const options = {
+      image: 'registry.example.com/app:lone-scheduled',
+      digest: 'sha256:lone-scheduled',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+    const scheduledScan = scanImageWithDedup({ ...options, signal: controller.signal }, 0);
+    await vi.waitFor(() => expect(commandCallback).toBeTypeOf('function'));
+
+    controller.abort(abortError);
+    commandCallback?.(
+      Object.assign(new Error('terminated'), { killed: true, signal: 'SIGTERM' }),
+      '',
+      '',
+    );
+
+    await expect(scheduledScan).rejects.toBe(abortError);
+    expect(kill).toHaveBeenCalledWith('SIGTERM');
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+    await expect(scanImageWithDedup(options, 0)).resolves.toMatchObject({ fromCache: false });
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('removes caller abort handling and the in-flight entry when the provider rejects', async () => {
+    const controller = new AbortController();
+    const addEventListenerSpy = vi.spyOn(controller.signal, 'addEventListener');
+    const removeEventListenerSpy = vi.spyOn(controller.signal, 'removeEventListener');
+    const providerError = new Error('configuration unavailable');
+    const configuration = createEnabledConfiguration();
+    mockGetSecurityConfiguration.mockReturnValueOnce(configuration).mockImplementationOnce(() => {
+      throw providerError;
+    });
+    const options = {
+      image: 'registry.example.com/app:provider-reject',
+      digest: 'sha256:provider-reject',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+
+    await expect(scanImageWithDedup({ ...options, signal: controller.signal }, 0)).rejects.toBe(
+      providerError,
+    );
+
+    expect(addEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function), { once: true });
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+
+    mockGetSecurityConfiguration.mockReturnValue(configuration);
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+    await expect(scanImageWithDedup(options, 0)).resolves.toMatchObject({ fromCache: false });
+  });
+
+  test('single-flights concurrent scans by digest and clears the in-flight entry after settlement', async () => {
+    const callbacks: Array<(error: Error | null, stdout: string, stderr: string) => void> = [];
+    const execFileMock = vi.fn((_command, _args, _options, callback) => {
+      callbacks.push(callback);
+      return { exitCode: null };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+    const options = {
+      image: 'registry.example.com/app:1.2.3',
+      digest: 'sha256:single-flight',
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+
+    const first = scanImageWithDedup(options, 0);
+    const second = scanImageWithDedup(options, 0);
+    await vi.waitFor(() => expect(callbacks.length).toBeGreaterThanOrEqual(1));
+    callbacks[0]?.(null, JSON.stringify({ Results: [] }), '');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    callbacks[1]?.(null, JSON.stringify({ Results: [] }), '');
+    await Promise.all([first, second]);
+    const concurrentInvocationCount = execFileMock.mock.calls.length;
+
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+    await scanImageWithDedup(options, 0);
+
+    expect(concurrentInvocationCount).toBe(1);
+    expect(execFileMock).toHaveBeenCalledTimes(1);
+  });
+
   test('does not reuse a digest cache entry after the scanner provider changes', async () => {
     childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
       callback(null, JSON.stringify({ Results: [] }), '');
