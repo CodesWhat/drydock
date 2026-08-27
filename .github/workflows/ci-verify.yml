@@ -1,11 +1,11 @@
-name: "🔬 CI Verify"
+name: "CI Verify"
 run-name: >-
   ${{
-    github.event_name == 'pull_request' && format('🔬 CI Verify — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
-    github.event_name == 'push' && format('🔬 CI Verify — {0}', github.event.head_commit.message) ||
-    github.event_name == 'merge_group' && format('🔬 CI Verify — Merge Queue: {0}', github.ref_name) ||
-    github.event_name == 'workflow_call' && format('🔬 CI Verify — workflow_call ({0})', github.sha) ||
-    format('🔬 CI Verify — {0}', github.ref_name)
+    github.event_name == 'pull_request' && format('CI Verify — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
+    github.event_name == 'push' && format('CI Verify — {0}', github.event.head_commit.message) ||
+    github.event_name == 'merge_group' && format('CI Verify — Merge Queue: {0}', github.ref_name) ||
+    github.event_name == 'workflow_call' && format('CI Verify — workflow_call ({0})', github.sha) ||
+    format('CI Verify — {0}', github.ref_name)
   }}
 
 on:
@@ -142,7 +142,7 @@ jobs:
         run: scripts/scan-secrets.sh
 
   changes:
-    name: "🔎 Changes: Path Filter"
+    name: "Changes: Path Filter"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -228,7 +228,7 @@ jobs:
           category: /language:${{ matrix.language }}
 
   fuzz:
-    name: "🎯 Fuzz Testing"
+    name: "Fuzz Testing"
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [security-actions]
     runs-on: ubuntu-24.04
@@ -846,7 +846,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   dast-zap-baseline:
-    name: "🕷️ DAST: ZAP + Nuclei"
+    name: "DAST: ZAP + Nuclei"
     runs-on: ubuntu-24.04
     timeout-minutes: 25  # Includes QA stack startup and scanner container runtime
     # Run on every merge to main (gates the next release-cut), on legacy
@@ -1382,7 +1382,7 @@ jobs:
   # still gate on it via release-cut.yml's second wait step.
 
   load-test-ci:
-    name: "⚡ Load Test: CI"
+    name: "Load Test: CI"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))
@@ -1507,7 +1507,7 @@ jobs:
           retention-days: 30
 
   load-test-behavior:
-    name: "⚡ Load Test: Behavior + Stress (Advisory)"
+    name: "Load Test: Behavior + Stress (Advisory)"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))

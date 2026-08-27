@@ -1,8 +1,8 @@
-name: "🕷️ Security: DAST (Web Surfaces)"
+name: "Security: DAST (Web Surfaces)"
 run-name: >-
   ${{
-    github.event_name == 'schedule' && '🕷️ Security: DAST (Web Surfaces) — Weekly schedule' ||
-    format('🕷️ Security: DAST (Web Surfaces) — Manual by {0}', github.actor)
+    github.event_name == 'schedule' && 'Security: DAST (Web Surfaces) — Weekly schedule' ||
+    format('Security: DAST (Web Surfaces) — Manual by {0}', github.actor)
   }}
 
 # Scheduled-advisory per security.md's gating-posture matrix: DAST runs
