@@ -12,7 +12,7 @@ import type {
 } from '../crud-context.js';
 import { normalizeContainerListPagination, paginateCollection } from '../filters.js';
 import { getPathParamValue } from '../request-helpers.js';
-import { isSensitiveKey } from '../shared.js';
+import { isSensitiveEnvEntry } from '../shared.js';
 import { getContainerOrNotFound, resolveWatcherIdForContainer } from './common.js';
 import { buildContainerListResponse } from './list.js';
 
@@ -113,7 +113,7 @@ function extractContainerEnv(container: Container) {
     .map((entry) => ({
       key: entry.key,
       value: entry.value,
-      sensitive: isSensitiveKey(entry.key),
+      sensitive: isSensitiveEnvEntry(entry),
     }));
 }
 

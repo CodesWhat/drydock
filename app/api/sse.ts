@@ -60,6 +60,7 @@ const connectionsPerIp = new Map<string, number>();
 const connectionsPerSession = new Map<string, number>();
 const DEFAULT_SELF_UPDATE_ACK_TIMEOUT_MS = 3000;
 const SSE_HEARTBEAT_INTERVAL_MS = 15000;
+const SSE_MAX_PENDING_BYTES_PER_CLIENT = 256 * 1024;
 const SSE_STALE_ENTRY_TTL_MS = 30 * 60 * 1000;
 const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:agent-connected',
@@ -86,7 +87,14 @@ let eventCounter = 0;
 // 5-minute ring buffer shared across all SSE connections.
 const sseEventBuffer = new SseEventBuffer();
 const clients = new Set<FlushableResponse>();
-const heartbeatBackpressuredClients = new Set<FlushableResponse>();
+interface SseResponsePressureState {
+  blocked: boolean;
+  pendingRetainedChunks: Array<{ chunk: string; flush: boolean }>;
+  pendingBytes: number;
+  drainHandler?: () => void;
+  cleanup?: () => void;
+}
+const responsePressureStates = new Map<FlushableResponse, SseResponsePressureState>();
 const sseClientRegistry = new ActiveSseClientRegistry();
 const activeSseClientRegistryTestAdapter =
   createActiveSseClientRegistryTestAdapter(sseClientRegistry);
@@ -149,24 +157,122 @@ function isResponseClosed(response: FlushableResponse): boolean {
   return writableEnded === true || writableFinished === true || destroyed === true;
 }
 
+function getResponsePressureState(response: FlushableResponse): SseResponsePressureState {
+  const existing = responsePressureStates.get(response);
+  if (existing) {
+    return existing;
+  }
+  const state: SseResponsePressureState = {
+    blocked: false,
+    pendingRetainedChunks: [],
+    pendingBytes: 0,
+  };
+  responsePressureStates.set(response, state);
+  return state;
+}
+
+function clearResponsePressureState(response: FlushableResponse): void {
+  const state = responsePressureStates.get(response);
+  if (!state) {
+    return;
+  }
+  if (state.drainHandler) {
+    response.off?.('drain', state.drainHandler);
+  }
+  responsePressureStates.delete(response);
+}
+
+function disconnectBackpressuredResponse(response: FlushableResponse): void {
+  const cleanup = responsePressureStates.get(response)?.cleanup;
+  if (cleanup) {
+    cleanup();
+  } else {
+    clients.delete(response);
+    const activeClient = sseClientRegistry.getByResponse(response);
+    if (activeClient) {
+      sseClientRegistry.remove(activeClient);
+    }
+    clearResponsePressureState(response);
+    stopSharedHeartbeatIntervalIfIdle();
+  }
+  const closable = response as FlushableResponse & {
+    destroy?: () => void;
+    end?: () => void;
+  };
+  if (typeof closable.destroy === 'function') {
+    closable.destroy();
+  } else {
+    closable.end?.();
+  }
+}
+
+function installDrainHandler(response: FlushableResponse, state: SseResponsePressureState): void {
+  if (state.drainHandler) {
+    return;
+  }
+  const drainHandler = () => {
+    if (responsePressureStates.get(response) !== state) {
+      return;
+    }
+    state.drainHandler = undefined;
+    state.blocked = false;
+    while (state.pendingRetainedChunks.length > 0) {
+      const { chunk, flush } = state.pendingRetainedChunks.shift()!;
+      state.pendingBytes -= Buffer.byteLength(chunk);
+      const writeAccepted = response.write(chunk);
+      if (flush) {
+        response.flush?.();
+      }
+      if (writeAccepted === false) {
+        state.blocked = true;
+        installDrainHandler(response, state);
+        return;
+      }
+    }
+  };
+  state.drainHandler = drainHandler;
+  response.once?.('drain', drainHandler);
+}
+
+function writeSseChunk(
+  response: FlushableResponse,
+  chunk: string,
+  retainWhileBlocked: boolean,
+  flush = true,
+): void {
+  const state = getResponsePressureState(response);
+  if (state.blocked) {
+    if (!retainWhileBlocked) {
+      return;
+    }
+    const chunkBytes = Buffer.byteLength(chunk);
+    if (state.pendingBytes + chunkBytes > SSE_MAX_PENDING_BYTES_PER_CLIENT) {
+      disconnectBackpressuredResponse(response);
+      return;
+    }
+    state.pendingRetainedChunks.push({ chunk, flush });
+    state.pendingBytes += chunkBytes;
+    return;
+  }
+
+  const writeAccepted = response.write(chunk);
+  if (flush) {
+    response.flush?.();
+  }
+  if (writeAccepted === false) {
+    state.blocked = true;
+    installDrainHandler(response, state);
+  }
+}
+
 function dropActiveClient(client: ActiveSseClient): void {
   clients.delete(client.response);
-  heartbeatBackpressuredClients.delete(client.response);
+  clearResponsePressureState(client.response);
   sseClientRegistry.remove(client);
 }
 
 function writeHeartbeat(response: FlushableResponse): void {
-  if (heartbeatBackpressuredClients.has(response)) {
-    return;
-  }
-
-  const writeAccepted = response.write('event: dd:heartbeat\ndata: {}\n\n');
-  if (writeAccepted === false) {
-    heartbeatBackpressuredClients.add(response);
-    response.once?.('drain', () => {
-      heartbeatBackpressuredClients.delete(response);
-    });
-  }
+  writeSseChunk(response, 'event: dd:heartbeat\ndata: {}\n\n', false, false);
 }
 
 function startSharedHeartbeatIntervalIfNeeded(): void {
@@ -186,7 +292,6 @@ function stopSharedHeartbeatIntervalIfIdle(): void {
   }
   globalThis.clearInterval(sharedHeartbeatIntervalHandle);
   sharedHeartbeatIntervalHandle = undefined;
-  heartbeatBackpressuredClients.clear();
 }
 
 /**
@@ -201,8 +306,7 @@ function broadcastWithId(eventName: string, payload: unknown): void {
     // Ephemeral: write directly, no id, no buffer.
     const data = JSON.stringify(payload ?? {});
     for (const client of clients) {
-      client.write(`event: ${eventName}\ndata: ${data}\n\n`);
-      client.flush?.();
+      writeSseChunk(client, `event: ${eventName}\ndata: ${data}\n\n`, false);
     }
     return;
   }
@@ -214,8 +318,7 @@ function broadcastWithId(eventName: string, payload: unknown): void {
   const data = JSON.stringify(payload ?? {});
   const chunk = `id: ${id}\nevent: ${eventName}\ndata: ${data}\n\n`;
   for (const client of clients) {
-    client.write(chunk);
-    client.flush?.();
+    writeSseChunk(client, chunk, true);
   }
 }
 
@@ -292,6 +395,43 @@ function eventsHandler(req: Request, res: Response): void {
   };
   sseClientRegistry.add(activeClient);
 
+  let disconnected = false;
+  const cleanup = () => {
+    if (disconnected) {
+      return;
+    }
+    disconnected = true;
+    const disconnectedClient = sseClientRegistry.getByResponse(client);
+    if (disconnectedClient) {
+      dropActiveClient(disconnectedClient);
+    } else {
+      clients.delete(client);
+      clearResponsePressureState(client);
+    }
+    stopSharedHeartbeatIntervalIfIdle();
+    const count = connectionsPerIp.get(ip);
+    if (count === undefined || count <= 1) {
+      connectionsPerIp.delete(ip);
+    } else {
+      connectionsPerIp.set(ip, count - 1);
+    }
+    const sessionCount = connectionsPerSession.get(sessionKey);
+    if (sessionCount === undefined || sessionCount <= 1) {
+      connectionsPerSession.delete(sessionKey);
+    } else {
+      connectionsPerSession.set(sessionKey, sessionCount - 1);
+    }
+    logger.debug(
+      `SSE client disconnected: client ID ${activeClient.clientId} from ${formatIpForLog(ip)} (${clients.size} total)`,
+    );
+  };
+
+  getResponsePressureState(client).cleanup = cleanup;
+  req.once('close', cleanup);
+  req.once('aborted', cleanup);
+  client.once('close', cleanup);
+  client.once('error', cleanup);
+
   // --- Last-Event-ID replay (W3C SSE reconnection protocol) ---
   // Node normalizes header names to lowercase, so we read 'last-event-id'.
   // We iterate the buffer synchronously before adding this client to `clients`,
@@ -316,71 +456,52 @@ function eventsHandler(req: Request, res: Response): void {
       eventCounter += 1;
       const resyncId = `${bootId}:${eventCounter}`;
       const reason = lastEventId.startsWith(bootId) ? 'buffer-evicted' : 'boot-mismatch';
-      client.write(
+      writeSseChunk(
+        client,
         `id: ${resyncId}\nevent: dd:resync-required\ndata: ${JSON.stringify({ reason })}\n\n`,
+        true,
       );
-      client.flush?.();
     } else {
       for (const bufferedEvent of replayResult.events) {
-        client.write(
+        writeSseChunk(
+          client,
           `id: ${bufferedEvent.id}\nevent: ${bufferedEvent.event}\ndata: ${JSON.stringify(bufferedEvent.data)}\n\n`,
+          true,
+          false,
         );
+        if (disconnected) {
+          return;
+        }
       }
-      if (replayResult.events.length > 0) {
+      if (replayResult.events.length > 0 && !getResponsePressureState(client).blocked) {
         client.flush?.();
       }
     }
   }
 
+  if (disconnected) {
+    return;
+  }
+
   // Send initial per-client handshake (ephemeral — no id:)
-  client.write(
+  writeSseChunk(
+    client,
     `event: dd:connected\ndata: ${JSON.stringify({
       clientId: activeClient.clientId,
       clientToken: activeClient.clientToken,
     })}\n\n`,
+    true,
   );
-  client.flush?.();
+
+  if (disconnected) {
+    return;
+  }
 
   clients.add(client);
   logger.debug(
     `SSE client connected: client ID ${activeClient.clientId} from ${formatIpForLog(ip)} (${clients.size} total)`,
   );
   startSharedHeartbeatIntervalIfNeeded();
-
-  let disconnected = false;
-  const cleanup = () => {
-    if (disconnected) {
-      return;
-    }
-    disconnected = true;
-    const disconnectedClient = sseClientRegistry.getByResponse(client);
-    if (disconnectedClient) {
-      dropActiveClient(disconnectedClient);
-    } else {
-      clients.delete(client);
-    }
-    stopSharedHeartbeatIntervalIfIdle();
-    const count = connectionsPerIp.get(ip);
-    if (count === undefined || count <= 1) {
-      connectionsPerIp.delete(ip);
-    } else {
-      connectionsPerIp.set(ip, count - 1);
-    }
-    const sessionCount = connectionsPerSession.get(sessionKey);
-    if (sessionCount === undefined || sessionCount <= 1) {
-      connectionsPerSession.delete(sessionKey);
-    } else {
-      connectionsPerSession.set(sessionKey, sessionCount - 1);
-    }
-    logger.debug(
-      `SSE client disconnected: client ID ${activeClient.clientId} from ${formatIpForLog(ip)} (${clients.size} total)`,
-    );
-  };
-
-  req.once('close', cleanup);
-  req.once('aborted', cleanup);
-  client.once('close', cleanup);
-  client.once('error', cleanup);
 }
 
 async function broadcastSelfUpdate(payload: SelfUpdateStartingEventPayload): Promise<void> {
@@ -416,7 +537,9 @@ function clearRuntimeIntervals(): void {
     globalThis.clearInterval(sharedHeartbeatIntervalHandle);
     sharedHeartbeatIntervalHandle = undefined;
   }
-  heartbeatBackpressuredClients.clear();
+  for (const response of responsePressureStates.keys()) {
+    clearResponsePressureState(response);
+  }
 }
 
 function cleanupOnProcessShutdown(): void {

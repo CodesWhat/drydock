@@ -584,6 +584,46 @@ describe('runScheduledScans', () => {
     clearTimeoutSpy.mockRestore();
   });
 
+  test('should keep the batch active until an aborted scanner acknowledges cancellation', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 * * *', jitter: 60000, concurrency: 1, batchTimeout: 10 },
+    });
+    mockGetContainers.mockReturnValue([createContainer()]);
+    let cancellationReceived = false;
+    let acknowledgeCancellation: (() => void) | undefined;
+    mockScanImageWithDedup
+      .mockImplementationOnce(
+        (rawOptions: unknown) =>
+          new Promise((_resolve, reject) => {
+            const signal = (rawOptions as { signal?: AbortSignal }).signal;
+            signal?.addEventListener(
+              'abort',
+              () => {
+                cancellationReceived = true;
+              },
+              { once: true },
+            );
+            acknowledgeCancellation = () => reject(signal?.reason ?? new Error('aborted'));
+          }),
+      )
+      .mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    const firstRun = runScheduledScans();
+    await vi.waitFor(() => expect(cancellationReceived).toBe(true));
+
+    await runScheduledScans();
+    expect(mockScanImageWithDedup).toHaveBeenCalledTimes(1);
+    expect(_isScanInProgress()).toBe(true);
+
+    acknowledgeCancellation?.();
+    await firstRun;
+    expect(_isScanInProgress()).toBe(false);
+
+    await runScheduledScans();
+    expect(mockScanImageWithDedup).toHaveBeenCalledTimes(2);
+  });
+
   test('should group containers by digest and scan unique digests', async () => {
     const container1 = createContainer({ id: 'c1' });
     const container2 = createContainer({
@@ -1265,6 +1305,27 @@ describe('runScheduledScans', () => {
     expect(mockScanImageWithDedup).not.toHaveBeenCalled();
     expect(mockBroadcastScanCompleted).not.toHaveBeenCalled();
     expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(_isScanInProgress()).toBe(false);
+  });
+
+  test('should abort while asynchronous auth resolution is still pending', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    let resolveAuth: (value: undefined) => void = () => undefined;
+    mockResolveContainerRegistryAuth.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveAuth = resolve;
+      }),
+    );
+
+    const scans = runScheduledScans();
+    await vi.waitFor(() => expect(mockResolveContainerRegistryAuth).toHaveBeenCalledOnce());
+    shutdown();
+    resolveAuth(undefined);
+    await scans;
+
+    expect(mockScanImageWithDedup).not.toHaveBeenCalled();
+    expect(mockBroadcastScanCompleted).not.toHaveBeenCalled();
     expect(_isScanInProgress()).toBe(false);
   });
 

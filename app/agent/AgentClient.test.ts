@@ -92,6 +92,7 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { AgentClient } from './AgentClient.js';
+import { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { bodySha256Hex, buildCanonicalMessage, EMPTY_BODY_SHA256_HEX } from './ed25519-signer.js';
 
 describe('AgentClient', () => {
@@ -504,6 +505,8 @@ describe('AgentClient', () => {
       axios.post.mockResolvedValue({ data: {} });
       const existing = {
         id: 'c1',
+        watcher: 'local',
+        agent: 'test-agent',
         updateAvailable: false,
         resultChanged: vi.fn().mockReturnValue(true),
       };
@@ -517,6 +520,7 @@ describe('AgentClient', () => {
       await client.handleEvent('dd:container-updated', {
         id: 'c1',
         name: 'test',
+        watcher: 'local',
         result: {
           digest: 'sha256:new',
         },
@@ -541,6 +545,8 @@ describe('AgentClient', () => {
       axios.post.mockResolvedValue({ data: {} });
       const existing = {
         id: 'c1',
+        watcher: 'local',
+        agent: 'test-agent',
         updateAvailable: false,
         resultChanged: vi.fn().mockReturnValue(true),
       };
@@ -559,11 +565,13 @@ describe('AgentClient', () => {
       await client.handleEvent('dd:container-updated', {
         id: 'c1',
         name: 'test',
+        watcher: 'local',
         updateAvailable: false,
       });
       await client.handleEvent('dd:container-updated', {
         id: 'c1',
         name: 'test',
+        watcher: 'local',
         updateAvailable: true,
       });
 
@@ -2014,8 +2022,198 @@ describe('AgentClient', () => {
     });
 
     test('should delete container on dd:container-removed', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        name: 'test',
+        watcher: 'local',
+        agent: 'test-agent',
+      } as never);
       await client.handleEvent('dd:container-removed', { id: 'c1' });
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
+    });
+
+    test('rejects another agent or controller container id before update side effects', async () => {
+      const rows = new Map<string, Record<string, unknown>>();
+      vi.mocked(storeContainer.getContainer).mockImplementation((id) => rows.get(id) as never);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((container) => {
+        const stored = { ...container } as Record<string, unknown>;
+        rows.set(stored.id as string, stored);
+        return stored as never;
+      });
+      vi.mocked(storeContainer.updateContainer).mockImplementation((container) => {
+        const stored = { ...container } as Record<string, unknown>;
+        rows.set(stored.id as string, stored);
+        return stored as never;
+      });
+
+      const agentA = new AgentClient('agent-a', { host: 'localhost', port: 3001, secret: '' });
+      const agentB = new AgentClient('agent-b', { host: 'localhost', port: 3002, secret: '' });
+      await agentB.handleEvent('dd:container-added', {
+        id: 'shared-id',
+        name: 'agent-b-container',
+        watcher: 'local',
+      });
+      agentB.stop();
+      rows.set('controller-id', {
+        id: 'controller-id',
+        name: 'controller-container',
+        watcher: 'local',
+        status: 'running',
+      });
+      const originalAgentBRow = { ...rows.get('shared-id') };
+      const originalControllerRow = { ...rows.get('controller-id') };
+      const pendingReport = {
+        container: { id: 'shared-id', name: 'pending', watcher: 'local' },
+        changed: false,
+      };
+      const internal = agentA as unknown as {
+        pendingFreshStateAfterRemoteUpdate: Set<string>;
+        pendingWatcherCycleReports: Map<string, Map<string, unknown>>;
+        statsChangedTimer?: ReturnType<typeof setTimeout>;
+      };
+      internal.pendingFreshStateAfterRemoteUpdate.add('shared-id');
+      internal.pendingWatcherCycleReports.set('local', new Map([['shared-id', pendingReport]]));
+      vi.clearAllMocks();
+
+      await agentA.handleEvent('dd:container-added', null);
+      await agentA.handleEvent('dd:container-updated', {});
+      await agentA.handleEvent('dd:container-updated', {
+        id: 'shared-id',
+        name: 'spoofed-agent-b-container',
+        watcher: 'local',
+        updateAvailable: true,
+        security: { sbom: { documents: { 'spdx-json': { spoofed: true } } } },
+      });
+      await agentA.handleEvent('dd:container-added', {
+        id: 'controller-id',
+        name: 'spoofed-controller-container',
+        watcher: 'local',
+      });
+
+      expect(rows.get('shared-id')).toEqual(originalAgentBRow);
+      expect(rows.get('controller-id')).toEqual(originalControllerRow);
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(mockOffloadSbomDocuments).not.toHaveBeenCalled();
+      expect(event.emitContainerReport).not.toHaveBeenCalled();
+      expect(internal.pendingFreshStateAfterRemoteUpdate.has('shared-id')).toBe(true);
+      expect(internal.pendingWatcherCycleReports.get('local')?.get('shared-id')).toBe(
+        pendingReport,
+      );
+      expect(internal.statsChangedTimer).toBeUndefined();
+
+      rows.set('agent-a-id', {
+        id: 'agent-a-id',
+        name: 'owned',
+        watcher: 'local',
+        agent: 'agent-a',
+      });
+      await agentA.handleEvent('dd:container-updated', {
+        id: 'agent-a-id',
+        name: 'owned-updated',
+        watcher: 'local',
+      });
+      await agentA.handleEvent('dd:container-added', {
+        id: 'new-agent-a-id',
+        name: 'new',
+        watcher: 'local',
+      });
+
+      expect(rows.get('agent-a-id')).toMatchObject({
+        name: 'owned-updated',
+        agent: 'agent-a',
+      });
+      expect(rows.get('new-agent-a-id')).toMatchObject({ agent: 'agent-a' });
+      agentA.stop();
+    });
+
+    test('removes only same-owner containers and preserves pending state on rejected removals', async () => {
+      const rows = new Map<string, Record<string, unknown>>([
+        ['agent-b-id', { id: 'agent-b-id', name: 'agent-b', watcher: 'local', agent: 'agent-b' }],
+        ['controller-id', { id: 'controller-id', name: 'controller', watcher: 'local' }],
+        ['agent-a-id', { id: 'agent-a-id', name: 'agent-a', watcher: 'local', agent: 'agent-a' }],
+      ]);
+      vi.mocked(storeContainer.getContainer).mockImplementation((id) => rows.get(id) as never);
+      vi.mocked(storeContainer.deleteContainer).mockImplementation((id) => {
+        rows.delete(id);
+        return undefined as never;
+      });
+      const agentA = new AgentClient('agent-a', { host: 'localhost', port: 3001, secret: '' });
+      const agentB = new AgentClient('agent-b', { host: 'localhost', port: 3002, secret: '' });
+      const internal = agentA as unknown as {
+        pendingFreshStateAfterRemoteUpdate: Set<string>;
+        pendingWatcherCycleReports: Map<string, Map<string, unknown>>;
+        statsChangedTimer?: ReturnType<typeof setTimeout>;
+      };
+      internal.pendingFreshStateAfterRemoteUpdate.add('agent-b-id');
+      internal.pendingWatcherCycleReports.set(
+        'local',
+        new Map([['agent-b-id', { container: rows.get('agent-b-id'), changed: false }]]),
+      );
+
+      await agentA.handleEvent('dd:container-removed', { id: 'agent-b-id', watcher: 'local' });
+      await agentA.handleEvent('dd:container-removed', { id: 'controller-id', watcher: 'local' });
+      await agentA.handleEvent('dd:container-removed', { id: 'unknown-id', watcher: 'local' });
+      await agentA.handleEvent('dd:container-removed', { id: 'agent-a-id', watcher: 'other' });
+
+      expect(rows.has('agent-b-id')).toBe(true);
+      expect(rows.has('controller-id')).toBe(true);
+      expect(rows.has('agent-a-id')).toBe(true);
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+      expect(internal.pendingFreshStateAfterRemoteUpdate.has('agent-b-id')).toBe(true);
+      expect(internal.pendingWatcherCycleReports.get('local')?.has('agent-b-id')).toBe(true);
+      expect(internal.statsChangedTimer).toBeUndefined();
+
+      await agentA.handleEvent('dd:container-removed', { id: 'agent-a-id', watcher: 'local' });
+      expect(rows.has('agent-a-id')).toBe(false);
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('agent-a-id');
+
+      await agentB.handleEvent('dd:container-removed', { id: 'agent-b-id' });
+      expect(rows.has('agent-b-id')).toBe(false);
+      agentA.stop();
+      agentB.stop();
+    });
+
+    test('EdgeAgentAdapter container frames cannot mutate another agent container', async () => {
+      const agentBRow = {
+        id: 'shared-id',
+        name: 'agent-b-container',
+        watcher: 'local',
+        agent: 'agent-b',
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(agentBRow as never);
+      const agentA = new AgentClient('agent-a', { host: 'localhost', port: 3001, secret: '' });
+      const agentB = new AgentClient('agent-b', { host: 'localhost', port: 3002, secret: '' });
+      const adapter = new EdgeAgentAdapter(agentA, {
+        send: vi.fn(),
+        close: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+      });
+
+      await (
+        adapter as unknown as {
+          dispatchFrame: (type: string, data: Record<string, unknown>) => Promise<void>;
+        }
+      ).dispatchFrame('dd:container_updated', {
+        container: { id: 'shared-id', name: 'spoofed', watcher: 'local' },
+      });
+      await (
+        adapter as unknown as {
+          dispatchFrame: (type: string, data: Record<string, unknown>) => Promise<void>;
+        }
+      ).dispatchFrame('dd:container_removed', { id: 'shared-id', name: 'spoofed' });
+
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReport).not.toHaveBeenCalled();
+      expect(agentBRow).toEqual({
+        id: 'shared-id',
+        name: 'agent-b-container',
+        watcher: 'local',
+        agent: 'agent-b',
+      });
+      agentA.stop();
+      agentB.stop();
     });
 
     test('should emit emitAgentStatsChanged after dd:container-added', async () => {
@@ -2049,12 +2247,22 @@ describe('AgentClient', () => {
     });
 
     test('should emit emitAgentStatsChanged after dd:container-removed', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        agent: 'test-agent',
+      } as never);
       await client.handleEvent('dd:container-removed', { id: 'c1' });
       await vi.runAllTimersAsync();
       expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
     });
 
     test('should log debug when emitAgentStatsChanged rejects on dd:container-removed', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        agent: 'test-agent',
+      } as never);
       vi.mocked(event.emitAgentStatsChanged).mockRejectedValueOnce(new Error('stats emit failed'));
       await client.handleEvent('dd:container-removed', { id: 'c1' });
       await vi.runAllTimersAsync();
@@ -2104,6 +2312,11 @@ describe('AgentClient', () => {
       vi.mocked(event.emitAgentStatsChanged).mockClear();
 
       // Second event — timer must re-arm (statsChangedTimer was cleared after first fire)
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c2',
+        watcher: 'local',
+        agent: 'test-agent',
+      } as never);
       await client.handleEvent('dd:container-removed', { id: 'c2' });
       // Debounce not yet fired
       expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
@@ -3374,6 +3587,7 @@ describe('AgentClient', () => {
 
       storeContainer.getContainer
         .mockReturnValueOnce(changedBeforeSnapshot)
+        .mockReturnValueOnce(changedBeforeSnapshot)
         .mockReturnValueOnce(unchangedAfterSnapshot);
       storeContainer.updateContainer.mockImplementation((container) => ({
         ...container,
@@ -3798,6 +4012,8 @@ describe('AgentClient', () => {
       axios.post.mockResolvedValue({ data: {} });
       const existing = {
         id: 'c1',
+        watcher: 'local',
+        agent: 'test-agent',
         updateAvailable: false,
         resultChanged: vi.fn().mockReturnValue(true),
       };
@@ -3812,6 +4028,7 @@ describe('AgentClient', () => {
       await client.handleEvent('dd:container-updated', {
         id: 'c1',
         name: 'test',
+        watcher: 'local',
         updateAvailable: true,
       });
 
@@ -8394,6 +8611,7 @@ describe('AgentClient', () => {
       const existing = {
         id: 'c1',
         watcher: 'docker',
+        agent: 'test-agent',
         result: { tag: '2.0.0' },
         updateAvailable: true,
         updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },

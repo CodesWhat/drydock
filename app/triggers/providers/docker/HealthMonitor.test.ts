@@ -11,6 +11,7 @@ vi.mock('../../../store/audit.js', () => ({
 var mockGetBackupsByName = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/backup.js', () => ({
   getBackupsByName: mockGetBackupsByName,
+  getBackupsForContainer: mockGetBackupsByName,
   pruneOldBackups: vi.fn(),
 }));
 
@@ -241,8 +242,10 @@ describe('HealthMonitor', () => {
         id: 'backup-latest',
         containerId: 'container-123',
         containerName: 'test-container',
+        containerIdentityKey: '::watcher-a::test-container',
         imageName: 'myregistry/myapp',
         imageTag: 'v3.2.1',
+        imageDigest: 'sha256:old',
         timestamp: new Date().toISOString(),
         triggerName: 'docker.update',
       },
@@ -262,6 +265,12 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: 'v3.3.0',
+      backupImageDigest: 'sha256:fallback',
+      backupScope: {
+        containerName: 'test-container',
+        containerIdentityKey: '::watcher-a::test-container',
+        includeLegacy: false,
+      },
       window: 300000,
       interval: 5000,
       triggerInstance,
@@ -270,11 +279,65 @@ describe('HealthMonitor', () => {
 
     await vi.advanceTimersByTimeAsync(5000);
 
-    // Should use the most recent backup (first in array)
+    expect(mockGetBackupsByName).toHaveBeenCalledWith({
+      containerName: 'test-container',
+      containerIdentityKey: '::watcher-a::test-container',
+      includeLegacy: false,
+    });
+    // Should use the most recent backup (first in array) pinned to its stored digest.
     expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
       dockerApi,
       expect.anything(),
-      'myregistry/myapp:v3.2.1',
+      'myregistry/myapp@sha256:old',
+      expect.anything(),
+      log,
+    );
+
+    abortController.abort();
+  });
+
+  test('should use the propagated pre-update digest when a legacy backup has no digest', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'legacy-backup',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'myregistry/myapp',
+        imageTag: 'latest',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: 'latest',
+      backupImageDigest: 'sha256:old',
+      backupScope: {
+        containerName: 'test-container',
+        containerIdentityKey: '::watcher-a::test-container',
+        includeLegacy: true,
+      },
+      window: 300000,
+      interval: 5000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
+      dockerApi,
+      expect.anything(),
+      'myregistry/myapp@sha256:old',
       expect.anything(),
       log,
     );

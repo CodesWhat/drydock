@@ -31,6 +31,7 @@ vi.mock('../../../store/backup', () => ({
   insertBackup: vi.fn(),
   pruneOldBackups: vi.fn(),
   getBackupsByName: vi.fn().mockReturnValue([]),
+  getBackupsForContainer: vi.fn().mockReturnValue([]),
 }));
 
 // Modules used by the shared lifecycle (inherited from Docker trigger)
@@ -51,6 +52,7 @@ vi.mock('../../../security/scan.js', () => ({
 }));
 vi.mock('../../../store/container.js', () => ({
   getContainer: vi.fn(),
+  getContainers: vi.fn().mockReturnValue([]),
   updateContainer: vi.fn(),
   cacheSecurityState: vi.fn(),
 }));

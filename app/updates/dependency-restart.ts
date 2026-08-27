@@ -1,6 +1,8 @@
 import { recordAuditEvent } from '../api/audit-events.js';
 import {
+  AGENT_LIFECYCLE_UNSUPPORTED_ERROR,
   findDockerTriggerForContainer,
+  isAgentLifecycleUnsupported,
   NO_DOCKER_TRIGGER_FOUND_ERROR,
 } from '../api/docker-trigger.js';
 import logger from '../log/index.js';
@@ -34,6 +36,10 @@ type DockerWatcher = {
 };
 
 export async function restartDependentContainer(container: Container): Promise<void> {
+  if (isAgentLifecycleUnsupported(container)) {
+    throw new Error(AGENT_LIFECYCLE_UNSUPPORTED_ERROR);
+  }
+
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
   if (!trigger) {
     throw new Error(NO_DOCKER_TRIGGER_FOUND_ERROR);

@@ -1,5 +1,6 @@
 import { isAbsolute } from 'node:path';
 import { Writable } from 'node:stream';
+import { getAbortReason } from '../abort.js';
 
 const DEFAULT_MEMORY_BYTES = 512 * 1024 * 1024;
 const DEFAULT_PIDS_LIMIT = 64;
@@ -43,6 +44,7 @@ export interface DockerScannerRunOptions {
   timeoutMs: number;
   maxOutputBytes: number;
   auth?: DockerScannerRegistryAuth;
+  signal?: AbortSignal;
 }
 
 export interface DockerScannerRunResult {
@@ -373,6 +375,38 @@ function waitForTimeout(
   };
 }
 
+function waitForAbort(signal: AbortSignal | undefined): {
+  promise: Promise<never>;
+  clear: () => void;
+  isAbort: (error: unknown) => boolean;
+} {
+  let abortError: Error | undefined;
+  let handleAbort: (() => void) | undefined;
+  const promise = new Promise<never>((_resolve, reject) => {
+    if (!signal) {
+      return;
+    }
+    handleAbort = () => {
+      abortError ??= getAbortReason(signal, 'Scanner worker aborted');
+      reject(abortError);
+    };
+    signal.addEventListener('abort', handleAbort, { once: true });
+    if (signal.aborted) {
+      handleAbort();
+    }
+  });
+  void promise.catch(() => undefined);
+  return {
+    promise,
+    clear: () => {
+      if (handleAbort) {
+        signal?.removeEventListener('abort', handleAbort);
+      }
+    },
+    isAbort: (error) => abortError !== undefined && error === abortError,
+  };
+}
+
 function parseDigest(image: string): string {
   return image.slice(image.lastIndexOf('@') + 1);
 }
@@ -451,18 +485,27 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
 
   async function run(runOptions: DockerScannerRunOptions): Promise<DockerScannerRunResult> {
     validateRunOptions(runOptions);
+    if (runOptions.signal?.aborted) {
+      throw getAbortReason(runOptions.signal, 'Scanner worker aborted');
+    }
     const startedAt = Date.now();
     const preparationTimeout = waitForTimeout(runOptions.timeoutMs);
+    const cancellation = waitForAbort(runOptions.signal);
     try {
       await Promise.race([
         ensureImage(runOptions.image, runOptions.auth, runOptions.timeoutMs),
         preparationTimeout.promise,
+        cancellation.promise,
       ]);
+    } catch (error: unknown) {
+      cancellation.clear();
+      throw error;
     } finally {
       preparationTimeout.clear();
     }
     const remainingTimeoutMs = runOptions.timeoutMs - (Date.now() - startedAt);
     if (remainingTimeoutMs <= 0) {
+      cancellation.clear();
       throw new DockerScannerTimeoutError(
         `Scanner worker timed out after ${runOptions.timeoutMs}ms`,
       );
@@ -475,10 +518,15 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
       createContainerPromise = options.client.createContainer(
         buildContainerConfiguration(runOptions, options.cacheDir, hardening),
       );
-      container = await Promise.race([createContainerPromise, timeout.promise]);
+      container = await Promise.race([
+        createContainerPromise,
+        timeout.promise,
+        cancellation.promise,
+      ]);
       const stream = await Promise.race([
         container.attach({ stream: true, stdout: true, stderr: true }),
         timeout.promise,
+        cancellation.promise,
       ]);
       const streamCompletion = createStreamCompletion(stream);
       const collectors = createOutputCollectors(runOptions.maxOutputBytes);
@@ -493,6 +541,7 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
         timeout.promise,
         collectors.overflow,
         streamCompletion.failed,
+        cancellation.promise,
       ]);
 
       const waitResult: { StatusCode?: number } = await Promise.race([
@@ -500,12 +549,14 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
         timeout.promise,
         collectors.overflow,
         streamCompletion.failed,
+        cancellation.promise,
       ]);
       await Promise.race([
         streamCompletion.done,
         collectors.overflow,
         streamCompletion.failed,
         timeout.promise,
+        cancellation.promise,
       ]);
       const outputLimitError = collectors.overflowError();
       if (outputLimitError) {
@@ -525,7 +576,12 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
       }
       return { exitCode, stdout, stderr } as DockerScannerRunResult;
     } catch (error: unknown) {
-      if (error instanceof DockerScannerTimeoutError && createContainerPromise && !container) {
+      const aborted = cancellation.isAbort(error);
+      if (
+        (error instanceof DockerScannerTimeoutError || aborted) &&
+        createContainerPromise &&
+        !container
+      ) {
         void createContainerPromise
           .then((lateContainer) => lateContainer.remove({ force: true }))
           .catch(() => undefined);
@@ -533,13 +589,15 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
       if (
         container &&
         (error instanceof DockerScannerTimeoutError ||
-          error instanceof DockerScannerOutputLimitError)
+          error instanceof DockerScannerOutputLimitError ||
+          aborted)
       ) {
         await terminateWorker(container);
       }
       throw error;
     } finally {
       timeout.clear();
+      cancellation.clear();
       if (container) {
         try {
           await container.remove({ force: true });

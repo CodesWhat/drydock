@@ -3,7 +3,6 @@ import { WebSocketServer } from 'ws';
 import * as configuration from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
-import * as rateLimitKey from '../rate-limit-key.js';
 import { createIdentityAwareUpgradeRateLimitKeyResolver } from '../ws-upgrade-utils.js';
 import {
   attachContainerLogStreamWebSocketServer,
@@ -507,6 +506,7 @@ describe('api/container/log-stream', () => {
           headers: {
             origin: 'http://localhost:3000',
             host: 'localhost:3000',
+            'x-forwarded-proto': 'http',
           },
           socket: { remoteAddress: '127.0.0.1' },
         } as any,
@@ -2183,6 +2183,7 @@ describe('api/container/log-stream', () => {
         status: 'running',
       } as any);
       const listeners: Array<(request: unknown, socket: unknown, head: Buffer) => void> = [];
+      const isRateLimited = vi.fn(() => false);
       const server = {
         on: vi.fn(
           (
@@ -2205,6 +2206,7 @@ describe('api/container/log-stream', () => {
           serverConfiguration: {
             ratelimit: { identitykeying: false },
           },
+          isRateLimited,
         });
 
         const socket = createUpgradeSocket();
@@ -2214,6 +2216,8 @@ describe('api/container/log-stream', () => {
           Buffer.alloc(0),
         );
         await new Promise((resolve) => setImmediate(resolve));
+        expect(isRateLimited).toHaveBeenCalledWith('ip:127.0.0.1');
+        expect(webSocketUpgradeSpy).toHaveBeenCalledOnce();
       } finally {
         webSocketUpgradeSpy.mockRestore();
         getStateSpy.mockRestore();
@@ -2263,9 +2267,6 @@ describe('api/container/log-stream', () => {
     });
 
     test('falls back to ip key when identity-aware key generator returns an empty key', async () => {
-      const createKeySpy = vi
-        .spyOn(rateLimitKey, 'createAuthenticatedRouteRateLimitKeyGenerator')
-        .mockReturnValue(() => '' as any);
       const webSocketUpgradeSpy = vi
         .spyOn(WebSocketServer.prototype, 'handleUpgrade')
         .mockImplementation((_request, _socket, _head, callback) => {
@@ -2297,6 +2298,7 @@ describe('api/container/log-stream', () => {
         status: 'running',
       } as any);
       const listeners: Array<(request: unknown, socket: unknown, head: Buffer) => void> = [];
+      const isRateLimited = vi.fn(() => false);
       const server = {
         on: vi.fn(
           (
@@ -2312,13 +2314,13 @@ describe('api/container/log-stream', () => {
         attachContainerLogStreamWebSocketServer({
           server: server as any,
           sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
-            req.session = { passport: { user: '{"username":"alice"}' } };
-            req.sessionID = 'session-1';
+            req.session = { passport: { user: '{}' } };
             next();
           },
           serverConfiguration: {
             ratelimit: { identitykeying: true },
           },
+          isRateLimited,
         });
 
         const socket = createUpgradeSocket();
@@ -2328,8 +2330,9 @@ describe('api/container/log-stream', () => {
           Buffer.alloc(0),
         );
         await new Promise((resolve) => setImmediate(resolve));
+        expect(isRateLimited).toHaveBeenCalledWith('ip:127.0.0.1');
+        expect(webSocketUpgradeSpy).toHaveBeenCalledOnce();
       } finally {
-        createKeySpy.mockRestore();
         webSocketUpgradeSpy.mockRestore();
         getStateSpy.mockRestore();
         getContainerSpy.mockRestore();
@@ -2368,6 +2371,7 @@ describe('api/container/log-stream', () => {
         status: 'running',
       } as any);
       const listeners: Array<(request: unknown, socket: unknown, head: Buffer) => void> = [];
+      const isRateLimited = vi.fn(() => false);
       const server = {
         on: vi.fn(
           (
@@ -2390,6 +2394,7 @@ describe('api/container/log-stream', () => {
           serverConfiguration: {
             ratelimit: { identitykeying: true },
           },
+          isRateLimited,
         });
 
         const socket = createUpgradeSocket();
@@ -2399,6 +2404,8 @@ describe('api/container/log-stream', () => {
           Buffer.alloc(0),
         );
         await new Promise((resolve) => setImmediate(resolve));
+        expect(isRateLimited).toHaveBeenCalledWith('session:session-identity');
+        expect(webSocketUpgradeSpy).toHaveBeenCalledOnce();
       } finally {
         webSocketUpgradeSpy.mockRestore();
         getStateSpy.mockRestore();

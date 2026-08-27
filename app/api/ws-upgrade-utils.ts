@@ -1,6 +1,7 @@
 import { type IncomingMessage, ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import logger from '../log/index.js';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import {
   getAuthenticatedRouteRateLimitKey,
   type IdentityAwareRateLimitRequestLike,
@@ -113,21 +114,19 @@ export function isOriginAllowed(
 
   if (!effectiveHost) {
     allowed = false;
-  } else if (forwardedProtocol !== undefined) {
-    const normalizedProtocol = normalizeForwardedProtocol(forwardedProtocol);
-    if (normalizedProtocol === undefined) {
+  } else if (trustProxy) {
+    if (forwardedProtocol === undefined) {
       allowed = false;
     } else {
-      effectiveProtocol = normalizedProtocol;
+      const normalizedProtocol = normalizeForwardedProtocol(forwardedProtocol);
+      if (normalizedProtocol === undefined) {
+        allowed = false;
+      } else {
+        effectiveProtocol = normalizedProtocol;
+      }
     }
   } else {
-    // When trust proxy is enabled but X-Forwarded-Proto is absent, the local
-    // socket's TLS state does not reflect the client-facing protocol behind a
-    // TLS-terminating proxy (the backend socket is typically plain HTTP).
-    // Treat the protocol as unknown rather than falling back to the socket,
-    // which would otherwise reject a same-origin request purely because the
-    // proxy stripped the protocol header (see #867).
-    effectiveProtocol = trustProxy ? undefined : getSocketOriginProtocol(request);
+    effectiveProtocol = getSocketOriginProtocol(request);
   }
 
   let parsedOrigin: URL | undefined;
@@ -149,12 +148,17 @@ export function isOriginAllowed(
     }
   }
 
-  if (!allowed) {
+  if (
+    !allowed &&
+    log.isLevelEnabled('debug') &&
+    originRejectionLogLimiter.consume(getDefaultRateLimitKey(request))
+  ) {
     log.debug(
-      `WebSocket origin rejected: origin=${origin} effectiveHost=${effectiveHost ?? 'unknown'} ` +
+      `WebSocket origin rejected: origin=${sanitizeLogParam(origin)} ` +
+        `effectiveHost=${effectiveHost === undefined ? 'unknown' : sanitizeLogParam(effectiveHost)} ` +
         `effectiveProtocol=${effectiveProtocol ?? 'unknown'} trustProxy=${trustProxy} ` +
-        `x-forwarded-host=${request.headers['x-forwarded-host'] ?? 'absent'} ` +
-        `x-forwarded-proto=${request.headers['x-forwarded-proto'] ?? 'absent'}`,
+        `x-forwarded-host=${sanitizeOptionalHeaderForLog(request.headers['x-forwarded-host'])} ` +
+        `x-forwarded-proto=${sanitizeOptionalHeaderForLog(request.headers['x-forwarded-proto'])}`,
     );
   }
 
@@ -207,7 +211,7 @@ export function isAuthenticatedSession(
 }
 
 export function getDefaultRateLimitKey(request: UpgradeRequest): string {
-  const rawIpAddress = request.socket.remoteAddress;
+  const rawIpAddress = request.socket?.remoteAddress;
   if (typeof rawIpAddress !== 'string') {
     return 'ip:unknown';
   }
@@ -223,6 +227,12 @@ const DEFAULT_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_MAX_ENTRIES = 10_000;
 
 const DEFAULT_SWEEP_EVERY = 100;
+
+const ORIGIN_REJECTION_LOG_WINDOW_MS = 60_000;
+
+const ORIGIN_REJECTION_LOG_MAX_PER_WINDOW = 5;
+
+const ORIGIN_REJECTION_LOG_MAX_ADDRESSES = 10_000;
 
 export function createFixedWindowRateLimiter(options: {
   windowMs: number;
@@ -295,6 +305,16 @@ export function createFixedWindowRateLimiter(options: {
       counters.clear();
     },
   };
+}
+
+const originRejectionLogLimiter = createFixedWindowRateLimiter({
+  windowMs: ORIGIN_REJECTION_LOG_WINDOW_MS,
+  max: ORIGIN_REJECTION_LOG_MAX_PER_WINDOW,
+  maxEntries: ORIGIN_REJECTION_LOG_MAX_ADDRESSES,
+});
+
+function sanitizeOptionalHeaderForLog(value: unknown): string {
+  return value === undefined ? 'absent' : sanitizeLogParam(value);
 }
 
 export function createIdentityAwareUpgradeRateLimitKeyResolver(

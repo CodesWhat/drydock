@@ -5,6 +5,27 @@ import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as eventApi from './event.js';
 
+function createPressureResponse() {
+  const listeners: Record<string, () => void> = {};
+  const response = {
+    writeHead: vi.fn(),
+    write: vi.fn(() => true),
+    once: vi.fn((eventName: string, listener: () => void) => {
+      listeners[eventName] = listener;
+      return response;
+    }),
+    off: vi.fn((eventName: string, listener: () => void) => {
+      if (listeners[eventName] === listener) {
+        delete listeners[eventName];
+      }
+      return response;
+    }),
+    destroy: vi.fn(),
+    listeners,
+  };
+  return response;
+}
+
 const { mockLogInfo, mockLogWarn, mockLogError, mockLogDebug, mockLoggerChild } = vi.hoisted(
   () => ({
     mockLogInfo: vi.fn(),
@@ -93,6 +114,287 @@ describe('agent API event', () => {
   });
 
   describe('subscribeEvents', () => {
+    test('should reject excess streams before retaining or writing the response', () => {
+      for (let index = 0; index < eventApi.AGENT_SSE_CONNECTION_LIMIT; index += 1) {
+        eventApi.subscribeEvents(
+          { ip: `127.0.0.${index + 1}`, on: vi.fn() },
+          createPressureResponse(),
+        );
+      }
+      const rejectedResponse = createPressureResponse();
+
+      const accepted = eventApi.subscribeEvents(
+        { ip: '127.0.0.99', on: vi.fn() },
+        rejectedResponse,
+      );
+
+      expect(accepted).toBe(false);
+      expect(rejectedResponse.writeHead).not.toHaveBeenCalled();
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+      addedHandler({ id: 'not-retained' });
+      expect(rejectedResponse.write).not.toHaveBeenCalled();
+    });
+
+    test('should isolate a backpressured client and deliver every queued event in order on drain', () => {
+      const slowReq = { ip: '127.0.0.1', on: vi.fn() };
+      const slowResponse = createPressureResponse();
+      const normalResponse = createPressureResponse();
+      eventApi.subscribeEvents(slowReq, slowResponse);
+      eventApi.subscribeEvents({ ip: '127.0.0.2', on: vi.fn() }, normalResponse);
+      slowResponse.write.mockClear();
+      normalResponse.write.mockClear();
+      slowResponse.write.mockImplementationOnce(() => false).mockImplementation(() => true);
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+
+      addedHandler({ id: 'first' });
+      addedHandler({ id: 'second' });
+      addedHandler({ id: 'latest' });
+
+      expect(slowResponse.write).toHaveBeenCalledTimes(1);
+      expect(normalResponse.write).toHaveBeenCalledTimes(3);
+      expect(slowResponse.once).toHaveBeenCalledWith('drain', expect.any(Function));
+
+      slowResponse.listeners.drain();
+
+      // Every event queued during the backpressure window is delivered, in FIFO
+      // order, once the client drains — none of them are coalesced away.
+      expect(slowResponse.write).toHaveBeenCalledTimes(3);
+      expect(slowResponse.write.mock.calls[1][0]).toContain('second');
+      expect(slowResponse.write.mock.calls[2][0]).toContain('latest');
+    });
+
+    test('should remove drain and client state when a backpressured response closes', () => {
+      const slowReq = { ip: '127.0.0.1', on: vi.fn(), off: vi.fn() };
+      const slowResponse = createPressureResponse();
+      eventApi.subscribeEvents(slowReq, slowResponse);
+      slowResponse.write.mockClear();
+      slowResponse.write.mockReturnValueOnce(false);
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+      addedHandler({ id: 'first' });
+      const drainHandler = slowResponse.listeners.drain;
+
+      const closeHandler = slowReq.on.mock.calls[0][1];
+      closeHandler();
+      closeHandler();
+      drainHandler();
+      addedHandler({ id: 'after-close' });
+
+      expect(slowResponse.off).toHaveBeenCalledWith('drain', drainHandler);
+      expect(slowReq.off).toHaveBeenCalledWith('close', closeHandler);
+      expect(slowResponse.listeners.drain).toBeUndefined();
+      expect(slowResponse.write).toHaveBeenCalledTimes(1);
+    });
+
+    test('should skip a client closed by an earlier client write in the same fan-out', () => {
+      const firstReq = { ip: '127.0.0.1', on: vi.fn() };
+      const secondReq = { ip: '127.0.0.2', on: vi.fn() };
+      const firstResponse = createPressureResponse();
+      const secondResponse = createPressureResponse();
+      eventApi.subscribeEvents(firstReq, firstResponse);
+      eventApi.subscribeEvents(secondReq, secondResponse);
+      firstResponse.write.mockClear();
+      secondResponse.write.mockClear();
+      const secondCloseHandler = secondReq.on.mock.calls[0][1];
+      firstResponse.write.mockImplementationOnce(() => {
+        secondCloseHandler();
+        return true;
+      });
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+
+      addedHandler({ id: 'fan-out' });
+
+      expect(firstResponse.write).toHaveBeenCalledTimes(1);
+      expect(secondResponse.write).not.toHaveBeenCalled();
+    });
+
+    test('should clear backpressure on drain when no event was retained', () => {
+      const slowResponse = createPressureResponse();
+      eventApi.subscribeEvents({ ip: '127.0.0.1', on: vi.fn() }, slowResponse);
+      slowResponse.write.mockClear();
+      slowResponse.write.mockReturnValueOnce(false).mockReturnValue(true);
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+
+      addedHandler({ id: 'blocked' });
+      slowResponse.listeners.drain();
+      addedHandler({ id: 'after-drain' });
+
+      expect(slowResponse.write).toHaveBeenCalledTimes(2);
+      expect(slowResponse.write.mock.calls[1][0]).toContain('after-drain');
+    });
+
+    test('should destroy and remove a backpressured client when its pending event overflows', () => {
+      const slowReq = { ip: '127.0.0.1', on: vi.fn(), off: vi.fn() };
+      const slowResponse = createPressureResponse();
+      eventApi.subscribeEvents(slowReq, slowResponse);
+      slowResponse.write.mockClear();
+      slowResponse.write.mockReturnValueOnce(false);
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+      addedHandler({ id: 'first' });
+
+      addedHandler({ id: 'overflow', details: 'x'.repeat(1024 * 1024) });
+      addedHandler({ id: 'after-overflow' });
+
+      expect(slowResponse.destroy).toHaveBeenCalledTimes(1);
+      expect(slowResponse.off).toHaveBeenCalledWith('drain', expect.any(Function));
+      expect(slowReq.off).toHaveBeenCalledWith('close', expect.any(Function));
+      expect(slowResponse.write).toHaveBeenCalledTimes(1);
+    });
+
+    test('should destroy and remove a backpressured client when its queued backlog exceeds the byte bound across several small payloads', () => {
+      const slowReq = { ip: '127.0.0.1', on: vi.fn(), off: vi.fn() };
+      const slowResponse = createPressureResponse();
+      eventApi.subscribeEvents(slowReq, slowResponse);
+      slowResponse.write.mockClear();
+      slowResponse.write.mockReturnValueOnce(false);
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+      addedHandler({ id: 'first' });
+
+      // Each individual queued payload is well under MAX_PENDING_SSE_BYTES on its
+      // own; only the cumulative backlog crosses the bound.
+      const chunk = 'x'.repeat(100 * 1024);
+      addedHandler({ id: 'e2', details: chunk });
+      addedHandler({ id: 'e3', details: chunk });
+      addedHandler({ id: 'e4', details: chunk });
+
+      expect(slowResponse.destroy).toHaveBeenCalledTimes(1);
+      expect(slowResponse.off).toHaveBeenCalledWith('drain', expect.any(Function));
+      expect(slowReq.off).toHaveBeenCalledWith('close', expect.any(Function));
+      expect(slowResponse.write).toHaveBeenCalledTimes(1);
+    });
+
+    test('should stop mid-flush and re-arm the drain handler when a queued write itself reports backpressure', () => {
+      const slowReq = { ip: '127.0.0.1', on: vi.fn(), off: vi.fn() };
+      const slowResponse = createPressureResponse();
+      eventApi.subscribeEvents(slowReq, slowResponse);
+      slowResponse.write.mockClear();
+      slowResponse.write
+        .mockImplementationOnce(() => false) // initial write of 'first' -> backpressured
+        .mockImplementationOnce(() => true) // flush of 'a' succeeds
+        .mockImplementationOnce(() => false) // flush of 'b' itself reports backpressure
+        .mockImplementation(() => true); // everything after the next drain succeeds
+      eventApi.initEvents();
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+
+      addedHandler({ id: 'first' });
+      addedHandler({ id: 'a' });
+      addedHandler({ id: 'b' });
+      addedHandler({ id: 'c' });
+
+      expect(slowResponse.write).toHaveBeenCalledTimes(1);
+      expect(slowResponse.once).toHaveBeenCalledTimes(1);
+
+      slowResponse.listeners.drain();
+
+      // Flush wrote 'a', then hit backpressure again on 'b': it stops there,
+      // leaving 'c' queued, and re-arms a fresh drain handler.
+      expect(slowResponse.write).toHaveBeenCalledTimes(3);
+      expect(slowResponse.write.mock.calls[1][0]).toContain('"a"');
+      expect(slowResponse.write.mock.calls[2][0]).toContain('"b"');
+      expect(slowResponse.once).toHaveBeenCalledTimes(2);
+
+      slowResponse.listeners.drain();
+
+      // The remainder ('c') is delivered on the next drain, not dropped.
+      expect(slowResponse.write).toHaveBeenCalledTimes(4);
+      expect(slowResponse.write.mock.calls[3][0]).toContain('"c"');
+    });
+
+    test('should preserve every initial watcher replay when live traffic arrives before drain', () => {
+      eventApi.subscribeEvents(req, res);
+      eventApi.initEvents();
+      const snapshotHandler = vi.mocked(event.registerWatcherSnapshot).mock.calls[0][0];
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'local-web', name: 'web' }],
+      });
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'edge' },
+        containers: [{ id: 'edge-api', name: 'api' }],
+      });
+
+      const replayResponse = createPressureResponse();
+      replayResponse.write.mockReturnValueOnce(false).mockReturnValue(true);
+      const accepted = eventApi.subscribeEvents({ ip: '127.0.0.2', on: vi.fn() }, replayResponse);
+
+      expect(accepted).toBe(true);
+      expect(replayResponse.write).toHaveBeenCalledTimes(1);
+      expect(replayResponse.write.mock.calls[0][0]).toContain('dd:ack');
+      expect(replayResponse.write.mock.calls[0][0]).toContain('local-web');
+      expect(replayResponse.write.mock.calls[0][0]).toContain('edge-api');
+      expect(replayResponse.once).toHaveBeenCalledWith('drain', expect.any(Function));
+
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+      addedHandler({ id: 'live-after-subscribe' });
+      replayResponse.listeners.drain();
+
+      expect(replayResponse.write).toHaveBeenCalledTimes(2);
+      const frames = replayResponse.write.mock.calls
+        .map(([payload]) => payload as string)
+        .join('')
+        .split('\n\n')
+        .filter(Boolean)
+        .map((frame) => JSON.parse(frame.replace(/^data: /, '')));
+      expect(frames.filter((frame) => frame.type === 'dd:ack')).toHaveLength(1);
+      expect(frames.filter((frame) => frame.type === 'dd:watcher-snapshot')).toEqual([
+        {
+          type: 'dd:watcher-snapshot',
+          data: {
+            watcher: { type: 'docker', name: 'local' },
+            containers: [{ id: 'local-web', name: 'web' }],
+          },
+        },
+        {
+          type: 'dd:watcher-snapshot',
+          data: {
+            watcher: { type: 'docker', name: 'edge' },
+            containers: [{ id: 'edge-api', name: 'api' }],
+          },
+        },
+      ]);
+      expect(frames.filter((frame) => frame.type === 'dd:container-added')).toEqual([
+        { type: 'dd:container-added', data: { id: 'live-after-subscribe' } },
+      ]);
+    });
+
+    test('should keep the stream open with only the ack when initial replay exceeds the byte bound', () => {
+      eventApi.subscribeEvents(req, res);
+      eventApi.initEvents();
+      const snapshotHandler = vi.mocked(event.registerWatcherSnapshot).mock.calls[0][0];
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'local-large', details: 'x'.repeat(140 * 1024) }],
+      });
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'edge' },
+        containers: [{ id: 'edge-large', details: 'y'.repeat(140 * 1024) }],
+      });
+
+      const replayRequest = { ip: '127.0.0.2', on: vi.fn(), off: vi.fn() };
+      const replayResponse = createPressureResponse();
+
+      expect(eventApi.subscribeEvents(replayRequest, replayResponse)).toBe(true);
+      expect(replayResponse.write).toHaveBeenCalledTimes(1);
+      const initialFrames = (replayResponse.write.mock.calls[0][0] as string)
+        .split('\n\n')
+        .filter(Boolean)
+        .map((frame) => JSON.parse(frame.replace(/^data: /, '')));
+      expect(initialFrames).toEqual([expect.objectContaining({ type: 'dd:ack' })]);
+      expect(replayResponse.destroy).not.toHaveBeenCalled();
+      expect(replayRequest.off).not.toHaveBeenCalled();
+
+      const addedHandler = vi.mocked(event.registerContainerAdded).mock.calls[0][0];
+      addedHandler({ id: 'after-overflow' });
+      expect(replayResponse.write).toHaveBeenCalledTimes(2);
+      expect(replayResponse.write.mock.calls[1][0]).toContain('after-overflow');
+    });
+
     test('should rollover SSE client id when max safe integer is reached', () => {
       eventApi._setNextSseClientIdForTests(Number.MAX_SAFE_INTEGER);
 
@@ -892,9 +1194,10 @@ describe('agent API event', () => {
       const newRes = { writeHead: vi.fn(), write: vi.fn() };
       eventApi.subscribeEvents(newReq, newRes);
 
-      // Should have received: ack (call 0) + snapshot replay (call 1)
-      expect(newRes.write).toHaveBeenCalledTimes(2);
-      const replayCall = newRes.write.mock.calls[1][0];
+      // Ack and the complete replay are accepted by the response in one write.
+      expect(newRes.write).toHaveBeenCalledTimes(1);
+      const replayCall = newRes.write.mock.calls[0][0];
+      expect(replayCall).toContain('dd:ack');
       expect(replayCall).toContain('dd:watcher-snapshot');
       expect(replayCall).toContain('"type":"docker"');
       expect(replayCall).toContain('"name":"local"');
@@ -960,9 +1263,10 @@ describe('agent API event', () => {
       const newRes = { writeHead: vi.fn(), write: vi.fn() };
       eventApi.subscribeEvents(newReq, newRes);
 
-      // Should receive ack + exactly one snapshot replay (snapshot B)
-      expect(newRes.write).toHaveBeenCalledTimes(2);
-      const replayCall = newRes.write.mock.calls[1][0];
+      // Should receive ack + exactly one snapshot replay (snapshot B) in one write.
+      expect(newRes.write).toHaveBeenCalledTimes(1);
+      const replayCall = newRes.write.mock.calls[0][0];
+      expect(replayCall).toContain('dd:ack');
       expect(replayCall).toContain('new-container');
       expect(replayCall).not.toContain('old-container');
     });

@@ -432,6 +432,19 @@ describe('Container Router', () => {
       excludeRollbackContainers: true,
       ...query,
     });
+    const defaultStorePagination = (limit: number, offset: number) => ({
+      limit,
+      offset,
+      sort: expect.any(Function),
+    });
+
+    function expectDefaultStoreSortBehavior() {
+      const pagination = storeContainer.getContainers.mock.calls.at(-1)?.[1];
+      expect(pagination?.sort?.([{ name: 'zulu' }, { name: 'alpha' }] as any)).toEqual([
+        { name: 'alpha' },
+        { name: 'zulu' },
+      ]);
+    }
 
     test('should return containers from store', () => {
       storeContainer.getContainers.mockReturnValue([{ id: 'c1' }]);
@@ -439,10 +452,11 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: {} }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith(visibleContainersStoreQuery(), {
-        limit: 0,
-        offset: 0,
-      });
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(
+        visibleContainersStoreQuery(),
+        defaultStorePagination(0, 0),
+      );
+      expectDefaultStoreSortBehavior();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [expect.objectContaining({ id: 'c1' })],
@@ -459,10 +473,10 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: '' }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith(visibleContainersStoreQuery(), {
-        limit: 0,
-        offset: 0,
-      });
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(
+        visibleContainersStoreQuery(),
+        defaultStorePagination(0, 0),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [expect.objectContaining({ id: 'c1' })],
@@ -546,10 +560,10 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: { includeVulnerabilities: 'true' } }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith(visibleContainersStoreQuery(), {
-        limit: 0,
-        offset: 0,
-      });
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(
+        visibleContainersStoreQuery(),
+        defaultStorePagination(0, 0),
+      );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [
@@ -629,7 +643,7 @@ describe('Container Router', () => {
 
       expect(storeContainer.getContainers).toHaveBeenCalledWith(
         visibleContainersStoreQuery({ watcher: 'docker' }),
-        { limit: 1, offset: 1 },
+        defaultStorePagination(1, 1),
       );
       expect(storeContainer.getContainerCount).toHaveBeenCalledWith(
         visibleContainersStoreQuery({ watcher: 'docker' }),
@@ -677,7 +691,7 @@ describe('Container Router', () => {
 
       expect(storeContainer.getContainers).toHaveBeenCalledWith(
         visibleContainersStoreQuery({ watcher: 'docker' }),
-        { limit: 0, offset: 2 },
+        defaultStorePagination(0, 2),
       );
       expect(storeContainer.getContainerCount).toHaveBeenCalledWith(
         visibleContainersStoreQuery({ watcher: 'docker' }),

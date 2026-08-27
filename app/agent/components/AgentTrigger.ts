@@ -95,6 +95,14 @@ class AgentTrigger extends Trigger {
     return this.requireControllerTrigger('recreateContainer').recreateContainer(...args);
   }
 
+  reconcileInProgressContainerUpdateOperation(
+    ...args: Parameters<DockerTrigger['reconcileInProgressContainerUpdateOperation']>
+  ) {
+    return this.requireControllerTrigger(
+      'reconcileInProgressContainerUpdateOperation',
+    ).reconcileInProgressContainerUpdateOperation(...args);
+  }
+
   /**
    * Configuration schema.
    * Relaxed validation since the agent has already validated the config.

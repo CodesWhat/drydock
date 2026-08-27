@@ -12,7 +12,13 @@ const log = logger.child({ component: 'agent-api-event' });
 
 interface SseClient {
   id: number;
+  req: Request;
   res: Response;
+  backpressured: boolean;
+  pendingPayloads: string[];
+  drainHandler?: () => void;
+  closeHandler: () => void;
+  closed: boolean;
 }
 
 interface ContainerSummary {
@@ -40,6 +46,8 @@ interface ContainerLike {
 }
 
 const CONTAINER_SUMMARY_CACHE_TTL_MS = 2_000;
+export const AGENT_SSE_CONNECTION_LIMIT = 5;
+const MAX_PENDING_SSE_BYTES = 256 * 1024;
 
 interface RuntimeEnvEntry {
   key: string;
@@ -63,6 +71,84 @@ function allocateSseClientId(): number {
   return nextSseClientId;
 }
 
+function removeDrainHandler(client: SseClient): void {
+  if (!client.drainHandler) {
+    return;
+  }
+  client.res.off?.('drain', client.drainHandler);
+  client.drainHandler = undefined;
+}
+
+function removeSseClient(client: SseClient, destroy: boolean): void {
+  if (client.closed) {
+    return;
+  }
+  client.closed = true;
+  removeDrainHandler(client);
+  client.req.off?.('close', client.closeHandler);
+  client.pendingPayloads = [];
+  sseClients = sseClients.filter((candidate) => candidate.id !== client.id);
+  if (destroy) {
+    client.res.destroy?.();
+  }
+}
+
+function armDrainHandler(client: SseClient): void {
+  const drainHandler = () => {
+    removeDrainHandler(client);
+    if (client.closed) {
+      return;
+    }
+    client.backpressured = false;
+    flushPendingPayloads(client);
+  };
+  client.drainHandler = drainHandler;
+  client.res.once?.('drain', drainHandler);
+}
+
+// Flushes the backlog queued while the client was backpressured, in FIFO order,
+// so no event queued during that window is silently dropped. If the flush
+// itself hits res.write() === false partway through, it stops, leaves the
+// remainder queued, and re-arms the drain handler rather than resuming the
+// single-payload write path.
+function flushPendingPayloads(client: SseClient): void {
+  while (client.pendingPayloads.length > 0) {
+    const payload = client.pendingPayloads.shift();
+    if (client.res.write(payload) === false) {
+      client.backpressured = true;
+      armDrainHandler(client);
+      return;
+    }
+  }
+}
+
+function writeSsePayload(client: SseClient, payload: string): void {
+  if (client.closed) {
+    return;
+  }
+
+  if (client.backpressured) {
+    const pendingBytes = client.pendingPayloads.reduce(
+      (total, pending) => total + Buffer.byteLength(pending),
+      0,
+    );
+    if (pendingBytes + Buffer.byteLength(payload) > MAX_PENDING_SSE_BYTES) {
+      log.warn(`Controller SSE client ${client.id} exceeded its pending event limit.`);
+      removeSseClient(client, true);
+      return;
+    }
+    client.pendingPayloads.push(payload);
+    return;
+  }
+
+  if (client.res.write(payload) !== false) {
+    return;
+  }
+
+  client.backpressured = true;
+  armDrainHandler(client);
+}
+
 /**
  * Send SSE event to all clients.
  * @param eventName
@@ -75,7 +161,7 @@ function sendSseEvent(eventName: string, data: unknown) {
   };
   const payload = JSON.stringify(message);
   sseClients.forEach((client) => {
-    client.res.write(`data: ${payload}\n\n`);
+    writeSsePayload(client, `data: ${payload}\n\n`);
   });
 }
 
@@ -320,7 +406,12 @@ function getAckPayloadData() {
 /**
  * Subscribe to Events (SSE).
  */
-export function subscribeEvents(req: Request, res: Response) {
+export function subscribeEvents(req: Request, res: Response): boolean {
+  if (sseClients.length >= AGENT_SSE_CONNECTION_LIMIT) {
+    log.warn(`Controller SSE connection limit reached (${sseClients.length}).`);
+    return false;
+  }
+
   log.info(`Controller drydock with ip ${sanitizeLogParam(req.ip)} connected.`);
 
   const headers = {
@@ -330,33 +421,44 @@ export function subscribeEvents(req: Request, res: Response) {
   };
   res.writeHead(200, headers);
 
-  const client: SseClient = {
+  let client: SseClient;
+  const closeHandler = () => {
+    log.info(`Controller drydock with ip ${sanitizeLogParam(req.ip)} disconnected.`);
+    removeSseClient(client, false);
+  };
+  client = {
     id: allocateSseClientId(),
+    req,
     res,
+    backpressured: false,
+    pendingPayloads: [],
+    closeHandler,
+    closed: false,
   };
   sseClients.push(client);
+  req.on('close', closeHandler);
 
   // Send Welcome / Ack
   const ackMessage = {
     type: 'dd:ack',
     data: getAckPayloadData(),
   };
-  client.res.write(`data: ${JSON.stringify(ackMessage)}\n\n`);
-
-  // Replay the latest snapshot for each known watcher to this new client only (#386).
-  // A snapshot emitted while the controller SSE was disconnected would otherwise be
-  // lost until the next 6 h cron. Write directly to client.res — not sendSseEvent —
-  // to avoid broadcasting to already-connected clients.
-  for (const snapshot of lastWatcherSnapshotByWatcher.values()) {
-    client.res.write(
-      `data: ${JSON.stringify({ type: 'dd:watcher-snapshot', data: snapshot })}\n\n`,
-    );
+  const ackPayload = `data: ${JSON.stringify(ackMessage)}\n\n`;
+  const replayPayload = Array.from(lastWatcherSnapshotByWatcher.values(), (snapshot) => ({
+    type: 'dd:watcher-snapshot',
+    data: snapshot,
+  }))
+    .map((message) => `data: ${JSON.stringify(message)}\n\n`)
+    .join('');
+  const initialPayload = `${ackPayload}${replayPayload}`;
+  if (Buffer.byteLength(initialPayload) > MAX_PENDING_SSE_BYTES) {
+    log.warn(`Controller SSE client ${client.id} exceeded its initial replay limit; sending ack.`);
+    writeSsePayload(client, ackPayload);
+    return true;
   }
+  writeSsePayload(client, initialPayload);
 
-  req.on('close', () => {
-    log.info(`Controller drydock with ip ${sanitizeLogParam(req.ip)} disconnected.`);
-    sseClients = sseClients.filter((c) => c.id !== client.id);
-  });
+  return true;
 }
 
 /**
@@ -405,6 +507,9 @@ export function _setNextSseClientIdForTests(value: number): void {
 }
 
 export function _resetAgentEventStateForTests(): void {
+  for (const client of sseClients) {
+    removeSseClient(client, false);
+  }
   sseClients = [];
   nextSseClientId = 0;
   containerSummaryCache = undefined;

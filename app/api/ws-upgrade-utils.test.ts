@@ -6,6 +6,7 @@ const mockLogChild = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
   debug: vi.fn(),
+  isLevelEnabled: vi.fn(() => true),
 }));
 vi.mock('../log/index.js', () => ({
   default: {
@@ -13,6 +14,7 @@ vi.mock('../log/index.js', () => ({
   },
 }));
 
+import { sanitizeLogParam } from '../log/sanitize.js';
 import {
   applySessionMiddleware,
   createFixedWindowRateLimiter,
@@ -290,6 +292,7 @@ describe('ws-upgrade-utils', () => {
             origin: 'https://drydock.example.com',
             host: '10.0.0.1:3000',
             'x-forwarded-host': 'drydock.example.com',
+            'x-forwarded-proto': 'https',
           },
         } as any;
         expect(isOriginAllowed(request, withProxy)).toBe(true);
@@ -301,6 +304,7 @@ describe('ws-upgrade-utils', () => {
             origin: 'https://drydock.example.com',
             host: '10.0.0.1:3000',
             'x-forwarded-host': 'drydock.example.com, other.example.com',
+            'x-forwarded-proto': 'https',
           },
         } as any;
         expect(isOriginAllowed(request, withProxy)).toBe(true);
@@ -312,6 +316,7 @@ describe('ws-upgrade-utils', () => {
             origin: 'https://evil.com',
             host: '10.0.0.1:3000',
             'x-forwarded-host': 'drydock.example.com',
+            'x-forwarded-proto': 'https',
           },
         } as any;
         expect(isOriginAllowed(request, withProxy)).toBe(false);
@@ -322,6 +327,7 @@ describe('ws-upgrade-utils', () => {
           headers: {
             origin: 'https://drydock.example.com',
             host: 'drydock.example.com',
+            'x-forwarded-proto': 'https',
           },
         } as any;
         expect(isOriginAllowed(request, withProxy)).toBe(true);
@@ -333,6 +339,7 @@ describe('ws-upgrade-utils', () => {
             origin: 'https://drydock.example.com',
             host: 'drydock.example.com',
             'x-forwarded-host': '',
+            'x-forwarded-proto': 'https',
           },
         } as any;
         expect(isOriginAllowed(request, withProxy)).toBe(true);
@@ -343,17 +350,13 @@ describe('ws-upgrade-utils', () => {
           headers: {
             origin: 'https://drydock.example.com',
             'x-forwarded-host': '',
+            'x-forwarded-proto': 'https',
           },
         } as any;
         expect(isOriginAllowed(request, withProxy)).toBe(false);
       });
 
-      test('allows a matching origin when X-Forwarded-Proto is absent and the local socket is unencrypted (TLS-terminating proxy)', () => {
-        // Reporter's deployment shape (#867): trust proxy is on, the proxy
-        // terminates TLS and sends X-Forwarded-Host but not X-Forwarded-Proto,
-        // and the backend socket itself is plain HTTP. The local socket's
-        // encrypted=false must not be used as a stand-in for the client-facing
-        // protocol.
+      test('rejects a browser origin when X-Forwarded-Proto is absent', () => {
         const request = {
           headers: {
             origin: 'https://drydock.example.com',
@@ -362,7 +365,20 @@ describe('ws-upgrade-utils', () => {
           },
           socket: { encrypted: false },
         } as any;
-        expect(isOriginAllowed(request, withProxy)).toBe(true);
+        expect(isOriginAllowed(request, withProxy)).toBe(false);
+      });
+
+      test('rejects a browser origin when X-Forwarded-Proto is empty', () => {
+        const request = {
+          headers: {
+            origin: 'https://drydock.example.com',
+            host: '10.0.0.1:3000',
+            'x-forwarded-host': 'drydock.example.com',
+            'x-forwarded-proto': '   ',
+          },
+          socket: { encrypted: false },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(false);
       });
 
       test('still allows a matching origin when X-Forwarded-Proto is present alongside an unencrypted local socket', () => {
@@ -378,13 +394,13 @@ describe('ws-upgrade-utils', () => {
         expect(isOriginAllowed(request, withProxy)).toBe(true);
       });
 
-      test('still rejects a mismatched X-Forwarded-Host when X-Forwarded-Proto is absent and the local socket is unencrypted', () => {
-        // Protocol being unknown must not weaken the host check.
+      test('still rejects a mismatched X-Forwarded-Host with a valid forwarded protocol', () => {
         const request = {
           headers: {
             origin: 'https://evil.com',
             host: '10.0.0.1:3000',
             'x-forwarded-host': 'drydock.example.com',
+            'x-forwarded-proto': 'https',
           },
           socket: { encrypted: false },
         } as any;
@@ -400,7 +416,7 @@ describe('ws-upgrade-utils', () => {
           'x-forwarded-host': 'drydock.example.com',
           'x-forwarded-proto': 'https',
         },
-        socket: { encrypted: false },
+        socket: { encrypted: false, remoteAddress: '198.51.100.10' },
       } as any;
 
       expect(isOriginAllowed(request, { trustproxy: 1 })).toBe(false);
@@ -413,6 +429,95 @@ describe('ws-upgrade-utils', () => {
       expect(message).toContain('trustProxy=true');
       expect(message).toContain('x-forwarded-host=drydock.example.com');
       expect(message).toContain('x-forwarded-proto=https');
+    });
+
+    test('logs an unknown effective host when the request has no host headers', () => {
+      const request = {
+        headers: { origin: 'https://evil.com' },
+        socket: { encrypted: false, remoteAddress: '198.51.100.17' },
+      } as any;
+
+      expect(isOriginAllowed(request)).toBe(false);
+
+      const [message] = mockLogChild.debug.mock.calls[0];
+      expect(message).toContain('effectiveHost=unknown');
+    });
+
+    test('does not build a rejection diagnostic when debug logging is disabled', () => {
+      mockLogChild.isLevelEnabled.mockReturnValueOnce(false);
+      const request = {
+        headers: { origin: 'https://evil.com', host: 'drydock.example.com' },
+        socket: { encrypted: false, remoteAddress: '198.51.100.11' },
+      } as any;
+
+      expect(isOriginAllowed(request)).toBe(false);
+      expect(mockLogChild.isLevelEnabled).toHaveBeenCalledWith('debug');
+      expect(mockLogChild.debug).not.toHaveBeenCalled();
+    });
+
+    test('sanitizes and truncates attacker-controlled headers in rejection diagnostics', () => {
+      const origin = `invalid\n${'o'.repeat(220)}`;
+      const forwardedHost = `proxy\u001b[31m${'h'.repeat(220)}`;
+      const forwardedProtocol = `ftp\r${'p'.repeat(220)}`;
+      const request = {
+        headers: {
+          origin,
+          host: '10.0.0.1:3000',
+          'x-forwarded-host': forwardedHost,
+          'x-forwarded-proto': forwardedProtocol,
+        },
+        socket: { encrypted: false, remoteAddress: '198.51.100.12' },
+      } as any;
+
+      expect(isOriginAllowed(request, { trustproxy: 1 })).toBe(false);
+
+      const [message] = mockLogChild.debug.mock.calls[0];
+      expect(message).toContain(`origin=${sanitizeLogParam(origin)}`);
+      expect(message).toContain(`effectiveHost=${sanitizeLogParam(forwardedHost)}`);
+      expect(message).toContain(`x-forwarded-host=${sanitizeLogParam(forwardedHost)}`);
+      expect(message).toContain(`x-forwarded-proto=${sanitizeLogParam(forwardedProtocol)}`);
+      expect(message).not.toContain('\n');
+      expect(message).not.toContain('\r');
+      expect(message).not.toContain('\u001b');
+    });
+
+    test('bounds rejection diagnostics per remote address within a fixed window', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      try {
+        const request = {
+          headers: { origin: 'https://evil.com', host: 'drydock.example.com' },
+          socket: { encrypted: false, remoteAddress: '198.51.100.13' },
+        } as any;
+
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          expect(isOriginAllowed(request)).toBe(false);
+        }
+        expect(mockLogChild.debug).toHaveBeenCalledTimes(5);
+
+        vi.advanceTimersByTime(60_000);
+        expect(isOriginAllowed(request)).toBe(false);
+        expect(mockLogChild.debug).toHaveBeenCalledTimes(6);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('tracks rejection diagnostic allowances independently by remote address', () => {
+      const createRequest = (remoteAddress: string) =>
+        ({
+          headers: { origin: 'https://evil.com', host: 'drydock.example.com' },
+          socket: { encrypted: false, remoteAddress },
+        }) as any;
+
+      const firstAddressRequest = createRequest('198.51.100.14');
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        expect(isOriginAllowed(firstAddressRequest)).toBe(false);
+      }
+      expect(isOriginAllowed(createRequest('198.51.100.15'))).toBe(false);
+      expect(isOriginAllowed(createRequest('198.51.100.16'))).toBe(false);
+
+      expect(mockLogChild.debug).toHaveBeenCalledTimes(7);
     });
 
     test('does not log when the origin is allowed', () => {

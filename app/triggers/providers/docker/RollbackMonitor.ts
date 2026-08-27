@@ -1,3 +1,4 @@
+import type { ContainerBackupScope } from '../../../util/backup.js';
 import { parseEnvNonNegativeInteger } from '../../../util/parse.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 
@@ -11,7 +12,11 @@ type RollbackMonitorRootLogger = {
 };
 
 type RollbackContainer = {
+  id: string;
   name: string;
+  watcher: string;
+  agent?: string;
+  identityKey?: string;
   labels?: Record<string, string>;
   image: {
     tag: { value: string };
@@ -46,12 +51,14 @@ type RollbackMonitorDependencies = {
     containerName: string;
     backupImageTag: string;
     backupImageDigest?: string;
+    backupScope: ContainerBackupScope;
     window: number;
     interval: number;
     triggerInstance: unknown;
     log: RollbackMonitorLogger;
   }) => void;
   getTriggerInstance: () => unknown;
+  resolveContainerBackupScope: (container: RollbackContainer) => ContainerBackupScope;
 };
 
 type RollbackMonitorConstructorOptions = Omit<
@@ -67,6 +74,7 @@ const REQUIRED_ROLLBACK_MONITOR_DEPENDENCY_KEYS = [
   'getCurrentContainer',
   'inspectContainer',
   'startHealthMonitor',
+  'resolveContainerBackupScope',
 ] as const;
 const DEFAULT_ROLLBACK_WINDOW = 300000;
 const DEFAULT_ROLLBACK_INTERVAL = 10000;
@@ -103,6 +111,8 @@ class RollbackMonitor {
   startHealthMonitor: RollbackMonitorDependencies['startHealthMonitor'];
 
   getTriggerInstance: RollbackMonitorDependencies['getTriggerInstance'];
+
+  resolveContainerBackupScope: RollbackMonitorDependencies['resolveContainerBackupScope'];
 
   constructor(options: RollbackMonitorConstructorOptions) {
     const dependencies = resolveFunctionDependencies<RollbackMonitorDependencies>(options, {
@@ -180,6 +190,7 @@ class RollbackMonitor {
       containerName: container.name,
       backupImageTag: failingImageTag,
       backupImageDigest: container.image.digest?.repo,
+      backupScope: this.resolveContainerBackupScope(container),
       window: rollbackConfig.rollbackWindow,
       interval: rollbackConfig.rollbackInterval,
       triggerInstance: this.getTriggerInstance(),

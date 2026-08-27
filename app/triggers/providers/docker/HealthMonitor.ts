@@ -1,6 +1,7 @@
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
+import { buildRollbackImageReference, type ContainerBackupScope } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
 import {
   cleanupCreatedContainerCandidate,
@@ -47,6 +48,7 @@ interface HealthMonitorOptions {
   containerName: string;
   backupImageTag: string;
   backupImageDigest?: string;
+  backupScope: ContainerBackupScope;
   window: number;
   interval: number;
   triggerInstance: unknown;
@@ -69,6 +71,8 @@ interface RollbackContext {
   containerRef: ContainerRef;
   containerName: string;
   backupImageTag: string;
+  backupImageDigest?: string;
+  backupScope: ContainerBackupScope;
   log: LoggerLike;
 }
 
@@ -141,17 +145,26 @@ function recordRollbackError(containerName: string, message: string): void {
 }
 
 async function performRollback(context: RollbackContext): Promise<void> {
-  const { dockerApi, triggerInstance, containerRef, containerName, backupImageTag, log } = context;
+  const {
+    dockerApi,
+    triggerInstance,
+    containerRef,
+    containerName,
+    backupImageTag,
+    backupImageDigest,
+    backupScope,
+    log,
+  } = context;
 
   try {
-    const backups = backupStore.getBackupsByName(containerName);
+    const backups = backupStore.getBackupsForContainer(backupScope);
     if (backups.length === 0) {
       log.warn(`No backups found for container ${containerName} — cannot auto-rollback`);
       return;
     }
 
     const latestBackup = backups[0];
-    const backupImage = `${latestBackup.imageName}:${latestBackup.imageTag}`;
+    const backupImage = buildRollbackImageReference(latestBackup, backupImageDigest);
 
     log.info(`Auto-rollback: pulling backup image ${backupImage}`);
 
@@ -257,6 +270,8 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
     containerId,
     containerName,
     backupImageTag,
+    backupImageDigest,
+    backupScope,
     window: monitorWindow,
     interval,
     triggerInstance: triggerInstanceOption,
@@ -287,6 +302,8 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
         containerRef,
         containerName,
         backupImageTag,
+        backupImageDigest,
+        backupScope,
         log,
       }),
     log,

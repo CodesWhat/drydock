@@ -115,7 +115,7 @@ describe('Update Operation Store', () => {
     );
   });
 
-  test('createCollections should fail non-resumable active operations and leave resumable ones queued for recovery', async () => {
+  test('createCollections should preserve Docker-mutating in-progress phases for runtime reconciliation', async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T01:00:00.000Z'));
@@ -201,30 +201,24 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById('started-stale-op-1')).toEqual(
         expect.objectContaining({
           id: 'started-stale-op-1',
-          status: 'expired',
-          phase: 'expired',
-          completedAt: '2026-02-23T01:00:00.000Z',
-          lastError: expect.stringContaining('process restart'),
+          status: 'in-progress',
+          phase: 'new-started',
         }),
       );
 
       expect(fresh.getOperationById('health-stale-op-1')).toEqual(
         expect.objectContaining({
           id: 'health-stale-op-1',
-          status: 'expired',
-          phase: 'expired',
-          completedAt: '2026-02-23T01:00:00.000Z',
-          lastError: expect.stringContaining('process restart'),
+          status: 'in-progress',
+          phase: 'health-gate',
         }),
       );
 
       expect(fresh.getOperationById('deferred-stale-op-1')).toEqual(
         expect.objectContaining({
           id: 'deferred-stale-op-1',
-          status: 'expired',
-          phase: 'expired',
-          completedAt: '2026-02-23T01:00:00.000Z',
-          lastError: expect.stringContaining('process restart'),
+          status: 'in-progress',
+          phase: 'rollback-deferred',
         }),
       );
 
@@ -241,12 +235,48 @@ describe('Update Operation Store', () => {
       expect(fresh.getActiveOperationByContainerName('queued-web')).toEqual(
         expect.objectContaining({ id: 'queued-fresh-op-1', status: 'queued' }),
       );
-      expect(fresh.getActiveOperationByContainerName('started-web')).toBeUndefined();
-      expect(fresh.getActiveOperationByContainerName('health-web')).toBeUndefined();
-      expect(fresh.getActiveOperationByContainerName('deferred-web')).toBeUndefined();
+      expect(fresh.getActiveOperationByContainerName('started-web')?.status).toBe('in-progress');
+      expect(fresh.getActiveOperationByContainerName('health-web')?.status).toBe('in-progress');
+      expect(fresh.getActiveOperationByContainerName('deferred-web')?.status).toBe('in-progress');
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test.each([
+    'prepare',
+    'renamed',
+    'new-created',
+    'old-stopped',
+    'new-started',
+    'health-gate',
+    'rollback-started',
+    'rollback-deferred',
+  ])('createCollections should keep %s operations in-progress across restart', async (phase) => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const documents = [
+      {
+        data: {
+          id: `op-${phase}`,
+          containerId: 'container-old',
+          containerName: 'web',
+          status: 'in-progress',
+          phase,
+          oldContainerId: 'container-old',
+          tempName: 'web-drydock-update',
+          newContainerId: 'container-new',
+          createdAt: '2026-02-23T00:00:00.000Z',
+          updatedAt: '2026-02-23T00:10:00.000Z',
+        },
+      },
+    ];
+
+    fresh.createCollections(createDocumentBackedDb(documents) as any);
+
+    expect(fresh.getOperationById(`op-${phase}`)).toEqual(
+      expect.objectContaining({ status: 'in-progress', phase }),
+    );
   });
 
   test('createCollections should reset in-progress pulling-phase operations to queued for recovery', async () => {
@@ -879,7 +909,7 @@ describe('Update Operation Store', () => {
     );
   });
 
-  test('markOperationTerminal should set completedAt, clear queue metadata, and default failed phase', () => {
+  test('markOperationTerminal should set completedAt, preserve batch metadata, and default failed phase', () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
@@ -905,9 +935,9 @@ describe('Update Operation Store', () => {
           phase: 'failed',
           lastError: 'scan failed',
           completedAt: '2026-02-23T00:01:00.000Z',
-          batchId: undefined,
-          queuePosition: undefined,
-          queueTotal: undefined,
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 4,
         }),
       );
       expect(updateOperation.getActiveOperationByContainerName('web')).toBeUndefined();
@@ -966,6 +996,28 @@ describe('Update Operation Store', () => {
         lastError: 'new error',
       }),
     ).toEqual(terminal);
+  });
+
+  test('markOperationTerminal tolerates a persisted batch row without in-memory membership', () => {
+    const documents: any[] = [];
+    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+    documents.push({
+      data: {
+        id: 'unregistered-batch-member',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        batchId: 'unregistered-batch',
+        createdAt: '2026-02-23T00:00:00.000Z',
+        updatedAt: '2026-02-23T00:00:00.000Z',
+      },
+    });
+
+    expect(
+      updateOperation.markOperationTerminal('unregistered-batch-member', {
+        status: 'succeeded',
+      }),
+    ).toMatchObject({ status: 'succeeded', batchId: 'unregistered-batch' });
   });
 
   test('markOperationTerminal emits update-applied with stored container snapshot (issue #385)', async () => {
@@ -1389,9 +1441,9 @@ describe('Update Operation Store', () => {
           status: 'expired',
           phase: 'expired',
           completedAt: '2026-02-23T00:01:01.000Z',
-          batchId: undefined,
-          queuePosition: undefined,
-          queueTotal: undefined,
+          batchId: 'batch-ttl',
+          queuePosition: 1,
+          queueTotal: 3,
           lastError: expect.stringContaining('active update TTL'),
         }),
       );

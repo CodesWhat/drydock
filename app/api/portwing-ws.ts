@@ -63,6 +63,7 @@ const KEY_ID_PATTERN = /^[0-9a-f]{16}$/;
 // slices its OUTPUT to 63 chars, but an attacker-supplied multi-megabyte string
 // would still be copied/regex-processed before that slice runs; this caps the input.
 const MAX_AGENT_NAME_INPUT_LENGTH = 256;
+const MAX_DRYDOCK_COMPAT_INPUT_LENGTH = 64;
 const MAX_CLOCK_SKEW_SECONDS = 60;
 const MAX_PAYLOAD_BYTES = 16 * 1024 * 1024; // 16 MB — matches the agent conn.SetReadLimit
 
@@ -527,7 +528,10 @@ function handleConnection(
     }
     helloHandled = true;
     clearTimeout(helloTimer);
-    void processHello(ws, raw, keyStore, serverConfiguration);
+    void processHello(ws, raw, keyStore, serverConfiguration).catch((error: unknown) => {
+      log.error(`Unexpected hello processing failure: ${getErrorMessage(error)}`);
+      sendErrorAndClose(ws, 'internal-error', 'Internal server error', 1011);
+    });
   });
 }
 
@@ -582,6 +586,22 @@ async function processHello(
     return;
   }
 
+  const drydockCompat = hello.drydockCompat;
+  if (
+    drydockCompat !== undefined &&
+    (typeof drydockCompat !== 'string' ||
+      drydockCompat.trim().length === 0 ||
+      drydockCompat.length > MAX_DRYDOCK_COMPAT_INPUT_LENGTH)
+  ) {
+    sendErrorAndClose(
+      ws,
+      'invalid-drydock-compat',
+      `drydockCompat must be a non-empty string of at most ${MAX_DRYDOCK_COMPAT_INPUT_LENGTH} characters`,
+      1008,
+    );
+    return;
+  }
+
   // Step 3: Protocol check
   if (hello.protocol !== PROTOCOL_STRING) {
     sendErrorAndClose(
@@ -594,7 +614,6 @@ async function processHello(
   }
 
   // Log version info for audit trail
-  const drydockCompat = hello.drydockCompat;
   if (!drydockCompat) {
     log.warn('Edge agent hello has no drydockCompat field (old client?)');
   } else {

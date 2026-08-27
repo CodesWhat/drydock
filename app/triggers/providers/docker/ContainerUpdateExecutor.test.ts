@@ -577,6 +577,8 @@ describe('ContainerUpdateExecutor', () => {
   test('reconcile handles active-only and missing-container recovery states', async () => {
     const pending = {
       id: 'op-1',
+      oldContainerId: 'old-container-id',
+      newContainerId: 'new-container-id',
       oldName: 'web',
       tempName: 'web-old-1',
       fromVersion: '1.0.0',
@@ -588,7 +590,7 @@ describe('ContainerUpdateExecutor', () => {
     const inspectSpy = vi.spyOn(executor, 'inspectContainerByIdentifier');
 
     inspectSpy
-      .mockResolvedValueOnce({ container: {}, inspection: {} })
+      .mockResolvedValueOnce({ container: {}, inspection: { Id: 'new-container-id' } })
       .mockResolvedValueOnce(undefined);
     await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
@@ -607,6 +609,38 @@ describe('ContainerUpdateExecutor', () => {
         status: 'failed',
         phase: 'recovery-missing-containers',
       }),
+    );
+  });
+
+  test('reconcile does not mark an untouched original container as a successful replacement', async () => {
+    const pending = {
+      id: 'op-prepare',
+      phase: 'prepare',
+      oldContainerId: 'old-container-id',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const executor = createExecutor();
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce({ container: {}, inspection: { Id: 'old-container-id' } })
+      .mockResolvedValueOnce(undefined);
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-prepare',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'recovery-failed',
+      }),
+    );
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+      'op-prepare',
+      expect.objectContaining({ status: 'succeeded' }),
     );
   });
 
