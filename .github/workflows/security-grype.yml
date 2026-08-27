@@ -1,9 +1,9 @@
-name: "🛡️ Security: Grype"
+name: "Security: Grype"
 run-name: >-
   ${{
-    github.event_name == 'schedule' && '🛡️ Security: Grype — Weekly run' ||
-    github.event_name == 'pull_request' && format('🛡️ Security: Grype — PR #{0}', github.event.pull_request.number) ||
-    format('🛡️ Security: Grype — Manual by {0}', github.actor)
+    github.event_name == 'schedule' && 'Security: Grype — Weekly run' ||
+    github.event_name == 'pull_request' && format('Security: Grype — PR #{0}', github.event.pull_request.number) ||
+    format('Security: Grype — Manual by {0}', github.actor)
   }}
 
 on:
@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   grype-deps:
-    name: "📦 Security: Grype Dependency Scan (npm lockfiles)"
+    name: "Security: Grype Dependency Scan (npm lockfiles)"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -81,7 +81,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   grype-image:
-    name: "🐳 Security: Grype Container Scan"
+    name: "Security: Grype Container Scan"
     # The image build is the heavy step; keep it on scheduled/manual runs.
     # PRs get fast, accurate dependency coverage from grype-deps without
     # paying for a Docker build on every push.
