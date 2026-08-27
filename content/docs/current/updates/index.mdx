@@ -5,6 +5,16 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.4 Highlights — August 27, 2026
+
+One bug fix: tag suggestion no longer ranks a bare integer build-number tag
+above a real dotted version. A tag like `168` coerced into a fake `168.0.0` and
+could outrank a real release like `1.43.3`, so on `linuxserver/plex` the
+suggested-tag badge and, with a permissive `dd.tag.include` filter, the update
+candidate itself could point at a downgrade. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc4--2026-08-27)
+for the full release notes.
+
 ## v1.6.1-rc.3 Highlights — August 27, 2026
 
 Three bug fixes: a `ws`/`wss` value in `X-Forwarded-Proto` no longer rejects the

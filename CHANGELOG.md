@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.4] — 2026-08-27
+
 ### Fixed
 
 - **Tag suggestion no longer ranks a bare integer build-number tag above a real dotted version.** A bare integer tag (e.g. `168`) coerces via `semver.coerce()` into a fake `168.0.0`, which previously outranked a real release like `1.43.3` — for `linuxserver/plex`, this meant the suggested-tag badge and, with a permissive `dd.tag.include` filter, the actionable update candidate itself could point at a destructive downgrade. Bare integer tags are now only ever ranked among themselves (never against a real dotted version, and never at all when the population contains any other non-integer version signal, such as a prerelease-only or coercion-lossy tag), sorted numerically rather than lexically. The rule is shared between the suggested-tag badge (`tag/suggest.ts`) and the actionable non-semver/`includeTags` recovery path (`watchers/providers/docker/tag-candidates.ts`) via a new `tag/version-population.ts` module so the two paths can't drift apart again. ([#859](https://github.com/CodesWhat/drydock/issues/859))
@@ -2423,7 +2425,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.3...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.4...HEAD
+[1.6.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.3...v1.6.1-rc.4
 [1.6.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.2...v1.6.1-rc.3
 [1.6.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.1...v1.6.1-rc.2
 [1.6.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.6.1-rc.1
