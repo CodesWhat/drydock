@@ -836,7 +836,7 @@ onMounted(async () => {
 
             <div class="pt-2 flex items-center gap-2">
               <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                      :style="{ backgroundColor: 'var(--dd-primary)', color: 'white' }"
+                      :style="{ backgroundColor: 'var(--dd-primary)', color: 'var(--dd-primary-fg)' }"
                       :disabled="detailSaving || !detailHasChanges"
                       @click="saveSelectedRule">
                 <AppIcon :name="detailSaving ? 'pending' : 'check'" :size="12" />

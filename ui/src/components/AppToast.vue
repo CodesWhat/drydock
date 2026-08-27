@@ -11,28 +11,28 @@ function toneStyles(tone: ToastTone) {
   switch (tone) {
     case 'error':
       return {
-        bg: 'color-mix(in srgb, var(--dd-danger) 25%, var(--dd-bg-card))',
+        bg: 'color-mix(in srgb, var(--dd-danger) 15%, var(--dd-bg-card))',
         border: 'var(--dd-danger)',
         text: 'var(--dd-danger)',
         iconName: 'warning',
       };
     case 'success':
       return {
-        bg: 'color-mix(in srgb, var(--dd-success) 25%, var(--dd-bg-card))',
+        bg: 'color-mix(in srgb, var(--dd-success) 15%, var(--dd-bg-card))',
         border: 'var(--dd-success)',
         text: 'var(--dd-success)',
         iconName: 'up-to-date',
       };
     case 'warning':
       return {
-        bg: 'color-mix(in srgb, var(--dd-warning) 25%, var(--dd-bg-card))',
+        bg: 'color-mix(in srgb, var(--dd-warning) 15%, var(--dd-bg-card))',
         border: 'var(--dd-warning)',
         text: 'var(--dd-warning)',
         iconName: 'warning',
       };
     default:
       return {
-        bg: 'color-mix(in srgb, var(--dd-primary) 25%, var(--dd-bg-card))',
+        bg: 'color-mix(in srgb, var(--dd-primary) 15%, var(--dd-bg-card))',
         border: 'var(--dd-primary)',
         text: 'var(--dd-primary)',
         iconName: 'info',
