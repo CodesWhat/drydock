@@ -53,11 +53,16 @@ interface ValidateResult {
   stderr: string;
 }
 
-function runValidateStep(changelogContent: string): ValidateResult {
+function runValidateStep(
+  changelogContent: string,
+  { writeChangelog = true }: { writeChangelog?: boolean } = {},
+): ValidateResult {
   const workdir = mkdtempSync(join(tmpdir(), 'release-cut-changelog-conflict-markers-'));
   try {
     const changelogPath = join(workdir, 'target-sha-changelog.md');
-    writeFileSync(changelogPath, changelogContent);
+    if (writeChangelog) {
+      writeFileSync(changelogPath, changelogContent);
+    }
 
     const scriptPath = join(workdir, 'validate-step.sh');
     writeFileSync(scriptPath, loadValidateStepRunBlock());
@@ -166,6 +171,21 @@ ${markerLine}
   expect(result.status).not.toBe(0);
   expect(result.stdout).toContain('CHANGELOG contains merge conflict markers');
   expect(result.stdout).toContain(markerLine);
+});
+
+test('an unreadable CHANGELOG fails the step before the marker grep runs', () => {
+  // `if grep ...; then` treats grep's exit 2 (file missing or unreadable) the
+  // same as its exit 1 (no match), so on its own the marker guard would fail
+  // open on an unreadable file. It doesn't, because the extract-script guard
+  // above it reads the same path under an explicit `if !` and exits 1 first.
+  // That makes an exit-2 branch in the grep unreachable — this pins the
+  // ordering the guard depends on, so a future reorder fails here instead of
+  // silently cutting a tag off an unscanned CHANGELOG.
+  const result = runValidateStep('', { writeChangelog: false });
+
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).toContain(`::error::CHANGELOG entry for ${RELEASE_TAG} missing.`);
+  expect(result.stdout).not.toContain(`Validated CHANGELOG entry for ${RELEASE_TAG}.`);
 });
 
 test('a line that merely starts with ======= does not fail', () => {
