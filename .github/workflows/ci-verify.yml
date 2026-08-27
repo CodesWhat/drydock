@@ -314,6 +314,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_TITLE: "CI: Fuzz tests failing on main"
+          # The title this step used before the emoji rename. This step both
+          # writes a title and matches on it, so dropping the old value would
+          # orphan an issue an earlier run filed and start posting duplicates
+          # beside it. Matching both, and retitling what it finds, closes that
+          # window instead of relying on none existing at merge time.
+          LEGACY_ISSUE_TITLE: "🚨 CI: Fuzz tests failing on main"
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -323,9 +329,12 @@ jobs:
             -H "Accept: application/vnd.github+json"
           )
 
+          match_filter='.[] | select((.title == $title or .title == $legacy) and (.pull_request | not))'
+
           issues_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100"
           open_issues="$(curl -fsSL "${api_headers[@]}" "${issues_url}")"
-          existing_number="$(echo "${open_issues}" | jq -r --arg title "${ISSUE_TITLE}" '.[] | select(.title == $title and (.pull_request | not)) | .number' | head -n1)"
+          existing_number="$(echo "${open_issues}" | jq -r --arg title "${ISSUE_TITLE}" --arg legacy "${LEGACY_ISSUE_TITLE}" "${match_filter} | .number" | head -n1)"
+          existing_title="$(echo "${open_issues}" | jq -r --arg title "${ISSUE_TITLE}" --arg legacy "${LEGACY_ISSUE_TITLE}" "${match_filter} | .title" | head -n1)"
 
           comment_body=$(
             cat <<EOF
@@ -339,6 +348,16 @@ jobs:
           )
 
           if [ -n "${existing_number}" ]; then
+            if [ "${existing_title}" != "${ISSUE_TITLE}" ]; then
+              # Retitle in place, so the next run matches on the new title and
+              # this migration branch stops firing. Done before the comment so
+              # a failure here surfaces rather than being masked by a
+              # successful comment on a still-legacy title.
+              issue_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${existing_number}"
+              curl -fsSL -X PATCH "${api_headers[@]}" "${issue_url}" \
+                -d "$(jq -n --arg title "${ISSUE_TITLE}" '{title: $title}')" >/dev/null
+            fi
+
             comment_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${existing_number}/comments"
             curl -fsSL -X POST "${api_headers[@]}" "${comment_url}" \
               -d "$(jq -n --arg body "${comment_body}" '{body: $body}')" >/dev/null
