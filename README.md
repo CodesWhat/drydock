@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.5-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.6-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,15 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.6 highlights</strong></summary>
+
+- **Maturity-policy overrides survive drydock updating itself** — the stash that lets a recreated container inherit its predecessor's maturity mode, min-age, skip list and snooze lived only in process memory, so the restart that is drydock's own self-update wiped it before the replacement container could read it and the controller-set policy was silently dropped. It now persists across the restart. Backported from the v1.7 line. ([#565](https://github.com/CodesWhat/drydock/issues/565))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc6--2026-08-28).
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.5 highlights</strong></summary>
 
 - **Compose updates now pick up the runtime defaults the new image ships** — a container recreated by the compose action was rebuilt from the stored config instead of re-reading the pulled image, so values like `APP_VERSION` carried over from the old container and the UI kept reporting an update that was already applied. Backported from the v1.7 line. ([#734](https://github.com/CodesWhat/drydock/issues/734))

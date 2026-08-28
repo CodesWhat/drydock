@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.6] — 2026-08-28
+
 ### Fixed
 
 - **Maturity-policy overrides no longer get wiped by drydock's own self-update.** `updatePolicyRetentionCache` — the stash that lets a recreated container inherit its predecessor's maturity mode, min-age, skip list, and snooze — lived only in a bare in-memory Map, so the SIGTERM-driven restart that is drydock's own self-update (recreate action, SIGTERM, new process) wiped the stash before the replacement container could consume it, silently dropping controller-set update policy. The cache now writes through to a durable LokiJS-backed store and rehydrates from it at startup before the first container is inserted, the same treatment the sibling lifecycle cache already had. Backported from the v1.7 line, where the reporter's version could not reach it. ([#565](https://github.com/CodesWhat/drydock/issues/565))
@@ -2438,7 +2440,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.5...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.6...HEAD
+[1.6.1-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.5...v1.6.1-rc.6
 [1.6.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.4...v1.6.1-rc.5
 [1.6.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.3...v1.6.1-rc.4
 [1.6.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.2...v1.6.1-rc.3

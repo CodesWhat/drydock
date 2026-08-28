@@ -5,6 +5,16 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.6 Highlights — August 28, 2026
+
+One bug fix: maturity-policy overrides now survive drydock updating itself. The
+stash that lets a recreated container inherit its predecessor's maturity mode,
+min-age, skip list and snooze lived only in process memory, so the restart that
+is drydock's own self-update wiped it before the replacement container could
+read it. It now persists across the restart. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc6--2026-08-28)
+for the full release notes.
+
 ## v1.6.1-rc.5 Highlights — August 27, 2026
 
 Two fixes: compose updates now pick up the runtime defaults the new image
