@@ -21,8 +21,8 @@
       "alreadyUpToDate": "Đã cập nhật rồi: {name}",
       "queuedUpdateSingle": "Đã xếp hàng cập nhật cho {count} container",
       "queuedUpdateMultiple": "Đã xếp hàng cập nhật cho {count} container",
-      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
-      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
+      "queuedUpdateGroupSingle": "Đã xếp hàng cập nhật cho {count} container trong {group}",
+      "queuedUpdateGroupMultiple": "Đã xếp hàng cập nhật cho {count} container trong {group}",
       "countAlreadyUpToDateSingle": "{count} container đã cập nhật rồi",
       "countAlreadyUpToDateMultiple": "{count} container đã cập nhật rồi"
     },
@@ -35,15 +35,15 @@
       "container": "Container",
       "tag": "Tag",
       "version": "Phiên bản",
-      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
+      "versionTooltip": "Phiên bản được phát hiện từ metadata image. Giá trị này có thể trùng với tag và sẽ ẩn trước cột Máy chủ khi không đủ khoảng trống.",
       "update": "Cập nhật",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Trạng thái",
       "host": "Máy chủ",
       "registry": "Registry",
       "resources": "Tài nguyên",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "Thời gian hoạt động",
+      "ports": "Cổng"
     },
     "status": {
       "running": "đang chạy",

@@ -3,8 +3,8 @@
     "heading": "Hộp thư đi",
     "refresh": "Làm mới",
     "loading": "Đang tải mục hộp thư đi…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Không thể tải hộp thư đi",
+    "ofCount": "{count} trên {total}",
     "tabs": {
       "dead-letter": "Dead-letter",
       "pending": "Đang chờ",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Thử lại",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Thử lại mục hộp thư đi",
       "discard": "Bỏ qua",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Bỏ qua mục hộp thư đi"
     },
     "status": {
       "dead-letter": "Dead-letter",

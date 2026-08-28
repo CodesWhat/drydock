@@ -24,7 +24,7 @@
       "oidcFailed": "Nie udało się połączyć z {name}",
       "providerBasic": "Uwierzytelnianie podstawowe „{name}”: {error}",
       "providerOidc": "Dostawca OIDC „{name}”: {error}",
-      "providerNamed": "{type} '{name}': {error}",
+      "providerNamed": "{type} „{name}”: {error}",
       "providerGeneric": "{provider}: {error}"
     },
     "connectionLost": {

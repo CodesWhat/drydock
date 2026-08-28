@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "Загрузка правил уведомлений...",
     "loadError": "Не удалось загрузить правила уведомлений",
-    "saveError": "Failed to update notification rule",
+    "saveError": "Не удалось обновить правило уведомления",
     "filterPlaceholder": "Фильтр по имени, описанию или триггеру...",
     "clear": "Очистить",
     "allNotificationTriggers": "Все триггеры уведомлений",
@@ -110,8 +110,8 @@
         "description": "Когда проверка состояния Docker контейнера переходит в состояние \"unhealthy\""
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "name": "Зрелость снята",
+        "description": "Когда обновление, отложенное политикой зрелости, становится доступным"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Загрузка данных об уязвимостях...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "Не удалось загрузить статус среды выполнения проверки безопасности",
     "scanNow": "Сканировать сейчас",
     "scanning": "Сканирование...",
     "scanAllAriaLabel": "Сканировать все контейнеры",
@@ -203,11 +203,11 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} испр.",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "fixed": "{count} исправлено",
+      "new": "{count} новых",
+      "both": "{fixed} исправлено, {new} новых"
     },
     "deltaTooltips": {
       "fixedSingle": "Обновление устраняет {count} уязвимость",
@@ -299,7 +299,7 @@
       "unknown": "Неизвестно"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "Не удалось загрузить актуальные данные реестра",
       "refreshing": "Обновление данных реестра...",
       "status": "Статус",
       "authentication": "Аутентификация",
@@ -372,7 +372,7 @@
       "defaultError": "Тест триггера не выполнен"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "Не удалось загрузить актуальные данные триггера",
       "status": "Статус",
       "refreshing": "Обновление данных триггера...",
       "noConfig": "Свойства конфигурации отсутствуют"
@@ -407,7 +407,7 @@
       "maint": "Обслуживание"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "Не удалось загрузить актуальные данные наблюдателя",
       "cron": "Cron",
       "lastRun": "Последний запуск",
       "containersWatched": "Наблюдаемые контейнеры",

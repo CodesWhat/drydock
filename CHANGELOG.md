@@ -10,7 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The UI is properly translated in all 16 non-English locales.** Every locale already had every key, but between 17% and 29% of the values in each were still the English source text showing through, so large parts of the container list, the update and rollback dialogs, the search palette and the notification outbox rendered in English regardless of the language selected. 2109 strings are now actually translated. The 61 left alone are the ones with nothing to translate, such as `"{registryHost} — {error}"`, and category labels whose only word is a product name each locale already keeps in English.
+
 ### Fixed
+
+- **The image-maturity badge showed no age outside English.** `Detected {duration} ago` had replaced an older bare `NEW` label in the English source, but all 16 locales still carried a translation of the old wording, so the badge silently dropped its duration for every non-English user. Retranslated in all 16, and a new placeholder-parity gate now fails the build when a translated string loses or invents an interpolation placeholder, which is the class of bug that hid this one: it breaks neither JSON parsing nor key parity.
+- **The Dutch curl healthcheck banner named the wrong thing.** Its title rendered the CLI tool `curl` as `krulstatus`, which in Dutch is a decorative curl.
 
 - **Restoring the maturity-policy stash at startup no longer ignores the size cap, or evicts the wrong entry afterwards.** The durable `updatePolicyRetentionCache` added in 1.7.0-rc.2 restored every non-expired persisted record straight into memory without checking `DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES`, so lowering that limit between restarts came back over it and the extra entries stayed live until the next stash trimmed them. Restoring also used the store's document order, which has nothing to do with stash age, and the eviction that runs when the cap is hit reads that order as its LRU, so the first eviction after any restart could drop the newest entry and keep the oldest. Startup now restores oldest first and enforces the cap against both the in-memory cache and the persisted records. ([#565](https://github.com/CodesWhat/drydock/issues/565))
 

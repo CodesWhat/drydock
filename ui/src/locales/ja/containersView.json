@@ -21,8 +21,8 @@
       "alreadyUpToDate": "すでに最新です：{name}",
       "queuedUpdateSingle": "{count} 件のコンテナの更新をキューに追加しました",
       "queuedUpdateMultiple": "{count} 件のコンテナの更新をキューに追加しました",
-      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
-      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
+      "queuedUpdateGroupSingle": "{group} 内の {count} 件のコンテナの更新をキューに追加しました",
+      "queuedUpdateGroupMultiple": "{group} 内の {count} 件のコンテナの更新をキューに追加しました",
       "countAlreadyUpToDateSingle": "{count} 件のコンテナはすでに最新です",
       "countAlreadyUpToDateMultiple": "{count} 件のコンテナはすでに最新です"
     },
@@ -33,17 +33,17 @@
     },
     "columns": {
       "container": "コンテナ",
-      "tag": "Tag",
+      "tag": "タグ",
       "version": "バージョン",
-      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
+      "versionTooltip": "イメージのメタデータから検出されたバージョンです。タグと一致する場合があり、表示スペースが不足するとホストの前に非表示になります。",
       "update": "更新",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "ステータス",
       "host": "ホスト",
       "registry": "レジストリ",
       "resources": "リソース",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "稼働時間",
+      "ports": "ポート"
     },
     "status": {
       "running": "稼働中",

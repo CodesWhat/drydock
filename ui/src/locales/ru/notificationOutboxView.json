@@ -3,8 +3,8 @@
     "heading": "Исходящие",
     "refresh": "Обновить",
     "loading": "Загрузка исходящих…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Не удалось загрузить исходящие уведомления",
+    "ofCount": "{count} из {total}",
     "tabs": {
       "dead-letter": "Необработанные",
       "pending": "Ожидающие",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Повторить",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Повторить запись исходящих",
       "discard": "Отклонить",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Отклонить запись исходящих"
     },
     "status": {
       "dead-letter": "Необработанные",

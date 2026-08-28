@@ -11,8 +11,8 @@
       "dryRunUpdateTooltip": "이 트리거는 드라이런 모드입니다 — 클릭하면 새 이미지를 가져오지만 컨테이너는 교체하지 않습니다.",
       "dryRunCondition": "작업 트리거 {trigger}는 드라이런 모드입니다 — 업데이트는 미리보기만 되고 컨테이너는 교체되지 않습니다.",
       "scanNow": "지금 스캔",
-      "recheckNow": "Recheck for Updates",
-      "rechecking": "Rechecking…",
+      "recheckNow": "업데이트 재확인",
+      "rechecking": "재확인하는 중…",
       "skipSnoozeGroup": "건너뛰기 및 일시 중지",
       "skipThisUpdate": "이 업데이트 건너뛰기",
       "snooze1d": "1일 일시 중지",
@@ -88,8 +88,8 @@
       "startButton": "시작",
       "restartButton": "재시작",
       "scanButton": "스캔",
-      "recheckButton": "Recheck",
-      "ariaRecheckContainer": "Recheck container for updates",
+      "recheckButton": "재확인",
+      "ariaRecheckContainer": "컨테이너 업데이트 재확인",
       "blockedButton": "차단됨",
       "updateButton": "업데이트",
       "deleteButton": "삭제"
@@ -186,7 +186,7 @@
       "startAction": "시작",
       "restartAction": "재시작",
       "scanAction": "스캔",
-      "recheckAction": "Recheck for updates",
+      "recheckAction": "업데이트 재확인",
       "forceUpdateAction": "강제 업데이트",
       "updateAction": "업데이트",
       "skipUpdateAction": "이 업데이트 건너뛰기",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "차단됨: {tag} ({count}개 치명적 CVE)",
       "manualUpdateOnly": "수동 업데이트만 가능",
       "manualUpdateOnlyWithMessage": "수동 업데이트만 가능 — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "업데이트",
+      "cancelButton": "취소",
+      "blockedButton": "차단됨",
+      "updateButton": "업데이트",
+      "moreButton": "더보기",
+      "cancelUpdateTooltip": "업데이트 취소"
     },
     "groupHeader": {
       "ungrouped": "그룹 없음",
@@ -251,7 +251,7 @@
       "startTooltip": "시작",
       "restartTooltip": "재시작",
       "scanTooltip": "스캔",
-      "recheckTooltip": "Recheck for updates",
+      "recheckTooltip": "업데이트 재확인",
       "blockedForceUpdateTooltip": "차단됨 — 강제 업데이트",
       "updateTooltip": "업데이트",
       "deleteTooltip": "삭제",
@@ -269,7 +269,7 @@
       "unknown": "알 수 없음",
       "imageMetadata": "이미지 메타데이터",
       "imageAge": "이미지 경과 시간",
-      "revealFailed": "Failed to reveal value"
+      "revealFailed": "값을 표시하지 못했습니다"
     },
     "listContent": {
       "loadingContainers": "컨테이너 불러오는 중...",
@@ -323,7 +323,7 @@
       "memory": "메모리",
       "networkRxTx": "네트워크 RX/TX",
       "blockIo": "블록 I/O",
-      "loadFailed": "Failed to load container stats"
+      "loadFailed": "컨테이너 통계를 불러오지 못했습니다"
     },
     "updateDialog": {
       "title": "컨테이너 업데이트",
@@ -350,9 +350,9 @@
       "viewFullNotes": "전체 노트 보기",
       "currentSuffix": "(현재)",
       "availableSuffix": "(사용 가능)",
-      "intermediateNotes": "Intermediate releases ({count})",
-      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
-      "loadingIntermediateNotes": "Loading intermediate releases…"
+      "intermediateNotes": "중간 릴리스 ({count}개)",
+      "olderReleasesNotShown": "표시되지 않은 이전 릴리스 {count}개 | 표시되지 않은 이전 릴리스 {count}개",
+      "loadingIntermediateNotes": "중간 릴리스 불러오는 중…"
     },
     "suggestedTag": {
       "badgeText": "추천",
@@ -432,7 +432,7 @@
       }
     },
     "maturityBadge": {
-      "new": "신규"
+      "new": "{duration} 전에 감지됨"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -449,133 +449,137 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
-        "message": "Force update {name}? This clears skip/snooze policy before attempting update.",
-        "acceptLabel": "Force Update"
+        "header": "강제 업데이트",
+        "message": "{name}을(를) 강제 업데이트하시겠습니까? 업데이트를 시도하기 전에 건너뛰기/일시 중지 정책이 초기화됩니다.",
+        "acceptLabel": "강제 업데이트"
       },
       "update": {
-        "header": "Update Container",
-        "messageLatest": "Update {name} now? This will apply the latest discovered image.",
-        "messageTagChange": "Update {name}? This will change the image tag from :{currentTag} to :{newTag}{kind}.",
-        "messageDigestChange": "Update {name}? A newer build of :{currentTag} is available (digest change).",
-        "softBlockerSuffix": "\n\nThis update is currently policy-blocked:\n{list}\n\nClick Update anyway to override.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "header": "컨테이너 업데이트",
+        "messageLatest": "{name}을(를) 지금 업데이트하시겠습니까? 최신 발견된 이미지가 적용됩니다.",
+        "messageTagChange": "{name}을(를) 업데이트하시겠습니까? 이미지 태그가 :{currentTag}에서 :{newTag}{kind}(으)로 변경됩니다.",
+        "messageDigestChange": "{name}을(를) 업데이트하시겠습니까? :{currentTag}의 최신 빌드가 사용 가능합니다 (다이제스트 변경).",
+        "softBlockerSuffix": "\n\n이 업데이트는 현재 정책에 의해 차단되어 있습니다:\n{list}\n\n재정의하려면 그래도 업데이트를 클릭하세요.",
+        "softBlockerLearnMore": "자세히 보기",
+        "acceptLabel": "업데이트",
+        "acceptLabelOverride": "그래도 업데이트"
       },
       "delete": {
-        "header": "Delete Container",
-        "message": "Delete {name}? This will remove it from Drydock tracking until rediscovered.",
-        "acceptLabel": "Delete"
+        "header": "컨테이너 삭제",
+        "message": "{name}을(를) 삭제하시겠습니까? 다시 발견될 때까지 Drydock 추적에서 제거됩니다.",
+        "acceptLabel": "삭제"
       },
       "clearPolicy": {
-        "header": "Clear Update Policy",
-        "message": "Clear all update policy for {name}? This removes skips, snooze, and maturity settings.",
-        "acceptLabel": "Clear Policy"
+        "header": "업데이트 정책 초기화",
+        "message": "{name}의 모든 업데이트 정책을 초기화하시겠습니까? 건너뛰기, 일시 중지, 성숙도 설정이 제거됩니다.",
+        "acceptLabel": "정책 초기화"
       },
       "rollback": {
-        "header": "Rollback Container",
-        "messageSelected": "Rollback {name} to the selected backup image? This will replace the running container image.",
-        "messageLatest": "Rollback {name} to the latest backup image? This will replace the running container image.",
-        "acceptLabel": "Rollback"
+        "header": "컨테이너 롤백",
+        "messageSelected": "{name}을(를) 선택한 백업 이미지로 롤백하시겠습니까? 실행 중인 컨테이너 이미지가 교체됩니다.",
+        "messageLatest": "{name}을(를) 최신 백업 이미지로 롤백하시겠습니까? 실행 중인 컨테이너 이미지가 교체됩니다.",
+        "acceptLabel": "롤백"
       },
       "dependencyGroup": {
-        "header": "Update Dependency Chain",
-        "message": "Update {name} and its dependency chain? This will update {count} other container in dependency order. | Update {name} and its dependency chain? This will update {count} other containers in dependency order.",
-        "messageSingle": "Update {name}? No other containers depend on it, so only {name} will be updated.",
-        "waveList": "\n\nUpdate order:\n{list}",
-        "cycleWarning": "\n\nWarning: a dependency cycle was detected ({cycles}). Containers in the cycle may update in an arbitrary order.",
-        "unresolvedWarning": "\n\nWarning: some dependency labels reference containers that could not be found. Those will be skipped.",
-        "acceptLabel": "Update chain",
-        "previewFailedTitle": "Unable to preview update chain",
-        "previewFailedDetail": "Failed to load the dependency chain preview for {name}.",
-        "successMessage": "Dependency chain update started: {name}",
-        "failedTitle": "Dependency chain update failed",
-        "failedDetail": "Failed to update the dependency chain for {name}.",
-        "staleChainTitle": "Dependency chain has changed",
-        "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
+        "header": "종속성 체인 업데이트",
+        "message": "{name} 및 종속성 체인을 업데이트하시겠습니까? 종속성 순서에 따라 다른 컨테이너 {count}개가 업데이트됩니다. | {name} 및 종속성 체인을 업데이트하시겠습니까? 종속성 순서에 따라 다른 컨테이너 {count}개가 업데이트됩니다.",
+        "messageSingle": "{name}을(를) 업데이트하시겠습니까? 이 컨테이너에 종속된 다른 컨테이너가 없으므로 {name}만 업데이트됩니다.",
+        "waveList": "\n\n업데이트 순서:\n{list}",
+        "cycleWarning": "\n\n경고: 종속성 순환이 감지되었습니다 ({cycles}). 순환에 포함된 컨테이너는 임의의 순서로 업데이트될 수 있습니다.",
+        "unresolvedWarning": "\n\n경고: 일부 종속성 레이블이 찾을 수 없는 컨테이너를 참조합니다. 해당 항목은 건너뜁니다.",
+        "acceptLabel": "체인 업데이트",
+        "previewFailedTitle": "업데이트 체인을 미리 볼 수 없음",
+        "previewFailedDetail": "{name}의 종속성 체인 미리 보기를 불러오지 못했습니다.",
+        "successMessage": "종속성 체인 업데이트 시작됨: {name}",
+        "failedTitle": "종속성 체인 업데이트 실패",
+        "failedDetail": "{name}의 종속성 체인 업데이트에 실패했습니다.",
+        "staleChainTitle": "종속성 체인이 변경됨",
+        "staleChainDetail": "{name}의 종속성 체인이 마지막으로 미리 본 이후 변경되었습니다. 확인하기 전에 업데이트 대화상자를 다시 열어 현재 체인을 검토하세요."
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
-      "scanTriggered": "Scan triggered: {name}",
-      "scanFailedTitle": "Scan failed: {name}",
-      "scanFailedDetail": "Scan failed for {name}",
-      "actionFailedDetail": "Action failed for {name}",
-      "updateFailedTitle": "Update failed: {name}",
-      "deleted": "Deleted: {name}",
-      "deleteFailedTitle": "Delete failed: {name}",
-      "deleteFailedDetail": "Failed to delete {name}",
-      "cancellationRequested": "Cancellation requested: {name}",
-      "cancelled": "Cancelled: {name}",
-      "cancelAlreadyFinished": "Update already finished for {name}, cannot cancel",
-      "cancelOperationNotFound": "Operation not found: {name}",
-      "cancelFailed": "Failed to cancel update for {name}",
-      "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}",
-      "recheckComplete": "Recheck complete: {name}",
-      "recheckNotFound": "Container not found: {name}",
-      "recheckFailedTitle": "Recheck failed: {name}",
-      "recheckFailedDetail": "Recheck failed for {name}"
+      "started": "시작됨: {name}",
+      "scanTriggered": "스캔 트리거됨: {name}",
+      "scanFailedTitle": "스캔 실패: {name}",
+      "scanFailedDetail": "{name} 스캔 실패",
+      "actionFailedDetail": "{name} 작업 실패",
+      "updateFailedTitle": "업데이트 실패: {name}",
+      "deleted": "삭제됨: {name}",
+      "deleteFailedTitle": "삭제 실패: {name}",
+      "deleteFailedDetail": "{name} 삭제 실패",
+      "cancellationRequested": "취소 요청됨: {name}",
+      "cancelled": "취소됨: {name}",
+      "cancelAlreadyFinished": "{name}의 업데이트가 이미 완료되어 취소할 수 없습니다",
+      "cancelOperationNotFound": "작업을 찾을 수 없음: {name}",
+      "cancelFailed": "{name} 업데이트 취소 실패",
+      "groupUpdateRejected": "{name} 업데이트 실패: {message}",
+      "groupUpdateFailed": "{name} 업데이트 실패",
+      "recheckComplete": "재확인 완료: {name}",
+      "recheckNotFound": "컨테이너를 찾을 수 없음: {name}",
+      "recheckFailedTitle": "재확인 실패: {name}",
+      "recheckFailedDetail": "{name} 재확인 실패"
     },
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "태그",
+        "digest": "다이제스트"
+      },
       "tooltips": {
-        "snoozedUntil": "Updates snoozed until {date}",
-        "snoozed": "Updates snoozed",
-        "maturityBlockedSingular": "Mature-only policy blocks updates younger than {days} day",
-        "maturityBlockedPlural": "Mature-only policy blocks updates younger than {days} days",
-        "maturityActiveSingular": "Mature-only policy active ({days} day minimum age)",
-        "maturityActivePlural": "Mature-only policy active ({days} days minimum age)",
-        "maturityAllowAll": "Maturity policy allows all updates",
-        "maturityGeneric": "Maturity policy active",
-        "skippedGeneric": "Skipped updates policy active",
-        "skippedWithCount": "Skipped updates policy active ({count})"
+        "snoozedUntil": "{date}까지 업데이트 일시 중지됨",
+        "snoozed": "업데이트 일시 중지됨",
+        "maturityBlockedSingular": "기존만 정책이 {days}일 미만 업데이트를 차단합니다",
+        "maturityBlockedPlural": "기존만 정책이 {days}일 미만 업데이트를 차단합니다",
+        "maturityActiveSingular": "기존만 정책 활성화됨 (최소 {days}일 경과)",
+        "maturityActivePlural": "기존만 정책 활성화됨 (최소 {days}일 경과)",
+        "maturityAllowAll": "성숙도 정책이 모든 업데이트를 허용합니다",
+        "maturityGeneric": "성숙도 정책 활성화됨",
+        "skippedGeneric": "건너뛰기 정책 활성화됨",
+        "skippedWithCount": "건너뛰기 정책 활성화됨 ({count}개)"
       },
       "toasts": {
-        "snoozedSingular": "Snoozed updates for {days} day",
-        "snoozedPlural": "Snoozed updates for {days} days",
-        "snoozedUntil": "Snoozed until {date}",
-        "unsnooze": "Snooze cleared",
-        "clearSkips": "Skipped updates cleared",
-        "clearPolicy": "Update policy cleared",
-        "clearMaturity": "Maturity policy cleared",
-        "setMatureSingular": "Maturity policy set to mature-only ({days} day)",
-        "setMaturePlural": "Maturity policy set to mature-only ({days} days)",
-        "setAll": "Maturity policy set to allow all updates",
-        "skipped": "Skipped current update for {name}",
-        "removeSkip": "Removed skipped {kind} {value}",
+        "snoozedSingular": "{days}일 동안 업데이트를 일시 중지했습니다",
+        "snoozedPlural": "{days}일 동안 업데이트를 일시 중지했습니다",
+        "snoozedUntil": "{date}까지 일시 중지했습니다",
+        "unsnooze": "일시 중지를 초기화했습니다",
+        "clearSkips": "건너뛴 업데이트를 초기화했습니다",
+        "clearPolicy": "업데이트 정책을 초기화했습니다",
+        "clearMaturity": "성숙도 정책을 초기화했습니다",
+        "setMatureSingular": "성숙도 정책을 기존만으로 설정했습니다 ({days}일)",
+        "setMaturePlural": "성숙도 정책을 기존만으로 설정했습니다 ({days}일)",
+        "setAll": "성숙도 정책을 모든 업데이트 허용으로 설정했습니다",
+        "skipped": "{name}의 현재 업데이트를 건너뛰었습니다",
+        "removeSkip": "건너뛴 {kind} {value}을(를) 제거했습니다",
         "revertField": "{field}을(를) 선언적 정책으로 되돌렸습니다",
         "revertAll": "모든 재정의를 선언적 정책으로 되돌렸습니다",
-        "failedTitle": "Policy update failed: {name}",
-        "failedDetail": "Failed to update policy"
+        "failedTitle": "정책 업데이트 실패: {name}",
+        "failedDetail": "정책을 업데이트하지 못했습니다"
       },
       "validation": {
-        "snoozeDate": "Select a valid snooze date",
-        "maturityAge": "Enter a maturity age between {min} and {max} days"
+        "snoozeDate": "유효한 일시 중지 날짜를 선택하세요",
+        "maturityAge": "{min}일에서 {max}일 사이의 성숙도 기간을 입력하세요"
       }
     },
     "triggers": {
       "agentLabel": "agent:",
       "toasts": {
-        "ran": "Trigger ran: {key}",
-        "ranSuccessfully": "Trigger {key} ran successfully",
-        "failed": "Trigger failed: {key}",
-        "failedDetail": "Failed to run {key}",
-        "loadFailed": "Failed to load associated triggers"
+        "ran": "트리거 실행됨: {key}",
+        "ranSuccessfully": "트리거 {key}가 성공적으로 실행되었습니다",
+        "failed": "트리거 실패: {key}",
+        "failedDetail": "{key} 실행에 실패했습니다",
+        "loadFailed": "연결된 트리거를 불러오지 못했습니다"
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
-      "loadFailed": "Failed to load backups",
+      "timestampUnknown": "알 수 없음",
+      "loadFailed": "백업을 불러오지 못했습니다",
       "rollback": {
-        "completedFromSelected": "Rollback completed from selected backup",
-        "completedFromLatest": "Rollback completed from latest backup",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "completedFromSelected": "선택한 백업에서 롤백이 완료되었습니다",
+        "completedFromLatest": "최신 백업에서 롤백이 완료되었습니다",
+        "failedTitle": "롤백 실패",
+        "failedDetail": "롤백 실패"
       },
-      "operationHistoryLoadFailed": "Failed to load update operation history"
+      "operationHistoryLoadFailed": "업데이트 작업 내역을 불러오지 못했습니다"
     },
     "updateAge": {
       "availableDaysSingular": "1일",
@@ -592,8 +596,8 @@
         "openTriggerSettings": "트리거 설정 열기"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
-        "failedDetail": "Failed to generate update preview"
+        "failedTitle": "미리 보기 실패",
+        "failedDetail": "업데이트 미리 보기를 생성하지 못했습니다"
       }
     },
     "security": {
@@ -602,40 +606,40 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
-      "preAbortYes": "Abort update on pre-hook failure",
-      "preAbortNo": "Continue update on pre-hook failure",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "timeoutDefault": "60000ms (기본값)",
+      "preAbortYes": "사전 훅 실패 시 업데이트 중단",
+      "preAbortNo": "사전 훅 실패 시 업데이트 계속",
+      "enabledLabel": "활성화됨",
+      "disabledLabel": "비활성화됨",
+      "disabledDefaultLabel": "비활성화됨 (기본값)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
       },
-      "runtimeDriftWarning": "Runtime origin metadata is missing for {list}. Updates will preserve current values to avoid dropping explicit overrides, which can cause runtime drift.",
-      "loadVulnerabilitiesFailed": "Failed to load vulnerabilities",
-      "loadSbomFailed": "Failed to load SBOM",
+      "runtimeDriftWarning": "{list}에 대한 런타임 출처 메타데이터가 없습니다. 명시적 재정의가 삭제되어 런타임 드리프트가 발생하지 않도록 업데이트 시 현재 값을 유지합니다.",
+      "loadVulnerabilitiesFailed": "취약성을 불러오지 못했습니다",
+      "loadSbomFailed": "SBOM을 불러오지 못했습니다",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
-        "imageName": "Image name (without registry)",
-        "imageTag": "Current image tag",
-        "updateKind": "Update type (tag or digest)",
-        "updateFrom": "Current tag or digest",
-        "updateTo": "New tag or digest"
+        "containerName": "컨테이너 이름",
+        "containerId": "컨테이너 ID",
+        "imageName": "이미지 이름 (레지스트리 제외)",
+        "imageTag": "현재 이미지 태그",
+        "updateKind": "업데이트 유형 (태그 또는 다이제스트)",
+        "updateFrom": "현재 태그 또는 다이제스트",
+        "updateTo": "새 태그 또는 다이제스트"
       }
     },
     "logs": {
-      "noLogs": "No logs available for this container",
-      "loadFailed": "Failed to load container logs",
-      "loading": "Loading logs..."
+      "noLogs": "이 컨테이너에 사용 가능한 로그가 없습니다",
+      "loadFailed": "컨테이너 로그를 불러오지 못했습니다",
+      "loading": "로그 불러오는 중..."
     },
     "vulnerabilities": {
-      "loadFailed": "Failed to load vulnerability data"
+      "loadFailed": "취약성 데이터를 불러오지 못했습니다"
     },
     "sbomDetail": {
-      "noContainerId": "No container identifier is available for this image.",
-      "loadFailed": "Failed to load SBOM"
+      "noContainerId": "이 이미지에 사용 가능한 컨테이너 식별자가 없습니다.",
+      "loadFailed": "SBOM을 불러오지 못했습니다"
     },
     "detailPanel": {
       "tabs": {
@@ -648,7 +652,7 @@
       }
     },
     "logViewer": {
-      "invalidRegex": "Invalid regular expression"
+      "invalidRegex": "잘못된 정규식입니다"
     }
   }
 }

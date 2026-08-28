@@ -112,15 +112,15 @@
         "useTab": " para alterar o escopo",
         "moveHint": "mover",
         "openHint": "abrir",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
-        "agentSubtitle": "Agent · {status} · {host}",
+        "recentGroup": "Recentes",
+        "unknownHost": "host desconhecido",
+        "containerSubtitle": "Contêiner · {image} · {status} · {host}",
+        "agentSubtitle": "Agente · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
         "watcherSubtitle": "Watcher · {type}",
         "registrySubtitle": "Registry · {type}",
         "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "notificationSubtitle": "Regra de notificação · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -135,10 +135,10 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
-          "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "appearanceTitle": "Configurações de aparência",
+          "appearanceSubtitle": "Config · Aparência",
+          "profileTitle": "Configurações de perfil",
+          "profileSubtitle": "Config · Perfil"
         }
       },
       "connection": {
@@ -150,12 +150,12 @@
         "restartingService": "Reiniciando serviço"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
-        "toggleSearch": "Toggle search"
+        "title": "Atalhos de teclado",
+        "close": "Fechar",
+        "focusSearch": "Focar busca",
+        "closeSearch": "Fechar busca ou dispensar diálogos",
+        "showHelp": "Mostrar esta ajuda",
+        "toggleSearch": "Alternar busca"
       }
     },
     "announcementBanner": {
@@ -173,13 +173,13 @@
       "labelKeysLabel": "Chaves de label ({count}): {keys}",
       "apiPathsLabel": "Caminhos API ({count}): {keys}",
       "healthcheckCommandLabel": "Comando healthcheck: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
-      "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
-      "installAction": "Install"
+      "legacyConfigBody": "As entradas de trigger legadas ainda estão ativas para compatibilidade com a v1.6. Renomeie as variáveis {triggerEnv} para {actionEnv} ou {notificationEnv}, e substitua as labels {triggerLabel} por {actionLabel} ou {notificationLabel} antes da v1.7.",
+      "legacyApiBody": "Clientes desta instância chamaram recentemente o caminho não versionado removido {oldPrefix} e estão recebendo erros {statusCode}. Migre-os para o prefixo {v1Prefix}. Integrações da era WUD, como o wud-card ou o widget whatsupdocker do Homepage, podem definir {compatFlag} em vez de migrar.",
+      "curlHealthcheckBody": "Seu contêiner Drydock usa uma substituição de healthcheck personalizada baseada em curl. O curl continua disponível para compatibilidade retroativa nas versões v1.5.x e v1.6.x; a v1.6.0 é a versão final de aviso, e o curl será removido da imagem na v1.7.0. Prefira o healthcheck integrado da imagem, ou atualize sua substituição para {bin}.",
+      "hiddenMore": "(+{count} mais)",
+      "installTitle": "Instalar o Drydock como aplicativo",
+      "installBody": "Adicione o Drydock ao seu dock ou à tela inicial para acesso rápido e uma experiência de aplicativo, com shell offline incluído.",
+      "installAction": "Instalar"
     }
   }
 }

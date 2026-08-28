@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "Carregando regras de notificação...",
     "loadError": "Falha ao carregar regras de notificação",
-    "saveError": "Failed to update notification rule",
+    "saveError": "Falha ao atualizar a regra de notificação",
     "filterPlaceholder": "Filtrar por nome, descrição ou trigger...",
     "clear": "Limpar",
     "allNotificationTriggers": "Todos os triggers de notificação",
@@ -110,8 +110,8 @@
         "description": "Quando o health check do Docker de um contêiner entra no estado \"unhealthy\""
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "name": "Maturidade liberada",
+        "description": "Quando uma atualização retida pela policy de maturidade se torna aplicável"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Carregando dados de vulnerabilidade...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "Falha ao carregar o status do runtime de segurança",
     "scanNow": "Escanear agora",
     "scanning": "Escaneando...",
     "scanAllAriaLabel": "Escanear todos os contêineres",
@@ -203,11 +203,11 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} corrigíveis",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "fixed": "{count} corrigidas",
+      "new": "{count} novas",
+      "both": "{fixed} corrigidas, {new} novas"
     },
     "deltaTooltips": {
       "fixedSingle": "A atualização corrige {count} vulnerabilidade",
@@ -299,7 +299,7 @@
       "unknown": "Desconhecido"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "Não foi possível carregar os detalhes mais recentes do registry",
       "refreshing": "Atualizando detalhes do registry...",
       "status": "Status",
       "authentication": "Autenticação",
@@ -372,7 +372,7 @@
       "defaultError": "Teste do trigger falhou"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "Não foi possível carregar os detalhes mais recentes do trigger",
       "status": "Status",
       "refreshing": "Atualizando detalhes do trigger...",
       "noConfig": "Nenhuma propriedade de configuração"
@@ -407,7 +407,7 @@
       "maint": "Manut"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "Não foi possível carregar os detalhes mais recentes do watcher",
       "cron": "Cron",
       "lastRun": "Última execução",
       "containersWatched": "Contêineres monitorados",

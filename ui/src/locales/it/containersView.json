@@ -21,8 +21,8 @@
       "alreadyUpToDate": "Già aggiornato: {name}",
       "queuedUpdateSingle": "Aggiornamento in coda per {count} container",
       "queuedUpdateMultiple": "Aggiornamenti in coda per {count} container",
-      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
-      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
+      "queuedUpdateGroupSingle": "Aggiornamento in coda per {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Aggiornamenti in coda per {count} container in {group}",
       "countAlreadyUpToDateSingle": "{count} container già aggiornato",
       "countAlreadyUpToDateMultiple": "{count} container già aggiornati"
     },
@@ -35,15 +35,15 @@
       "container": "Container",
       "tag": "Tag",
       "version": "Versione",
-      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
+      "versionTooltip": "Versione rilevata dai metadati dell'immagine. Può corrispondere al tag e si nasconde prima di Host quando lo spazio è limitato.",
       "update": "Aggiornamento",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Stato",
       "host": "Host",
       "registry": "Registry",
       "resources": "Risorse",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "Tempo di attività",
+      "ports": "Porte"
     },
     "status": {
       "running": "in esecuzione",

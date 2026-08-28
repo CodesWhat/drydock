@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "Bildirim kuralları yükleniyor...",
     "loadError": "Bildirim kuralları yüklenemedi",
-    "saveError": "Failed to update notification rule",
+    "saveError": "Bildirim kuralı güncellenemedi",
     "filterPlaceholder": "Ada, açıklamaya veya tetikleyiciye göre filtreleyin...",
     "clear": "Temizle",
     "allNotificationTriggers": "Tüm bildirim tetikleyicileri",
@@ -110,8 +110,8 @@
         "description": "Bir container'ın Docker sağlık kontrolü \"unhealthy\" durumuna girdiğinde"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "name": "Olgunluk Temizlendi",
+        "description": "Olgunluk politikası tarafından tutulan bir güncelleme uygulanabilir hale geldiğinde"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Güvenlik açığı verileri yükleniyor...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "Güvenlik çalışma zamanı durumu yüklenemedi",
     "scanNow": "Şimdi tara",
     "scanning": "Taranıyor...",
     "scanAllAriaLabel": "Tüm kapsayıcıları tara",
@@ -203,11 +203,11 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} düzeltme",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "fixed": "{count} giderildi",
+      "new": "{count} yeni",
+      "both": "{fixed} giderildi, {new} yeni"
     },
     "deltaTooltips": {
       "fixedSingle": "Güncelleme {count} güvenlik açığını giderir",
@@ -299,7 +299,7 @@
       "unknown": "Bilinmiyor"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "En son kayıt defteri ayrıntıları yüklenemedi",
       "refreshing": "Kayıt defteri ayrıntıları yenileniyor...",
       "status": "Durum",
       "authentication": "Kimlik doğrulama",
@@ -372,7 +372,7 @@
       "defaultError": "Tetikleme testi başarısız oldu"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "En son tetikleyici ayrıntıları yüklenemedi",
       "status": "Durum",
       "refreshing": "Tetikleyici ayrıntıları yenileniyor...",
       "noConfig": "Yapılandırma özelliği yok"
@@ -407,7 +407,7 @@
       "maint": "Bakım"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "En son izleyici ayrıntıları yüklenemedi",
       "cron": "Cron",
       "lastRun": "Son Çalıştırma",
       "containersWatched": "İzlenen Konteynerler",

@@ -11,8 +11,8 @@
       "dryRunUpdateTooltip": "此触发器处于 dry-run 模式 — 点击会拉取新镜像但不会替换容器。",
       "dryRunCondition": "操作触发器 {trigger} 处于 dry-run 模式 — 更新仅作预览，容器不会被替换。",
       "scanNow": "立即扫描",
-      "recheckNow": "Recheck for Updates",
-      "rechecking": "Rechecking…",
+      "recheckNow": "重新检查更新",
+      "rechecking": "重新检查中...",
       "skipSnoozeGroup": "跳过和推迟",
       "skipThisUpdate": "跳过此次更新",
       "snooze1d": "推迟 1 天",
@@ -88,8 +88,8 @@
       "startButton": "启动",
       "restartButton": "重启",
       "scanButton": "扫描",
-      "recheckButton": "Recheck",
-      "ariaRecheckContainer": "Recheck container for updates",
+      "recheckButton": "重新检查",
+      "ariaRecheckContainer": "重新检查容器更新",
       "blockedButton": "已阻止",
       "updateButton": "更新",
       "deleteButton": "删除"
@@ -186,7 +186,7 @@
       "startAction": "启动",
       "restartAction": "重启",
       "scanAction": "扫描",
-      "recheckAction": "Recheck for updates",
+      "recheckAction": "重新检查更新",
       "forceUpdateAction": "强制更新",
       "updateAction": "更新",
       "skipUpdateAction": "跳过此次更新",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "已阻止：{tag}（{count} 个严重）",
       "manualUpdateOnly": "仅支持手动更新",
       "manualUpdateOnlyWithMessage": "仅支持手动更新 — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "更新",
+      "cancelButton": "取消",
+      "blockedButton": "已阻止",
+      "updateButton": "更新",
+      "moreButton": "更多",
+      "cancelUpdateTooltip": "取消更新"
     },
     "groupHeader": {
       "ungrouped": "未分组",
@@ -251,7 +251,7 @@
       "startTooltip": "启动",
       "restartTooltip": "重启",
       "scanTooltip": "扫描",
-      "recheckTooltip": "Recheck for updates",
+      "recheckTooltip": "重新检查更新",
       "blockedForceUpdateTooltip": "已阻止 — 强制更新",
       "updateTooltip": "更新",
       "deleteTooltip": "删除",
@@ -269,7 +269,7 @@
       "unknown": "未知",
       "imageMetadata": "镜像元数据",
       "imageAge": "镜像时龄",
-      "revealFailed": "Failed to reveal value"
+      "revealFailed": "无法显示值"
     },
     "listContent": {
       "loadingContainers": "正在加载容器...",
@@ -323,7 +323,7 @@
       "memory": "内存",
       "networkRxTx": "网络 RX/TX",
       "blockIo": "块 I/O",
-      "loadFailed": "Failed to load container stats"
+      "loadFailed": "无法加载容器统计信息"
     },
     "updateDialog": {
       "title": "更新容器",
@@ -350,9 +350,9 @@
       "viewFullNotes": "查看完整说明",
       "currentSuffix": "（当前）",
       "availableSuffix": "（可用）",
-      "intermediateNotes": "Intermediate releases ({count})",
-      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
-      "loadingIntermediateNotes": "Loading intermediate releases…"
+      "intermediateNotes": "中间版本（{count}）",
+      "olderReleasesNotShown": "{count} 个较早版本未显示 | {count} 个较早版本未显示",
+      "loadingIntermediateNotes": "正在加载中间版本..."
     },
     "suggestedTag": {
       "badgeText": "建议",
@@ -432,7 +432,7 @@
       }
     },
     "maturityBadge": {
-      "new": "新"
+      "new": "{duration}前检测到"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -449,133 +449,137 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
-        "message": "Force update {name}? This clears skip/snooze policy before attempting update.",
-        "acceptLabel": "Force Update"
+        "header": "强制更新",
+        "message": "强制更新 {name}？这将在尝试更新前清除跳过/推迟策略。",
+        "acceptLabel": "强制更新"
       },
       "update": {
-        "header": "Update Container",
-        "messageLatest": "Update {name} now? This will apply the latest discovered image.",
-        "messageTagChange": "Update {name}? This will change the image tag from :{currentTag} to :{newTag}{kind}.",
-        "messageDigestChange": "Update {name}? A newer build of :{currentTag} is available (digest change).",
-        "softBlockerSuffix": "\n\nThis update is currently policy-blocked:\n{list}\n\nClick Update anyway to override.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "header": "更新容器",
+        "messageLatest": "立即更新 {name}？这将应用最新发现的镜像。",
+        "messageTagChange": "更新 {name}？这将把镜像标签从 :{currentTag} 更改为 :{newTag}{kind}。",
+        "messageDigestChange": "更新 {name}？:{currentTag} 有更新的构建版本可用（摘要变更）。",
+        "softBlockerSuffix": "\n\n此更新当前处于策略阻止状态：\n{list}\n\n点击“仍然更新”以覆盖。",
+        "softBlockerLearnMore": "了解更多",
+        "acceptLabel": "更新",
+        "acceptLabelOverride": "仍然更新"
       },
       "delete": {
-        "header": "Delete Container",
-        "message": "Delete {name}? This will remove it from Drydock tracking until rediscovered.",
-        "acceptLabel": "Delete"
+        "header": "删除容器",
+        "message": "删除 {name}？这将把它从 Drydock 的跟踪列表中移除，直到重新发现为止。",
+        "acceptLabel": "删除"
       },
       "clearPolicy": {
-        "header": "Clear Update Policy",
-        "message": "Clear all update policy for {name}? This removes skips, snooze, and maturity settings.",
-        "acceptLabel": "Clear Policy"
+        "header": "清除更新策略",
+        "message": "清除 {name} 的所有更新策略？这将移除跳过、推迟和成熟度设置。",
+        "acceptLabel": "清除策略"
       },
       "rollback": {
-        "header": "Rollback Container",
-        "messageSelected": "Rollback {name} to the selected backup image? This will replace the running container image.",
-        "messageLatest": "Rollback {name} to the latest backup image? This will replace the running container image.",
-        "acceptLabel": "Rollback"
+        "header": "回滚容器",
+        "messageSelected": "将 {name} 回滚到所选的备份镜像？这将替换正在运行的容器镜像。",
+        "messageLatest": "将 {name} 回滚到最新的备份镜像？这将替换正在运行的容器镜像。",
+        "acceptLabel": "回滚"
       },
       "dependencyGroup": {
-        "header": "Update Dependency Chain",
-        "message": "Update {name} and its dependency chain? This will update {count} other container in dependency order. | Update {name} and its dependency chain? This will update {count} other containers in dependency order.",
-        "messageSingle": "Update {name}? No other containers depend on it, so only {name} will be updated.",
-        "waveList": "\n\nUpdate order:\n{list}",
-        "cycleWarning": "\n\nWarning: a dependency cycle was detected ({cycles}). Containers in the cycle may update in an arbitrary order.",
-        "unresolvedWarning": "\n\nWarning: some dependency labels reference containers that could not be found. Those will be skipped.",
-        "acceptLabel": "Update chain",
-        "previewFailedTitle": "Unable to preview update chain",
-        "previewFailedDetail": "Failed to load the dependency chain preview for {name}.",
-        "successMessage": "Dependency chain update started: {name}",
-        "failedTitle": "Dependency chain update failed",
-        "failedDetail": "Failed to update the dependency chain for {name}.",
-        "staleChainTitle": "Dependency chain has changed",
-        "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
+        "header": "更新依赖链",
+        "message": "更新 {name} 及其依赖链？这将按依赖顺序更新其他 {count} 个容器。 | 更新 {name} 及其依赖链？这将按依赖顺序更新其他 {count} 个容器。",
+        "messageSingle": "更新 {name}？没有其他容器依赖于它，因此只会更新 {name}。",
+        "waveList": "\n\n更新顺序：\n{list}",
+        "cycleWarning": "\n\n警告：检测到依赖循环（{cycles}）。循环中的容器可能以任意顺序更新。",
+        "unresolvedWarning": "\n\n警告：部分依赖标签引用的容器未找到，这些容器将被跳过。",
+        "acceptLabel": "更新链",
+        "previewFailedTitle": "无法预览更新链",
+        "previewFailedDetail": "无法加载 {name} 的依赖链预览。",
+        "successMessage": "依赖链更新已开始：{name}",
+        "failedTitle": "依赖链更新失败",
+        "failedDetail": "无法更新 {name} 的依赖链。",
+        "staleChainTitle": "依赖链已发生变化",
+        "staleChainDetail": "{name} 的依赖链自上次预览后已发生变化。请重新打开更新对话框，在确认前查看当前的依赖链。"
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
-      "scanTriggered": "Scan triggered: {name}",
-      "scanFailedTitle": "Scan failed: {name}",
-      "scanFailedDetail": "Scan failed for {name}",
-      "actionFailedDetail": "Action failed for {name}",
-      "updateFailedTitle": "Update failed: {name}",
-      "deleted": "Deleted: {name}",
-      "deleteFailedTitle": "Delete failed: {name}",
-      "deleteFailedDetail": "Failed to delete {name}",
-      "cancellationRequested": "Cancellation requested: {name}",
-      "cancelled": "Cancelled: {name}",
-      "cancelAlreadyFinished": "Update already finished for {name}, cannot cancel",
-      "cancelOperationNotFound": "Operation not found: {name}",
-      "cancelFailed": "Failed to cancel update for {name}",
-      "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}",
-      "recheckComplete": "Recheck complete: {name}",
-      "recheckNotFound": "Container not found: {name}",
-      "recheckFailedTitle": "Recheck failed: {name}",
-      "recheckFailedDetail": "Recheck failed for {name}"
+      "started": "已开始：{name}",
+      "scanTriggered": "已触发扫描：{name}",
+      "scanFailedTitle": "扫描失败：{name}",
+      "scanFailedDetail": "扫描 {name} 失败",
+      "actionFailedDetail": "{name} 操作失败",
+      "updateFailedTitle": "更新失败：{name}",
+      "deleted": "已删除：{name}",
+      "deleteFailedTitle": "删除失败：{name}",
+      "deleteFailedDetail": "删除 {name} 失败",
+      "cancellationRequested": "已请求取消：{name}",
+      "cancelled": "已取消：{name}",
+      "cancelAlreadyFinished": "{name} 的更新已完成，无法取消",
+      "cancelOperationNotFound": "未找到操作：{name}",
+      "cancelFailed": "取消 {name} 的更新失败",
+      "groupUpdateRejected": "更新 {name} 失败：{message}",
+      "groupUpdateFailed": "更新 {name} 失败",
+      "recheckComplete": "重新检查完成：{name}",
+      "recheckNotFound": "未找到容器：{name}",
+      "recheckFailedTitle": "重新检查失败：{name}",
+      "recheckFailedDetail": "重新检查 {name} 失败"
     },
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "标签",
+        "digest": "摘要"
+      },
       "tooltips": {
-        "snoozedUntil": "Updates snoozed until {date}",
-        "snoozed": "Updates snoozed",
-        "maturityBlockedSingular": "Mature-only policy blocks updates younger than {days} day",
-        "maturityBlockedPlural": "Mature-only policy blocks updates younger than {days} days",
-        "maturityActiveSingular": "Mature-only policy active ({days} day minimum age)",
-        "maturityActivePlural": "Mature-only policy active ({days} days minimum age)",
-        "maturityAllowAll": "Maturity policy allows all updates",
-        "maturityGeneric": "Maturity policy active",
-        "skippedGeneric": "Skipped updates policy active",
-        "skippedWithCount": "Skipped updates policy active ({count})"
+        "snoozedUntil": "更新已推迟至 {date}",
+        "snoozed": "更新已推迟",
+        "maturityBlockedSingular": "仅成熟策略会阻止低于 {days} 天的更新",
+        "maturityBlockedPlural": "仅成熟策略会阻止低于 {days} 天的更新",
+        "maturityActiveSingular": "仅成熟策略已启用（最低 {days} 天）",
+        "maturityActivePlural": "仅成熟策略已启用（最低 {days} 天）",
+        "maturityAllowAll": "成熟度策略允许所有更新",
+        "maturityGeneric": "成熟度策略已启用",
+        "skippedGeneric": "跳过更新策略已启用",
+        "skippedWithCount": "跳过更新策略已启用（{count}）"
       },
       "toasts": {
-        "snoozedSingular": "Snoozed updates for {days} day",
-        "snoozedPlural": "Snoozed updates for {days} days",
-        "snoozedUntil": "Snoozed until {date}",
-        "unsnooze": "Snooze cleared",
-        "clearSkips": "Skipped updates cleared",
-        "clearPolicy": "Update policy cleared",
-        "clearMaturity": "Maturity policy cleared",
-        "setMatureSingular": "Maturity policy set to mature-only ({days} day)",
-        "setMaturePlural": "Maturity policy set to mature-only ({days} days)",
-        "setAll": "Maturity policy set to allow all updates",
-        "skipped": "Skipped current update for {name}",
-        "removeSkip": "Removed skipped {kind} {value}",
+        "snoozedSingular": "已推迟更新 {days} 天",
+        "snoozedPlural": "已推迟更新 {days} 天",
+        "snoozedUntil": "已推迟至 {date}",
+        "unsnooze": "已清除推迟",
+        "clearSkips": "已清除跳过的更新",
+        "clearPolicy": "已清除更新策略",
+        "clearMaturity": "已清除成熟度策略",
+        "setMatureSingular": "成熟度策略已设置为仅成熟（{days} 天）",
+        "setMaturePlural": "成熟度策略已设置为仅成熟（{days} 天）",
+        "setAll": "成熟度策略已设置为允许所有更新",
+        "skipped": "已跳过 {name} 的当前更新",
+        "removeSkip": "已移除跳过的 {kind} {value}",
         "revertField": "已将 {field} 还原为声明式策略",
         "revertAll": "已将所有覆盖项还原为声明式策略",
-        "failedTitle": "Policy update failed: {name}",
-        "failedDetail": "Failed to update policy"
+        "failedTitle": "策略更新失败：{name}",
+        "failedDetail": "无法更新策略"
       },
       "validation": {
-        "snoozeDate": "Select a valid snooze date",
-        "maturityAge": "Enter a maturity age between {min} and {max} days"
+        "snoozeDate": "请选择有效的推迟日期",
+        "maturityAge": "请输入 {min} 到 {max} 天之间的成熟期"
       }
     },
     "triggers": {
       "agentLabel": "agent:",
       "toasts": {
-        "ran": "Trigger ran: {key}",
-        "ranSuccessfully": "Trigger {key} ran successfully",
-        "failed": "Trigger failed: {key}",
-        "failedDetail": "Failed to run {key}",
-        "loadFailed": "Failed to load associated triggers"
+        "ran": "触发器已运行：{key}",
+        "ranSuccessfully": "触发器 {key} 运行成功",
+        "failed": "触发器失败：{key}",
+        "failedDetail": "无法运行 {key}",
+        "loadFailed": "无法加载关联的触发器"
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
-      "loadFailed": "Failed to load backups",
+      "timestampUnknown": "未知",
+      "loadFailed": "无法加载备份",
       "rollback": {
-        "completedFromSelected": "Rollback completed from selected backup",
-        "completedFromLatest": "Rollback completed from latest backup",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "completedFromSelected": "已从所选备份完成回滚",
+        "completedFromLatest": "已从最新备份完成回滚",
+        "failedTitle": "回滚失败",
+        "failedDetail": "回滚失败"
       },
-      "operationHistoryLoadFailed": "Failed to load update operation history"
+      "operationHistoryLoadFailed": "无法加载更新操作历史"
     },
     "updateAge": {
       "availableDaysSingular": "1 天",
@@ -592,8 +596,8 @@
         "openTriggerSettings": "打开触发器设置"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
-        "failedDetail": "Failed to generate update preview"
+        "failedTitle": "预览失败",
+        "failedDetail": "无法生成更新预览"
       }
     },
     "security": {
@@ -602,40 +606,40 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
-      "preAbortYes": "Abort update on pre-hook failure",
-      "preAbortNo": "Continue update on pre-hook failure",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "timeoutDefault": "60000ms（默认）",
+      "preAbortYes": "前置钩子失败时中止更新",
+      "preAbortNo": "前置钩子失败时继续更新",
+      "enabledLabel": "已启用",
+      "disabledLabel": "已禁用",
+      "disabledDefaultLabel": "已禁用（默认）",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
       },
-      "runtimeDriftWarning": "Runtime origin metadata is missing for {list}. Updates will preserve current values to avoid dropping explicit overrides, which can cause runtime drift.",
-      "loadVulnerabilitiesFailed": "Failed to load vulnerabilities",
-      "loadSbomFailed": "Failed to load SBOM",
+      "runtimeDriftWarning": "{list} 缺少运行时来源元数据。为避免丢失显式覆盖项而导致运行时漂移，更新将保留当前值。",
+      "loadVulnerabilitiesFailed": "无法加载漏洞信息",
+      "loadSbomFailed": "无法加载 SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
-        "imageName": "Image name (without registry)",
-        "imageTag": "Current image tag",
-        "updateKind": "Update type (tag or digest)",
-        "updateFrom": "Current tag or digest",
-        "updateTo": "New tag or digest"
+        "containerName": "容器名称",
+        "containerId": "容器 ID",
+        "imageName": "镜像名称（不含仓库）",
+        "imageTag": "当前镜像标签",
+        "updateKind": "更新类型（标签或摘要）",
+        "updateFrom": "当前标签或摘要",
+        "updateTo": "新标签或摘要"
       }
     },
     "logs": {
-      "noLogs": "No logs available for this container",
-      "loadFailed": "Failed to load container logs",
-      "loading": "Loading logs..."
+      "noLogs": "此容器暂无可用日志",
+      "loadFailed": "无法加载容器日志",
+      "loading": "正在加载日志..."
     },
     "vulnerabilities": {
-      "loadFailed": "Failed to load vulnerability data"
+      "loadFailed": "无法加载漏洞数据"
     },
     "sbomDetail": {
-      "noContainerId": "No container identifier is available for this image.",
-      "loadFailed": "Failed to load SBOM"
+      "noContainerId": "此镜像没有可用的容器标识符。",
+      "loadFailed": "无法加载 SBOM"
     },
     "detailPanel": {
       "tabs": {
@@ -648,7 +652,7 @@
       }
     },
     "logViewer": {
-      "invalidRegex": "Invalid regular expression"
+      "invalidRegex": "无效的正则表达式"
     }
   }
 }

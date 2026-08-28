@@ -58,7 +58,7 @@
         "entries": "{count} إدخال",
         "statusLive": "مباشر",
         "statusOffline": "غير متصل",
-        "loadError": "Failed to load agent logs"
+        "loadError": "فشل تحميل سجلات الوكيل"
       },
       "fields": {
         "cpus": "المعالجات",

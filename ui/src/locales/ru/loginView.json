@@ -22,9 +22,9 @@
       "loadFailed": "Не удалось загрузить методы аутентификации",
       "invalidCredentials": "Неверное имя пользователя или пароль",
       "oidcFailed": "Не удалось подключиться к {name}",
-      "providerBasic": "Basic auth '{name}': {error}",
-      "providerOidc": "OIDC provider '{name}': {error}",
-      "providerNamed": "{type} '{name}': {error}",
+      "providerBasic": "Basic auth «{name}»: {error}",
+      "providerOidc": "OIDC-провайдер «{name}»: {error}",
+      "providerNamed": "{type} «{name}»: {error}",
       "providerGeneric": "{provider}: {error}"
     },
     "connectionLost": {

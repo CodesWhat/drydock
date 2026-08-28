@@ -58,7 +58,7 @@
         "entries": "{count} voci",
         "statusLive": "Live",
         "statusOffline": "Offline",
-        "loadError": "Failed to load agent logs"
+        "loadError": "Impossibile caricare i log dell'agent"
       },
       "fields": {
         "cpus": "CPU",

@@ -22,8 +22,8 @@
       "loadFailed": "Không thể tải phương thức xác thực",
       "invalidCredentials": "Tên đăng nhập hoặc mật khẩu không hợp lệ",
       "oidcFailed": "Không thể kết nối tới {name}",
-      "providerBasic": "Basic auth '{name}': {error}",
-      "providerOidc": "OIDC provider '{name}': {error}",
+      "providerBasic": "Xác thực Basic '{name}': {error}",
+      "providerOidc": "Nhà cung cấp OIDC '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
       "providerGeneric": "{provider}: {error}"
     },

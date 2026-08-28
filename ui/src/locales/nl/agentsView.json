@@ -58,7 +58,7 @@
         "entries": "{count} vermeldingen",
         "statusLive": "Leef",
         "statusOffline": "Offline",
-        "loadError": "Failed to load agent logs"
+        "loadError": "Kan agentlogboeken niet laden"
       },
       "fields": {
         "cpus": "CPU's",

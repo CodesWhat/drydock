@@ -108,19 +108,19 @@
         "typeHint": "Вводьте",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; використовуйте",
         "useTab": " для зміни фільтра",
         "moveHint": "переміщення",
         "openHint": "відкрити",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
-        "agentSubtitle": "Agent · {status} · {host}",
-        "triggerSubtitle": "Trigger · {type}",
-        "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "recentGroup": "Нещодавні",
+        "unknownHost": "невідомий хост",
+        "containerSubtitle": "Контейнер · {image} · {status} · {host}",
+        "agentSubtitle": "Агент · {status} · {host}",
+        "triggerSubtitle": "Тригер · {type}",
+        "watcherSubtitle": "Спостерігач · {type}",
+        "registrySubtitle": "Реєстр · {type}",
+        "authSubtitle": "Автентифікація · {type}",
+        "notificationSubtitle": "Правило сповіщення · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -135,10 +135,10 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
-          "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "appearanceTitle": "Налаштування вигляду",
+          "appearanceSubtitle": "Конфігурація · Вигляд",
+          "profileTitle": "Налаштування профілю",
+          "profileSubtitle": "Конфігурація · Профіль"
         }
       },
       "connection": {
@@ -150,12 +150,12 @@
         "restartingService": "Перезапуск сервісу"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
-        "toggleSearch": "Toggle search"
+        "title": "Комбінації клавіш",
+        "close": "Закрити",
+        "focusSearch": "Перейти до пошуку",
+        "closeSearch": "Закрити пошук або закрити діалогові вікна",
+        "showHelp": "Показати цю довідку",
+        "toggleSearch": "Перемкнути пошук"
       }
     },
     "announcementBanner": {
@@ -173,13 +173,13 @@
       "labelKeysLabel": "Ключі міток ({count}): {keys}",
       "apiPathsLabel": "Шляхи API ({count}): {keys}",
       "healthcheckCommandLabel": "Команда healthcheck: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
-      "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
-      "installAction": "Install"
+      "legacyConfigBody": "Застарілі входи тригерів все ще активні для сумісності з v1.6. Перейменуйте змінні {triggerEnv} на {actionEnv} або {notificationEnv} та замініть мітки {triggerLabel} на {actionLabel} або {notificationLabel} до v1.7.",
+      "legacyApiBody": "Клієнти цього екземпляра нещодавно викликали видалений шлях без версії {oldPrefix} і отримують помилки {statusCode}. Перенесіть їх на префікс {v1Prefix}. Інтеграції епохи WUD, такі як wud-card або віджет whatsupdocker для Homepage, можуть замість перенесення встановити {compatFlag}.",
+      "curlHealthcheckBody": "Ваш контейнер Drydock використовує користувацьке перевизначення healthcheck на основі curl. curl залишається доступним для зворотної сумісності в v1.5.x і v1.6.x; v1.6.0 — останній випуск із попередженням, і curl буде видалено з образу в v1.7.0. Надавайте перевагу вбудованій перевірці healthcheck образу або оновіть своє перевизначення на {bin}.",
+      "hiddenMore": "(+{count} ще)",
+      "installTitle": "Встановити Drydock як застосунок",
+      "installBody": "Додайте Drydock на панель або головний екран для швидкого доступу й досвіду користування, схожого на застосунок, включно з офлайн-оболонкою.",
+      "installAction": "Встановити"
     }
   }
 }

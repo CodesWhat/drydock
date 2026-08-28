@@ -3,8 +3,8 @@
     "heading": "صندوق الصادر",
     "refresh": "تحديث",
     "loading": "جارٍ تحميل إدخالات صندوق الصادر…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "فشل تحميل صندوق الصادر",
+    "ofCount": "{count} من {total}",
     "tabs": {
       "dead-letter": "رسائل فاشلة",
       "pending": "قيد الانتظار",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "إعادة المحاولة",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "إعادة محاولة إدخال صندوق الصادر",
       "discard": "تجاهل",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "تجاهل إدخال صندوق الصادر"
     },
     "status": {
       "dead-letter": "رسائل فاشلة",

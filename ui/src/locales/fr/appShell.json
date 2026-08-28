@@ -150,12 +150,12 @@
         "restartingService": "Redémarrage du service"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
-        "toggleSearch": "Toggle search"
+        "title": "Raccourcis clavier",
+        "close": "Fermer",
+        "focusSearch": "Mettre le focus sur la recherche",
+        "closeSearch": "Fermer la recherche ou les boîtes de dialogue",
+        "showHelp": "Afficher cette aide",
+        "toggleSearch": "Afficher/masquer la recherche"
       }
     },
     "announcementBanner": {
@@ -177,9 +177,9 @@
       "legacyApiBody": "Les clients sur cette instance ont récemment appelé le chemin d'accès {oldPrefix} supprimé non versionné et reçoivent des erreurs {statusCode} . Migrez-les vers le préfixe {v1Prefix} . Les intégrations de l'ère WUD comme la carte wud-card ou le widget whatsupdocker de la page d'accueil peuvent définir {compatFlag} au lieu de migrer.",
       "curlHealthcheckBody": "Votre conteneur Drydock utilise une substitution de contrôle de santé personnalisée basée sur curl. curl reste disponible pour la compatibilité du backend en v1.5.x et v1.6.x ; v1.6.0 est la dernière version d'avertissement, et curl sera supprimé de l'image en v1.7.0. Préférez l'image intégrée de vérification de santé ou mettez à jour votre replacement à {bin}.",
       "hiddenMore": "(+{count} en plus)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
-      "installAction": "Install"
+      "installTitle": "Installer Drydock comme application",
+      "installBody": "Ajoutez Drydock à votre dock ou à votre écran d'accueil pour un accès rapide et une expérience proche d'une application, avec une interface de base hors ligne incluse.",
+      "installAction": "Installer"
     }
   }
 }

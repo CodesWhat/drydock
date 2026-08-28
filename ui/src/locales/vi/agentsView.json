@@ -58,7 +58,7 @@
         "entries": "{count} mục",
         "statusLive": "Trực tiếp",
         "statusOffline": "Ngoại tuyến",
-        "loadError": "Failed to load agent logs"
+        "loadError": "Không thể tải nhật ký agent"
       },
       "fields": {
         "cpus": "CPU",

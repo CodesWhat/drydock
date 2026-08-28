@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "Ładowanie reguł powiadomień...",
     "loadError": "Nie udało się załadować reguł powiadomień",
-    "saveError": "Failed to update notification rule",
+    "saveError": "Nie udało się zaktualizować reguły powiadomienia",
     "filterPlaceholder": "Filtruj według nazwy, opisu lub wyzwalacza...",
     "clear": "Wyczyść",
     "allNotificationTriggers": "Wszystkie wyzwalacze powiadomień",
@@ -110,8 +110,8 @@
         "description": "Gdy kontrola stanu Docker kontenera przejdzie w stan \"unhealthy\""
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "name": "Dojrzałość wyczyszczona",
+        "description": "Gdy aktualizacja wstrzymana przez politykę dojrzałości staje się dostępna"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Ładowanie danych o lukach w zabezpieczeniach...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "Nie udało się załadować stanu środowiska wykonawczego zabezpieczeń",
     "scanNow": "Skanuj teraz",
     "scanning": "Skanowanie...",
     "scanAllAriaLabel": "Zeskanuj wszystkie kontenery",
@@ -203,11 +203,11 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} do naprawy",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "fixed": "{count} naprawionych",
+      "new": "{count} nowych",
+      "both": "{fixed} naprawionych, {new} nowych"
     },
     "deltaTooltips": {
       "fixedSingle": "Aktualizacja naprawia {count} podatność",
@@ -299,7 +299,7 @@
       "unknown": "Nieznany"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "Nie można załadować najnowszych szczegółów rejestru",
       "refreshing": "Odświeżanie szczegółów rejestru...",
       "status": "Stan",
       "authentication": "Uwierzytelnianie",
@@ -372,7 +372,7 @@
       "defaultError": "Test wyzwalacza nie powiódł się"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "Nie można załadować najnowszych szczegółów wyzwalacza",
       "status": "Stan",
       "refreshing": "Odświeżanie szczegółów wyzwalacza...",
       "noConfig": "Brak właściwości konfiguracyjnych"
@@ -407,7 +407,7 @@
       "maint": "Konserwacja"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "Nie można załadować najnowszych szczegółów obserwatora",
       "cron": "Cron",
       "lastRun": "Ostatni bieg",
       "containersWatched": "Kontenery oglądane",

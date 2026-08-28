@@ -66,11 +66,11 @@
       "scanNow": "今すぐスキャン"
     },
     "notifications": {
-      "loadFailed": "Failed to load notifications"
+      "loadFailed": "通知の読み込みに失敗しました"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration",
-      "actionsDisabledReason": "Container actions disabled by server configuration"
+      "loadFailed": "サーバー機能設定の読み込みに失敗しました",
+      "actionsDisabledReason": "サーバー設定によりコンテナアクションが無効化されています"
     }
   }
 }
