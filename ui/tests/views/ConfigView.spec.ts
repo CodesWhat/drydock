@@ -245,7 +245,7 @@ vi.mock('@/theme/palettes', () => ({
       description: 'Clean and balanced',
       swatchDark: '#282c34',
       swatchLight: '#fafafa',
-      accent: '#528bff',
+      accent: '#8ab0ff',
     },
     {
       id: 'github',

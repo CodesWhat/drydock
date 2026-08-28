@@ -105,7 +105,6 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
           data-reason="update-insight"
           data-tone="info"
           :style="{
-            backgroundColor: 'var(--dd-info-muted)',
             color: 'var(--dd-info)',
           }"
         >
@@ -122,7 +121,6 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
           data-severity="soft"
           data-tone="warning"
           :style="{
-            backgroundColor: 'var(--dd-warning-muted)',
             color: 'var(--dd-warning)',
           }"
         >
@@ -145,7 +143,6 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
           :data-severity="condition.severity"
           :data-tone="condition.tone"
           :style="{
-            backgroundColor: `var(--dd-${condition.tone}-muted)`,
             color: `var(--dd-${condition.tone})`,
           }"
         >
