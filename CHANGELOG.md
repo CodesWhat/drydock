@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.5] — 2026-08-27
+
 ### Security
 
 - **An unauthenticated Portwing hello could throw outside the callback error boundary.** A non-string compatibility value in the hello payload reached `.split()` before anything validated it. The payload is now validated before parsing. ([#904](https://github.com/CodesWhat/drydock/pull/904))
@@ -43,6 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tearing a watcher down while it was setting up its Docker event listener could resurrect it.** Deregistration landing during the client-recreation or auth preflight, or during the `getEvents` request itself, left a late callback to fire against already-cleaned-up state: it registered a stream and attached handlers to a watcher that was being removed, or scheduled a reconnect for one that was already gone. Superseded and deregistered listener setups now bail out at each of those points, and a stream that arrives too late is destroyed rather than adopted. ([#904](https://github.com/CodesWhat/drydock/pull/904))
 - **An update that never started was reported as a failed update.** An operation that could not be resolved before the runtime was reachable was marked failed rather than expired, so users saw a failure for an update that had not run. ([#904](https://github.com/CodesWhat/drydock/pull/904))
 - **The Crowdin sync workflow failed on every push to a dev branch that was not the newest one.** The base resolver always picked the highest `dev/vX.Y` on origin regardless of which ref triggered the run, but the Crowdin action had already downloaded translations into the working tree by then, so checking out a different branch over them died with `Your local changes to the following files would be overwritten by checkout`. A push to a `dev/vX.Y` branch now targets that branch directly; scheduled and manually dispatched runs keep the highest-wins lookup and its default-branch fallback. ([run 33047712284](https://github.com/CodesWhat/drydock/actions/runs/33047712284))
+
+### Documentation
+
+- **The homepage FAQ described `DD_TRIGGER_*` as still deprecated, past its actual v1.7.0 removal.** It said the prefix was "a deprecated alias scheduled for removal", but v1.7.0 removed it outright: any `DD_TRIGGER_*` environment variable now fails startup with an error naming every offending variable and its exact `DD_ACTION_*`/`DD_NOTIFICATION_*` replacement (see `DEPRECATIONS.md`). The FAQ answer now says so, and a new test asserts the copy can't drift back to describing an already-removed feature as merely pending removal.
+- **Archived changelog snapshots kept relative `./DEPRECATIONS.md` links that don't resolve on the docs site.** `content/docs/v1.x/changelog/index.mdx` files are frozen copies of the root `CHANGELOG.md`, which uses relative links, and the docs sync script's per-version rewrite only handled absolute `/docs/...` targets. So the relative-link rewrite that already ran for the freshly generated current-version changelog never reached the frozen archives. `rewriteDocsLinksInDirectory` now routes changelog files through the same rewrite, fixing the two broken links in the v1.5 archive, and any future archive with the same pattern, without touching non-changelog content.
+
+### Chore
+
+- **Two real production modules were excluded from the coverage gate, and a third exclude entry never matched anything.** `query-values.ts` and `sorting.ts` are used by `maturity-filter.ts`, `container.ts` and `crud-context.ts`, but were carved out of the 100% coverage requirement the repo otherwise enforces. Both are back in: `sorting.ts` was already fully covered indirectly, and `query-values.ts` needed a new direct test for the repeated-query-param (array) path, which is real Express `qs` behavior nothing exercised before. The third entry named `Trueforge.ts` while the file on disk was `trueforge.ts`, so it was a silent no-op on case-sensitive CI, and dropping it surfaced what the wrong case was hiding. `registerComponent()` resolves a provider's module by testing for a `Provider.ts`-cased file, and on a case-insensitive filesystem that test also matched `trueforge.ts`, loading it under a second differently-cased specifier the direct unit tests never touch, so full-suite coverage read it as partly uncovered even though the module is fully tested. Every other provider file already follows the PascalCase convention, so the file and its test are renamed to match and the convention check now resolves identically on every filesystem.
+- **Removed the now-stale CVE-2026-14456 (openssl/libssl3/libcrypto3) Grype suppression.** It was scoped to the Alpine 3.24 `openssl` pin at `3.5.7-r0` and named its own removal trigger: bump the Dockerfile's `openssl=` pin to 3.5.8 or newer. That bump already landed in [#881](https://github.com/CodesWhat/drydock/pull/881), so `openssl` is now pinned at `3.5.8-r0`, and a live Grype scan of that exact package and version confirms zero matches for this CVE or any other finding. The suppression no longer applies.
 
 ## [1.7.0-rc.4] — 2026-08-26
 
@@ -2553,7 +2565,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.4...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.5...HEAD
+[1.7.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.4...v1.7.0-rc.5
 [1.7.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.3...v1.7.0-rc.4
 [1.7.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.2...v1.7.0-rc.3
 [1.7.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.1...v1.7.0-rc.2

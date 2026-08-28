@@ -571,6 +571,25 @@ jobs:
             exit 1
           fi
 
+          # PR #906 shipped the literal string `(PR_LINK_PLACEHOLDER)` in a
+          # CHANGELOG bullet where a real `([#906](.../pull/906))` citation
+          # belonged — an ALL-CAPS `_PLACEHOLDER` token left behind until the
+          # PR existed, and never filled in. It read as an ordinary citation
+          # to the gate, to CI, and to review, same as the rc.4 conflict
+          # markers above. scripts/unfilled-placeholders.test.mjs catches this
+          # class (an ALL-CAPS `_PLACEHOLDER` token, or an empty markdown link
+          # target like `[text]()`) before a push, but the cut is the last
+          # line of defence before it reaches a published tag and the
+          # generated docs changelog. `if grep` is exempt from set -e, so a
+          # clean file (exit 1, no match) does not abort the step.
+          # The optional `<...>` covers the angle-bracket destination form:
+          # `[text](<>)` is equally valid CommonMark and equally empty, so a
+          # pattern that only knows `[text]()` leaves a hole.
+          if grep -nE '(^|[^A-Za-z0-9_])([A-Z][A-Z0-9]*_)*PLACEHOLDER($|[^A-Za-z0-9_])|\[[^]]*\]\([[:space:]]*(<[[:space:]]*>[[:space:]]*)?\)' "${CHANGELOG_PATH}"; then
+            echo "::error::CHANGELOG contains an unfilled placeholder (listed above). Resolve it before cutting ${RELEASE_TAG}."
+            exit 1
+          fi
+
           echo "Validated CHANGELOG entry for ${RELEASE_TAG}."
 
       - name: Set up QEMU

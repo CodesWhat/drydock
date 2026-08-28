@@ -205,6 +205,20 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.5 highlights</strong></summary>
+
+- **A security hardening pass closes five findings in Portwing and the debug/diagnostics surface** — a malformed Portwing hello payload is now validated before parsing instead of throwing outside the callback error boundary, agent container ownership is enforced at the update/removal boundary, redaction now catches `*_PAT` values and credentials embedded in URLs (including scheme-relative ones), and the rejected-origin diagnostics path is rate-limited. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Dark themes meet the WCAG 2.2 contrast minimum** — secondary/muted text, the tone colors, toast surfaces, and primary button labels are raised to clear 4.5:1 against the surfaces they're actually painted on, across all six dark themes. ([#850](https://github.com/CodesWhat/drydock/issues/850), [#865](https://github.com/CodesWhat/drydock/discussions/865))
+- **Large fleets and slow clients no longer break the controller connection** — an agent whose cached watcher replay exceeded 256 KiB could never reconnect, is now fixed by keeping the stream open for the authenticated handshake to supply state; SSE clients that fall behind now get bounded, drain-aware, in-order delivery instead of dropped or unbounded-memory writes; the system-log limiter no longer falls back to an empty identity; and an unsupported agent transport is now rejected at admission instead of failing later. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Update and watcher lifecycle state stays accurate through restarts and teardown** — startup recovery no longer marks an untouched container as updated, a restart no longer suppresses batch-completion events for updates still in flight, an update that never started is no longer reported as failed, a watcher torn down mid-setup can no longer be resurrected by a late callback, and concurrently parsed Docker event chunks no longer race a shared buffer. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Backup, rollback, and container-list correctness fixes** — backups carry a stable scoped identity instead of colliding on a shared container name, rollback restores the digest recorded with the backup instead of whatever a mutable tag now points at, concurrent digest scans no longer cancel each other, a successful container action no longer returns 500 when the follow-up refresh fails, and paginated container lists are sorted globally instead of only within a page. ([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **The Crowdin sync workflow no longer fails on non-default dev branches** — a push to a `dev/vX.Y` branch that wasn't the newest one died with a checkout conflict because the base resolver always picked the highest dev branch regardless of which ref triggered the run; a push now targets its own branch directly. ([run 33047712284](https://github.com/CodesWhat/drydock/actions/runs/33047712284))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc5--2026-08-27).
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.4 highlights</strong></summary>
 
 - **WebSocket log streams work behind TLS-terminating proxies** — with trust proxy enabled and `X-Forwarded-Proto` absent on the upgrade request, the origin check no longer falls back to the local socket's TLS state (plain HTTP behind TLS termination, so every browser connection 403'd); the protocol is treated as unknown and host validation is unchanged. Traefik forwards the upgrade's client-facing scheme as `wss` rather than `https` (traefik/traefik#6388), which the origin check rejected outright, so the first fix alone still 403'd behind a default Traefik setup; `ws`/`wss` now map to `http:`/`https:` for the Origin comparison. ([#867](https://github.com/CodesWhat/drydock/issues/867), [#868](https://github.com/CodesWhat/drydock/pull/868), [#887](https://github.com/CodesWhat/drydock/pull/887))

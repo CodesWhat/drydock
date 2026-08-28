@@ -66,95 +66,77 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.4</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.5</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.4</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.5</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.4</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.5</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.4</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.5</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.4</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.5</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.4 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.5 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
   {
-    wsProxyFix: string;
-    bareIntegerTags: string;
-    storeChmodCrash: string;
-    debugDumpRedaction: string;
+    securityHardening: string;
+    accessibilityContrast: string;
   }
 > = {
   'README.de.md': {
-    wsProxyFix: '**WebSocket-Log-Streams funktionieren jetzt hinter TLS-terminierenden Proxys**',
-    bareIntegerTags: '**Reine Ganzzahl-Tags überholen keine gepunkteten Versionen mehr**',
-    storeChmodCrash: '**Der Start stürzt nicht mehr ab, wenn das Store-Volume `chmod` verweigert**',
-    debugDumpRedaction:
-      '**Debug-Dumps schwärzen jetzt die Werte von Umgebungsvariablen, nicht ihre Namen**',
+    securityHardening:
+      '**Ein Security-Hardening-Pass schließt fünf Befunde in Portwing und auf der Debug-/Diagnose-Oberfläche**',
+    accessibilityContrast: '**Dunkle Themes erfüllen jetzt den WCAG-2.2-Kontrastmindestwert**',
   },
   'README.es.md': {
-    wsProxyFix:
-      '**Los flujos de logs por WebSocket funcionan ahora detrás de proxies con terminación TLS**',
-    bareIntegerTags:
-      '**Las etiquetas de enteros simples ya no superan a las versiones con puntos**',
-    storeChmodCrash: '**El arranque ya no falla cuando el volumen del store rechaza `chmod`**',
-    debugDumpRedaction:
-      '**El volcado de depuración ocultaba los nombres de las variables de entorno en lugar de los valores**',
+    securityHardening:
+      '**Un endurecimiento de seguridad corrige cinco hallazgos en Portwing y en la superficie de depuración/diagnóstico**',
+    accessibilityContrast: '**Los temas oscuros cumplen ahora el contraste mínimo WCAG 2.2**',
   },
   'README.fr.md': {
-    wsProxyFix:
-      '**Les flux de logs WebSocket fonctionnent désormais derrière des proxys à terminaison TLS**',
-    bareIntegerTags: '**Les tags entiers nus ne dépassent plus les versions à points**',
-    storeChmodCrash: '**Le démarrage ne plante plus lorsque le volume du store refuse `chmod`**',
-    debugDumpRedaction:
-      "**Le dump de débogage masquait les noms des variables d'environnement au lieu de leurs valeurs**",
+    securityHardening:
+      '**Un durcissement de sécurité corrige cinq constats dans Portwing et sur la surface de débogage/diagnostic**',
+    accessibilityContrast:
+      '**Les thèmes sombres respectent désormais le contraste minimum WCAG 2.2**',
   },
   'README.pl.md': {
-    wsProxyFix: '**Strumienie logów WebSocket działają teraz za proxy z terminacją TLS**',
-    bareIntegerTags: '**Nagie tagi liczbowe nie wyprzedzają już wersji z kropkami**',
-    storeChmodCrash:
-      '**Uruchomienie nie kończy się już awarią, gdy wolumin store odmawia `chmod`**',
-    debugDumpRedaction:
-      '**Zrzut debugowania ukrywał nazwy zmiennych środowiskowych zamiast ich wartości**',
+    securityHardening:
+      '**Przegląd wzmacniający bezpieczeństwo usuwa pięć problemów w Portwing i na powierzchni debugowania/diagnostyki**',
+    accessibilityContrast: '**Ciemne motywy spełniają teraz minimalny kontrast WCAG 2.2**',
   },
   'README.pt-BR.md': {
-    wsProxyFix:
-      '**Fluxos de logs via WebSocket agora funcionam atrás de proxies com terminação TLS**',
-    bareIntegerTags: '**Tags de inteiros simples não superam mais versões com pontos**',
-    storeChmodCrash: '**A inicialização não trava mais quando o volume do store recusa `chmod`**',
-    debugDumpRedaction:
-      '**O dump de depuração ocultava os nomes das variáveis de ambiente em vez dos valores**',
+    securityHardening:
+      '**Uma passagem de fortalecimento de segurança corrige cinco achados no Portwing e na superfície de depuração/diagnóstico**',
+    accessibilityContrast: '**Os temas escuros agora atendem ao contraste mínimo do WCAG 2.2**',
   },
   'README.zh-CN.md': {
-    wsProxyFix: '**WebSocket 日志流现在可在 TLS 终止代理后正常工作**',
-    bareIntegerTags: '**纯数字标签不再超过带点号的版本号**',
-    storeChmodCrash: '**当存储卷拒绝 `chmod` 时启动不再崩溃**',
-    debugDumpRedaction: '**调试转储此前隐藏的是环境变量的名称而非值**',
+    securityHardening: '**一次安全加固修复了 Portwing 与调试/诊断层面的五个问题**',
+    accessibilityContrast: '**暗色主题现在满足 WCAG 2.2 最低对比度要求**',
   },
 };
 
@@ -207,6 +189,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc2--2026-08-20',
   './CHANGELOG.md#170-rc3--2026-08-23',
   './CHANGELOG.md#170-rc4--2026-08-26',
+  './CHANGELOG.md#170-rc5--2026-08-27',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -260,19 +243,15 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const surface = localizedSurfaceFragments[readme];
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
-    const wsProxyBullet = getBullet(releaseBlock, release.wsProxyFix);
-    const bareIntegerBullet = getBullet(releaseBlock, release.bareIntegerTags);
+    const securityBullet = getBullet(releaseBlock, release.securityHardening);
+    const accessibilityBullet = getBullet(releaseBlock, release.accessibilityContrast);
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
-    expect(getUrls(wsProxyBullet)).toEqual([
-      'https://github.com/CodesWhat/drydock/issues/867',
-      'https://github.com/CodesWhat/drydock/pull/868',
-      'https://github.com/CodesWhat/drydock/pull/887',
-    ]);
-    expect(getUrls(bareIntegerBullet)).toEqual([
-      'https://github.com/CodesWhat/drydock/issues/859',
-      'https://github.com/CodesWhat/drydock/pull/871',
+    expect(getUrls(securityBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/904']);
+    expect(getUrls(accessibilityBullet)).toEqual([
+      'https://github.com/CodesWhat/drydock/issues/850',
+      'https://github.com/CodesWhat/drydock/discussions/865',
     ]);
   });
 

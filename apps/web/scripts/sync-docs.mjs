@@ -10,11 +10,12 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
   rewriteChangelogLinksForVersion,
+  rewriteDocsFileForVersion,
   rewriteDocsLinksForVersion,
 } from "./docs-link-rewriter.mjs";
 import { versions } from "./docs-versions.mjs";
@@ -80,11 +81,11 @@ description: "All notable changes to this project will be documented in this fil
   console.warn(`No CHANGELOG.md at ${changelogPath}; skipping changelog generation`);
 }
 
-function rewriteDocsLinksInDirectory(dir, versionSlug) {
+function rewriteDocsLinksInDirectory(dir, versionSlug, rootDir = dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const target = join(dir, entry.name);
     if (entry.isDirectory()) {
-      rewriteDocsLinksInDirectory(target, versionSlug);
+      rewriteDocsLinksInDirectory(target, versionSlug, rootDir);
       continue;
     }
     if (!entry.isFile() || !/\.(md|mdx)$/.test(entry.name)) {
@@ -92,7 +93,8 @@ function rewriteDocsLinksInDirectory(dir, versionSlug) {
     }
 
     const before = readFileSync(target, "utf8");
-    const after = rewriteDocsLinksForVersion(before, versionSlug);
+    const relativePath = relative(rootDir, target);
+    const after = rewriteDocsFileForVersion(relativePath, before, versionSlug);
     if (after !== before) {
       writeFileSync(target, after);
     }

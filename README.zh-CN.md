@@ -202,6 +202,20 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.5 亮点</strong></summary>
+
+- **一次安全加固修复了 Portwing 与调试/诊断层面的五个问题** — 格式错误的 Portwing hello 负载现在会在解析前先完成校验，而不是在回调错误边界之外抛出异常；代理容器的所有权现在会在更新/删除边界处强制校验；脱敏现在还能捕获 `*_PAT` 值以及嵌入 URL 中的凭据（包括相对协议的 URL）；被拒来源的诊断路径现在也有速率限制。([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **暗色主题现在满足 WCAG 2.2 最低对比度要求** — 次要/弱化文本、色调颜色、toast 提示背景以及主按钮文字标签均已提升，在全部六种暗色主题下相对其实际绘制的背景都能达到 4.5:1。([#850](https://github.com/CodesWhat/drydock/issues/850)、[#865](https://github.com/CodesWhat/drydock/discussions/865))
+- **大规模集群与慢客户端不再拖垮控制器连接** — 缓存的 watcher 重放超过 256 KiB 的代理此前永远无法重新连接，现在通过保持流处于打开状态、让已认证的握手来补充状态解决了这个问题；落后的 SSE 客户端现在会获得有边界、感知背压、按顺序投递的数据，而不是被丢弃的写入或无限增长的内存占用；系统日志限流器不再回退到空标识；不受支持的代理传输现在会在准入阶段就被拒绝，而不是之后才失败。([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **更新与 watcher 的生命周期状态在重启和拆卸过程中都保持准确** — 启动恢复不再把未被改动的容器标记为已更新，重启不再抑制仍在进行中的更新的批次完成事件，从未真正开始的更新不再被报告为失败，配置过程中被拆卸的 watcher 不再会被延迟到达的回调重新唤醒，并发解析的 Docker 事件分片也不再争抢同一个共享缓冲区。([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **备份、回滚与容器列表的正确性修复** — 备份现在携带稳定的作用域身份，而不是在共享容器名称时发生冲突；回滚现在会恢复备份中记录的摘要，而不是可变标签当前指向的内容；并发的摘要扫描不再互相取消；成功的容器操作在后续刷新失败时不再返回 500；分页的容器列表现在按全局排序，而不仅仅是在单页内排序。([#904](https://github.com/CodesWhat/drydock/pull/904))
+- **Crowdin 同步工作流在非默认 dev 分支上不再失败** — 推送到并非最新的 `dev/vX.Y` 分支此前会因基准解析器始终选择最高的 dev 分支（而不管是哪个 ref 触发了运行）而以检出冲突告终；现在推送会直接定位到自己所在的分支。([run 33047712284](https://github.com/CodesWhat/drydock/actions/runs/33047712284))
+
+完整发行说明请参阅 [CHANGELOG.md](./CHANGELOG.md#170-rc5--2026-08-27)。
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.4 亮点</strong></summary>
 
 - **WebSocket 日志流现在可在 TLS 终止代理后正常工作** — 当启用 trust proxy 且升级请求中缺少 `X-Forwarded-Proto` 时，来源检查不再回退到本地 socket 的 TLS 状态（TLS 终止后端为纯 HTTP，导致每个浏览器连接都被 403 拒绝）；协议现在被视为未知，主机校验保持不变。Traefik 会将升级请求面向客户端的协议转发为 `wss` 而非 `https`（traefik/traefik#6388），而来源检查会直接拒绝该值，因此仅靠第一个修复在默认 Traefik 配置下仍会返回 403；`ws`/`wss` 现在会映射为 `http:`/`https:` 参与来源比较。([#867](https://github.com/CodesWhat/drydock/issues/867)、[#868](https://github.com/CodesWhat/drydock/pull/868)、[#887](https://github.com/CodesWhat/drydock/pull/887))
