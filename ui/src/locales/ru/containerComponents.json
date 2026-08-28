@@ -323,7 +323,7 @@
       "memory": "Память",
       "networkRxTx": "Сеть RX/TX",
       "blockIo": "Block I/O",
-      "loadFailed": "Не удалось загрузить статистику контейнеров"
+      "loadFailed": "Не удалось загрузить статистику контейнера"
     },
     "updateDialog": {
       "title": "Обновить контейнер",

@@ -168,7 +168,7 @@
       "legacyApiPathTitleSingular": "Kaldırılan API yoluna {total} istek algılandı",
       "legacyApiPathTitlePlural": "Kaldırılan API yoluna {total} istek algılandı",
       "dontShowAgain": "Bir daha gösterme",
-      "curlHealthcheckTitle": "Özel kıvrılma durumu denetimini geçersiz kılma algılandı",
+      "curlHealthcheckTitle": "Özel curl tabanlı durum denetimi geçersiz kılması algılandı",
       "envKeysLabel": "Zarf anahtarları ({count}): {keys}",
       "labelKeysLabel": "Etiket anahtarları ({count}): {keys}",
       "apiPathsLabel": "API yolları ({count}): {keys}",

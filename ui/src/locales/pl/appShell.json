@@ -120,7 +120,7 @@
         "watcherSubtitle": "Obserwator · {type}",
         "registrySubtitle": "Rejestr · {type}",
         "authSubtitle": "Uwierzytelnianie · {type}",
-        "notificationSubtitle": "Reguła powiadamiania · {id}",
+        "notificationSubtitle": "Reguła powiadomienia · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -168,7 +168,7 @@
       "legacyApiPathTitleSingular": "Wykryto {total} żądanie do usuniętej ścieżki API",
       "legacyApiPathTitlePlural": "Wykryto {total} żądań do usuniętej ścieżki API",
       "dontShowAgain": "Nie pokazuj więcej",
-      "curlHealthcheckTitle": "Wykryto niestandardowe zastąpienie kontroli stanu zwijania",
+      "curlHealthcheckTitle": "Wykryto niestandardowe zastąpienie kontroli stanu opartego na curl",
       "envKeysLabel": "Klucze Env ({count}): {keys}",
       "labelKeysLabel": "Klucze etykiet ({count}): {keys}",
       "apiPathsLabel": "Ścieżki API ({count}): {keys}",
