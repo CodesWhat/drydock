@@ -108,12 +108,12 @@
         "typeHint": "入力",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "；",
         "useTab": "でスコープを変更",
         "moveHint": "移動",
         "openHint": "開く",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "最近",
+        "unknownHost": "不明なホスト",
         "containerSubtitle": "コンテナ · {image} · {status} · {host}",
         "agentSubtitle": "エージェント · {status} · {host}",
         "triggerSubtitle": "トリガー · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "外観設定",
           "appearanceSubtitle": "設定 · 外観",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "プロフィール設定",
           "profileSubtitle": "設定 · プロフィール"
         }
       },
@@ -150,12 +150,12 @@
         "restartingService": "サービスを再起動中"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "キーボードショートカット",
+        "close": "閉じる",
+        "focusSearch": "検索にフォーカス",
         "closeSearch": "検索またはダイアログを閉じる",
         "showHelp": "このヘルプを表示",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "検索の切り替え"
       }
     },
     "announcementBanner": {
@@ -176,10 +176,10 @@
       "legacyConfigBody": "レガシートリガー入力は v1.6 との互換性のため引き続き有効です。v1.7 までに {triggerEnv} 変数を {actionEnv} または {notificationEnv} にリネームし、{triggerLabel} ラベルを {actionLabel} または {notificationLabel} に置き換えてください。",
       "legacyApiBody": "このインスタンス上のクライアントが、削除されたバージョン指定なしの {oldPrefix} パスを最近呼び出し、{statusCode} エラーを受け取っています。{v1Prefix} プレフィックスへ移行してください。wud-card や Homepage の whatsupdocker ウィジェットなど WUD 時代の連携ツールは、移行の代わりに {compatFlag} を設定できます。",
       "curlHealthcheckBody": "お使いの Drydock コンテナは、カスタムの curl ベースのヘルスチェックオーバーライドを使用しています。curl は v1.5.x と v1.6.x では後方互換性のために引き続き利用できますが、v1.6.0 が最終の警告リリースとなり、v1.7.0 ではイメージから curl が削除されます。組み込みのイメージヘルスチェックを使用するか、オーバーライドを {bin} に更新してください。",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "（+{count} 件）",
       "installTitle": "Drydock をアプリとしてインストール",
       "installBody": "Drydock をドックまたはホーム画面に追加すると、すばやくアクセスでき、オフラインシェルを含むアプリのような操作感が得られます。",
-      "installAction": "Install"
+      "installAction": "インストール"
     }
   }
 }

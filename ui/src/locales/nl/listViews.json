@@ -110,7 +110,7 @@
         "description": "Wanneer de Docker-gezondheidscontrole van een container de status \"unhealthy\" bereikt"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "Volwassenheid gewist",
         "description": "Wanneer een update die is tegengehouden door het volwassenheidsbeleid van toepassing wordt"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} oplosbaar",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} verholpen",
+      "new": "{count} nieuw",
       "both": "{fixed} verholpen, {new} nieuw"
     },
     "deltaTooltips": {

@@ -16,8 +16,8 @@
       "accessDenied": "Registry-Zugriff verweigert",
       "imageNotFound": "Image nicht gefunden",
       "authFailed": "Registry-Authentifizierung fehlgeschlagen",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "Registry nicht erreichbar",
+      "cancelled": "Abgebrochen",
       "securityBlocked": "Durch Sicherheitsscan blockiert",
       "signatureFailed": "Signaturprüfung fehlgeschlagen"
     },

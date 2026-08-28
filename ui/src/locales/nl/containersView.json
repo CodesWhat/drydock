@@ -43,7 +43,7 @@
       "registry": "Register",
       "resources": "Bronnen",
       "uptime": "Uptime",
-      "ports": "Ports"
+      "ports": "Poorten"
     },
     "status": {
       "running": "actief",

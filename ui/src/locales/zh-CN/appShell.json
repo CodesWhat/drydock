@@ -108,12 +108,12 @@
         "typeHint": "输入",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "；使用",
         "useTab": " 以更改作用域",
         "moveHint": "移动",
         "openHint": "打开",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "最近",
+        "unknownHost": "未知主机",
         "containerSubtitle": "容器 · {image} · {status} · {host}",
         "agentSubtitle": "代理 · {status} · {host}",
         "triggerSubtitle": "触发器 · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "外观设置",
           "appearanceSubtitle": "配置 · 外观",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "个人资料设置",
           "profileSubtitle": "配置 · 个人资料"
         }
       },
@@ -150,12 +150,12 @@
         "restartingService": "重启服务中"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "键盘快捷键",
+        "close": "关闭",
+        "focusSearch": "聚焦搜索",
         "closeSearch": "关闭搜索或关闭对话框",
         "showHelp": "显示此帮助",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "切换搜索"
       }
     },
     "announcementBanner": {
@@ -176,10 +176,10 @@
       "legacyConfigBody": "为兼容 v1.6，旧版触发器输入仍然有效。请在 v1.7 之前将 {triggerEnv} 变量重命名为 {actionEnv} 或 {notificationEnv}，并将 {triggerLabel} 标签替换为 {actionLabel} 或 {notificationLabel}。",
       "legacyApiBody": "此实例上的客户端最近调用了已移除的无版本号路径 {oldPrefix}，并收到了 {statusCode} 错误。请将其迁移到 {v1Prefix} 前缀。像 wud-card 或 Homepage 的 whatsupdocker 小部件这样的 WUD 时代集成，可以设置 {compatFlag} 而不必迁移。",
       "curlHealthcheckBody": "您的 Drydock 容器使用了自定义的基于 curl 的健康检查覆盖。为保持向后兼容，curl 在 v1.5.x 和 v1.6.x 中仍然可用；v1.6.0 是最后一个警告版本，curl 将在 v1.7.0 中从镜像中移除。请优先使用内置的镜像健康检查，或将您的覆盖更新为 {bin}。",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "(+{count} 更多)",
       "installTitle": "将 Drydock 安装为应用",
       "installBody": "将 Drydock 添加到程序坞或主屏幕，快速访问并获得类应用体验，包含离线支持。",
-      "installAction": "Install"
+      "installAction": "安装"
     }
   }
 }

@@ -12,7 +12,7 @@
       "dryRunCondition": "O trigger de ação {trigger} está em modo dry-run — as atualizações são apenas pré-visualizadas e os contêineres não são substituídos.",
       "scanNow": "Escanear agora",
       "recheckNow": "Verificar atualizações novamente",
-      "rechecking": "Rechecking…",
+      "rechecking": "Verificando atualizações novamente…",
       "skipSnoozeGroup": "Ignorar e adiar",
       "skipThisUpdate": "Ignorar esta atualização",
       "snooze1d": "Adiar 1d",
@@ -88,7 +88,7 @@
       "startButton": "Iniciar",
       "restartButton": "Reiniciar",
       "scanButton": "Escanear",
-      "recheckButton": "Recheck",
+      "recheckButton": "Verificar",
       "ariaRecheckContainer": "Verificar atualizações do contêiner",
       "blockedButton": "Bloqueado",
       "updateButton": "Atualizar",
@@ -211,21 +211,21 @@
       "currentLabel": "Atual",
       "latestLabel": "Mais recente",
       "blockedByBouncer": "Bloqueado pelo Bouncer",
-      "registryErrorRateLimited": "Rate limited",
-      "registryErrorAuth": "Auth failed",
-      "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed",
+      "registryErrorRateLimited": "Taxa limitada",
+      "registryErrorAuth": "Falha na autenticação",
+      "registryErrorNotFound": "Não encontrado",
+      "registryErrorCheckFailed": "Verificação falhou",
       "blockedTag": "Bloqueado: {tag}",
       "blockedTagWithCriticals": "Bloqueado: {tag} ({count} CVE crítico)",
       "blockedTagWithCriticalsCVEs": "Bloqueado: {tag} ({count} CVEs críticos)",
       "manualUpdateOnly": "Somente atualização manual",
       "manualUpdateOnlyWithMessage": "Somente atualização manual — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "Atualizar",
+      "cancelButton": "Cancelar",
+      "blockedButton": "Bloqueado",
+      "updateButton": "Atualizar",
+      "moreButton": "Mais",
+      "cancelUpdateTooltip": "Cancelar atualização"
     },
     "groupHeader": {
       "ungrouped": "Sem grupo",
@@ -449,32 +449,32 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "Forçar atualização",
         "message": "Forçar atualização de {name}? Isso limpa a policy de ignorar/adiar antes de tentar a atualização.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "Forçar atualização"
       },
       "update": {
-        "header": "Update Container",
+        "header": "Atualizar contêiner",
         "messageLatest": "Atualizar {name} agora? A imagem mais recente descoberta será aplicada.",
         "messageTagChange": "Atualizar {name}? Isso mudará a tag da imagem de :{currentTag} para :{newTag}{kind}.",
         "messageDigestChange": "Atualizar {name}? Uma build mais recente de :{currentTag} está disponível (mudança de digest).",
-        "softBlockerSuffix": "\n\nEsta atualização está atualmente bloqueada pela policy:\n{list}\n\nClique em \"Update anyway\" para sobrescrever.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerSuffix": "\n\nEsta atualização está atualmente bloqueada pela policy:\n{list}\n\nClique em \"Atualizar mesmo assim\" para sobrescrever.",
+        "softBlockerLearnMore": "Saiba mais",
+        "acceptLabel": "Atualizar",
+        "acceptLabelOverride": "Atualizar mesmo assim"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "Excluir contêiner",
         "message": "Excluir {name}? Isso vai removê-lo do rastreamento do Drydock até que seja redescoberto.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "Excluir"
       },
       "clearPolicy": {
         "header": "Limpar policy de atualização",
         "message": "Limpar toda a policy de atualização de {name}? Isso remove itens ignorados, adiamento e configurações de maturidade.",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "Limpar policy"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "Rollback do contêiner",
         "messageSelected": "Fazer rollback de {name} para a imagem de backup selecionada? Isso substituirá a imagem do contêiner em execução.",
         "messageLatest": "Fazer rollback de {name} para a imagem de backup mais recente? Isso substituirá a imagem do contêiner em execução.",
         "acceptLabel": "Rollback"
@@ -486,7 +486,7 @@
         "waveList": "\n\nOrdem de atualização:\n{list}",
         "cycleWarning": "\n\nAviso: um ciclo de dependência foi detectado ({cycles}). Os contêineres no ciclo podem ser atualizados em ordem arbitrária.",
         "unresolvedWarning": "\n\nAviso: algumas labels de dependência referenciam contêineres que não puderam ser encontrados. Esses serão ignorados.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Atualizar cadeia",
         "previewFailedTitle": "Não foi possível pré-visualizar a cadeia de atualização",
         "previewFailedDetail": "Falha ao carregar a prévia da cadeia de dependências para {name}.",
         "successMessage": "Atualização da cadeia de dependências iniciada: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "Iniciado: {name}",
       "scanTriggered": "Scan iniciado: {name}",
       "scanFailedTitle": "Scan falhou: {name}",
       "scanFailedDetail": "Falha no scan de {name}",
       "actionFailedDetail": "Falha na ação de {name}",
       "updateFailedTitle": "Atualização falhou: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "Excluído: {name}",
       "deleteFailedTitle": "Exclusão falhou: {name}",
       "deleteFailedDetail": "Falha ao excluir {name}",
       "cancellationRequested": "Cancelamento solicitado: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "Cancelado: {name}",
       "cancelAlreadyFinished": "A atualização de {name} já foi concluída, não é possível cancelar",
       "cancelOperationNotFound": "Operação não encontrada: {name}",
       "cancelFailed": "Falha ao cancelar a atualização de {name}",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "tag",
+        "digest": "digest"
+      },
       "tooltips": {
         "snoozedUntil": "Atualizações adiadas até {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "Atualizações adiadas",
         "maturityBlockedSingular": "A policy somente maduras bloqueia atualizações com menos de {days} dia",
         "maturityBlockedPlural": "A policy somente maduras bloqueia atualizações com menos de {days} dias",
         "maturityActiveSingular": "Policy somente maduras ativa (idade mínima de {days} dia)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Atualizações adiadas por {days} dia",
         "snoozedPlural": "Atualizações adiadas por {days} dias",
         "snoozedUntil": "Adiado até {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Adiamento removido",
         "clearSkips": "Atualizações ignoradas limpas",
         "clearPolicy": "Policy de atualização limpa",
         "clearMaturity": "Policy de maturidade limpa",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Desconhecido",
       "loadFailed": "Falha ao carregar backups",
       "rollback": {
         "completedFromSelected": "Rollback concluído a partir do backup selecionado",
         "completedFromLatest": "Rollback concluído a partir do backup mais recente",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Rollback falhou",
+        "failedDetail": "Rollback falhou"
       },
       "operationHistoryLoadFailed": "Falha ao carregar o histórico de operações de atualização"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Abrir configurações do trigger"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Prévia falhou",
         "failedDetail": "Falha ao gerar a prévia de atualização"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms (padrão)",
       "preAbortYes": "Abortar atualização em caso de falha do hook pré-execução",
       "preAbortNo": "Continuar atualização em caso de falha do hook pré-execução",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Ativado",
+      "disabledLabel": "Desativado",
+      "disabledDefaultLabel": "Desativado (padrão)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "Falha ao carregar vulnerabilidades",
       "loadSbomFailed": "Falha ao carregar o SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Nome do contêiner",
+        "containerId": "ID do contêiner",
         "imageName": "Nome da imagem (sem registry)",
         "imageTag": "Tag atual da imagem",
         "updateKind": "Tipo de atualização (tag ou digest)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "Nenhum log disponível para este contêiner",
       "loadFailed": "Falha ao carregar logs do contêiner",
-      "loading": "Loading logs..."
+      "loading": "Carregando logs..."
     },
     "vulnerabilities": {
       "loadFailed": "Falha ao carregar dados de vulnerabilidade"

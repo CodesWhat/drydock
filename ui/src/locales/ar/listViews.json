@@ -110,7 +110,7 @@
         "description": "عندما يدخل فحص الحالة الصحية لـ Docker الخاص بالحاوية في حالة غير سليمة"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "اكتمل النضج",
         "description": "عندما يصبح تحديث محجوب بسياسة النضج قابلاً للتطبيق"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} قابلة للإصلاح",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} مُصلَّحة",
+      "new": "{count} جديدة",
       "both": "{fixed} مُصلَّحة، {new} جديدة"
     },
     "deltaTooltips": {

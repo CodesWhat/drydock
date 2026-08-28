@@ -108,12 +108,12 @@
         "typeHint": "Tippe",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; verwende",
         "useTab": " zum Wechseln des Bereichs",
         "moveHint": "bewegen",
         "openHint": "öffnen",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "Kürzlich",
+        "unknownHost": "unbekannter Host",
         "containerSubtitle": "Container · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "Darstellungseinstellungen",
           "appearanceSubtitle": "Config · Darstellung",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "Profileinstellungen",
           "profileSubtitle": "Config · Profil"
         }
       },
@@ -150,12 +150,12 @@
         "restartingService": "Dienst wird neu gestartet"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "Tastenkürzel",
+        "close": "Schließen",
+        "focusSearch": "Suche fokussieren",
         "closeSearch": "Suche schließen oder Dialoge ausblenden",
         "showHelp": "Diese Hilfe anzeigen",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "Suche umschalten"
       }
     },
     "announcementBanner": {
@@ -176,10 +176,10 @@
       "legacyConfigBody": "Legacy-Trigger-Eingaben sind weiterhin aus Kompatibilitätsgründen mit v1.6 aktiv. Benennen Sie {triggerEnv}-Variablen in {actionEnv} oder {notificationEnv} um, und ersetzen Sie {triggerLabel}-Labels durch {actionLabel} oder {notificationLabel} vor v1.7.",
       "legacyApiBody": "Clients auf dieser Instanz haben kürzlich den entfernten unversionierten Pfad {oldPrefix} aufgerufen und erhalten {statusCode}-Fehler. Migrieren Sie sie auf das Präfix {v1Prefix}. WUD-Ära-Integrationen wie wud-card oder das whatsupdocker-Widget von Homepage können statt einer Migration {compatFlag} setzen.",
       "curlHealthcheckBody": "Ihr Drydock-Container verwendet einen benutzerdefinierten curl-basierten Healthcheck-Override. curl bleibt in v1.5.x und v1.6.x aus Gründen der Abwärtskompatibilität verfügbar; v1.6.0 ist die letzte Version mit Warnhinweis, und curl wird in v1.7.0 aus dem Image entfernt. Bevorzugen Sie den integrierten Image-Healthcheck, oder aktualisieren Sie Ihren Override auf {bin}.",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "(+{count} weitere)",
       "installTitle": "Drydock als App installieren",
       "installBody": "Fügen Sie Drydock zu Ihrem Dock oder Startbildschirm hinzu, für schnellen Zugriff und ein App-ähnliches Erlebnis, inklusive Offline-Shell.",
-      "installAction": "Install"
+      "installAction": "Installieren"
     }
   }
 }

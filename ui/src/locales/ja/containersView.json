@@ -33,7 +33,7 @@
     },
     "columns": {
       "container": "コンテナ",
-      "tag": "Tag",
+      "tag": "タグ",
       "version": "バージョン",
       "versionTooltip": "イメージのメタデータから検出されたバージョンです。タグと一致する場合があり、表示スペースが不足するとホストの前に非表示になります。",
       "update": "更新",
@@ -42,8 +42,8 @@
       "host": "ホスト",
       "registry": "レジストリ",
       "resources": "リソース",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "稼働時間",
+      "ports": "ポート"
     },
     "status": {
       "running": "稼働中",

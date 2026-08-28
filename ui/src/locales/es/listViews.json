@@ -110,7 +110,7 @@
         "description": "Cuando la comprobación de estado de Docker de un contenedor entra en estado \"unhealthy\""
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "Madurez liberada",
         "description": "Cuando una actualización retenida por la política de madurez se vuelve aplicable"
       }
     },
@@ -203,10 +203,10 @@
       "images": "imágenes",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} corregibles",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} corregidas",
+      "new": "{count} nuevas",
       "both": "{fixed} corregidas, {new} nuevas"
     },
     "deltaTooltips": {

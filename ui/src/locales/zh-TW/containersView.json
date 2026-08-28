@@ -33,7 +33,7 @@
     },
     "columns": {
       "container": "容器",
-      "tag": "Tag",
+      "tag": "標籤",
       "version": "版本",
       "versionTooltip": "從映像檔元資料偵測到的版本，可能與標籤相同；當版面空間不足時，此欄位會比「主機」欄更早被隱藏。",
       "update": "更新",
@@ -42,8 +42,8 @@
       "host": "主機",
       "registry": "倉庫",
       "resources": "資源",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "正常執行時間",
+      "ports": "連接埠"
     },
     "status": {
       "running": "執行中",

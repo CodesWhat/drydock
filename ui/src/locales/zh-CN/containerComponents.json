@@ -12,7 +12,7 @@
       "dryRunCondition": "操作触发器 {trigger} 处于 dry-run 模式 — 更新仅作预览，容器不会被替换。",
       "scanNow": "立即扫描",
       "recheckNow": "重新检查更新",
-      "rechecking": "Rechecking…",
+      "rechecking": "重新检查中...",
       "skipSnoozeGroup": "跳过和推迟",
       "skipThisUpdate": "跳过此次更新",
       "snooze1d": "推迟 1 天",
@@ -88,7 +88,7 @@
       "startButton": "启动",
       "restartButton": "重启",
       "scanButton": "扫描",
-      "recheckButton": "Recheck",
+      "recheckButton": "重新检查",
       "ariaRecheckContainer": "重新检查容器更新",
       "blockedButton": "已阻止",
       "updateButton": "更新",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "已阻止：{tag}（{count} 个严重）",
       "manualUpdateOnly": "仅支持手动更新",
       "manualUpdateOnlyWithMessage": "仅支持手动更新 — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "更新",
+      "cancelButton": "取消",
+      "blockedButton": "已阻止",
+      "updateButton": "更新",
+      "moreButton": "更多",
+      "cancelUpdateTooltip": "取消更新"
     },
     "groupHeader": {
       "ungrouped": "未分组",
@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "强制更新",
         "message": "强制更新 {name}？这将在尝试更新前清除跳过/推迟策略。",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "强制更新"
       },
       "update": {
-        "header": "Update Container",
+        "header": "更新容器",
         "messageLatest": "立即更新 {name}？这将应用最新发现的镜像。",
         "messageTagChange": "更新 {name}？这将把镜像标签从 :{currentTag} 更改为 :{newTag}{kind}。",
         "messageDigestChange": "更新 {name}？:{currentTag} 有更新的构建版本可用（摘要变更）。",
         "softBlockerSuffix": "\n\n此更新当前处于策略阻止状态：\n{list}\n\n点击“仍然更新”以覆盖。",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerLearnMore": "了解更多",
+        "acceptLabel": "更新",
+        "acceptLabelOverride": "仍然更新"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "删除容器",
         "message": "删除 {name}？这将把它从 Drydock 的跟踪列表中移除，直到重新发现为止。",
-        "acceptLabel": "Delete"
+        "acceptLabel": "删除"
       },
       "clearPolicy": {
         "header": "清除更新策略",
         "message": "清除 {name} 的所有更新策略？这将移除跳过、推迟和成熟度设置。",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "清除策略"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "回滚容器",
         "messageSelected": "将 {name} 回滚到所选的备份镜像？这将替换正在运行的容器镜像。",
         "messageLatest": "将 {name} 回滚到最新的备份镜像？这将替换正在运行的容器镜像。",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "回滚"
       },
       "dependencyGroup": {
         "header": "更新依赖链",
@@ -486,7 +486,7 @@
         "waveList": "\n\n更新顺序：\n{list}",
         "cycleWarning": "\n\n警告：检测到依赖循环（{cycles}）。循环中的容器可能以任意顺序更新。",
         "unresolvedWarning": "\n\n警告：部分依赖标签引用的容器未找到，这些容器将被跳过。",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "更新链",
         "previewFailedTitle": "无法预览更新链",
         "previewFailedDetail": "无法加载 {name} 的依赖链预览。",
         "successMessage": "依赖链更新已开始：{name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "已开始：{name}",
       "scanTriggered": "已触发扫描：{name}",
       "scanFailedTitle": "扫描失败：{name}",
       "scanFailedDetail": "扫描 {name} 失败",
       "actionFailedDetail": "{name} 操作失败",
       "updateFailedTitle": "更新失败：{name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "已删除：{name}",
       "deleteFailedTitle": "删除失败：{name}",
       "deleteFailedDetail": "删除 {name} 失败",
       "cancellationRequested": "已请求取消：{name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "已取消：{name}",
       "cancelAlreadyFinished": "{name} 的更新已完成，无法取消",
       "cancelOperationNotFound": "未找到操作：{name}",
       "cancelFailed": "取消 {name} 的更新失败",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "标签",
+        "digest": "摘要"
+      },
       "tooltips": {
         "snoozedUntil": "更新已推迟至 {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "更新已推迟",
         "maturityBlockedSingular": "仅成熟策略会阻止低于 {days} 天的更新",
         "maturityBlockedPlural": "仅成熟策略会阻止低于 {days} 天的更新",
         "maturityActiveSingular": "仅成熟策略已启用（最低 {days} 天）",
@@ -537,7 +541,7 @@
         "snoozedSingular": "已推迟更新 {days} 天",
         "snoozedPlural": "已推迟更新 {days} 天",
         "snoozedUntil": "已推迟至 {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "已清除推迟",
         "clearSkips": "已清除跳过的更新",
         "clearPolicy": "已清除更新策略",
         "clearMaturity": "已清除成熟度策略",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "未知",
       "loadFailed": "无法加载备份",
       "rollback": {
         "completedFromSelected": "已从所选备份完成回滚",
         "completedFromLatest": "已从最新备份完成回滚",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "回滚失败",
+        "failedDetail": "回滚失败"
       },
       "operationHistoryLoadFailed": "无法加载更新操作历史"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "打开触发器设置"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "预览失败",
         "failedDetail": "无法生成更新预览"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms（默认）",
       "preAbortYes": "前置钩子失败时中止更新",
       "preAbortNo": "前置钩子失败时继续更新",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "已启用",
+      "disabledLabel": "已禁用",
+      "disabledDefaultLabel": "已禁用（默认）",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "无法加载漏洞信息",
       "loadSbomFailed": "无法加载 SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "容器名称",
+        "containerId": "容器 ID",
         "imageName": "镜像名称（不含仓库）",
         "imageTag": "当前镜像标签",
         "updateKind": "更新类型（标签或摘要）",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "此容器暂无可用日志",
       "loadFailed": "无法加载容器日志",
-      "loading": "Loading logs..."
+      "loading": "正在加载日志..."
     },
     "vulnerabilities": {
       "loadFailed": "无法加载漏洞数据"

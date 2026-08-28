@@ -16,8 +16,8 @@
       "accessDenied": "レジストリへのアクセスが拒否されました",
       "imageNotFound": "イメージが見つかりません",
       "authFailed": "レジストリ認証に失敗しました",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "レジストリに接続できません",
+      "cancelled": "キャンセル済み",
       "securityBlocked": "セキュリティスキャンによりブロックされました",
       "signatureFailed": "署名の検証に失敗しました"
     },

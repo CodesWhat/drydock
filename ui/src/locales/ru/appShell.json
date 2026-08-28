@@ -150,12 +150,12 @@
         "restartingService": "Перезапуск службы"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "Горячие клавиши",
+        "close": "Закрыть",
+        "focusSearch": "Перейти к поиску",
         "closeSearch": "Закрыть поиск или диалоговые окна",
         "showHelp": "Показать эту справку",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "Переключить поиск"
       }
     },
     "announcementBanner": {
@@ -179,7 +179,7 @@
       "hiddenMore": "(+{count} далее)",
       "installTitle": "Установить Drydock как приложение",
       "installBody": "Добавьте Drydock на панель или главный экран для быстрого доступа и работы как в приложении, включая офлайн-оболочку.",
-      "installAction": "Install"
+      "installAction": "Установить"
     }
   }
 }

@@ -110,7 +110,7 @@
         "description": "Khi health check Docker của container chuyển sang trạng thái \"unhealthy\""
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "Đã đạt độ chín",
         "description": "Khi cập nhật bị chính sách độ chín giữ lại trở nên khả dụng"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} có thể vá",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} đã vá",
+      "new": "{count} mới",
       "both": "{fixed} đã vá, {new} mới"
     },
     "deltaTooltips": {

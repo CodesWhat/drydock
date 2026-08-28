@@ -110,7 +110,7 @@
         "description": "Gdy kontrola stanu Docker kontenera przejdzie w stan \"unhealthy\""
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "Dojrzałość wyczyszczona",
         "description": "Gdy aktualizacja wstrzymana przez politykę dojrzałości staje się dostępna"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} do naprawy",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} naprawionych",
+      "new": "{count} nowych",
       "both": "{fixed} naprawionych, {new} nowych"
     },
     "deltaTooltips": {

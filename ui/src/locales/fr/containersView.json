@@ -42,7 +42,7 @@
       "host": "Hôte",
       "registry": "Registry",
       "resources": "Ressources",
-      "uptime": "Uptime",
+      "uptime": "Temps de fonctionnement",
       "ports": "Ports"
     },
     "status": {

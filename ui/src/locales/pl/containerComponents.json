@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "Wymuś aktualizację",
         "message": "Wymusić aktualizację {name}? To wyczyści zasady pomijania i odkładania przed próbą aktualizacji.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "Wymuś aktualizację"
       },
       "update": {
-        "header": "Update Container",
+        "header": "Zaktualizuj kontener",
         "messageLatest": "Zaktualizować {name} teraz? Spowoduje to zastosowanie najnowszego odkrytego obrazu.",
         "messageTagChange": "Zaktualizować {name}? Spowoduje to zmianę znacznika obrazu z :{currentTag} na :{newTag}{kind}.",
         "messageDigestChange": "Zaktualizować {name}? Dostępna jest nowsza wersja :{currentTag} (zmiana skrótu).",
         "softBlockerSuffix": "\n\nTa aktualizacja jest obecnie zablokowana przez politykę:\n{list}\n\nKliknij „Zaktualizuj mimo to”, aby to obejść.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerLearnMore": "Dowiedz się więcej",
+        "acceptLabel": "Zaktualizuj",
+        "acceptLabelOverride": "Zaktualizuj mimo to"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "Usuń kontener",
         "message": "Usunąć {name}? Spowoduje to usunięcie go ze śledzenia Drydock do czasu ponownego wykrycia.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "Usuń"
       },
       "clearPolicy": {
         "header": "Wyczyść zasady aktualizacji",
         "message": "Wyczyścić wszystkie zasady aktualizacji dla {name}? Spowoduje to usunięcie pominięć, odłożeń i ustawień dojrzałości.",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "Wyczyść zasady"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "Wycofaj kontener",
         "messageSelected": "Wycofać {name} do wybranego obrazu kopii zapasowej? Spowoduje to zastąpienie obrazu uruchomionego kontenera.",
         "messageLatest": "Wycofać {name} do najnowszego obrazu kopii zapasowej? Spowoduje to zastąpienie obrazu uruchomionego kontenera.",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "Wycofaj"
       },
       "dependencyGroup": {
         "header": "Zaktualizuj łańcuch zależności",
@@ -486,7 +486,7 @@
         "waveList": "\n\nKolejność aktualizacji:\n{list}",
         "cycleWarning": "\n\nOstrzeżenie: wykryto cykl zależności ({cycles}). Kontenery w cyklu mogą zostać zaktualizowane w dowolnej kolejności.",
         "unresolvedWarning": "\n\nOstrzeżenie: niektóre etykiety zależności odwołują się do kontenerów, których nie można znaleźć. Zostaną one pominięte.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Zaktualizuj łańcuch",
         "previewFailedTitle": "Nie można wyświetlić podglądu łańcucha aktualizacji",
         "previewFailedDetail": "Nie udało się załadować podglądu łańcucha zależności dla {name}.",
         "successMessage": "Rozpoczęto aktualizację łańcucha zależności: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "Uruchomiono: {name}",
       "scanTriggered": "Zainicjowano skanowanie: {name}",
       "scanFailedTitle": "Skanowanie nie powiodło się: {name}",
       "scanFailedDetail": "Skanowanie nie powiodło się dla {name}",
       "actionFailedDetail": "Działanie nie powiodło się dla {name}",
       "updateFailedTitle": "Aktualizacja nie powiodła się: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "Usunięto: {name}",
       "deleteFailedTitle": "Usuwanie nie powiodło się: {name}",
       "deleteFailedDetail": "Nie udało się usunąć {name}",
       "cancellationRequested": "Zażądano anulowania: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "Anulowano: {name}",
       "cancelAlreadyFinished": "Aktualizacja dla {name} już się zakończyła, nie można anulować",
       "cancelOperationNotFound": "Nie znaleziono operacji: {name}",
       "cancelFailed": "Nie udało się anulować aktualizacji dla {name}",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "tag",
+        "digest": "skrót"
+      },
       "tooltips": {
         "snoozedUntil": "Aktualizacje odłożone do {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "Aktualizacje odłożone",
         "maturityBlockedSingular": "Polityka „tylko dojrzałe” blokuje aktualizacje młodsze niż {days} dzień",
         "maturityBlockedPlural": "Polityka „tylko dojrzałe” blokuje aktualizacje młodsze niż {days} dni",
         "maturityActiveSingular": "Polityka „tylko dojrzałe” aktywna (minimalny wiek {days} dzień)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Odłożono aktualizacje na {days} dzień",
         "snoozedPlural": "Odłożono aktualizacje na {days} dni",
         "snoozedUntil": "Odłożono do {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Wyczyszczono odłożenie",
         "clearSkips": "Wyczyszczono pominięte aktualizacje",
         "clearPolicy": "Wyczyszczono zasady aktualizacji",
         "clearMaturity": "Wyczyszczono politykę dojrzałości",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Nieznany",
       "loadFailed": "Nie udało się załadować kopii zapasowych",
       "rollback": {
         "completedFromSelected": "Wycofanie zakończone z wybranej kopii zapasowej",
         "completedFromLatest": "Wycofanie zakończone z najnowszej kopii zapasowej",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Wycofanie nie powiodło się",
+        "failedDetail": "Wycofanie nie powiodło się"
       },
       "operationHistoryLoadFailed": "Nie udało się załadować historii operacji aktualizacji"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Otwórz ustawienia wyzwalacza"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Podgląd nie powiódł się",
         "failedDetail": "Nie udało się wygenerować podglądu aktualizacji"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms (domyślnie)",
       "preAbortYes": "Przerwij aktualizację w przypadku niepowodzenia haka wstępnego",
       "preAbortNo": "Kontynuuj aktualizację w przypadku niepowodzenia haka wstępnego",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Włączone",
+      "disabledLabel": "Wyłączone",
+      "disabledDefaultLabel": "Wyłączone (domyślnie)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "Nie udało się załadować podatności",
       "loadSbomFailed": "Nie udało się załadować SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Nazwa kontenera",
+        "containerId": "ID kontenera",
         "imageName": "Nazwa obrazu (bez rejestru)",
         "imageTag": "Bieżący tag obrazu",
         "updateKind": "Typ aktualizacji (tag lub skrót)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "Brak dostępnych logów dla tego kontenera",
       "loadFailed": "Nie udało się załadować logów kontenera",
-      "loading": "Loading logs..."
+      "loading": "Ładowanie logów..."
     },
     "vulnerabilities": {
       "loadFailed": "Nie udało się załadować danych o podatnościach"

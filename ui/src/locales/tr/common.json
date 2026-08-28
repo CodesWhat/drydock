@@ -16,8 +16,8 @@
       "accessDenied": "Kayıt defteri erişimi reddedildi",
       "imageNotFound": "İmaj bulunamadı",
       "authFailed": "Kayıt defteri kimlik doğrulaması başarısız oldu",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "Kayıt defterine ulaşılamıyor",
+      "cancelled": "İptal edildi",
       "securityBlocked": "Güvenlik taraması tarafından engellendi",
       "signatureFailed": "İmza doğrulaması başarısız oldu"
     },

@@ -12,7 +12,7 @@
       "dryRunCondition": "Aktions-Trigger {trigger} befindet sich im Dry-Run-Modus — Updates werden nur als Vorschau angezeigt, Container werden nicht ersetzt.",
       "scanNow": "Jetzt scannen",
       "recheckNow": "Erneut auf Updates prüfen",
-      "rechecking": "Rechecking…",
+      "rechecking": "Erneute Prüfung läuft...",
       "skipSnoozeGroup": "Überspringen & pausieren",
       "skipThisUpdate": "Dieses Update überspringen",
       "snooze1d": "1 T pausieren",
@@ -88,7 +88,7 @@
       "startButton": "Starten",
       "restartButton": "Neu starten",
       "scanButton": "Scannen",
-      "recheckButton": "Recheck",
+      "recheckButton": "Erneut prüfen",
       "ariaRecheckContainer": "Container erneut auf Updates prüfen",
       "blockedButton": "Blockiert",
       "updateButton": "Update",
@@ -222,9 +222,9 @@
       "manualUpdateOnlyWithMessage": "Nur manuelles Update — {message}",
       "updateBtnTooltipDefault": "Update",
       "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
+      "blockedButton": "Blockiert",
       "updateButton": "Update",
-      "moreButton": "More",
+      "moreButton": "Mehr",
       "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
@@ -449,32 +449,32 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "Update erzwingen",
         "message": "Update für {name} erzwingen? Dies löscht die Überspringen-/Pausieren-Policy, bevor das Update versucht wird.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "Update erzwingen"
       },
       "update": {
-        "header": "Update Container",
+        "header": "Container aktualisieren",
         "messageLatest": "{name} jetzt aktualisieren? Das neueste erkannte Image wird angewendet.",
         "messageTagChange": "{name} aktualisieren? Der Image-Tag wird von :{currentTag} auf :{newTag}{kind} geändert.",
         "messageDigestChange": "{name} aktualisieren? Ein neuerer Build von :{currentTag} ist verfügbar (Digest-Änderung).",
         "softBlockerSuffix": "\n\nDieses Update ist derzeit durch eine Policy blockiert:\n{list}\n\nKlicken Sie auf „Update anyway“, um die Blockierung zu überschreiben.",
-        "softBlockerLearnMore": "Learn more",
+        "softBlockerLearnMore": "Mehr erfahren",
         "acceptLabel": "Update",
         "acceptLabelOverride": "Update anyway"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "Container löschen",
         "message": "{name} löschen? Dies entfernt ihn aus der Drydock-Nachverfolgung, bis er erneut erkannt wird.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "Löschen"
       },
       "clearPolicy": {
         "header": "Update-Policy löschen",
         "message": "Alle Update-Policy-Einstellungen für {name} löschen? Dies entfernt Überspringungen, Pausen und Reife-Einstellungen.",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "Policy löschen"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "Container zurückrollen",
         "messageSelected": "{name} auf das ausgewählte Backup-Image zurückrollen? Dies ersetzt das aktuell laufende Container-Image.",
         "messageLatest": "{name} auf das neueste Backup-Image zurückrollen? Dies ersetzt das aktuell laufende Container-Image.",
         "acceptLabel": "Rollback"
@@ -486,7 +486,7 @@
         "waveList": "\n\nUpdate-Reihenfolge:\n{list}",
         "cycleWarning": "\n\nWarnung: Ein Abhängigkeitszyklus wurde erkannt ({cycles}). Container im Zyklus werden möglicherweise in beliebiger Reihenfolge aktualisiert.",
         "unresolvedWarning": "\n\nWarnung: Einige Abhängigkeits-Labels verweisen auf Container, die nicht gefunden werden konnten. Diese werden übersprungen.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Update-Kette",
         "previewFailedTitle": "Vorschau der Abhängigkeitskette nicht möglich",
         "previewFailedDetail": "Die Vorschau der Abhängigkeitskette für {name} konnte nicht geladen werden.",
         "successMessage": "Aktualisierung der Abhängigkeitskette gestartet: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "Gestartet: {name}",
       "scanTriggered": "Scan ausgelöst: {name}",
       "scanFailedTitle": "Scan fehlgeschlagen: {name}",
       "scanFailedDetail": "Scan für {name} fehlgeschlagen",
       "actionFailedDetail": "Aktion für {name} fehlgeschlagen",
       "updateFailedTitle": "Update fehlgeschlagen: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "Gelöscht: {name}",
       "deleteFailedTitle": "Löschen fehlgeschlagen: {name}",
       "deleteFailedDetail": "{name} konnte nicht gelöscht werden",
       "cancellationRequested": "Abbruch angefordert: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "Abgebrochen: {name}",
       "cancelAlreadyFinished": "Update für {name} bereits abgeschlossen, Abbruch nicht möglich",
       "cancelOperationNotFound": "Operation nicht gefunden: {name}",
       "cancelFailed": "Update für {name} konnte nicht abgebrochen werden",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "tag",
+        "digest": "digest"
+      },
       "tooltips": {
         "snoozedUntil": "Updates pausiert bis {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "Updates pausiert",
         "maturityBlockedSingular": "Die Nur-reife-Policy blockiert Updates, die jünger als {days} Tag sind",
         "maturityBlockedPlural": "Die Nur-reife-Policy blockiert Updates, die jünger als {days} Tage sind",
         "maturityActiveSingular": "Nur-reife-Policy aktiv (Mindestalter {days} Tag)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Updates für {days} Tag pausiert",
         "snoozedPlural": "Updates für {days} Tage pausiert",
         "snoozedUntil": "Pausiert bis {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Pause aufgehoben",
         "clearSkips": "Überspringungen gelöscht",
         "clearPolicy": "Update-Policy gelöscht",
         "clearMaturity": "Reife-Policy gelöscht",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Unbekannt",
       "loadFailed": "Backups konnten nicht geladen werden",
       "rollback": {
         "completedFromSelected": "Rollback vom ausgewählten Backup abgeschlossen",
         "completedFromLatest": "Rollback vom neuesten Backup abgeschlossen",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Rollback fehlgeschlagen",
+        "failedDetail": "Rollback fehlgeschlagen"
       },
       "operationHistoryLoadFailed": "Historie der Update-Operationen konnte nicht geladen werden"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Trigger-Einstellungen öffnen"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Vorschau fehlgeschlagen",
         "failedDetail": "Update-Vorschau konnte nicht erstellt werden"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms (Standard)",
       "preAbortYes": "Update bei Pre-Hook-Fehler abbrechen",
       "preAbortNo": "Update bei Pre-Hook-Fehler fortsetzen",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Aktiviert",
+      "disabledLabel": "Deaktiviert",
+      "disabledDefaultLabel": "Deaktiviert (Standard)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "Schwachstellen konnten nicht geladen werden",
       "loadSbomFailed": "SBOM konnte nicht geladen werden",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Container-Name",
+        "containerId": "Container-ID",
         "imageName": "Image-Name (ohne Registry)",
         "imageTag": "Aktueller Image-Tag",
         "updateKind": "Update-Typ (Tag oder Digest)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "Keine Logs für diesen Container verfügbar",
       "loadFailed": "Container-Logs konnten nicht geladen werden",
-      "loading": "Loading logs..."
+      "loading": "Logs werden geladen..."
     },
     "vulnerabilities": {
       "loadFailed": "Schwachstellendaten konnten nicht geladen werden"

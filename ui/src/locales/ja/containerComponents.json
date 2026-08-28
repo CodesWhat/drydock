@@ -12,7 +12,7 @@
       "dryRunCondition": "アクショントリガー {trigger} はドライランモードです — 更新はプレビューのみで、コンテナは置き換えられません。",
       "scanNow": "今すぐスキャン",
       "recheckNow": "更新を再確認",
-      "rechecking": "Rechecking…",
+      "rechecking": "再確認中...",
       "skipSnoozeGroup": "スキップ＆スヌーズ",
       "skipThisUpdate": "この更新をスキップ",
       "snooze1d": "1 日スヌーズ",
@@ -88,7 +88,7 @@
       "startButton": "起動",
       "restartButton": "再起動",
       "scanButton": "スキャン",
-      "recheckButton": "Recheck",
+      "recheckButton": "再確認",
       "ariaRecheckContainer": "コンテナの更新を再確認",
       "blockedButton": "ブロック済み",
       "updateButton": "更新",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "ブロック済み：{tag}（致命的 CVE {count} 件）",
       "manualUpdateOnly": "手動更新のみ",
       "manualUpdateOnlyWithMessage": "手動更新のみ — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "更新",
+      "cancelButton": "キャンセル",
+      "blockedButton": "ブロック済み",
+      "updateButton": "更新",
+      "moreButton": "その他",
+      "cancelUpdateTooltip": "更新をキャンセル"
     },
     "groupHeader": {
       "ungrouped": "グループなし",
@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "強制更新",
         "message": "{name} を強制更新しますか？更新を試みる前に、スキップ／スヌーズポリシーをクリアします。",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "強制更新"
       },
       "update": {
-        "header": "Update Container",
+        "header": "コンテナを更新",
         "messageLatest": "{name} を今すぐ更新しますか？最新のイメージが適用されます。",
         "messageTagChange": "{name} を更新しますか？イメージタグが :{currentTag} から :{newTag}{kind} に変更されます。",
         "messageDigestChange": "{name} を更新しますか？:{currentTag} の新しいビルドが利用可能です（ダイジェスト変更）。",
         "softBlockerSuffix": "\n\nこの更新は現在ポリシーによりブロックされています：\n{list}\n\n上書きするには「とにかく更新」をクリックしてください。",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerLearnMore": "詳細を表示",
+        "acceptLabel": "更新",
+        "acceptLabelOverride": "とにかく更新"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "コンテナを削除",
         "message": "{name} を削除しますか？再検出されるまで Drydock の追跡対象から削除されます。",
-        "acceptLabel": "Delete"
+        "acceptLabel": "削除"
       },
       "clearPolicy": {
         "header": "更新ポリシーをクリア",
         "message": "{name} のすべての更新ポリシーをクリアしますか？スキップ、スヌーズ、成熟度の設定が削除されます。",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "ポリシーをクリア"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "コンテナをロールバック",
         "messageSelected": "{name} を選択したバックアップイメージにロールバックしますか？稼働中のコンテナイメージが置き換えられます。",
         "messageLatest": "{name} を最新のバックアップイメージにロールバックしますか？稼働中のコンテナイメージが置き換えられます。",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "ロールバック"
       },
       "dependencyGroup": {
         "header": "依存関係チェーンを更新",
@@ -486,7 +486,7 @@
         "waveList": "\n\n更新順序：\n{list}",
         "cycleWarning": "\n\n警告：依存関係の循環が検出されました（{cycles}）。循環内のコンテナは任意の順序で更新される場合があります。",
         "unresolvedWarning": "\n\n警告：一部の依存関係ラベルが見つからないコンテナを参照しています。これらはスキップされます。",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "チェーンを更新",
         "previewFailedTitle": "更新チェーンをプレビューできません",
         "previewFailedDetail": "{name} の依存関係チェーンのプレビューの読み込みに失敗しました。",
         "successMessage": "依存関係チェーンの更新を開始しました：{name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "開始しました：{name}",
       "scanTriggered": "スキャンを開始しました：{name}",
       "scanFailedTitle": "スキャンに失敗しました：{name}",
       "scanFailedDetail": "{name} のスキャンに失敗しました",
       "actionFailedDetail": "{name} のアクションに失敗しました",
       "updateFailedTitle": "更新に失敗しました：{name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "削除しました：{name}",
       "deleteFailedTitle": "削除に失敗しました：{name}",
       "deleteFailedDetail": "{name} の削除に失敗しました",
       "cancellationRequested": "キャンセルをリクエストしました：{name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "キャンセルしました：{name}",
       "cancelAlreadyFinished": "{name} の更新はすでに完了しているため、キャンセルできません",
       "cancelOperationNotFound": "オペレーションが見つかりません：{name}",
       "cancelFailed": "{name} の更新のキャンセルに失敗しました",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "タグ",
+        "digest": "ダイジェスト"
+      },
       "tooltips": {
         "snoozedUntil": "更新は {date} までスヌーズされています",
-        "snoozed": "Updates snoozed",
+        "snoozed": "更新はスヌーズされています",
         "maturityBlockedSingular": "成熟のみポリシーにより、{days} 日未満の更新はブロックされます",
         "maturityBlockedPlural": "成熟のみポリシーにより、{days} 日未満の更新はブロックされます",
         "maturityActiveSingular": "成熟のみポリシーが有効です（最低経過日数 {days} 日）",
@@ -537,7 +541,7 @@
         "snoozedSingular": "更新を {days} 日間スヌーズしました",
         "snoozedPlural": "更新を {days} 日間スヌーズしました",
         "snoozedUntil": "{date} までスヌーズしました",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "スヌーズを解除しました",
         "clearSkips": "スキップ済み更新をクリアしました",
         "clearPolicy": "更新ポリシーをクリアしました",
         "clearMaturity": "成熟度ポリシーをクリアしました",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "不明",
       "loadFailed": "バックアップの読み込みに失敗しました",
       "rollback": {
         "completedFromSelected": "選択したバックアップからのロールバックが完了しました",
         "completedFromLatest": "最新のバックアップからのロールバックが完了しました",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "ロールバックに失敗しました",
+        "failedDetail": "ロールバックに失敗しました"
       },
       "operationHistoryLoadFailed": "更新操作履歴の読み込みに失敗しました"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "トリガー設定を開く"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "プレビューに失敗しました",
         "failedDetail": "更新プレビューの生成に失敗しました"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms（デフォルト）",
       "preAbortYes": "事前フック失敗時に更新を中止",
       "preAbortNo": "事前フック失敗時も更新を継続",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "有効",
+      "disabledLabel": "無効",
+      "disabledDefaultLabel": "無効（デフォルト）",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "脆弱性の読み込みに失敗しました",
       "loadSbomFailed": "SBOM の読み込みに失敗しました",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "コンテナ名",
+        "containerId": "コンテナ ID",
         "imageName": "イメージ名（レジストリを除く）",
         "imageTag": "現在のイメージタグ",
         "updateKind": "更新種別（タグまたはダイジェスト）",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "このコンテナで利用可能なログはありません",
       "loadFailed": "コンテナログの読み込みに失敗しました",
-      "loading": "Loading logs..."
+      "loading": "コンテナログを読み込み中..."
     },
     "vulnerabilities": {
       "loadFailed": "脆弱性データの読み込みに失敗しました"

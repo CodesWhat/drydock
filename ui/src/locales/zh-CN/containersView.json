@@ -33,7 +33,7 @@
     },
     "columns": {
       "container": "容器",
-      "tag": "Tag",
+      "tag": "标签",
       "version": "版本",
       "versionTooltip": "此版本从镜像元数据中检测得出，可能与标签相同；在空间不足时，会在“主机”列之前被隐藏。",
       "update": "更新",
@@ -42,8 +42,8 @@
       "host": "主机",
       "registry": "仓库",
       "resources": "资源",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "运行时间",
+      "ports": "端口"
     },
     "status": {
       "running": "运行中",

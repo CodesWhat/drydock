@@ -42,8 +42,8 @@
       "host": "Máy chủ",
       "registry": "Registry",
       "resources": "Tài nguyên",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "Thời gian hoạt động",
+      "ports": "Cổng"
     },
     "status": {
       "running": "đang chạy",

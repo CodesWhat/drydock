@@ -112,8 +112,8 @@
         "useTab": " para alterar o escopo",
         "moveHint": "mover",
         "openHint": "abrir",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "Recentes",
+        "unknownHost": "host desconhecido",
         "containerSubtitle": "Contêiner · {image} · {status} · {host}",
         "agentSubtitle": "Agente · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "Configurações de aparência",
           "appearanceSubtitle": "Config · Aparência",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "Configurações de perfil",
           "profileSubtitle": "Config · Perfil"
         }
       },
@@ -150,12 +150,12 @@
         "restartingService": "Reiniciando serviço"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "Atalhos de teclado",
+        "close": "Fechar",
+        "focusSearch": "Focar busca",
         "closeSearch": "Fechar busca ou dispensar diálogos",
         "showHelp": "Mostrar esta ajuda",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "Alternar busca"
       }
     },
     "announcementBanner": {
@@ -176,10 +176,10 @@
       "legacyConfigBody": "As entradas de trigger legadas ainda estão ativas para compatibilidade com a v1.6. Renomeie as variáveis {triggerEnv} para {actionEnv} ou {notificationEnv}, e substitua as labels {triggerLabel} por {actionLabel} ou {notificationLabel} antes da v1.7.",
       "legacyApiBody": "Clientes desta instância chamaram recentemente o caminho não versionado removido {oldPrefix} e estão recebendo erros {statusCode}. Migre-os para o prefixo {v1Prefix}. Integrações da era WUD, como o wud-card ou o widget whatsupdocker do Homepage, podem definir {compatFlag} em vez de migrar.",
       "curlHealthcheckBody": "Seu contêiner Drydock usa uma substituição de healthcheck personalizada baseada em curl. O curl continua disponível para compatibilidade retroativa nas versões v1.5.x e v1.6.x; a v1.6.0 é a versão final de aviso, e o curl será removido da imagem na v1.7.0. Prefira o healthcheck integrado da imagem, ou atualize sua substituição para {bin}.",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "(+{count} mais)",
       "installTitle": "Instalar o Drydock como aplicativo",
       "installBody": "Adicione o Drydock ao seu dock ou à tela inicial para acesso rápido e uma experiência de aplicativo, com shell offline incluído.",
-      "installAction": "Install"
+      "installAction": "Instalar"
     }
   }
 }

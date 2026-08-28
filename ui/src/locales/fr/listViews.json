@@ -110,7 +110,7 @@
         "description": "Lorsque le healthcheck Docker d'un conteneur passe à l'état « unhealthy »"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "Maturité effacée",
         "description": "Quand une mise à jour retenue par la politique de maturité devient applicable"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} corrigeables",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} corrigées",
+      "new": "{count} nouvelles",
       "both": "{fixed} corrigées, {new} nouvelles"
     },
     "deltaTooltips": {

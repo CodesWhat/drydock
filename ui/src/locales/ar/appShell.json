@@ -108,12 +108,12 @@
         "typeHint": "اكتب",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "؛ استخدم",
         "useTab": " لتغيير النطاق",
         "moveHint": "تنقل",
         "openHint": "فتح",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "الأخيرة",
+        "unknownHost": "مضيف غير معروف",
         "containerSubtitle": "حاوية · {image} · {status} · {host}",
         "agentSubtitle": "وكيل · {status} · {host}",
         "triggerSubtitle": "مشغّل · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "إعدادات المظهر",
           "appearanceSubtitle": "إعداد · المظهر",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "إعدادات الملف الشخصي",
           "profileSubtitle": "إعداد · الملف الشخصي"
         }
       },
@@ -150,12 +150,12 @@
         "restartingService": "جارٍ إعادة تشغيل الخدمة"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "اختصارات لوحة المفاتيح",
+        "close": "إغلاق",
+        "focusSearch": "التركيز على البحث",
         "closeSearch": "إغلاق البحث أو إغلاق مربعات الحوار",
         "showHelp": "إظهار هذه المساعدة",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "تبديل البحث"
       }
     },
     "announcementBanner": {
@@ -176,10 +176,10 @@
       "legacyConfigBody": "لا تزال مدخلات المشغّل القديمة نشطة للتوافق مع v1.6. أعد تسمية متغيرات {triggerEnv} إلى {actionEnv} أو {notificationEnv}، واستبدل تسميات {triggerLabel} بـ {actionLabel} أو {notificationLabel} قبل الإصدار v1.7.",
       "legacyApiBody": "استدعى بعض العملاء على هذا المثيل مؤخراً مسار {oldPrefix} غير المُرقَّم الذي تمت إزالته، وهم يتلقون أخطاء {statusCode} نتيجة لذلك. رحّلهم إلى استخدام البادئة {v1Prefix}. يمكن لتكاملات حقبة WUD مثل wud-card أو أداة whatsupdocker التابعة لـ Homepage ضبط {compatFlag} بدلاً من الترحيل.",
       "curlHealthcheckBody": "تستخدم حاوية Drydock الخاصة بك تجاوزاً مخصصاً لفحص الصحة يعتمد على curl. يظل curl متاحاً للتوافق مع الإصدارات السابقة في v1.5.x وv1.6.x؛ يُعد الإصدار v1.6.0 إصدار التحذير الأخير، وستتم إزالة curl من الصورة في v1.7.0. يُفضَّل استخدام فحص الصحة المدمج في الصورة، أو تحديث تجاوزك إلى {bin}.",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "(+{count} أخرى)",
       "installTitle": "تثبيت Drydock كتطبيق",
       "installBody": "أضف Drydock إلى الرصيف أو الشاشة الرئيسية للوصول السريع وتجربة أشبه بالتطبيق، مع دعم العمل دون اتصال بالإنترنت.",
-      "installAction": "Install"
+      "installAction": "تثبيت"
     }
   }
 }

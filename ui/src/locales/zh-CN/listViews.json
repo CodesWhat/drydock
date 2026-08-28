@@ -110,7 +110,7 @@
         "description": "当容器的 Docker 健康检查进入 unhealthy 状态时"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "成熟度已清除",
         "description": "当被成熟度策略搁置的更新变为可用时"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} 个可修复",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "已修复 {count} 个",
+      "new": "新增 {count} 个",
       "both": "已修复 {fixed} 个，新增 {new} 个"
     },
     "deltaTooltips": {

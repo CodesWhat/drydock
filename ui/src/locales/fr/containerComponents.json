@@ -486,7 +486,7 @@
         "waveList": "\n\nOrdre de mise à jour :\n{list}",
         "cycleWarning": "\n\nAvertissement : un cycle de dépendances a été détecté ({cycles}). Les conteneurs du cycle peuvent être mis à jour dans un ordre arbitraire.",
         "unresolvedWarning": "\n\nAvertissement : certains labels de dépendance référencent des conteneurs introuvables. Ceux-ci seront ignorés.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Mettre à jour la chaîne",
         "previewFailedTitle": "Impossible de prévisualiser la chaîne de mise à jour",
         "previewFailedDetail": "Impossible de charger l'aperçu de la chaîne de dépendances pour {name}.",
         "successMessage": "Mise à jour de la chaîne de dépendances démarrée : {name}",
@@ -521,6 +521,10 @@
     "policy": {
       "entryCountSingular": "{count} entrée",
       "entryCountPlural": "{count} entrées",
+      "kindLabels": {
+        "tag": "tag",
+        "digest": "digest"
+      },
       "tooltips": {
         "snoozedUntil": "Mises à jour reportées jusqu'à {date}",
         "snoozed": "Mises à jour reportées",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Mises à jour reportées pour {days} jour",
         "snoozedPlural": "Mises à jour reportées pour {days} jours",
         "snoozedUntil": "Mises à jour reportées jusqu'à {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Report annulé",
         "clearSkips": "Mises à jour ignorées effacées",
         "clearPolicy": "Politique de mise à jour effacée",
         "clearMaturity": "Politique de maturité effacée",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Inconnu",
       "loadFailed": "Impossible de charger les backups",
       "rollback": {
         "completedFromSelected": "Rollback terminé depuis le backup sélectionné",
         "completedFromLatest": "Rollback terminé depuis le dernier backup",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Échec du rollback",
+        "failedDetail": "Échec du rollback"
       },
       "operationHistoryLoadFailed": "Impossible de charger l'historique des opérations de mise à jour"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Ouvrir les paramètres du trigger"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Échec de la prévisualisation",
         "failedDetail": "Impossible de générer la prévisualisation de la mise à jour"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000 ms (par défaut)",
       "preAbortYes": "Annuler la mise à jour en cas d'échec du hook pré-exécution",
       "preAbortNo": "Continuer la mise à jour en cas d'échec du hook pré-exécution",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Activé",
+      "disabledLabel": "Désactivé",
+      "disabledDefaultLabel": "Désactivé (par défaut)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "Impossible de charger les vulnérabilités",
       "loadSbomFailed": "Impossible de charger le SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Nom du conteneur",
+        "containerId": "ID du conteneur",
         "imageName": "Nom de l'image (sans le registre)",
         "imageTag": "Tag d'image actuel",
         "updateKind": "Type de mise à jour (tag ou digest)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "Aucun log disponible pour ce conteneur",
       "loadFailed": "Impossible de charger les logs du conteneur",
-      "loading": "Loading logs..."
+      "loading": "Chargement des logs..."
     },
     "vulnerabilities": {
       "loadFailed": "Impossible de charger les données de vulnérabilité"

@@ -12,7 +12,7 @@
       "dryRunCondition": "مشغّل الإجراء {trigger} في وضع المعاينة التجريبية (dry-run) — تُعرض التحديثات فقط ولا يتم استبدال الحاويات.",
       "scanNow": "فحص الآن",
       "recheckNow": "إعادة الفحص للتحديثات",
-      "rechecking": "Rechecking…",
+      "rechecking": "جارٍ إعادة الفحص…",
       "skipSnoozeGroup": "تخطي وتأجيل",
       "skipThisUpdate": "تخطي هذا التحديث",
       "snooze1d": "تأجيل يوماً",
@@ -88,7 +88,7 @@
       "startButton": "تشغيل",
       "restartButton": "إعادة التشغيل",
       "scanButton": "فحص",
-      "recheckButton": "Recheck",
+      "recheckButton": "إعادة الفحص",
       "ariaRecheckContainer": "إعادة فحص الحاوية للتحديثات",
       "blockedButton": "محظور",
       "updateButton": "تحديث",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "محظور: {tag} ({count} ثغرات حرجة CVE)",
       "manualUpdateOnly": "التحديث اليدوي فقط",
       "manualUpdateOnlyWithMessage": "التحديث اليدوي فقط — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "تحديث",
+      "cancelButton": "إلغاء",
+      "blockedButton": "محظور",
+      "updateButton": "تحديث",
+      "moreButton": "المزيد",
+      "cancelUpdateTooltip": "إلغاء التحديث"
     },
     "groupHeader": {
       "ungrouped": "غير مجمّع",
@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "فرض التحديث",
         "message": "فرض تحديث {name}؟ سيؤدي هذا إلى مسح سياسة التخطي/التأجيل قبل محاولة التحديث.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "فرض التحديث"
       },
       "update": {
-        "header": "Update Container",
+        "header": "تحديث الحاوية",
         "messageLatest": "تحديث {name} الآن؟ سيُطبَّق آخر صورة مكتشفة.",
         "messageTagChange": "تحديث {name}؟ سيغيّر ذلك تسمية الصورة من :{currentTag} إلى :{newTag}{kind}.",
         "messageDigestChange": "تحديث {name}؟ يتوفر إصدار بناء أحدث من :{currentTag} (تغيير الملخص).",
         "softBlockerSuffix": "\n\nهذا التحديث محظور حالياً بواسطة السياسة:\n{list}\n\nانقر فوق \"تحديث على أي حال\" للتجاوز.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerLearnMore": "معرفة المزيد",
+        "acceptLabel": "تحديث",
+        "acceptLabelOverride": "تحديث على أي حال"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "حذف الحاوية",
         "message": "حذف {name}؟ سيؤدي هذا إلى إزالتها من تتبع Drydock إلى أن يُعاد اكتشافها.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "حذف"
       },
       "clearPolicy": {
         "header": "مسح سياسة التحديث",
         "message": "مسح كل سياسة التحديث لـ {name}؟ سيؤدي هذا إلى إزالة إعدادات التخطي والتأجيل والنضج.",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "مسح السياسة"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "التراجع عن الحاوية",
         "messageSelected": "التراجع بـ {name} إلى صورة النسخة الاحتياطية المحددة؟ سيستبدل هذا صورة الحاوية قيد التشغيل.",
         "messageLatest": "التراجع بـ {name} إلى أحدث صورة نسخة احتياطية؟ سيستبدل هذا صورة الحاوية قيد التشغيل.",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "تراجع"
       },
       "dependencyGroup": {
         "header": "تحديث سلسلة الاعتمادية",
@@ -486,7 +486,7 @@
         "waveList": "\n\nترتيب التحديث:\n{list}",
         "cycleWarning": "\n\nتحذير: تم اكتشاف حلقة اعتمادية ({cycles}). قد يتم تحديث الحاويات ضمن الحلقة بترتيب عشوائي.",
         "unresolvedWarning": "\n\nتحذير: تشير بعض تسميات الاعتمادية إلى حاويات تعذّر العثور عليها. سيتم تخطي تلك الحاويات.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "تحديث السلسلة",
         "previewFailedTitle": "تعذّرت معاينة سلسلة التحديث",
         "previewFailedDetail": "فشل تحميل معاينة سلسلة الاعتمادية لـ {name}.",
         "successMessage": "بدأ تحديث سلسلة الاعتمادية: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "تم التشغيل: {name}",
       "scanTriggered": "تم بدء الفحص: {name}",
       "scanFailedTitle": "فشل الفحص: {name}",
       "scanFailedDetail": "فشل الفحص لـ {name}",
       "actionFailedDetail": "فشل الإجراء لـ {name}",
       "updateFailedTitle": "فشل التحديث: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "تم الحذف: {name}",
       "deleteFailedTitle": "فشل الحذف: {name}",
       "deleteFailedDetail": "فشل حذف {name}",
       "cancellationRequested": "تم طلب الإلغاء: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "تم الإلغاء: {name}",
       "cancelAlreadyFinished": "انتهى التحديث بالفعل لـ {name}، لا يمكن الإلغاء",
       "cancelOperationNotFound": "العملية غير موجودة: {name}",
       "cancelFailed": "فشل إلغاء التحديث لـ {name}",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "تسمية",
+        "digest": "ملخص"
+      },
       "tooltips": {
         "snoozedUntil": "التحديثات مؤجلة حتى {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "التحديثات مؤجلة",
         "maturityBlockedSingular": "سياسة الناضج فقط تحظر التحديثات الأصغر من {days} يوم",
         "maturityBlockedPlural": "سياسة الناضج فقط تحظر التحديثات الأصغر من {days} أيام",
         "maturityActiveSingular": "سياسة الناضج فقط نشطة (الحد الأدنى للعمر {days} يوم)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "تم تأجيل التحديثات لمدة {days} يوم",
         "snoozedPlural": "تم تأجيل التحديثات لمدة {days} أيام",
         "snoozedUntil": "مؤجل حتى {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "تم مسح التأجيل",
         "clearSkips": "تم مسح التحديثات المتخطاة",
         "clearPolicy": "تم مسح سياسة التحديث",
         "clearMaturity": "تم مسح سياسة النضج",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "غير معروف",
       "loadFailed": "فشل تحميل النسخ الاحتياطية",
       "rollback": {
         "completedFromSelected": "اكتمل التراجع من النسخة الاحتياطية المحددة",
         "completedFromLatest": "اكتمل التراجع من أحدث نسخة احتياطية",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "فشل التراجع",
+        "failedDetail": "فشل التراجع"
       },
       "operationHistoryLoadFailed": "فشل تحميل سجل عمليات التحديث"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "فتح إعدادات المشغّل"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "فشلت المعاينة",
         "failedDetail": "فشل إنشاء معاينة التحديث"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms (افتراضي)",
       "preAbortYes": "إلغاء التحديث عند فشل الخطاف المسبق",
       "preAbortNo": "متابعة التحديث عند فشل الخطاف المسبق",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "مفعّل",
+      "disabledLabel": "معطّل",
+      "disabledDefaultLabel": "معطّل (افتراضي)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "فشل تحميل الثغرات",
       "loadSbomFailed": "فشل تحميل SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "اسم الحاوية",
+        "containerId": "معرّف الحاوية",
         "imageName": "اسم الصورة (بدون السجل)",
         "imageTag": "تسمية الصورة الحالية",
         "updateKind": "نوع التحديث (تسمية أو ملخص)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "لا تتوفر سجلات لهذه الحاوية",
       "loadFailed": "فشل تحميل سجلات الحاوية",
-      "loading": "Loading logs..."
+      "loading": "جارٍ تحميل السجلات..."
     },
     "vulnerabilities": {
       "loadFailed": "فشل تحميل بيانات الثغرات"

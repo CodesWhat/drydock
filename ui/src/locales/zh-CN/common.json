@@ -16,8 +16,8 @@
       "accessDenied": "仓库访问被拒绝",
       "imageNotFound": "未找到镜像",
       "authFailed": "仓库认证失败",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "仓库不可达",
+      "cancelled": "已取消",
       "securityBlocked": "被安全扫描阻止",
       "signatureFailed": "签名验证失败"
     },

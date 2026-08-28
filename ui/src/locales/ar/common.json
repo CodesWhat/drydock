@@ -16,8 +16,8 @@
       "accessDenied": "تم رفض الوصول إلى السجل",
       "imageNotFound": "الصورة غير موجودة",
       "authFailed": "فشلت مصادقة السجل",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "السجل غير قابل للوصول",
+      "cancelled": "تم الإلغاء",
       "securityBlocked": "محظور بواسطة الفحص الأمني",
       "signatureFailed": "فشل التحقق من التوقيع"
     },

@@ -110,7 +110,7 @@
         "description": "Bir container'ın Docker sağlık kontrolü \"unhealthy\" durumuna girdiğinde"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "Olgunluk Temizlendi",
         "description": "Olgunluk politikası tarafından tutulan bir güncelleme uygulanabilir hale geldiğinde"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} düzeltme",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} giderildi",
+      "new": "{count} yeni",
       "both": "{fixed} giderildi, {new} yeni"
     },
     "deltaTooltips": {

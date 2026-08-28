@@ -16,8 +16,8 @@
       "accessDenied": "Доступ до реєстру заборонено",
       "imageNotFound": "Образ не знайдено",
       "authFailed": "Помилка автентифікації реєстру",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "Реєстр недоступний",
+      "cancelled": "Скасовано",
       "securityBlocked": "Заблоковано скануванням безпеки",
       "signatureFailed": "Помилка перевірки підпису"
     },

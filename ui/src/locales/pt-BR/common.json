@@ -16,8 +16,8 @@
       "accessDenied": "Acesso ao registry negado",
       "imageNotFound": "Imagem não encontrada",
       "authFailed": "Falha na autenticação do registry",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "Registry inacessível",
+      "cancelled": "Cancelado",
       "securityBlocked": "Bloqueado pelo scan de segurança",
       "signatureFailed": "Falha na verificação de assinatura"
     },

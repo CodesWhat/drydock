@@ -33,7 +33,7 @@
     },
     "columns": {
       "container": "컨테이너",
-      "tag": "Tag",
+      "tag": "태그",
       "version": "버전",
       "versionTooltip": "이미지 메타데이터에서 감지된 버전입니다. 태그와 일치할 수 있으며 공간이 부족하면 호스트보다 먼저 숨겨집니다.",
       "update": "업데이트",
@@ -42,8 +42,8 @@
       "host": "호스트",
       "registry": "레지스트리",
       "resources": "리소스",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "가동 시간",
+      "ports": "포트"
     },
     "status": {
       "running": "실행 중",

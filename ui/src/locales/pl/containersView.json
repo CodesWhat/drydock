@@ -39,11 +39,11 @@
       "update": "Aktualizacja",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Stan",
-      "host": "Host",
+      "host": "Gospodarz",
       "registry": "Rejestr",
       "resources": "Zasoby",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "Czas pracy",
+      "ports": "Porty"
     },
     "status": {
       "running": "działa",

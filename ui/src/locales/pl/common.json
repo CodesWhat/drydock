@@ -16,8 +16,8 @@
       "accessDenied": "Odmowa dostępu do rejestru",
       "imageNotFound": "Nie znaleziono obrazu",
       "authFailed": "Uwierzytelnianie w rejestrze nie powiodło się",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "Rejestr nieosiągalny",
+      "cancelled": "Anulowano",
       "securityBlocked": "Zablokowane przez skanowanie zabezpieczeń",
       "signatureFailed": "Weryfikacja podpisu nie powiodła się"
     },

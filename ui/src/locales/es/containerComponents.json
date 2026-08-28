@@ -12,7 +12,7 @@
       "dryRunCondition": "El trigger de acción {trigger} está en modo dry-run — las actualizaciones solo se previsualizan y los contenedores no se reemplazan.",
       "scanNow": "Escanear ahora",
       "recheckNow": "Volver a comprobar actualizaciones",
-      "rechecking": "Rechecking…",
+      "rechecking": "Volviendo a comprobar…",
       "skipSnoozeGroup": "Omitir y posponer",
       "skipThisUpdate": "Omitir esta actualización",
       "snooze1d": "Posponer 1 d",
@@ -88,7 +88,7 @@
       "startButton": "Iniciar",
       "restartButton": "Reiniciar",
       "scanButton": "Escanear",
-      "recheckButton": "Recheck",
+      "recheckButton": "Recomprobar",
       "ariaRecheckContainer": "Volver a comprobar actualizaciones del contenedor",
       "blockedButton": "Bloqueado",
       "updateButton": "Actualizar",
@@ -221,10 +221,10 @@
       "manualUpdateOnly": "Solo actualización manual",
       "manualUpdateOnlyWithMessage": "Solo actualización manual — {message}",
       "updateBtnTooltipDefault": "Actualizar",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
+      "cancelButton": "Cancelar",
+      "blockedButton": "Bloqueado",
+      "updateButton": "Actualizar",
+      "moreButton": "Más",
       "cancelUpdateTooltip": "Cancelar actualización"
     },
     "groupHeader": {
@@ -449,32 +449,32 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "Forzar actualización",
         "message": "¿Forzar la actualización de {name}? Esto borra la política de omisión/posposición antes de intentar la actualización.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "Forzar actualización"
       },
       "update": {
-        "header": "Update Container",
+        "header": "Actualizar contenedor",
         "messageLatest": "¿Actualizar {name} ahora? Se aplicará la imagen más reciente detectada.",
         "messageTagChange": "¿Actualizar {name}? Esto cambiará el tag de imagen de :{currentTag} a :{newTag}{kind}.",
         "messageDigestChange": "¿Actualizar {name}? Hay una build más reciente de :{currentTag} disponible (cambio de digest).",
-        "softBlockerSuffix": "\n\nEsta actualización está actualmente bloqueada por política:\n{list}\n\nHaz clic en Update anyway para anular el bloqueo.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerSuffix": "\n\nEsta actualización está actualmente bloqueada por política:\n{list}\n\nHaz clic en Actualizar de todos modos para anular el bloqueo.",
+        "softBlockerLearnMore": "Más información",
+        "acceptLabel": "Actualizar",
+        "acceptLabelOverride": "Actualizar de todos modos"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "Eliminar contenedor",
         "message": "¿Eliminar {name}? Esto lo quitará del seguimiento de Drydock hasta que vuelva a detectarse.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "Eliminar"
       },
       "clearPolicy": {
         "header": "Limpiar política de actualización",
         "message": "¿Limpiar toda la política de actualización de {name}? Esto elimina las omisiones, la posposición y los ajustes de madurez.",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "Limpiar política"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "Rollback del contenedor",
         "messageSelected": "¿Hacer rollback de {name} a la imagen de backup seleccionada? Esto reemplazará la imagen del contenedor en ejecución.",
         "messageLatest": "¿Hacer rollback de {name} a la última imagen de backup? Esto reemplazará la imagen del contenedor en ejecución.",
         "acceptLabel": "Rollback"
@@ -486,7 +486,7 @@
         "waveList": "\n\nOrden de actualización:\n{list}",
         "cycleWarning": "\n\nAdvertencia: se detectó un ciclo de dependencias ({cycles}). Los contenedores del ciclo pueden actualizarse en un orden arbitrario.",
         "unresolvedWarning": "\n\nAdvertencia: algunas etiquetas de dependencia hacen referencia a contenedores que no se pudieron encontrar. Esos se omitirán.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Actualizar cadena",
         "previewFailedTitle": "No se pudo generar la vista previa de la cadena de actualización",
         "previewFailedDetail": "No se pudo cargar la vista previa de la cadena de dependencias para {name}.",
         "successMessage": "Actualización de la cadena de dependencias iniciada: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "Iniciado: {name}",
       "scanTriggered": "Escaneo iniciado: {name}",
       "scanFailedTitle": "Escaneo fallido: {name}",
       "scanFailedDetail": "El escaneo falló para {name}",
       "actionFailedDetail": "La acción falló para {name}",
       "updateFailedTitle": "Actualización fallida: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "Eliminado: {name}",
       "deleteFailedTitle": "Eliminación fallida: {name}",
       "deleteFailedDetail": "No se pudo eliminar {name}",
       "cancellationRequested": "Cancelación solicitada: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "Cancelado: {name}",
       "cancelAlreadyFinished": "La actualización de {name} ya finalizó, no se puede cancelar",
       "cancelOperationNotFound": "Operación no encontrada: {name}",
       "cancelFailed": "No se pudo cancelar la actualización de {name}",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "tag",
+        "digest": "digest"
+      },
       "tooltips": {
         "snoozedUntil": "Actualizaciones pospuestas hasta {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "Actualizaciones pospuestas",
         "maturityBlockedSingular": "La política de Mature-only bloquea actualizaciones menores de {days} día",
         "maturityBlockedPlural": "La política de Mature-only bloquea actualizaciones menores de {days} días",
         "maturityActiveSingular": "Política de Mature-only activa (antigüedad mínima de {days} día)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Actualizaciones pospuestas por {days} día",
         "snoozedPlural": "Actualizaciones pospuestas por {days} días",
         "snoozedUntil": "Pospuesto hasta {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Posposición eliminada",
         "clearSkips": "Omisiones de actualización eliminadas",
         "clearPolicy": "Política de actualización eliminada",
         "clearMaturity": "Política de madurez eliminada",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Desconocido",
       "loadFailed": "No se pudieron cargar los backups",
       "rollback": {
         "completedFromSelected": "Rollback completado desde el backup seleccionado",
         "completedFromLatest": "Rollback completado desde el último backup",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Rollback fallido",
+        "failedDetail": "Rollback fallido"
       },
       "operationHistoryLoadFailed": "No se pudo cargar el historial de operaciones de actualización"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Abrir configuración del trigger"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Vista previa fallida",
         "failedDetail": "No se pudo generar la vista previa de la actualización"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms (predeterminado)",
       "preAbortYes": "Abortar la actualización si falla el hook previo",
       "preAbortNo": "Continuar la actualización si falla el hook previo",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Habilitado",
+      "disabledLabel": "Deshabilitado",
+      "disabledDefaultLabel": "Deshabilitado (predeterminado)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "No se pudieron cargar las vulnerabilidades",
       "loadSbomFailed": "No se pudo cargar el SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Nombre del contenedor",
+        "containerId": "ID de contenedor",
         "imageName": "Nombre de la imagen (sin el registro)",
         "imageTag": "Tag actual de la imagen",
         "updateKind": "Tipo de actualización (tag o digest)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "No hay registros disponibles para este contenedor",
       "loadFailed": "No se pudieron cargar los registros del contenedor",
-      "loading": "Loading logs..."
+      "loading": "Cargando registros..."
     },
     "vulnerabilities": {
       "loadFailed": "No se pudieron cargar los datos de vulnerabilidades"

@@ -16,8 +16,8 @@
       "accessDenied": "Toegang tot register geweigerd",
       "imageNotFound": "Image niet gevonden",
       "authFailed": "Registerauthenticatie mislukt",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "Register onbereikbaar",
+      "cancelled": "Geannuleerd",
       "securityBlocked": "Geblokkeerd door beveiligingsscan",
       "signatureFailed": "Handtekeningverificatie mislukt"
     },

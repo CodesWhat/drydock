@@ -16,8 +16,8 @@
       "accessDenied": "Truy cập registry bị từ chối",
       "imageNotFound": "Không tìm thấy image",
       "authFailed": "Xác thực registry thất bại",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "Registry không thể truy cập",
+      "cancelled": "Đã hủy",
       "securityBlocked": "Bị chặn do quét bảo mật",
       "signatureFailed": "Xác minh chữ ký thất bại"
     },

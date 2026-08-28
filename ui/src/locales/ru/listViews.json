@@ -110,7 +110,7 @@
         "description": "Когда проверка состояния Docker контейнера переходит в состояние \"unhealthy\""
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "Зрелость снята",
         "description": "Когда обновление, отложенное политикой зрелости, становится доступным"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} испр.",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} исправлено",
+      "new": "{count} новых",
       "both": "{fixed} исправлено, {new} новых"
     },
     "deltaTooltips": {

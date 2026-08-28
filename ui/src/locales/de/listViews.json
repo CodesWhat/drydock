@@ -110,7 +110,7 @@
         "description": "Wenn der Docker-Healthcheck eines Containers in den Status „unhealthy“ wechselt"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "Reife aufgehoben",
         "description": "Wenn ein durch die Reife-Policy zurückgehaltenes Update anwendbar wird"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} behebbar",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} behoben",
+      "new": "{count} neu",
       "both": "{fixed} behoben, {new} neu"
     },
     "deltaTooltips": {

@@ -12,7 +12,7 @@
       "dryRunCondition": "{trigger} eylem tetikleyicisi deneme modunda (dry-run) — güncellemeler yalnızca önizlenir, container'lar değiştirilmez.",
       "scanNow": "Şimdi tara",
       "recheckNow": "Güncellemeleri yeniden kontrol et",
-      "rechecking": "Rechecking…",
+      "rechecking": "Yeniden kontrol ediliyor…",
       "skipSnoozeGroup": "Atla ve Ertele",
       "skipThisUpdate": "Bu Güncellemeyi Atla",
       "snooze1d": "1 gün ertele",
@@ -88,7 +88,7 @@
       "startButton": "Başlat",
       "restartButton": "Yeniden başlat",
       "scanButton": "Tara",
-      "recheckButton": "Recheck",
+      "recheckButton": "Yeniden kontrol et",
       "ariaRecheckContainer": "Kapsayıcıyı güncellemeler için yeniden kontrol et",
       "blockedButton": "Engellendi",
       "updateButton": "Güncelle",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "Engellendi: {tag} ({count} kritik CVE)",
       "manualUpdateOnly": "Yalnızca manuel güncelleme",
       "manualUpdateOnlyWithMessage": "Yalnızca manuel güncelleme — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "Güncelle",
+      "cancelButton": "İptal",
+      "blockedButton": "Engellendi",
+      "updateButton": "Güncelle",
+      "moreButton": "Daha fazla",
+      "cancelUpdateTooltip": "Güncellemeyi iptal et"
     },
     "groupHeader": {
       "ungrouped": "Gruplandırılmamış",
@@ -328,8 +328,8 @@
     "updateDialog": {
       "title": "Kapsayıcıyı Güncelle",
       "thisContainer": "this container",
-      "confirmTagChange": "{name} güncellensin mi? Bu, resim etiketini :{currentTag} yerine :{newTag}{kind} olarak değiştirecektir.",
-      "confirmDigestChange": "{name} güncellensin mi? :{currentTag} dosyasının daha yeni bir yapısı mevcut (özet değişikliği).",
+      "confirmTagChange": "{name} güncellensin mi? Bu, imaj etiketini :{currentTag} yerine :{newTag}{kind} olarak değiştirecektir.",
+      "confirmDigestChange": "{name} güncellensin mi? :{currentTag} imajının daha yeni bir yapısı mevcut (özet değişikliği).",
       "confirmLatest": "{name} şimdi güncellensin mi? Bu, en son bulunan imajı uygulayacaktır.",
       "updating": "Güncelleniyor...",
       "update": "Güncelle",
@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "Güncellemeyi Zorla",
         "message": "{name} zorla güncellensin mi? Bu, güncelleme denenmeden önce atlama/erteleme politikasını temizler.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "Güncellemeyi zorla"
       },
       "update": {
-        "header": "Update Container",
+        "header": "Kapsayıcıyı Güncelle",
         "messageLatest": "{name} şimdi güncellensin mi? Bu, en son bulunan imajı uygulayacaktır.",
-        "messageTagChange": "{name} güncellensin mi? Bu, resim etiketini :{currentTag} yerine :{newTag}{kind} olarak değiştirecektir.",
-        "messageDigestChange": "{name} güncellensin mi? :{currentTag} dosyasının daha yeni bir yapısı mevcut (özet değişikliği).",
+        "messageTagChange": "{name} güncellensin mi? Bu, imaj etiketini :{currentTag} yerine :{newTag}{kind} olarak değiştirecektir.",
+        "messageDigestChange": "{name} güncellensin mi? :{currentTag} imajının daha yeni bir yapısı mevcut (özet değişikliği).",
         "softBlockerSuffix": "\n\nBu güncelleme şu anda politika tarafından engellendi:\n{list}\n\nGeçersiz kılmak için Yine de Güncelle'ye tıklayın.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerLearnMore": "Daha fazla bilgi",
+        "acceptLabel": "Güncelle",
+        "acceptLabelOverride": "Yine de Güncelle"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "Kapsayıcıyı Sil",
         "message": "{name} silinsin mi? Yeniden keşfedilene kadar Drydock takibinden kaldırılacaktır.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "Sil"
       },
       "clearPolicy": {
         "header": "Güncelleme Politikasını Temizle",
         "message": "{name} için tüm güncelleme politikası temizlensin mi? Bu, atlama, erteleme ve olgunluk ayarlarını kaldırır.",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "Politikayı Temizle"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "Kapsayıcıyı Geri Al",
         "messageSelected": "{name}, seçilen yedek imaja geri alınsın mı? Bu, çalışan kapsayıcı imajının yerini alacaktır.",
         "messageLatest": "{name}, en son yedek imaja geri alınsın mı? Bu, çalışan kapsayıcı imajının yerini alacaktır.",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "Geri al"
       },
       "dependencyGroup": {
         "header": "Bağımlılık Zincirini Güncelle",
@@ -486,7 +486,7 @@
         "waveList": "\n\nGüncelleme sırası:\n{list}",
         "cycleWarning": "\n\nUyarı: bir bağımlılık döngüsü tespit edildi ({cycles}). Döngüdeki kapsayıcılar rastgele bir sırayla güncellenebilir.",
         "unresolvedWarning": "\n\nUyarı: bazı bağımlılık etiketleri bulunamayan kapsayıcılara işaret ediyor. Bunlar atlanacaktır.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Zinciri Güncelle",
         "previewFailedTitle": "Güncelleme zinciri önizlenemiyor",
         "previewFailedDetail": "{name} için bağımlılık zinciri önizlemesi yüklenemedi.",
         "successMessage": "Bağımlılık zinciri güncellemesi başlatıldı: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "Başlatıldı: {name}",
       "scanTriggered": "Tarama tetiklendi: {name}",
       "scanFailedTitle": "Tarama başarısız oldu: {name}",
       "scanFailedDetail": "{name} için tarama başarısız oldu",
       "actionFailedDetail": "{name} için eylem başarısız oldu",
       "updateFailedTitle": "Güncelleme başarısız oldu: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "Silindi: {name}",
       "deleteFailedTitle": "Silme başarısız oldu: {name}",
       "deleteFailedDetail": "{name} silinemedi",
       "cancellationRequested": "İptal istendi: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "İptal edildi: {name}",
       "cancelAlreadyFinished": "{name} için güncelleme zaten tamamlandı, iptal edilemiyor",
       "cancelOperationNotFound": "İşlem bulunamadı: {name}",
       "cancelFailed": "{name} için güncelleme iptal edilemedi",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "etiket",
+        "digest": "özet"
+      },
       "tooltips": {
         "snoozedUntil": "Güncellemeler {date} tarihine kadar ertelendi",
-        "snoozed": "Updates snoozed",
+        "snoozed": "Güncellemeler ertelendi",
         "maturityBlockedSingular": "Yalnızca olgun politikası {days} günden genç güncellemeleri engeller",
         "maturityBlockedPlural": "Yalnızca olgun politikası {days} günden genç güncellemeleri engeller",
         "maturityActiveSingular": "Yalnızca olgun politikası etkin ({days} gün minimum yaş)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Güncellemeler {days} gün ertelendi",
         "snoozedPlural": "Güncellemeler {days} gün ertelendi",
         "snoozedUntil": "{date} tarihine kadar ertelendi",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Erteleme temizlendi",
         "clearSkips": "Atlanan güncellemeler temizlendi",
         "clearPolicy": "Güncelleme politikası temizlendi",
         "clearMaturity": "Olgunluk politikası temizlendi",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Bilinmiyor",
       "loadFailed": "Yedeklemeler yüklenemedi",
       "rollback": {
         "completedFromSelected": "Seçilen yedekten geri alma tamamlandı",
         "completedFromLatest": "En son yedekten geri alma tamamlandı",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Geri alma başarısız oldu",
+        "failedDetail": "Geri alma başarısız oldu"
       },
       "operationHistoryLoadFailed": "Güncelleme işlem geçmişi yüklenemedi"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Tetikleyici ayarlarını aç"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Önizleme başarısız oldu",
         "failedDetail": "Güncelleme önizlemesi oluşturulamadı"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms (varsayılan)",
       "preAbortYes": "Ön hook hatasında güncellemeyi iptal et",
       "preAbortNo": "Ön hook hatasında güncellemeye devam et",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Etkin",
+      "disabledLabel": "Devre dışı",
+      "disabledDefaultLabel": "Devre dışı (varsayılan)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "Güvenlik açıkları yüklenemedi",
       "loadSbomFailed": "SBOM yüklenemedi",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Konteyner adı",
+        "containerId": "Konteyner kimliği",
         "imageName": "İmaj adı (kayıt defteri olmadan)",
         "imageTag": "Mevcut imaj etiketi",
         "updateKind": "Güncelleme türü (etiket veya özet)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "Bu kapsayıcı için günlük mevcut değil",
       "loadFailed": "Kapsayıcı günlükleri yüklenemedi",
-      "loading": "Loading logs..."
+      "loading": "Günlükler yükleniyor..."
     },
     "vulnerabilities": {
       "loadFailed": "Güvenlik açığı verileri yüklenemedi"

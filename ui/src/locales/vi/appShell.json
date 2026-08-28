@@ -108,12 +108,12 @@
         "typeHint": "Nhập",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; dùng",
         "useTab": " để đổi phạm vi",
         "moveHint": "di chuyển",
         "openHint": "mở",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "Gần đây",
+        "unknownHost": "máy chủ không xác định",
         "containerSubtitle": "Container · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "Cài đặt giao diện",
           "appearanceSubtitle": "Cấu hình · Giao diện",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "Cài đặt hồ sơ",
           "profileSubtitle": "Cấu hình · Hồ sơ"
         }
       },
@@ -150,12 +150,12 @@
         "restartingService": "Đang khởi động lại dịch vụ"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "Phím tắt",
+        "close": "Đóng",
+        "focusSearch": "Chuyển đến tìm kiếm",
         "closeSearch": "Đóng tìm kiếm hoặc đóng hộp thoại",
         "showHelp": "Hiển thị trợ giúp này",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "Bật/tắt tìm kiếm"
       }
     },
     "announcementBanner": {
@@ -176,10 +176,10 @@
       "legacyConfigBody": "Đầu vào trigger cũ vẫn đang hoạt động để tương thích với v1.6. Đổi tên biến {triggerEnv} thành {actionEnv} hoặc {notificationEnv}, và thay nhãn {triggerLabel} bằng {actionLabel} hoặc {notificationLabel} trước v1.7.",
       "legacyApiBody": "Các client trên hệ thống này gần đây đã gọi đường dẫn {oldPrefix} không đánh phiên bản đã bị gỡ bỏ và đang nhận lỗi {statusCode}. Hãy chuyển các client đó sang tiền tố {v1Prefix}. Các tích hợp từ thời WUD như wud-card hoặc widget whatsupdocker của Homepage có thể đặt {compatFlag} thay vì phải di chuyển.",
       "curlHealthcheckBody": "Container Drydock của bạn đang sử dụng ghi đè healthcheck dựa trên curl tùy chỉnh. curl vẫn khả dụng để tương thích ngược trong v1.5.x và v1.6.x; v1.6.0 là bản phát hành cảnh báo cuối cùng, và curl sẽ bị gỡ khỏi image trong v1.7.0. Hãy ưu tiên healthcheck tích hợp sẵn của image, hoặc cập nhật ghi đè của bạn thành {bin}.",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "(+{count} nữa)",
       "installTitle": "Cài đặt Drydock như một ứng dụng",
       "installBody": "Thêm Drydock vào dock hoặc màn hình chính để truy cập nhanh và có trải nghiệm giống ứng dụng, bao gồm cả shell ngoại tuyến.",
-      "installAction": "Install"
+      "installAction": "Cài đặt"
     }
   }
 }

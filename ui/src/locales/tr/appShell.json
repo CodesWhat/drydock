@@ -108,12 +108,12 @@
         "typeHint": "Tür",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; kullanın",
         "useTab": " kapsamı değiştirmek",
         "moveHint": "hareket etmek",
         "openHint": "açık",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "Son kullanılanlar",
+        "unknownHost": "bilinmeyen sunucu",
         "containerSubtitle": "Kapsayıcı · {image} · {status} · {host}",
         "agentSubtitle": "Aracı · {status} · {host}",
         "triggerSubtitle": "Tetikleyici · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "Görünüm Ayarları",
           "appearanceSubtitle": "Yapılandırma · Görünüm",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "Profil Ayarları",
           "profileSubtitle": "Yapılandırma · Profil"
         }
       },
@@ -150,12 +150,12 @@
         "restartingService": "Hizmet yeniden başlatılıyor"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "Klavye kısayolları",
+        "close": "Kapat",
+        "focusSearch": "Aramaya odaklan",
         "closeSearch": "Aramayı kapat veya iletişim kutularını kapat",
         "showHelp": "Bu yardımı göster",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "Aramayı aç/kapat"
       }
     },
     "announcementBanner": {
@@ -176,10 +176,10 @@
       "legacyConfigBody": "Eski tetikleyici girdileri v1.6 uyumluluğu için hâlâ etkin. {triggerEnv} değişkenlerini {actionEnv} veya {notificationEnv} olarak yeniden adlandırın ve {triggerLabel} etiketlerini v1.7'den önce {actionLabel} veya {notificationLabel} ile değiştirin.",
       "legacyApiBody": "Bu örnekteki istemciler kısa süre önce kaldırılan sürümsüz {oldPrefix} yoluna istek gönderdi ve {statusCode} hatası alıyor. Bunları {v1Prefix} önekine taşıyın. wud-card veya Homepage'in whatsupdocker widget'ı gibi WUD dönemi entegrasyonlar, taşıma yapmak yerine {compatFlag} ayarlayabilir.",
       "curlHealthcheckBody": "Drydock kapsayıcınız curl tabanlı özel bir durum denetimi geçersiz kılması kullanıyor. curl, v1.5.x ve v1.6.x sürümlerinde geriye dönük uyumluluk için kullanılabilir durumda kalacak; v1.6.0 son uyarı sürümüdür ve curl v1.7.0'da imajdan kaldırılacaktır. İmajın yerleşik durum denetimini tercih edin veya geçersiz kılmanızı {bin} olarak güncelleyin.",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "(+{count} daha)",
       "installTitle": "Drydock'u uygulama olarak yükleyin",
       "installBody": "Hızlı erişim ve çevrimdışı kabuk dahil uygulama benzeri bir deneyim için Drydock'u dock'unuza veya ana ekranınıza ekleyin.",
-      "installAction": "Install"
+      "installAction": "Yükle"
     }
   }
 }

@@ -12,7 +12,7 @@
       "dryRunCondition": "Тригер дії {trigger} у режимі dry-run — оновлення лише попередньо переглядаються, контейнери не замінюються.",
       "scanNow": "Сканувати зараз",
       "recheckNow": "Перевірити наявність оновлень",
-      "rechecking": "Rechecking…",
+      "rechecking": "Перевірка…",
       "skipSnoozeGroup": "Пропустити та відкласти",
       "skipThisUpdate": "Пропустити це оновлення",
       "snooze1d": "Відкласти на 1д",
@@ -88,7 +88,7 @@
       "startButton": "Запустити",
       "restartButton": "Перезапустити",
       "scanButton": "Сканувати",
-      "recheckButton": "Recheck",
+      "recheckButton": "Перевірити",
       "ariaRecheckContainer": "Перевірити контейнер на наявність оновлень",
       "blockedButton": "Заблоковано",
       "updateButton": "Оновити",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "Заблоковано: {tag} ({count} критичних CVE)",
       "manualUpdateOnly": "Лише ручне оновлення",
       "manualUpdateOnlyWithMessage": "Лише ручне оновлення — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "Оновити",
+      "cancelButton": "Скасувати",
+      "blockedButton": "Заблоковано",
+      "updateButton": "Оновити",
+      "moreButton": "Більше",
+      "cancelUpdateTooltip": "Скасувати оновлення"
     },
     "groupHeader": {
       "ungrouped": "Без групи",
@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "Примусово оновити",
         "message": "Примусово оновити {name}? Це очистить політику пропуску/відкладання перед спробою оновлення.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "Примусово оновити"
       },
       "update": {
-        "header": "Update Container",
+        "header": "Оновити контейнер",
         "messageLatest": "Оновити {name} зараз? Буде застосовано останній виявлений образ.",
         "messageTagChange": "Оновити {name}? Тег образу зміниться з :{currentTag} на :{newTag}{kind}.",
         "messageDigestChange": "Оновити {name}? Доступна новіша збірка :{currentTag} (зміна дайджесту).",
         "softBlockerSuffix": "\n\nЦе оновлення наразі заблоковано політикою:\n{list}\n\nНатисніть «Оновити попри це», щоб перевизначити блокування.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerLearnMore": "Дізнатися більше",
+        "acceptLabel": "Оновити",
+        "acceptLabelOverride": "Оновити попри це"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "Видалити контейнер",
         "message": "Видалити {name}? Це прибере його з відстеження Drydock, доки він не буде виявлений повторно.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "Видалити"
       },
       "clearPolicy": {
-        "header": "Скасувати політику оновлення",
-        "message": "Скасувати всю політику оновлення для {name}? Це видалить налаштування пропусків, відкладання та зрілості.",
-        "acceptLabel": "Clear Policy"
+        "header": "Очистити політику оновлення",
+        "message": "Очистити всю політику оновлення для {name}? Це видалить налаштування пропусків, відкладання та зрілості.",
+        "acceptLabel": "Скасувати політику"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "Відкатити контейнер",
         "messageSelected": "Відкатити {name} до вибраного резервного образу? Це замінить образ запущеного контейнера.",
         "messageLatest": "Відкатити {name} до останнього резервного образу? Це замінить образ запущеного контейнера.",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "Відкат"
       },
       "dependencyGroup": {
         "header": "Оновити ланцюг залежностей",
@@ -486,7 +486,7 @@
         "waveList": "\n\nПорядок оновлення:\n{list}",
         "cycleWarning": "\n\nПопередження: виявлено цикл залежностей ({cycles}). Контейнери в цьому циклі можуть оновлюватися у довільному порядку.",
         "unresolvedWarning": "\n\nПопередження: деякі мітки залежностей посилаються на контейнери, які не вдалося знайти. Їх буде пропущено.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Оновити ланцюг",
         "previewFailedTitle": "Не вдалося виконати попередній перегляд ланцюга оновлення",
         "previewFailedDetail": "Не вдалося завантажити попередній перегляд ланцюга залежностей для {name}.",
         "successMessage": "Оновлення ланцюга залежностей розпочато: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "Запущено: {name}",
       "scanTriggered": "Сканування запущено: {name}",
       "scanFailedTitle": "Помилка сканування: {name}",
       "scanFailedDetail": "Не вдалося виконати сканування для {name}",
       "actionFailedDetail": "Не вдалося виконати дію для {name}",
       "updateFailedTitle": "Помилка оновлення: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "Видалено: {name}",
       "deleteFailedTitle": "Помилка видалення: {name}",
       "deleteFailedDetail": "Не вдалося видалити {name}",
       "cancellationRequested": "Запитано скасування: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "Скасовано: {name}",
       "cancelAlreadyFinished": "Оновлення для {name} вже завершено, скасування неможливе",
       "cancelOperationNotFound": "Операцію не знайдено: {name}",
       "cancelFailed": "Не вдалося скасувати оновлення для {name}",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "тег",
+        "digest": "дайджест"
+      },
       "tooltips": {
         "snoozedUntil": "Оновлення відкладено до {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "Оновлення відкладено",
         "maturityBlockedSingular": "Політика «лише зрілі» блокує оновлення, молодші за {days} день",
         "maturityBlockedPlural": "Політика «лише зрілі» блокує оновлення, молодші за {days} днів",
         "maturityActiveSingular": "Політика «лише зрілі» активна (мінімальний вік {days} день)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Відкладено оновлення на {days} день",
         "snoozedPlural": "Відкладено оновлення на {days} днів",
         "snoozedUntil": "Відкладено до {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Відкладання очищено",
         "clearSkips": "Пропущені оновлення очищено",
         "clearPolicy": "Політику оновлення очищено",
         "clearMaturity": "Політику зрілості очищено",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Невідомо",
       "loadFailed": "Не вдалося завантажити резервні копії",
       "rollback": {
         "completedFromSelected": "Відкат виконано з вибраної резервної копії",
         "completedFromLatest": "Відкат виконано з останньої резервної копії",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Відкат не вдався",
+        "failedDetail": "Відкат не вдався"
       },
       "operationHistoryLoadFailed": "Не вдалося завантажити історію операцій оновлення"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Відкрити налаштування тригера"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Попередній перегляд не вдався",
         "failedDetail": "Не вдалося створити попередній перегляд оновлення"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000 мс (за замовчуванням)",
       "preAbortYes": "Перервати оновлення в разі помилки попереднього хука",
       "preAbortNo": "Продовжити оновлення в разі помилки попереднього хука",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Увімкнено",
+      "disabledLabel": "Вимкнено",
+      "disabledDefaultLabel": "Вимкнено (за замовчуванням)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "Не вдалося завантажити вразливості",
       "loadSbomFailed": "Не вдалося завантажити SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Назва контейнера",
+        "containerId": "ID контейнера",
         "imageName": "Назва образу (без реєстру)",
         "imageTag": "Поточний тег образу",
         "updateKind": "Тип оновлення (тег або дайджест)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "Журнали для цього контейнера недоступні",
       "loadFailed": "Не вдалося завантажити журнали контейнера",
-      "loading": "Loading logs..."
+      "loading": "Завантаження журналів..."
     },
     "vulnerabilities": {
       "loadFailed": "Не вдалося завантажити дані про вразливості"

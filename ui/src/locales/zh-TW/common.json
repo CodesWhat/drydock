@@ -16,8 +16,8 @@
       "accessDenied": "倉庫存取被拒",
       "imageNotFound": "找不到映像檔",
       "authFailed": "倉庫認證失敗",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
+      "unreachable": "倉庫無法連線",
+      "cancelled": "已取消",
       "securityBlocked": "被安全掃描阻止",
       "signatureFailed": "簽名驗證失敗"
     },

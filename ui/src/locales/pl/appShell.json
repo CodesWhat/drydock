@@ -108,12 +108,12 @@
         "typeHint": "Wpisz",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; używać",
         "useTab": " zmienić zakres",
         "moveHint": "ruszaj się",
         "openHint": "otwarte",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "Ostatnie",
+        "unknownHost": "nieznany host",
         "containerSubtitle": "Kontener · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Wyzwalacz · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "Ustawienia wyglądu",
           "appearanceSubtitle": "Konfiguracja · Wygląd",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "Ustawienia profilu",
           "profileSubtitle": "Konfiguracja · Profil"
         }
       },
@@ -150,12 +150,12 @@
         "restartingService": "Ponowne uruchomienie usługi"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "Skróty klawiszowe",
+        "close": "Zamknij",
+        "focusSearch": "Ustaw fokus na wyszukiwanie",
         "closeSearch": "Zamknij wyszukiwanie lub zamknij okna dialogowe",
         "showHelp": "Pokaż tę pomoc",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "Przełącz wyszukiwanie"
       }
     },
     "announcementBanner": {
@@ -176,10 +176,10 @@
       "legacyConfigBody": "Starsze dane wejściowe wyzwalacza są nadal aktywne w celu zachowania zgodności z v1.6. Zmień nazwy zmiennych {triggerEnv} na {actionEnv} lub {notificationEnv} oraz zastąp etykiety {triggerLabel} etykietami {actionLabel} lub {notificationLabel} przed v1.7.",
       "legacyApiBody": "Klienci tej instancji ostatnio wywoływali usuniętą, nieopatrzoną wersją ścieżkę {oldPrefix} i otrzymują błędy {statusCode}. Zmigruj ich do prefiksu {v1Prefix}. Integracje z ery WUD, takie jak wud-card czy widżet whatsupdocker w Homepage, mogą zamiast migracji ustawić {compatFlag}.",
       "curlHealthcheckBody": "Twój kontener Drydock używa niestandardowego zastąpienia kontroli stanu opartego na curl. curl pozostaje dostępny w celu zachowania wstecznej zgodności w wersjach v1.5.x i v1.6.x; v1.6.0 to ostatnia wersja ostrzegawcza, a curl zostanie usunięty z obrazu w wersji v1.7.0. Preferuj wbudowaną kontrolę stanu obrazu lub zaktualizuj swoje zastąpienie na {bin}.",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "(+{count} więcej)",
       "installTitle": "Zainstaluj Drydock jako aplikację",
       "installBody": "Dodaj Drydock do doku lub ekranu głównego, aby uzyskać szybki dostęp i doświadczenie podobne do aplikacji, wraz z powłoką offline.",
-      "installAction": "Install"
+      "installAction": "Zainstaluj"
     }
   }
 }

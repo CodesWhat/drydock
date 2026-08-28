@@ -110,7 +110,7 @@
         "description": "컨테이너의 Docker 헬스체크가 unhealthy 상태가 될 때"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "성숙도 해제됨",
         "description": "성숙도 정책으로 보류된 업데이트가 적용 가능해질 때"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count}개 수정 가능",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count}개 수정",
+      "new": "{count}개 신규",
       "both": "{fixed}개 수정, {new}개 신규"
     },
     "deltaTooltips": {

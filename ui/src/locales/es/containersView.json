@@ -43,7 +43,7 @@
       "registry": "Registro",
       "resources": "Recursos",
       "uptime": "Tiempo en funcionamiento",
-      "ports": "Ports"
+      "ports": "Puertos"
     },
     "status": {
       "running": "en ejecución",

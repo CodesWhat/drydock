@@ -12,7 +12,7 @@
       "dryRunCondition": "Trigger hành động {trigger} đang ở chế độ dry-run — cập nhật chỉ được xem trước, container không bị thay thế.",
       "scanNow": "Quét ngay",
       "recheckNow": "Kiểm tra lại cập nhật",
-      "rechecking": "Rechecking…",
+      "rechecking": "Đang kiểm tra lại…",
       "skipSnoozeGroup": "Bỏ qua & Hoãn",
       "skipThisUpdate": "Bỏ qua cập nhật này",
       "snooze1d": "Hoãn 1 ngày",
@@ -88,7 +88,7 @@
       "startButton": "Khởi động",
       "restartButton": "Khởi động lại",
       "scanButton": "Quét",
-      "recheckButton": "Recheck",
+      "recheckButton": "Kiểm tra lại",
       "ariaRecheckContainer": "Kiểm tra lại cập nhật cho container",
       "blockedButton": "Bị chặn",
       "updateButton": "Cập nhật",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "Bị chặn: {tag} ({count} CVE nghiêm trọng)",
       "manualUpdateOnly": "Chỉ cập nhật thủ công",
       "manualUpdateOnlyWithMessage": "Chỉ cập nhật thủ công — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "Cập nhật",
+      "cancelButton": "Hủy",
+      "blockedButton": "Bị chặn",
+      "updateButton": "Cập nhật",
+      "moreButton": "Thêm",
+      "cancelUpdateTooltip": "Hủy cập nhật"
     },
     "groupHeader": {
       "ungrouped": "Không phân nhóm",
@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "Cập nhật bắt buộc",
         "message": "Cập nhật bắt buộc {name}? Thao tác này sẽ xóa chính sách bỏ qua/hoãn trước khi thử cập nhật.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "Cập nhật bắt buộc"
       },
       "update": {
-        "header": "Update Container",
+        "header": "Cập nhật Container",
         "messageLatest": "Cập nhật {name} ngay bây giờ? Thao tác này sẽ áp dụng image mới nhất đã phát hiện.",
         "messageTagChange": "Cập nhật {name}? Thao tác này sẽ thay đổi tag image từ :{currentTag} thành :{newTag}{kind}.",
         "messageDigestChange": "Cập nhật {name}? Bản build mới hơn của :{currentTag} có sẵn (digest thay đổi).",
-        "softBlockerSuffix": "\n\nCập nhật này hiện đang bị chặn bởi chính sách:\n{list}\n\nNhấp Update anyway để ghi đè.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerSuffix": "\n\nCập nhật này hiện đang bị chặn bởi chính sách:\n{list}\n\nNhấp Vẫn cập nhật để ghi đè.",
+        "softBlockerLearnMore": "Tìm hiểu thêm",
+        "acceptLabel": "Cập nhật",
+        "acceptLabelOverride": "Vẫn cập nhật"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "Xóa Container",
         "message": "Xóa {name}? Thao tác này sẽ gỡ nó khỏi việc theo dõi của Drydock cho đến khi được phát hiện lại.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "Xóa"
       },
       "clearPolicy": {
         "header": "Xóa chính sách cập nhật",
         "message": "Xóa toàn bộ chính sách cập nhật cho {name}? Thao tác này sẽ xóa các mục bỏ qua, hoãn và cài đặt độ chín.",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "Xóa chính sách"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "Khôi phục Container",
         "messageSelected": "Khôi phục {name} về image sao lưu đã chọn? Thao tác này sẽ thay thế image của container đang chạy.",
         "messageLatest": "Khôi phục {name} về image sao lưu mới nhất? Thao tác này sẽ thay thế image của container đang chạy.",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "Khôi phục"
       },
       "dependencyGroup": {
         "header": "Cập nhật chuỗi phụ thuộc",
@@ -486,7 +486,7 @@
         "waveList": "\n\nThứ tự cập nhật:\n{list}",
         "cycleWarning": "\n\nCảnh báo: đã phát hiện vòng lặp phụ thuộc ({cycles}). Các container trong vòng lặp này có thể được cập nhật theo thứ tự bất kỳ.",
         "unresolvedWarning": "\n\nCảnh báo: một số nhãn phụ thuộc tham chiếu đến các container không thể tìm thấy. Những container đó sẽ bị bỏ qua.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Cập nhật chuỗi",
         "previewFailedTitle": "Không thể xem trước chuỗi cập nhật",
         "previewFailedDetail": "Không thể tải bản xem trước chuỗi phụ thuộc cho {name}.",
         "successMessage": "Đã bắt đầu cập nhật chuỗi phụ thuộc: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "Đã bắt đầu: {name}",
       "scanTriggered": "Đã kích hoạt quét: {name}",
       "scanFailedTitle": "Quét thất bại: {name}",
       "scanFailedDetail": "Quét thất bại cho {name}",
       "actionFailedDetail": "Thao tác thất bại cho {name}",
       "updateFailedTitle": "Cập nhật thất bại: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "Đã xóa: {name}",
       "deleteFailedTitle": "Xóa thất bại: {name}",
       "deleteFailedDetail": "Không thể xóa {name}",
       "cancellationRequested": "Đã yêu cầu hủy: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "Đã hủy: {name}",
       "cancelAlreadyFinished": "Cập nhật cho {name} đã hoàn tất, không thể hủy",
       "cancelOperationNotFound": "Không tìm thấy thao tác: {name}",
       "cancelFailed": "Không thể hủy cập nhật cho {name}",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "tag",
+        "digest": "digest"
+      },
       "tooltips": {
         "snoozedUntil": "Cập nhật đã hoãn đến {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "Cập nhật đã hoãn",
         "maturityBlockedSingular": "Chính sách chỉ chín chặn cập nhật mới hơn {days} ngày",
         "maturityBlockedPlural": "Chính sách chỉ chín chặn cập nhật mới hơn {days} ngày",
         "maturityActiveSingular": "Chính sách chỉ chín đang hoạt động (tuổi tối thiểu {days} ngày)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Đã hoãn cập nhật trong {days} ngày",
         "snoozedPlural": "Đã hoãn cập nhật trong {days} ngày",
         "snoozedUntil": "Đã hoãn đến {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Đã bỏ hoãn",
         "clearSkips": "Đã xóa danh sách bỏ qua",
         "clearPolicy": "Đã xóa chính sách cập nhật",
         "clearMaturity": "Đã xóa chính sách độ chín",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Không xác định",
       "loadFailed": "Không thể tải bản sao lưu",
       "rollback": {
         "completedFromSelected": "Đã hoàn tất khôi phục từ bản sao lưu đã chọn",
         "completedFromLatest": "Đã hoàn tất khôi phục từ bản sao lưu mới nhất",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Khôi phục thất bại",
+        "failedDetail": "Khôi phục thất bại"
       },
       "operationHistoryLoadFailed": "Không thể tải lịch sử thao tác cập nhật"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Mở cài đặt trigger"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Xem trước thất bại",
         "failedDetail": "Không thể tạo bản xem trước cập nhật"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms (mặc định)",
       "preAbortYes": "Hủy cập nhật khi hook trước thất bại",
       "preAbortNo": "Tiếp tục cập nhật khi hook trước thất bại",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Đã bật",
+      "disabledLabel": "Đã tắt",
+      "disabledDefaultLabel": "Đã tắt (mặc định)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "Không thể tải lỗ hổng",
       "loadSbomFailed": "Không thể tải SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Tên container",
+        "containerId": "ID container",
         "imageName": "Tên image (không kèm registry)",
         "imageTag": "Tag image hiện tại",
         "updateKind": "Loại cập nhật (tag hoặc digest)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "Không có nhật ký nào cho container này",
       "loadFailed": "Không thể tải nhật ký container",
-      "loading": "Loading logs..."
+      "loading": "Đang tải nhật ký..."
     },
     "vulnerabilities": {
       "loadFailed": "Không thể tải dữ liệu lỗ hổng"

@@ -108,12 +108,12 @@
         "typeHint": "탭",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; ",
         "useTab": "을 눌러 범위 변경",
         "moveHint": "이동",
         "openHint": "열기",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "최근",
+        "unknownHost": "알 수 없는 호스트",
         "containerSubtitle": "컨테이너 · {image} · {status} · {host}",
         "agentSubtitle": "에이전트 · {status} · {host}",
         "triggerSubtitle": "트리거 · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "외관 설정",
           "appearanceSubtitle": "설정 · 외관",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "프로필 설정",
           "profileSubtitle": "설정 · 프로필"
         }
       },
@@ -176,10 +176,10 @@
       "legacyConfigBody": "레거시 트리거 입력이 v1.6 호환성을 위해 계속 활성화되어 있습니다. v1.7 이전에 {triggerEnv} 변수를 {actionEnv} 또는 {notificationEnv}(으)로 이름을 변경하고, {triggerLabel} 레이블을 {actionLabel} 또는 {notificationLabel}(으)로 교체하세요.",
       "legacyApiBody": "이 인스턴스의 클라이언트가 최근 제거된 버전 없는 {oldPrefix} 경로를 호출하여 {statusCode} 오류를 받고 있습니다. {v1Prefix} 접두사로 마이그레이션하세요. wud-card나 Homepage의 whatsupdocker 위젯과 같은 WUD 시대 통합은 마이그레이션 대신 {compatFlag}을(를) 설정할 수 있습니다.",
       "curlHealthcheckBody": "Drydock 컨테이너가 사용자 정의 curl 기반 헬스체크 재정의를 사용하고 있습니다. curl은 v1.5.x 및 v1.6.x에서 하위 호환성을 위해 계속 사용할 수 있습니다. v1.6.0이 마지막 경고 릴리스이며, v1.7.0부터 이미지에서 curl이 제거됩니다. 내장된 이미지 헬스체크를 사용하거나 재정의를 {bin}(으)로 업데이트하세요.",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "(+{count}개 더)",
       "installTitle": "Drydock을 앱으로 설치",
       "installBody": "빠르게 접근하고 앱과 같은 사용 경험을 이용하려면 Drydock을 Dock이나 홈 화면에 추가하세요. 오프라인 셸도 포함되어 있습니다.",
-      "installAction": "Install"
+      "installAction": "설치"
     }
   }
 }

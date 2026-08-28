@@ -108,12 +108,12 @@
         "typeHint": "Escribe",
         "slashComma": ",",
         "atOrConnector": ", o",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; usa",
         "useTab": " para cambiar de ámbito",
         "moveHint": "mover",
         "openHint": "abrir",
         "recentGroup": "Reciente",
-        "unknownHost": "unknown host",
+        "unknownHost": "host desconocido",
         "containerSubtitle": "Contenedor · {image} · {status} · {host}",
         "agentSubtitle": "Agente · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
@@ -135,9 +135,9 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
+          "appearanceTitle": "Ajustes de apariencia",
           "appearanceSubtitle": "Config · Apariencia",
-          "profileTitle": "Profile Settings",
+          "profileTitle": "Ajustes de perfil",
           "profileSubtitle": "Config · Perfil"
         }
       },
@@ -150,12 +150,12 @@
         "restartingService": "Reiniciando servicio"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "Atajos de teclado",
+        "close": "Cerrar",
+        "focusSearch": "Enfocar búsqueda",
         "closeSearch": "Cerrar la búsqueda o descartar diálogos",
         "showHelp": "Mostrar esta ayuda",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "Alternar búsqueda"
       }
     },
     "announcementBanner": {
@@ -176,10 +176,10 @@
       "legacyConfigBody": "Las entradas heredadas de trigger siguen activas por compatibilidad con v1.6. Renombra las variables {triggerEnv} a {actionEnv} o {notificationEnv}, y sustituye las etiquetas {triggerLabel} por {actionLabel} o {notificationLabel} antes de v1.7.",
       "legacyApiBody": "Los clientes de esta instancia llamaron recientemente a la ruta {oldPrefix} sin versión, que fue eliminada, y están recibiendo errores {statusCode}. Migra esos clientes al prefijo {v1Prefix}. Las integraciones de la era WUD, como wud-card o el widget whatsupdocker de Homepage, pueden configurar {compatFlag} en lugar de migrar.",
       "curlHealthcheckBody": "Tu contenedor de Drydock usa un override personalizado de healthcheck basado en curl. curl sigue disponible por compatibilidad retroactiva en v1.5.x y v1.6.x; v1.6.0 es la última versión con esta advertencia, y curl se eliminará de la imagen en v1.7.0. Usa el healthcheck integrado de la imagen, o actualiza tu override a {bin}.",
-      "hiddenMore": "(+{count} more)",
+      "hiddenMore": "(+{count} más)",
       "installTitle": "Instalar Drydock como aplicación",
       "installBody": "Añade Drydock a tu dock o pantalla de inicio para un acceso rápido y una experiencia similar a una app, con shell sin conexión incluido.",
-      "installAction": "Install"
+      "installAction": "Instalar"
     }
   }
 }

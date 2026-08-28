@@ -110,7 +110,7 @@
         "description": "コンテナの Docker ヘルスチェックが unhealthy 状態になったとき"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
+        "name": "成熟度クリア",
         "description": "成熟度ポリシーにより保留されていた更新が適用可能になった場合"
       }
     },
@@ -203,10 +203,10 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} 件修正可能",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
+      "fixed": "{count} 件修正",
+      "new": "{count} 件新規",
       "both": "{fixed} 件修正、{new} 件新規"
     },
     "deltaTooltips": {

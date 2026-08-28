@@ -12,7 +12,7 @@
       "dryRunCondition": "操作觸發器 {trigger} 處於 dry-run 模式 — 更新僅供預覽，容器不會被取代。",
       "scanNow": "立即掃描",
       "recheckNow": "重新檢查更新",
-      "rechecking": "Rechecking…",
+      "rechecking": "重新檢查中……",
       "skipSnoozeGroup": "跳過和推遲",
       "skipThisUpdate": "跳過此次更新",
       "snooze1d": "推遲 1 天",
@@ -88,7 +88,7 @@
       "startButton": "啟動",
       "restartButton": "重啟",
       "scanButton": "掃描",
-      "recheckButton": "Recheck",
+      "recheckButton": "重新檢查",
       "ariaRecheckContainer": "重新檢查容器更新",
       "blockedButton": "已阻止",
       "updateButton": "更新",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "已封鎖：{tag}（{count} 個嚴重）",
       "manualUpdateOnly": "僅支援手動更新",
       "manualUpdateOnlyWithMessage": "僅支援手動更新 — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "更新",
+      "cancelButton": "取消",
+      "blockedButton": "已阻止",
+      "updateButton": "更新",
+      "moreButton": "更多",
+      "cancelUpdateTooltip": "取消更新"
     },
     "groupHeader": {
       "ungrouped": "未分組",
@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "強制更新",
         "message": "強制更新 {name}？這將在嘗試更新前清除跳過/推遲策略。",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "強制更新"
       },
       "update": {
-        "header": "Update Container",
+        "header": "更新容器",
         "messageLatest": "立即更新 {name}？這將應用最新發現的映像檔。",
         "messageTagChange": "更新 {name}？這將把映像檔標籤從 :{currentTag} 更改為 :{newTag}{kind}。",
         "messageDigestChange": "更新 {name}？:{currentTag} 有更新的建置版本可用（摘要變更）。",
         "softBlockerSuffix": "\n\n此更新目前被策略阻止：\n{list}\n\n點選「仍要更新」以覆蓋。",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerLearnMore": "深入瞭解",
+        "acceptLabel": "更新",
+        "acceptLabelOverride": "仍要更新"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "刪除容器",
         "message": "刪除 {name}？這將把它從 Drydock 追蹤中移除，直到重新被偵測到為止。",
-        "acceptLabel": "Delete"
+        "acceptLabel": "刪除"
       },
       "clearPolicy": {
         "header": "清除更新策略",
         "message": "清除 {name} 的所有更新策略？這將移除跳過、推遲和成熟度設定。",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "清除策略"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "回滾容器",
         "messageSelected": "將 {name} 回滾至選定的備份映像檔？這將取代執行中的容器映像檔。",
         "messageLatest": "將 {name} 回滾至最新的備份映像檔？這將取代執行中的容器映像檔。",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "回滾"
       },
       "dependencyGroup": {
         "header": "更新依賴鏈",
@@ -486,7 +486,7 @@
         "waveList": "\n\n更新順序：\n{list}",
         "cycleWarning": "\n\n警告：偵測到依賴循環（{cycles}）。循環中的容器可能以任意順序更新。",
         "unresolvedWarning": "\n\n警告：部分依賴標籤所參照的容器找不到，這些容器將被跳過。",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "更新鏈",
         "previewFailedTitle": "無法預覽更新鏈",
         "previewFailedDetail": "無法載入 {name} 的依賴鏈預覽。",
         "successMessage": "依賴鏈更新已開始：{name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "已啟動：{name}",
       "scanTriggered": "已觸發掃描：{name}",
       "scanFailedTitle": "掃描失敗：{name}",
       "scanFailedDetail": "{name} 的掃描失敗",
       "actionFailedDetail": "{name} 的操作失敗",
       "updateFailedTitle": "更新失敗：{name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "已刪除：{name}",
       "deleteFailedTitle": "刪除失敗：{name}",
       "deleteFailedDetail": "無法刪除 {name}",
       "cancellationRequested": "已請求取消：{name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "已取消：{name}",
       "cancelAlreadyFinished": "{name} 的更新已完成，無法取消",
       "cancelOperationNotFound": "找不到操作：{name}",
       "cancelFailed": "無法取消 {name} 的更新",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "標籤",
+        "digest": "摘要"
+      },
       "tooltips": {
         "snoozedUntil": "更新已推遲至 {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "更新已推遲",
         "maturityBlockedSingular": "僅限成熟版本策略會阻止低於 {days} 天的更新",
         "maturityBlockedPlural": "僅限成熟版本策略會阻止低於 {days} 天的更新",
         "maturityActiveSingular": "僅限成熟版本策略已啟用（最短 {days} 天）",
@@ -537,7 +541,7 @@
         "snoozedSingular": "已推遲更新 {days} 天",
         "snoozedPlural": "已推遲更新 {days} 天",
         "snoozedUntil": "已推遲至 {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "已清除推遲",
         "clearSkips": "已清除跳過的更新",
         "clearPolicy": "已清除更新策略",
         "clearMaturity": "已清除成熟度策略",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "未知",
       "loadFailed": "無法載入備份",
       "rollback": {
         "completedFromSelected": "已完成從選定備份的回滾",
         "completedFromLatest": "已完成從最新備份的回滾",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "回滾失敗",
+        "failedDetail": "回滾失敗"
       },
       "operationHistoryLoadFailed": "無法載入更新操作歷史"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "開啟觸發器設定"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "預覽失敗",
         "failedDetail": "無法產生更新預覽"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms（預設）",
       "preAbortYes": "前置掛鉤失敗時中止更新",
       "preAbortNo": "前置掛鉤失敗時繼續更新",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "已啟用",
+      "disabledLabel": "已停用",
+      "disabledDefaultLabel": "已停用（預設）",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "無法載入漏洞",
       "loadSbomFailed": "無法載入 SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "容器名稱",
+        "containerId": "容器 ID",
         "imageName": "映像檔名稱（不含倉庫）",
         "imageTag": "目前的映像檔標籤",
         "updateKind": "更新類型（標籤或摘要）",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "此容器沒有可用的日誌",
       "loadFailed": "無法載入容器日誌",
-      "loading": "Loading logs..."
+      "loading": "正在載入日誌……"
     },
     "vulnerabilities": {
       "loadFailed": "無法載入漏洞資料"

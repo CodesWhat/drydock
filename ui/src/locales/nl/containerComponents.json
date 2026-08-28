@@ -12,7 +12,7 @@
       "dryRunCondition": "Actietrigger {trigger} staat in dry-run-modus — updates worden alleen als voorbeeld getoond en containers worden niet vervangen.",
       "scanNow": "Nu scannen",
       "recheckNow": "Controleer opnieuw op updates",
-      "rechecking": "Rechecking…",
+      "rechecking": "Opnieuw controleren…",
       "skipSnoozeGroup": "Overslaan en snoozen",
       "skipThisUpdate": "Sla deze update over",
       "snooze1d": "Snooze 1d",
@@ -88,7 +88,7 @@
       "startButton": "Starten",
       "restartButton": "Herstarten",
       "scanButton": "Scannen",
-      "recheckButton": "Recheck",
+      "recheckButton": "Opnieuw controleren",
       "ariaRecheckContainer": "Container opnieuw controleren op updates",
       "blockedButton": "Geblokkeerd",
       "updateButton": "Bijwerken",
@@ -211,21 +211,21 @@
       "currentLabel": "Huidig",
       "latestLabel": "Nieuwste",
       "blockedByBouncer": "Geblokkeerd door Bouncer",
-      "registryErrorRateLimited": "Rate limited",
-      "registryErrorAuth": "Auth failed",
-      "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed",
+      "registryErrorRateLimited": "Ratelimiet bereikt",
+      "registryErrorAuth": "Authenticatie mislukt",
+      "registryErrorNotFound": "Niet gevonden",
+      "registryErrorCheckFailed": "Controle mislukt",
       "blockedTag": "Geblokkeerd: {tag}",
       "blockedTagWithCriticals": "Geblokkeerd: {tag} ({count} kritieke CVE)",
       "blockedTagWithCriticalsCVEs": "Geblokkeerd: {tag} ({count} kritieke CVE's)",
       "manualUpdateOnly": "Alleen handmatige update",
       "manualUpdateOnlyWithMessage": "Alleen handmatige update — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "Bijwerken",
+      "cancelButton": "Annuleren",
+      "blockedButton": "Geblokkeerd",
+      "updateButton": "Bijwerken",
+      "moreButton": "Meer",
+      "cancelUpdateTooltip": "Update annuleren"
     },
     "groupHeader": {
       "ungrouped": "Niet gegroepeerd",
@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "Update forceren",
         "message": "{name} geforceerd bijwerken? Hiermee wordt het overslaan/snooze-beleid gewist voordat de update wordt geprobeerd.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "Update forceren"
       },
       "update": {
-        "header": "Update Container",
+        "header": "Container bijwerken",
         "messageLatest": "{name} nu bijwerken? Hiermee wordt de laatst gevonden image toegepast.",
         "messageTagChange": "{name} bijwerken? Hiermee wordt de imagetag gewijzigd van :{currentTag} naar :{newTag}{kind}.",
         "messageDigestChange": "{name} bijwerken? Er is een nieuwere versie van :{currentTag} beschikbaar (digestwijziging).",
         "softBlockerSuffix": "\n\nDeze update is momenteel beleidsmatig geblokkeerd:\n{list}\n\nKlik op Toch bijwerken om te overschrijven.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerLearnMore": "Meer informatie",
+        "acceptLabel": "Bijwerken",
+        "acceptLabelOverride": "Toch bijwerken"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "Container verwijderen",
         "message": "{name} verwijderen? Hiermee wordt deze uit de Drydock-tracking verwijderd totdat deze opnieuw wordt ontdekt.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "Verwijderen"
       },
       "clearPolicy": {
         "header": "Wis updatebeleid",
         "message": "Alle updatebeleid voor {name} wissen? Hiermee worden overslaan, snooze en volwassenheidsinstellingen verwijderd.",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "Beleid wissen"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "Container terugdraaien",
         "messageSelected": "{name} terugdraaien naar de geselecteerde back-upimage? Hiermee wordt de actieve containerimage vervangen.",
         "messageLatest": "{name} terugdraaien naar de nieuwste back-upimage? Hiermee wordt de actieve containerimage vervangen.",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "Terugdraaien"
       },
       "dependencyGroup": {
         "header": "Afhankelijkheidsketen bijwerken",
@@ -486,7 +486,7 @@
         "waveList": "\n\nUpdatevolgorde:\n{list}",
         "cycleWarning": "\n\nWaarschuwing: er is een afhankelijkheidscyclus gedetecteerd ({cycles}). Containers in de cyclus kunnen in willekeurige volgorde worden bijgewerkt.",
         "unresolvedWarning": "\n\nWaarschuwing: sommige afhankelijkheidslabels verwijzen naar containers die niet konden worden gevonden. Deze worden overgeslagen.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Keten bijwerken",
         "previewFailedTitle": "Kan geen voorbeeld van de afhankelijkheidsketen tonen",
         "previewFailedDetail": "Kan het voorbeeld van de afhankelijkheidsketen voor {name} niet laden.",
         "successMessage": "Update van afhankelijkheidsketen gestart: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "Gestart: {name}",
       "scanTriggered": "Scan gestart: {name}",
       "scanFailedTitle": "Scan mislukt: {name}",
       "scanFailedDetail": "Scan mislukt voor {name}",
       "actionFailedDetail": "Actie mislukt voor {name}",
       "updateFailedTitle": "Update mislukt: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "Verwijderd: {name}",
       "deleteFailedTitle": "Verwijderen mislukt: {name}",
       "deleteFailedDetail": "Kan {name} niet verwijderen",
       "cancellationRequested": "Annulering aangevraagd: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "Geannuleerd: {name}",
       "cancelAlreadyFinished": "Update voor {name} is al voltooid en kan niet worden geannuleerd",
       "cancelOperationNotFound": "Bewerking niet gevonden: {name}",
       "cancelFailed": "Kan update voor {name} niet annuleren",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "tag",
+        "digest": "samenvatting"
+      },
       "tooltips": {
         "snoozedUntil": "Updates gesnoozed tot {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "Updates gesnoozed",
         "maturityBlockedSingular": "Alleen-rijp-beleid blokkeert updates die jonger zijn dan {days} dag",
         "maturityBlockedPlural": "Alleen-rijp-beleid blokkeert updates die jonger zijn dan {days} dagen",
         "maturityActiveSingular": "Alleen-rijp-beleid actief (minimumleeftijd {days} dag)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Updates gesnoozed voor {days} dag",
         "snoozedPlural": "Updates gesnoozed voor {days} dagen",
         "snoozedUntil": "Gesnoozed tot {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Snooze gewist",
         "clearSkips": "Overgeslagen updates gewist",
         "clearPolicy": "Updatebeleid gewist",
         "clearMaturity": "Volwassenheidsbeleid gewist",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Onbekend",
       "loadFailed": "Kan back-ups niet laden",
       "rollback": {
         "completedFromSelected": "Terugdraaien voltooid vanaf geselecteerde back-up",
         "completedFromLatest": "Terugdraaien voltooid vanaf nieuwste back-up",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Terugdraaien mislukt",
+        "failedDetail": "Terugdraaien mislukt"
       },
       "operationHistoryLoadFailed": "Kan bewerkingsgeschiedenis niet laden"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Triggerinstellingen openen"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Voorbeeld mislukt",
         "failedDetail": "Kan updatevoorbeeld niet genereren"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000ms (standaard)",
       "preAbortYes": "Update afbreken bij een mislukte pre-hook",
       "preAbortNo": "Update voortzetten bij een mislukte pre-hook",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Ingeschakeld",
+      "disabledLabel": "Uitgeschakeld",
+      "disabledDefaultLabel": "Uitgeschakeld (standaard)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "Kan kwetsbaarheden niet laden",
       "loadSbomFailed": "Kan SBOM niet laden",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Naam van de container",
+        "containerId": "Container-ID",
         "imageName": "Naam van de image (zonder register)",
         "imageTag": "Huidige image-tag",
         "updateKind": "Updatetype (tag of digest)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "Geen logboeken beschikbaar voor deze container",
       "loadFailed": "Kan containerlogboeken niet laden",
-      "loading": "Loading logs..."
+      "loading": "Logboeken laden..."
     },
     "vulnerabilities": {
       "loadFailed": "Kan kwetsbaarheidsgegevens niet laden"

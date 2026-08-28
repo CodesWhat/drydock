@@ -12,7 +12,7 @@
       "dryRunCondition": "Триггер действия {trigger} в режиме dry-run — обновления только предпросматриваются, контейнеры не заменяются.",
       "scanNow": "Сканировать сейчас",
       "recheckNow": "Повторно проверить обновления",
-      "rechecking": "Rechecking…",
+      "rechecking": "Повторная проверка...",
       "skipSnoozeGroup": "Пропустить и отложить",
       "skipThisUpdate": "Пропустить это обновление",
       "snooze1d": "Отложить на 1 д.",
@@ -88,7 +88,7 @@
       "startButton": "Старт",
       "restartButton": "Перезапуск",
       "scanButton": "Сканировать",
-      "recheckButton": "Recheck",
+      "recheckButton": "Перепроверить",
       "ariaRecheckContainer": "Повторно проверить контейнер на обновления",
       "blockedButton": "Заблокировано",
       "updateButton": "Обновить",
@@ -220,12 +220,12 @@
       "blockedTagWithCriticalsCVEs": "Заблокировано: {tag} ({count} критических CVE)",
       "manualUpdateOnly": "Только ручное обновление",
       "manualUpdateOnlyWithMessage": "Только ручное обновление — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "Обновить",
+      "cancelButton": "Отмена",
+      "blockedButton": "Заблокировано",
+      "updateButton": "Обновить",
+      "moreButton": "Ещё",
+      "cancelUpdateTooltip": "Отменить обновление"
     },
     "groupHeader": {
       "ungrouped": "Без группы",
@@ -449,35 +449,35 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
+        "header": "Принудительное обновление",
         "message": "Принудительно обновить {name}? Это очистит политику пропуска/отсрочки перед попыткой обновления.",
-        "acceptLabel": "Force Update"
+        "acceptLabel": "Принудительное обновление"
       },
       "update": {
-        "header": "Update Container",
+        "header": "Обновить контейнер",
         "messageLatest": "Обновить {name} сейчас? Будет применён последний обнаруженный образ.",
         "messageTagChange": "Обновить {name}? Тег образа изменится с :{currentTag} на :{newTag}{kind}.",
         "messageDigestChange": "Обновить {name}? Доступна новая сборка :{currentTag} (изменение дайджеста).",
         "softBlockerSuffix": "\n\nЭто обновление в настоящее время заблокировано политикой:\n{list}\n\nНажмите «Обновить всё равно», чтобы переопределить блокировку.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "softBlockerLearnMore": "Подробнее",
+        "acceptLabel": "Обновить",
+        "acceptLabelOverride": "Обновить всё равно"
       },
       "delete": {
-        "header": "Delete Container",
+        "header": "Удалить контейнер",
         "message": "Удалить {name}? Это уберёт его из отслеживания Drydock до повторного обнаружения.",
-        "acceptLabel": "Delete"
+        "acceptLabel": "Удалить"
       },
       "clearPolicy": {
         "header": "Сбросить политику обновления",
         "message": "Сбросить всю политику обновления для {name}? Это удалит настройки пропусков, отсрочки и зрелости.",
-        "acceptLabel": "Clear Policy"
+        "acceptLabel": "Сбросить политику"
       },
       "rollback": {
-        "header": "Rollback Container",
+        "header": "Откат контейнера",
         "messageSelected": "Откатить {name} к выбранному резервному образу? Это заменит образ работающего контейнера.",
         "messageLatest": "Откатить {name} к последнему резервному образу? Это заменит образ работающего контейнера.",
-        "acceptLabel": "Rollback"
+        "acceptLabel": "Откат"
       },
       "dependencyGroup": {
         "header": "Обновление цепочки зависимостей",
@@ -486,7 +486,7 @@
         "waveList": "\n\nПорядок обновления:\n{list}",
         "cycleWarning": "\n\nПредупреждение: обнаружен цикл зависимостей ({cycles}). Контейнеры в этом цикле могут обновляться в произвольном порядке.",
         "unresolvedWarning": "\n\nПредупреждение: некоторые метки зависимостей ссылаются на контейнеры, которые не удалось найти. Они будут пропущены.",
-        "acceptLabel": "Update chain",
+        "acceptLabel": "Обновить цепочку",
         "previewFailedTitle": "Не удалось предпросмотреть цепочку обновления",
         "previewFailedDetail": "Не удалось загрузить предпросмотр цепочки зависимостей для {name}.",
         "successMessage": "Обновление цепочки зависимостей запущено: {name}",
@@ -497,17 +497,17 @@
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
+      "started": "Запущено: {name}",
       "scanTriggered": "Сканирование запущено: {name}",
       "scanFailedTitle": "Ошибка сканирования: {name}",
       "scanFailedDetail": "Не удалось выполнить сканирование для {name}",
       "actionFailedDetail": "Не удалось выполнить действие для {name}",
       "updateFailedTitle": "Ошибка обновления: {name}",
-      "deleted": "Deleted: {name}",
+      "deleted": "Удалено: {name}",
       "deleteFailedTitle": "Ошибка удаления: {name}",
       "deleteFailedDetail": "Не удалось удалить {name}",
       "cancellationRequested": "Запрошена отмена: {name}",
-      "cancelled": "Cancelled: {name}",
+      "cancelled": "Отменено: {name}",
       "cancelAlreadyFinished": "Обновление для {name} уже завершено, отмена невозможна",
       "cancelOperationNotFound": "Операция не найдена: {name}",
       "cancelFailed": "Не удалось отменить обновление для {name}",
@@ -521,9 +521,13 @@
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "тег",
+        "digest": "дайджест"
+      },
       "tooltips": {
         "snoozedUntil": "Обновления отложены до {date}",
-        "snoozed": "Updates snoozed",
+        "snoozed": "Обновления отложены",
         "maturityBlockedSingular": "Политика «Только зрелые» блокирует обновления младше {days} дня",
         "maturityBlockedPlural": "Политика «Только зрелые» блокирует обновления младше {days} дней",
         "maturityActiveSingular": "Активна политика «Только зрелые» (минимальный возраст — {days} день)",
@@ -537,7 +541,7 @@
         "snoozedSingular": "Обновления отложены на {days} день",
         "snoozedPlural": "Обновления отложены на {days} дней",
         "snoozedUntil": "Отложено до {date}",
-        "unsnooze": "Snooze cleared",
+        "unsnooze": "Отсрочка снята",
         "clearSkips": "Пропуски обновлений очищены",
         "clearPolicy": "Политика обновления сброшена",
         "clearMaturity": "Политика зрелости сброшена",
@@ -567,13 +571,13 @@
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
+      "timestampUnknown": "Неизвестно",
       "loadFailed": "Не удалось загрузить резервные копии",
       "rollback": {
         "completedFromSelected": "Откат выполнен из выбранной резервной копии",
         "completedFromLatest": "Откат выполнен из последней резервной копии",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "failedTitle": "Ошибка отката",
+        "failedDetail": "Не удалось выполнить откат"
       },
       "operationHistoryLoadFailed": "Не удалось загрузить историю операций обновления"
     },
@@ -592,7 +596,7 @@
         "openTriggerSettings": "Открыть настройки триггера"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
+        "failedTitle": "Ошибка предпросмотра",
         "failedDetail": "Не удалось создать предпросмотр обновления"
       }
     },
@@ -602,12 +606,12 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
+      "timeoutDefault": "60000 мс (по умолчанию)",
       "preAbortYes": "Прервать обновление при ошибке предварительного хука",
       "preAbortNo": "Продолжить обновление при ошибке предварительного хука",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "enabledLabel": "Включено",
+      "disabledLabel": "Отключено",
+      "disabledDefaultLabel": "Отключено (по умолчанию)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
@@ -616,8 +620,8 @@
       "loadVulnerabilitiesFailed": "Не удалось загрузить уязвимости",
       "loadSbomFailed": "Не удалось загрузить SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
+        "containerName": "Имя контейнера",
+        "containerId": "ID контейнера",
         "imageName": "Имя образа (без реестра)",
         "imageTag": "Текущий тег образа",
         "updateKind": "Тип обновления (тег или дайджест)",
@@ -628,7 +632,7 @@
     "logs": {
       "noLogs": "Для этого контейнера нет доступных журналов",
       "loadFailed": "Не удалось загрузить журналы контейнера",
-      "loading": "Loading logs..."
+      "loading": "Загрузка журналов..."
     },
     "vulnerabilities": {
       "loadFailed": "Не удалось загрузить данные об уязвимостях"

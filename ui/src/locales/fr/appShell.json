@@ -150,12 +150,12 @@
         "restartingService": "Redémarrage du service"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "Raccourcis clavier",
+        "close": "Fermer",
+        "focusSearch": "Mettre le focus sur la recherche",
         "closeSearch": "Fermer la recherche ou les boîtes de dialogue",
         "showHelp": "Afficher cette aide",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "Afficher/masquer la recherche"
       }
     },
     "announcementBanner": {
@@ -179,7 +179,7 @@
       "hiddenMore": "(+{count} en plus)",
       "installTitle": "Installer Drydock comme application",
       "installBody": "Ajoutez Drydock à votre dock ou à votre écran d'accueil pour un accès rapide et une expérience proche d'une application, avec une interface de base hors ligne incluse.",
-      "installAction": "Install"
+      "installAction": "Installer"
     }
   }
 }
