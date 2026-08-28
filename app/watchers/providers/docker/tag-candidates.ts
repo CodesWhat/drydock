@@ -285,6 +285,25 @@ function isGreaterCandidateTag(
   if (transformedTag === currentTransformedTag) {
     return false;
   }
+
+  // #918: prefer the numeric-shape-aware comparison whenever a safe ordering
+  // can be established from it — it compares trailing numeric counters (e.g.
+  // "-ls101" vs "-ls99") and multi-component version cores (e.g.
+  // "4.0.19.2979" vs "4.0.9.2244") numerically instead of relying on
+  // semver's alphanumeric-prerelease and loose-clean handling, neither of
+  // which was designed for either shape and both silently mis-rank them (see
+  // compareByNumericShape for the full explanation). Falls back to the
+  // legacy semver-based check only when no safe shape-based ordering can be
+  // established (e.g. no numeric shape at all, or a core tie between
+  // suffixes of different precision).
+  const shapeComparison = compareByNumericShape(
+    getNumericTagShapeFromTransformedTag(currentTransformedTag),
+    getNumericTagShapeFromTransformedTag(transformedTag),
+  );
+  if (shapeComparison !== null) {
+    return shapeComparison > 0;
+  }
+
   if (!isGreaterSemver(transformedTag, currentTransformedTag)) {
     return false;
   }
@@ -489,6 +508,85 @@ function compareExactSuffixMatch(
 }
 
 /**
+ * #918: the numeric runs embedded in a suffix, in order (e.g. "-ls101" ->
+ * [101]; "b3.dev101-ls250" -> [3, 101, 250]).
+ */
+function getSuffixDigitRuns(suffix: string): number[] {
+  const runs = suffix.match(/\d+/g);
+  return runs ? runs.map((run) => Number.parseInt(run, 10)) : [];
+}
+
+/**
+ * #918: compare two numeric tuples element-by-element, most-significant
+ * first, using the same descending-sort "b minus a" convention as
+ * compareNumericSegmentsDescending above (negative when `a` is numerically
+ * greater). Its sole caller (compareSuffixCounters) only ever passes
+ * equal-length tuples: two suffixes whose normalized templates match are
+ * guaranteed to have the same count of digit runs, one '#' per run.
+ */
+function compareNumericTuplesDescending(a: number[], b: number[]): number {
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      return b[i] - a[i];
+    }
+  }
+  return 0;
+}
+
+/**
+ * #918: compare two shapes' suffixes by their own embedded numeric counters
+ * (e.g. "-ls101" vs "-ls99", or "b3.dev101-ls250" vs "b3.dev99-ls235").
+ * LinuxServer.io-style images bump such a counter on every rebuild; generic
+ * semver treats the whole suffix as a single alphanumeric prerelease
+ * identifier and compares it lexically (ASCII), so "ls101" < "ls99" — the
+ * digit '1' sorts below '9' at the first differing character even though
+ * 101 > 99. Comparing the digit runs numerically instead fixes that, but is
+ * only safe when both suffixes reduce to the exact same digit-free
+ * template: a differently-precise suffix (e.g. "-alpine" vs "-alpine3.21")
+ * has no positional correspondence between its digit runs, so this returns
+ * null rather than guessing.
+ */
+function compareSuffixCounters(a: NumericTagShape, b: NumericTagShape): number | null {
+  if (normalizeSuffixTemplate(a.suffix) !== normalizeSuffixTemplate(b.suffix)) {
+    return null;
+  }
+  return compareNumericTuplesDescending(getSuffixDigitRuns(a.suffix), getSuffixDigitRuns(b.suffix));
+}
+
+/**
+ * #918: safe, numeric-counter-aware comparison between two same-shaped tags,
+ * used as the primary "is candidate greater than reference" check (see
+ * isGreaterCandidateTag) instead of trusting generic semver/coerce parsing,
+ * which was never designed for either shape it fixes here: a trailing
+ * numeric counter inside an otherwise-identical suffix (see
+ * compareSuffixCounters), and a 4+ component version core (e.g.
+ * "4.0.19.2979-ls322"), which falls outside semver entirely and gets
+ * mangled asymmetrically by the semver library's loose-mode cleanup versus
+ * its own coerce() fallback — comparing the raw numeric segments here
+ * sidesteps that corruption altogether.
+ *
+ * Returns the same descending-sort "b minus a" convention as
+ * compareNumericSegmentsDescending (negative when `a` is greater, positive
+ * when `b` is greater, 0 on an exact tie), or null when neither shape is
+ * derivable, or the version-core ties and the suffixes don't share an exact
+ * template: no safe total ordering exists via this method, and callers must
+ * fall back rather than guess.
+ */
+function compareByNumericShape(
+  a: NumericTagShape | null,
+  b: NumericTagShape | null,
+): number | null {
+  if (!a || !b) {
+    return null;
+  }
+  const coreComparison = compareNumericSegmentsDescending(a, b);
+  if (coreComparison !== 0) {
+    return coreComparison;
+  }
+  return compareSuffixCounters(a, b);
+}
+
+/**
  * Sort tags by semver in descending order (mutates the array).
  * Pre-computes transformed tags to avoid recompiling the transform formula
  * on every comparator call (O(n log n) calls for an n-element array).
@@ -525,6 +623,15 @@ function sortSemverDescending(
       const suffixComparison = compareExactSuffixMatch(a.shape, b.shape, referenceSuffixTemplate);
       if (suffixComparison !== 0) {
         return suffixComparison;
+      }
+      // #918: numeric segments tie and neither candidate's suffix template
+      // (or both) matches the reference's exactly — if the two candidates'
+      // own suffix templates match each other exactly, rank them by their
+      // embedded numeric counters (e.g. "-ls105" above "-ls99") instead of
+      // falling through to semver's lexical prerelease comparison below.
+      const counterComparison = compareSuffixCounters(a.shape, b.shape);
+      if (counterComparison !== null && counterComparison !== 0) {
+        return counterComparison;
       }
     }
     const greater = isGreaterSemver(b.transformed, a.transformed);

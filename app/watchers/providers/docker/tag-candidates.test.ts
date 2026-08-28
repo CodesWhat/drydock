@@ -1711,6 +1711,184 @@ describe('docker tag candidates module', () => {
       });
     });
   });
+
+  // #918: LinuxServer.io-style images embed a per-build counter in an
+  // otherwise-identical suffix (e.g. "-ls101"). Generic semver treats that
+  // suffix as a prerelease identifier and compares it lexically (ASCII), so
+  // "ls101" < "ls99" — the reported bug suggested an older build as an
+  // "update". The pyload-ng pair additionally has a python-style prerelease
+  // token ("dev101") ahead of the counter, and the sonarr pair has a
+  // 4-component version core ("4.0.19.2979") that falls outside semver
+  // entirely — the library's loose-mode cleanup mis-splits its digits
+  // asymmetrically against its own coerce() fallback, comparing two
+  // differently-corrupted cores. Fixed by comparing the version-core numeric
+  // segments first, then — only when they tie and the suffix templates match
+  // exactly — the suffix's own embedded numeric counters, both numerically.
+  describe('#918: numeric-counter suffix comparison (LinuxServer.io downgrade)', () => {
+    test('nzbhydra2: "-ls101" is not outranked by the lexically-smaller "-ls99"', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: 'v8.9.0-ls101', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v8.9.0-ls101', 'v8.9.0-ls99'], log);
+
+      expect(result.tags).toEqual([]);
+    });
+
+    test('pyload-ng: "dev101-ls250" is not outranked by the lexically-smaller "dev99-ls235"', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: '0.5.0b3.dev101-ls250', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(
+        container,
+        ['0.5.0b3.dev101-ls250', '0.5.0b3.dev99-ls235'],
+        log,
+      );
+
+      expect(result.tags).toEqual([]);
+    });
+
+    test('sonarr: 4-component core "4.0.19.2979-ls322" is not outranked by "4.0.9.2244-ls257"', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: '4.0.19.2979-ls322', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['4.0.19.2979-ls322', '4.0.9.2244-ls257'], log);
+
+      expect(result.tags).toEqual([]);
+    });
+
+    test('a genuinely higher build counter is still accepted as an update', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: 'v8.9.0-ls101', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(
+        container,
+        ['v8.9.0-ls101', 'v8.9.0-ls99', 'v8.9.0-ls105'],
+        log,
+      );
+
+      expect(result.tags).toEqual(['v8.9.0-ls105']);
+    });
+
+    test('a genuinely higher 4-component core is still accepted as an update', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: '4.0.9.2244-ls257', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['4.0.9.2244-ls257', '4.0.19.2979-ls322'], log);
+
+      expect(result.tags).toEqual(['4.0.19.2979-ls322']);
+    });
+
+    test('the pin-gate insight badge does not surface the same downgrade under default strict family policy', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: 'v8.9.0-ls101', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v8.9.0-ls101', 'v8.9.0-ls99'], log);
+
+      expect(result.tags).toEqual([]);
+      expect(result.insight).toBeUndefined();
+    });
+
+    test('the pin-gate insight badge still surfaces a genuinely higher build counter', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: 'v8.9.0-ls101', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v8.9.0-ls101', 'v8.9.0-ls105'], log);
+
+      expect(result.insight).toEqual({ tag: 'v8.9.0-ls105', kind: 'patch' });
+    });
+
+    test('two exact-template candidates sort by their numeric counter, not lexically', () => {
+      // "ls9" sorts lexically ahead of "ls10" under generic semver (the '9'
+      // byte is greater than the '1' byte at the first differing position),
+      // even though 10 > 9 numerically. Both are genuine updates over the
+      // current tag; the winner must be the numerically higher one.
+      const container = createContainer({
+        image: {
+          tag: { value: 'v1.0.0-ls1', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.0.0-ls1', 'v1.0.0-ls9', 'v1.0.0-ls10'], log);
+
+      expect(result.tags).toEqual(['v1.0.0-ls10', 'v1.0.0-ls9']);
+    });
+
+    test('falls back to legacy semver comparison when the current tag has no numeric shape at all', () => {
+      // Defensive fallback: when the reference tag has no derivable numeric
+      // shape, the numeric-counter comparison cannot apply (there is nothing
+      // to compare against) and the existing semver-based check runs
+      // unchanged — which itself never treats "latest" as comparable, so no
+      // candidate is ever reported greater.
+      const container = createContainer({
+        image: {
+          tag: { value: 'latest', semver: true },
+        },
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.0.0'], log);
+
+      expect(result.tags).toEqual([]);
+    });
+
+    test('does not crash when only the candidate has no numeric shape (newline-mangled transform)', () => {
+      // The current tag has a normal numeric shape, but a transform can
+      // selectively mangle just a candidate tag beyond shape parsing (same
+      // technique as the #498 coverage above). This exercises the defensive
+      // null-candidate-shape side of the numeric-counter comparison (it must
+      // decline rather than throw); the shape-mangled candidate is separately
+      // rejected by the pre-existing family-match gate regardless of this
+      // comparison's outcome, since a null candidate shape can never satisfy
+      // isSemverFamilyMatch's segment-count check against a non-null
+      // reference.
+      const container = createContainer({
+        image: {
+          tag: { value: 'v1.2.3', semver: true },
+        },
+        transformTags: `${String.raw`^v5\.(.+)$ => v5.$1`}\nx`,
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      expect(() => getTagCandidates(container, ['v1.2.3', 'v5.0.0'], log)).not.toThrow();
+    });
+  });
 });
 
 describe('isPrereleaseSuffix (#498)', () => {
