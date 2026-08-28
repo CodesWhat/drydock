@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1-rc.5] — 2026-08-27
+
 ### Fixed
 
 - **Compose updates now pick up runtime defaults the new image ships.** A container recreated by the compose action was rebuilt from the stored config rather than re-reading the defaults baked into the pulled image, so anything the image sets for itself — `APP_VERSION`, `RELEASE_VERSION` and the like — carried over from the old container and made the UI keep reporting an update while the running image was already current. A manual `docker compose down && docker compose up -d` fixed it because compose rebuilds that config from the image every time. Backported from the v1.7 line, where the reporter's version could not reach it. ([#734](https://github.com/CodesWhat/drydock/issues/734), [#736](https://github.com/CodesWhat/drydock/pull/736))
-- **The Crowdin translation-sync workflow failed on every push to `dev/v1.6`** while a newer `dev/v1.7` branch also existed on origin, dying with `Your local changes to the following files would be overwritten by checkout`. The base-branch resolver always targeted the highest `dev/vX.Y` branch on origin regardless of which branch triggered the run, but the crowdin action had already downloaded translations into the working tree by the time that step ran, so checking out a *different* branch over those changes failed. A push straight to a `dev/vX.Y` branch now targets that branch directly as the base instead of going through the highest-wins lookup; scheduled and `workflow_dispatch` runs are unaffected and keep using it. (PR_LINK_PLACEHOLDER)
+- **The Crowdin translation-sync workflow failed on every push to `dev/v1.6`** while a newer `dev/v1.7` branch also existed on origin, dying with `Your local changes to the following files would be overwritten by checkout`. The base-branch resolver always targeted the highest `dev/vX.Y` branch on origin regardless of which branch triggered the run, but the crowdin action had already downloaded translations into the working tree by the time that step ran, so checking out a *different* branch over those changes failed. A push straight to a `dev/vX.Y` branch now targets that branch directly as the base instead of going through the highest-wins lookup; scheduled and `workflow_dispatch` runs are unaffected and keep using it. ([#906](https://github.com/CodesWhat/drydock/pull/906))
 
 ## [1.6.1-rc.4] — 2026-08-27
 
@@ -2430,7 +2432,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.4...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.5...HEAD
+[1.6.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.4...v1.6.1-rc.5
 [1.6.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.3...v1.6.1-rc.4
 [1.6.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.2...v1.6.1-rc.3
 [1.6.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.6.1-rc.1...v1.6.1-rc.2
