@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **An update that never started was reported as a failed update.** An operation that could not be resolved before the runtime was reachable was marked failed rather than expired, so users saw a failure for an update that had not run. ([#904](https://github.com/CodesWhat/drydock/pull/904))
 - **The Crowdin sync workflow failed on every push to a dev branch that was not the newest one.** The base resolver always picked the highest `dev/vX.Y` on origin regardless of which ref triggered the run, but the Crowdin action had already downloaded translations into the working tree by then, so checking out a different branch over them died with `Your local changes to the following files would be overwritten by checkout`. A push to a `dev/vX.Y` branch now targets that branch directly; scheduled and manually dispatched runs keep the highest-wins lookup and its default-branch fallback. ([run 33047712284](https://github.com/CodesWhat/drydock/actions/runs/33047712284))
 
+### Documentation
+
+- **The homepage FAQ described `DD_TRIGGER_*` as still deprecated, past its actual v1.7.0 removal.** It said the prefix was "a deprecated alias scheduled for removal", but v1.7.0 removed it outright: any `DD_TRIGGER_*` environment variable now fails startup with an error naming every offending variable and its exact `DD_ACTION_*`/`DD_NOTIFICATION_*` replacement (see `DEPRECATIONS.md`). The FAQ answer now says so, and a new test asserts the copy can't drift back to describing an already-removed feature as merely pending removal.
+- **Archived changelog snapshots kept relative `./DEPRECATIONS.md` links that don't resolve on the docs site.** `content/docs/v1.x/changelog/index.mdx` files are frozen copies of the root `CHANGELOG.md`, which uses relative links, and the docs sync script's per-version rewrite only handled absolute `/docs/...` targets. So the relative-link rewrite that already ran for the freshly generated current-version changelog never reached the frozen archives. `rewriteDocsLinksInDirectory` now routes changelog files through the same rewrite, fixing the two broken links in the v1.5 archive, and any future archive with the same pattern, without touching non-changelog content.
+
 ## [1.7.0-rc.4] — 2026-08-26
 
 ### Security

@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   rewriteChangelogLinksForVersion,
+  rewriteDocsFileForVersion,
   rewriteDocsLinksForVersion,
 } from "./docs-link-rewriter.mjs";
 
@@ -62,5 +63,29 @@ test("rewriteChangelogLinksForVersion points deprecation links at the docs page"
       "See [deprecations](/docs/v1.5/deprecations) for the full schedule.",
       "See [DEPRECATIONS.md](/docs/v1.5/deprecations) for migration guidance.",
     ].join("\n"),
+  );
+});
+
+test("rewriteDocsFileForVersion fixes relative DEPRECATIONS.md links in a changelog file", () => {
+  const input = "See [DEPRECATIONS.md](./DEPRECATIONS.md) for migration guidance.";
+  assert.equal(
+    rewriteDocsFileForVersion("changelog/index.mdx", input, "v1.5"),
+    "See [DEPRECATIONS.md](/docs/v1.5/deprecations) for migration guidance.",
+  );
+});
+
+test("rewriteDocsFileForVersion leaves a relative DEPRECATIONS.md mention alone outside changelog files", () => {
+  // Only content/docs/<version>/changelog/index.mdx is a frozen copy of the
+  // root CHANGELOG.md's relative links -- an unrelated doc page mentioning
+  // DEPRECATIONS.md this way isn't the pattern being fixed here.
+  const input = "See [DEPRECATIONS.md](./DEPRECATIONS.md) for migration guidance.";
+  assert.equal(rewriteDocsFileForVersion("configuration/index.mdx", input, "v1.5"), input);
+});
+
+test("rewriteDocsFileForVersion still rewrites absolute /docs links in a changelog file", () => {
+  const input = "[Quick Start](/docs/quickstart)";
+  assert.equal(
+    rewriteDocsFileForVersion("changelog/index.mdx", input, "v1.5"),
+    "[Quick Start](/docs/v1.5/quickstart)",
   );
 });

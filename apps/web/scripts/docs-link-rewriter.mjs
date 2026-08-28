@@ -32,3 +32,23 @@ export function rewriteChangelogLinksForVersion(content, versionSlug) {
     )
     .replace(/`DEPRECATIONS\.md`/g, `[deprecations](${deprecationsTarget})`);
 }
+
+const CHANGELOG_FILE_RE = /(^|\/)changelog\/index\.mdx?$/;
+
+// Applies both rewriters to a single synced doc file, keyed off its path
+// relative to the version's docs root. The root CHANGELOG.md source (and the
+// currently-generated changelog) use relative `./DEPRECATIONS.md` links,
+// which is also what got committed verbatim into the frozen
+// content/docs/v1.x/changelog/index.mdx snapshots when each version was
+// archived -- rewriteDocsLinksForVersion only rewrites absolute `/docs/...`
+// targets, so those relative links never got fixed. Scoping this to
+// changelog files (rather than running rewriteChangelogLinksForVersion over
+// every doc file) keeps the archived, deliberately-historical snapshots from
+// being touched anywhere a `DEPRECATIONS.md` mention isn't actually a
+// changelog link.
+export function rewriteDocsFileForVersion(relativePath, content, versionSlug) {
+  const withChangelogLinksFixed = CHANGELOG_FILE_RE.test(relativePath)
+    ? rewriteChangelogLinksForVersion(content, versionSlug)
+    : content;
+  return rewriteDocsLinksForVersion(withChangelogLinksFixed, versionSlug);
+}
