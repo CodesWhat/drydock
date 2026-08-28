@@ -79,3 +79,28 @@ test('Crowdin workflow lets crowdin.yml own the target language list', () => {
   expect(mappedLanguages).toContain('zh-TW');
   expect(step.with?.download_translations_args).toBeUndefined();
 });
+
+test('Crowdin PR creation authenticates with a minted App token, not the ambient GITHUB_TOKEN', () => {
+  // The ambient GITHUB_TOKEN can't create pull requests here
+  // (can_approve_pull_request_reviews is false org-wide), so the crowdin step
+  // 403'd with "GitHub Actions is not permitted to create or approve pull
+  // requests" right after it pushed l10n_crowdin — translations landed but the
+  // PR never opened. A dedicated GitHub App installation token is the fix.
+  const steps = loadWorkflow(workflowPath).jobs?.sync?.steps ?? [];
+  const appTokenStepIndex = steps.findIndex((step) => step.id === 'app-token');
+  const crowdinStepIndex = steps.findIndex((step) =>
+    step.uses?.startsWith('crowdin/github-action@'),
+  );
+  const appTokenStep = steps[appTokenStepIndex];
+  const crowdinStep = steps[crowdinStepIndex];
+
+  expect(appTokenStepIndex).toBeGreaterThanOrEqual(0);
+  expect(appTokenStep?.uses).toBe(
+    'actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1',
+  );
+  expect(appTokenStep?.with?.['app-id']).toBe('${{ secrets.CROWDIN_APP_ID }}');
+  expect(appTokenStep?.with?.['private-key']).toBe('${{ secrets.CROWDIN_APP_PRIVATE_KEY }}');
+
+  expect(crowdinStepIndex).toBeGreaterThan(appTokenStepIndex);
+  expect(crowdinStep?.env?.GITHUB_TOKEN).toBe('${{ steps.app-token.outputs.token }}');
+});

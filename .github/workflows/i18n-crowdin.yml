@@ -101,6 +101,31 @@ jobs:
           git fetch origin "refs/heads/${BASE}:refs/remotes/origin/${BASE}"
           git checkout -B "${BASE}" "refs/remotes/origin/${BASE}"
 
+      - name: Mint an App installation token for the translation PR
+        id: app-token
+        # `can_approve_pull_request_reviews` is false org-wide and repo-wide, and
+        # that control blocks GITHUB_TOKEN from CREATING pull requests, not just
+        # approving them — the crowdin step 403'd with "GitHub Actions is not
+        # permitted to create or approve pull requests" while still pushing the
+        # branch fine, so translations landed on l10n_crowdin and stopped there.
+        # The setting stays false (a workflow that can approve its own PRs
+        # defeats the two-approver rule); the fix is a dedicated identity.
+        # Chosen over a PAT for lifetime, not permissions. The App's stored
+        # credentials (id + private key) don't expire, so this can't silently
+        # re-break a year from now the way a PAT would. The token they mint is
+        # deliberately short-lived: fresh per run, dead in an hour.
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.CROWDIN_APP_ID }}
+          private-key: ${{ secrets.CROWDIN_APP_PRIVATE_KEY }}
+          # Narrow at mint time, not just at the App's install grants. Without
+          # these the token carries whatever the installation happens to hold,
+          # so broadening the App later would silently widen this workflow too.
+          # These two are exactly what the crowdin step needs: push l10n_crowdin
+          # and open the PR.
+          permission-contents: write
+          permission-pull-requests: write
+
       - uses: crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f  # v2.16.3
         with:
           user: auto
@@ -124,6 +149,6 @@ jobs:
           # git's global config at a mounted, writable file — GIT_CONFIG_GLOBAL
           # is honored independent of HOME (git >= 2.32).
           GIT_CONFIG_GLOBAL: /github/home/.gitconfig
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
