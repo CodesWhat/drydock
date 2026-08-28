@@ -6155,6 +6155,68 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     expect(persistedKeys).toEqual(['::local::live-app-2']);
   });
 
+  test('rehydrateUpdatePolicyRetentionCacheFromStore re-applies the size cap, dropping the oldest records from the Map and the durable store', () => {
+    // Lowering DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES between processes leaves the
+    // store holding more rows than the new limit allows. The stash path only trims after
+    // it has already restored them, so rehydration has to enforce the cap itself.
+    const nowMs = Date.now();
+    const maxEntries = container.UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES;
+    const overCap = [];
+    for (let i = 0; i <= maxEntries; i++) {
+      overCap.push({
+        cacheKey: `::local::overcap-app-${i}`,
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 60_000 + i,
+      });
+    }
+    mountPolicyRetentionStore(overCap);
+
+    container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+    const cache = container._getUpdatePolicyRetentionCacheForTests();
+    expect(cache.size).toBe(maxEntries);
+    expect(cache.has('::local::overcap-app-0')).toBe(false);
+    expect(cache.has(`::local::overcap-app-${maxEntries}`)).toBe(true);
+
+    const persistedKeys = updatePolicyRetentionCacheStore
+      .listRecords()
+      .map((record) => record.cacheKey);
+    expect(persistedKeys).toHaveLength(maxEntries);
+    expect(persistedKeys).not.toContain('::local::overcap-app-0');
+  });
+
+  test('rehydrateUpdatePolicyRetentionCacheFromStore restores oldest-first so the stash path still evicts the oldest', () => {
+    // listRecords() returns LokiJS document order. Inserting straight from it would leave
+    // the Map's insertion order unrelated to stash age, and the stash path's eviction
+    // reads that order as its LRU.
+    const nowMs = Date.now();
+    mountPolicyRetentionStore([
+      {
+        cacheKey: '::local::order-newest',
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 90_000,
+      },
+      {
+        cacheKey: '::local::order-oldest',
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 30_000,
+      },
+      {
+        cacheKey: '::local::order-middle',
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 60_000,
+      },
+    ]);
+
+    container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+    expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
+      '::local::order-oldest',
+      '::local::order-middle',
+      '::local::order-newest',
+    ]);
+  });
+
   // #565: unlike the lifecycle/clock cache (#556), updatePolicyRetentionCache never got a
   // durable write-through store, so a self-update (recreate -> SIGTERM -> new process) lost
   // the stashed maturity policy even though the clock survived it. This pins the fix.
