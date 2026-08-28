@@ -24,7 +24,7 @@
     "registries/providers/nexus/Nexus.ts",
     "registries/providers/ocir/Ocir.ts",
     "registries/providers/quay/Quay.ts",
-    "registries/providers/trueforge/trueforge.ts",
+    "registries/providers/trueforge/Trueforge.ts",
     "triggers/providers/apprise/Apprise.ts",
     "triggers/providers/command/Command.ts",
     "triggers/providers/discord/Discord.ts",
