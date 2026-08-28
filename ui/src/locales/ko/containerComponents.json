@@ -394,7 +394,7 @@
         "blocked": "차단됨"
       },
       "actionPolicyTooltip": {
-        "auto": "감지되면 Drydock가 이 업데이트를 자동으로 적용합니다 — 수동으로 클릭할 필요가 없습니다.",
+        "auto": "감지되면 Drydock이 이 업데이트를 자동으로 적용합니다 — 수동으로 클릭할 필요가 없습니다.",
         "manual": "이 업데이트는 수동으로 적용할 수 있지만 자동으로 실행되지는 않습니다.",
         "blocked": "현재 이 컨테이너를 허용하는 작업 트리거가 없습니다 — dd.action.include / dd.action.exclude / dd.action.auto 레이블을 확인하세요."
       },
@@ -404,7 +404,7 @@
         "insight": "새 버전 사용 가능 — 이 태그는 고정되어 있습니다.",
         "inProgress": "업데이트 진행 중입니다.",
         "hardBlocked": "업데이트가 차단되었습니다 — 수정이 필요합니다.",
-        "notify": "알림만 제공 — Drydock가 업데이트를 적용하지 않습니다.",
+        "notify": "알림만 제공 — Drydock이 업데이트를 적용하지 않습니다.",
         "autoFiltered": "업데이트 사용 가능 — 자동 실행이 필터링되었습니다(수동은 가능).",
         "manualFiltered": "업데이트 사용 가능 — 정책 조건에 따라 확인이 필요합니다.",
         "autoReady": "업데이트 사용 가능 — 자동 실행 대상입니다.",

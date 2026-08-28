@@ -8,7 +8,7 @@
     "general": {
       "updateMode": {
         "title": "전역 업데이트 모드",
-        "description": "Drydock가 업데이트를 보고만 할지, 수동 작업을 기다릴지, 적용 가능한 업데이트를 자동으로 실행할지 선택하세요.",
+        "description": "Drydock이 업데이트를 보고만 할지, 수동 작업을 기다릴지, 적용 가능한 업데이트를 자동으로 실행할지 선택하세요.",
         "options": {
           "notify": {
             "label": "알림",
