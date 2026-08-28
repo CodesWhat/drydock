@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.5] — 2026-08-27
+
 ### Security
 
 - **An unauthenticated Portwing hello could throw outside the callback error boundary.** A non-string compatibility value in the hello payload reached `.split()` before anything validated it. The payload is now validated before parsing. ([#904](https://github.com/CodesWhat/drydock/pull/904))
@@ -2563,7 +2565,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.4...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.5...HEAD
+[1.7.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.4...v1.7.0-rc.5
 [1.7.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.3...v1.7.0-rc.4
 [1.7.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.2...v1.7.0-rc.3
 [1.7.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.1...v1.7.0-rc.2
