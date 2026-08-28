@@ -114,13 +114,13 @@
         "openHint": "열기",
         "recentGroup": "Recent",
         "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
-        "agentSubtitle": "Agent · {status} · {host}",
-        "triggerSubtitle": "Trigger · {type}",
-        "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "containerSubtitle": "컨테이너 · {image} · {status} · {host}",
+        "agentSubtitle": "에이전트 · {status} · {host}",
+        "triggerSubtitle": "트리거 · {type}",
+        "watcherSubtitle": "워처 · {type}",
+        "registrySubtitle": "레지스트리 · {type}",
+        "authSubtitle": "인증 · {type}",
+        "notificationSubtitle": "알림 규칙 · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -136,9 +136,9 @@
         },
         "settings": {
           "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
+          "appearanceSubtitle": "설정 · 외관",
           "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "profileSubtitle": "설정 · 프로필"
         }
       },
       "connection": {
@@ -153,8 +153,8 @@
         "title": "Keyboard shortcuts",
         "close": "Close",
         "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
+        "closeSearch": "검색 닫기 또는 대화상자 닫기",
+        "showHelp": "도움말 표시",
         "toggleSearch": "Toggle search"
       }
     },
@@ -173,12 +173,12 @@
       "labelKeysLabel": "레이블 키 ({count}개): {keys}",
       "apiPathsLabel": "API 경로 ({count}개): {keys}",
       "healthcheckCommandLabel": "헬스체크 명령: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
+      "legacyConfigBody": "레거시 트리거 입력이 v1.6 호환성을 위해 계속 활성화되어 있습니다. v1.7 이전에 {triggerEnv} 변수를 {actionEnv} 또는 {notificationEnv}(으)로 이름을 변경하고, {triggerLabel} 레이블을 {actionLabel} 또는 {notificationLabel}(으)로 교체하세요.",
+      "legacyApiBody": "이 인스턴스의 클라이언트가 최근 제거된 버전 없는 {oldPrefix} 경로를 호출하여 {statusCode} 오류를 받고 있습니다. {v1Prefix} 접두사로 마이그레이션하세요. wud-card나 Homepage의 whatsupdocker 위젯과 같은 WUD 시대 통합은 마이그레이션 대신 {compatFlag}을(를) 설정할 수 있습니다.",
+      "curlHealthcheckBody": "Drydock 컨테이너가 사용자 정의 curl 기반 헬스체크 재정의를 사용하고 있습니다. curl은 v1.5.x 및 v1.6.x에서 하위 호환성을 위해 계속 사용할 수 있습니다. v1.6.0이 마지막 경고 릴리스이며, v1.7.0부터 이미지에서 curl이 제거됩니다. 내장된 이미지 헬스체크를 사용하거나 재정의를 {bin}(으)로 업데이트하세요.",
       "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
+      "installTitle": "Drydock을 앱으로 설치",
+      "installBody": "빠르게 접근하고 앱과 같은 사용 경험을 이용하려면 Drydock을 Dock이나 홈 화면에 추가하세요. 오프라인 셸도 포함되어 있습니다.",
       "installAction": "Install"
     }
   }

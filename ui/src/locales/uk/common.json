@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
+      "rateLimitHit": "Перевищено ліміт запитів реєстру",
+      "accessDenied": "Доступ до реєстру заборонено",
+      "imageNotFound": "Образ не знайдено",
+      "authFailed": "Помилка автентифікації реєстру",
       "unreachable": "Registry unreachable",
       "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "securityBlocked": "Заблоковано скануванням безпеки",
+      "signatureFailed": "Помилка перевірки підпису"
     },
     "display": {
       "custom": "Custom"

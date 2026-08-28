@@ -110,7 +110,7 @@
       "scheduled": "Scheduled",
       "openingSoon": "Opening soon"
     },
-    "dataLoadFailed": "Failed to load dashboard data",
+    "dataLoadFailed": "대시보드 데이터를 불러오지 못했습니다",
     "widgets": {
       "statContainers": "Containers",
       "statUpdates": "Updates Available",

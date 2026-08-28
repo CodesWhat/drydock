@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
+      "rateLimitHit": "Registry đã đạt giới hạn tốc độ",
+      "accessDenied": "Truy cập Registry bị từ chối",
+      "imageNotFound": "Không tìm thấy Image",
+      "authFailed": "Xác thực Registry thất bại",
       "unreachable": "Registry unreachable",
       "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "securityBlocked": "Bị chặn do quét bảo mật",
+      "signatureFailed": "Xác minh chữ ký thất bại"
     },
     "display": {
       "custom": "Custom"

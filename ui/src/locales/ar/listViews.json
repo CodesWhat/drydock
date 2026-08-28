@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "جارٍ تحميل قواعد الإشعارات...",
     "loadError": "فشل تحميل قواعد الإشعارات",
-    "saveError": "Failed to update notification rule",
+    "saveError": "فشل تحديث قاعدة الإشعار",
     "filterPlaceholder": "تصفية حسب الاسم أو الوصف أو المشغّل...",
     "clear": "مسح",
     "allNotificationTriggers": "جميع مشغّلات الإشعارات",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "عندما يصبح تحديث محجوب بسياسة النضج قابلاً للتطبيق"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "جارٍ تحميل بيانات الثغرات...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "فشل تحميل حالة وقت تشغيل الأمان",
     "scanNow": "فحص الآن",
     "scanning": "جارٍ الفحص...",
     "scanAllAriaLabel": "فحص جميع الحاويات",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "{fixed} مُصلَّحة، {new} جديدة"
     },
     "deltaTooltips": {
       "fixedSingle": "التحديث يُصلح {count} ثغرة",
@@ -299,7 +299,7 @@
       "unknown": "غير معروف"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "تعذّر تحميل أحدث تفاصيل السجل",
       "refreshing": "جارٍ تحديث تفاصيل السجل...",
       "status": "الحالة",
       "authentication": "المصادقة",
@@ -372,7 +372,7 @@
       "defaultError": "فشل اختبار المشغّل"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "تعذّر تحميل أحدث تفاصيل المشغّل",
       "status": "الحالة",
       "refreshing": "جارٍ تحديث تفاصيل المشغّل...",
       "noConfig": "لا توجد خصائص إعداد"
@@ -407,7 +407,7 @@
       "maint": "صيانة"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "تعذّر تحميل أحدث تفاصيل المراقب",
       "cron": "Cron",
       "lastRun": "آخر تشغيل",
       "containersWatched": "الحاويات تحت المراقبة",

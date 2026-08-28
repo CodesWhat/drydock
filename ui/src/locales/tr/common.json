@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
+      "rateLimitHit": "Kayıt defteri istek sınırı aşıldı",
+      "accessDenied": "Kayıt defteri erişimi reddedildi",
+      "imageNotFound": "İmaj bulunamadı",
+      "authFailed": "Kayıt defteri kimlik doğrulaması başarısız oldu",
       "unreachable": "Registry unreachable",
       "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "securityBlocked": "Güvenlik taraması tarafından engellendi",
+      "signatureFailed": "İmza doğrulaması başarısız oldu"
     },
     "display": {
       "custom": "Custom"

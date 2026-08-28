@@ -3,8 +3,8 @@
     "heading": "Вихідні",
     "refresh": "Оновити",
     "loading": "Завантаження вихідних записів…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Не вдалося завантажити вихідні сповіщення",
+    "ofCount": "{count} з {total}",
     "tabs": {
       "dead-letter": "Мертві листи",
       "pending": "Очікують",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Повторити",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Повторити запис вихідних",
       "discard": "Відхилити",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Відхилити запис вихідних"
     },
     "status": {
       "dead-letter": "Мертвий лист",

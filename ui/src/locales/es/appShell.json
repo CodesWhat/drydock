@@ -114,13 +114,13 @@
         "openHint": "abrir",
         "recentGroup": "Reciente",
         "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
-        "agentSubtitle": "Agent · {status} · {host}",
+        "containerSubtitle": "Contenedor · {image} · {status} · {host}",
+        "agentSubtitle": "Agente · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
         "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
+        "registrySubtitle": "Registro · {type}",
         "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "notificationSubtitle": "Regla de notificación · {id}",
         "scope": {
           "all": "Todos",
           "pages": "Pages",
@@ -136,9 +136,9 @@
         },
         "settings": {
           "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
+          "appearanceSubtitle": "Config · Apariencia",
           "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "profileSubtitle": "Config · Perfil"
         }
       },
       "connection": {
@@ -153,8 +153,8 @@
         "title": "Keyboard shortcuts",
         "close": "Close",
         "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
+        "closeSearch": "Cerrar la búsqueda o descartar diálogos",
+        "showHelp": "Mostrar esta ayuda",
         "toggleSearch": "Toggle search"
       }
     },
@@ -173,12 +173,12 @@
       "labelKeysLabel": "Claves de etiqueta ({count}): {keys}",
       "apiPathsLabel": "Rutas API ({count}): {keys}",
       "healthcheckCommandLabel": "Comando healthcheck: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
+      "legacyConfigBody": "Las entradas heredadas de trigger siguen activas por compatibilidad con v1.6. Renombra las variables {triggerEnv} a {actionEnv} o {notificationEnv}, y sustituye las etiquetas {triggerLabel} por {actionLabel} o {notificationLabel} antes de v1.7.",
+      "legacyApiBody": "Los clientes de esta instancia llamaron recientemente a la ruta {oldPrefix} sin versión, que fue eliminada, y están recibiendo errores {statusCode}. Migra esos clientes al prefijo {v1Prefix}. Las integraciones de la era WUD, como wud-card o el widget whatsupdocker de Homepage, pueden configurar {compatFlag} en lugar de migrar.",
+      "curlHealthcheckBody": "Tu contenedor de Drydock usa un override personalizado de healthcheck basado en curl. curl sigue disponible por compatibilidad retroactiva en v1.5.x y v1.6.x; v1.6.0 es la última versión con esta advertencia, y curl se eliminará de la imagen en v1.7.0. Usa el healthcheck integrado de la imagen, o actualiza tu override a {bin}.",
       "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
+      "installTitle": "Instalar Drydock como aplicación",
+      "installBody": "Añade Drydock a tu dock o pantalla de inicio para un acceso rápido y una experiencia similar a una app, con shell sin conexión incluido.",
       "installAction": "Install"
     }
   }

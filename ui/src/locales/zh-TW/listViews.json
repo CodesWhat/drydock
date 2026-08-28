@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "正在載入通知規則……",
     "loadError": "無法載入通知規則",
-    "saveError": "Failed to update notification rule",
+    "saveError": "無法更新通知規則",
     "filterPlaceholder": "按名稱、描述或觸發器篩選……",
     "clear": "清除",
     "allNotificationTriggers": "所有通知觸發器",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "當被成熟度策略保留的更新變為可套用時"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "正在載入漏洞資料……",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "無法載入安全執行時狀態",
     "scanNow": "立即掃描",
     "scanning": "掃描中……",
     "scanAllAriaLabel": "掃描所有容器",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "{fixed} 個已修復，{new} 個新增"
     },
     "deltaTooltips": {
       "fixedSingle": "更新可修復 {count} 個漏洞",
@@ -299,7 +299,7 @@
       "unknown": "未知"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "無法載入最新的倉庫詳情",
       "refreshing": "正在重新整理倉庫詳情……",
       "status": "狀態",
       "authentication": "認證",
@@ -372,7 +372,7 @@
       "defaultError": "觸發器測試失敗"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "無法載入最新的觸發器詳情",
       "status": "狀態",
       "refreshing": "正在重新整理觸發器詳情……",
       "noConfig": "無配置屬性"
@@ -407,7 +407,7 @@
       "maint": "維護"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "無法載入最新的監視器詳情",
       "cron": "Cron",
       "lastRun": "上次執行",
       "containersWatched": "監視的容器",

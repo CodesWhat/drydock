@@ -66,11 +66,11 @@
       "scanNow": "فحص الآن"
     },
     "notifications": {
-      "loadFailed": "Failed to load notifications"
+      "loadFailed": "فشل تحميل الإشعارات"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration",
-      "actionsDisabledReason": "Container actions disabled by server configuration"
+      "loadFailed": "فشل تحميل إعداد ميزات الخادم",
+      "actionsDisabledReason": "إجراءات الحاوية معطّلة بواسطة إعداد الخادم"
     }
   }
 }

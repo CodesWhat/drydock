@@ -91,7 +91,7 @@
       },
       "about": {
         "title": "Drydock",
-        "subtitle": "Docker Container Update Manager",
+        "subtitle": "Docker-Container-Update-Manager",
         "documentation": "Dokumentation",
         "github": "GitHub",
         "changelog": "Changelog",
@@ -120,7 +120,7 @@
         "watcherSubtitle": "Watcher · {type}",
         "registrySubtitle": "Registry · {type}",
         "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "notificationSubtitle": "Benachrichtigungsregel · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -136,9 +136,9 @@
         },
         "settings": {
           "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
+          "appearanceSubtitle": "Config · Darstellung",
           "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "profileSubtitle": "Config · Profil"
         }
       },
       "connection": {
@@ -153,8 +153,8 @@
         "title": "Keyboard shortcuts",
         "close": "Close",
         "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
+        "closeSearch": "Suche schließen oder Dialoge ausblenden",
+        "showHelp": "Diese Hilfe anzeigen",
         "toggleSearch": "Toggle search"
       }
     },
@@ -173,12 +173,12 @@
       "labelKeysLabel": "Label-Keys ({count}): {keys}",
       "apiPathsLabel": "API-Pfade ({count}): {keys}",
       "healthcheckCommandLabel": "Healthcheck-Befehl: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
+      "legacyConfigBody": "Legacy-Trigger-Eingaben sind weiterhin aus Kompatibilitätsgründen mit v1.6 aktiv. Benennen Sie {triggerEnv}-Variablen in {actionEnv} oder {notificationEnv} um, und ersetzen Sie {triggerLabel}-Labels durch {actionLabel} oder {notificationLabel} vor v1.7.",
+      "legacyApiBody": "Clients auf dieser Instanz haben kürzlich den entfernten unversionierten Pfad {oldPrefix} aufgerufen und erhalten {statusCode}-Fehler. Migrieren Sie sie auf das Präfix {v1Prefix}. WUD-Ära-Integrationen wie wud-card oder das whatsupdocker-Widget von Homepage können statt einer Migration {compatFlag} setzen.",
+      "curlHealthcheckBody": "Ihr Drydock-Container verwendet einen benutzerdefinierten curl-basierten Healthcheck-Override. curl bleibt in v1.5.x und v1.6.x aus Gründen der Abwärtskompatibilität verfügbar; v1.6.0 ist die letzte Version mit Warnhinweis, und curl wird in v1.7.0 aus dem Image entfernt. Bevorzugen Sie den integrierten Image-Healthcheck, oder aktualisieren Sie Ihren Override auf {bin}.",
       "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
+      "installTitle": "Drydock als App installieren",
+      "installBody": "Fügen Sie Drydock zu Ihrem Dock oder Startbildschirm hinzu, für schnellen Zugriff und ein App-ähnliches Erlebnis, inklusive Offline-Shell.",
       "installAction": "Install"
     }
   }

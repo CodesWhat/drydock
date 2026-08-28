@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
+      "rateLimitHit": "仓库速率限制已触发",
+      "accessDenied": "仓库访问被拒绝",
+      "imageNotFound": "未找到镜像",
+      "authFailed": "仓库认证失败",
       "unreachable": "Registry unreachable",
       "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "securityBlocked": "被安全扫描阻止",
+      "signatureFailed": "签名验证失败"
     },
     "display": {
       "custom": "Custom"

@@ -3,8 +3,8 @@
     "heading": "Posta in uscita",
     "refresh": "Aggiorna",
     "loading": "Caricamento voci in uscita...",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Impossibile caricare la posta in uscita delle notifiche",
+    "ofCount": "{count} di {total}",
     "tabs": {
       "dead-letter": "Dead-letter",
       "pending": "In attesa",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Riprova",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Riprova voce posta in uscita",
       "discard": "Scarta",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Scarta voce posta in uscita"
     },
     "status": {
       "dead-letter": "Dead-letter",

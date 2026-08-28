@@ -114,13 +114,13 @@
         "openHint": "打开",
         "recentGroup": "Recent",
         "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
-        "agentSubtitle": "Agent · {status} · {host}",
-        "triggerSubtitle": "Trigger · {type}",
-        "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "containerSubtitle": "容器 · {image} · {status} · {host}",
+        "agentSubtitle": "代理 · {status} · {host}",
+        "triggerSubtitle": "触发器 · {type}",
+        "watcherSubtitle": "监视器 · {type}",
+        "registrySubtitle": "仓库 · {type}",
+        "authSubtitle": "认证 · {type}",
+        "notificationSubtitle": "通知规则 · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -136,9 +136,9 @@
         },
         "settings": {
           "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
+          "appearanceSubtitle": "配置 · 外观",
           "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "profileSubtitle": "配置 · 个人资料"
         }
       },
       "connection": {
@@ -153,8 +153,8 @@
         "title": "Keyboard shortcuts",
         "close": "Close",
         "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
+        "closeSearch": "关闭搜索或关闭对话框",
+        "showHelp": "显示此帮助",
         "toggleSearch": "Toggle search"
       }
     },
@@ -173,12 +173,12 @@
       "labelKeysLabel": "标签 ({count}): {keys}",
       "apiPathsLabel": "API 路径 ({count}): {keys}",
       "healthcheckCommandLabel": "健康检查命令：{command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
+      "legacyConfigBody": "为兼容 v1.6，旧版触发器输入仍然有效。请在 v1.7 之前将 {triggerEnv} 变量重命名为 {actionEnv} 或 {notificationEnv}，并将 {triggerLabel} 标签替换为 {actionLabel} 或 {notificationLabel}。",
+      "legacyApiBody": "此实例上的客户端最近调用了已移除的无版本号路径 {oldPrefix}，并收到了 {statusCode} 错误。请将其迁移到 {v1Prefix} 前缀。像 wud-card 或 Homepage 的 whatsupdocker 小部件这样的 WUD 时代集成，可以设置 {compatFlag} 而不必迁移。",
+      "curlHealthcheckBody": "您的 Drydock 容器使用了自定义的基于 curl 的健康检查覆盖。为保持向后兼容，curl 在 v1.5.x 和 v1.6.x 中仍然可用；v1.6.0 是最后一个警告版本，curl 将在 v1.7.0 中从镜像中移除。请优先使用内置的镜像健康检查，或将您的覆盖更新为 {bin}。",
       "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
+      "installTitle": "将 Drydock 安装为应用",
+      "installBody": "将 Drydock 添加到程序坞或主屏幕，快速访问并获得类应用体验，包含离线支持。",
       "installAction": "Install"
     }
   }

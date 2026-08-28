@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "Meldingsregels laden...",
     "loadError": "Kan meldingsregels niet laden",
-    "saveError": "Failed to update notification rule",
+    "saveError": "Kan meldingsregel niet bijwerken",
     "filterPlaceholder": "Filter op naam, beschrijving of trigger...",
     "clear": "Wissen",
     "allNotificationTriggers": "Alle meldingen worden geactiveerd",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "Wanneer een update die is tegengehouden door het volwassenheidsbeleid van toepassing wordt"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Kwetsbaarheidsgegevens laden...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "Kan beveiligingsruntimestatus niet laden",
     "scanNow": "Nu scannen",
     "scanning": "Scannen...",
     "scanAllAriaLabel": "Scan alle containers",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "{fixed} verholpen, {new} nieuw"
     },
     "deltaTooltips": {
       "fixedSingle": "Update verhelpt {count} kwetsbaarheid",
@@ -299,7 +299,7 @@
       "unknown": "Onbekend"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "Kan de nieuwste registergegevens niet laden",
       "refreshing": "Registergegevens vernieuwen...",
       "status": "Status",
       "authentication": "Authenticatie",
@@ -372,7 +372,7 @@
       "defaultError": "Triggertest mislukt"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "Kan de nieuwste triggerdetails niet laden",
       "status": "Status",
       "refreshing": "Triggerdetails vernieuwen...",
       "noConfig": "Geen configuratie-eigenschappen"
@@ -407,7 +407,7 @@
       "maint": "Onderhoud"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "Kan de nieuwste details van de kijker niet laden",
       "cron": "Cron",
       "lastRun": "Laatste run",
       "containersWatched": "Containers in de gaten gehouden",

@@ -58,7 +58,7 @@
         "entries": "{count} girişleri",
         "statusLive": "Canlı",
         "statusOffline": "Çevrimdışı",
-        "loadError": "Failed to load agent logs"
+        "loadError": "Aracı günlükleri yüklenemedi"
       },
       "fields": {
         "cpus": "CPU'lar",

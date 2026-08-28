@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "正在加载通知规则...",
     "loadError": "无法加载通知规则",
-    "saveError": "Failed to update notification rule",
+    "saveError": "无法更新通知规则",
     "filterPlaceholder": "按名称、描述或触发器筛选...",
     "clear": "清除",
     "allNotificationTriggers": "所有通知触发器",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "当被成熟度策略搁置的更新变为可用时"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "正在加载漏洞数据...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "无法加载安全运行时状态",
     "scanNow": "立即扫描",
     "scanning": "扫描中...",
     "scanAllAriaLabel": "扫描所有容器",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "已修复 {fixed} 个，新增 {new} 个"
     },
     "deltaTooltips": {
       "fixedSingle": "更新可修复 {count} 个漏洞",
@@ -299,7 +299,7 @@
       "unknown": "未知"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "无法加载最新的仓库详情",
       "refreshing": "正在刷新仓库详情...",
       "status": "状态",
       "authentication": "认证",
@@ -372,7 +372,7 @@
       "defaultError": "触发器测试失败"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "无法加载最新的触发器详情",
       "status": "状态",
       "refreshing": "正在刷新触发器详情...",
       "noConfig": "无配置属性"
@@ -407,7 +407,7 @@
       "maint": "维护"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "无法加载最新的监视器详情",
       "cron": "Cron",
       "lastRun": "上次运行",
       "containersWatched": "监视的容器",

@@ -58,7 +58,7 @@
         "entries": "{count}개 항목",
         "statusLive": "실시간",
         "statusOffline": "오프라인",
-        "loadError": "Failed to load agent logs"
+        "loadError": "에이전트 로그를 불러오지 못했습니다"
       },
       "fields": {
         "cpus": "CPU",

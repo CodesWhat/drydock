@@ -69,7 +69,7 @@
       "loadFailed": "Error al cargar las notificaciones"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration",
+      "loadFailed": "Error al cargar la configuración de funciones del servidor",
       "actionsDisabledReason": "Acciones de contenedores desactivadas por la configuración del servidor"
     }
   }

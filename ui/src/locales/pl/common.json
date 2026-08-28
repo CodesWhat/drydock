@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
+      "rateLimitHit": "Przekroczono limit zapytań do rejestru",
+      "accessDenied": "Odmowa dostępu do rejestru",
+      "imageNotFound": "Nie znaleziono obrazu",
+      "authFailed": "Uwierzytelnianie w rejestrze nie powiodło się",
       "unreachable": "Registry unreachable",
       "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "securityBlocked": "Zablokowane przez skanowanie zabezpieczeń",
+      "signatureFailed": "Weryfikacja podpisu nie powiodła się"
     },
     "display": {
       "custom": "Custom"

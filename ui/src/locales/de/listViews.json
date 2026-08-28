@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "Benachrichtigungsregeln werden geladen...",
     "loadError": "Benachrichtigungsregeln konnten nicht geladen werden",
-    "saveError": "Failed to update notification rule",
+    "saveError": "Benachrichtigungsregel konnte nicht aktualisiert werden",
     "filterPlaceholder": "Nach Name, Beschreibung oder Trigger filtern...",
     "clear": "Löschen",
     "allNotificationTriggers": "Alle Benachrichtigungstrigger",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "Wenn ein durch die Reife-Policy zurückgehaltenes Update anwendbar wird"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Schwachstellendaten werden geladen...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "Sicherheits-Runtime-Status konnte nicht geladen werden",
     "scanNow": "Jetzt scannen",
     "scanning": "Scan läuft...",
     "scanAllAriaLabel": "Alle Container scannen",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "{fixed} behoben, {new} neu"
     },
     "deltaTooltips": {
       "fixedSingle": "Update behebt {count} Schwachstelle",
@@ -299,7 +299,7 @@
       "unknown": "Unbekannt"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "Die neuesten Registry-Details konnten nicht geladen werden",
       "refreshing": "Registry-Details werden aktualisiert...",
       "status": "Status",
       "authentication": "Authentifizierung",
@@ -372,7 +372,7 @@
       "defaultError": "Trigger-Test fehlgeschlagen"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "Die neuesten Trigger-Details konnten nicht geladen werden",
       "status": "Status",
       "refreshing": "Trigger-Details werden aktualisiert...",
       "noConfig": "Keine Konfigurationseigenschaften"
@@ -407,7 +407,7 @@
       "maint": "Wart"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "Die neuesten Watcher-Details konnten nicht geladen werden",
       "cron": "Cron",
       "lastRun": "Letzter Lauf",
       "containersWatched": "Beobachtete Container",

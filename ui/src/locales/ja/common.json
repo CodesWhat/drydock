@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
+      "rateLimitHit": "レジストリのレート制限に達しました",
+      "accessDenied": "レジストリへのアクセスが拒否されました",
+      "imageNotFound": "イメージが見つかりません",
+      "authFailed": "レジストリ認証に失敗しました",
       "unreachable": "Registry unreachable",
       "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "securityBlocked": "セキュリティスキャンによりブロックされました",
+      "signatureFailed": "署名の検証に失敗しました"
     },
     "display": {
       "custom": "Custom"

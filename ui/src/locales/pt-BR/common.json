@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
+      "rateLimitHit": "Limite de taxa do registry atingido",
+      "accessDenied": "Acesso ao registry negado",
+      "imageNotFound": "Imagem não encontrada",
+      "authFailed": "Falha na autenticação do registry",
       "unreachable": "Registry unreachable",
       "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "securityBlocked": "Bloqueado pelo scan de segurança",
+      "signatureFailed": "Falha na verificação de assinatura"
     },
     "display": {
       "custom": "Custom"

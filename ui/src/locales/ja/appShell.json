@@ -114,13 +114,13 @@
         "openHint": "開く",
         "recentGroup": "Recent",
         "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
-        "agentSubtitle": "Agent · {status} · {host}",
-        "triggerSubtitle": "Trigger · {type}",
-        "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "containerSubtitle": "コンテナ · {image} · {status} · {host}",
+        "agentSubtitle": "エージェント · {status} · {host}",
+        "triggerSubtitle": "トリガー · {type}",
+        "watcherSubtitle": "ウォッチャー · {type}",
+        "registrySubtitle": "レジストリ · {type}",
+        "authSubtitle": "認証 · {type}",
+        "notificationSubtitle": "通知ルール · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -136,9 +136,9 @@
         },
         "settings": {
           "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
+          "appearanceSubtitle": "設定 · 外観",
           "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "profileSubtitle": "設定 · プロフィール"
         }
       },
       "connection": {
@@ -153,8 +153,8 @@
         "title": "Keyboard shortcuts",
         "close": "Close",
         "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
+        "closeSearch": "検索またはダイアログを閉じる",
+        "showHelp": "このヘルプを表示",
         "toggleSearch": "Toggle search"
       }
     },
@@ -173,12 +173,12 @@
       "labelKeysLabel": "ラベルキー（{count} 件）：{keys}",
       "apiPathsLabel": "API パス（{count} 件）：{keys}",
       "healthcheckCommandLabel": "ヘルスチェックコマンド：{command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
+      "legacyConfigBody": "レガシートリガー入力は v1.6 との互換性のため引き続き有効です。v1.7 までに {triggerEnv} 変数を {actionEnv} または {notificationEnv} にリネームし、{triggerLabel} ラベルを {actionLabel} または {notificationLabel} に置き換えてください。",
+      "legacyApiBody": "このインスタンス上のクライアントが、削除されたバージョン指定なしの {oldPrefix} パスを最近呼び出し、{statusCode} エラーを受け取っています。{v1Prefix} プレフィックスへ移行してください。wud-card や Homepage の whatsupdocker ウィジェットなど WUD 時代の連携ツールは、移行の代わりに {compatFlag} を設定できます。",
+      "curlHealthcheckBody": "お使いの Drydock コンテナは、カスタムの curl ベースのヘルスチェックオーバーライドを使用しています。curl は v1.5.x と v1.6.x では後方互換性のために引き続き利用できますが、v1.6.0 が最終の警告リリースとなり、v1.7.0 ではイメージから curl が削除されます。組み込みのイメージヘルスチェックを使用するか、オーバーライドを {bin} に更新してください。",
       "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
+      "installTitle": "Drydock をアプリとしてインストール",
+      "installBody": "Drydock をドックまたはホーム画面に追加すると、すばやくアクセスでき、オフラインシェルを含むアプリのような操作感が得られます。",
       "installAction": "Install"
     }
   }

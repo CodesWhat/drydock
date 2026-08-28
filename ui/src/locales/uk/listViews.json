@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "Завантаження правил сповіщень...",
     "loadError": "Не вдалося завантажити правила сповіщень",
-    "saveError": "Failed to update notification rule",
+    "saveError": "Не вдалося оновити правило сповіщення",
     "filterPlaceholder": "Фільтр за назвою, описом або тригером...",
     "clear": "Очистити",
     "allNotificationTriggers": "Всі тригери сповіщень",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "Коли оновлення, стримане політикою зрілості, стає застосовним"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Завантаження даних про вразливості...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "Не вдалося завантажити статус середовища виконання безпеки",
     "scanNow": "Сканувати зараз",
     "scanning": "Сканування...",
     "scanAllAriaLabel": "Сканувати всі контейнери",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "{fixed} усунуто, {new} нових"
     },
     "deltaTooltips": {
       "fixedSingle": "Оновлення усуває {count} вразливість",
@@ -299,7 +299,7 @@
       "unknown": "Невідомо"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "Не вдалося завантажити останні дані реєстру",
       "refreshing": "Оновлення даних реєстру...",
       "status": "Статус",
       "authentication": "Автентифікація",
@@ -372,7 +372,7 @@
       "defaultError": "Тест тригера не вдався"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "Не вдалося завантажити останні дані тригера",
       "status": "Статус",
       "refreshing": "Оновлення даних тригера...",
       "noConfig": "Немає властивостей конфігурації"
@@ -407,7 +407,7 @@
       "maint": "Обслуговування"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "Не вдалося завантажити останні дані спостерігача",
       "cron": "Cron",
       "lastRun": "Останній запуск",
       "containersWatched": "Контейнери під спостереженням",

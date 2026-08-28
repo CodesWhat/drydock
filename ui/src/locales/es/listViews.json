@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "Cargando reglas de notificación...",
     "loadError": "No se pudieron cargar las reglas de notificación",
-    "saveError": "Failed to update notification rule",
+    "saveError": "No se pudo actualizar la regla de notificación",
     "filterPlaceholder": "Filtrar por nombre, descripción o trigger...",
     "clear": "Limpiar",
     "allNotificationTriggers": "Todos los triggers de notificación",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "Cuando una actualización retenida por la política de madurez se vuelve aplicable"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Cargando datos de vulnerabilidades...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "No se pudo cargar el estado runtime de seguridad",
     "scanNow": "Escanear ahora",
     "scanning": "Escaneando...",
     "scanAllAriaLabel": "Escanear todos los contenedores",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "{fixed} corregidas, {new} nuevas"
     },
     "deltaTooltips": {
       "fixedSingle": "La actualización corrige {count} vulnerabilidad",
@@ -299,7 +299,7 @@
       "unknown": "Desconocido"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "No se pudieron cargar los últimos detalles del registro",
       "refreshing": "Actualizando detalles del registro...",
       "status": "Estado",
       "authentication": "Autenticación",
@@ -372,7 +372,7 @@
       "defaultError": "Prueba de trigger fallida"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "No se pudieron cargar los últimos detalles del trigger",
       "status": "Estado",
       "refreshing": "Actualizando detalles del trigger...",
       "noConfig": "Sin propiedades de configuración"
@@ -407,7 +407,7 @@
       "maint": "Mant"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "No se pudieron cargar los últimos detalles del watcher",
       "cron": "Cron",
       "lastRun": "Última ejecución",
       "containersWatched": "Contenedores vigilados",

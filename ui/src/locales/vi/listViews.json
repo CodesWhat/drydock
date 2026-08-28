@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "Đang tải quy tắc thông báo...",
     "loadError": "Không thể tải quy tắc thông báo",
-    "saveError": "Failed to update notification rule",
+    "saveError": "Không thể cập nhật quy tắc thông báo",
     "filterPlaceholder": "Lọc theo tên, mô tả hoặc trigger...",
     "clear": "Xóa",
     "allNotificationTriggers": "Tất cả trigger thông báo",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "Khi cập nhật bị chính sách độ chín giữ lại trở nên khả dụng"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Đang tải dữ liệu lỗ hổng...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "Không thể tải trạng thái runtime bảo mật",
     "scanNow": "Quét ngay",
     "scanning": "Đang quét...",
     "scanAllAriaLabel": "Quét tất cả container",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "{fixed} đã vá, {new} mới"
     },
     "deltaTooltips": {
       "fixedSingle": "Cập nhật vá {count} lỗ hổng",
@@ -299,7 +299,7 @@
       "unknown": "Không xác định"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "Không thể tải chi tiết Registry mới nhất",
       "refreshing": "Đang làm mới thông tin registry...",
       "status": "Trạng thái",
       "authentication": "Xác thực",
@@ -372,7 +372,7 @@
       "defaultError": "Kiểm tra trigger thất bại"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "Không thể tải chi tiết Trigger mới nhất",
       "status": "Trạng thái",
       "refreshing": "Đang làm mới thông tin trigger...",
       "noConfig": "Không có thuộc tính cấu hình"
@@ -407,7 +407,7 @@
       "maint": "Bảo trì"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "Không thể tải chi tiết Watcher mới nhất",
       "cron": "Cron",
       "lastRun": "Lần chạy cuối",
       "containersWatched": "Container đang theo dõi",

@@ -58,7 +58,7 @@
         "entries": "{count} записів",
         "statusLive": "В ефірі",
         "statusOffline": "Офлайн",
-        "loadError": "Failed to load agent logs"
+        "loadError": "Не вдалося завантажити журнали агента"
       },
       "fields": {
         "cpus": "CPU",

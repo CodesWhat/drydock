@@ -3,8 +3,8 @@
     "heading": "Skrzynka nadawcza",
     "refresh": "Odśwież",
     "loading": "Ładowanie wpisów skrzynki nadawczej…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Nie udało się załadować skrzynki nadawczej powiadomień",
+    "ofCount": "{count} z {total}",
     "tabs": {
       "dead-letter": "Niedostarczone",
       "pending": "Oczekujące",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Ponów",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Ponów wpis skrzynki nadawczej",
       "discard": "Odrzuć",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Odrzuć wpis skrzynki nadawczej"
     },
     "status": {
       "dead-letter": "Niedostarczone",

@@ -66,11 +66,11 @@
       "scanNow": "지금 스캔"
     },
     "notifications": {
-      "loadFailed": "Failed to load notifications"
+      "loadFailed": "알림을 불러오지 못했습니다"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration",
-      "actionsDisabledReason": "Container actions disabled by server configuration"
+      "loadFailed": "서버 기능 구성을 불러오지 못했습니다",
+      "actionsDisabledReason": "서버 구성에 의해 컨테이너 작업이 비활성화되었습니다"
     }
   }
 }

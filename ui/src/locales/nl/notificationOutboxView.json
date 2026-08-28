@@ -3,8 +3,8 @@
     "heading": "Postvak uit",
     "refresh": "Vernieuwen",
     "loading": "Postvakuitems laden…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Kan postvak uit niet laden",
+    "ofCount": "{count} van {total}",
     "tabs": {
       "dead-letter": "Dead-letter",
       "pending": "In behandeling",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Opnieuw proberen",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Postvakitem opnieuw proberen",
       "discard": "Verwijderen",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Postvakitem verwijderen"
     },
     "status": {
       "dead-letter": "Dead-letter",

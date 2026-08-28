@@ -58,7 +58,7 @@
         "entries": "{count} 條記錄",
         "statusLive": "線上",
         "statusOffline": "離線",
-        "loadError": "Failed to load agent logs"
+        "loadError": "無法載入代理日誌"
       },
       "fields": {
         "cpus": "CPU",

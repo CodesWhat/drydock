@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
+      "rateLimitHit": "레지스트리 요청 제한 초과",
+      "accessDenied": "레지스트리 접근 거부됨",
+      "imageNotFound": "이미지를 찾을 수 없음",
+      "authFailed": "레지스트리 인증 실패",
       "unreachable": "Registry unreachable",
       "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "securityBlocked": "보안 스캔에 의해 차단됨",
+      "signatureFailed": "서명 검증 실패"
     },
     "display": {
       "custom": "Custom"

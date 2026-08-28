@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "알림 규칙 불러오는 중...",
     "loadError": "알림 규칙을 불러오지 못했습니다",
-    "saveError": "Failed to update notification rule",
+    "saveError": "알림 규칙을 업데이트하지 못했습니다",
     "filterPlaceholder": "이름, 설명 또는 트리거로 필터...",
     "clear": "초기화",
     "allNotificationTriggers": "전체 알림 트리거",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "성숙도 정책으로 보류된 업데이트가 적용 가능해질 때"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "취약성 데이터 불러오는 중...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "보안 런타임 상태를 불러오지 못했습니다",
     "scanNow": "지금 스캔",
     "scanning": "스캔 중...",
     "scanAllAriaLabel": "모든 컨테이너 스캔",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "{fixed}개 수정, {new}개 신규"
     },
     "deltaTooltips": {
       "fixedSingle": "업데이트로 {count}개 취약점 수정",
@@ -299,7 +299,7 @@
       "unknown": "알 수 없음"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "최신 레지스트리 상세 정보를 불러올 수 없습니다",
       "refreshing": "레지스트리 상세 정보 새로 고침 중...",
       "status": "상태",
       "authentication": "인증",
@@ -372,7 +372,7 @@
       "defaultError": "트리거 테스트 실패"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "최신 트리거 상세 정보를 불러올 수 없습니다",
       "status": "상태",
       "refreshing": "트리거 상세 정보 새로 고침 중...",
       "noConfig": "구성 속성이 없습니다"
@@ -407,7 +407,7 @@
       "maint": "유지보수"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "최신 워처 상세 정보를 불러올 수 없습니다",
       "cron": "Cron",
       "lastRun": "마지막 실행",
       "containersWatched": "감시 중인 컨테이너",

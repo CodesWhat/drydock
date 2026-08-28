@@ -3,8 +3,8 @@
     "heading": "Boîte d'envoi",
     "refresh": "Actualiser",
     "loading": "Chargement des entrées...",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Impossible de charger la boîte d'envoi",
+    "ofCount": "{count} sur {total}",
     "tabs": {
       "dead-letter": "Dead-letter",
       "pending": "En attente",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Réessayer",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Réessayer l'entrée de la boîte d'envoi",
       "discard": "Rejeter",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Rejeter l'entrée de la boîte d'envoi"
     },
     "status": {
       "dead-letter": "Dead-letter",

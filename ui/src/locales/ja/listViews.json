@@ -75,7 +75,7 @@
   "notificationsView": {
     "loadingRules": "通知ルールを読み込み中...",
     "loadError": "通知ルールの読み込みに失敗しました",
-    "saveError": "Failed to update notification rule",
+    "saveError": "通知ルールの更新に失敗しました",
     "filterPlaceholder": "名前、説明、またはトリガーで絞り込む...",
     "clear": "クリア",
     "allNotificationTriggers": "全通知トリガー",
@@ -111,7 +111,7 @@
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "description": "成熟度ポリシーにより保留されていた更新が適用可能になった場合"
       }
     },
     "columns": {
@@ -162,7 +162,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "脆弱性データを読み込み中...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "セキュリティランタイムステータスの読み込みに失敗しました",
     "scanNow": "今すぐスキャン",
     "scanning": "スキャン中...",
     "scanAllAriaLabel": "全コンテナをスキャン",
@@ -207,7 +207,7 @@
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "both": "{fixed} 件修正、{new} 件新規"
     },
     "deltaTooltips": {
       "fixedSingle": "更新により {count} 件の脆弱性が修正されます",
@@ -299,7 +299,7 @@
       "unknown": "不明"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "最新のレジストリ詳細を読み込めませんでした",
       "refreshing": "レジストリの詳細を更新中...",
       "status": "ステータス",
       "authentication": "認証",
@@ -372,7 +372,7 @@
       "defaultError": "トリガーテストが失敗しました"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "最新のトリガー詳細を読み込めませんでした",
       "status": "ステータス",
       "refreshing": "トリガーの詳細を更新中...",
       "noConfig": "設定プロパティがありません"
@@ -407,7 +407,7 @@
       "maint": "メンテナンス"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "最新のウォッチャー詳細を読み込めませんでした",
       "cron": "Cron",
       "lastRun": "前回実行",
       "containersWatched": "監視中のコンテナ",
