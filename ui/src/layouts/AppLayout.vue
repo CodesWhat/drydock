@@ -1542,8 +1542,8 @@ onUnmounted(() => {
                     :aria-expanded="String(showUserMenu)"
                     class="flex items-center gap-2 dd-rounded px-1.5 py-1 transition-colors hover:dd-bg-elevated"
                     @click="toggleUserMenu">
-              <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                   style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));">
+              <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+                   style="background: var(--dd-primary); color: var(--dd-primary-fg);">
                 {{ userInitials }}
               </div>
               <AppIcon name="chevron-down" :size="12" class="dd-text-muted" />

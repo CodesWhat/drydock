@@ -11,15 +11,29 @@ import NotificationOutboxView from '@/views/NotificationOutboxView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
 // ── router mocks ─────────────────────────────────────────────────────────────
+// `mockRoute` stays the plain object every existing test writes `mockRoute.query = {...}`
+// to before mounting. `useRoute()` below wraps it in `reactive()` and `router.replace()`
+// writes through that same reactive proxy so the component's `watch(() => route.query.status)`
+// actually re-fires after mount — needed to exercise the tab-switch race in
+// "reruns loadEntries when route query status changes" without reimplementing vue-router.
 const { mockRoute, mockRouter } = vi.hoisted(() => ({
   mockRoute: { query: {} as Record<string, unknown> },
   mockRouter: { replace: vi.fn() },
 }));
 
-vi.mock('vue-router', () => ({
-  useRoute: () => mockRoute,
-  useRouter: () => mockRouter,
-}));
+vi.mock('vue-router', async () => {
+  const { reactive } = await import('vue');
+  const routeState = reactive(mockRoute);
+  mockRouter.replace.mockImplementation((to: { query?: Record<string, unknown> }) => {
+    if (!to.query) return;
+    for (const key of Object.keys(routeState.query)) delete routeState.query[key];
+    Object.assign(routeState.query, to.query);
+  });
+  return {
+    useRoute: () => routeState,
+    useRouter: () => mockRouter,
+  };
+});
 
 // ── service mocks ─────────────────────────────────────────────────────────────
 vi.mock('@/services/notification-outbox', () => ({
@@ -38,6 +52,20 @@ vi.mock('@/composables/useToast', () => ({
 const mockGetOutboxEntries = getOutboxEntries as ReturnType<typeof vi.fn>;
 const mockRetryOutboxEntry = retryOutboxEntry as ReturnType<typeof vi.fn>;
 const mockDeleteOutboxEntry = deleteOutboxEntry as ReturnType<typeof vi.fn>;
+
+// ── async helpers ─────────────────────────────────────────────────────────────
+// Lets a test hold a getOutboxEntries() call open and resolve it on demand, so two
+// overlapping loadEntries() calls can be made to settle in a chosen (possibly reversed)
+// order — reproducing the tab-switch race this view's requestId guard exists to prevent.
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 // ── fixture helpers ───────────────────────────────────────────────────────────
 function makeEntry(overrides: Partial<NotificationOutboxEntry> = {}): NotificationOutboxEntry {
@@ -266,6 +294,18 @@ describe('NotificationOutboxView', () => {
       );
     });
 
+    it('reruns loadEntries with the new status when the route query changes', async () => {
+      const wrapper = await mountView();
+      expect(mockGetOutboxEntries).toHaveBeenCalledTimes(1);
+
+      const pendingTab = wrapper.findAll('button').find((b) => b.text().includes('Pending'))!;
+      await pendingTab.trigger('click');
+      await flushPromises();
+
+      expect(mockGetOutboxEntries).toHaveBeenCalledTimes(2);
+      expect(mockGetOutboxEntries).toHaveBeenLastCalledWith('pending');
+    });
+
     it('does not call router.replace when clicking the already-active tab', async () => {
       mockRoute.query = { status: 'dead-letter' };
       const wrapper = await mountView();
@@ -275,6 +315,71 @@ describe('NotificationOutboxView', () => {
       await deadLetterTab!.trigger('click');
 
       expect(mockRouter.replace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('overlapping tab switches (out-of-order responses)', () => {
+    it("keeps the later-selected tab's data when an earlier tab's request resolves last", async () => {
+      const deadLetterRequest = deferred<NotificationOutboxResponse>();
+      const pendingResponse = makeResponse([
+        makeEntry({ id: 'p1', eventName: 'pending-event', status: 'pending' }),
+      ]);
+
+      mockGetOutboxEntries.mockImplementation((requestedStatus: string) =>
+        requestedStatus === 'dead-letter'
+          ? deadLetterRequest.promise
+          : Promise.resolve(pendingResponse),
+      );
+
+      // Initial mount fires the dead-letter load, which stays in flight (unresolved).
+      const wrapper = await mountView();
+
+      // Switching to Pending fires a second, later request that resolves immediately.
+      const pendingTab = wrapper.findAll('button').find((b) => b.text().includes('Pending'))!;
+      await pendingTab.trigger('click');
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('pending-event');
+
+      // The stale dead-letter request now resolves after the newer pending one already
+      // applied. Without the requestId guard this clobbers the pending tab's rows.
+      deadLetterRequest.resolve(
+        makeResponse([makeEntry({ id: 'd1', eventName: 'dead-letter-event' })]),
+      );
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('pending-event');
+      expect(wrapper.text()).not.toContain('dead-letter-event');
+    });
+
+    it('does not resurrect a stale error banner when a later request resolves successfully first', async () => {
+      const deadLetterRequest = deferred<NotificationOutboxResponse>();
+      const pendingResponse = makeResponse([
+        makeEntry({ id: 'p1', eventName: 'pending-event', status: 'pending' }),
+      ]);
+
+      mockGetOutboxEntries.mockImplementation((requestedStatus: string) =>
+        requestedStatus === 'dead-letter'
+          ? deadLetterRequest.promise
+          : Promise.resolve(pendingResponse),
+      );
+
+      const wrapper = await mountView();
+
+      const pendingTab = wrapper.findAll('button').find((b) => b.text().includes('Pending'))!;
+      await pendingTab.trigger('click');
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('pending-event');
+
+      // The stale dead-letter request rejects after the newer pending one already
+      // succeeded. Without the requestId guard this paints an error banner over data
+      // that is actually current.
+      deadLetterRequest.reject(new Error('stale dead-letter failure'));
+      await flushPromises();
+
+      expect(wrapper.text()).toContain('pending-event');
+      expect(wrapper.text()).not.toContain('stale dead-letter failure');
     });
   });
 

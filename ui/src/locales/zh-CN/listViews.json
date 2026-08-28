@@ -35,6 +35,11 @@
       "trigger": "触发器",
       "details": "详情"
     },
+    "status": {
+      "success": "成功",
+      "error": "错误",
+      "info": "提示"
+    },
     "actions": {
       "container-update": "容器更新",
       "container-added": "容器已添加",

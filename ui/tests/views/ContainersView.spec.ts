@@ -1032,22 +1032,6 @@ describe('ContainersView', () => {
     });
   });
 
-  describe('route-driven logs detail', () => {
-    it('opens full-page logs tab for /containers/:id/logs', async () => {
-      const targetContainer = makeContainer({ id: 'container-42', name: 'api' });
-      mockRoute.name = 'container-logs';
-      mockRoute.path = '/containers/container-42/logs';
-      mockRoute.params = { id: 'container-42' };
-
-      await mountContainersView([targetContainer]);
-
-      expect(mockSelectedContainer.value?.id).toBe('container-42');
-      expect(mockActiveDetailTab.value).toBe('logs');
-      expect(mockContainerFullPage.value).toBe(true);
-      expect(mockDetailPanelOpen.value).toBe(false);
-    });
-  });
-
   describe('empty state', () => {
     it('shows empty state when no containers match filters', async () => {
       mockFilteredContainers.value = [];
@@ -2898,26 +2882,6 @@ describe('ContainersView', () => {
           stub.attributes('data-compact') === 'true',
       );
       expect(compactStub).toBeDefined();
-    });
-
-    it('renders full-size log viewer for /containers/:id/logs route', async () => {
-      const c = makeContainer({ id: 'container-42', name: 'api' });
-      mockRoute.name = 'container-logs';
-      mockRoute.path = '/containers/container-42/logs';
-      mockRoute.params = { id: 'container-42' };
-
-      const wrapper = await mountContainersView([c]);
-      await flushPromises();
-
-      const logsStubs = wrapper.findAll('[data-test="container-logs-stub"]');
-      expect(logsStubs.length).toBeGreaterThan(0);
-      const fullSizeStub = logsStubs.find(
-        (stub) =>
-          stub.attributes('data-id') === 'container-42' &&
-          stub.attributes('data-name') === 'api' &&
-          stub.attributes('data-compact') === 'false',
-      );
-      expect(fullSizeStub).toBeDefined();
     });
   });
 

@@ -19,6 +19,10 @@
     "badge": {
       "basic": "Temel",
       "oidc": "OIDC"
+    },
+    "status": {
+      "active": "Aktif",
+      "inactive": "Etkin değil"
     }
   }
 }

@@ -27,6 +27,17 @@ export function statusBg(status: string): string {
   return 'var(--dd-info-muted)';
 }
 
+export function statusLabel(
+  status: string,
+  i18n?: { t: (key: string) => string; te: (key: string) => boolean },
+): string {
+  if (i18n) {
+    const key = `auditView.status.${status}`;
+    if (i18n.te(key)) return i18n.t(key);
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 export function actionLabel(
   action: string,
   i18n?: { t: (key: string) => string; te: (key: string) => boolean },

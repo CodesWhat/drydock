@@ -39,6 +39,11 @@ function authTypeBadge(type: string) {
   return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)', label: type };
 }
 
+function authStatusLabel(status: string): string {
+  if (status === 'active') return t('authView.status.active');
+  return t('authView.status.inactive');
+}
+
 const searchQuery = ref('');
 const showFilters = ref(false);
 const authViewMode = useViewMode('auth');
@@ -181,7 +186,7 @@ onMounted(async () => {
         storage-key="auth"
         :rows="filteredAuth"
         row-key="id"
-        :active-row="selectedAuth?.id"
+        :selected-key="selectedAuth?.id"
         :prefer-cards="authViewMode === 'cards'"
         @update:card-reflow-forced="cardReflowForced = $event"
         @row-click="openDetail($event)">
@@ -197,7 +202,7 @@ onMounted(async () => {
           <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                    :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
           <AppBadge :tone="row.status === 'active' ? 'success' : 'neutral'" size="xs" class="max-md:!hidden">
-            {{ row.status }}
+            {{ authStatusLabel(row.status) }}
           </AppBadge>
         </template>
         <template #card="{ row }">
@@ -226,7 +231,7 @@ onMounted(async () => {
               <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
                        :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
               <AppBadge :tone="row.status === 'active' ? 'success' : 'neutral'" size="xs" class="max-md:!hidden">
-                {{ row.status }}
+                {{ authStatusLabel(row.status) }}
               </AppBadge>
             </div>
           </div>
@@ -255,7 +260,7 @@ onMounted(async () => {
 
         <template #subtitle>
           <AppBadge v-if="selectedAuth" :tone="selectedAuth.status === 'active' ? 'success' : 'neutral'" size="xs">
-            {{ selectedAuth.status }}
+            {{ authStatusLabel(String(selectedAuth.status)) }}
           </AppBadge>
         </template>
 

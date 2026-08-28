@@ -93,6 +93,7 @@ export function useDetailPanel() {
   function closePanel() {
     detailPanelOpen.value = false;
     panelSize.value = 'sm';
+    containerFullPage.value = false;
     selectedContainer.value = null;
     panelStorage.remove();
   }

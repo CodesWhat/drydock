@@ -40,10 +40,10 @@ const stubs: Record<string, any> = {
     `,
   }),
   DataTable: defineComponent({
-    props: ['columns', 'rows', 'rowKey', 'activeRow', 'hiddenColumnKeys'],
+    props: ['columns', 'rows', 'rowKey', 'selectedKey', 'hiddenColumnKeys'],
     emits: ['row-click'],
     template: `
-      <div class="data-table" :data-row-count="rows.length" :data-active-row="activeRow || ''">
+      <div class="data-table" :data-row-count="rows.length" :data-selected-key="selectedKey || ''">
         <div
           v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
           :key="col.key"
@@ -128,7 +128,6 @@ const auditCardDataTableStub = defineComponent({
     'columns',
     'rows',
     'rowKey',
-    'activeRow',
     'selectedKey',
     'sortKey',
     'sortAsc',
@@ -141,7 +140,7 @@ const auditCardDataTableStub = defineComponent({
       class="data-table audit-card-table"
       :data-row-count="rows?.length ?? 0"
       :data-prefer-cards="String(preferCards)"
-      :data-selected-key="selectedKey || activeRow || ''">
+      :data-selected-key="selectedKey || ''">
       <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
         Force cards
       </button>
@@ -803,19 +802,24 @@ describe('AuditView', () => {
       });
       const wrapper = await mountAuditView();
 
+      expect(wrapper.text()).toContain('Success');
+      expect(wrapper.text()).not.toContain('success');
+
       await wrapper.find('.row-click-second').trigger('click');
       await flushPromises();
 
       expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-      expect(wrapper.find('.data-table').attributes('data-active-row')).toBe('e2');
+      expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe('e2');
       expect(wrapper.text()).toContain('redis');
       expect(wrapper.text()).toContain('Update Failed');
+      expect(wrapper.text()).toContain('Error');
+      expect(wrapper.text()).not.toContain('error');
 
       await wrapper.find('.close-detail').trigger('click');
       await flushPromises();
 
       expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
-      expect(wrapper.find('.data-table').attributes('data-active-row')).toBe('');
+      expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe('');
     });
   });
 
@@ -856,7 +860,8 @@ describe('AuditView', () => {
     expect(firstCard.text()).toContain('Version');
     expect(firstCard.text()).toContain('1.0.0');
     expect(firstCard.text()).toContain('1.1.0');
-    expect(firstCard.text()).toContain('success');
+    expect(firstCard.text()).toContain('Success');
+    expect(firstCard.text()).not.toContain('success');
 
     const secondCard = wrapper.get('[data-card-id="e2"]');
     expect(secondCard.text()).toContain('Container Added');

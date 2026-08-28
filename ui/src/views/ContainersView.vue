@@ -368,12 +368,16 @@ function syncSelectedContainerReference() {
   closePanel();
 }
 
-watch(
-  () => containers.value,
-  () => {
-    syncSelectedContainerReference();
-  },
-);
+// Watches both the containers ref itself (fires on the full-reload path's
+// containers.value = mapped reassignment) and its length (fires on the SSE
+// patch pipeline's in-place push/splice for added/removed rows, which never
+// replaces the array reference so a reference-only watch misses them). Not
+// { deep: true }: that would re-run this on every in-place field mutation
+// applyContainerPatch makes to unaffected rows (see the comment above that
+// function), which is exactly the per-row invalidation it's designed to avoid.
+watch([() => containers.value, () => containers.value.length], () => {
+  syncSelectedContainerReference();
+});
 
 const selectedContainerId = computed(() => selectedContainer.value?.id);
 const selectedContainerMeta = computed<Record<string, unknown> | undefined>(() => {
@@ -677,39 +681,6 @@ function encodeSortQueryValue(key: string, asc: boolean): string | undefined {
   return asc ? key : `${key}-desc`;
 }
 
-function resolveRouteParamId(rawValue: unknown): string | undefined {
-  if (Array.isArray(rawValue)) {
-    return typeof rawValue[0] === 'string' ? rawValue[0] : undefined;
-  }
-  return typeof rawValue === 'string' ? rawValue : undefined;
-}
-
-const isContainerLogsRoute = computed(() => route.name === 'container-logs');
-
-function syncRouteDrivenContainerLogsView(): void {
-  if (!isContainerLogsRoute.value) {
-    return;
-  }
-
-  const containerIdFromRoute = resolveRouteParamId((route.params as Record<string, unknown>)?.id);
-  if (!containerIdFromRoute) {
-    return;
-  }
-
-  const targetContainer = containers.value.find(
-    (container) => container.id === containerIdFromRoute,
-  );
-
-  if (!targetContainer) {
-    return;
-  }
-
-  selectedContainer.value = targetContainer;
-  activeDetailTab.value = 'logs';
-  detailPanelOpen.value = false;
-  containerFullPage.value = true;
-}
-
 function applyFilterKindFromQuery(queryValue: unknown) {
   const raw = firstQueryValue(queryValue);
   if (raw === undefined) {
@@ -762,14 +733,6 @@ function applySortFromQuery(queryValue: unknown) {
   containerSortKey.value = sort.key;
   containerSortAsc.value = sort.asc;
 }
-
-watch(
-  [() => route.name, () => route.path, () => route.params, () => containers.value.length],
-  () => {
-    syncRouteDrivenContainerLogsView();
-  },
-  { immediate: true },
-);
 
 const containerSortKey = usePreference(
   () => preferences.containers.sort.key,
@@ -919,9 +882,6 @@ function areQueriesEqual(left: Record<string, string>, right: Record<string, str
 }
 
 async function syncRouteQueryFromState() {
-  if (isContainerLogsRoute.value) {
-    return;
-  }
   const currentQuery = normalizeQueryRecord(route.query as Record<string, unknown>);
   const nextQuery = buildSyncedRouteQuery();
   if (areQueriesEqual(currentQuery, nextQuery)) {
@@ -1382,10 +1342,6 @@ const tableColumns = computed(() =>
 );
 
 onMounted(() => {
-  if (isContainerLogsRoute.value) {
-    return;
-  }
-
   const saved = detailPanelStorage.read();
   if (!saved) {
     return;
