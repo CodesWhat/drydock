@@ -142,6 +142,8 @@ describe('Log Entries Route', () => {
   test.each([
     ['level', 123, 'Invalid level query parameter'],
     ['component', ['docker'], 'Invalid component query parameter'],
+    ['tail', ['50'], 'Invalid tail query parameter'],
+    ['since', ['1000'], 'Invalid since query parameter'],
   ])('should return 400 when %s query parameter is not a string', (param, value, expectedError) => {
     logRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
@@ -221,44 +223,42 @@ describe('Log Entries Route', () => {
     ]);
   });
 
-  test('should pass NaN tail when query param is non-numeric', () => {
+  test('should return 400 when tail query param is non-numeric', () => {
+    // Inverted 2026-08-28: this test previously asserted that a non-numeric
+    // tail was silently forwarded to getEntries() as NaN with a 200 response.
+    // That was a characterization of the bug, not a deliberate contract —
+    // `applyTail()` compares `entries.length > NaN`, which is always false, so
+    // an unparseable tail silently returned every buffered entry instead of
+    // erroring. tail/since now validate the same way level/component already
+    // do, matching the sibling audit.ts convention.
     logRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
-
-    mockGetEntries.mockReturnValue([]);
 
     const req = createMockRequest({ query: { tail: 'abc' } });
     const res = createResponse();
 
     handler(req, res);
 
-    expect(mockGetEntries).toHaveBeenCalledWith({
-      level: undefined,
-      component: undefined,
-      tail: NaN,
-      since: undefined,
-    });
-    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+    expect(mockGetEntries).not.toHaveBeenCalled();
   });
 
-  test('should pass NaN since when query param is non-numeric', () => {
+  test('should return 400 when since query param is non-numeric', () => {
+    // Inverted 2026-08-28: see the tail test above — `isSince()` compares
+    // `entry.timestamp >= NaN`, which is always false, so an unparseable
+    // since silently returned zero entries instead of erroring.
     logRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
-
-    mockGetEntries.mockReturnValue([]);
 
     const req = createMockRequest({ query: { since: 'invalid' } });
     const res = createResponse();
 
     handler(req, res);
 
-    expect(mockGetEntries).toHaveBeenCalledWith({
-      level: undefined,
-      component: undefined,
-      tail: undefined,
-      since: NaN,
-    });
-    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid since query parameter' });
+    expect(mockGetEntries).not.toHaveBeenCalled();
   });
 
   test('should pass tail=0 through to getEntries', () => {

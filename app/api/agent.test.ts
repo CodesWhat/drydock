@@ -590,9 +590,42 @@ describe('Agent Log Entries Route', () => {
   test.each([
     ['level', 123, 'Invalid level query parameter'],
     ['component', ['docker'], 'Invalid component query parameter'],
+    ['tail', ['50'], 'Invalid tail query parameter'],
+    ['since', ['1000'], 'Invalid since query parameter'],
   ])(
     'should return 400 when %s query parameter is not a string',
     async (param, value, expectedError) => {
+      const getLogEntries = vi.fn().mockResolvedValue([]);
+      mockGetAgent.mockReturnValue({
+        isConnected: true,
+        getLogEntries,
+      });
+
+      const req = createMockRequest({
+        params: { name: 'agent-1' },
+        query: { [param]: value },
+      });
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+      expect(getLogEntries).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([
+    ['tail', 'abc', 'Invalid tail query parameter'],
+    ['since', 'invalid', 'Invalid since query parameter'],
+  ])(
+    'should return 400 when %s query parameter is non-numeric',
+    async (param, value, expectedError) => {
+      // Before this fix, a non-numeric tail/since silently became NaN and was
+      // forwarded to agent.getLogEntries(). AgentClient.getLogEntries only sets
+      // the query param `if (options.tail)`, and NaN is falsy, so the malformed
+      // value was silently dropped instead of surfacing as a 400 — matching the
+      // level/component validation that already exists on this route.
       const getLogEntries = vi.fn().mockResolvedValue([]);
       mockGetAgent.mockReturnValue({
         isConnected: true,

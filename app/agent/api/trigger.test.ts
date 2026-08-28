@@ -416,6 +416,30 @@ describe('agent API trigger', () => {
       expect(jsonCall.details.reason).toBe('specific-reason');
     });
 
+    test('should scrub credentials embedded in the thrown error message before sending to the client', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi
+          .fn()
+          .mockRejectedValue(
+            new Error(
+              'Webhook call failed: Authorization: Bearer sk-secret-abc123, POST https://user:hunter2@hooks.example.com/notify timed out',
+            ),
+          ),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      const responseBody = JSON.stringify(res.json.mock.calls[0][0]);
+      expect(responseBody).not.toContain('sk-secret-abc123');
+      expect(responseBody).not.toContain('hunter2');
+    });
+
     test('triggerId is constructed from type.name (lowercased is not forced here)', async () => {
       req.params = { type: 'docker', name: 'update' };
       req.body = [{ id: 'c1' }];

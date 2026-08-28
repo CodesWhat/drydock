@@ -64,6 +64,17 @@ function getValidatedLogComponent(component: unknown): string | undefined | null
   return component;
 }
 
+function getValidatedLogInteger(value: unknown): number | undefined | null {
+  if (!value) {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function getOwnAgentLogValue(logEntry: Record<string, unknown>, field: string): unknown {
   return Object.hasOwn(logEntry, field) ? logEntry[field] : undefined;
 }
@@ -179,8 +190,18 @@ async function getAgentLogEntries(
       return;
     }
 
-    const tail = req.query.tail ? Number.parseInt(req.query.tail, 10) : undefined;
-    const since = req.query.since ? Number.parseInt(req.query.since, 10) : undefined;
+    const tail = getValidatedLogInteger(req.query.tail);
+    if (tail === null) {
+      sendErrorResponse(res, 400, 'Invalid tail query parameter');
+      return;
+    }
+
+    const since = getValidatedLogInteger(req.query.since);
+    if (since === null) {
+      sendErrorResponse(res, 400, 'Invalid since query parameter');
+      return;
+    }
+
     const entries = await agent.getLogEntries({ level, component, tail, since });
     res.json(normalizeAgentLogEntries(entries));
   } catch {

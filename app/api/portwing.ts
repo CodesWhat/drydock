@@ -8,6 +8,7 @@
 import express, { type Request, type Response } from 'express';
 import * as agentKeys from '../store/agent-keys.js';
 import { sendErrorResponse } from './error-response.js';
+import { sanitizeApiError } from './helpers.js';
 import { disconnectByKeyId } from './portwing-ws.js';
 
 // Key IDs are hex(SHA-256(raw32Bytes)[:8]) → exactly 16 lowercase hex chars.
@@ -71,7 +72,11 @@ router.post('/keys', (req: Request, res: Response) => {
   try {
     record = agentKeys.addKey(pubkeyBuffer, label);
   } catch (error: unknown) {
-    sendErrorResponse(res, 409, String(error));
+    if (error instanceof agentKeys.AgentKeyConflictError) {
+      sendErrorResponse(res, 409, error.message);
+      return;
+    }
+    sendErrorResponse(res, 500, sanitizeApiError(error));
     return;
   }
 

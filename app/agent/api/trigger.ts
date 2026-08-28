@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { mapComponentsToList } from '../../api/component.js';
 import { sendErrorResponse } from '../../api/error-response.js';
+import { sanitizePreviewErrorReason } from '../../api/preview-errors.js';
 import * as triggerApi from '../../api/trigger.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
@@ -94,14 +95,15 @@ export async function runTriggerBatch(req: Request, res: Response) {
     res.status(200).json({});
   } catch (e: unknown) {
     const errorMessage = getErrorMessage(e);
+    const sanitizedReason = errorMessage ? sanitizePreviewErrorReason(errorMessage) : '';
     log.error(
-      `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(errorMessage ?? '')}`,
+      `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(sanitizedReason)}`,
     );
-    if (errorMessage) {
+    if (sanitizedReason) {
       sendErrorResponse(res, 500, {
         message: `Error when running batch trigger ${type}.${name}`,
         details: {
-          reason: errorMessage,
+          reason: sanitizedReason,
         },
       });
       return;
