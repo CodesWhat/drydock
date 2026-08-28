@@ -341,7 +341,7 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery(),
-        { limit: 0, offset: 0 },
+        { limit: 0, offset: 0, sort: 'name' },
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -395,7 +395,7 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery({ watcher: 'local' }),
-        { limit: 0, offset: 0 },
+        { limit: 0, offset: 0, sort: 'name' },
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -425,7 +425,7 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery({ watcher: 'local' }),
-        { limit: 1, offset: 1 },
+        { limit: 1, offset: 1, sort: 'name' },
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -488,7 +488,7 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery({ watcher: 'local' }),
-        { limit: 1, offset: 1 },
+        { limit: 1, offset: 1, sort: 'name' },
       );
     });
 
@@ -510,7 +510,7 @@ describe('api/container/crud', () => {
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledTimes(1);
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery({ watcher: 'local' }),
-        { limit: 1, offset: 1 },
+        { limit: 1, offset: 1, sort: 'name' },
       );
       expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledTimes(1);
       expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith(
@@ -1056,7 +1056,7 @@ describe('api/container/crud', () => {
           'updateKind.semverDiff': 'major',
           watcher: 'local',
         }),
-        { limit: 0, offset: 0 },
+        { limit: 0, offset: 0, sort: 'name' },
       );
     });
 
@@ -1073,7 +1073,7 @@ describe('api/container/crud', () => {
         buildVisibleContainersStoreQuery({
           updateAvailable: false,
         }),
-        { limit: 0, offset: 0 },
+        { limit: 0, offset: 0, sort: 'name' },
       );
     });
 
@@ -1090,7 +1090,7 @@ describe('api/container/crud', () => {
         buildVisibleContainersStoreQuery({
           status: 'running',
         }),
-        { limit: 0, offset: 0 },
+        { limit: 0, offset: 0, sort: 'name' },
       );
     });
 
@@ -1108,7 +1108,7 @@ describe('api/container/crud', () => {
         expect(res.status).toHaveBeenCalledWith(200);
         expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
           buildVisibleContainersStoreQuery({ status: runtimeStatus }),
-          { limit: 0, offset: 0 },
+          { limit: 0, offset: 0, sort: 'name' },
         );
       },
     );
@@ -1126,7 +1126,7 @@ describe('api/container/crud', () => {
         buildVisibleContainersStoreQuery({
           'updateKind.kind': 'digest',
         }),
-        { limit: 0, offset: 0 },
+        { limit: 0, offset: 0, sort: 'name' },
       );
     });
 
@@ -1146,7 +1146,7 @@ describe('api/container/crud', () => {
 
       expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery(),
-        { limit: 1, offset: 0 },
+        { limit: 1, offset: 0, sort: 'name' },
       );
       expect(harness.deps.getContainerCountFromStore).toHaveBeenCalledWith(
         buildVisibleContainersStoreQuery(),
@@ -1180,7 +1180,7 @@ describe('api/container/crud', () => {
           updateAvailable: true,
           'updateKind.semverDiff': 'major',
         }),
-        { limit: 5, offset: 0 },
+        { limit: 5, offset: 0, sort: 'name' },
       );
       // Should use getContainerCountFromStore for total instead of
       // loading all containers just to count them.
@@ -1293,7 +1293,7 @@ describe('api/container/crud', () => {
           labels: 'prod',
           watcher: 'local',
         }),
-        { limit: 0, offset: 0 },
+        { limit: 0, offset: 0, sort: 'name' },
       );
     });
 
@@ -3098,6 +3098,43 @@ describe('api/container/crud', () => {
         status: 'info',
         details: 'Revealed 2 sensitive env var(s)',
       });
+    });
+
+    test('reveals PAT and URL credentials with the same sensitivity count as redaction', () => {
+      const credentialUrl = 'postgres://service-user:db-secret@database.internal/app';
+      const publicUrl = 'https://example.com/public';
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            name: 'edge-api',
+            image: { name: 'org/edge-api' },
+            details: {
+              env: [
+                { key: 'GITHUB_PAT', value: 'github-pat-value' },
+                { key: 'PATTERN', value: 'weekly' },
+                { key: 'DATABASE_URL', value: credentialUrl },
+                { key: 'PUBLIC_URL', value: publicUrl },
+              ],
+            },
+          }),
+        ],
+      });
+
+      const res = callRevealContainerEnv(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        env: [
+          { key: 'GITHUB_PAT', value: 'github-pat-value', sensitive: true },
+          { key: 'PATTERN', value: 'weekly', sensitive: false },
+          { key: 'DATABASE_URL', value: credentialUrl, sensitive: true },
+          { key: 'PUBLIC_URL', value: publicUrl, sensitive: false },
+        ],
+      });
+      expect(harness.deps.auditStore.insertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({ details: 'Revealed 2 sensitive env var(s)' }),
+      );
     });
 
     test('returns empty env payload when details.env is not an array', () => {

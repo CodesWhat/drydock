@@ -16,6 +16,7 @@ type ScannerBackend = {
     env?: Record<string, string>;
     timeoutMs: number;
     maxOutputBytes: number;
+    signal?: AbortSignal;
   }): Promise<{ stdout: string }>;
   pullImage(
     image: string,
@@ -48,6 +49,7 @@ export interface ScannerWorkerInvocation {
   env?: NodeJS.ProcessEnv | Record<string, string>;
   timeoutMs: number;
   maxOutputBytes: number;
+  signal?: AbortSignal;
 }
 
 interface CreateScannerRuntimeOptions {
@@ -163,6 +165,7 @@ export function createScannerRuntime(options: CreateScannerRuntimeOptions): {
       env: filterWorkerEnvironment(invocation.provider, invocation.env),
       timeoutMs: invocation.timeoutMs,
       maxOutputBytes: invocation.maxOutputBytes,
+      signal: invocation.signal,
     });
     return result.stdout;
   }

@@ -261,7 +261,7 @@ describe('api/log-stream', () => {
       expect(mockHandleUpgrade).toHaveBeenCalledTimes(1);
     });
 
-    test('falls back to raw Host when trust proxy is on but X-Forwarded-Host is absent', async () => {
+    test('falls back to raw Host when trusted protocol is present but X-Forwarded-Host is absent', async () => {
       const mockHandleUpgrade = vi.fn(
         (_req: unknown, _socket: unknown, _head: unknown, callback: (ws: unknown) => void) => {
           const ws = {
@@ -288,6 +288,7 @@ describe('api/log-stream', () => {
           headers: {
             origin: 'http://localhost:3000',
             host: 'localhost:3000',
+            'x-forwarded-proto': 'http',
           },
           socket: { remoteAddress: '127.0.0.1' },
         } as any,
@@ -1206,6 +1207,7 @@ describe('api/log-stream', () => {
     });
 
     test('uses identity-aware key resolver when enabled', async () => {
+      const isRateLimited = vi.fn(() => false);
       const webSocketUpgradeSpy = vi
         .spyOn(WebSocketServer.prototype, 'handleUpgrade')
         .mockImplementation((_request, _socket, _head, callback) => {
@@ -1234,6 +1236,7 @@ describe('api/log-stream', () => {
           server: server as any,
           sessionMiddleware: authenticatingSessionMiddleware,
           serverConfiguration: { ratelimit: { identitykeying: true } },
+          isRateLimited,
         });
 
         const socket = createUpgradeSocket();
@@ -1243,15 +1246,19 @@ describe('api/log-stream', () => {
           Buffer.alloc(0),
         );
         await new Promise((resolve) => setImmediate(resolve));
+
+        expect(isRateLimited).toHaveBeenCalledWith('session:session-1');
+        expect(webSocketUpgradeSpy).toHaveBeenCalledOnce();
       } finally {
         webSocketUpgradeSpy.mockRestore();
       }
     });
 
     test('falls back to ip key when identity-aware key generator returns empty', async () => {
+      const isRateLimited = vi.fn(() => false);
       const createKeySpy = vi
-        .spyOn(rateLimitKey, 'createAuthenticatedRouteRateLimitKeyGenerator')
-        .mockReturnValue(() => '' as any);
+        .spyOn(rateLimitKey, 'getAuthenticatedRouteRateLimitKey')
+        .mockReturnValue('');
       const webSocketUpgradeSpy = vi
         .spyOn(WebSocketServer.prototype, 'handleUpgrade')
         .mockImplementation((_request, _socket, _head, callback) => {
@@ -1280,6 +1287,7 @@ describe('api/log-stream', () => {
           server: server as any,
           sessionMiddleware: authenticatingSessionMiddleware,
           serverConfiguration: { ratelimit: { identitykeying: true } },
+          isRateLimited,
         });
 
         const socket = createUpgradeSocket();
@@ -1289,6 +1297,9 @@ describe('api/log-stream', () => {
           Buffer.alloc(0),
         );
         await new Promise((resolve) => setImmediate(resolve));
+
+        expect(isRateLimited).toHaveBeenCalledWith('ip:127.0.0.1');
+        expect(webSocketUpgradeSpy).toHaveBeenCalledOnce();
       } finally {
         createKeySpy.mockRestore();
         webSocketUpgradeSpy.mockRestore();

@@ -104,6 +104,13 @@ describe('api/container/shared', () => {
       expect(isSensitiveKey('BYPASS_RATE')).toBe(false);
     });
 
+    test('detects PAT only as an exact key segment', () => {
+      expect(isSensitiveKey('GITHUB_PAT')).toBe(true);
+      expect(isSensitiveKey('PAT')).toBe(true);
+      expect(isSensitiveKey('PATTERN')).toBe(false);
+      expect(isSensitiveKey('DISPATCH')).toBe(false);
+    });
+
     test('returns false for non-sensitive keys', () => {
       expect(isSensitiveKey('PATH')).toBe(false);
       expect(isSensitiveKey('NODE_ENV')).toBe(false);
@@ -162,6 +169,80 @@ describe('api/container/shared', () => {
       });
     });
 
+    test('redacts credential-bearing URLs regardless of key while preserving public URLs', () => {
+      const credentialUrl = 'postgres://service-user:db-secret@database.internal/app';
+      const usernameOnlyUrl = 'https://service-user@example.com/private';
+      const publicUrl = 'https://example.com/public';
+      const container = {
+        id: 'c-url',
+        details: {
+          env: [
+            { key: 'DATABASE_URL', value: credentialUrl },
+            { key: 'SERVICE_URL', value: usernameOnlyUrl },
+            { key: 'PUBLIC_URL', value: publicUrl },
+            { key: 'OPTIONAL_URL', value: undefined },
+          ],
+        },
+      };
+
+      const redacted = redactContainerRuntimeEnv(container);
+      const serialized = JSON.stringify(redacted);
+
+      expect(redacted).toEqual({
+        id: 'c-url',
+        details: {
+          env: [
+            { key: 'DATABASE_URL', value: '[REDACTED]', sensitive: true },
+            { key: 'SERVICE_URL', value: '[REDACTED]', sensitive: true },
+            { key: 'PUBLIC_URL', value: publicUrl, sensitive: false },
+            { key: 'OPTIONAL_URL', value: undefined, sensitive: false },
+          ],
+        },
+      });
+      expect(serialized).not.toContain(credentialUrl);
+      expect(serialized).not.toContain(usernameOnlyUrl);
+      expect(serialized).toContain(publicUrl);
+    });
+
+    test('redacts a scheme-relative URL carrying credentials under a non-sensitive key', () => {
+      // A bare `new URL()` with no base throws on a scheme-relative value like
+      // "//user:pass@host", so without a base the credentials would slip through
+      // under a key such as SERVICE_URL that doesn't match isSensitiveKey either.
+      const schemeRelativeUrl = '//user:password@example.com/private';
+      const container = {
+        id: 'c-scheme-relative',
+        details: {
+          env: [{ key: 'SERVICE_URL', value: schemeRelativeUrl }],
+        },
+      };
+
+      expect(redactContainerRuntimeEnv(container)).toEqual({
+        id: 'c-scheme-relative',
+        details: {
+          env: [{ key: 'SERVICE_URL', value: '[REDACTED]', sensitive: true }],
+        },
+      });
+    });
+
+    test('treats a value that fails to parse even against the dummy base as non-sensitive', () => {
+      // An invalid bracketed IPv6 authority still throws from new URL() even with
+      // a base supplied, so this keeps the hasUrlCredentials catch branch covered
+      // now that ordinary non-URL strings (e.g. plain paths) no longer throw.
+      const container = {
+        id: 'c-malformed-url',
+        details: {
+          env: [{ key: 'ENDPOINT_URL', value: 'http://[::1' }],
+        },
+      };
+
+      expect(redactContainerRuntimeEnv(container)).toEqual({
+        id: 'c-malformed-url',
+        details: {
+          env: [{ key: 'ENDPOINT_URL', value: 'http://[::1', sensitive: false }],
+        },
+      });
+    });
+
     test('drops malformed env entries', () => {
       const container = {
         id: 'c3',
@@ -183,6 +264,33 @@ describe('api/container/shared', () => {
     test('returns non-array input unchanged', () => {
       expect(redactContainersRuntimeEnv(undefined)).toBeUndefined();
       expect(redactContainersRuntimeEnv('not-an-array')).toBe('not-an-array');
+    });
+
+    test('removes PAT and URL credentials from ordinary list payloads', () => {
+      const pat = 'github-pat-value';
+      const credentialUrl = 'https://user:password@example.com/private';
+      const publicUrl = 'https://example.com/public';
+      const containers = [
+        {
+          id: 'c-list',
+          details: {
+            env: [
+              { key: 'GITHUB_PAT', value: pat },
+              { key: 'PATTERN', value: 'weekly' },
+              { key: 'SERVICE_URL', value: credentialUrl },
+              { key: 'PUBLIC_URL', value: publicUrl },
+            ],
+          },
+        },
+      ];
+
+      const redacted = redactContainersRuntimeEnv(containers);
+      const serialized = JSON.stringify(redacted);
+
+      expect(serialized).not.toContain(pat);
+      expect(serialized).not.toContain(credentialUrl);
+      expect(serialized).toContain('weekly');
+      expect(serialized).toContain(publicUrl);
     });
   });
 

@@ -1879,10 +1879,11 @@ test('stale lock cleanup timer should delete session lock when operation outlive
   vi.useRealTimers();
 });
 
-test('stale lock cleanup timer should skip deleting when a newer lock replaces the entry', async () => {
+test('stale lock cleanup should not let a third redirect bypass a newer active lock', async () => {
   vi.useFakeTimers();
 
   let firstReload: ((error?: unknown) => void) | undefined;
+  let secondReload: ((error?: unknown) => void) | undefined;
   const firstReq = createReq({
     sessionID: 'replaced-lock-session',
     session: {
@@ -1895,25 +1896,49 @@ test('stale lock cleanup timer should skip deleting when a newer lock replaces t
   const secondReq = createReq({
     sessionID: 'replaced-lock-session',
     session: {
-      reload: vi.fn((cb) => cb()),
+      reload: vi.fn((cb) => {
+        secondReload = cb;
+      }),
+      save: vi.fn((cb) => cb()),
+    },
+  });
+  const thirdReload = vi.fn((cb) => cb());
+  const thirdReq = createReq({
+    sessionID: 'replaced-lock-session',
+    session: {
+      reload: thirdReload,
       save: vi.fn((cb) => cb()),
     },
   });
   const firstRes = createRes();
   const secondRes = createRes();
+  const thirdRes = createRes();
 
   try {
     const firstRedirectPromise = oidc.redirect(firstReq, firstRes);
+    await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(1);
     const secondRedirectPromise = oidc.redirect(secondReq, secondRes);
 
-    await vi.advanceTimersByTimeAsync(59_999);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(secondReload).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(49_999);
+    const thirdRedirectPromise = oidc.redirect(thirdReq, thirdRes);
+    await vi.advanceTimersByTimeAsync(0);
 
     firstReload?.();
-    await Promise.all([firstRedirectPromise, secondRedirectPromise]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(thirdReload).not.toHaveBeenCalled();
+
+    secondReload?.();
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.all([firstRedirectPromise, secondRedirectPromise, thirdRedirectPromise]);
 
     expectDefaultRedirectPayload(firstRes);
     expectDefaultRedirectPayload(secondRes);
+    expectDefaultRedirectPayload(thirdRes);
+    expect(thirdReload).toHaveBeenCalledTimes(1);
   } finally {
     vi.useRealTimers();
   }

@@ -56,6 +56,10 @@ async function loadEntryPoint({
   const maturitySchedulerInit = vi.fn();
   const warmTrivyDatabase = vi.fn(async () => 'ready');
   const startOutboxWorker = vi.fn();
+  const recoverInProgressOperationsOnStartup = vi.fn(async () => ({
+    reconciled: 0,
+    abandoned: 0,
+  }));
   const recoverQueuedOperationsOnStartup = vi.fn();
   let deliverOutboxEntry: ((entry: NotificationOutboxEntry) => Promise<void>) | undefined;
 
@@ -89,7 +93,10 @@ async function loadEntryPoint({
       startOutboxWorker(options);
     }),
   }));
-  vi.doMock('./updates/recovery.js', () => ({ recoverQueuedOperationsOnStartup }));
+  vi.doMock('./updates/recovery.js', () => ({
+    recoverInProgressOperationsOnStartup,
+    recoverQueuedOperationsOnStartup,
+  }));
 
   const imported = import('./index.js');
 
@@ -112,6 +119,7 @@ async function loadEntryPoint({
     maturitySchedulerInit,
     warmTrivyDatabase,
     startOutboxWorker,
+    recoverInProgressOperationsOnStartup,
     recoverQueuedOperationsOnStartup,
     get deliverOutboxEntry() {
       return deliverOutboxEntry;
@@ -147,6 +155,7 @@ describe('entrypoint', () => {
     expect(harness.maturitySchedulerInit).not.toHaveBeenCalled();
     expect(harness.warmTrivyDatabase).not.toHaveBeenCalled();
     expect(harness.startOutboxWorker).not.toHaveBeenCalled();
+    expect(harness.recoverInProgressOperationsOnStartup).not.toHaveBeenCalled();
     expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
   });
 
@@ -168,6 +177,7 @@ describe('entrypoint', () => {
     expect(harness.maturitySchedulerInit).not.toHaveBeenCalled();
     expect(harness.warmTrivyDatabase).not.toHaveBeenCalled();
     expect(harness.startOutboxWorker).not.toHaveBeenCalled();
+    expect(harness.recoverInProgressOperationsOnStartup).not.toHaveBeenCalled();
     expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
   });
 
@@ -193,7 +203,17 @@ describe('entrypoint', () => {
     expect(harness.maturitySchedulerInit).toHaveBeenCalledOnce();
     expect(harness.warmTrivyDatabase).toHaveBeenCalledOnce();
     expect(harness.startOutboxWorker).toHaveBeenCalledOnce();
+    expect(harness.recoverInProgressOperationsOnStartup).toHaveBeenCalledOnce();
     expect(harness.recoverQueuedOperationsOnStartup).toHaveBeenCalledOnce();
+    expect(harness.agentManagerInit.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.recoverInProgressOperationsOnStartup.mock.invocationCallOrder[0],
+    );
+    expect(harness.recoverInProgressOperationsOnStartup.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.apiInit.mock.invocationCallOrder[0],
+    );
+    expect(harness.recoverInProgressOperationsOnStartup.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.recoverQueuedOperationsOnStartup.mock.invocationCallOrder[0],
+    );
 
     const entry = {
       id: 'entry-1',
@@ -224,6 +244,7 @@ describe('entrypoint', () => {
     expect(harness.apiInit).not.toHaveBeenCalled();
     expect(harness.warmTrivyDatabase).toHaveBeenCalledOnce();
     expect(harness.startOutboxWorker).not.toHaveBeenCalled();
+    expect(harness.recoverInProgressOperationsOnStartup).not.toHaveBeenCalled();
     expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
   });
 

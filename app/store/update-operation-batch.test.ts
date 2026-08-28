@@ -183,7 +183,7 @@ describe('update-operation batch completion', () => {
     expect(mockEmitBatchUpdateCompleted).not.toHaveBeenCalled();
   });
 
-  test('does not emit batch-update-completed for persisted batch rows missing from the in-memory registry', () => {
+  test('rehydrates persisted batch membership and emits completion once after restart', () => {
     const documents: any[] = [
       {
         data: {
@@ -193,6 +193,8 @@ describe('update-operation batch completion', () => {
           status: 'queued',
           phase: 'queued',
           batchId: 'batch-before-boot',
+          queuePosition: 1,
+          queueTotal: 1,
           createdAt: '2026-02-23T00:00:00.000Z',
           updatedAt: '2026-02-23T00:00:00.000Z',
         },
@@ -205,6 +207,53 @@ describe('update-operation batch completion', () => {
     });
 
     expect(terminal).toEqual(expect.objectContaining({ status: 'succeeded' }));
+    expect(mockEmitBatchUpdateCompleted).toHaveBeenCalledTimes(1);
+    expect(mockEmitBatchUpdateCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        batchId: 'batch-before-boot',
+        total: 1,
+        succeeded: 1,
+      }),
+    );
+
+    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+    updateOperation.markOperationTerminal('preexisting-op-1', { status: 'succeeded' });
+    expect(mockEmitBatchUpdateCompleted).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not emit a misleading partial batch for legacy rows missing persisted identity', () => {
+    const documents: any[] = [
+      {
+        data: {
+          id: 'legacy-terminal-op',
+          containerName: 'nginx',
+          containerId: 'c-1',
+          status: 'succeeded',
+          phase: 'succeeded',
+          completedAt: '2026-02-23T00:01:00.000Z',
+          createdAt: '2026-02-23T00:00:00.000Z',
+          updatedAt: '2026-02-23T00:01:00.000Z',
+        },
+      },
+      {
+        data: {
+          id: 'active-op',
+          containerName: 'redis',
+          containerId: 'c-2',
+          status: 'queued',
+          phase: 'queued',
+          batchId: 'legacy-batch',
+          queuePosition: 2,
+          queueTotal: 2,
+          createdAt: '2026-02-23T00:00:00.000Z',
+          updatedAt: '2026-02-23T00:00:00.000Z',
+        },
+      },
+    ];
+    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+
+    updateOperation.markOperationTerminal('active-op', { status: 'succeeded' });
+
     expect(mockEmitBatchUpdateCompleted).not.toHaveBeenCalled();
   });
 

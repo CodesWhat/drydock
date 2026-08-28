@@ -33,10 +33,10 @@ for i in "${!pids[@]}"; do
 	if ! wait "${pids[$i]}"; then
 		fail=1
 		failed_labels+=("${labels[$i]}")
-		echo "❌ ${labels[$i]}: build failed"
+		echo "${labels[$i]}: build failed"
 		echo "   full log: ${log_files[$i]}"
 	else
-		echo "✅ ${labels[$i]}: build succeeded"
+		echo "${labels[$i]}: build succeeded"
 	fi
 done
 

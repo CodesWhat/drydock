@@ -134,13 +134,28 @@ async function executeAction(
     return;
   }
 
+  let dockerContainer: DockerContainerHandle;
   try {
     const watcher = trigger.getWatcher(container) as DockerWatcher;
     const { dockerApi } = watcher;
-    const dockerContainer = dockerApi.getContainer(container.id);
+    dockerContainer = dockerApi.getContainer(container.id);
     await dockerContainer[method]();
+  } catch (e: unknown) {
+    handleContainerActionError({
+      error: e,
+      action,
+      actionLabel: `performing ${method} on`,
+      id,
+      container,
+      log,
+      res,
+    });
+    getContainerActionsCounter()?.inc({ action });
+    return;
+  }
 
-    // Update container status in the store so the UI reflects the change
+  let responseContainer: Container;
+  try {
     const inspectResult = await dockerContainer.inspect();
     const newStatus = inspectResult?.State?.Status;
     let updatedContainer = container;
@@ -153,28 +168,24 @@ async function executeAction(
         });
       }
     }
-    const responseContainer = storeContainer.getContainer(id) || updatedContainer;
-
-    recordAuditEvent({
-      action,
-      container,
-      status: 'success',
-    });
-    getContainerActionsCounter()?.inc({ action });
-
-    res.status(200).json({ message: ACTION_MESSAGES[method], result: responseContainer });
+    responseContainer = storeContainer.getContainer(id) || updatedContainer;
   } catch (e: unknown) {
-    handleContainerActionError({
-      error: e,
-      action,
-      actionLabel: `performing ${method} on`,
-      id,
-      container,
-      log,
-      res,
-    });
-    getContainerActionsCounter()?.inc({ action });
+    log.warn(
+      `Container ${method} succeeded but status refresh failed for ${sanitizeLogParam(id)} (${sanitizeLogParam(
+        e instanceof Error ? e.message : String(e),
+      )})`,
+    );
+    responseContainer = storeContainer.getContainer(id) || container;
   }
+
+  recordAuditEvent({
+    action,
+    container,
+    status: 'success',
+  });
+  getContainerActionsCounter()?.inc({ action });
+
+  res.status(200).json({ message: ACTION_MESSAGES[method], result: responseContainer });
 }
 
 /**

@@ -14,7 +14,10 @@ import * as registry from './registry/index.js';
 import { warmTrivyDatabase } from './security/scan.js';
 import * as securityScheduler from './security/scheduler.js';
 import * as store from './store/index.js';
-import { recoverQueuedOperationsOnStartup } from './updates/recovery.js';
+import {
+  recoverInProgressOperationsOnStartup,
+  recoverQueuedOperationsOnStartup,
+} from './updates/recovery.js';
 
 // Configure DNS result ordering (DD_DNS_MODE, default: ipv4first).
 // Defaults to IPv4-first to work around musl libc (Alpine) resolver issues
@@ -69,6 +72,10 @@ if (commandExitCode !== null) {
     // Init Agent Manager (Controller mode)
     await agentManager.init();
 
+    // Docker-mutating operations must be reconciled only after triggers,
+    // watchers, and remote-agent identities are available.
+    await recoverInProgressOperationsOnStartup();
+
     // Init api
     await api.init();
 
@@ -99,9 +106,8 @@ if (commandExitCode !== null) {
     });
 
     // Recover queued update operations from a previous process run.
-    // Resumable in-progress phases (pulling) were reset to queued during
-    // store init; this dispatches all queued operations through the
-    // standard fire-and-forget pipeline.
+    // Pulling operations were reset to queued during store init; dispatch all
+    // queued operations through the standard fire-and-forget pipeline.
     recoverQueuedOperationsOnStartup();
   }
 }

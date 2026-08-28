@@ -1,10 +1,10 @@
-name: "🎭 E2E: Playwright"
+name: "E2E: Playwright"
 run-name: >-
   ${{
-    github.event_name == 'pull_request' && format('🎭 E2E: Playwright — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
-    github.event_name == 'push' && format('🎭 E2E: Playwright — {0}', github.event.head_commit.message) ||
-    github.event_name == 'merge_group' && format('🎭 E2E: Playwright — Merge Queue: {0}', github.ref_name) ||
-    format('🎭 E2E: Playwright — {0}', github.ref_name)
+    github.event_name == 'pull_request' && format('E2E: Playwright — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
+    github.event_name == 'push' && format('E2E: Playwright — {0}', github.event.head_commit.message) ||
+    github.event_name == 'merge_group' && format('E2E: Playwright — Merge Queue: {0}', github.ref_name) ||
+    format('E2E: Playwright — {0}', github.ref_name)
   }}
 
 # Playwright lives in its own workflow so a single failing UI assertion
@@ -49,7 +49,7 @@ env:
 
 jobs:
   changes:
-    name: "🔎 Changes: Path Filter"
+    name: "Changes: Path Filter"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

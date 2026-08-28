@@ -22,41 +22,15 @@
 # Revisit on each pinned-tool or base-image bump: fixed upstream binaries make
 # these scopes stop matching anything.
 #
-# CVE-2026-14456 (openssl / libssl3 / libcrypto3, Alpine 3.24, all at 3.5.7-r0):
-# CWE-770 unbounded memory growth in OpenSSL's QUIC *server* incoming-channel-
-# queue handling, fixed upstream in 3.5.8/3.6.4/4.0.2. As of 2026-08-19, no
-# Alpine branch has repackaged it — 3.24-stable and edge aports both still pin
-# openssl at 3.5.7-r0, and grype's own DB carries fix.state: unknown — so there
-# is no version to bump to yet. The gate scores it High off the generic CVSS
-# 3.1 vector (AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H, 7.5); OpenSSL's own advisory
-# rates it Low, because it only bites a QUIC server accepting unauthenticated
-# Initial packets. Drydock links libssl3/libcrypto3 through the openssl CLI
-# and Node's own TLS stack as TLS *clients* only — registry queries and the
-# healthcheck — and runs no QUIC/HTTP3 server anywhere, so the vulnerable code
-# path is not reachable here regardless of the CVSS bucket. (curl was removed
-# from the image in v1.7.0 and is no longer part of that TLS-client surface.)
-#
-# Scoped to this exact CVE on these three package names (not by location), so
-# a different HIGH/CRITICAL finding in openssl/libssl3/libcrypto3 still fails
-# the gate normally.
-#
-# Remove this entry when either fires first:
-#   1. Alpine ships openssl >= 3.5.8 for the 3.24 branch (bump the Dockerfile's
-#      pinned `openssl=` version and drop this block — the `apk upgrade` line
-#      already covers libssl3/libcrypto3 once a rebuilt package exists).
-#   2. 2026-11-17 (90 days out) — recheck regardless, so this can't sit past a
-#      quarter if the version bump goes unnoticed.
+# CVE-2026-14456 (openssl / libssl3 / libcrypto3) was ignored here from
+# 2026-08-19 until the Dockerfile's `openssl=` pin rolled to 3.5.8-r0 (#881),
+# which carries the upstream fix. A live grype scan of that exact pin
+# (pkg:apk/alpine/openssl@3.5.8-r0) confirms zero matches for CVE-2026-14456
+# or any other finding, so the suppression no longer applies and was removed.
+# Re-add a scoped entry (by CVE and package name, not by location) if a future
+# base-image or pin change reintroduces it.
 ignore:
   - package:
       location: "/usr/bin/cosign"
   - package:
       location: "/usr/local/bin/trivy"
-  - vulnerability: CVE-2026-14456
-    package:
-      name: openssl
-  - vulnerability: CVE-2026-14456
-    package:
-      name: libssl3
-  - vulnerability: CVE-2026-14456
-    package:
-      name: libcrypto3

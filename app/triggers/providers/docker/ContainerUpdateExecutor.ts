@@ -444,7 +444,11 @@ class ContainerUpdateExecutor {
     }
 
     if (activeByOriginalName) {
-      this.reconcileWithActiveContainerOnly(pending, container);
+      this.reconcileWithActiveContainerOnly(
+        pending,
+        container,
+        activeByOriginalName.inspection?.Id,
+      );
       return;
     }
 
@@ -531,7 +535,33 @@ class ContainerUpdateExecutor {
   private reconcileWithActiveContainerOnly(
     pending: PendingContainerUpdateOperation,
     container: ContainerForUpdate,
+    activeContainerId?: string,
   ): void {
+    const isPersistedReplacement =
+      activeContainerId !== undefined && pending.newContainerId === activeContainerId;
+    const isUntouchedOriginal =
+      !isPersistedReplacement &&
+      activeContainerId !== undefined &&
+      pending.oldContainerId === activeContainerId;
+
+    if (isUntouchedOriginal) {
+      updateOperationStore.markOperationTerminal(pending.id, {
+        status: 'failed',
+        phase: 'recovery-failed',
+        lastError: `Original container ${pending.oldName} is still active; update did not reach replacement`,
+        recoveredAt: new Date().toISOString(),
+      });
+      this.recordRollbackTelemetry({
+        container,
+        outcome: 'error',
+        reason: 'startup_reconcile_original_untouched',
+        details: `Recovered interrupted update operation ${pending.id} without replacing original container ${pending.oldName}`,
+        fromVersion: pending.fromVersion,
+        toVersion: pending.toVersion,
+      });
+      return;
+    }
+
     updateOperationStore.markOperationTerminal(pending.id, {
       status: 'succeeded',
       phase: 'recovered-active',

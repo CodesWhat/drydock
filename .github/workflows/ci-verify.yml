@@ -1,11 +1,11 @@
-name: "🔬 CI Verify"
+name: "CI Verify"
 run-name: >-
   ${{
-    github.event_name == 'pull_request' && format('🔬 CI Verify — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
-    github.event_name == 'push' && format('🔬 CI Verify — {0}', github.event.head_commit.message) ||
-    github.event_name == 'merge_group' && format('🔬 CI Verify — Merge Queue: {0}', github.ref_name) ||
-    github.event_name == 'workflow_call' && format('🔬 CI Verify — workflow_call ({0})', github.sha) ||
-    format('🔬 CI Verify — {0}', github.ref_name)
+    github.event_name == 'pull_request' && format('CI Verify — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
+    github.event_name == 'push' && format('CI Verify — {0}', github.event.head_commit.message) ||
+    github.event_name == 'merge_group' && format('CI Verify — Merge Queue: {0}', github.ref_name) ||
+    github.event_name == 'workflow_call' && format('CI Verify — workflow_call ({0})', github.sha) ||
+    format('CI Verify — {0}', github.ref_name)
   }}
 
 on:
@@ -75,7 +75,7 @@ jobs:
       run-lint: false
 
   secrets:
-    name: "🔑 Security: Secrets"
+    name: "Security: Secrets"
     needs: [security-actions]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -142,7 +142,7 @@ jobs:
         run: scripts/scan-secrets.sh
 
   changes:
-    name: "🔎 Changes: Path Filter"
+    name: "Changes: Path Filter"
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -188,7 +188,7 @@ jobs:
           filters: .github/filters/runtime.yml
 
   codeql:
-    name: "🛡️ SAST: CodeQL"
+    name: "SAST: CodeQL"
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [security-actions]
     runs-on: ubuntu-24.04
@@ -228,7 +228,7 @@ jobs:
           category: /language:${{ matrix.language }}
 
   fuzz:
-    name: "🎯 Fuzz Testing"
+    name: "Fuzz Testing"
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [security-actions]
     runs-on: ubuntu-24.04
@@ -313,7 +313,13 @@ jobs:
         if: steps.fuzz-status.outputs.failed == 'true' && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
-          ISSUE_TITLE: "🚨 CI: Fuzz tests failing on main"
+          ISSUE_TITLE: "CI: Fuzz tests failing on main"
+          # The title this step used before the emoji rename. This step both
+          # writes a title and matches on it, so dropping the old value would
+          # orphan an issue an earlier run filed and start posting duplicates
+          # beside it. Matching both, and retitling what it finds, closes that
+          # window instead of relying on none existing at merge time.
+          LEGACY_ISSUE_TITLE: "🚨 CI: Fuzz tests failing on main"
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -325,7 +331,13 @@ jobs:
 
           issues_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100"
           open_issues="$(curl -fsSL "${api_headers[@]}" "${issues_url}")"
+
+          # Two single-purpose lookups rather than one filter held in a shell
+          # variable: a jq filter in a variable puts `$title` inside single
+          # quotes, which is SC2016 and makes a reader stop to check whether
+          # the non-expansion is deliberate.
           existing_number="$(echo "${open_issues}" | jq -r --arg title "${ISSUE_TITLE}" '.[] | select(.title == $title and (.pull_request | not)) | .number' | head -n1)"
+          legacy_number="$(echo "${open_issues}" | jq -r --arg legacy "${LEGACY_ISSUE_TITLE}" '.[] | select(.title == $legacy and (.pull_request | not)) | .number' | head -n1)"
 
           comment_body=$(
             cat <<EOF
@@ -337,6 +349,20 @@ jobs:
           - Log artifact: \`fuzz-log-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}\`
           EOF
           )
+
+          # Retitle a legacy-named issue in place, so the next run matches on
+          # the new title and this branch stops firing. Done before the comment
+          # so a failure here surfaces rather than being masked by a successful
+          # comment on a still-legacy title. If BOTH titles are somehow open,
+          # the new-named one is canonical and the legacy one is left alone
+          # rather than merged, since this step can't know which has the
+          # history worth keeping.
+          if [ -z "${existing_number}" ] && [ -n "${legacy_number}" ]; then
+            issue_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${legacy_number}"
+            curl -fsSL -X PATCH "${api_headers[@]}" "${issue_url}" \
+              -d "$(jq -n --arg title "${ISSUE_TITLE}" '{title: $title}')" >/dev/null
+            existing_number="${legacy_number}"
+          fi
 
           if [ -n "${existing_number}" ]; then
             comment_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${existing_number}/comments"
@@ -367,7 +393,7 @@ jobs:
         run: exit 1
 
   dependency-review:
-    name: "📦 Security: Dependency Review"
+    name: "Security: Dependency Review"
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -604,7 +630,7 @@ jobs:
           fail_ci_if_error: false
 
   web:
-    name: "🌐 Web: Site Build & Scripts Tests"
+    name: "Web: Site Build & Scripts Tests"
     # apps/web ships via Vercel (separate from the Docker image), and Vercel only
     # runs `next build` — never the node:test scripts suite. This job is that gate.
     # Path-filtered: skips (→ counts as pass) on changesets that don't touch the
@@ -762,7 +788,7 @@ jobs:
           retention-days: 1
 
   grype-image:
-    name: "🐳 Security: Grype Image"
+    name: "Security: Grype Image"
     # security-grype.yml's own grype-image job only runs on workflow_dispatch
     # and schedule, so the image every PR actually ships is never scanned
     # pre-merge. This job closes that gap by scanning the same QA image
@@ -846,7 +872,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   dast-zap-baseline:
-    name: "🕷️ DAST: ZAP + Nuclei"
+    name: "DAST: ZAP + Nuclei"
     runs-on: ubuntu-24.04
     timeout-minutes: 25  # Includes QA stack startup and scanner container runtime
     # Run on every merge to main (gates the next release-cut), on legacy
@@ -1382,7 +1408,7 @@ jobs:
   # still gate on it via release-cut.yml's second wait step.
 
   load-test-ci:
-    name: "⚡ Load Test: CI"
+    name: "Load Test: CI"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))
@@ -1507,7 +1533,7 @@ jobs:
           retention-days: 30
 
   load-test-behavior:
-    name: "⚡ Load Test: Behavior + Stress (Advisory)"
+    name: "Load Test: Behavior + Stress (Advisory)"
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))

@@ -16,6 +16,7 @@ const controllerMocks = vi.hoisted(() => {
     inspectContainer: vi.fn(),
     stopAndRemoveContainer: vi.fn(),
     recreateContainer: vi.fn(),
+    reconcileInProgressContainerUpdateOperation: vi.fn(),
     deregister: vi.fn().mockResolvedValue(undefined),
   };
   return {
@@ -72,6 +73,9 @@ describe('AgentTrigger', () => {
     controllerMocks.delegate.inspectContainer.mockResolvedValue({ State: { Running: true } });
     controllerMocks.delegate.stopAndRemoveContainer.mockResolvedValue(undefined);
     controllerMocks.delegate.recreateContainer.mockResolvedValue({ id: 'replacement-c1' });
+    controllerMocks.delegate.reconcileInProgressContainerUpdateOperation.mockResolvedValue(
+      undefined,
+    );
     trigger = new AgentTrigger();
     trigger.type = 'docker';
     trigger.name = 'update';
@@ -286,6 +290,12 @@ describe('AgentTrigger', () => {
       container,
       log,
     );
+    await expect(
+      trigger.reconcileInProgressContainerUpdateOperation(dockerApi, container, log),
+    ).resolves.toBeUndefined();
+    expect(
+      controllerMocks.delegate.reconcileInProgressContainerUpdateOperation,
+    ).toHaveBeenCalledWith(dockerApi, container, log);
   });
 
   test('legacy remote mode keeps default preview behavior and rejects local-only Docker capabilities', async () => {

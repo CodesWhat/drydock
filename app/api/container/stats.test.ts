@@ -5,20 +5,30 @@ import { createStatsHandlers, createSummaryStatsHandlers } from './stats.js';
 
 function createResponse() {
   const listeners: Record<string, (...args: unknown[]) => void> = {};
-  return {
+  const response = {
     status: vi.fn().mockReturnThis(),
     json: vi.fn(),
     writeHead: vi.fn(),
     write: vi.fn().mockReturnValue(true),
     flushHeaders: vi.fn(),
     flush: vi.fn(),
+    destroy: vi.fn(),
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       listeners[event] = handler;
+    }),
+    off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+      if (listeners[event] === handler) {
+        delete listeners[event];
+      }
     }),
     emit(event: string, ...args: unknown[]) {
       listeners[event]?.(...args);
     },
+    listenerCount(event: string) {
+      return listeners[event] ? 1 : 0;
+    },
   };
+  return response;
 }
 
 function createRequest(overrides: Record<string, unknown> = {}) {
@@ -183,6 +193,10 @@ describe('api/container/stats', () => {
     await vi.advanceTimersByTimeAsync(15_000);
     expect(res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
 
+    const writeCountBeforeDrain = res.write.mock.calls.length;
+    res.emit('drain');
+    expect(res.write).toHaveBeenCalledTimes(writeCountBeforeDrain);
+
     req.emit('close');
     req.emit('aborted');
     expect(harness.unsubscribe).toHaveBeenCalledTimes(1);
@@ -201,6 +215,62 @@ describe('api/container/stats', () => {
     expect(harness.watch).toHaveBeenCalledWith('c2');
     expect(harness.subscribe).toHaveBeenCalledWith('c2', expect.any(Function));
     expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('dd:container-stats'));
+  });
+
+  test('coalesces blocked container snapshots and resumes with only the latest on drain', async () => {
+    const harness = createHarness();
+    const req = createRequest({ params: { id: 'c1' } });
+    const res = createResponse();
+    const releaseWatch = vi.fn();
+    harness.watch.mockReturnValue(releaseWatch);
+    res.write.mockImplementation((event: string) => !event.includes('"cpuPercent":20'));
+
+    harness.handlers.streamContainerStats(req as any, res as any);
+    harness.emitSnapshot({ containerId: 'c1', cpuPercent: 20 });
+    const blockedWriteCount = res.write.mock.calls.length;
+    harness.emitSnapshot({ containerId: 'c1', cpuPercent: 30 });
+    harness.emitSnapshot({ containerId: 'c1', cpuPercent: 40 });
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(res.write).toHaveBeenCalledTimes(blockedWriteCount);
+    expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('"cpuPercent":30'));
+    expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('dd:heartbeat'));
+
+    res.emit('drain');
+
+    expect(res.write).toHaveBeenCalledTimes(blockedWriteCount + 1);
+    expect(res.write).toHaveBeenLastCalledWith(expect.stringContaining('"cpuPercent":40'));
+
+    req.emit('close');
+    expect(res.off).toHaveBeenCalledWith('drain', expect.any(Function));
+    expect(res.listenerCount('drain')).toBe(0);
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+    expect(releaseWatch).toHaveBeenCalledOnce();
+  });
+
+  test('closes and fully cleans a container stats stream that stays blocked', async () => {
+    const harness = createHarness();
+    const req = createRequest({ params: { id: 'c1' } });
+    const res = createResponse();
+    const releaseWatch = vi.fn();
+    harness.watch.mockReturnValue(releaseWatch);
+    res.write.mockImplementation((event: string) => !event.includes('dd:heartbeat'));
+
+    harness.handlers.streamContainerStats(req as any, res as any);
+    await vi.advanceTimersByTimeAsync(15_000);
+    res.emit('drain');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(res.destroy).toHaveBeenCalledOnce();
+    expect(res.off).toHaveBeenCalledWith('drain', expect.any(Function));
+    expect(res.listenerCount('drain')).toBe(0);
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+    expect(releaseWatch).toHaveBeenCalledOnce();
+    const writeCountAfterStall = res.write.mock.calls.length;
+    harness.emitSnapshot({ containerId: 'c1', cpuPercent: 99 });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(res.write).toHaveBeenCalledTimes(writeCountAfterStall);
   });
 
   test('cleanup continues when unsubscribe throws', () => {
@@ -380,6 +450,53 @@ describe('api/container/stats — summary handlers', () => {
     expect(res.write).toHaveBeenCalledWith(
       `event: dd:stats-summary\ndata: ${JSON.stringify(updatedSummary)}\n\n`,
     );
+  });
+
+  test('coalesces blocked summary snapshots and resumes with only the latest on drain', async () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+    res.write.mockImplementation((event: string) => !event.includes('"watchedCount":2'));
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+    harness.emitSummary({ ...emptySummary, watchedCount: 2 });
+    const blockedWriteCount = res.write.mock.calls.length;
+    harness.emitSummary({ ...emptySummary, watchedCount: 3 });
+    harness.emitSummary({ ...emptySummary, watchedCount: 4 });
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(res.write).toHaveBeenCalledTimes(blockedWriteCount);
+    expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('"watchedCount":3'));
+    expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('dd:heartbeat'));
+
+    res.emit('drain');
+
+    expect(res.write).toHaveBeenCalledTimes(blockedWriteCount + 1);
+    expect(res.write).toHaveBeenLastCalledWith(expect.stringContaining('"watchedCount":4'));
+
+    req.emit('close');
+    expect(res.off).toHaveBeenCalledWith('drain', expect.any(Function));
+    expect(res.listenerCount('drain')).toBe(0);
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  test('closes and fully cleans a summary stats stream that stays blocked', async () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+    res.write.mockReturnValue(false);
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(res.destroy).toHaveBeenCalledOnce();
+    expect(res.off).toHaveBeenCalledWith('drain', expect.any(Function));
+    expect(res.listenerCount('drain')).toBe(0);
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+    const writeCountAfterStall = res.write.mock.calls.length;
+    harness.emitSummary({ ...emptySummary, watchedCount: 99 });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(res.write).toHaveBeenCalledTimes(writeCountAfterStall);
   });
 
   test('SSE stream writes heartbeat at interval', async () => {

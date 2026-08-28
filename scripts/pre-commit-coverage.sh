@@ -26,11 +26,11 @@ if ! "${has_app}" && ! "${has_ui}"; then
 fi
 
 if "${has_app}"; then
-	echo "⏳ app: running tests on changed files..."
+	echo "app: running tests on changed files..."
 	(cd app && npx vitest run --changed HEAD --reporter=dot)
 fi
 
 if "${has_ui}"; then
-	echo "⏳ ui: running tests on changed files..."
+	echo "ui: running tests on changed files..."
 	(cd ui && npx vitest run --changed HEAD --reporter=dot)
 fi

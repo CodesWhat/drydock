@@ -46,6 +46,27 @@ test("faq data uses canonical DD_NOTIFICATION_* / DD_ACTION_* prefixes, not DD_T
   assert.match(faqDataSource, /DD_ACTION_/);
 });
 
+test("faq data describes DD_TRIGGER_* as removed, not as a still-live deprecation", () => {
+  // DD_TRIGGER_* was removed outright in v1.7.0 (DEPRECATIONS.md) -- any
+  // DD_TRIGGER_* env var now fails startup. The copy must say so instead of
+  // describing it as a deprecated alias that is merely "scheduled for
+  // removal", which is what shipped before this drifted from reality.
+  assert.doesNotMatch(
+    faqDataSource,
+    // Bounded dot-all rather than [^.]*: the prohibited claim can sit in a
+    // later sentence than the mention ("DD_TRIGGER_* was deprecated. It is
+    // scheduled for removal"), and a character class that stops at the first
+    // period would wave that through.
+    /DD_TRIGGER_\*[\s\S]{0,200}?scheduled for removal/i,
+    "DD_TRIGGER_* was already removed in v1.7.0 -- don't describe it as pending removal",
+  );
+  assert.match(
+    faqDataSource,
+    /DD_TRIGGER_\*[\s\S]{0,80}removed in v1\.7\.0/,
+    "FAQ copy mentioning DD_TRIGGER_* must say it was removed in v1.7.0",
+  );
+});
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 test("faq component is a client component", () => {

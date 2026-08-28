@@ -1,4 +1,4 @@
-name: "🐙 Review: Greptile Second Opinion"
+name: "Review: Greptile Second Opinion"
 
 on:
   pull_request:

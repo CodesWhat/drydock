@@ -180,16 +180,20 @@ function createSSEResponse() {
       listeners[event] = handler;
     }),
     once: vi.fn((event, handler) => {
-      listeners[event] = (...args) => {
+      const wrapped = (...args) => {
         delete listeners[event];
         handler(...args);
       };
+      wrapped.listener = handler;
+      listeners[event] = wrapped;
     }),
     off: vi.fn((event, handler) => {
-      if (listeners[event] === handler) {
+      if (listeners[event] === handler || listeners[event]?.listener === handler) {
         delete listeners[event];
       }
     }),
+    end: vi.fn(),
+    destroy: vi.fn(),
     _listeners: listeners,
   };
 }
@@ -259,6 +263,22 @@ function connectSseClient(handler, ip = '127.0.0.1') {
     clientId: connectedPayload.clientId,
     clientToken: connectedPayload.clientToken,
   };
+}
+
+function spyOnPressureStateLookup(res, transform) {
+  const originalMapGet = Map.prototype.get;
+  return vi.spyOn(Map.prototype, 'get').mockImplementation(function (key) {
+    const value = Reflect.apply(originalMapGet, this, [key]);
+    if (
+      key === res &&
+      value !== undefined &&
+      typeof value === 'object' &&
+      'pendingRetainedChunks' in value
+    ) {
+      return transform(value);
+    }
+    return value;
+  });
 }
 
 describe('SSE Router', () => {
@@ -628,6 +648,172 @@ describe('SSE Router', () => {
       res._listeners.drain();
       vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
       expect(res.write).toHaveBeenCalledTimes(2);
+    });
+
+    test('should suppress all SSE writes while blocked and replay retained durable work on drain', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      res.write.mockClear();
+      res.flush.mockClear();
+      res.once.mockClear();
+      res.write.mockImplementationOnce(() => false).mockImplementation(() => true);
+
+      sseRouter._broadcastScanStarted('container-1');
+      sseRouter._broadcastScanCompleted('container-1', 'success');
+      sseRouter._broadcastWithId('dd:heartbeat', { tick: 1 });
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+      expect(res.write).toHaveBeenCalledTimes(1);
+      expect(res.once).toHaveBeenCalledTimes(1);
+      expect(res.once).toHaveBeenCalledWith('drain', expect.any(Function));
+
+      res._listeners.drain();
+
+      expect(res.write).toHaveBeenCalledTimes(2);
+      expect(res.write.mock.calls[1][0]).toContain('event: dd:scan-completed');
+      expect(res.write.mock.calls.some(([chunk]) => chunk.includes('dd:heartbeat'))).toBe(false);
+
+      sseRouter._broadcastScanStarted('container-2');
+      expect(res.write).toHaveBeenCalledTimes(3);
+    });
+
+    test('should disconnect a blocked client when retained durable work exceeds the bound', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      res.write.mockClear();
+      res.once.mockClear();
+      res.write.mockReturnValueOnce(false);
+
+      sseRouter._broadcastScanStarted('container-1');
+      sseRouter._broadcastWithId('dd:oversized', { data: 'x'.repeat(1024 * 1024) });
+
+      expect(res.write).toHaveBeenCalledTimes(1);
+      expect(res.once).toHaveBeenCalledTimes(1);
+      expect(res.off).toHaveBeenCalledWith('drain', expect.any(Function));
+      expect(res.destroy).toHaveBeenCalledTimes(1);
+      expect(sseRouter._clients.has(res)).toBe(false);
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
+      expect(res._listeners.drain).toBeUndefined();
+    });
+
+    test('should fall back to ending an unregistered blocked response on overflow', () => {
+      const res = createSSEResponse();
+      delete res.destroy;
+      res.write.mockReturnValueOnce(false);
+      sseRouter._clients.add(res);
+
+      sseRouter._broadcastScanStarted('container-1');
+      sseRouter._broadcastWithId('dd:oversized', { data: 'x'.repeat(1024 * 1024) });
+
+      expect(res.end).toHaveBeenCalledTimes(1);
+      expect(sseRouter._clients.has(res)).toBe(false);
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
+    });
+
+    test('should remove registry state when pressure cleanup metadata is missing', () => {
+      const handler = getHandler();
+      const { req, res } = connectSseClient(handler);
+      res.write.mockClear();
+      res.write.mockReturnValueOnce(false);
+      sseRouter._broadcastScanStarted('container-1');
+
+      let pressureLookups = 0;
+      const mapGetSpy = spyOnPressureStateLookup(res, (value) => {
+        pressureLookups += 1;
+        if (pressureLookups === 2) {
+          return { ...value, cleanup: undefined };
+        }
+        if (pressureLookups === 3) {
+          return undefined;
+        }
+        return value;
+      });
+      try {
+        sseRouter._broadcastWithId('dd:oversized', { data: 'x'.repeat(1024 * 1024) });
+      } finally {
+        mapGetSpy.mockRestore();
+      }
+
+      expect(res.destroy).toHaveBeenCalledTimes(1);
+      expect(sseRouter._clients.has(res)).toBe(false);
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(res)).toBe(false);
+
+      req._listeners.close();
+    });
+
+    test('should not install a second drain handler when one is already present', () => {
+      const handler = getHandler();
+      const { req, res } = connectSseClient(handler);
+      res.write.mockClear();
+      res.once.mockClear();
+      res.write.mockReturnValue(false);
+      sseRouter._broadcastScanStarted('container-1');
+
+      const mapGetSpy = spyOnPressureStateLookup(res, (value) => ({ ...value, blocked: false }));
+      try {
+        sseRouter._broadcastScanCompleted('container-1', 'success');
+      } finally {
+        mapGetSpy.mockRestore();
+      }
+
+      expect(res.once.mock.calls.filter(([event]) => event === 'drain')).toHaveLength(1);
+      req._listeners.close();
+    });
+
+    test('should re-enter backpressure when a retained drain write is rejected', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      res.write.mockClear();
+      res.once.mockClear();
+      res.write
+        .mockImplementationOnce(() => false)
+        .mockImplementationOnce(() => false)
+        .mockImplementation(() => true);
+
+      sseRouter._broadcastScanStarted('container-1');
+      sseRouter._broadcastScanCompleted('container-1', 'success');
+      res._listeners.drain();
+
+      expect(res.once.mock.calls.filter(([event]) => event === 'drain')).toHaveLength(2);
+      expect(res._listeners.drain).toBeTypeOf('function');
+
+      res._listeners.drain();
+      sseRouter._broadcastScanStarted('container-2');
+      expect(res.write).toHaveBeenCalledTimes(3);
+    });
+
+    test('should keep writing to normal clients when another client is blocked', () => {
+      const handler = getHandler();
+      const slow = connectSseClient(handler, '10.0.0.1').res;
+      const normal = connectSseClient(handler, '10.0.0.2').res;
+      slow.write.mockClear();
+      normal.write.mockClear();
+      slow.write.mockReturnValueOnce(false);
+
+      sseRouter._broadcastScanStarted('container-1');
+      sseRouter._broadcastScanCompleted('container-1', 'success');
+      sseRouter._broadcastWithId('dd:heartbeat', { tick: 1 });
+
+      expect(slow.write).toHaveBeenCalledTimes(1);
+      expect(normal.write).toHaveBeenCalledTimes(3);
+    });
+
+    test('should make an already-queued drain callback inert after client cleanup', () => {
+      const handler = getHandler();
+      const { req, res } = connectSseClient(handler);
+      res.write.mockClear();
+      res.write.mockReturnValueOnce(false);
+
+      sseRouter._broadcastScanStarted('container-1');
+      sseRouter._broadcastScanCompleted('container-1', 'success');
+      const queuedDrain = res._listeners.drain;
+
+      req._listeners.close();
+
+      expect(res.off).toHaveBeenCalledWith('drain', expect.any(Function));
+      expect(res._listeners.drain).toBeUndefined();
+      queuedDrain();
+      expect(res.write).toHaveBeenCalledTimes(1);
     });
 
     test('should use one shared heartbeat interval and clear it when the last client disconnects', () => {
@@ -1203,6 +1389,107 @@ describe('SSE Router', () => {
       expect(writes[replayIdx4]).toBe(
         'id: test-boot-id:4\nevent: dd:scan-started\ndata: {"containerId":"c1"}\n\n',
       );
+    });
+
+    test('replay and connected handshake share the response pressure state', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      req.headers = { 'last-event-id': 'test-boot-id:3' };
+      mockSseEventBuffer.replaySince.mockReturnValueOnce({
+        kind: 'replay',
+        events: [
+          {
+            id: 'test-boot-id:4',
+            event: 'dd:scan-started',
+            data: { containerId: 'c1' },
+            timestamp: Date.now(),
+          },
+          {
+            id: 'test-boot-id:5',
+            event: 'dd:scan-completed',
+            data: { containerId: 'c1' },
+            timestamp: Date.now(),
+          },
+        ],
+      });
+      const res = createSSEResponse();
+      res.write.mockReturnValueOnce(false).mockReturnValue(true);
+
+      handler(req, res);
+
+      expect(res.write).toHaveBeenCalledTimes(1);
+      expect(res.once.mock.calls.filter(([event]) => event === 'drain')).toHaveLength(1);
+
+      res._listeners.drain();
+
+      expect(res.write).toHaveBeenCalledTimes(3);
+      expect(res.write.mock.calls[1][0]).toContain('test-boot-id:5');
+      expect(res.write.mock.calls[2][0]).toContain('event: dd:connected');
+    });
+
+    test('stops replay immediately when the response disconnects during a replay write', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      req.headers = { 'last-event-id': 'test-boot-id:3' };
+      mockSseEventBuffer.replaySince.mockReturnValueOnce({
+        kind: 'replay',
+        events: [
+          {
+            id: 'test-boot-id:4',
+            event: 'dd:scan-started',
+            data: { containerId: 'c1' },
+            timestamp: Date.now(),
+          },
+        ],
+      });
+      const res = createSSEResponse();
+      res.write.mockImplementationOnce(() => {
+        req._listeners.close();
+        return true;
+      });
+
+      handler(req, res);
+
+      expect(res.write).toHaveBeenCalledTimes(1);
+      expect(res.write.mock.calls[0][0]).toContain('test-boot-id:4');
+      expect(sseRouter._clients.has(res)).toBe(false);
+    });
+
+    test('stops before the handshake when a resync write disconnects the response', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      req.headers = { 'last-event-id': 'old-boot-id:99' };
+      mockSseEventBuffer.replaySince.mockReturnValueOnce({
+        kind: 'resync-required',
+        events: [],
+      });
+      const res = createSSEResponse();
+      res.write.mockImplementationOnce(() => {
+        req._listeners.close();
+        return true;
+      });
+
+      handler(req, res);
+
+      expect(res.write).toHaveBeenCalledTimes(1);
+      expect(res.write.mock.calls[0][0]).toContain('dd:resync-required');
+      expect(sseRouter._clients.has(res)).toBe(false);
+    });
+
+    test('does not retain a response disconnected during its connected handshake', () => {
+      const handler = getHandler();
+      const req = createSSERequest();
+      const res = createSSEResponse();
+      res.write.mockImplementationOnce(() => {
+        req._listeners.close();
+        return true;
+      });
+
+      handler(req, res);
+
+      expect(res.write).toHaveBeenCalledTimes(1);
+      expect(res.write.mock.calls[0][0]).toContain('dd:connected');
+      expect(sseRouter._clients.has(res)).toBe(false);
     });
 
     test('reconnect with no Last-Event-ID behaves exactly as today (no replay)', () => {

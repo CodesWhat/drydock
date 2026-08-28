@@ -518,6 +518,76 @@ describe('createDockerScannerBackend', () => {
     expect(container.remove).toHaveBeenCalledWith({ force: true });
   });
 
+  test('stops and removes a worker when its scan is aborted', async () => {
+    const { backend, container } = createHarness({ wait: () => new Promise(() => undefined) });
+    const controller = new AbortController();
+    const removeEventListenerSpy = vi.spyOn(controller.signal, 'removeEventListener');
+    const abortError = Object.assign(new Error('worker cancelled'), { name: 'AbortError' });
+
+    const runPromise = backend.run({
+      image: PINNED_IMAGE,
+      args: ['scan'],
+      timeoutMs: 1_000,
+      maxOutputBytes: 1_024,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(container.wait).toHaveBeenCalledOnce());
+    controller.abort(abortError);
+
+    await expect(runPromise).rejects.toBe(abortError);
+    expect(container.stop).toHaveBeenCalledWith({ t: 0 });
+    expect(container.remove).toHaveBeenCalledWith({ force: true });
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
+  test('rejects an already-aborted run with a fallback AbortError', async () => {
+    const { backend, client } = createHarness();
+    const controller = new AbortController();
+    controller.abort('cancelled without an Error reason');
+
+    await expect(
+      backend.run({
+        image: PINNED_IMAGE,
+        args: ['scan'],
+        timeoutMs: 50,
+        maxOutputBytes: 1_024,
+        signal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError', message: 'Scanner worker aborted' });
+    expect(client.createContainer).not.toHaveBeenCalled();
+  });
+
+  test('catches an abort that races cancellation listener installation', async () => {
+    const { backend, client } = createHarness();
+    const abortError = Object.assign(new Error('listener setup cancellation'), {
+      name: 'AbortError',
+    });
+    let aborted = false;
+    const signal = {
+      get aborted() {
+        return aborted;
+      },
+      get reason() {
+        return abortError;
+      },
+      addEventListener: vi.fn(() => {
+        aborted = true;
+      }),
+      removeEventListener: vi.fn(),
+    } as unknown as AbortSignal;
+
+    await expect(
+      backend.run({
+        image: PINNED_IMAGE,
+        args: ['scan'],
+        timeoutMs: 50,
+        maxOutputBytes: 1_024,
+        signal,
+      }),
+    ).rejects.toBe(abortError);
+    expect(client.createContainer).not.toHaveBeenCalled();
+  });
+
   test.each([
     [
       'container creation',

@@ -103,6 +103,25 @@ test('executes provider invocations in hardened Docker workers with bounded prov
   });
 });
 
+test('forwards scanner cancellation to the Docker backend', async () => {
+  const trivy = createBackend();
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({ scanner: 'trivy', sbom: { enabled: false } }),
+    backends: { trivy },
+  });
+  const controller = new AbortController();
+
+  await runtime.run({
+    provider: 'trivy',
+    args: ['image', '--format', 'json', 'registry/app:1'],
+    timeoutMs: 1000,
+    maxOutputBytes: 1024,
+    signal: controller.signal,
+  });
+
+  expect(trivy.run).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }));
+});
+
 test('auto SBOM generation uses Syft only when Grype is the sole scanner', () => {
   const grypeOnly = createScannerRuntime({
     configuration: createConfiguration({ scanner: 'grype' }),

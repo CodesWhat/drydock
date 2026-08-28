@@ -1,4 +1,4 @@
-import Trueforge from './trueforge.js';
+import Trueforge from './Trueforge.js';
 
 vi.mock('axios');
 

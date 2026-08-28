@@ -33,7 +33,7 @@ curl "http://drydock:3000/api/v1/containers?limit=25&offset=0"
 | `limit` | integer | `0` | Maximum number of containers to return (`0` means unbounded; max `200`) |
 | `offset` | integer | `0` | Number of matching containers to skip |
 | `includeVulnerabilities` | boolean | `false` | Include full vulnerability arrays in `data` |
-| `sort` | string | | Sort order: `name`, `-name`, `status`, `-status`, `age`, `-age`, `created`, `-created` (prefix `-` for descending) |
+| `sort` | string | `name` | Sort order: `name`, `-name`, `status`, `-status`, `age`, `-age`, `created`, `-created` (prefix `-` for descending). Sorting is applied before pagination. |
 | `order` | string | | Optional sort direction override: `asc` or `desc` |
 | `status` | string | | Filter by update/runtime status: `update-available`, `up-to-date`, `running`, `stopped`, `exited`, `paused`, `restarting`, `dead`, `created` |
 | `kind` | string | | Filter by update kind or watched state: `major`, `minor`, `patch`, `digest`, `watched`, `unwatched`, `all` |
@@ -653,7 +653,7 @@ WebSocket connections are rate-limited to 1,000 connections per 15-minute window
 
 ## Reveal container environment variables
 
-Returns the full (unredacted) runtime environment variables for a container. Environment values in the standard container response are redacted to `[REDACTED]` for sensitive keys, including names containing `PASSWORD`, `PASSWD`, `SECRET`, `TOKEN`, `API_KEY`, `APIKEY`, `PRIVATE_KEY`, `CREDENTIAL`, `AUTH`, `ACCESS_KEY`, or an exact `PASS` segment. This endpoint reveals the actual values and creates an audit trail entry recording how many sensitive variables were revealed.
+Returns the full (unredacted) runtime environment variables for a container. Environment values in the standard container response are redacted to `[REDACTED]` for sensitive entries. This includes keys containing `PASSWORD`, `PASSWD`, `SECRET`, `TOKEN`, `API_KEY`, `APIKEY`, `PRIVATE_KEY`, `CREDENTIAL`, `AUTH`, `ACCESS_KEY`, exact `PASS` or `PAT` segments, and URL values containing a username or password. This endpoint reveals the actual values and creates an audit trail entry recording how many sensitive variables were revealed.
 
 Rate-limited to 10 requests per minute.
 
@@ -674,7 +674,7 @@ curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d
 | --- | --- | --- |
 | `env[].key` | string | Environment variable name |
 | `env[].value` | string | Unredacted value |
-| `env[].sensitive` | boolean | Whether the key matches known sensitive patterns (passwords, tokens, secrets) |
+| `env[].sensitive` | boolean | Whether the key matches a known sensitive pattern or the value is a URL containing credentials |
 
 Returns 200 with the env array on success, 404 if the container is not found, or 429 if rate-limited.
 

@@ -1337,7 +1337,44 @@ export class AgentClient {
     });
   }
 
+  private canMutateContainer(data: unknown, operation: 'upsert' | 'remove'): data is Container {
+    if (!data || typeof data !== 'object') {
+      this.log.warn(`Ignoring invalid container ${operation} event from agent ${this.name}`);
+      return false;
+    }
+
+    const candidate = data as Partial<Pick<Container, 'id' | 'watcher'>>;
+    if (typeof candidate.id !== 'string' || candidate.id.length === 0) {
+      this.log.warn(`Ignoring container ${operation} event without an id from agent ${this.name}`);
+      return false;
+    }
+
+    const existing = storeContainer.getContainer(candidate.id);
+    if (!existing) {
+      return operation === 'upsert';
+    }
+    if (existing.agent !== this.name) {
+      this.log.warn(
+        `Ignoring container ${operation} for ${sanitizeLogParam(candidate.id)} from agent ${this.name}: container is owned by ${sanitizeLogParam(existing.agent ?? 'controller')}`,
+      );
+      return false;
+    }
+    if (
+      (operation === 'upsert' || candidate.watcher !== undefined) &&
+      candidate.watcher !== existing.watcher
+    ) {
+      this.log.warn(
+        `Ignoring container ${operation} for ${sanitizeLogParam(candidate.id)} from agent ${this.name}: watcher does not match`,
+      );
+      return false;
+    }
+    return true;
+  }
+
   private async handleContainerChangeEvent(data: unknown) {
+    if (!this.canMutateContainer(data, 'upsert')) {
+      return;
+    }
     const containerReport = await this.processContainer(data as Container);
     this.rememberPendingWatcherCycleReport(containerReport);
     if (containerReport?.container) {
@@ -1379,6 +1416,9 @@ export class AgentClient {
   }
 
   private handleContainerRemovedEvent(data: unknown) {
+    if (!this.canMutateContainer(data, 'remove')) {
+      return;
+    }
     const removedContainerData = data as { id: string };
     this.clearPendingFreshState(removedContainerData.id);
     this.clearPendingWatcherCycleReportByContainerId(removedContainerData.id);

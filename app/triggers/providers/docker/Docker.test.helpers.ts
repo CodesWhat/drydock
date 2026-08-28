@@ -87,6 +87,7 @@ vi.mock('../../../security/scan.js', () => ({
 
 vi.mock('../../../store/container.js', () => ({
   getContainer: vi.fn(),
+  getContainers: vi.fn().mockReturnValue([]),
   updateContainer: vi.fn((container) => container),
   cacheSecurityState: vi.fn(),
 }));
@@ -95,6 +96,7 @@ vi.mock('../../../store/backup', () => ({
   insertBackup: vi.fn(),
   pruneOldBackups: vi.fn(),
   getBackupsByName: vi.fn().mockReturnValue([]),
+  getBackupsForContainer: vi.fn().mockReturnValue([]),
 }));
 
 const mockRunHook = vi.hoisted(() => vi.fn());

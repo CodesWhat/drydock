@@ -9,6 +9,7 @@ const {
   mockRateLimit,
   mockRateLimitMiddleware,
   mockGetState,
+  mockSubscribeEvents,
 } = vi.hoisted(() => {
   const mockRateLimitMiddleware = vi.fn((_req, _res, next) => next());
   const mockGetState = vi.fn(() => ({ watcher: { 'docker.local': {} } }));
@@ -36,6 +37,7 @@ const {
   };
   const mockLoggerChild = vi.fn();
   const mockRateLimit = vi.fn(() => mockRateLimitMiddleware);
+  const mockSubscribeEvents = vi.fn(() => true);
   return {
     mockApp,
     mockServerConfig,
@@ -45,6 +47,7 @@ const {
     mockRateLimit,
     mockRateLimitMiddleware,
     mockGetState,
+    mockSubscribeEvents,
   };
 });
 
@@ -90,7 +93,7 @@ vi.mock('./trigger.js', () => ({
 }));
 vi.mock('./event.js', () => ({
   initEvents: vi.fn(),
-  subscribeEvents: vi.fn(),
+  subscribeEvents: mockSubscribeEvents,
 }));
 vi.mock('../../log/buffer.js', () => ({
   getEntries: vi.fn().mockReturnValue([]),
@@ -118,6 +121,7 @@ describe('Agent API index', () => {
     delete process.env.WUD_AGENT_SECRET_FILE;
     vi.clearAllMocks();
     mockGetState.mockReturnValue({ watcher: { 'docker.local': {} } });
+    mockSubscribeEvents.mockReturnValue(true);
     Object.assign(mockServerConfig, {
       port: 3000,
       tls: { enabled: false },
@@ -302,6 +306,36 @@ describe('Agent API index', () => {
       const getCalls = mockApp.get.mock.calls;
       const logsRoute = getCalls.find(([path]) => path === '/api/containers/:id/logs');
       expect(logsRoute).toBeDefined();
+    });
+
+    test('should reject an excess authenticated event stream with the standard error response', async () => {
+      process.env.DD_AGENT_SECRET = 'secret';
+      mockSubscribeEvents.mockReturnValueOnce(false);
+      await init();
+      const eventsRoute = mockApp.get.mock.calls.find(([path]) => path === '/api/events');
+      const handler = eventsRoute?.[1];
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+      handler({ ip: '127.0.0.1' }, res);
+
+      expect(mockSubscribeEvents).toHaveBeenCalledTimes(1);
+      expect(res.status).toHaveBeenCalledWith(429);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Too many SSE connections' });
+    });
+
+    test('should leave an accepted authenticated event stream open', async () => {
+      process.env.DD_AGENT_SECRET = 'secret';
+      await init();
+      const eventsRoute = mockApp.get.mock.calls.find(([path]) => path === '/api/events');
+      const handler = eventsRoute?.[1];
+      const req = { ip: '127.0.0.1' };
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+      handler(req, res);
+
+      expect(mockSubscribeEvents).toHaveBeenCalledWith(req, res);
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
     });
 
     test('should mount /health before auth middleware', async () => {

@@ -157,7 +157,7 @@ test('secret scanning gates full history and the tracked working tree', () => {
   const job = workflow.jobs?.secrets;
 
   expect(job).toMatchObject({
-    name: '🔑 Security: Secrets',
+    name: 'Security: Secrets',
     needs: ['security-actions'],
     'runs-on': 'ubuntu-24.04',
     'timeout-minutes': 10,
@@ -390,13 +390,13 @@ test('load-test workflow runs load profiles in parallel jobs', () => {
     "github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))";
 
   expect(workflow.jobs?.['load-test-ci']).toMatchObject({
-    name: '⚡ Load Test: CI',
+    name: 'Load Test: CI',
     if: releaseMatrixCondition,
     needs: ['build'],
     'timeout-minutes': expect.any(Number),
   });
   expect(workflow.jobs?.['load-test-behavior']).toMatchObject({
-    name: '⚡ Load Test: Behavior + Stress (Advisory)',
+    name: 'Load Test: Behavior + Stress (Advisory)',
     if: releaseMatrixCondition,
     needs: ['build'],
     'timeout-minutes': expect.any(Number),

@@ -1,5 +1,5 @@
-name: "🏷️ Release: Cut"
-run-name: "🏷️ Release: Cut — manual by ${{ github.actor }}"
+name: "Release: Cut"
+run-name: "Release: Cut — manual by ${{ github.actor }}"
 
 # Recoverable release pipeline. Build output is first published under
 # run-scoped staging tags, signed, attested, and attached to a draft release.
@@ -55,7 +55,7 @@ env:
 
 jobs:
   release:
-    name: "🚀 Release: Build, Publish, Tag"
+    name: "Release: Build, Publish, Tag"
     runs-on: ubuntu-24.04
     timeout-minutes: 120  # Multi-arch build, signing, attestations, release upload, and CI-success polling budget
     environment: release-publish
@@ -556,6 +556,37 @@ jobs:
 
           if ! awk 'NR > 1 && NF { found = 1; exit } END { exit found ? 0 : 1 }' "${entry_file}"; then
             echo "::error::CHANGELOG entry for ${RELEASE_TAG} is empty."
+            exit 1
+          fi
+
+          # v1.7.0-rc.4 shipped with two `||||||| parent of ...` lines in its
+          # entry: a hand-resolved conflict left the diff3 middle marker behind
+          # and it read as ordinary prose to the gate, to CI, and to review.
+          # scripts/conflict-markers.test.mjs catches it before a push, but the
+          # cut is the last line of defence before it reaches a published tag
+          # and the generated docs changelog. `if grep` is exempt from set -e,
+          # so a clean file (exit 1, no match) does not abort the step.
+          if grep -nE '^(<<<<<<<|\|\|\|\|\|\|\||>>>>>>>)([[:space:]]|$)' "${CHANGELOG_PATH}"; then
+            echo "::error::CHANGELOG contains merge conflict markers (listed above). Resolve them before cutting ${RELEASE_TAG}."
+            exit 1
+          fi
+
+          # PR #906 shipped the literal string `(PR_LINK_PLACEHOLDER)` in a
+          # CHANGELOG bullet where a real `([#906](.../pull/906))` citation
+          # belonged — an ALL-CAPS `_PLACEHOLDER` token left behind until the
+          # PR existed, and never filled in. It read as an ordinary citation
+          # to the gate, to CI, and to review, same as the rc.4 conflict
+          # markers above. scripts/unfilled-placeholders.test.mjs catches this
+          # class (an ALL-CAPS `_PLACEHOLDER` token, or an empty markdown link
+          # target like `[text]()`) before a push, but the cut is the last
+          # line of defence before it reaches a published tag and the
+          # generated docs changelog. `if grep` is exempt from set -e, so a
+          # clean file (exit 1, no match) does not abort the step.
+          # The optional `<...>` covers the angle-bracket destination form:
+          # `[text](<>)` is equally valid CommonMark and equally empty, so a
+          # pattern that only knows `[text]()` leaves a hole.
+          if grep -nE '(^|[^A-Za-z0-9_])([A-Z][A-Z0-9]*_)*PLACEHOLDER($|[^A-Za-z0-9_])|\[[^]]*\]\([[:space:]]*(<[[:space:]]*>[[:space:]]*)?\)' "${CHANGELOG_PATH}"; then
+            echo "::error::CHANGELOG contains an unfilled placeholder (listed above). Resolve it before cutting ${RELEASE_TAG}."
             exit 1
           fi
 

@@ -20,7 +20,6 @@ import {
   applyContainerMaturityFilter,
   applyContainerWatchedKindFilter,
   type ContainerWatchedKind,
-  getFirstNonEmptyQueryValue,
   isContainerWatchedKind,
   mapContainerListKindFilter,
   mapContainerListStatusFilter,
@@ -474,14 +473,11 @@ export function buildContainerListResponse(
     ...(validatedQuery.watcher ? { watcher: validatedQuery.watcher } : {}),
   };
   const pagination = normalizeContainerListPagination(query);
-  const hasExplicitSort =
-    getFirstNonEmptyQueryValue(query.sort) !== undefined ||
-    getFirstNonEmptyQueryValue(query.order) !== undefined;
 
   // Maturity and watched-kind filters require loading the full collection
   // before pagination because they inspect in-memory properties that cannot
-  // be pushed down to the store. Explicit sorting is delegated to the store,
-  // which orders cached live objects before cloning only the requested page.
+  // be pushed down to the store. Sorting is delegated to the store for every
+  // paginated request so the validated default order is global across pages.
   // status and update-kind are already pushed down to filteredQuery as
   // store-level filters (updateAvailable, updateKind.*), so the store handles
   // those efficiently without loading everything into memory first.
@@ -510,16 +506,12 @@ export function buildContainerListResponse(
   } else {
     pagedContainers = context.getContainersFromStore(filteredQuery, {
       ...pagination,
-      ...(hasExplicitSort ? { sort: sortMode } : {}),
+      sort: sortMode,
     });
-    const sortedPagedContainers = hasExplicitSort
-      ? pagedContainers
-      : sortContainers(pagedContainers, sortMode);
     total =
       pagination.limit === 0 && pagination.offset === 0
-        ? sortedPagedContainers.length
+        ? pagedContainers.length
         : context.getContainerCountFromStore(filteredQuery);
-    pagedContainers = sortedPagedContainers;
   }
 
   const redactedContainers = context.redactContainersRuntimeEnv(pagedContainers);

@@ -358,7 +358,7 @@ onUnmounted(() => {
             type="submit"
             :disabled="submitting"
             class="w-full py-2.5 text-sm font-semibold dd-rounded transition-colors cursor-pointer"
-            style="background-color: var(--dd-primary); color: #fff;"
+            style="background-color: var(--dd-primary); color: var(--dd-primary-fg);"
           >
             <template v-if="submitting">
               <AppIcon name="spinner" :size="14" class="dd-spin mr-2" />

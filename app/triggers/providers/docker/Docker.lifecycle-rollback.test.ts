@@ -493,8 +493,9 @@ describe('additional docker trigger coverage', () => {
 
   test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
     const backupStore = await import('../../../store/backup.js');
+    const storeContainer = await import('../../../store/container.js');
     docker.configuration.prune = true;
-    vi.mocked(backupStore.getBackupsByName).mockReturnValue([
+    vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([
       {
         imageTag: '1.0.0',
       },
@@ -504,26 +505,28 @@ describe('additional docker trigger coverage', () => {
       getImageFullName: vi.fn(() => 'my-registry/test/test:1.0.0'),
     };
     const logContainer = createMockLog('info');
-
-    await docker.cleanupOldImages(
-      {},
-      registryProvider,
-      {
-        name: 'container-name',
-        image: {
-          registry: { name: 'hub', url: 'my-registry' },
-          name: 'test/test',
-          tag: { value: '1.0.0' },
-          digest: {},
-        },
-        updateKind: {
-          kind: 'tag',
-        },
+    const container = {
+      name: 'container-name',
+      watcher: 'test',
+      image: {
+        registry: { name: 'hub', url: 'my-registry' },
+        name: 'test/test',
+        tag: { value: '1.0.0' },
+        digest: {},
       },
-      logContainer,
-    );
+      updateKind: {
+        kind: 'tag',
+      },
+    };
+    vi.mocked(storeContainer.getContainers).mockReturnValue([container] as any);
 
-    expect(backupStore.getBackupsByName).toHaveBeenCalledWith('container-name');
+    await docker.cleanupOldImages({}, registryProvider, container, logContainer);
+
+    expect(backupStore.getBackupsForContainer).toHaveBeenCalledWith({
+      containerName: 'container-name',
+      containerIdentityKey: '::test::container-name',
+      includeLegacy: true,
+    });
     expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
     expect(removeImageSpy).not.toHaveBeenCalled();
     expect(logContainer.info).toHaveBeenCalledWith(

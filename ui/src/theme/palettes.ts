@@ -15,7 +15,7 @@ export const themeFamilies: ThemeFamilyMeta[] = [
     label: 'One Dark',
     swatchDark: '#282c34',
     swatchLight: '#fafafa',
-    accent: '#528bff',
+    accent: '#8ab0ff',
   },
   {
     id: 'github',
@@ -29,7 +29,7 @@ export const themeFamilies: ThemeFamilyMeta[] = [
     label: 'Dracula',
     swatchDark: '#282a36',
     swatchLight: '#f8f8f2',
-    accent: '#bd93f9',
+    accent: '#e1cffc',
   },
   {
     id: 'catppuccin',
@@ -43,7 +43,7 @@ export const themeFamilies: ThemeFamilyMeta[] = [
     label: 'Gruvbox',
     swatchDark: '#282828',
     swatchLight: '#fbf1c7',
-    accent: '#fe8019',
+    accent: '#fea962',
   },
   {
     id: 'ayu',
