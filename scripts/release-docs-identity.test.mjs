@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.6.1-rc.5';
-const PREV_RC_VERSION = '1.6.1-rc.4';
-const RC_DATE = '2026-08-27';
-const RC_DISPLAY_DATE = 'August 27, 2026';
+const RC_VERSION = '1.6.1-rc.6';
+const PREV_RC_VERSION = '1.6.1-rc.5';
+const RC_DATE = '2026-08-28';
+const RC_DISPLAY_DATE = 'August 28, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.5'];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
