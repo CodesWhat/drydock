@@ -388,8 +388,19 @@
       "updateButton": "今すぐ更新",
       "blockedButton": "更新はブロックされています",
       "notificationsOnlyButton": "通知のみ",
+      "actionPolicyBadge": {
+        "auto": "Auto",
+        "manual": "Manual",
+        "blocked": "Blocked"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock will apply this update automatically once it's detected — no manual click needed.",
+        "manual": "This update can be applied manually, but won't fire automatically.",
+        "blocked": "No action trigger currently authorizes this container — check the dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "summary": {
         "upToDate": "最新の状態です。",
+        "unknown": "Update status unknown. The last check could not complete.",
         "insight": "新しいバージョンが利用可能です — このタグは固定されています。",
         "inProgress": "更新処理中です。",
         "hardBlocked": "更新はブロックされています — 修正が必要です。",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Auto",
+      "resolvedStateTooltip": {
+        "auto": "Runs automatically for this container when a qualifying update is detected.",
+        "manual": "Can be run manually for this container, but will not fire automatically.",
+        "blocked": "Blocked for this container — check the dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "toasts": {
         "ran": "トリガーを実行しました：{key}",
         "ranSuccessfully": "トリガー {key} が正常に実行されました",
