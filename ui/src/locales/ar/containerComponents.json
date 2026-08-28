@@ -388,8 +388,19 @@
       "updateButton": "تحديث الآن",
       "blockedButton": "التحديث محظور",
       "notificationsOnlyButton": "إشعارات فقط",
+      "actionPolicyBadge": {
+        "auto": "تلقائي",
+        "manual": "يدوي",
+        "blocked": "محظور"
+      },
+      "actionPolicyTooltip": {
+        "auto": "سيقوم Drydock بتطبيق هذا التحديث تلقائيًا فور اكتشافه — دون الحاجة إلى نقرة يدوية.",
+        "manual": "يمكن تطبيق هذا التحديث يدويًا، لكنه لن يُطلق تلقائيًا.",
+        "blocked": "لا يوجد مشغّل إجراء يخوّل هذه الحاوية حاليًا — تحقّق من تسميات dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "summary": {
         "upToDate": "محدَّث.",
+        "unknown": "حالة التحديث غير معروفة. تعذّر إتمام آخر فحص.",
         "insight": "تتوفر نسخة أحدث — هذا الوسم مثبّت.",
         "inProgress": "التحديث قيد التنفيذ.",
         "hardBlocked": "التحديث محظور — يلزم إصلاح.",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "تلقائي",
+      "resolvedStateTooltip": {
+        "auto": "يعمل تلقائيًا لهذه الحاوية عند اكتشاف تحديث مؤهّل.",
+        "manual": "يمكن تشغيله يدويًا لهذه الحاوية، لكنه لن يُطلق تلقائيًا.",
+        "blocked": "محظور لهذه الحاوية — تحقّق من تسميات dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "toasts": {
         "ran": "تم تشغيل المشغّل: {key}",
         "ranSuccessfully": "تم تشغيل المشغّل {key} بنجاح",

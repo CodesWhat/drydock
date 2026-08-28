@@ -388,8 +388,19 @@
       "updateButton": "立即更新",
       "blockedButton": "更新已阻止",
       "notificationsOnlyButton": "僅通知",
+      "actionPolicyBadge": {
+        "auto": "自動",
+        "manual": "手動",
+        "blocked": "已阻止"
+      },
+      "actionPolicyTooltip": {
+        "auto": "偵測到此更新後，Drydock 將自動套用 — 不需要手動點選。",
+        "manual": "此更新可以手動套用，但不會自動觸發。",
+        "blocked": "目前沒有任何操作觸發器授權此容器 — 請檢查 dd.action.include / dd.action.exclude / dd.action.auto 標籤。"
+      },
       "summary": {
         "upToDate": "已是最新。",
+        "unknown": "更新狀態未知。上次檢查未能完成。",
         "insight": "有更新版本可用 — 此標籤已固定。",
         "inProgress": "更新進行中。",
         "hardBlocked": "更新已阻止 — 需要修復。",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "自動",
+      "resolvedStateTooltip": {
+        "auto": "當偵測到符合條件的更新時，會自動為此容器執行。",
+        "manual": "可以為此容器手動執行，但不會自動觸發。",
+        "blocked": "此容器已被阻止 — 請檢查 dd.action.include / dd.action.exclude / dd.action.auto 標籤。"
+      },
       "toasts": {
         "ran": "觸發器已執行：{key}",
         "ranSuccessfully": "觸發器 {key} 執行成功",

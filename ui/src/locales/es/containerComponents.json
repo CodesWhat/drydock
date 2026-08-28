@@ -388,8 +388,19 @@
       "updateButton": "Actualizar ahora",
       "blockedButton": "Actualización bloqueada",
       "notificationsOnlyButton": "Sólo notificaciones",
+      "actionPolicyBadge": {
+        "auto": "Automático",
+        "manual": "Manual",
+        "blocked": "Bloqueado"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock aplicará esta actualización automáticamente en cuanto se detecte — no es necesario hacer clic manualmente.",
+        "manual": "Esta actualización se puede aplicar manualmente, pero no se activará automáticamente.",
+        "blocked": "Ningún trigger de acción autoriza actualmente este contenedor — revisa las etiquetas dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "summary": {
         "upToDate": "Actualizado.",
+        "unknown": "Estado de la actualización desconocido. La última comprobación no pudo completarse.",
         "insight": "Nueva versión disponible — este tag está fijado.",
         "inProgress": "Actualización en curso.",
         "hardBlocked": "Actualización bloqueada — se requiere una corrección.",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Automático",
+      "resolvedStateTooltip": {
+        "auto": "Se ejecuta automáticamente para este contenedor cuando se detecta una actualización elegible.",
+        "manual": "Se puede ejecutar manualmente para este contenedor, pero no se activará automáticamente.",
+        "blocked": "Bloqueado para este contenedor — revisa las etiquetas dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "toasts": {
         "ran": "Trigger ejecutado: {key}",
         "ranSuccessfully": "El trigger {key} se ejecutó correctamente",

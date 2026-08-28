@@ -388,8 +388,19 @@
       "updateButton": "Aktualizuj teraz",
       "blockedButton": "Aktualizacja zablokowana",
       "notificationsOnlyButton": "Tylko powiadomienia",
+      "actionPolicyBadge": {
+        "auto": "Auto",
+        "manual": "Ręczne",
+        "blocked": "Zablokowano"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock zastosuje tę aktualizację automatycznie, gdy tylko zostanie wykryta — ręczne kliknięcie nie jest wymagane.",
+        "manual": "Tę aktualizację można zastosować ręcznie, ale nie uruchomi się automatycznie.",
+        "blocked": "Żaden wyzwalacz akcji nie autoryzuje obecnie tego kontenera — sprawdź etykiety dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "summary": {
         "upToDate": "Aktualne.",
+        "unknown": "Status aktualizacji nieznany. Ostatnie sprawdzenie nie mogło zostać zakończone.",
         "insight": "Dostępna nowsza wersja — ten tag jest przypięty.",
         "inProgress": "Aktualizacja w toku.",
         "hardBlocked": "Aktualizacja zablokowana — wymagana poprawka.",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Auto",
+      "resolvedStateTooltip": {
+        "auto": "Uruchamia się automatycznie dla tego kontenera, gdy zostanie wykryta kwalifikująca się aktualizacja.",
+        "manual": "Można uruchomić ręcznie dla tego kontenera, ale nie uruchomi się automatycznie.",
+        "blocked": "Zablokowane dla tego kontenera — sprawdź etykiety dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "toasts": {
         "ran": "Wyzwalacz uruchomiony: {key}",
         "ranSuccessfully": "Wyzwalacz {key} uruchomiony pomyślnie",
