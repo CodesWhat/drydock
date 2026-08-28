@@ -328,7 +328,7 @@
     "updateDialog": {
       "title": "Aggiorna container",
       "thisContainer": "this container",
-      "confirmTagChange": "Aggiornare {name}? Il tag immagine cambiera da :{currentTag} a :{newTag}{kind}.",
+      "confirmTagChange": "Aggiornare {name}? Il tag immagine cambierà da :{currentTag} a :{newTag}{kind}.",
       "confirmDigestChange": "Aggiornare {name}? È disponibile una build più recente di :{currentTag} (cambio digest).",
       "confirmLatest": "Aggiornare {name} ora? Verrà applicata l'immagine più recente rilevata.",
       "updating": "Aggiornamento...",
@@ -456,7 +456,7 @@
       "update": {
         "header": "Update Container",
         "messageLatest": "Aggiornare {name} ora? Verrà applicata l'immagine più recente rilevata.",
-        "messageTagChange": "Aggiornare {name}? Il tag immagine cambiera da :{currentTag} a :{newTag}{kind}.",
+        "messageTagChange": "Aggiornare {name}? Il tag immagine cambierà da :{currentTag} a :{newTag}{kind}.",
         "messageDigestChange": "Aggiornare {name}? È disponibile una build più recente di :{currentTag} (cambio digest).",
         "softBlockerSuffix": "\n\nQuesto aggiornamento è attualmente bloccato dalla policy:\n{list}\n\nFai clic su \"Update anyway\" per sovrascrivere.",
         "softBlockerLearnMore": "Learn more",

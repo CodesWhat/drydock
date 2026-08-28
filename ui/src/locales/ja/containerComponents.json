@@ -552,7 +552,7 @@
         "failedDetail": "ポリシーの更新に失敗しました"
       },
       "validation": {
-        "snoozeDate": "有効なスヌーズ日時を選択してください",
+        "snoozeDate": "有効なスヌーズ日付を選択してください",
         "maturityAge": "{min} 日から {max} 日の間で成熟度の日数を入力してください"
       }
     },

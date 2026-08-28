@@ -299,7 +299,7 @@
       "unknown": "Không xác định"
     },
     "detail": {
-      "loadError": "Không thể tải chi tiết Registry mới nhất",
+      "loadError": "Không thể tải chi tiết registry mới nhất",
       "refreshing": "Đang làm mới thông tin registry...",
       "status": "Trạng thái",
       "authentication": "Xác thực",
@@ -372,7 +372,7 @@
       "defaultError": "Kiểm tra trigger thất bại"
     },
     "detail": {
-      "loadError": "Không thể tải chi tiết Trigger mới nhất",
+      "loadError": "Không thể tải chi tiết trigger mới nhất",
       "status": "Trạng thái",
       "refreshing": "Đang làm mới thông tin trigger...",
       "noConfig": "Không có thuộc tính cấu hình"
@@ -407,7 +407,7 @@
       "maint": "Bảo trì"
     },
     "detail": {
-      "loadError": "Không thể tải chi tiết Watcher mới nhất",
+      "loadError": "Không thể tải chi tiết watcher mới nhất",
       "cron": "Cron",
       "lastRun": "Lần chạy cuối",
       "containersWatched": "Container đang theo dõi",

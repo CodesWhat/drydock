@@ -269,7 +269,7 @@
       "unknown": "Không xác định",
       "imageMetadata": "Thông tin Image",
       "imageAge": "Tuổi của image",
-      "revealFailed": "Không thể hiện giá trị"
+      "revealFailed": "Không thể hiển thị giá trị"
     },
     "listContent": {
       "loadingContainers": "Đang tải container...",

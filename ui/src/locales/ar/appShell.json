@@ -136,9 +136,9 @@
         },
         "settings": {
           "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "الإعداد · المظهر",
+          "appearanceSubtitle": "إعداد · المظهر",
           "profileTitle": "Profile Settings",
-          "profileSubtitle": "الإعداد · الملف الشخصي"
+          "profileSubtitle": "إعداد · الملف الشخصي"
         }
       },
       "connection": {

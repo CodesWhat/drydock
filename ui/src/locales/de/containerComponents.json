@@ -543,7 +543,7 @@
         "clearMaturity": "Reife-Policy gelöscht",
         "setMatureSingular": "Reife-Policy auf nur reif gesetzt ({days} Tag)",
         "setMaturePlural": "Reife-Policy auf nur reif gesetzt ({days} Tage)",
-        "setAll": "Reife-Policy auf alle Updates erlauben gesetzt",
+        "setAll": "Reife-Policy erlaubt jetzt alle Updates",
         "skipped": "Aktuelles Update für {name} übersprungen",
         "removeSkip": "Übersprungenen {kind} {value} entfernt",
         "revertField": "{field} auf deklarative Policy zurückgesetzt",

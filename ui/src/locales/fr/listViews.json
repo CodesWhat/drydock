@@ -299,7 +299,7 @@
       "unknown": "Inconnue"
     },
     "detail": {
-      "loadError": "Impossible de charger les derniers détails de registry",
+      "loadError": "Impossible de charger les derniers détails du registry",
       "refreshing": "Actualisation des détails de registry...",
       "status": "État",
       "authentication": "Authentification",

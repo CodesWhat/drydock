@@ -13,9 +13,9 @@
     "no": "no",
     "errorSummary": {
       "rateLimitHit": "Registry đã đạt giới hạn tốc độ",
-      "accessDenied": "Truy cập Registry bị từ chối",
-      "imageNotFound": "Không tìm thấy Image",
-      "authFailed": "Xác thực Registry thất bại",
+      "accessDenied": "Truy cập registry bị từ chối",
+      "imageNotFound": "Không tìm thấy image",
+      "authFailed": "Xác thực registry thất bại",
       "unreachable": "Registry unreachable",
       "cancelled": "Cancelled",
       "securityBlocked": "Bị chặn do quét bảo mật",

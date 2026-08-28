@@ -70,7 +70,7 @@
     },
     "serverFeatures": {
       "loadFailed": "Impossible de charger la configuration des fonctionnalités du serveur",
-      "actionsDisabledReason": "Actions sur le conteneur désactivées par la configuration du serveur"
+      "actionsDisabledReason": "Actions sur les conteneurs désactivées par la configuration du serveur"
     }
   }
 }

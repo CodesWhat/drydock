@@ -35,7 +35,7 @@
       "container": "컨테이너",
       "tag": "Tag",
       "version": "버전",
-      "versionTooltip": "이미지 메타데이터에서 감지된 버전입니다. 태그와 일치할 수 있으며 공간이 부족하면 호스트 앞에서 숨겨집니다.",
+      "versionTooltip": "이미지 메타데이터에서 감지된 버전입니다. 태그와 일치할 수 있으며 공간이 부족하면 호스트보다 먼저 숨겨집니다.",
       "update": "업데이트",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "상태",
