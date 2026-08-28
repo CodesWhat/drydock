@@ -1582,6 +1582,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
  */
 export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
   const nowMs = Date.now();
+  const surviving: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord[] = [];
   for (const record of updatePolicyRetentionCacheStore.listRecords()) {
     if (record.expiresAt <= nowMs) {
       // Prune expired records from the durable store too, not just skip them —
@@ -1590,6 +1591,23 @@ export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
       updatePolicyRetentionCacheStore.deleteRecord(record.cacheKey);
       continue;
     }
+    surviving.push(record);
+  }
+  // Oldest first. Every stash uses the same TTL, so ascending expiresAt is
+  // ascending stash time, which is the order the stash path's Map-insertion-order
+  // eviction assumes. listRecords() returns LokiJS document order, so inserting
+  // straight from it would leave the next eviction dropping an arbitrary entry
+  // instead of the oldest one.
+  surviving.sort((a, b) => a.expiresAt - b.expiresAt);
+  // Re-apply the cap here rather than leaving it to the next stash: lowering
+  // DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES between processes leaves the
+  // store holding more rows than the new limit allows, and the stash path only
+  // trims after it has already restored them.
+  const overflow = Math.max(surviving.length - UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES, 0);
+  for (const record of surviving.slice(0, overflow)) {
+    updatePolicyRetentionCacheStore.deleteRecord(record.cacheKey);
+  }
+  for (const record of surviving.slice(overflow)) {
     updatePolicyRetentionCache.set(record.cacheKey, {
       updatePolicyOverrides: record.updatePolicyOverrides as container.ContainerUpdatePolicy,
       expiresAt: record.expiresAt,
