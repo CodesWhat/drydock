@@ -388,8 +388,19 @@
       "updateButton": "지금 업데이트",
       "blockedButton": "업데이트 차단됨",
       "notificationsOnlyButton": "알림만",
+      "actionPolicyBadge": {
+        "auto": "Auto",
+        "manual": "Manual",
+        "blocked": "Blocked"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock will apply this update automatically once it's detected — no manual click needed.",
+        "manual": "This update can be applied manually, but won't fire automatically.",
+        "blocked": "No action trigger currently authorizes this container — check the dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "summary": {
         "upToDate": "최신 상태입니다.",
+        "unknown": "Update status unknown. The last check could not complete.",
         "insight": "새 버전 사용 가능 — 이 태그는 고정되어 있습니다.",
         "inProgress": "업데이트 진행 중입니다.",
         "hardBlocked": "업데이트가 차단되었습니다 — 수정이 필요합니다.",
@@ -558,6 +569,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Auto",
+      "resolvedStateTooltip": {
+        "auto": "Runs automatically for this container when a qualifying update is detected.",
+        "manual": "Can be run manually for this container, but will not fire automatically.",
+        "blocked": "Blocked for this container — check the dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "toasts": {
         "ran": "Trigger ran: {key}",
         "ranSuccessfully": "Trigger {key} ran successfully",
