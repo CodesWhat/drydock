@@ -53,7 +53,11 @@ test("faq data describes DD_TRIGGER_* as removed, not as a still-live deprecatio
   // removal", which is what shipped before this drifted from reality.
   assert.doesNotMatch(
     faqDataSource,
-    /DD_TRIGGER_\*[^.]*scheduled for removal/i,
+    // Bounded dot-all rather than [^.]*: the prohibited claim can sit in a
+    // later sentence than the mention ("DD_TRIGGER_* was deprecated. It is
+    // scheduled for removal"), and a character class that stops at the first
+    // period would wave that through.
+    /DD_TRIGGER_\*[\s\S]{0,200}?scheduled for removal/i,
     "DD_TRIGGER_* was already removed in v1.7.0 -- don't describe it as pending removal",
   );
   assert.match(

@@ -582,7 +582,10 @@ jobs:
           # line of defence before it reaches a published tag and the
           # generated docs changelog. `if grep` is exempt from set -e, so a
           # clean file (exit 1, no match) does not abort the step.
-          if grep -nE '(^|[^A-Za-z0-9_])([A-Z][A-Z0-9]*_)*PLACEHOLDER($|[^A-Za-z0-9_])|\[[^]]*\]\([[:space:]]*\)' "${CHANGELOG_PATH}"; then
+          # The optional `<...>` covers the angle-bracket destination form:
+          # `[text](<>)` is equally valid CommonMark and equally empty, so a
+          # pattern that only knows `[text]()` leaves a hole.
+          if grep -nE '(^|[^A-Za-z0-9_])([A-Z][A-Z0-9]*_)*PLACEHOLDER($|[^A-Za-z0-9_])|\[[^]]*\]\([[:space:]]*(<[[:space:]]*>[[:space:]]*)?\)' "${CHANGELOG_PATH}"; then
             echo "::error::CHANGELOG contains an unfilled placeholder (listed above). Resolve it before cutting ${RELEASE_TAG}."
             exit 1
           fi

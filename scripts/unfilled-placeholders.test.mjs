@@ -43,6 +43,10 @@ function publishedTextFiles() {
 const PLACEHOLDER_TOKEN = /\b(?:[A-Z][A-Z0-9]*_)*PLACEHOLDER\b/u;
 
 // An empty markdown link or image target: `[text]()`, `[]()`, `![alt]()`.
+// The optional `<>` covers the angle-bracket destination form, which is
+// equally valid CommonMark and equally empty: `[text](<>)` renders exactly
+// like `[text]()`, so a guard that only knows the bare form has a hole a
+// citation can walk through.
 // Deliberately scoped to prose files only (see PUBLISHED_TEXT_PATHSPECS),
 // never source code: the same shape is ordinary JS/TS syntax — an index
 // immediately invoked, e.g. `callbacks[0]()` — which shows up harmlessly
@@ -50,7 +54,7 @@ const PLACEHOLDER_TOKEN = /\b(?:[A-Z][A-Z0-9]*_)*PLACEHOLDER\b/u;
 // 418 tracked .mdx files scanned here; if a docs code sample ever starts
 // demonstrating that exact idiom, narrow this to skip fenced code blocks
 // rather than drop the check.
-const EMPTY_LINK_TARGET = /\[[^\]]*\]\(\s*\)/u;
+const EMPTY_LINK_TARGET = /\[[^\]]*\]\(\s*(?:<\s*>\s*)?\)/u;
 
 const PATTERNS = [PLACEHOLDER_TOKEN, EMPTY_LINK_TARGET];
 

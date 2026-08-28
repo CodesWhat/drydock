@@ -33,7 +33,12 @@ export function rewriteChangelogLinksForVersion(content, versionSlug) {
     .replace(/`DEPRECATIONS\.md`/g, `[deprecations](${deprecationsTarget})`);
 }
 
-const CHANGELOG_FILE_RE = /(^|\/)changelog\/index\.mdx?$/;
+// Both separators, because callers build the path with node:path.relative,
+// which emits the host separator. Matching only `/` would silently skip the
+// changelog rewrite on Windows. Accepting both here beats normalizing the
+// path at the boundary: a `sep`-based normalization is a no-op on POSIX, so
+// the test covering it would never actually exercise anything on CI.
+const CHANGELOG_FILE_RE = /(^|[/\\])changelog[/\\]index\.mdx?$/;
 
 // Applies both rewriters to a single synced doc file, keyed off its path
 // relative to the version's docs root. The root CHANGELOG.md source (and the

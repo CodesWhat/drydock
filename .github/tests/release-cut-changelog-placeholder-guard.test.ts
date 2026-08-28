@@ -167,6 +167,27 @@ test('an empty markdown link target fails the step and names it', () => {
   expect(result.stdout).toContain('([#901]())');
 });
 
+test('an empty angle-bracket link target fails the step too', () => {
+  // `[text](<>)` is the angle-bracket destination form and is equally valid
+  // CommonMark, rendering exactly like `[text]()`. A guard that only knew the
+  // bare form would let an unfilled citation through in the one shape nobody
+  // writes on purpose.
+  const changelog = `# Changelog
+
+## [1.7.0-rc.4] - 2026-08-20
+
+### Fixed
+
+- **First fix.** Description of the first bug fix in this release. ([#901](<>))
+`;
+
+  const result = runValidateStep(changelog);
+
+  expect(result.status).not.toBe(0);
+  expect(result.stdout).toContain('::error::CHANGELOG contains an unfilled placeholder');
+  expect(result.stdout).toContain('([#901](<>))');
+});
+
 test('lowercase "placeholder" used correctly in prose does not fail', () => {
   // This repo uses the word legitimately and often — e.g. "served a
   // placeholder ... SVG at HTTP 200 instead of erroring". Only an ALL-CAPS

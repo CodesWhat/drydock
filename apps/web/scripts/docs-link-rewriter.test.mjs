@@ -82,6 +82,17 @@ test("rewriteDocsFileForVersion leaves a relative DEPRECATIONS.md mention alone 
   assert.equal(rewriteDocsFileForVersion("configuration/index.mdx", input, "v1.5"), input);
 });
 
+test("rewriteDocsFileForVersion recognises a backslash-separated changelog path", () => {
+  // sync-docs builds the relative path with node:path.relative, which emits
+  // the host separator, so on Windows this arrives backslash-separated. The
+  // changelog rewrite has to fire there too, not silently skip.
+  const input = "See [DEPRECATIONS.md](./DEPRECATIONS.md) for migration guidance.";
+  assert.equal(
+    rewriteDocsFileForVersion("changelog\\index.mdx", input, "v1.5"),
+    "See [DEPRECATIONS.md](/docs/v1.5/deprecations) for migration guidance.",
+  );
+});
+
 test("rewriteDocsFileForVersion still rewrites absolute /docs links in a changelog file", () => {
   const input = "[Quick Start](/docs/quickstart)";
   assert.equal(
