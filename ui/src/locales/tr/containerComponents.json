@@ -388,8 +388,19 @@
       "updateButton": "Şimdi güncelle",
       "blockedButton": "Güncelleme engellendi",
       "notificationsOnlyButton": "Yalnızca bildirimler",
+      "actionPolicyBadge": {
+        "auto": "Otomatik",
+        "manual": "Manuel",
+        "blocked": "Engellendi"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock, bu güncellemeyi algılandığı anda otomatik olarak uygulayacak — manuel tıklama gerekmez.",
+        "manual": "Bu güncelleme manuel olarak uygulanabilir, ancak otomatik olarak tetiklenmez.",
+        "blocked": "Şu anda hiçbir eylem tetikleyicisi bu kapsayıcıyı yetkilendirmiyor — dd.action.include / dd.action.exclude / dd.action.auto etiketlerini kontrol edin."
+      },
       "summary": {
         "upToDate": "Güncel.",
+        "unknown": "Güncelleme durumu bilinmiyor. Son kontrol tamamlanamadı.",
         "insight": "Daha yeni sürüm mevcut — bu etiket sabitlendi.",
         "inProgress": "Güncelleme devam ediyor.",
         "hardBlocked": "Güncelleme engellendi — düzeltme gerekiyor.",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Otomatik",
+      "resolvedStateTooltip": {
+        "auto": "Uygun bir güncelleme algılandığında bu kapsayıcı için otomatik olarak çalışır.",
+        "manual": "Bu kapsayıcı için manuel olarak çalıştırılabilir, ancak otomatik olarak tetiklenmez.",
+        "blocked": "Bu kapsayıcı için engellendi — dd.action.include / dd.action.exclude / dd.action.auto etiketlerini kontrol edin."
+      },
       "toasts": {
         "ran": "Tetikleyici çalıştı: {key}",
         "ranSuccessfully": "{key} tetikleyicisi başarıyla çalıştı",

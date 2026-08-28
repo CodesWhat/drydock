@@ -388,8 +388,19 @@
       "updateButton": "Cập nhật ngay",
       "blockedButton": "Cập nhật bị chặn",
       "notificationsOnlyButton": "Chỉ thông báo",
+      "actionPolicyBadge": {
+        "auto": "Tự động",
+        "manual": "Thủ công",
+        "blocked": "Bị chặn"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock sẽ tự động áp dụng cập nhật này ngay khi được phát hiện — không cần nhấp thủ công.",
+        "manual": "Cập nhật này có thể được áp dụng thủ công, nhưng sẽ không tự động kích hoạt.",
+        "blocked": "Hiện không có trigger hành động nào cho phép container này — hãy kiểm tra nhãn dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "summary": {
         "upToDate": "Đã cập nhật.",
+        "unknown": "Trạng thái cập nhật không xác định. Lần kiểm tra gần nhất không thể hoàn tất.",
         "insight": "Có phiên bản mới hơn — tag này đã được ghim.",
         "inProgress": "Đang cập nhật.",
         "hardBlocked": "Cập nhật bị chặn — cần khắc phục.",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Tự động",
+      "resolvedStateTooltip": {
+        "auto": "Tự động chạy cho container này khi phát hiện một cập nhật đủ điều kiện.",
+        "manual": "Có thể chạy thủ công cho container này, nhưng sẽ không tự động kích hoạt.",
+        "blocked": "Bị chặn đối với container này — hãy kiểm tra nhãn dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "toasts": {
         "ran": "Trigger đã chạy: {key}",
         "ranSuccessfully": "Trigger {key} đã chạy thành công",

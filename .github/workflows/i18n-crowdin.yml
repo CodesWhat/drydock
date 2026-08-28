@@ -8,7 +8,6 @@ on:
     # that is not supposed to take independent commits.
     branches: ['dev/**', main]
     paths:
-      - 'README.md'
       - 'ui/src/locales/en/**'
       - 'crowdin.yml'
       - '.github/workflows/i18n-crowdin.yml'

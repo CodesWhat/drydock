@@ -388,8 +388,19 @@
       "updateButton": "Nu bijwerken",
       "blockedButton": "Update geblokkeerd",
       "notificationsOnlyButton": "Alleen meldingen",
+      "actionPolicyBadge": {
+        "auto": "Automatisch",
+        "manual": "Handmatig",
+        "blocked": "Geblokkeerd"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock past deze update automatisch toe zodra deze is gedetecteerd — er is geen handmatige klik nodig.",
+        "manual": "Deze update kan handmatig worden toegepast, maar wordt niet automatisch geactiveerd.",
+        "blocked": "Geen enkele actietrigger autoriseert momenteel deze container — controleer de dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "summary": {
         "upToDate": "Up-to-date.",
+        "unknown": "Updatestatus onbekend. De laatste controle kon niet worden voltooid.",
         "insight": "Nieuwere versie beschikbaar — deze tag is vastgezet.",
         "inProgress": "Update wordt uitgevoerd.",
         "hardBlocked": "Update geblokkeerd — herstel vereist.",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Automatisch",
+      "resolvedStateTooltip": {
+        "auto": "Wordt automatisch uitgevoerd voor deze container wanneer een geschikte update wordt gedetecteerd.",
+        "manual": "Kan handmatig worden uitgevoerd voor deze container, maar wordt niet automatisch geactiveerd.",
+        "blocked": "Geblokkeerd voor deze container — controleer de dd.action.include / dd.action.exclude / dd.action.auto labels."
+      },
       "toasts": {
         "ran": "Trigger uitgevoerd: {key}",
         "ranSuccessfully": "Trigger {key} is succesvol uitgevoerd",

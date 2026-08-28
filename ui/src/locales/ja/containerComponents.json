@@ -388,8 +388,19 @@
       "updateButton": "今すぐ更新",
       "blockedButton": "更新はブロックされています",
       "notificationsOnlyButton": "通知のみ",
+      "actionPolicyBadge": {
+        "auto": "自動",
+        "manual": "手動",
+        "blocked": "ブロック済み"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock はこの更新を検出後に自動的に適用します — 手動でのクリックは不要です。",
+        "manual": "この更新は手動で適用できますが、自動的には実行されません。",
+        "blocked": "このコンテナを許可するアクショントリガーが現在ありません — dd.action.include / dd.action.exclude / dd.action.auto ラベルを確認してください。"
+      },
       "summary": {
         "upToDate": "最新の状態です。",
+        "unknown": "更新ステータスは不明です。前回の確認が完了しませんでした。",
         "insight": "新しいバージョンが利用可能です — このタグは固定されています。",
         "inProgress": "更新処理中です。",
         "hardBlocked": "更新はブロックされています — 修正が必要です。",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "自動",
+      "resolvedStateTooltip": {
+        "auto": "条件を満たす更新が検出されると、このコンテナに対して自動的に実行されます。",
+        "manual": "このコンテナに対して手動で実行できますが、自動的には実行されません。",
+        "blocked": "このコンテナではブロックされています — dd.action.include / dd.action.exclude / dd.action.auto ラベルを確認してください。"
+      },
       "toasts": {
         "ran": "トリガーを実行しました：{key}",
         "ranSuccessfully": "トリガー {key} が正常に実行されました",

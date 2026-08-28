@@ -388,8 +388,19 @@
       "updateButton": "Mettre à jour maintenant",
       "blockedButton": "Mise à jour bloquée",
       "notificationsOnlyButton": "Notifications uniquement",
+      "actionPolicyBadge": {
+        "auto": "Auto",
+        "manual": "Manuel",
+        "blocked": "Bloqué"
+      },
+      "actionPolicyTooltip": {
+        "auto": "Drydock appliquera automatiquement cette mise à jour dès qu'elle sera détectée — aucun clic manuel nécessaire.",
+        "manual": "Cette mise à jour peut être appliquée manuellement, mais ne se déclenchera pas automatiquement.",
+        "blocked": "Aucun trigger d'action n'autorise actuellement ce conteneur — vérifiez les labels dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "summary": {
         "upToDate": "À jour.",
+        "unknown": "État de la mise à jour inconnu. Impossible de terminer la dernière vérification.",
         "insight": "Nouvelle version disponible — ce tag est épinglé.",
         "inProgress": "Mise à jour en cours.",
         "hardBlocked": "Mise à jour bloquée — une correction est requise.",
@@ -562,6 +573,12 @@
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Auto",
+      "resolvedStateTooltip": {
+        "auto": "S'exécute automatiquement pour ce conteneur lorsqu'une mise à jour éligible est détectée.",
+        "manual": "Peut être exécuté manuellement pour ce conteneur, mais ne se déclenchera pas automatiquement.",
+        "blocked": "Bloqué pour ce conteneur — vérifiez les labels dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "toasts": {
         "ran": "Trigger exécuté : {key}",
         "ranSuccessfully": "Le trigger {key} s'est exécuté avec succès",
