@@ -24,6 +24,7 @@ import * as secrets from './secrets.js';
 import * as settings from './settings.js';
 import * as uiPreferences from './ui-preferences.js';
 import * as updateOperation from './update-operation.js';
+import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
 
 // Store Configuration Schema
 const configurationSchema = joi.object().keys({
@@ -95,6 +96,10 @@ function createCollections() {
   audit.createCollections(db);
   backup.createCollections(db);
   container.createCollections(db);
+  // #565: the update-policy-retention-cache collection must exist before
+  // rehydration repopulates container.ts's in-memory Map from it.
+  updatePolicyRetentionCacheStore.createCollections(db);
+  container.rehydrateUpdatePolicyRetentionCacheFromStore();
   nameBindings.createCollections(db);
   notification.createCollections(db);
   notificationHistory.createCollections(db);

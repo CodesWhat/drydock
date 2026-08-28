@@ -55,6 +55,7 @@ const {
       ...createCollectionsMock(),
       getContainersRaw: vi.fn(() => []),
       updateContainer: vi.fn(),
+      rehydrateUpdatePolicyRetentionCacheFromStore: vi.fn(),
       ...overrides,
     };
   }
@@ -113,6 +114,7 @@ const {
     vi.doMock('./settings', createCollectionsMock);
     vi.doMock('./ui-preferences', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
+    vi.doMock('./update-policy-retention-cache', createCollectionsMock);
     vi.doMock('../log', createLogMock);
   }
 
@@ -150,6 +152,7 @@ vi.mock('./secrets', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
 vi.mock('./ui-preferences', createCollectionsMock);
 vi.mock('./update-operation', createCollectionsMock);
+vi.mock('./update-policy-retention-cache', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
 describe('Store Module', () => {
@@ -183,6 +186,7 @@ describe('Store Module', () => {
     const settings = await import('./settings.js');
     const uiPreferences = await import('./ui-preferences.js');
     const updateOperation = await import('./update-operation.js');
+    const updatePolicyRetentionCache = await import('./update-policy-retention-cache.js');
 
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
@@ -194,6 +198,19 @@ describe('Store Module', () => {
     expect(container.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
       app.completeStartupInitialization.mock.invocationCallOrder[0],
     );
+
+    // #565: the update-policy-retention-cache collection must exist, and container's
+    // in-memory Map must be rehydrated from it, before startup is considered complete.
+    expect(updatePolicyRetentionCache.createCollections).toHaveBeenCalled();
+    expect(container.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      updatePolicyRetentionCache.createCollections.mock.invocationCallOrder[0],
+    );
+    expect(updatePolicyRetentionCache.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
+      container.rehydrateUpdatePolicyRetentionCacheFromStore.mock.invocationCallOrder[0],
+    );
+    expect(
+      container.rehydrateUpdatePolicyRetentionCacheFromStore.mock.invocationCallOrder[0],
+    ).toBeLessThan(app.completeStartupInitialization.mock.invocationCallOrder[0]);
   });
 
   test('should create directory if it does not exist', async () => {

@@ -5,6 +5,7 @@ import { createContainerFixture } from '../test/helpers.js';
 import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
 import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
 import * as container from './container.js';
+import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
 
 vi.mock('./migrate');
 vi.mock('../event');
@@ -5318,6 +5319,59 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     return collection;
   }
 
+  function createPolicyRetentionStoreCollection(
+    initialDocs: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord[] = [],
+  ) {
+    const docs = [...initialDocs];
+    return {
+      findOne: vi.fn(
+        (
+          query: Record<string, unknown>,
+        ): updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord | null =>
+          docs.find((doc) =>
+            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
+          ) ?? null,
+      ),
+      find: vi.fn(
+        (
+          query?: Record<string, unknown>,
+        ): updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord[] => {
+          if (!query || Object.keys(query).length === 0) {
+            return [...docs];
+          }
+          return docs.filter((doc) =>
+            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
+          );
+        },
+      ),
+      insert: vi.fn((doc: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord) => {
+        docs.push(doc);
+      }),
+      update: vi.fn(),
+      remove: vi.fn((doc: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord) => {
+        const index = docs.indexOf(doc);
+        if (index !== -1) {
+          docs.splice(index, 1);
+        }
+      }),
+    };
+  }
+
+  function mountPolicyRetentionStore(
+    initialDocs: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord[] = [],
+  ) {
+    const collection = createPolicyRetentionStoreCollection(initialDocs);
+    updatePolicyRetentionCacheStore.createCollections({
+      getCollection: () => collection,
+      addCollection: () => collection,
+    });
+    return collection;
+  }
+
+  beforeEach(() => {
+    updatePolicyRetentionCacheStore.clearCollectionForTesting();
+  });
+
   test('carries updatePolicy forward across a container recreate (new id, same watcher+name)', () => {
     const oldFixture = makePolicyFixture({
       id: 'policy-old-1',
@@ -5711,6 +5765,183 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
     // preceding replacement-delete must not inherit anything
     const later = container.insertContainer(makePolicyFixture({ id: 'policy-once-later' }));
     expect(later.updatePolicy).toBeUndefined();
+  });
+
+  test('deleteContainer write-throughs the stash to the durable store', () => {
+    mountPolicyRetentionStore();
+    const oldFixture = makePolicyFixture({
+      id: 'policy-durable-old-1',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-durable-old-1', { replacementExpected: true });
+
+    const [record] = updatePolicyRetentionCacheStore.listRecords();
+    expect(record).toMatchObject({
+      cacheKey: '::local::myapp',
+      updatePolicyOverrides: MATURITY_POLICY,
+    });
+  });
+
+  test('insertContainer deletes the persisted record on a consumed cache hit', () => {
+    mountPolicyRetentionStore();
+    const oldFixture = makePolicyFixture({
+      id: 'policy-durable-old-2',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+    container.deleteContainer('policy-durable-old-2', { replacementExpected: true });
+    expect(updatePolicyRetentionCacheStore.listRecords()).toHaveLength(1);
+
+    container.insertContainer(makePolicyFixture({ id: 'policy-durable-new-2' }));
+
+    expect(updatePolicyRetentionCacheStore.listRecords()).toEqual([]);
+  });
+
+  test('rehydrateUpdatePolicyRetentionCacheFromStore repopulates the in-memory Map from non-expired persisted records only', () => {
+    const nowMs = Date.now();
+    mountPolicyRetentionStore([
+      {
+        cacheKey: '::local::live-app',
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 60_000,
+      },
+      {
+        cacheKey: '::local::expired-app',
+        updatePolicyOverrides: { maturityMode: 'all' },
+        expiresAt: nowMs - 1,
+      },
+    ]);
+
+    container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+    const policyRetentionCache = container._getUpdatePolicyRetentionCacheForTests();
+    expect(policyRetentionCache.has('::local::live-app')).toBe(true);
+    expect(policyRetentionCache.get('::local::live-app')?.updatePolicyOverrides).toEqual(
+      MATURITY_POLICY,
+    );
+    expect(policyRetentionCache.has('::local::expired-app')).toBe(false);
+  });
+
+  test('rehydrateUpdatePolicyRetentionCacheFromStore prunes expired records from the durable store, not just the in-memory Map', () => {
+    const nowMs = Date.now();
+    mountPolicyRetentionStore([
+      {
+        cacheKey: '::local::live-app-2',
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 60_000,
+      },
+      {
+        cacheKey: '::local::expired-app-2',
+        updatePolicyOverrides: { maturityMode: 'all' },
+        expiresAt: nowMs - 1,
+      },
+    ]);
+
+    container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+    const persistedKeys = updatePolicyRetentionCacheStore
+      .listRecords()
+      .map((record) => record.cacheKey);
+    expect(persistedKeys).toEqual(['::local::live-app-2']);
+  });
+
+  test('rehydrateUpdatePolicyRetentionCacheFromStore re-applies the size cap, dropping the oldest records from the Map and the durable store', () => {
+    // Lowering DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES between processes leaves the
+    // store holding more rows than the new limit allows. The stash path only trims after
+    // it has already restored them, so rehydration has to enforce the cap itself.
+    const nowMs = Date.now();
+    const maxEntries = container.UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES;
+    const overCap = [];
+    for (let i = 0; i <= maxEntries; i++) {
+      overCap.push({
+        cacheKey: `::local::overcap-app-${i}`,
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 60_000 + i,
+      });
+    }
+    mountPolicyRetentionStore(overCap);
+
+    container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+    const cache = container._getUpdatePolicyRetentionCacheForTests();
+    expect(cache.size).toBe(maxEntries);
+    expect(cache.has('::local::overcap-app-0')).toBe(false);
+    expect(cache.has(`::local::overcap-app-${maxEntries}`)).toBe(true);
+
+    const persistedKeys = updatePolicyRetentionCacheStore
+      .listRecords()
+      .map((record) => record.cacheKey);
+    expect(persistedKeys).toHaveLength(maxEntries);
+    expect(persistedKeys).not.toContain('::local::overcap-app-0');
+  });
+
+  test('rehydrateUpdatePolicyRetentionCacheFromStore restores oldest-first so the stash path still evicts the oldest', () => {
+    // listRecords() returns LokiJS document order. Inserting straight from it would leave
+    // the Map's insertion order unrelated to stash age, and the stash path's eviction
+    // reads that order as its LRU.
+    const nowMs = Date.now();
+    mountPolicyRetentionStore([
+      {
+        cacheKey: '::local::order-newest',
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 90_000,
+      },
+      {
+        cacheKey: '::local::order-oldest',
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 30_000,
+      },
+      {
+        cacheKey: '::local::order-middle',
+        updatePolicyOverrides: MATURITY_POLICY,
+        expiresAt: nowMs + 60_000,
+      },
+    ]);
+
+    container.rehydrateUpdatePolicyRetentionCacheFromStore();
+
+    expect([...container._getUpdatePolicyRetentionCacheForTests().keys()]).toEqual([
+      '::local::order-oldest',
+      '::local::order-middle',
+      '::local::order-newest',
+    ]);
+  });
+
+  // #565: unlike the lifecycle/clock cache, updatePolicyRetentionCache never got a durable
+  // write-through store, so a self-update (recreate -> SIGTERM -> new process) lost the
+  // stashed maturity policy even though the clock survived it. This pins the fix.
+  test('end-to-end: a simulated process restart still carries updatePolicy forward', () => {
+    mountPolicyRetentionStore();
+    const oldFixture = makePolicyFixture({
+      id: 'policy-persist-restart-old',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    // 1. Self-update fires: the old container is torn down and its policy overrides are
+    //    stashed into both the in-memory Map and (write-through) the durable store.
+    container.deleteContainer('policy-persist-restart-old', { replacementExpected: true });
+    expect(updatePolicyRetentionCacheStore.listRecords()).toHaveLength(1);
+
+    // 2. SIGTERM: simulate the old process exiting — the in-memory Map is gone, but the
+    //    durable store (our stand-in for the persisted dd.json) survives untouched.
+    container._resetContainerStoreStateForTests();
+    expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+
+    // 3. New process boots: store/index.ts's createCollections() would call
+    //    rehydrateUpdatePolicyRetentionCacheFromStore() right after re-creating the
+    //    collections.
+    container.rehydrateUpdatePolicyRetentionCacheFromStore();
+    expect(container._getUpdatePolicyRetentionCacheForTests().has('::local::myapp')).toBe(true);
+
+    // 4. The watcher discovers the replacement container under the same watcher+name —
+    //    insertContainer's Map lookup now hits even though it's a brand-new process.
+    const inserted = container.insertContainer(
+      makePolicyFixture({ id: 'policy-persist-restart-new' }),
+    );
+    expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
   });
 });
 

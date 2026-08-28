@@ -31,6 +31,7 @@ import {
   getUpdatePolicyOverrides,
 } from '../model/update-policy.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
+import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
 import { initCollection } from './util.js';
 
 let containers: ReturnType<typeof initCollection> | undefined;
@@ -999,15 +1000,22 @@ function stashUpdatePolicyForReplacement(containerRaw) {
     return;
   }
   updatePolicyRetentionCache.delete(cacheKey);
-  updatePolicyRetentionCache.set(cacheKey, {
+  const entry: UpdatePolicyRetentionCacheEntry = {
     updatePolicyOverrides,
     expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
-  });
+  };
+  updatePolicyRetentionCache.set(cacheKey, entry);
+  // #565: write-through to the durable store so this stash survives the
+  // cross-process recreation that IS drydock's own self-update (recreate
+  // action -> SIGTERM -> shutdown()'s store.save() -> new process ->
+  // rehydrateUpdatePolicyRetentionCacheFromStore()).
+  updatePolicyRetentionCacheStore.upsertRecord({ cacheKey, ...entry });
   if (updatePolicyRetentionCache.size > UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES) {
     const nowMs = Date.now();
     for (const [expiredKey, expiredEntry] of updatePolicyRetentionCache.entries()) {
       if (expiredEntry.expiresAt <= nowMs) {
         updatePolicyRetentionCache.delete(expiredKey);
+        updatePolicyRetentionCacheStore.deleteRecord(expiredKey);
       }
     }
   }
@@ -1018,6 +1026,7 @@ function stashUpdatePolicyForReplacement(containerRaw) {
       break;
     }
     updatePolicyRetentionCache.delete(oldestKey);
+    updatePolicyRetentionCacheStore.deleteRecord(oldestKey);
   }
 }
 
@@ -1045,6 +1054,7 @@ function restoreRetainedUpdatePolicy(container) {
     return;
   }
   updatePolicyRetentionCache.delete(cacheKey);
+  updatePolicyRetentionCacheStore.deleteRecord(cacheKey);
   if (entry.expiresAt <= Date.now()) {
     return;
   }
@@ -1560,6 +1570,48 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
         replacementExpected: options.replacementExpected,
       });
     }
+  }
+}
+
+/**
+ * Repopulate the in-memory updatePolicyRetentionCache Map from its durable store
+ * counterpart. Called once at startup (see store/index.ts's createCollections())
+ * after both the containers collection and the update-policy-retention-cache
+ * collection have been created. Drops any record whose TTL already lapsed while
+ * the process was down rather than resurrecting a stale stash (#565).
+ */
+export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
+  const nowMs = Date.now();
+  const surviving: updatePolicyRetentionCacheStore.UpdatePolicyRetentionCacheRecord[] = [];
+  for (const record of updatePolicyRetentionCacheStore.listRecords()) {
+    if (record.expiresAt <= nowMs) {
+      // Prune expired records from the durable store too, not just skip them —
+      // otherwise a long-stopped process leaves dead rows in the collection
+      // forever (it only ever grows via the write-through path elsewhere).
+      updatePolicyRetentionCacheStore.deleteRecord(record.cacheKey);
+      continue;
+    }
+    surviving.push(record);
+  }
+  // Oldest first. Every stash uses the same TTL, so ascending expiresAt is
+  // ascending stash time, which is the order the stash path's Map-insertion-order
+  // eviction assumes. listRecords() returns LokiJS document order, so inserting
+  // straight from it would leave the next eviction dropping an arbitrary entry
+  // instead of the oldest one.
+  surviving.sort((a, b) => a.expiresAt - b.expiresAt);
+  // Re-apply the cap here rather than leaving it to the next stash: lowering
+  // DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES between processes leaves the
+  // store holding more rows than the new limit allows, and the stash path only
+  // trims after it has already restored them.
+  const overflow = Math.max(surviving.length - UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES, 0);
+  for (const record of surviving.slice(0, overflow)) {
+    updatePolicyRetentionCacheStore.deleteRecord(record.cacheKey);
+  }
+  for (const record of surviving.slice(overflow)) {
+    updatePolicyRetentionCache.set(record.cacheKey, {
+      updatePolicyOverrides: record.updatePolicyOverrides as container.ContainerUpdatePolicy,
+      expiresAt: record.expiresAt,
+    });
   }
 }
 
