@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Restoring the maturity-policy stash at startup no longer ignores the size cap, or evicts the wrong entry afterwards.** The durable `updatePolicyRetentionCache` added in 1.7.0-rc.2 restored every non-expired persisted record straight into memory without checking `DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES`, so lowering that limit between restarts came back over it and the extra entries stayed live until the next stash trimmed them. Restoring also used the store's document order, which has nothing to do with stash age, and the eviction that runs when the cap is hit reads that order as its LRU, so the first eviction after any restart could drop the newest entry and keep the oldest. Startup now restores oldest first and enforces the cap against both the in-memory cache and the persisted records. ([#565](https://github.com/CodesWhat/drydock/issues/565))
+
 ## [1.7.0-rc.5] — 2026-08-27
 
 ### Security
