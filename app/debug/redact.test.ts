@@ -72,7 +72,7 @@ describe('debug/redact', () => {
     const source = {
       environment: {
         ddEnvVars: {
-          DD_REGISTRY_HUB_PUBLIC_AUTH: 'am9objpzZWNyZXQ=',
+          DD_REGISTRY_HUB_PUBLIC_AUTH: 'ZXhhbXBsZTpleGFtcGxl',
           DD_REGISTRY_HUB_PUBLIC_LOGIN: 'john',
           DD_WATCHER_REMOTE_AUTH_BEARER: 'bearer-token',
           DD_ANONYMOUS_AUTH_CONFIRM: 'true',
