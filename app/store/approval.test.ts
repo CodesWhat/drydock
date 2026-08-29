@@ -85,6 +85,15 @@ describe('insertApproval', () => {
     expect(record.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
+  test('returns the existing row when the container and candidate already exist', () => {
+    const first = approvalStore.insertApproval(createInput());
+    const second = approvalStore.insertApproval(createInput({ containerName: 'renamed' }));
+
+    expect(second.id).toBe(first.id);
+    expect(approvalStore.listApprovals({ status: 'all' }).records).toHaveLength(1);
+    expect(second.containerName).toBe('nginx');
+  });
+
   test('defaults the clock to now', () => {
     const before = Date.now();
 
@@ -112,7 +121,9 @@ describe('insertApproval', () => {
     expect(record.scanCritical).toBe(1);
     expect(record.scanUnknown).toBe(5);
     expect(record.scanAt).toBe('2026-03-01T00:00:00.000Z');
-    expect(approvalStore.insertApproval(createInput())).not.toHaveProperty('agent');
+    expect(approvalStore.insertApproval(createInput({ candidateRef: '1.2.5' }))).not.toHaveProperty(
+      'agent',
+    );
   });
 
   test('never leaks the LokiJS metadata fields onto a returned record', () => {

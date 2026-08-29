@@ -49,6 +49,7 @@ import * as registry from '../registry/index.js';
 import {
   type ApprovalPatch,
   countApprovals,
+  findApprovalByContainerAndCandidate,
   findApprovalByOperationId,
   findApprovalsByContainerId,
   insertApproval,
@@ -173,7 +174,9 @@ function reconcileContainer(container: Container | undefined): void {
     return;
   }
 
-  announce('created', insertApproval(input));
+  if (findApprovalByContainerAndCandidate(input.containerId, input.candidateRef) === undefined) {
+    announce('created', insertApproval(input));
+  }
 }
 
 function stampOutcome(operationId: string | undefined, outcome: ApprovalOutcome): void {

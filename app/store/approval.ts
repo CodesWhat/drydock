@@ -177,9 +177,8 @@ export function createCollections(db: ApprovalStoreDb): void {
 }
 
 /**
- * Insert a pending row for a newly sighted candidate. Callers are responsible for the
- * dedupe check — one row per `(containerId, candidateRef)` — because the reconciler
- * already has the container's rows in hand when it decides to insert.
+ * Insert a pending row for a newly sighted candidate. The store enforces one row per
+ * `(containerId, candidateRef)` so decided and resolved history cannot be duplicated.
  * @param input
  * @param options
  */
@@ -189,6 +188,14 @@ export function insertApproval(
 ): ApprovalRecord {
   if (!approvalCollection) {
     throw new Error('approvals collection not initialized');
+  }
+
+  const existing = approvalCollection.findOne({
+    containerId: input.containerId,
+    candidateRef: input.candidateRef,
+  });
+  if (existing) {
+    return toApprovalRecord(existing);
   }
 
   const createdAtMs = options.now ?? Date.now();
@@ -241,6 +248,14 @@ export function findApprovalsByContainerId(containerId: string): ApprovalRecord[
     return [];
   }
   return sortByCreatedAtDescending(approvalCollection.find({ containerId }).map(toApprovalRecord));
+}
+
+export function findApprovalByContainerAndCandidate(
+  containerId: string,
+  candidateRef: string,
+): ApprovalRecord | undefined {
+  const document = approvalCollection?.findOne({ containerId, candidateRef });
+  return document ? toApprovalRecord(document) : undefined;
 }
 
 /**

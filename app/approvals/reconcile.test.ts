@@ -338,18 +338,12 @@ describe('supersession', () => {
       decidedBy: 'scott',
     });
 
-    await emitContainerReport({
-      container: createContainer({
-        result: { tag: '1.2.5' },
-        updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '1.2.5' },
-      }),
-      changed: true,
-    });
+    await emitContainerReport({ container: createContainer(), changed: true });
 
     const rejected = allRows().find((candidate) => candidate.id === row.id);
     expect(rejected).toMatchObject({ decision: 'rejected' });
     expect(rejected?.resolution).toBeUndefined();
-    expect(approvalStore.countApprovals().pending).toBe(1);
+    expect(approvalStore.countApprovals().pending).toBe(0);
   });
 
   test('does not supersede a row that was already resolved', async () => {
