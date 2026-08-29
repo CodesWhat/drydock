@@ -305,6 +305,10 @@ describe('Docker Watcher', () => {
     });
 
     test('should handle unsupported registry', async () => {
+      // findNewVersion catches the "Unsupported Registry" error internally
+      // (see getRegistry in image-comparison.ts) — it never propagates. The
+      // observable contract is: log the failure and return the container's
+      // current tag unchanged, rather than throwing.
       const container = {
         image: {
           registry: { name: 'unknown' },
@@ -315,11 +319,12 @@ describe('Docker Watcher', () => {
       hRegistry.getState.mockReturnValue({ registry: {} });
       const mockLogChild = { error: vi.fn() };
 
-      try {
-        await docker.findNewVersion(container, mockLogChild);
-      } catch (error) {
-        expect(error.message).toContain('Unsupported Registry');
-      }
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.0.0' });
+      expect(mockLogChild.error).toHaveBeenCalledWith(
+        expect.stringContaining('Unsupported registry (unknown)'),
+      );
     });
 
     test('should handle digest watching with v2 manifest', async () => {
