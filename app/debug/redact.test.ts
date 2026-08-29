@@ -1,3 +1,4 @@
+import { isSensitiveEnvEntry } from '../api/container/shared.js';
 import { REDACTED_VALUE, redactDebugDump } from './redact.js';
 
 describe('debug/redact', () => {
@@ -385,6 +386,121 @@ describe('debug/redact', () => {
       extra: { token: '[REDACTED]' },
       note: 'kept',
     });
+  });
+
+  // ── compound key names (SR-8) ──────────────────────────────────────────────
+  // The whole-token matcher required a key segment to equal a token exactly, so
+  // every compound single-word name below came back verbatim.
+  test.each([
+    'DD_REGISTRY_ECR_PRIVATE_SECRETACCESSKEY',
+    'DD_REGISTRY_ECR_PRIVATE_ACCESSKEYID',
+    'DD_REGISTRY_ACR_PRIVATE_CLIENTSECRET',
+    'DD_NOTIFICATION_TELEGRAM_T_BOTTOKEN',
+    'DD_NOTIFICATION_MATRIX_M_ACCESSTOKEN',
+    'DD_NOTIFICATION_PUSHOVER_P_USER',
+    'DD_AGENT_X_AGENTSECRET',
+  ])('redacts the compound secret key %s', (key) => {
+    const redacted = redactDebugDump({ [key]: 'the-real-secret' }) as Record<string, unknown>;
+
+    expect(redacted[key]).toBe(REDACTED_VALUE);
+  });
+
+  test("keeps a Pushover user key redacted without hiding other providers' user fields", () => {
+    const redacted = redactDebugDump({
+      DD_NOTIFICATION_PUSHOVER_P_USER: 'uQiRzpo4DXghDmr9QzzfQu27cmVRsG',
+      DD_NOTIFICATION_PUSHOVER_P_DEVICE: 'phone',
+      DD_NOTIFICATION_SMTP_ALERTS_USER: 'alerts@example.com',
+    }) as Record<string, unknown>;
+
+    expect(redacted).toEqual({
+      DD_NOTIFICATION_PUSHOVER_P_USER: REDACTED_VALUE,
+      DD_NOTIFICATION_PUSHOVER_P_DEVICE: 'phone',
+      DD_NOTIFICATION_SMTP_ALERTS_USER: 'alerts@example.com',
+    });
+  });
+
+  test('redacts compound pair names and leaves ordinary ones visible', () => {
+    const redacted = redactDebugDump({
+      env: [
+        { key: 'MINIO_SECRETKEY', value: 'minio-secret' },
+        { key: 'REDIS_AUTHTOKEN', value: 'redis-secret' },
+        { key: 'DEBIAN_FRONTEND', value: 'noninteractive' },
+      ],
+    });
+
+    expect(redacted).toEqual({
+      env: [
+        { key: 'MINIO_SECRETKEY', value: REDACTED_VALUE },
+        { key: 'REDIS_AUTHTOKEN', value: REDACTED_VALUE },
+        { key: 'DEBIAN_FRONTEND', value: 'noninteractive' },
+      ],
+    });
+  });
+
+  test('redacts a value carrying URL credentials even under an innocuous key', () => {
+    const redacted = redactDebugDump({
+      env: [{ key: 'MY_DSN', value: 'postgres://u:p@h/db' }],
+      SERVICE_ENDPOINT: 'https://operator:hunter2@internal.example.com/api',
+      PUBLIC_ENDPOINT: 'https://internal.example.com/api',
+      contact: 'operator@example.com',
+    });
+
+    expect(redacted).toEqual({
+      env: [{ key: 'MY_DSN', value: REDACTED_VALUE }],
+      SERVICE_ENDPOINT: REDACTED_VALUE,
+      PUBLIC_ENDPOINT: 'https://internal.example.com/api',
+      contact: 'operator@example.com',
+    });
+  });
+
+  test('leaves keys that only look like secrets visible', () => {
+    const source = {
+      DD_WATCHER_LOCAL_SOCKET: '/var/run/docker.sock',
+      DD_REGISTRY_HUB_PRIVATE_USERNAME: 'operator',
+      COMPASS_MODE: 'strict',
+      BYPASS_CACHE: 'true',
+      monkey: 'business',
+      KEYFILE: '/etc/drydock/tls.pem',
+      DISPATCH: 'immediate',
+      PATTERN: '^v1\\.',
+    };
+
+    expect(redactDebugDump(source)).toEqual(source);
+  });
+
+  test('is at least as strict as the container API env redactor', () => {
+    // Parity with app/api/container/shared.ts. The dump used to be laxer than
+    // GET /containers on the same values, which is what made it a bypass.
+    const sensitiveFixtures = [
+      { key: 'DB_PASSWORD', value: 'v' },
+      { key: 'password', value: 'v' },
+      { key: 'API_TOKEN', value: 'v' },
+      { key: 'ACCESS_TOKEN', value: 'v' },
+      { key: 'APP_SECRET', value: 'v' },
+      { key: 'client_secret', value: 'v' },
+      { key: 'MY_API_KEY', value: 'v' },
+      { key: 'APIKEY', value: 'v' },
+      { key: 'BASIC_AUTH', value: 'v' },
+      { key: 'AUTH_HEADER', value: 'v' },
+      { key: 'SSL_PRIVATE_KEY', value: 'v' },
+      { key: 'GCP_CREDENTIAL', value: 'v' },
+      { key: 'AWS_ACCESS_KEY', value: 'v' },
+      { key: 'MYSQL_PASSWD', value: 'v' },
+      { key: 'SMTP_PASS', value: 'v' },
+      { key: 'DB_PASS', value: 'v' },
+      { key: 'REDIS_PASS', value: 'v' },
+      { key: 'GITHUB_PAT', value: 'v' },
+      { key: 'PAT', value: 'v' },
+      { key: 'SERVICE_URI', value: 'https://u:p@h/db' },
+    ];
+
+    for (const entry of sensitiveFixtures) {
+      expect(isSensitiveEnvEntry(entry)).toBe(true);
+      const redacted = redactDebugDump({ env: [entry] }) as {
+        env: { key: string; value: unknown }[];
+      };
+      expect(redacted.env[0]).toEqual({ key: entry.key, value: REDACTED_VALUE });
+    }
   });
 
   test('keeps empty and null sensitive values unchanged', () => {

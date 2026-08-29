@@ -345,6 +345,7 @@ export const openApiPaths = {
           },
         },
         401: errorResponse('Authentication required'),
+        429: errorResponse('Debug dump rate limit exceeded'),
         500: errorResponse('Unable to generate debug dump'),
       },
     },
