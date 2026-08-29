@@ -438,46 +438,88 @@ Skanowanie pod kątem luk w zabezpieczeniach oparte na Trivy lub Grype blokuje n
 <details>
 <summary><strong>Jak drydock wypada w porównaniu z innymi narzędziami do aktualizacji kontenerów?</strong></summary>
 
-> ✅ = obsługiwane &nbsp; ❌ = nieobsługiwane &nbsp; ⚠️ = częściowy / ograniczony &nbsp; † = zarchiwizowane, nie jest już obsługiwane
+> ✅ = obsługiwane &nbsp; ❌ = nieobsługiwane &nbsp; ⚠️ = częściowy / ograniczony &nbsp; ? = niepotwierdzone &nbsp; † = zarchiwizowane, nie jest już obsługiwane
+
+<h4 align="center">Menedżery aktualizacji</h4>
 
 <table>
 <thead>
 <tr>
-<th width="28%">Funkcja</th>
-<th width="15%" align="center">drydock</th>
-<th width="15%" align="center">WUD</th>
-<th width="15%" align="center">Diun</th>
-<th width="13%" align="center"><em>Watchtower †</em></th>
-<th width="14%" align="center"><em>Ouroboros †</em></th>
+<th width="32%">Funkcja</th>
+<th width="17%" align="center">drydock</th>
+<th width="17%" align="center">WUD</th>
+<th width="17%" align="center">Diun</th>
+<th width="17%" align="center"><em>Watchtower&nbsp;†</em></th>
 </tr>
 </thead>
 <tbody>
-<tr><td>Interfejs webowy / pulpit</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Automatyczna aktualizacja kontenerów</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Aktualizacje Docker Compose</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Kanały wyzwalaczy / powiadomień</td><td align="center">20</td><td align="center">16</td><td align="center">17</td><td align="center">~19</td><td align="center">~6</td></tr>
-<tr><td>Dostawcy rejestrów</td><td align="center">23</td><td align="center">13</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
-<tr><td>Uwierzytelnianie OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Metryki Prometheus</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Kopia i przywracanie obrazów</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Grupowanie kontenerów / stosy</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Hooki cyklu życia (przed/po)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
-<tr><td>Webhook API dla CI/CD</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td></tr>
-<tr><td>Start/stop/restart/aktualizacja kontenerów</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Agenci rozproszeni (zdalni)</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Dziennik audytu</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Skanowanie bezpieczeństwa (Trivy/Grype)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Aktualizacje zgodne z SemVer</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Monitorowanie digestów</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Wiele architektur (amd64/arm64)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Podgląd logów kontenera</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Aktywnie utrzymywane</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Aktywnie utrzymywane</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td></tr>
+<tr><td>Interfejs webowy / pulpit</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Automatyczna aktualizacja kontenerów</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Aktualizacje Docker Compose</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td></tr>
+<tr><td>Aktualizacje zgodne z SemVer</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Monitorowanie digestów</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Filtrowanie progu aktualizacji (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Kolejność aktualizacji uwzględniająca zależności</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Kolejka oczekujących zatwierdzeń</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Kopia i przywracanie obrazów</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Hooki cyklu życia (przed/po)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Skanowanie podatności</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Dziennik audytu</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>RBAC / role wielu użytkowników</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Uwierzytelnianie OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Kanały wyzwalaczy / powiadomień</td><td align="center">20</td><td align="center">17</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
+<tr><td>Dostawcy rejestrów</td><td align="center">23</td><td align="center">12</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Webhook API dla CI/CD</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Metryki Prometheus</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Agenci rozproszeni (zdalni)</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">⚠️</td></tr>
+<tr><td>Grupowanie kontenerów / stosy</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Start/stop/restart/aktualizacja kontenerów</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Podgląd logów kontenera</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 </tbody>
 </table>
 
-> Dane na podstawie publicznie dostępnej dokumentacji, stan na marzec 2026 r.
+> Watchtower zarchiwizowano w grudniu 2025 roku, a jego ostatnie wydanie to v1.7.1 (listopad 2023). Nieoficjalny fork społecznościowy, nicholas-fedor/watchtower, nadal jest aktywnie wydawany.
+
+<h4 align="center">Platformy zarządzania</h4>
+
+<table>
+<thead>
+<tr>
+<th width="32%">Funkcja</th>
+<th width="17%" align="center">drydock</th>
+<th width="17%" align="center">Arcane</th>
+<th width="17%" align="center">Komodo</th>
+<th width="17%" align="center">Dockhand</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Aktywnie utrzymywane</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Interfejs webowy / pulpit</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Automatyczna aktualizacja kontenerów</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Aktualizacje Docker Compose</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Aktualizacje zgodne z SemVer</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Monitorowanie digestów</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Filtrowanie progu aktualizacji (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Kolejność aktualizacji uwzględniająca zależności</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>
+<tr><td>Kolejka oczekujących zatwierdzeń</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Kopia i przywracanie obrazów</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Skanowanie podatności</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Dziennik audytu</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
+<tr><td>RBAC / role wielu użytkowników</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
+<tr><td>Uwierzytelnianie OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Kanały wyzwalaczy / powiadomień</td><td align="center">20</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
+<tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Dostawcy rejestrów</td><td align="center">23</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Metryki Prometheus</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>Agenci rozproszeni (zdalni)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
+<tr><td>Grupowanie kontenerów / stosy</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>
+</tbody>
+</table>
+
+> Opracowano na podstawie publicznej dokumentacji i repozytoriów poszczególnych projektów, stan na 29.08.2026 r.
 > Komentarze są mile widziane, jeśli jakiekolwiek informacje są niedokładne.
 
 </details>
@@ -512,8 +554,8 @@ Tylko motywy ogólne; szczegóły poszczególnych wersji zawiera [CHANGELOG.md](
 | **v1.5.2** ✅ | Niezawodność zasad i przypiętych tagów            | Zachowywanie zasad dojrzałości/pomijania/odraczania podczas ponownego tworzenia kontenera, wykrywanie przebudowy digestu przypiętych tagów i informacyjne spostrzeżenia dotyczące tej samej rodziny, czyszczenie kandydatów do wycofania, zapobieganie kaskadzie wycofywania, jawne zachowywanie adresów MAC i zachowanie pomijania rejestru obrazów lokalnych                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | **v1.6.0**   | Powiadomienia, zasady i informacje o wydaniach    | Szablony powiadomień dla poszczególnych reguł/wyzwalaczy z podglądem na żywo, preferencjami dzwonka powiadomień, synchronizacją preferencji między urządzeniami, niestandardową siatką pulpitu nawigacyjnego o zerowej zależności ([#281](https://github.com/CodesWhat/drydock/issues/281)), deklaratywną polityką aktualizacji ([#320](https://github.com/CodesWhat/drydock/issues/320)), odliczaniem stabilizacji dojrzałości + natychmiastową widocznością kandydata + ręcznym zastąpieniem ([#406](https://github.com/CodesWhat/drydock/discussions/406)), praktycznym panelem stanu aktualizacji i globalnym trybem aktualizacji `notify` / `manual` / `auto` ([#325](https://github.com/CodesWhat/drydock/discussions/325)), dziedziczenie zasad tagów obserwatora/imgset/kontenera plus warstwowa widoczność bieżącego → nowszego przypiętego tagu ([#498](https://github.com/CodesWhat/drydock/issues/498)), ujednolicone do 44 px akcje zasobów: Źródło / informacje o wydaniu / rejestr w tabelach, kartach i widokach szczegółów ([#295](https://github.com/CodesWhat/drydock/discussions/295)), powiadomienia o zdarzeniach dotyczących stanu zdrowia ([#198](https://github.com/CodesWhat/drydock/discussions/198)), dwukierunkowy Home Assistant MQTT, responsywne widoki tabel/list kart, Trivy/Grype/oba skanowanie za pośrednictwem poleceń lub przypiętych backendów Docker-worker, kontrola ściągania/ogrzewania zasobów skanera, praca poza stertą deduplikowana pamięć SBOM, poprawność długiego skanowania Trivy ([#490](https://github.com/CodesWhat/drydock/issues/490)), ostrzeżenia o migracji wyzwalacza-taksonomii, usunięcie zgodności z wersją 1.6, higiena dokumentów/API oraz zakończenie migracji `/api` → `/api/v1` z opcjonalną podkładką zgodności wud-card/strony głównej (`DD_COMPAT_WUDCARD`). |
 | **v1.7.0**   | Inteligentne aktualizacje i UX                    | Zamawianie uwzględniające zależności ([#219](https://github.com/CodesWhat/drydock/discussions/219)), selektywne aktualizacje zbiorcze ([#232](https://github.com/CodesWhat/drydock/discussions/232)), zasady aktualizacji według akcji ([#511](https://github.com/CodesWhat/drydock/discussions/511)), czyszczenie obrazu, monitorowanie obrazu statycznego, wskaźnik dojrzałości obrazu, ujednolicony zegar dojrzałości/wieku aktualizacji, klikalne łącza do portów, skróty klawiaturowe, PWA, poprawa kontrastu ciemnego motywu (WCAG 2.2) ([#850](https://github.com/CodesWhat/drydock/issues/850), [#865](https://github.com/CodesWhat/drydock/discussions/865)), usuwanie `DD_TRIGGER_*` (koniec okresu wycofywania dla wersji 1.5.0), curl usunięty z obrazu                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| **v1.8.0**   | Zarządzanie flotą i konfiguracja na żywo          | Konfiguracja YAML, konfiguracja interfejsu użytkownika na żywo, przeglądarka woluminów, aktualizacje równoległe, migracja sklepu SQLite, postęp aktualizacji Home Assistant i urządzenia przypisane do poszczególnych kontenerów ([#210](https://github.com/CodesWhat/drydock/discussions/210)), lokalnie zbudowane obrazy monitorowane względem zadeklarowanej bazy upstream ([#897](https://github.com/CodesWhat/drydock/discussions/897))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| **v2.0+**                    | Rozszerzanie platformy i nie tylko                | Obserwatorzy roju/Kubernetes, GitOps, bramki kondycji, wdrożenia Canary, terminal sieciowy, RBAC, rotacyjne klucze API o określonym zakresie (statyczne tokeny nośnika do integracji HA/pulpitu nawigacyjnego, [#469](https://github.com/CodesWhat/drydock/discussions/469)), LDAP/AD, natywny dostawca Podman poza interfejsem API zgodnym z Dockerem, CLI, wzmocniony obraz Wolfi, proxy gniazda                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **v1.8.0**   | Zarządzanie flotą i konfiguracja na żywo          | Konfiguracja YAML, konfiguracja interfejsu użytkownika na żywo, przeglądarka woluminów, aktualizacje równoległe, migracja sklepu SQLite, postęp aktualizacji Home Assistant i urządzenia przypisane do poszczególnych kontenerów ([#210](https://github.com/CodesWhat/drydock/discussions/210)), lokalnie zbudowane obrazy monitorowane względem zadeklarowanej bazy upstream ([#897](https://github.com/CodesWhat/drydock/discussions/897)), rotacyjne klucze API o określonym zakresie (statyczne tokeny nośnika do integracji HA/pulpitu nawigacyjnego, [#469](https://github.com/CodesWhat/drydock/discussions/469)), kolejka zatwierdzeń dla poszczególnych aktualizacji |
+| **v2.0+**                    | Rozszerzanie platformy i nie tylko                | Obserwatorzy roju/Kubernetes, GitOps, bramki kondycji, wdrożenia Canary, terminal sieciowy, RBAC, LDAP/AD, natywny dostawca Podman poza interfejsem API zgodnym z Dockerem, CLI, wzmocniony obraz Wolfi, proxy gniazda                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 </details>
 

@@ -4,14 +4,14 @@ import type { ComparisonRouteRawConfig } from "@/lib/comparison-route-data/types
 export const watchtowerComparisonRouteData = {
   slug: "watchtower",
   comparisonTable: `
-Project status|Archived (Dec 2025)|Actively maintained|self
+Project status|Archived Dec 2025; last release v1.7.1 (Nov 2023). Unofficial community fork still released|Actively maintained|self
 Language|Go|TypeScript|tie
 Web UI|None (CLI only)|Full dashboard|self
 Update approach|Auto-pulls & restarts|Monitor + notify (optional update)|self
 Monitor-only mode|Flag exists; pulls images anyway due to Docker API limits|Core design — monitor-first|self
 Dry-run preview|No|Yes|self
 Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
-Notifications|Via Shoutrrr (~18 services)|20 native trigger integrations|tie
+Notifications|Via Shoutrrr (~20 services)|20 native trigger integrations|tie
 Security scanning|None|Trivy + SBOM + cosign verification|self
 Per-container scheduling|No|Yes (per-watcher CRON)|self
 Include/exclude patterns|Labels only|Labels, regex, image sets|self
