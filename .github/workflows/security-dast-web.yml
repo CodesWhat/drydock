@@ -25,13 +25,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  dast-web:
-    name: "DAST: getdrydock.com"
+  dast-web-zap:
+    name: "DAST: getdrydock.com (ZAP)"
     # Dynamic surface (server-side API routes: /api/search, /api/star-history)
-    # → full tier: ZAP active/full scan + Nuclei, per security.md's DAST
-    # tiering decision.
+    # → full tier: ZAP active/full scan, per security.md's DAST tiering
+    # decision. Split into its own job — ZAP and Nuclei used to share one
+    # 40-minute job budget, but the full active scan alone regularly takes
+    # ~40 minutes against the live site, so Nuclei never got a turn and the
+    # job was silently cancelled every Wednesday with no Nuclei report ever
+    # written. Each scanner now gets its own timeout and runs in parallel.
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 60
     permissions:
       actions: read
       contents: read
@@ -42,9 +46,9 @@ jobs:
         uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
         with:
           # DAST scanners hit unbounded third-party endpoints (ZAP passive
-          # rule callbacks, Nuclei template fetches) with no stable
-          # upstream-published allowlist — same accepted-audit exception as
-          # ci-verify.yml's dast-zap-baseline job (security.md Known drift).
+          # rule callbacks) with no stable upstream-published allowlist —
+          # same accepted-audit exception as ci-verify.yml's dast-zap-baseline
+          # job (security.md Known drift).
           egress-policy: audit
 
       - name: Checkout
@@ -126,6 +130,33 @@ jobs:
             echo "- Target: https://getdrydock.com"
             echo "- Artifact: [${artifact_name}](${artifact_url})"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  dast-web-nuclei:
+    name: "DAST: getdrydock.com (Nuclei)"
+    # Split from dast-web-zap above (see that job's comment) so Nuclei gets
+    # its own timeout instead of whatever the ZAP full scan happened to
+    # leave behind, and runs in parallel with it instead of after it.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
+        with:
+          # DAST scanners hit unbounded third-party endpoints (Nuclei
+          # template fetches) with no stable upstream-published allowlist —
+          # same accepted-audit exception as ci-verify.yml's dast-zap-baseline
+          # job (security.md Known drift).
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Create Nuclei report directory
         if: always()
@@ -321,8 +352,9 @@ jobs:
       - name: Harden Runner
         uses: step-security/harden-runner@b09bb98e06d4d774595224525879c09bc6e98c40  # v2.20.1
         with:
-          # Same accepted-audit exception as dast-web above and
-          # ci-verify.yml's dast-zap-baseline job (security.md Known drift).
+          # Same accepted-audit exception as dast-web-zap/dast-web-nuclei
+          # above and ci-verify.yml's dast-zap-baseline job (security.md
+          # Known drift).
           egress-policy: audit
 
       - name: Checkout
