@@ -70,7 +70,7 @@ function getValidatedLogComponent(component: unknown): string | undefined | null
 }
 
 function getValidatedLogInteger(value: unknown): number | undefined | null {
-  if (!value) {
+  if (value === undefined || value === null) {
     return undefined;
   }
   // The whole string must be a complete integer literal — no leading/trailing whitespace,

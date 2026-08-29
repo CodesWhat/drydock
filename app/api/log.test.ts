@@ -307,6 +307,29 @@ describe('Log Entries Route', () => {
     expect(mockGetEntries).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ['level', 'Invalid level query parameter'],
+    ['component', 'Invalid component query parameter'],
+    ['tail', 'Invalid tail query parameter'],
+    ['since', 'Invalid since query parameter'],
+  ])('should return 400 when %s query parameter is an empty string', (param, expectedError) => {
+    // An empty string means the param was supplied with no value (e.g. `?tail=`),
+    // which is distinct from the param being absent altogether. getValidatedLogInteger
+    // used to guard with `if (!value)`, and '' is falsy, so it was treated the same as
+    // "not supplied" and silently passed through as undefined instead of being rejected.
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
+
+    const req = createMockRequest({ query: { [param]: '' } });
+    const res = createResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+    expect(mockGetEntries).not.toHaveBeenCalled();
+  });
+
   test('should pass tail=0 through to getEntries', () => {
     logRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];

@@ -710,6 +710,38 @@ describe('Agent Log Entries Route', () => {
     expect(getLogEntries).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ['level', 'Invalid level query parameter'],
+    ['component', 'Invalid component query parameter'],
+    ['tail', 'Invalid tail query parameter'],
+    ['since', 'Invalid since query parameter'],
+  ])(
+    'should return 400 when %s query parameter is an empty string',
+    async (param, expectedError) => {
+      // An empty string means the param was supplied with no value (e.g. `?tail=`),
+      // which is distinct from the param being absent altogether. getValidatedLogInteger
+      // used to guard with `if (!value)`, and '' is falsy, so it was treated the same as
+      // "not supplied" and silently passed through as undefined instead of being rejected.
+      const getLogEntries = vi.fn().mockResolvedValue([]);
+      mockGetAgent.mockReturnValue({
+        isConnected: true,
+        getLogEntries,
+      });
+
+      const req = createMockRequest({
+        params: { name: 'agent-1' },
+        query: { [param]: '' },
+      });
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+      expect(getLogEntries).not.toHaveBeenCalled();
+    },
+  );
+
   test('should return 400 when component query parameter contains unsafe characters', async () => {
     const getLogEntries = vi.fn().mockResolvedValue([]);
     mockGetAgent.mockReturnValue({
