@@ -576,6 +576,28 @@ describe('Agent API index', () => {
         expect(getEntries).not.toHaveBeenCalled();
       });
 
+      test.each([
+        ['tail', 'Invalid tail query parameter'],
+        ['since', 'Invalid since query parameter'],
+      ])(
+        'should return 400 when %s query parameter is an empty string',
+        async (param, expectedError) => {
+          // An empty string means the param was supplied with no value (e.g. `?tail=`),
+          // which is distinct from the param being absent altogether. getValidatedLogInteger
+          // used to guard with `if (!value)`, and '' is falsy, so it was treated the same as
+          // "not supplied" and silently passed through as undefined instead of being rejected.
+          const { getEntries } = await import('../../log/buffer.js');
+          const req = { query: { [param]: '' } };
+          const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+          logEntriesHandler(req, res);
+
+          expect(res.status).toHaveBeenCalledWith(400);
+          expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+          expect(getEntries).not.toHaveBeenCalled();
+        },
+      );
+
       test('should return 400 when tail query parameter is a digit string that exceeds Number.MAX_SAFE_INTEGER', async () => {
         // Passes the /^-?\d+$/ shape check but loses precision as a Number, so
         // Number.isSafeInteger must reject it.
