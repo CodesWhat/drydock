@@ -550,6 +550,46 @@ describe('Agent API index', () => {
         expect(getEntries).not.toHaveBeenCalled();
       });
 
+      test('should return 400 when tail query parameter has a numeric prefix followed by trailing characters', async () => {
+        // Number.parseInt('25logs', 10) === 25, which used to slip past the finite check.
+        const { getEntries } = await import('../../log/buffer.js');
+        const req = { query: { tail: '25logs' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+        logEntriesHandler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+        expect(getEntries).not.toHaveBeenCalled();
+      });
+
+      test('should return 400 when since query parameter has a numeric prefix followed by trailing characters', async () => {
+        // Number.parseInt('1000ms', 10) === 1000, which used to slip past the finite check.
+        const { getEntries } = await import('../../log/buffer.js');
+        const req = { query: { since: '1000ms' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+        logEntriesHandler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid since query parameter' });
+        expect(getEntries).not.toHaveBeenCalled();
+      });
+
+      test('should return 400 when tail query parameter is a digit string that exceeds Number.MAX_SAFE_INTEGER', async () => {
+        // Passes the /^-?\d+$/ shape check but loses precision as a Number, so
+        // Number.isSafeInteger must reject it.
+        const { getEntries } = await import('../../log/buffer.js');
+        const req = { query: { tail: '99999999999999999999' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+        logEntriesHandler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+        expect(getEntries).not.toHaveBeenCalled();
+      });
+
       test('should pass undefined tail/since to getEntries so the default cap applies when the params are absent', async () => {
         const { getEntries } = await import('../../log/buffer.js');
         getEntries.mockReturnValue([]);
