@@ -699,12 +699,12 @@ test('getUserFromAccessToken should pass skipSubjectCheck when no expectedSubjec
 test('getUserFromAccessToken should pass expectedSubject when provided (login path)', async () => {
   openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
 
-  await oidc.getUserFromAccessToken('access-token', 'expected-sub-123');
+  await oidc.getUserFromAccessToken('access-token', 'sub-123');
 
   expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(
     oidc.client,
     'access-token',
-    'expected-sub-123',
+    'sub-123',
   );
 });
 
