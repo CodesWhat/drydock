@@ -17,7 +17,7 @@ export function buildContentSecurityPolicy(nonce, isDevelopment) {
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://img.shields.io https://github.com https://qlty.sh",
+    "img-src 'self' data: https://img.shields.io https://github.com https://qlty.sh https://www.bestpractices.dev https://codecov.io",
     "font-src 'self' data:",
     "connect-src 'self' https://e.codeswhat.com",
     "frame-src https://demo.getdrydock.com",
