@@ -45,7 +45,7 @@ baseRegistry.authenticateBasic({ headers: 'bad-headers' }, 'credentials');
 baseRegistry.normalizeImageUrl({ registry: {} });
 
 // @ts-expect-error matchRegistryHost expects string base hosts
-baseRegistry.matchRegistryHost({ registry: { url: 'docker.io' } }, /docker\.io/);
+baseRegistry.matchRegistryHost({ registry: { url: 'docker.io' } }, /^docker\.io$/);
 
 // @ts-expect-error maskSensitiveFields expects string field names
 baseRegistry.maskSensitiveFields([123]);
