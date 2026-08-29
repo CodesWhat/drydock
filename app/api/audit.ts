@@ -7,12 +7,17 @@ import { buildPaginationLinks } from './pagination-links.js';
 const router = express.Router();
 // Stryker disable next-line Regex: validation behavior is covered by route tests, but module-scope regex mutants survive under the vitest runner.
 const SAFE_AUDIT_FILTER_PATTERN = /^[a-zA-Z0-9._-]+$/;
-// Requires the entire string to be an optional sign followed by one or more digits, so a
+// Requires the entire string to be an optional minus sign followed by one or more digits, so a
 // numeric-prefix string like '25logs' or '10ms' is rejected rather than silently truncated
 // by Number.parseInt. Mirrors SAFE_LOG_INTEGER_PATTERN in app/api/log.ts, but offset/limit
 // keep audit's existing fallback-to-default contract instead of 400ing: an unparseable value
 // is treated the same as an absent one (falls back to the default) rather than erroring, so
 // this only closes the truncation/precision-loss hole without changing the response shape.
+// A leading `+` is deliberately not accepted: it's form-encoding for a space in a query
+// string, so `?limit=+5` arrives as `" 5"` and only the `%2B5` spelling would ever reach the
+// validator as `"+5"`; accepting `[+-]?` would make acceptance depend on how the client
+// encoded the sign, and restoring both spellings would need a trim, which is the exact thing
+// this pattern exists to stop (`?limit=%205`).
 const SAFE_AUDIT_INTEGER_PATTERN = /^-?\d+$/;
 
 type AuditEntriesQuery = {

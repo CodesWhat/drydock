@@ -8,10 +8,14 @@ import { sendErrorResponse } from './error-response.js';
 const router = express.Router();
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
 const SAFE_LOG_COMPONENT_PATTERN = /^[a-zA-Z0-9._-]+$/;
-// Requires the entire string to be an optional sign followed by one or more digits, so a
+// Requires the entire string to be an optional minus sign followed by one or more digits, so a
 // numeric-prefix string like '25logs' or '1000ms' is rejected rather than silently truncated
 // by Number.parseInt. Negative values are intentionally still accepted here — see
-// getValidatedLogInteger below.
+// getValidatedLogInteger below. A leading `+` is deliberately not accepted: it's
+// form-encoding for a space in a query string, so `?tail=+5` arrives as `" 5"` and only the
+// `%2B5` spelling would ever reach the validator as `"+5"`; accepting `[+-]?` would make
+// acceptance depend on how the client encoded the sign, and restoring both spellings would
+// need a trim, which is the exact thing this pattern exists to stop (`?tail=%205`).
 const SAFE_LOG_INTEGER_PATTERN = /^-?\d+$/;
 
 function getValidatedLogLevel(level: unknown): string | undefined | null {
