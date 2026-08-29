@@ -256,6 +256,12 @@ type ValidateComposeConfigurationOptions = {
 
 type MutateComposeFileOptions = ValidateComposeConfigurationOptions & {
   captureSnapshot?: boolean;
+  backupFilePath?: string;
+  validateCurrentState?: (
+    composeFileText: string,
+    filePath: string,
+    composeFileChain: string[],
+  ) => Promise<void>;
 };
 
 type ComposeFileMutationSnapshot = {
@@ -970,6 +976,41 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  async assertComposeRepositoryContinuityFromFreshChain(
+    composeFileChain,
+    composeFilePath,
+    composeFileText,
+    mappings,
+  ) {
+    const composeByFile = new Map<string, unknown>();
+    composeByFile.set(
+      composeFilePath,
+      yaml.parse(composeFileText, {
+        maxAliasCount: YAML_MAX_ALIAS_COUNT,
+      }),
+    );
+    for (const composeFile of composeFileChain) {
+      if (composeFile !== composeFilePath) {
+        composeByFile.set(
+          composeFile,
+          yaml.parse((await this.getComposeFile(composeFile)).toString(), {
+            maxAliasCount: YAML_MAX_ALIAS_COUNT,
+          }),
+        );
+      }
+    }
+    const compose = await this.getComposeFileChainAsObject(composeFileChain, composeByFile);
+    this.assertComposeRepositoryContinuity(
+      composeFileChain.join(', '),
+      mappings.map((mapping) => ({
+        ...mapping,
+        current: isPlainObject(compose?.services?.[mapping.service])
+          ? (compose.services[mapping.service] as { image?: unknown }).image
+          : undefined,
+      })),
+    );
+  }
+
   reconcileComposeMappings(composeFileChainSummary, versionMappings) {
     this.assertComposeRepositoryContinuity(composeFileChainSummary, versionMappings);
     const reconciliationMode = this.configuration.reconciliationMode || 'warn';
@@ -1241,6 +1282,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       const composeFileText = (await this.getComposeFile(filePath)).toString();
       const composeFileStat = await fs.stat(filePath);
       const composeFileChain = this.normalizeComposeFileChain(filePath, options.composeFiles);
+      if (options.validateCurrentState) {
+        await options.validateCurrentState(composeFileText, filePath, composeFileChain);
+      }
+      if (options.backupFilePath) {
+        await this.backup(filePath, options.backupFilePath);
+      }
       const updatedComposeFileText = updateComposeText(composeFileText, {
         filePath,
         mtimeMs: composeFileStat.mtimeMs,
@@ -1850,12 +1897,6 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     composeFileChain,
     composeByFile,
   ): Promise<ComposeFileMutationSnapshot | undefined> {
-    // Backup docker-compose file
-    if (this.configuration.backup) {
-      const backupFile = `${writableComposeFile}.back`;
-      await this.backup(writableComposeFile, backupFile);
-    }
-
     // Replace only the targeted compose service image values.
     const serviceImageUpdates = this.buildComposeServiceImageUpdates(composeUpdates);
     const parsedComposeFileObject = this.buildUpdatedComposeFileObjectForValidation(
@@ -1878,6 +1919,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         composeFiles: composeFileChain,
         parsedComposeFileObject,
         captureSnapshot: true,
+        backupFilePath: this.configuration.backup ? `${writableComposeFile}.back` : undefined,
+        validateCurrentState: (composeFileText, filePath, currentComposeFileChain) =>
+          this.assertComposeRepositoryContinuityFromFreshChain(
+            currentComposeFileChain,
+            filePath,
+            composeFileText,
+            composeUpdates,
+          ),
       },
     );
     return isPlainObject(mutationResult) &&
@@ -2149,6 +2198,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       );
     }
 
+    this.assertComposeRepositoryContinuity(composeFiles.join(', '), [
+      {
+        container,
+        service,
+        runtimeImage: currentImage,
+        current: (compose as ComposeFileWithServices).services?.[service]?.image,
+      },
+    ]);
     const composeFile = await this.getWritableComposeFileForService(
       composeFiles,
       service,
@@ -2667,6 +2724,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       {
         composeFiles,
         captureSnapshot: true,
+        validateCurrentState: (composeFileText, filePath, currentComposeFileChain) =>
+          this.assertComposeRepositoryContinuityFromFreshChain(
+            currentComposeFileChain,
+            filePath,
+            composeFileText,
+            [{ container, service, runtimeImage: currentImage }],
+          ),
       },
     );
     const mutationSnapshots =

@@ -11,6 +11,14 @@ describe('sanitizeLogParam', () => {
     expect(sanitizeLogParam('a\x1b[2Jb\x1b[1;31;42mc\x1b[?25ld')).toBe('abcd');
   });
 
+  test('should remove C1 CSI sequences without leaving residue', () => {
+    expect(sanitizeLogParam('\x9b31mred\x9b0m')).toBe('red');
+  });
+
+  test('should remove standalone C1 control characters', () => {
+    expect(sanitizeLogParam('before\x85after')).toBe('beforeafter');
+  });
+
   test('should truncate values longer than maxLength', () => {
     expect(sanitizeLogParam('abcdef', 3)).toBe('abc...');
   });

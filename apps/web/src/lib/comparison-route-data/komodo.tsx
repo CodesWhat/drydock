@@ -29,9 +29,9 @@ Dry-run preview|Limited|Yes|self
 License|GPL-3.0|AGPL-3.0|tie
 `,
   highlightsTable: `
-rotate|Update Safety Controls|Drydock is the only tool with automatic rollback on health check failure, maintenance windows, and pre/post-update lifecycle hooks. Komodo updates containers but does not include automatic rollback on failure, maintenance windows, or pre/post-update hooks.
+rotate|Update Safety Controls|Both tools support maintenance windows. Drydock adds automatic rollback on health check failure and pre/post-update lifecycle hooks, which Komodo does not include.
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), and cosign image signature verification — built-in. Komodo has no integrated security scanning.
-eye|Dry-Run Preview|Preview exactly what an update will do before applying it, with pre-update image backups and configurable retention. Komodo applies updates immediately with no preview step.
+eye|Dry-Run Preview|Preview exactly what an update will do before applying it, with pre-update image backups and configurable retention. Komodo offers a limited dry-run preview, while Drydock provides the full update preview and backup workflow.
 radio|23 Registry Providers|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more. Komodo supports fewer registries out of the box.
 bell|20 Trigger Integrations|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more. Komodo includes built-in alerters for Slack, Discord, Ntfy, and Pushover; anything beyond those requires a self-hosted custom alerter integration.
 lock|Fully Open Source|Every Drydock feature is free and open source. Both Drydock (AGPL-3.0) and Komodo (GPL-3.0) use copyleft licenses.
