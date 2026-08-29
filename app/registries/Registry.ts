@@ -94,7 +94,55 @@ const MAX_MANIFEST_INDEX_DEPTH = 3;
 const MAX_TAG_PAGES = 50;
 
 /**
- * Extract the `rel="next"` URL from an RFC 5988 `Link` header.
+ * Split a `Link` header into its link-values.
+ *
+ * A plain `split(',')` is wrong: a comma is a sub-delimiter under RFC 3986, so
+ * a registry may legitimately put one inside a cursor (`?last=a,b`) or inside a
+ * quoted parameter, and splitting there destroys the entry. Commas only
+ * separate link-values when they sit outside both the angle brackets and any
+ * quoted string.
+ */
+function splitLinkHeader(link: string): string[] {
+  const entries: string[] = [];
+  let current = '';
+  let inAngle = false;
+  let inQuote = false;
+  for (const char of link) {
+    if (char === '"') {
+      inQuote = !inQuote;
+    } else if (char === '<' && !inQuote) {
+      inAngle = true;
+    } else if (char === '>' && !inQuote) {
+      inAngle = false;
+    } else if (char === ',' && !inAngle && !inQuote) {
+      entries.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  entries.push(current);
+  return entries;
+}
+
+/**
+ * Whether a link-value's parameters declare the `next` relation.
+ *
+ * `rel` carries a space-separated list of relation types, quoted or bare, so
+ * the value has to be tokenised and matched exactly. A substring test accepts
+ * `rel=next-page`, which is a different relation, and misses `rel="prev next"`,
+ * which is the one we want.
+ */
+function hasNextRelation(parameters: string): boolean {
+  const match = /(?:^|;)\s*rel\s*=\s*"?([^";,]*)"?/iu.exec(parameters);
+  if (match === null) {
+    return false;
+  }
+  return match[1].split(/\s+/u).some((relation) => relation.toLowerCase() === 'next');
+}
+
+/**
+ * Extract the `rel="next"` URL from an RFC 8288 `Link` header.
  *
  * Pagination cursors are opaque under the OCI distribution spec: a client is
  * meant to follow this URL as given rather than rebuild it. Registries differ
@@ -107,12 +155,12 @@ function parseNextPageLink(link: string | undefined): string | undefined {
   if (link === undefined) {
     return undefined;
   }
-  for (const entry of link.split(',')) {
-    const match = /<([^>]+)>\s*;\s*(.+)/u.exec(entry);
+  for (const entry of splitLinkHeader(link)) {
+    const match = /<([^>]+)>\s*;\s*(.+)/su.exec(entry);
     if (match === null) {
       continue;
     }
-    if (/\brel\s*=\s*"?next"?/iu.test(match[2])) {
+    if (hasNextRelation(match[2])) {
       return match[1].trim();
     }
   }

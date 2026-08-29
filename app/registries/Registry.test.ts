@@ -384,6 +384,62 @@ describe('getTagsPage link header cursor', () => {
     );
   });
 
+  test('should follow a Link header cursor containing a literal comma in the cursor value, not split on it', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '</v2/team/img/tags/list?n=1000&last=a,b>; rel="next"',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe('https://reg.io/v2/team/img/tags/list?n=1000&last=a,b');
+  });
+
+  test('should not split a link-value on a comma inside a quoted parameter', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '</v2/team/img/tags/list?last=quoted-comma-cursor&n=1000>; rel="next"; title="a,b"',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe(
+      'https://reg.io/v2/team/img/tags/list?last=quoted-comma-cursor&n=1000',
+    );
+  });
+
   test('should accept an unquoted rel=next parameter', async () => {
     const registryMocked = createMockedRegistry();
     const callRegistrySpy = vi.fn();
@@ -410,6 +466,35 @@ describe('getTagsPage link header cursor', () => {
     const secondCallOptions = callRegistrySpy.mock.calls[1][0];
     expect(secondCallOptions.url).toBe(
       'https://reg.io/v2/team/img/tags/list?last=unquoted-cursor&n=1000',
+    );
+  });
+
+  test('should accept an unquoted rel=NEXT parameter regardless of case', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '</v2/team/img/tags/list?last=uppercase-cursor&n=1000>; rel=NEXT',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe(
+      'https://reg.io/v2/team/img/tags/list?last=uppercase-cursor&n=1000',
     );
   });
 
@@ -443,6 +528,35 @@ describe('getTagsPage link header cursor', () => {
     expect(secondCallOptions.url).not.toContain('last=prev-cursor');
   });
 
+  test('should accept a quoted rel list containing "next" among other relations', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '</v2/team/img/tags/list?last=multi-rel-cursor&n=1000>; rel="prev next"',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe(
+      'https://reg.io/v2/team/img/tags/list?last=multi-rel-cursor&n=1000',
+    );
+  });
+
   test('should fall back to the hand-built &last= URL when the Link header has no rel="next"', async () => {
     const registryMocked = createMockedRegistry();
     const callRegistrySpy = vi.fn();
@@ -452,6 +566,87 @@ describe('getTagsPage link header cursor', () => {
       if (callCount === 1) {
         return {
           headers: { link: '</v2/team/img/tags/list?last=prev-cursor&n=1000>; rel="prev"' },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe('https://reg.io/v2/team/img/tags/list?n=1000&last=v2');
+  });
+
+  test('should reject rel=next-page (not the next relation) and fall back to the hand-built &last= URL', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '</v2/team/img/tags/list?last=prev-cursor&n=1000>; rel=next-page',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe('https://reg.io/v2/team/img/tags/list?n=1000&last=v2');
+  });
+
+  test('should fall back to the hand-built &last= URL when the Link header entry has no rel parameter at all', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '</v2/team/img/tags/list?last=prev-cursor&n=1000>; title="tags"',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe('https://reg.io/v2/team/img/tags/list?n=1000&last=v2');
+  });
+
+  test('should fall back to the hand-built &last= URL when the rel parameter has no recognisable value', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '</v2/team/img/tags/list?last=prev-cursor&n=1000>; rel=',
+          },
           data: { tags: ['v1', 'v2'] },
         };
       }
