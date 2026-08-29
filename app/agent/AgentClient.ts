@@ -1039,10 +1039,14 @@ export class AgentClient {
         this.log.warn(`Failed to fetch/register watchers: ${getErrorMessage(error)}`);
       }
 
-      // Apply inventory only after watcher registration. Controller-transport
-      // descriptors change which fields are authoritative: Portwing owns live
-      // runtime state, while Drydock's native watcher owns update enrichment.
-      await this.processAuthoritativeContainers(containers);
+      // Prune (and, for a same-identity replacement, stash the retained update
+      // policy) before applying the incoming inventory. deleteContainer(...,
+      // {replacementExpected: true}) stashes updatePolicy keyed by identity
+      // (agent::watcher::name); insertContainer() consumes that stash as its
+      // first action. Running the insert first — as this used to — leaves
+      // nothing to consume, so a recreated agent-owned container silently
+      // lost its maturity policy on every restart-driven replacement.
+      //
       // A zero-container handshake is ambiguous: it could mean the agent has
       // no running containers, or its in-memory store is fresh-empty after a
       // restart while docker still has running containers. Defer the prune
@@ -1058,6 +1062,10 @@ export class AgentClient {
           'Handshake returned 0 containers; preserving last-known state until the first watch cycle completes',
         );
       }
+      // Apply inventory only after watcher registration. Controller-transport
+      // descriptors change which fields are authoritative: Portwing owns live
+      // runtime state, while Drydock's native watcher owns update enrichment.
+      await this.processAuthoritativeContainers(containers);
 
       // Fetch and register triggers
       try {
@@ -1445,6 +1453,14 @@ export class AgentClient {
       });
     }
 
+    // Prune (and stash any same-identity replacement's update policy) before
+    // the loop below inserts/updates the incoming containers — insertContainer()
+    // consumes the stash as its first action, so it must already exist. See the
+    // reorder note in _doHandshake() above for the full mechanism.
+    if (watcherName) {
+      this.pruneOldContainers(containers, watcherName);
+    }
+
     const containerReports: ContainerReport[] = [];
     for (const container of containers) {
       try {
@@ -1465,10 +1481,6 @@ export class AgentClient {
     }
     this.clearPendingWatcherCycleReports(watcherName);
     await emitContainerReports(containerReports);
-
-    if (watcherName) {
-      this.pruneOldContainers(containers, watcherName);
-    }
 
     this.scheduleStatsChanged();
   }
@@ -2259,9 +2271,25 @@ export class AgentClient {
         this.buildRequestConfig('POST', target, {}),
       );
       const reports = response.data;
-      await this.processAuthoritativeContainers(reports.map((report) => report.container));
       const containers = reports.map((report) => report.container);
-      this.pruneOldContainers(containers, watcherName);
+      // Prune (and stash any same-identity replacement's update policy) before
+      // processAuthoritativeContainers() inserts/updates below — insertContainer()
+      // consumes the stash as its first action, so it must already exist. See the
+      // reorder note in _doHandshake() for the full mechanism.
+      //
+      // An empty report list is ambiguous the same way a zero-container handshake
+      // is: it could mean the watcher genuinely has nothing to report, or that
+      // enumeration failed entirely on the agent (Docker.watch() returns []
+      // without distinguishing the two). Skip the prune in that case rather than
+      // wiping every container this watcher owns.
+      if (containers.length > 0) {
+        this.pruneOldContainers(containers, watcherName);
+      } else if (this.hasConnectedOnce) {
+        this.log.warn(
+          'Watch returned 0 containers; preserving last-known state until the next watch cycle completes',
+        );
+      }
+      await this.processAuthoritativeContainers(containers);
       this.scheduleStatsChanged();
       return reports;
     } catch (error: unknown) {
@@ -2297,10 +2325,14 @@ export class AgentClient {
    * agent via dd:container_sync. Replaces handshake() for edge connections.
    */
   async handleContainerSync(containers: Container[]): Promise<void> {
-    const reports = await this.processAuthoritativeContainers(containers);
+    // Prune (and stash any same-identity replacement's update policy) before
+    // processAuthoritativeContainers() inserts/updates below — insertContainer()
+    // consumes the stash as its first action, so it must already exist. See the
+    // reorder note in _doHandshake() for the full mechanism.
     if (containers.length > 0) {
       this.pruneOldContainers(containers);
     }
+    const reports = await this.processAuthoritativeContainers(containers);
     this.scheduleStatsChanged();
     // Suppress unused variable warning — reports are emitted internally.
     void reports;
