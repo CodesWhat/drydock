@@ -1,3 +1,4 @@
+import { expect, test, vi } from 'vitest';
 import Portainer, {
   testable_extractTagVariable,
   testable_getComposeProjectPaths,
@@ -24,6 +25,7 @@ function makeTrigger() {
     updateModeLabel: 'dd.portainer.update-mode',
     pullImage: true,
     pruneStack: false,
+    redeployTimeout: 300000,
     dryrun: false,
     prune: false,
     autoremovetimeout: 10000,
@@ -201,4 +203,103 @@ test('redeployPortainerStack sends the Portainer stack update payload', async ()
   });
 
   vi.unstubAllGlobals();
+});
+
+test('waitForPortainerRedeploy resolves when the compose service reaches the target image', async () => {
+  const trigger = makeTrigger();
+  const dockerApi = {
+    listContainers: vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          Image: 'homeassistant/home-assistant:2026.7.1',
+          Labels: {
+            'com.docker.compose.project': 'openhab',
+            'com.docker.compose.service': 'homeassistant',
+          },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          Id: 'new-container-id',
+          Names: ['/homeassistant'],
+          Image: 'homeassistant/home-assistant:2026.8.3',
+          Labels: {
+            'com.docker.compose.project': 'openhab',
+            'com.docker.compose.service': 'homeassistant',
+          },
+        },
+      ]),
+  };
+  const container = makeContainer({
+    name: 'homeassistant',
+    labels: {
+      'com.docker.compose.project': 'openhab',
+      'com.docker.compose.service': 'homeassistant',
+    },
+  });
+
+  await trigger.waitForPortainerRedeploy(
+    dockerApi,
+    container,
+    {
+      mode: 'compose',
+      stack: { Id: 2, Name: 'openhab', EndpointId: 1 },
+      stackFileContent: '',
+      service: 'homeassistant',
+      targetImage: 'homeassistant/home-assistant:2026.8.3',
+      updatedStackFileContent: '',
+      updatedEnv: [],
+    },
+    trigger.log,
+  );
+
+  expect(dockerApi.listContainers).toHaveBeenCalledTimes(2);
+});
+
+test('waitForPortainerRedeploy rejects when Portainer never recreates the service', async () => {
+  vi.useFakeTimers();
+  const trigger = makeTrigger();
+  trigger.configuration.redeployTimeout = 1;
+  const dockerApi = {
+    listContainers: vi.fn().mockResolvedValue([
+      {
+        Image: 'homeassistant/home-assistant:2026.7.1',
+        Labels: {
+          'com.docker.compose.project': 'openhab',
+          'com.docker.compose.service': 'homeassistant',
+        },
+      },
+    ]),
+  };
+  const container = makeContainer({
+    name: 'homeassistant',
+    labels: {
+      'com.docker.compose.project': 'openhab',
+      'com.docker.compose.service': 'homeassistant',
+    },
+  });
+
+  const waitPromise = expect(
+    trigger.waitForPortainerRedeploy(
+      dockerApi,
+      container,
+      {
+        mode: 'compose',
+        stack: { Id: 2, Name: 'openhab', EndpointId: 1 },
+        stackFileContent: '',
+        service: 'homeassistant',
+        targetImage: 'homeassistant/home-assistant:2026.8.3',
+        updatedStackFileContent: '',
+        updatedEnv: [],
+      },
+      trigger.log,
+    ),
+  ).rejects.toThrow(
+    'Timed out waiting for Portainer stack openhab service homeassistant to use homeassistant/home-assistant:2026.8.3',
+  );
+  await vi.advanceTimersByTimeAsync(2000);
+  await waitPromise;
+
+  vi.useRealTimers();
 });

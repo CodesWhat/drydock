@@ -17,6 +17,8 @@ const DEFAULT_VERSION_VAR_LABEL = 'dd.portainer.version-var';
 const DEFAULT_UPDATE_MODE_LABEL = 'dd.portainer.update-mode';
 const STACK_ID_LABEL = 'dd.portainer.stack-id';
 const ENDPOINT_ID_LABEL = 'dd.portainer.endpoint-id';
+const DEFAULT_REDEPLOY_TIMEOUT_MS = 5 * 60 * 1000;
+const REDEPLOY_POLL_INTERVAL_MS = 2 * 1000;
 
 type PortainerUpdateMode = 'auto' | 'env' | 'compose';
 
@@ -28,6 +30,7 @@ interface PortainerTriggerConfiguration extends DockerTriggerConfiguration {
   updateModeLabel: string;
   pullImage: boolean;
   pruneStack: boolean;
+  redeployTimeout: number;
 }
 
 interface PortainerStackSummary {
@@ -71,6 +74,19 @@ interface ResolvedPortainerUpdate {
   targetTag?: string;
   updatedStackFileContent: string;
   updatedEnv: PortainerStackEnv[];
+}
+
+interface DockerContainerListItem {
+  Id?: string;
+  Image?: string;
+  State?: string;
+  Status?: string;
+  Names?: string[];
+  Labels?: Record<string, string>;
+}
+
+interface DockerApiWithListContainers {
+  listContainers: (options?: { all?: boolean }) => Promise<DockerContainerListItem[]>;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -163,6 +179,28 @@ function getServiceImage(compose: ComposeFile, service: string): string | undefi
   return typeof serviceDefinition.image === 'string' ? serviceDefinition.image : undefined;
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTargetServiceContainer(
+  item: DockerContainerListItem,
+  container,
+  resolved: ResolvedPortainerUpdate,
+): boolean {
+  const labels = item.Labels || {};
+  const service = labels[COMPOSE_SERVICE_LABEL];
+  const project = labels[COMPOSE_PROJECT_LABEL];
+  const expectedProject = container.labels?.[COMPOSE_PROJECT_LABEL];
+  if (service !== resolved.service) {
+    return false;
+  }
+  if (expectedProject && project !== expectedProject) {
+    return false;
+  }
+  return item.Image === resolved.targetImage;
+}
+
 function extractTagVariable(image: string | undefined): string | undefined {
   if (!image || image.includes('@')) {
     return undefined;
@@ -217,6 +255,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         updateModeLabel: this.joi.string().default(DEFAULT_UPDATE_MODE_LABEL),
         pullImage: this.joi.boolean().default(true),
         pruneStack: this.joi.boolean().default(false),
+        redeployTimeout: this.joi.number().integer().min(0).default(DEFAULT_REDEPLOY_TIMEOUT_MS),
       })
       .rename('updatemode', 'updateMode', {
         ignoreUndefined: true,
@@ -235,6 +274,10 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         override: true,
       })
       .rename('prunestack', 'pruneStack', {
+        ignoreUndefined: true,
+        override: true,
+      })
+      .rename('redeploytimeout', 'redeployTimeout', {
         ignoreUndefined: true,
         override: true,
       });
@@ -314,6 +357,63 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         pullImage: this.configuration.pullImage,
       }),
     });
+  }
+
+  async waitForPortainerRedeploy(
+    dockerApi: DockerApiWithListContainers | undefined,
+    container,
+    resolved: ResolvedPortainerUpdate,
+    logContainer,
+  ) {
+    if (!dockerApi || typeof dockerApi.listContainers !== 'function') {
+      logContainer.warn(
+        'Unable to verify Portainer redeploy because Docker listContainers is unavailable',
+      );
+      return;
+    }
+
+    const timeoutMs = this.configuration.redeployTimeout;
+    if (!(timeoutMs > 0)) {
+      logContainer.info(
+        'Skip Portainer redeploy verification because redeploy timeout is disabled',
+      );
+      return;
+    }
+
+    const startedAt = Date.now();
+    let lastSeen: string | undefined;
+    do {
+      const containers = await dockerApi.listContainers({ all: true });
+      const matched = containers.find((item) =>
+        isTargetServiceContainer(item, container, resolved),
+      );
+      if (matched) {
+        logContainer.info(
+          `Portainer redeploy verified: ${matched.Names?.[0]?.replace(/^\//, '') || matched.Id?.substring(0, 12) || resolved.service} now uses ${resolved.targetImage}`,
+        );
+        return;
+      }
+
+      const sameService = containers.find((item) => {
+        const labels = item.Labels || {};
+        return (
+          labels[COMPOSE_SERVICE_LABEL] === resolved.service &&
+          labels[COMPOSE_PROJECT_LABEL] === container.labels?.[COMPOSE_PROJECT_LABEL]
+        );
+      });
+      if (sameService?.Image && sameService.Image !== lastSeen) {
+        lastSeen = sameService.Image;
+        logContainer.debug(
+          `Waiting for Portainer redeploy of ${resolved.service}: current image is ${sameService.Image}, target is ${resolved.targetImage}`,
+        );
+      }
+
+      await delay(REDEPLOY_POLL_INTERVAL_MS);
+    } while (Date.now() - startedAt < timeoutMs);
+
+    throw new Error(
+      `Timed out waiting for Portainer stack ${resolved.stack.Name || resolved.stack.Id} service ${resolved.service} to use ${resolved.targetImage}`,
+    );
   }
 
   async resolvePortainerStack(container): Promise<ResolvedPortainerStack> {
@@ -476,6 +576,8 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       resolved.updatedStackFileContent,
       resolved.updatedEnv,
     );
+
+    await this.waitForPortainerRedeploy(context.dockerApi, container, resolved, logContainer);
 
     if (postPullHook) {
       await postPullHook(getRequestedOperationId(container, runtimeContext) ?? '');
