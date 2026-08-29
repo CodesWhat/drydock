@@ -627,7 +627,7 @@ class ContainerUpdateExecutor {
         logContainer,
         attemptState,
       );
-      await this.cleanupRenamedContainer(preparedExecution, logContainer, attemptState);
+      await this.cleanupRenamedContainer(preparedExecution, logContainer);
       this.markOperationSucceeded(preparedExecution.operationId);
       this.persistRollbackState?.(container.id, 'succeeded');
       return true;
@@ -966,9 +966,7 @@ class ContainerUpdateExecutor {
   private async cleanupRenamedContainer(
     preparedExecution: PreparedContainerUpdateExecution,
     logContainer: ContainerUpdateLogger,
-    attemptState: ContainerUpdateAttemptState,
   ) {
-    attemptState.failureReason = 'cleanup_old_failed';
     try {
       if (
         preparedExecution.currentContainerSpec.HostConfig?.AutoRemove === true &&
@@ -989,12 +987,35 @@ class ContainerUpdateExecutor {
         );
       }
     } catch (cleanupError: unknown) {
-      if (!this.isContainerNotFoundError(cleanupError)) {
-        throw cleanupError;
+      if (this.isContainerNotFoundError(cleanupError)) {
+        logContainer.info(
+          `Container ${preparedExecution.tempName} with id ${preparedExecution.currentContainerSpec.Id} was already removed during cleanup`,
+        );
+        return;
       }
-      logContainer.info(
-        `Container ${preparedExecution.tempName} with id ${preparedExecution.currentContainerSpec.Id} was already removed during cleanup`,
+      // Cleanup only runs once the replacement has started and cleared the health
+      // gate, so the update itself is already done. Rethrowing here would send a
+      // finished update into rollback, which stops the verified new container and
+      // restarts the old one — and when the old one had AutoRemove set, Docker may
+      // already have deleted it, leaving nothing running at all. A removal that
+      // times out or conflicts leaves a stopped container behind, which is a prune
+      // job, not a reason to undo the update.
+      const cleanupErrorMessage = getErrorMessage(cleanupError);
+      logContainer.warn(
+        `Unable to remove previous container ${preparedExecution.tempName} with id ${preparedExecution.currentContainerSpec.Id} after the update completed (${cleanupErrorMessage}); it is left stopped for manual removal or prune`,
       );
+      try {
+        updateOperationStore.updateOperation(preparedExecution.operationId, {
+          lastError: `cleanup_old_failed: ${cleanupErrorMessage}`,
+        });
+      } catch {
+        // The operation row is only a record of what happened. If the active-TTL
+        // sweep already terminalised it, updateOperation() throws, and letting that
+        // escape would undo the update for exactly the reason this branch avoids.
+        logContainer.warn(
+          `Unable to record the failed cleanup of ${preparedExecution.tempName} on operation ${preparedExecution.operationId}`,
+        );
+      }
     }
   }
 
