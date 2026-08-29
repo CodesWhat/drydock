@@ -274,6 +274,28 @@ class Http extends Trigger<HttpConfiguration> {
   }
 
   /**
+   * Sanitize sensitive data.
+   *
+   * The credentials live under a nested `auth` object, which the flat
+   * `maskFields()` helper cannot reach, so the masking is written out here.
+   * @returns {*}
+   */
+  maskConfiguration() {
+    const { auth, ...rest } = this.configuration;
+    if (!auth) {
+      return { ...rest } as HttpConfiguration;
+    }
+    return {
+      ...rest,
+      auth: {
+        ...auth,
+        password: Http.mask(auth.password),
+        bearer: Http.mask(auth.bearer),
+      },
+    } as HttpConfiguration;
+  }
+
+  /**
    * Send an HTTP Request with new image version details.
    *
    * @param container the container

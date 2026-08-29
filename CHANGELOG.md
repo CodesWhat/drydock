@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **The HTTP trigger's bearer credential was written to the log in cleartext on every registration.** `Component.register()` logs the configuration it was handed, and both layers that are supposed to scrub it missed this one field: the shared trigger redactor knew `token`, `password` and `apikey` but not `bearer`, and `Http` had no `maskConfiguration()` of its own, so the base implementation handed the configuration back untouched. The credential sits nested under `auth`, which is also why the flat `maskFields()` helper the other providers use would not have reached it. That log line is not only container stdout: it feeds the buffered stream behind the log API, so the credential was readable over HTTP as well as on disk. `bearer` is now an infrastructure key in the shared redactor, which covers both the registration log and the `/api/v1/triggers` response, and `Http` masks the nested `bearer` and `password` directly so the mask holds for any caller that reads `maskConfiguration()`.
+
 ### Fixed
 
 - **A caller-supplied update operation id was inserted without checking whether it already existed.** `POST /api/v1/triggers/:type/:name` and its per-agent variant accept an `operationId` in the body so the controller can thread its own id through to an agent-local route. Nothing checked it, and the store's id index is not unique, so reusing an id left two rows sharing it. Lookups return the newest of the two, so every later status write landed on the duplicate and the original stayed `queued`, holding its container's active-operation gate for the full 30 minute TTL or until a restart reconciled it, and when the orphaned entry's turn came round it resolved to the other container's row and overwrote it with its own fields. The active-operation gate did not catch this because it only looks up operations for the container being targeted, so an id belonging to a different container passed straight through. Both routes now return 409 for an id that already exists, active or terminal, and nothing is inserted.

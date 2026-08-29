@@ -2,9 +2,15 @@ import Http, { isMetadataAddress } from './Http.js';
 
 // Mock axios
 vi.mock('axios', () => ({ default: vi.fn() }));
+var logMock = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+  error: vi.fn(),
+}));
 vi.mock('../../../log/index.js', () => ({
   default: {
-    child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }),
+    child: () => logMock,
   },
 }));
 
@@ -959,6 +965,74 @@ describe('HTTP Trigger SSRF guard', () => {
           });
         }),
       ).rejects.toBeInstanceOf(Error);
+    }
+  });
+});
+
+describe('HTTP Trigger credential masking', () => {
+  let http;
+
+  beforeEach(async () => {
+    http = new Http();
+    vi.clearAllMocks();
+  });
+
+  test('maskConfiguration should mask the nested basic and bearer credentials', async () => {
+    http.configuration = {
+      url: 'https://example.com/webhook',
+      method: 'POST',
+      auth: {
+        type: 'BEARER',
+        user: 'operator',
+        password: 'sekret-password-value',
+        bearer: 'sekret-bearer-value',
+      },
+      allowmetadata: false,
+    };
+
+    const masked = http.maskConfiguration();
+
+    expect(masked).toEqual({
+      url: 'https://example.com/webhook',
+      method: 'POST',
+      auth: {
+        type: 'BEARER',
+        user: 'operator',
+        password: '[REDACTED]',
+        bearer: '[REDACTED]',
+      },
+      allowmetadata: false,
+    });
+    expect(JSON.stringify(masked)).not.toContain('sekret-bearer-value');
+    expect(JSON.stringify(masked)).not.toContain('sekret-password-value');
+  });
+
+  test('maskConfiguration should return the configuration unchanged when no auth is set', async () => {
+    http.configuration = {
+      url: 'https://example.com/webhook',
+      method: 'POST',
+      allowmetadata: false,
+    };
+
+    expect(http.maskConfiguration()).toEqual({
+      url: 'https://example.com/webhook',
+      method: 'POST',
+      allowmetadata: false,
+    });
+  });
+
+  test('register should not log the bearer credential', async () => {
+    await http.register('trigger', 'http', 'webhook', {
+      url: 'https://example.com/webhook',
+      method: 'POST',
+      auth: { type: 'BEARER', bearer: 'sekret-bearer-value' },
+      auto: false,
+    });
+
+    const loggedLines = logMock.info.mock.calls.map((call) => String(call[0]));
+    expect(loggedLines.some((line) => line.startsWith('Register with configuration'))).toBe(true);
+    for (const line of loggedLines) {
+      expect(line).not.toContain('sekret-bearer-value');
     }
   });
 });
