@@ -180,6 +180,21 @@ const filteredEntries = computed(() => {
   return result;
 });
 
+// The free-text box filters only the rows already fetched. The container,
+// action and date filters all go server-side, but the audit API has no
+// full-text parameter to send this one to, so it can only ever see the current
+// page. Counting a page-scoped match against the server's full total renders
+// as "2/500", which reads as "2 of your 500 entries matched" when it means "2
+// of the 50 on this page, nobody looked at the other 450". While the search is
+// active, count against the page and label it.
+const searchIsPageScoped = computed(() => searchQuery.value.trim().length > 0);
+const filterBarTotal = computed(() =>
+  searchIsPageScoped.value ? entries.value.length : total.value,
+);
+const filterBarCountLabel = computed(() =>
+  searchIsPageScoped.value ? t('auditView.onThisPage') : undefined,
+);
+
 function formatTimestamp(ts: string) {
   try {
     const d = new Date(ts);
@@ -335,7 +350,8 @@ onUnmounted(() => {
       v-model="auditViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredEntries.length"
-      :total-count="total"
+      :total-count="filterBarTotal"
+      :count-label="filterBarCountLabel"
       :active-filter-count="activeFilterCount"
       :hide-view-toggle="cardReflowForced"
     >

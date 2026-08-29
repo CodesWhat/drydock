@@ -262,11 +262,11 @@ git push -f origin refs/tags/0.24.0`}</code>
                 &mdash; not installed from Alpine&apos;s package repository. Image digests, unlike
                 tags, cannot be silently repointed, so this stage is immune to the tag-repointing
                 mechanism this advisory describes. The bundled version is currently{" "}
-                <strong>Trivy 0.72.0</strong>, well past the compromised v0.69.4 release.
+                <strong>Trivy 0.73.0</strong>, well past the compromised v0.69.4 release.
               </p>
               <pre>
                 <code>{`# From Drydock's Dockerfile — Trivy copied from a digest-pinned build stage
-FROM aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f AS trivy-bin
+FROM aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c AS trivy-bin
 ...
 COPY --from=trivy-bin /usr/local/bin/trivy /usr/local/bin/trivy`}</code>
               </pre>
@@ -299,7 +299,7 @@ COPY --from=trivy-bin /usr/local/bin/trivy /usr/local/bin/trivy`}</code>
                 dedicated <code>trivy-bin</code> stage pinned to the official Aqua Security image by
                 immutable digest &mdash; the same defense already used for GitHub Actions pinning in
                 section 3 below. This removes the Alpine-edge dependency entirely; the bundled
-                version is currently Trivy 0.72.0.
+                version was Trivy 0.72.0 at that time.
               </p>
 
               <h3>3. All GitHub Actions pinned by commit SHA</h3>
@@ -348,7 +348,7 @@ uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294    # v7.
               <h2>Verifying your Drydock installation</h2>
               <p>
                 Drydock bundles Trivy and cosign in its Docker image for local vulnerability
-                scanning and image signature verification. Current Drydock images ship Trivy 0.72.0,
+                scanning and image signature verification. Current Drydock images ship Trivy 0.73.0,
                 sourced from a digest-pinned official image, so a tampered upstream tag cannot
                 silently reach a Drydock build. The compromised releases were v0.69.4 (published
                 across GitHub, Docker Hub, GHCR, and ECR) and the Docker Hub-only v0.69.5 and
@@ -358,7 +358,7 @@ uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294    # v7.
                 <code>{`# Check the Trivy version inside your Drydock container
 docker exec drydock trivy --version
 
-# Expected: 0.72.0 — the digest-pinned build Drydock ships. This is a local
+# Expected: 0.73.0 — the digest-pinned build Drydock ships. This is a local
 # version check only; it does not attest to Trivy builds obtained elsewhere.`}</code>
               </pre>
               <p>
