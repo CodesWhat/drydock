@@ -467,7 +467,14 @@ async function streamContainerLogsToWebSocket({
       timestamps: true,
     });
   } catch (error: unknown) {
-    webSocket.close(1011, `Unable to open logs (${getErrorMessage(error)})`);
+    try {
+      webSocket.close(
+        1011,
+        truncateWebSocketCloseReason(`Unable to open logs (${getErrorMessage(error)})`),
+      );
+    } catch {
+      /* socket already closed */
+    }
     return;
   }
 
@@ -543,7 +550,10 @@ async function streamContainerLogsToWebSocket({
   };
   const handleError = (error: unknown) => {
     try {
-      webSocket.close(1011, `Log stream error (${getErrorMessage(error)})`);
+      webSocket.close(
+        1011,
+        truncateWebSocketCloseReason(`Log stream error (${getErrorMessage(error)})`),
+      );
     } catch {
       /* socket already closed */
     }
