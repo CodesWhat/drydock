@@ -41,7 +41,6 @@ const COMMAND_PAYLOAD_ENV_KEYS = new Set([
   'containers_json',
   'dd_title',
   'dd_body',
-  'dd_event_kind',
 ]);
 
 const DELETE_CONTROL_CODE_POINT = 0x7f;
