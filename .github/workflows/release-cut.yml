@@ -753,8 +753,18 @@ jobs:
       # Left as a second docker/build-push-action rather than a hand-rolled CLI
       # retry so the digest output stays computed the way the manifest-retry and
       # digest-resolve steps below already depend on. A bad hand-rolled digest
-      # here would be a worse failure than the one this guards against. Drop it
-      # once buildkit ships the fix.
+      # here would be a worse failure than the one this guards against.
+      #
+      # One retry, and be honest about what that buys. The race measured at
+      # roughly 50% on 2026-08-29, three failures in six runs, so a single retry
+      # still leaves about a quarter of RC cuts failing. That residual is
+      # recoverable by re-dispatch, which the no-digest case was not, and that
+      # gap is what this closes. The real fix is building the
+      # architecture-independent stages natively with
+      # `FROM --platform=$BUILDPLATFORM`, leaving far less emulated work for the
+      # race to land on. Tracked separately; too big to land beside a cut.
+      #
+      # Drop this once buildkit ships the fix.
       - name: Retry full build on total build failure
         id: build-retry
         if: steps.tag.outputs.is_prerelease == 'true' && steps.build.outcome == 'failure' && steps.build.outputs.digest == ''

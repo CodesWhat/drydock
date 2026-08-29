@@ -769,11 +769,26 @@ jobs:
       # before apk or anything else has produced a line of output.
       #
       # It is a scheduler-timing race inside buildkit, not something this build
-      # config controls. It has fired once: an identical arm64-emulated build
-      # passed 55 minutes earlier, and every run since has passed. Retrying the
-      # whole build is mechanism-agnostic, because each attempt is a fresh
-      # Solve() that reparses the LLB graph from the Dockerfile, so a mutated
-      # Meta.Args from a canceled attempt cannot carry over.
+      # config controls, and it is frequent rather than rare: three failures in
+      # six runs measured on 2026-08-29, roughly a coin flip. It is not tied to
+      # one RUN either. It hit `apk add` in the healthcheck stage once and
+      # `npm run build && npm prune` in a build stage the next time, which is
+      # what you would expect from a race on whichever op the solver happens to
+      # cancel and re-execute.
+      #
+      # Retrying the whole build is mechanism-agnostic, because each attempt is
+      # a fresh Solve() that reparses the LLB graph from the Dockerfile, so a
+      # mutated Meta.Args from a canceled attempt cannot carry over. Three
+      # attempts, not two: at an observed ~50% rate, two attempts still fail a
+      # quarter of the time, which is not a gate. The failure is also cheap to
+      # absorb, dying 0.083s into the RUN.
+      #
+      # The real fix is to stop emulating these stages at all. The build stages
+      # produce architecture-independent JavaScript, so they could run natively
+      # with `FROM --platform=$BUILDPLATFORM`, leaving only the healthcheck
+      # stage (which compiles C) genuinely per-target. That is a Dockerfile
+      # change with its own release risk and does not belong days before a cut.
+      # Tracked separately.
       #
       # Raw CLI rather than docker/build-push-action because nick-fields/retry
       # wraps a shell command, not a `uses:` step. Safe here specifically
@@ -784,7 +799,7 @@ jobs:
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
           timeout_minutes: 10
-          max_attempts: 2
+          max_attempts: 3
           retry_wait_seconds: 5
           # Smoke build never lands in a registry, so attesting it adds noise
           # without value. Real attestations live on release-cut.yml.
