@@ -590,6 +590,8 @@ describe('Agent Log Entries Route', () => {
   test.each([
     ['level', 123, 'Invalid level query parameter'],
     ['component', ['docker'], 'Invalid component query parameter'],
+    ['tail', ['50'], 'Invalid tail query parameter'],
+    ['since', ['1000'], 'Invalid since query parameter'],
   ])(
     'should return 400 when %s query parameter is not a string',
     async (param, value, expectedError) => {
@@ -602,6 +604,133 @@ describe('Agent Log Entries Route', () => {
       const req = createMockRequest({
         params: { name: 'agent-1' },
         query: { [param]: value },
+      });
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+      expect(getLogEntries).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([
+    ['tail', 'abc', 'Invalid tail query parameter'],
+    ['since', 'invalid', 'Invalid since query parameter'],
+  ])(
+    'should return 400 when %s query parameter is non-numeric',
+    async (param, value, expectedError) => {
+      // Before this fix, a non-numeric tail/since silently became NaN and was
+      // forwarded to agent.getLogEntries(). AgentClient.getLogEntries only sets
+      // the query param `if (options.tail)`, and NaN is falsy, so the malformed
+      // value was silently dropped instead of surfacing as a 400 — matching the
+      // level/component validation that already exists on this route.
+      const getLogEntries = vi.fn().mockResolvedValue([]);
+      mockGetAgent.mockReturnValue({
+        isConnected: true,
+        getLogEntries,
+      });
+
+      const req = createMockRequest({
+        params: { name: 'agent-1' },
+        query: { [param]: value },
+      });
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: expectedError });
+      expect(getLogEntries).not.toHaveBeenCalled();
+    },
+  );
+
+  test('should return 400 when tail query parameter has a numeric prefix followed by trailing characters', async () => {
+    // Number.parseInt('25logs', 10) === 25, which used to slip past the finite check.
+    const getLogEntries = vi.fn().mockResolvedValue([]);
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries,
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: { tail: '25logs' },
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+    expect(getLogEntries).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when since query parameter has a numeric prefix followed by trailing characters', async () => {
+    // Number.parseInt('1000ms', 10) === 1000, which used to slip past the finite check.
+    const getLogEntries = vi.fn().mockResolvedValue([]);
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries,
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: { since: '1000ms' },
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid since query parameter' });
+    expect(getLogEntries).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when tail query parameter is a digit string that exceeds Number.MAX_SAFE_INTEGER', async () => {
+    // Passes the /^-?\d+$/ shape check but loses precision as a Number, so
+    // Number.isSafeInteger must reject it.
+    const getLogEntries = vi.fn().mockResolvedValue([]);
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries,
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: { tail: '99999999999999999999' },
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+    expect(getLogEntries).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['level', 'Invalid level query parameter'],
+    ['component', 'Invalid component query parameter'],
+    ['tail', 'Invalid tail query parameter'],
+    ['since', 'Invalid since query parameter'],
+  ])(
+    'should return 400 when %s query parameter is an empty string',
+    async (param, expectedError) => {
+      // An empty string means the param was supplied with no value (e.g. `?tail=`),
+      // which is distinct from the param being absent altogether. getValidatedLogInteger
+      // used to guard with `if (!value)`, and '' is falsy, so it was treated the same as
+      // "not supplied" and silently passed through as undefined instead of being rejected.
+      const getLogEntries = vi.fn().mockResolvedValue([]);
+      mockGetAgent.mockReturnValue({
+        isConnected: true,
+        getLogEntries,
+      });
+
+      const req = createMockRequest({
+        params: { name: 'agent-1' },
+        query: { [param]: '' },
       });
       const res = createResponse();
 

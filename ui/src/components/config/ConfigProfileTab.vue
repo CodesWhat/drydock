@@ -32,8 +32,8 @@ const props = defineProps<{
     >
       <div class="px-5 py-5 flex items-center gap-4">
         <div
-          class="w-12 h-12 rounded-full flex items-center justify-center dd-text-heading-page text-white shrink-0"
-          style="background: linear-gradient(135deg, var(--dd-primary), var(--dd-success));"
+          class="w-12 h-12 rounded-full flex items-center justify-center dd-text-heading-page shrink-0"
+          style="background: var(--dd-primary); color: var(--dd-primary-fg);"
         >
           {{ props.profileInitials }}
         </div>

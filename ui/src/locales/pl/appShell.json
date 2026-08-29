@@ -108,19 +108,19 @@
         "typeHint": "Wpisz",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; używać",
         "useTab": " zmienić zakres",
         "moveHint": "ruszaj się",
         "openHint": "otwarte",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
+        "recentGroup": "Ostatnie",
+        "unknownHost": "nieznany host",
+        "containerSubtitle": "Kontener · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
-        "triggerSubtitle": "Trigger · {type}",
-        "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "triggerSubtitle": "Wyzwalacz · {type}",
+        "watcherSubtitle": "Obserwator · {type}",
+        "registrySubtitle": "Rejestr · {type}",
+        "authSubtitle": "Uwierzytelnianie · {type}",
+        "notificationSubtitle": "Reguła powiadomienia · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -135,10 +135,10 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
-          "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "appearanceTitle": "Ustawienia wyglądu",
+          "appearanceSubtitle": "Konfiguracja · Wygląd",
+          "profileTitle": "Ustawienia profilu",
+          "profileSubtitle": "Konfiguracja · Profil"
         }
       },
       "connection": {
@@ -150,12 +150,12 @@
         "restartingService": "Ponowne uruchomienie usługi"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
-        "toggleSearch": "Toggle search"
+        "title": "Skróty klawiszowe",
+        "close": "Zamknij",
+        "focusSearch": "Ustaw fokus na wyszukiwanie",
+        "closeSearch": "Zamknij wyszukiwanie lub zamknij okna dialogowe",
+        "showHelp": "Pokaż tę pomoc",
+        "toggleSearch": "Przełącz wyszukiwanie"
       }
     },
     "announcementBanner": {
@@ -168,18 +168,18 @@
       "legacyApiPathTitleSingular": "Wykryto {total} żądanie do usuniętej ścieżki API",
       "legacyApiPathTitlePlural": "Wykryto {total} żądań do usuniętej ścieżki API",
       "dontShowAgain": "Nie pokazuj więcej",
-      "curlHealthcheckTitle": "Wykryto niestandardowe zastąpienie kontroli stanu zwijania",
+      "curlHealthcheckTitle": "Wykryto niestandardowe zastąpienie kontroli stanu opartego na curl",
       "envKeysLabel": "Klucze Env ({count}): {keys}",
       "labelKeysLabel": "Klucze etykiet ({count}): {keys}",
       "apiPathsLabel": "Ścieżki API ({count}): {keys}",
       "healthcheckCommandLabel": "Komenda sprawdzania stanu: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
-      "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
-      "installAction": "Install"
+      "legacyConfigBody": "Starsze dane wejściowe wyzwalacza są nadal aktywne w celu zachowania zgodności z v1.6. Zmień nazwy zmiennych {triggerEnv} na {actionEnv} lub {notificationEnv} oraz zastąp etykiety {triggerLabel} etykietami {actionLabel} lub {notificationLabel} przed v1.7.",
+      "legacyApiBody": "Klienci tej instancji ostatnio wywoływali usuniętą, nieopatrzoną wersją ścieżkę {oldPrefix} i otrzymują błędy {statusCode}. Zmigruj ich do prefiksu {v1Prefix}. Integracje z ery WUD, takie jak wud-card czy widżet whatsupdocker w Homepage, mogą zamiast migracji ustawić {compatFlag}.",
+      "curlHealthcheckBody": "Twój kontener Drydock używa niestandardowego zastąpienia kontroli stanu opartego na curl. curl pozostaje dostępny w celu zachowania wstecznej zgodności w wersjach v1.5.x i v1.6.x; v1.6.0 to ostatnia wersja ostrzegawcza, a curl zostanie usunięty z obrazu w wersji v1.7.0. Preferuj wbudowaną kontrolę stanu obrazu lub zaktualizuj swoje zastąpienie na {bin}.",
+      "hiddenMore": "(+{count} więcej)",
+      "installTitle": "Zainstaluj Drydock jako aplikację",
+      "installBody": "Dodaj Drydock do doku lub ekranu głównego, aby uzyskać szybki dostęp i doświadczenie podobne do aplikacji, wraz z powłoką offline.",
+      "installAction": "Zainstaluj"
     }
   }
 }

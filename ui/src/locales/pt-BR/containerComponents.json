@@ -11,8 +11,8 @@
       "dryRunUpdateTooltip": "Este trigger está em modo dry-run — clicar vai baixar a nova imagem, mas não substituirá o contêiner.",
       "dryRunCondition": "O trigger de ação {trigger} está em modo dry-run — as atualizações são apenas pré-visualizadas e os contêineres não são substituídos.",
       "scanNow": "Escanear agora",
-      "recheckNow": "Recheck for Updates",
-      "rechecking": "Rechecking…",
+      "recheckNow": "Verificar atualizações novamente",
+      "rechecking": "Verificando atualizações novamente…",
       "skipSnoozeGroup": "Ignorar e adiar",
       "skipThisUpdate": "Ignorar esta atualização",
       "snooze1d": "Adiar 1d",
@@ -88,8 +88,8 @@
       "startButton": "Iniciar",
       "restartButton": "Reiniciar",
       "scanButton": "Escanear",
-      "recheckButton": "Recheck",
-      "ariaRecheckContainer": "Recheck container for updates",
+      "recheckButton": "Verificar",
+      "ariaRecheckContainer": "Verificar atualizações do contêiner",
       "blockedButton": "Bloqueado",
       "updateButton": "Atualizar",
       "deleteButton": "Excluir"
@@ -186,7 +186,7 @@
       "startAction": "Iniciar",
       "restartAction": "Reiniciar",
       "scanAction": "Escanear",
-      "recheckAction": "Recheck for updates",
+      "recheckAction": "Verificar atualizações novamente",
       "forceUpdateAction": "Forçar atualização",
       "updateAction": "Atualizar",
       "skipUpdateAction": "Ignorar esta atualização",
@@ -211,21 +211,21 @@
       "currentLabel": "Atual",
       "latestLabel": "Mais recente",
       "blockedByBouncer": "Bloqueado pelo Bouncer",
-      "registryErrorRateLimited": "Rate limited",
-      "registryErrorAuth": "Auth failed",
-      "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed",
+      "registryErrorRateLimited": "Taxa limitada",
+      "registryErrorAuth": "Falha na autenticação",
+      "registryErrorNotFound": "Não encontrado",
+      "registryErrorCheckFailed": "Verificação falhou",
       "blockedTag": "Bloqueado: {tag}",
       "blockedTagWithCriticals": "Bloqueado: {tag} ({count} CVE crítico)",
       "blockedTagWithCriticalsCVEs": "Bloqueado: {tag} ({count} CVEs críticos)",
       "manualUpdateOnly": "Somente atualização manual",
       "manualUpdateOnlyWithMessage": "Somente atualização manual — {message}",
-      "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
-      "blockedButton": "Blocked",
-      "updateButton": "Update",
-      "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "updateBtnTooltipDefault": "Atualizar",
+      "cancelButton": "Cancelar",
+      "blockedButton": "Bloqueado",
+      "updateButton": "Atualizar",
+      "moreButton": "Mais",
+      "cancelUpdateTooltip": "Cancelar atualização"
     },
     "groupHeader": {
       "ungrouped": "Sem grupo",
@@ -251,7 +251,7 @@
       "startTooltip": "Iniciar",
       "restartTooltip": "Reiniciar",
       "scanTooltip": "Escanear",
-      "recheckTooltip": "Recheck for updates",
+      "recheckTooltip": "Verificar atualizações novamente",
       "blockedForceUpdateTooltip": "Bloqueado - Forçar atualização",
       "updateTooltip": "Atualizar",
       "deleteTooltip": "Excluir",
@@ -269,7 +269,7 @@
       "unknown": "Desconhecido",
       "imageMetadata": "Metadados da imagem",
       "imageAge": "Idade da imagem",
-      "revealFailed": "Failed to reveal value"
+      "revealFailed": "Falha ao mostrar o valor"
     },
     "listContent": {
       "loadingContainers": "Carregando contêineres...",
@@ -323,7 +323,7 @@
       "memory": "Memória",
       "networkRxTx": "Rede RX/TX",
       "blockIo": "Block I/O",
-      "loadFailed": "Failed to load container stats"
+      "loadFailed": "Falha ao carregar estatísticas do contêiner"
     },
     "updateDialog": {
       "title": "Atualizar contêiner",
@@ -350,9 +350,9 @@
       "viewFullNotes": "Ver notas completas",
       "currentSuffix": "(atual)",
       "availableSuffix": "(disponível)",
-      "intermediateNotes": "Intermediate releases ({count})",
-      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
-      "loadingIntermediateNotes": "Loading intermediate releases…"
+      "intermediateNotes": "Versões intermediárias ({count})",
+      "olderReleasesNotShown": "{count} versão mais antiga não exibida | {count} versões mais antigas não exibidas",
+      "loadingIntermediateNotes": "Carregando versões intermediárias…"
     },
     "suggestedTag": {
       "badgeText": "Sugerida",
@@ -388,8 +388,19 @@
       "updateButton": "Atualizar agora",
       "blockedButton": "Atualização bloqueada",
       "notificationsOnlyButton": "Somente notificações",
+      "actionPolicyBadge": {
+        "auto": "Auto",
+        "manual": "Manual",
+        "blocked": "Bloqueado"
+      },
+      "actionPolicyTooltip": {
+        "auto": "O Drydock aplicará esta atualização automaticamente assim que for detectada — não é necessário clique manual.",
+        "manual": "Esta atualização pode ser aplicada manualmente, mas não será executada automaticamente.",
+        "blocked": "Nenhum trigger de ação autoriza atualmente este contêiner — verifique as labels dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "summary": {
         "upToDate": "Atualizado.",
+        "unknown": "Status da atualização desconhecido. A última verificação não pôde ser concluída.",
         "insight": "Nova versão disponível — esta tag está fixada.",
         "inProgress": "Atualização em andamento.",
         "hardBlocked": "Atualização bloqueada — correção necessária.",
@@ -432,7 +443,7 @@
       }
     },
     "maturityBadge": {
-      "new": "NOVA"
+      "new": "Detectado há {duration}"
     },
     "confirmDialogs": {
       "cancel": "Cancel",
@@ -449,133 +460,143 @@
         "successMessage": "Restarted: {name}"
       },
       "forceUpdate": {
-        "header": "Force Update",
-        "message": "Force update {name}? This clears skip/snooze policy before attempting update.",
-        "acceptLabel": "Force Update"
+        "header": "Forçar atualização",
+        "message": "Forçar atualização de {name}? Isso limpa a policy de ignorar/adiar antes de tentar a atualização.",
+        "acceptLabel": "Forçar atualização"
       },
       "update": {
-        "header": "Update Container",
-        "messageLatest": "Update {name} now? This will apply the latest discovered image.",
-        "messageTagChange": "Update {name}? This will change the image tag from :{currentTag} to :{newTag}{kind}.",
-        "messageDigestChange": "Update {name}? A newer build of :{currentTag} is available (digest change).",
-        "softBlockerSuffix": "\n\nThis update is currently policy-blocked:\n{list}\n\nClick Update anyway to override.",
-        "softBlockerLearnMore": "Learn more",
-        "acceptLabel": "Update",
-        "acceptLabelOverride": "Update anyway"
+        "header": "Atualizar contêiner",
+        "messageLatest": "Atualizar {name} agora? A imagem mais recente descoberta será aplicada.",
+        "messageTagChange": "Atualizar {name}? Isso mudará a tag da imagem de :{currentTag} para :{newTag}{kind}.",
+        "messageDigestChange": "Atualizar {name}? Uma build mais recente de :{currentTag} está disponível (mudança de digest).",
+        "softBlockerSuffix": "\n\nEsta atualização está atualmente bloqueada pela policy:\n{list}\n\nClique em \"Atualizar mesmo assim\" para sobrescrever.",
+        "softBlockerLearnMore": "Saiba mais",
+        "acceptLabel": "Atualizar",
+        "acceptLabelOverride": "Atualizar mesmo assim"
       },
       "delete": {
-        "header": "Delete Container",
-        "message": "Delete {name}? This will remove it from Drydock tracking until rediscovered.",
-        "acceptLabel": "Delete"
+        "header": "Excluir contêiner",
+        "message": "Excluir {name}? Isso vai removê-lo do rastreamento do Drydock até que seja redescoberto.",
+        "acceptLabel": "Excluir"
       },
       "clearPolicy": {
-        "header": "Clear Update Policy",
-        "message": "Clear all update policy for {name}? This removes skips, snooze, and maturity settings.",
-        "acceptLabel": "Clear Policy"
+        "header": "Limpar policy de atualização",
+        "message": "Limpar toda a policy de atualização de {name}? Isso remove itens ignorados, adiamento e configurações de maturidade.",
+        "acceptLabel": "Limpar policy"
       },
       "rollback": {
-        "header": "Rollback Container",
-        "messageSelected": "Rollback {name} to the selected backup image? This will replace the running container image.",
-        "messageLatest": "Rollback {name} to the latest backup image? This will replace the running container image.",
+        "header": "Rollback do contêiner",
+        "messageSelected": "Fazer rollback de {name} para a imagem de backup selecionada? Isso substituirá a imagem do contêiner em execução.",
+        "messageLatest": "Fazer rollback de {name} para a imagem de backup mais recente? Isso substituirá a imagem do contêiner em execução.",
         "acceptLabel": "Rollback"
       },
       "dependencyGroup": {
-        "header": "Update Dependency Chain",
-        "message": "Update {name} and its dependency chain? This will update {count} other container in dependency order. | Update {name} and its dependency chain? This will update {count} other containers in dependency order.",
-        "messageSingle": "Update {name}? No other containers depend on it, so only {name} will be updated.",
-        "waveList": "\n\nUpdate order:\n{list}",
-        "cycleWarning": "\n\nWarning: a dependency cycle was detected ({cycles}). Containers in the cycle may update in an arbitrary order.",
-        "unresolvedWarning": "\n\nWarning: some dependency labels reference containers that could not be found. Those will be skipped.",
-        "acceptLabel": "Update chain",
-        "previewFailedTitle": "Unable to preview update chain",
-        "previewFailedDetail": "Failed to load the dependency chain preview for {name}.",
-        "successMessage": "Dependency chain update started: {name}",
-        "failedTitle": "Dependency chain update failed",
-        "failedDetail": "Failed to update the dependency chain for {name}.",
-        "staleChainTitle": "Dependency chain has changed",
-        "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
+        "header": "Atualizar cadeia de dependências",
+        "message": "Atualizar {name} e sua cadeia de dependências? Isso vai atualizar {count} outro contêiner na ordem de dependência. | Atualizar {name} e sua cadeia de dependências? Isso vai atualizar {count} outros contêineres na ordem de dependência.",
+        "messageSingle": "Atualizar {name}? Nenhum outro contêiner depende dele, então apenas {name} será atualizado.",
+        "waveList": "\n\nOrdem de atualização:\n{list}",
+        "cycleWarning": "\n\nAviso: um ciclo de dependência foi detectado ({cycles}). Os contêineres no ciclo podem ser atualizados em ordem arbitrária.",
+        "unresolvedWarning": "\n\nAviso: algumas labels de dependência referenciam contêineres que não puderam ser encontrados. Esses serão ignorados.",
+        "acceptLabel": "Atualizar cadeia",
+        "previewFailedTitle": "Não foi possível pré-visualizar a cadeia de atualização",
+        "previewFailedDetail": "Falha ao carregar a prévia da cadeia de dependências para {name}.",
+        "successMessage": "Atualização da cadeia de dependências iniciada: {name}",
+        "failedTitle": "Falha na atualização da cadeia de dependências",
+        "failedDetail": "Falha ao atualizar a cadeia de dependências de {name}.",
+        "staleChainTitle": "A cadeia de dependências mudou",
+        "staleChainDetail": "A cadeia de dependências de {name} mudou desde a última pré-visualização. Reabra a caixa de diálogo de atualização para revisar a cadeia atual antes de confirmar."
       }
     },
     "actionToasts": {
-      "started": "Started: {name}",
-      "scanTriggered": "Scan triggered: {name}",
-      "scanFailedTitle": "Scan failed: {name}",
-      "scanFailedDetail": "Scan failed for {name}",
-      "actionFailedDetail": "Action failed for {name}",
-      "updateFailedTitle": "Update failed: {name}",
-      "deleted": "Deleted: {name}",
-      "deleteFailedTitle": "Delete failed: {name}",
-      "deleteFailedDetail": "Failed to delete {name}",
-      "cancellationRequested": "Cancellation requested: {name}",
-      "cancelled": "Cancelled: {name}",
-      "cancelAlreadyFinished": "Update already finished for {name}, cannot cancel",
-      "cancelOperationNotFound": "Operation not found: {name}",
-      "cancelFailed": "Failed to cancel update for {name}",
-      "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}",
-      "recheckComplete": "Recheck complete: {name}",
-      "recheckNotFound": "Container not found: {name}",
-      "recheckFailedTitle": "Recheck failed: {name}",
-      "recheckFailedDetail": "Recheck failed for {name}"
+      "started": "Iniciado: {name}",
+      "scanTriggered": "Scan iniciado: {name}",
+      "scanFailedTitle": "Scan falhou: {name}",
+      "scanFailedDetail": "Falha no scan de {name}",
+      "actionFailedDetail": "Falha na ação de {name}",
+      "updateFailedTitle": "Atualização falhou: {name}",
+      "deleted": "Excluído: {name}",
+      "deleteFailedTitle": "Exclusão falhou: {name}",
+      "deleteFailedDetail": "Falha ao excluir {name}",
+      "cancellationRequested": "Cancelamento solicitado: {name}",
+      "cancelled": "Cancelado: {name}",
+      "cancelAlreadyFinished": "A atualização de {name} já foi concluída, não é possível cancelar",
+      "cancelOperationNotFound": "Operação não encontrada: {name}",
+      "cancelFailed": "Falha ao cancelar a atualização de {name}",
+      "groupUpdateRejected": "Falha ao atualizar {name}: {message}",
+      "groupUpdateFailed": "Falha ao atualizar {name}",
+      "recheckComplete": "Verificação concluída: {name}",
+      "recheckNotFound": "Contêiner não encontrado: {name}",
+      "recheckFailedTitle": "Falha na verificação: {name}",
+      "recheckFailedDetail": "Falha na verificação de {name}"
     },
     "policy": {
       "entryCountSingular": "{count} entry",
       "entryCountPlural": "{count} entries",
+      "kindLabels": {
+        "tag": "tag",
+        "digest": "digest"
+      },
       "tooltips": {
-        "snoozedUntil": "Updates snoozed until {date}",
-        "snoozed": "Updates snoozed",
-        "maturityBlockedSingular": "Mature-only policy blocks updates younger than {days} day",
-        "maturityBlockedPlural": "Mature-only policy blocks updates younger than {days} days",
-        "maturityActiveSingular": "Mature-only policy active ({days} day minimum age)",
-        "maturityActivePlural": "Mature-only policy active ({days} days minimum age)",
-        "maturityAllowAll": "Maturity policy allows all updates",
-        "maturityGeneric": "Maturity policy active",
-        "skippedGeneric": "Skipped updates policy active",
-        "skippedWithCount": "Skipped updates policy active ({count})"
+        "snoozedUntil": "Atualizações adiadas até {date}",
+        "snoozed": "Atualizações adiadas",
+        "maturityBlockedSingular": "A policy somente maduras bloqueia atualizações com menos de {days} dia",
+        "maturityBlockedPlural": "A policy somente maduras bloqueia atualizações com menos de {days} dias",
+        "maturityActiveSingular": "Policy somente maduras ativa (idade mínima de {days} dia)",
+        "maturityActivePlural": "Policy somente maduras ativa (idade mínima de {days} dias)",
+        "maturityAllowAll": "A policy de maturidade permite todas as atualizações",
+        "maturityGeneric": "Policy de maturidade ativa",
+        "skippedGeneric": "Policy de atualizações ignoradas ativa",
+        "skippedWithCount": "Policy de atualizações ignoradas ativa ({count})"
       },
       "toasts": {
-        "snoozedSingular": "Snoozed updates for {days} day",
-        "snoozedPlural": "Snoozed updates for {days} days",
-        "snoozedUntil": "Snoozed until {date}",
-        "unsnooze": "Snooze cleared",
-        "clearSkips": "Skipped updates cleared",
-        "clearPolicy": "Update policy cleared",
-        "clearMaturity": "Maturity policy cleared",
-        "setMatureSingular": "Maturity policy set to mature-only ({days} day)",
-        "setMaturePlural": "Maturity policy set to mature-only ({days} days)",
-        "setAll": "Maturity policy set to allow all updates",
-        "skipped": "Skipped current update for {name}",
-        "removeSkip": "Removed skipped {kind} {value}",
+        "snoozedSingular": "Atualizações adiadas por {days} dia",
+        "snoozedPlural": "Atualizações adiadas por {days} dias",
+        "snoozedUntil": "Adiado até {date}",
+        "unsnooze": "Adiamento removido",
+        "clearSkips": "Atualizações ignoradas limpas",
+        "clearPolicy": "Policy de atualização limpa",
+        "clearMaturity": "Policy de maturidade limpa",
+        "setMatureSingular": "Policy de maturidade definida como somente maduras ({days} dia)",
+        "setMaturePlural": "Policy de maturidade definida como somente maduras ({days} dias)",
+        "setAll": "Policy de maturidade definida para permitir todas as atualizações",
+        "skipped": "Atualização atual de {name} ignorada",
+        "removeSkip": "Removido {kind} ignorado {value}",
         "revertField": "{field} revertido para a policy declarativa",
         "revertAll": "Todas as substituições revertidas para a policy declarativa",
-        "failedTitle": "Policy update failed: {name}",
-        "failedDetail": "Failed to update policy"
+        "failedTitle": "Falha na atualização da policy: {name}",
+        "failedDetail": "Falha ao atualizar a policy"
       },
       "validation": {
-        "snoozeDate": "Select a valid snooze date",
-        "maturityAge": "Enter a maturity age between {min} and {max} days"
+        "snoozeDate": "Selecione uma data de adiamento válida",
+        "maturityAge": "Informe uma idade de maturidade entre {min} e {max} dias"
       }
     },
     "triggers": {
       "agentLabel": "agent:",
+      "autoBadge": "Auto",
+      "resolvedStateTooltip": {
+        "auto": "É executado automaticamente para este contêiner quando uma atualização qualificada é detectada.",
+        "manual": "Pode ser executado manualmente para este contêiner, mas não será executado automaticamente.",
+        "blocked": "Bloqueado para este contêiner — verifique as labels dd.action.include / dd.action.exclude / dd.action.auto."
+      },
       "toasts": {
-        "ran": "Trigger ran: {key}",
-        "ranSuccessfully": "Trigger {key} ran successfully",
-        "failed": "Trigger failed: {key}",
-        "failedDetail": "Failed to run {key}",
-        "loadFailed": "Failed to load associated triggers"
+        "ran": "Trigger executado: {key}",
+        "ranSuccessfully": "O trigger {key} foi executado com sucesso",
+        "failed": "Falha no trigger: {key}",
+        "failedDetail": "Falha ao executar {key}",
+        "loadFailed": "Falha ao carregar triggers associados"
       }
     },
     "backups": {
-      "timestampUnknown": "Unknown",
-      "loadFailed": "Failed to load backups",
+      "timestampUnknown": "Desconhecido",
+      "loadFailed": "Falha ao carregar backups",
       "rollback": {
-        "completedFromSelected": "Rollback completed from selected backup",
-        "completedFromLatest": "Rollback completed from latest backup",
-        "failedTitle": "Rollback failed",
-        "failedDetail": "Rollback failed"
+        "completedFromSelected": "Rollback concluído a partir do backup selecionado",
+        "completedFromLatest": "Rollback concluído a partir do backup mais recente",
+        "failedTitle": "Rollback falhou",
+        "failedDetail": "Rollback falhou"
       },
-      "operationHistoryLoadFailed": "Failed to load update operation history"
+      "operationHistoryLoadFailed": "Falha ao carregar o histórico de operações de atualização"
     },
     "updateAge": {
       "availableDaysSingular": "1 dia",
@@ -592,8 +613,8 @@
         "openTriggerSettings": "Abrir configurações do trigger"
       },
       "toasts": {
-        "failedTitle": "Preview failed",
-        "failedDetail": "Failed to generate update preview"
+        "failedTitle": "Prévia falhou",
+        "failedDetail": "Falha ao gerar a prévia de atualização"
       }
     },
     "security": {
@@ -602,40 +623,40 @@
         "inherited": "Inherited",
         "unknown": "Unknown"
       },
-      "timeoutDefault": "60000ms (default)",
-      "preAbortYes": "Abort update on pre-hook failure",
-      "preAbortNo": "Continue update on pre-hook failure",
-      "enabledLabel": "Enabled",
-      "disabledLabel": "Disabled",
-      "disabledDefaultLabel": "Disabled (default)",
+      "timeoutDefault": "60000ms (padrão)",
+      "preAbortYes": "Abortar atualização em caso de falha do hook pré-execução",
+      "preAbortNo": "Continuar atualização em caso de falha do hook pré-execução",
+      "enabledLabel": "Ativado",
+      "disabledLabel": "Desativado",
+      "disabledDefaultLabel": "Desativado (padrão)",
       "originName": {
         "entrypoint": "Entrypoint",
         "cmd": "Cmd"
       },
-      "runtimeDriftWarning": "Runtime origin metadata is missing for {list}. Updates will preserve current values to avoid dropping explicit overrides, which can cause runtime drift.",
-      "loadVulnerabilitiesFailed": "Failed to load vulnerabilities",
-      "loadSbomFailed": "Failed to load SBOM",
+      "runtimeDriftWarning": "Estão faltando metadados de origem do runtime para {list}. As atualizações preservarão os valores atuais para evitar a perda de substituições explícitas, o que pode causar desvio de runtime.",
+      "loadVulnerabilitiesFailed": "Falha ao carregar vulnerabilidades",
+      "loadSbomFailed": "Falha ao carregar o SBOM",
       "templateVar": {
-        "containerName": "Container name",
-        "containerId": "Container ID",
-        "imageName": "Image name (without registry)",
-        "imageTag": "Current image tag",
-        "updateKind": "Update type (tag or digest)",
-        "updateFrom": "Current tag or digest",
-        "updateTo": "New tag or digest"
+        "containerName": "Nome do contêiner",
+        "containerId": "ID do contêiner",
+        "imageName": "Nome da imagem (sem registry)",
+        "imageTag": "Tag atual da imagem",
+        "updateKind": "Tipo de atualização (tag ou digest)",
+        "updateFrom": "Tag ou digest atual",
+        "updateTo": "Nova tag ou digest"
       }
     },
     "logs": {
-      "noLogs": "No logs available for this container",
-      "loadFailed": "Failed to load container logs",
-      "loading": "Loading logs..."
+      "noLogs": "Nenhum log disponível para este contêiner",
+      "loadFailed": "Falha ao carregar logs do contêiner",
+      "loading": "Carregando logs..."
     },
     "vulnerabilities": {
-      "loadFailed": "Failed to load vulnerability data"
+      "loadFailed": "Falha ao carregar dados de vulnerabilidade"
     },
     "sbomDetail": {
-      "noContainerId": "No container identifier is available for this image.",
-      "loadFailed": "Failed to load SBOM"
+      "noContainerId": "Nenhum identificador de contêiner disponível para esta imagem.",
+      "loadFailed": "Falha ao carregar o SBOM"
     },
     "detailPanel": {
       "tabs": {
@@ -648,7 +669,7 @@
       }
     },
     "logViewer": {
-      "invalidRegex": "Invalid regular expression"
+      "invalidRegex": "Expressão regular inválida"
     }
   }
 }

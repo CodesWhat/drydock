@@ -150,12 +150,12 @@
         "restartingService": "Перезапуск службы"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
-        "toggleSearch": "Toggle search"
+        "title": "Горячие клавиши",
+        "close": "Закрыть",
+        "focusSearch": "Перейти к поиску",
+        "closeSearch": "Закрыть поиск или диалоговые окна",
+        "showHelp": "Показать эту справку",
+        "toggleSearch": "Переключить поиск"
       }
     },
     "announcementBanner": {
@@ -177,9 +177,9 @@
       "legacyApiBody": "Клиенты данного экземпляра недавно обращались к удалённому пути без версии {oldPrefix} и получают ошибки с кодом {statusCode}. Перенесите их на префикс {v1Prefix}. Для интеграций эпохи WUD, таких как wud-card или виджет whatsupdocker на главной странице, вместо переноса можно установить флаг {compatFlag}.",
       "curlHealthcheckBody": "В вашем контейнере Drydock используется настраиваемый переопределитель проверки работоспособности на основе curl. curl по-прежнему доступен в версиях v1.5.x и v1.6.x в целях обратной совместимости; версия v1.6.0 является последней версией с предупреждением, а в версии v1.7.0 curl будет удален из образа. Рекомендуется использовать встроенную проверку работоспособности образа или обновить переопределитель, указав {bin}.",
       "hiddenMore": "(+{count} далее)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
-      "installAction": "Install"
+      "installTitle": "Установить Drydock как приложение",
+      "installBody": "Добавьте Drydock на панель или главный экран для быстрого доступа и работы как в приложении, включая офлайн-оболочку.",
+      "installAction": "Установить"
     }
   }
 }

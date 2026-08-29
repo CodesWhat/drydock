@@ -19,6 +19,10 @@
     "badge": {
       "basic": "Basic",
       "oidc": "OIDC"
+    },
+    "status": {
+      "active": "有効",
+      "inactive": "無効"
     }
   }
 }

@@ -21,8 +21,8 @@
       "alreadyUpToDate": "Al up-to-date: {name}",
       "queuedUpdateSingle": "Update in de wachtrij voor {count} container",
       "queuedUpdateMultiple": "Updates in de wachtrij voor {count} containers",
-      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
-      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
+      "queuedUpdateGroupSingle": "Update in de wachtrij voor {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Updates in de wachtrij voor {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} container al up-to-date",
       "countAlreadyUpToDateMultiple": "{count} containers al up-to-date"
     },
@@ -35,7 +35,7 @@
       "container": "Container",
       "tag": "Tag",
       "version": "Versie",
-      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
+      "versionTooltip": "Versie gedetecteerd op basis van de image-metadata. Dit kan overeenkomen met de tag en wordt vóór Host verborgen wanneer de ruimte krap is.",
       "update": "Update",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Status",
@@ -43,7 +43,7 @@
       "registry": "Register",
       "resources": "Bronnen",
       "uptime": "Uptime",
-      "ports": "Ports"
+      "ports": "Poorten"
     },
     "status": {
       "running": "actief",

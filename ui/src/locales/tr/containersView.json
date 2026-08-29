@@ -21,8 +21,8 @@
       "alreadyUpToDate": "Zaten güncel: {name}",
       "queuedUpdateSingle": "{count} konteyner için güncelleme sıraya alındı",
       "queuedUpdateMultiple": "{count} konteyner için güncellemeler sıraya alındı",
-      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
-      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
+      "queuedUpdateGroupSingle": "{group} içindeki {count} konteyner için güncelleme sıraya alındı",
+      "queuedUpdateGroupMultiple": "{group} içindeki {count} konteyner için güncellemeler sıraya alındı",
       "countAlreadyUpToDateSingle": "{count} konteyner zaten güncel",
       "countAlreadyUpToDateMultiple": "{count} konteyner zaten güncel"
     },
@@ -33,17 +33,17 @@
     },
     "columns": {
       "container": "Kapsayıcı",
-      "tag": "Tag",
+      "tag": "Etiket",
       "version": "Sürüm",
-      "versionTooltip": "Version detected from the image metadata. This can match the tag and hides before Host when space is tight.",
+      "versionTooltip": "Sürüm, imaj meta verisinden tespit edilir. Bu, etiketle eşleşebilir ve alan dar olduğunda Sunucu sütunundan önce gizlenir.",
       "update": "Güncelle",
       "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Durum",
       "host": "Sunucu",
       "registry": "Kayıt Defteri",
       "resources": "Kaynaklar",
-      "uptime": "Uptime",
-      "ports": "Ports"
+      "uptime": "Çalışma süresi",
+      "ports": "Portlar"
     },
     "status": {
       "running": "çalışıyor",

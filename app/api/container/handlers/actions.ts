@@ -4,6 +4,7 @@ import type { Container, ContainerReport } from '../../../model/container.js';
 import { toApiUpdateOperation } from '../../../store/update-operation.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
+import { sanitizePreviewErrorReason } from '../../preview-errors.js';
 import type {
   CrudHandlerContext,
   LocalContainerWatcher,
@@ -198,7 +199,11 @@ export function createWatchContainersHandler(context: CrudHandlerContext) {
         .status(200)
         .json(buildContainerListResponse(context, req.query, '/api/v1/containers/watch'));
     } catch (error: unknown) {
-      sendErrorResponse(res, 500, `Error when watching images (${context.getErrorMessage(error)})`);
+      sendErrorResponse(
+        res,
+        500,
+        `Error when watching images (${sanitizePreviewErrorReason(context.getErrorMessage(error))})`,
+      );
     }
   };
 }

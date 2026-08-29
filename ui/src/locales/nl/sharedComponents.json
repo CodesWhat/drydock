@@ -66,11 +66,11 @@
       "scanNow": "Nu scannen"
     },
     "notifications": {
-      "loadFailed": "Failed to load notifications"
+      "loadFailed": "Kan meldingen niet laden"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration",
-      "actionsDisabledReason": "Container actions disabled by server configuration"
+      "loadFailed": "Kan serverfunctieconfiguratie niet laden",
+      "actionsDisabledReason": "Containeracties uitgeschakeld door serverconfiguratie"
     }
   }
 }

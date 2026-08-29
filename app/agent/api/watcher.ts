@@ -77,7 +77,7 @@ export async function watchWatcher(req: Request, res: Response) {
   } catch (error: unknown) {
     const message = normalizeErrorMessage(error);
     log.error(`Error watching watcher ${sanitizeLogParam(name)}: ${sanitizeLogParam(message)}`);
-    sendErrorResponse(res, 500, error instanceof Error ? INTERNAL_SERVER_ERROR_MESSAGE : message);
+    sendErrorResponse(res, 500, INTERNAL_SERVER_ERROR_MESSAGE);
   }
 }
 
@@ -108,6 +108,6 @@ export async function watchContainer(req: Request, res: Response) {
   } catch (error: unknown) {
     const message = normalizeErrorMessage(error);
     log.error(`Error watching container ${sanitizeLogParam(id)}: ${sanitizeLogParam(message)}`);
-    sendErrorResponse(res, 500, error instanceof Error ? INTERNAL_SERVER_ERROR_MESSAGE : message);
+    sendErrorResponse(res, 500, INTERNAL_SERVER_ERROR_MESSAGE);
   }
 }

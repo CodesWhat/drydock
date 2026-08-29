@@ -3,8 +3,8 @@
     "heading": "寄件匣",
     "refresh": "重新整理",
     "loading": "正在載入寄件匣項目…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "無法載入通知寄件匣",
+    "ofCount": "{count} / {total}",
     "tabs": {
       "dead-letter": "無法投遞",
       "pending": "待處理",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "重試",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "重試寄件匣項目",
       "discard": "捨棄",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "捨棄寄件匣項目"
     },
     "status": {
       "dead-letter": "無法投遞",

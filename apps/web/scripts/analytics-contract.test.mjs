@@ -211,6 +211,100 @@ test("pageleaves are rebuilt from posthog-js's own envelope onto the canonical c
   });
 });
 
+test("$pageleave survives being rebuilt from the FULL real posthog-js envelope, not a hand-picked subset", () => {
+  // Measured 2026-08-28 by driving a real Chromium browser (Playwright,
+  // chromium 149) against a page bundled with the actual, unmodified
+  // analytics-contract.ts/analytics-client.ts and posthog-js@1.417.1: called
+  // posthog.init() with the exact production PostHogOptions from
+  // createPostHogOptions(), fired a manual $pageview the same way
+  // AnalyticsPageview does, then navigated the page away (which fires
+  // posthog-js's own `pagehide` listener -> _handle_unload ->
+  // capture('$pageleave')) and recorded the raw `input` argument our real
+  // before_send actually received, before any filtering.
+  //
+  // This is the full, unedited property set posthog-js hands to before_send
+  // for an automatic $pageleave, not a hand-picked list of the properties we
+  // expect to matter (values below are the literal properties observed,
+  // renamed only where they'd otherwise look like production secrets).
+  // $raw_user_agent and $host are present and correctly forwarded, same as
+  // on $pageview: the "before_send silently drops most pageleave events
+  // because those two fields are missing" hypothesis does not hold up
+  // against a real envelope. $pageleave also carries no `path` property at
+  // all (only posthog-js's own $current_url) since it never goes through our
+  // capturePageview()/dispatch() wrapper -- getRawPath()'s $current_url
+  // fallback is what makes canonicalization work for it at all.
+  const timestamp = new Date("2026-08-28T23:32:51.820Z");
+  const beforeSend = createBeforeSend("phc_public-token_123", ROUTES);
+  const result = beforeSend({
+    uuid: "01a04ab8-0f16-7513-82a9-e32c0a34c333",
+    event: "$pageleave",
+    timestamp,
+    properties: {
+      $os: "Mac OS X",
+      $os_version: "10.15.7",
+      $browser: "Chrome",
+      $device_type: "Desktop",
+      $timezone: "America/New_York",
+      $timezone_offset: 240,
+      $current_url: "https://getdrydock.com/compare/?utm_source=secret#secret",
+      $host: "getdrydock.com",
+      $pathname: "/compare/",
+      $raw_user_agent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
+      $browser_version: 149,
+      $browser_language: "en-US",
+      $browser_language_prefix: "en",
+      $screen_height: 720,
+      $screen_width: 1280,
+      $viewport_height: 720,
+      $viewport_width: 1280,
+      $lib: "web",
+      $lib_version: "1.417.1",
+      $insert_id: "3rabalovgz7a96ah",
+      $time: 1787959971.82,
+      $sdk_dist_channel: "npm",
+      $initialization_time: "2026-08-28T23:32:51.522Z",
+      $sdk_debug_extensions_init_method: "synchronous",
+      $sdk_debug_extensions_init_time_ms: 1,
+      distinct_id: "$posthog_cookieless",
+      $device_id: null,
+      token: "attacker-token",
+      $config_defaults: "unset",
+      $cookieless_mode: true,
+      $sdk_debug_retry_queue_size: 0,
+      $lib_custom_api_host: "https://e.codeswhat.com",
+      $pageview_id: "01a04ab8-0f16-7513-82a9-e32c0a34c332",
+      $prev_pageview_id: "01a04ab8-0f16-7513-82a9-e32c0a34c332",
+      $prev_pageview_pathname: "/compare/",
+      $prev_pageview_duration: 0.214,
+      $is_identified: false,
+      $process_person_profile: false,
+      $lib_rate_limit_remaining_tokens: 99,
+    },
+  });
+
+  assert.deepEqual(result, {
+    uuid: "01a04ab8-0f16-7513-82a9-e32c0a34c333",
+    event: "$pageleave",
+    timestamp,
+    properties: {
+      token: "phc_public-token_123",
+      distinct_id: "$posthog_cookieless",
+      $cookieless_mode: true,
+      $process_person_profile: false,
+      schema_version: 1,
+      site: "drydock",
+      surface: "marketing",
+      path: "/compare",
+      $current_url: `${PRODUCTION_ORIGIN}/compare`,
+      $pathname: "/compare",
+      $raw_user_agent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.7827.55 Safari/537.36",
+      $host: "getdrydock.com",
+    },
+  });
+});
+
 test("$pathname always equals the canonicalized path and never leaks an unlisted route", () => {
   // $pathname exists purely so PostHog's Web analytics Page / Entry page /
   // Exit page tables resolve at all; they read that property and nothing

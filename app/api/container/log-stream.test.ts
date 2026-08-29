@@ -974,6 +974,82 @@ describe('api/container/log-stream', () => {
       expect(ws.close).toHaveBeenCalledWith(1011, expect.stringContaining('Unable to open logs'));
     });
 
+    test('does not crash the process when docker logs cannot be opened and the error is long', async () => {
+      // Reproduces the real `ws` WebSocket#close() throw semantics: `sender.close()`
+      // throws a synchronous RangeError when the close reason exceeds 123 UTF-8
+      // bytes (see node_modules/ws/lib/sender.js). A `vi.fn()` double that silently
+      // accepts any reason would never exercise this and would hide the crash.
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn((_code: number, reason: string) => {
+        if (Buffer.byteLength(reason, 'utf8') > 123) {
+          throw new RangeError('The message must not be greater than 123 bytes');
+        }
+      });
+
+      const mockDockerContainer = {
+        logs: vi.fn().mockRejectedValue(new Error(`docker down: ${'x'.repeat(200)}`)),
+      };
+      const mockWatcher = {
+        dockerApi: {
+          getContainer: vi.fn(() => mockDockerContainer),
+        },
+      };
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => ({
+          id: 'c1',
+          name: 'my-container',
+          watcher: 'local',
+          status: 'running',
+        })),
+        getWatchers: vi.fn(() => ({
+          'docker.local': mockWatcher,
+        })),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-1';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+
+      const unhandledRejections: unknown[] = [];
+      const onUnhandledRejection = (reason: unknown) => {
+        unhandledRejections.push(reason);
+      };
+      process.on('unhandledRejection', onUnhandledRejection);
+
+      try {
+        await gateway.handleUpgrade(
+          createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+          createUpgradeSocket() as any,
+          Buffer.alloc(0),
+        );
+
+        // Node only fires 'unhandledRejection' after the current microtask
+        // queue drains; yield to a macrotask so a genuinely unhandled
+        // rejection has a chance to surface before we assert on it.
+        await new Promise((resolve) => setImmediate(resolve));
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+      }
+
+      expect(ws.close).toHaveBeenCalledTimes(1);
+      const reason = String(ws.close.mock.calls[0]?.[1]);
+      expect(Buffer.byteLength(reason, 'utf8')).toBeLessThanOrEqual(123);
+      expect(reason).toContain('Unable to open logs');
+      expect(unhandledRejections).toEqual([]);
+    });
+
     test('streams one-shot non-readable log payloads and closes cleanly', async () => {
       const ws = new EventEmitter() as EventEmitter & {
         send: ReturnType<typeof vi.fn>;
@@ -1429,6 +1505,76 @@ describe('api/container/log-stream', () => {
       dockerStream.emit('error', new Error('stream boom'));
 
       expect(ws.close).toHaveBeenCalledWith(1011, expect.stringContaining('Log stream error'));
+      expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
+    });
+
+    test('keeps a live docker stream error within the WebSocket close-reason limit', async () => {
+      // Same bug class as the "cannot be opened" path above: this call site was
+      // already wrapped in try/catch, so it could not crash the process, but it
+      // interpolated an unbounded error message with no truncation. A close
+      // reason over 123 UTF-8 bytes made the real `ws` close() throw, which the
+      // try/catch swallowed — silently dropping the close frame instead of
+      // sending a truncated, still-useful one.
+      const dockerStream = new EventEmitter() as EventEmitter & {
+        destroy: ReturnType<typeof vi.fn>;
+      };
+      dockerStream.destroy = vi.fn();
+
+      const mockDockerContainer = {
+        logs: vi.fn().mockResolvedValue(dockerStream),
+      };
+      const mockWatcher = {
+        dockerApi: {
+          getContainer: vi.fn(() => mockDockerContainer),
+        },
+      };
+
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn((_code: number, reason: string) => {
+        if (Buffer.byteLength(reason, 'utf8') > 123) {
+          throw new RangeError('The message must not be greater than 123 bytes');
+        }
+      });
+
+      const gateway = createContainerLogStreamGateway({
+        getContainer: vi.fn(() => ({
+          id: 'c1',
+          name: 'my-container',
+          watcher: 'local',
+          status: 'running',
+        })),
+        getWatchers: vi.fn(() => ({
+          'docker.local': mockWatcher,
+        })),
+        sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
+          req.session = { passport: { user: '{"username":"alice"}' } };
+          req.sessionID = 'session-1';
+          next();
+        },
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+      });
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      expect(() => dockerStream.emit('error', new Error('x'.repeat(500)))).not.toThrow();
+
+      expect(ws.close).toHaveBeenCalledTimes(1);
+      const reason = String(ws.close.mock.calls[0]?.[1]);
+      expect(Buffer.byteLength(reason, 'utf8')).toBeLessThanOrEqual(123);
+      expect(reason).toContain('Log stream error');
       expect(dockerStream.destroy).toHaveBeenCalledTimes(1);
     });
 

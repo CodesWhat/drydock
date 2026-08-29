@@ -58,7 +58,7 @@
         "entries": "{count} Einträge",
         "statusLive": "Live",
         "statusOffline": "Offline",
-        "loadError": "Failed to load agent logs"
+        "loadError": "Agent-Logs konnten nicht geladen werden"
       },
       "fields": {
         "cpus": "CPUs",

@@ -9,6 +9,11 @@ import { sendErrorResponse } from '../error-response.js';
 
 export const MAX_CONCURRENT_BULK_SCANS = 4;
 
+// Matches WATCH_CONTAINERS_MAX_IDS in handlers/actions.ts deliberately. The cap
+// matters even more here: each accepted id drives a vulnerability scan rather
+// than a watch, so an unbounded array is unbounded scanning work.
+const BULK_SCAN_MAX_IDS = 200;
+
 const VALID_SEVERITY_VALUES = ['critical', 'high', 'all'] as const;
 type SeverityFilter = (typeof VALID_SEVERITY_VALUES)[number];
 
@@ -83,12 +88,24 @@ function parseBulkScanBody(
       if (!Array.isArray(requestBody.containerIds)) {
         return { error: 'containerIds must be an array of strings', status: 400 };
       }
+      if (requestBody.containerIds.length > BULK_SCAN_MAX_IDS) {
+        return {
+          error: `containerIds must contain at most ${BULK_SCAN_MAX_IDS} entries`,
+          status: 400,
+        };
+      }
       const normalized: string[] = [];
+      const seenIds = new Set<string>();
       for (const id of requestBody.containerIds) {
         if (typeof id !== 'string' || id.trim() === '') {
           return { error: 'containerIds must be an array of non-empty strings', status: 400 };
         }
-        normalized.push(id.trim());
+        const normalizedId = id.trim();
+        if (seenIds.has(normalizedId)) {
+          continue;
+        }
+        seenIds.add(normalizedId);
+        normalized.push(normalizedId);
       }
       parsed.containerIds = normalized;
     }

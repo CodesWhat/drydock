@@ -108,19 +108,19 @@
         "typeHint": "اكتب",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "؛ استخدم",
         "useTab": " لتغيير النطاق",
         "moveHint": "تنقل",
         "openHint": "فتح",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
-        "agentSubtitle": "Agent · {status} · {host}",
-        "triggerSubtitle": "Trigger · {type}",
-        "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "recentGroup": "الأخيرة",
+        "unknownHost": "مضيف غير معروف",
+        "containerSubtitle": "حاوية · {image} · {status} · {host}",
+        "agentSubtitle": "وكيل · {status} · {host}",
+        "triggerSubtitle": "مشغّل · {type}",
+        "watcherSubtitle": "مراقب · {type}",
+        "registrySubtitle": "سجل · {type}",
+        "authSubtitle": "مصادقة · {type}",
+        "notificationSubtitle": "قاعدة إشعار · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -135,10 +135,10 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
-          "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "appearanceTitle": "إعدادات المظهر",
+          "appearanceSubtitle": "إعداد · المظهر",
+          "profileTitle": "إعدادات الملف الشخصي",
+          "profileSubtitle": "إعداد · الملف الشخصي"
         }
       },
       "connection": {
@@ -150,12 +150,12 @@
         "restartingService": "جارٍ إعادة تشغيل الخدمة"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
-        "toggleSearch": "Toggle search"
+        "title": "اختصارات لوحة المفاتيح",
+        "close": "إغلاق",
+        "focusSearch": "التركيز على البحث",
+        "closeSearch": "إغلاق البحث أو إغلاق مربعات الحوار",
+        "showHelp": "إظهار هذه المساعدة",
+        "toggleSearch": "تبديل البحث"
       }
     },
     "announcementBanner": {
@@ -173,13 +173,13 @@
       "labelKeysLabel": "مفاتيح التسمية ({count}): {keys}",
       "apiPathsLabel": "مسارات API ({count}): {keys}",
       "healthcheckCommandLabel": "أمر فحص الصحة: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
-      "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
-      "installAction": "Install"
+      "legacyConfigBody": "لا تزال مدخلات المشغّل القديمة نشطة للتوافق مع v1.6. أعد تسمية متغيرات {triggerEnv} إلى {actionEnv} أو {notificationEnv}، واستبدل تسميات {triggerLabel} بـ {actionLabel} أو {notificationLabel} قبل الإصدار v1.7.",
+      "legacyApiBody": "استدعى بعض العملاء على هذا المثيل مؤخراً مسار {oldPrefix} غير المُرقَّم الذي تمت إزالته، وهم يتلقون أخطاء {statusCode} نتيجة لذلك. رحّلهم إلى استخدام البادئة {v1Prefix}. يمكن لتكاملات حقبة WUD مثل wud-card أو أداة whatsupdocker التابعة لـ Homepage ضبط {compatFlag} بدلاً من الترحيل.",
+      "curlHealthcheckBody": "تستخدم حاوية Drydock الخاصة بك تجاوزاً مخصصاً لفحص الصحة يعتمد على curl. يظل curl متاحاً للتوافق مع الإصدارات السابقة في v1.5.x وv1.6.x؛ يُعد الإصدار v1.6.0 إصدار التحذير الأخير، وستتم إزالة curl من الصورة في v1.7.0. يُفضَّل استخدام فحص الصحة المدمج في الصورة، أو تحديث تجاوزك إلى {bin}.",
+      "hiddenMore": "(+{count} أخرى)",
+      "installTitle": "تثبيت Drydock كتطبيق",
+      "installBody": "أضف Drydock إلى الرصيف أو الشاشة الرئيسية للوصول السريع وتجربة أشبه بالتطبيق، مع دعم العمل دون اتصال بالإنترنت.",
+      "installAction": "تثبيت"
     }
   }
 }

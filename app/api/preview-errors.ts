@@ -74,9 +74,36 @@ function getErrorCode(error: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined;
 }
 
+const REDACTED = '[REDACTED]';
+
+// Providers whose API URL embeds a credential in a fixed path position rather
+// than in userinfo or an Authorization header. Anchored to each provider's own
+// host and path structure (not "any long opaque string") so an ordinary
+// registry path segment - including one that merely looks hex-ish or long,
+// such as a manifest digest - is never mistaken for a credential.
+const PATH_EMBEDDED_CREDENTIAL_PATTERNS = [
+  // Telegram: https://api.telegram.org/bot<credential>/sendMessage
+  /(https?:\/\/api\.telegram\.org\/bot)[^\s/'")]+/gi,
+  // IFTTT Maker Webhooks: https://maker.ifttt.com/trigger/<event>/with/key/<credential>
+  /(https?:\/\/maker\.ifttt\.com\/trigger\/[^\s/'")]+\/with\/key\/)[^\s/'")]+/gi,
+  // Discord webhooks: https://discord.com/api/webhooks/<id>/<credential>
+  /(https?:\/\/(?:discord|discordapp)\.com\/api\/webhooks\/[^\s/'")]+\/)[^\s/'")]+/gi,
+];
+
+function scrubPathEmbeddedCredentials(message: string): string {
+  return PATH_EMBEDDED_CREDENTIAL_PATTERNS.reduce(
+    (scrubbed, pattern) => scrubbed.replace(pattern, `$1${REDACTED}`),
+    message,
+  );
+}
+
 export function sanitizePreviewErrorReason(error: unknown): string {
   const withScrubbedHeaders = scrubAuthorizationHeaderValues(getErrorMessage(error));
-  return withScrubbedHeaders.replace(/(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, '$1[REDACTED]@');
+  const withScrubbedUserinfo = withScrubbedHeaders.replace(
+    /(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi,
+    `$1${REDACTED}@`,
+  );
+  return scrubPathEmbeddedCredentials(withScrubbedUserinfo);
 }
 
 function getRegistryHost(container: Container): string | undefined {

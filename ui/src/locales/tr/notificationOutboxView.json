@@ -3,8 +3,8 @@
     "heading": "Giden Kutusu",
     "refresh": "Yenile",
     "loading": "Giden kutusu girişleri yükleniyor…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Bildirim giden kutusu yüklenemedi",
+    "ofCount": "{count} / {total}",
     "tabs": {
       "dead-letter": "Ölü mektup",
       "pending": "Beklemede",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Yeniden dene",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Giden kutusu girişini yeniden dene",
       "discard": "At",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Giden kutusu girişini at"
     },
     "status": {
       "dead-letter": "Ölü mektup",

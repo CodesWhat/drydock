@@ -599,6 +599,7 @@ describe('AgentClient', () => {
       axios.post.mockResolvedValue({ data: {} });
       const existing = {
         id: 'c1',
+        agent: 'test-agent',
         updateAvailable: false,
         resultChanged: vi.fn().mockReturnValue(true),
       };
@@ -679,6 +680,241 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('canIngestAuthoritativeContainer (ownership gate for bulk/authoritative ingestion)', () => {
+    // Every one of these paths funnels through processAuthoritativeContainer(s),
+    // which is the one place buildContainerReport's unconditional
+    // `container.agent = this.name` stamp is gated. A bug in the no-record
+    // branch silently drops every agent's new containers; a bug in the
+    // existing-record branch silently stops every agent's own re-reports from
+    // landing. Both failure directions are silent (a warn log, no thrown
+    // error), so both blocked and allowed cases are covered per path.
+
+    test('handshake(): rejects a container report whose id is owned by a different agent', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        name: 'owned-by-other',
+        watcher: 'local',
+        agent: 'other-agent',
+      } as never);
+      axios.get
+        .mockResolvedValueOnce({
+          data: [{ id: 'c1', name: 'spoofed-by-test-agent', watcher: 'local' }],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReports).toHaveBeenCalledWith([]);
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('owned by other-agent'),
+      );
+    });
+
+    test('watchContainer(): rejects a container report whose id is owned by the controller (no agent field)', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        name: 'controller-owned',
+        watcher: 'local',
+      } as never);
+      const report = { container: { id: 'c1', name: 'spoofed-by-test-agent', watcher: 'local' } };
+      axios.post.mockResolvedValue({ data: report });
+
+      const result = await client.watchContainer('docker', 'local', { id: 'c1', name: 'test' });
+
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReport).not.toHaveBeenCalled();
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('owned by controller'),
+      );
+      // watchContainer() always returns the raw agent response — processing
+      // failure is silent by design, matching every other call site.
+      expect(result).toBe(report);
+    });
+
+    test('handshake(): rejects a no-record container whose watcher collides with the controller local watcher namespace', async () => {
+      mockRegistryState.watcher['docker.local'] = {};
+      axios.get
+        .mockResolvedValueOnce({
+          data: [
+            { id: 'controller-future-id', name: 'spoofed-controller-container', watcher: 'local' },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReports).toHaveBeenCalledWith([]);
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('controller-future-id'),
+      );
+    });
+
+    test('handleWatcherSnapshotEvent fallback: rejects a no-record container whose watcher collides with the controller local watcher namespace', async () => {
+      mockRegistryState.watcher['docker.local'] = {};
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [
+          { id: 'controller-future-id', name: 'spoofed-controller-container', watcher: 'local' },
+        ],
+      });
+
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReports).toHaveBeenCalledWith([]);
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('controller-future-id'),
+      );
+    });
+
+    test('handleContainerSync(): rejects a container whose id is owned by a different agent', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        name: 'owned-by-other',
+        watcher: 'local',
+        agent: 'other-agent',
+      } as never);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+
+      await client.handleContainerSync([
+        { id: 'c1', name: 'spoofed-by-test-agent', watcher: 'local' } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReports).toHaveBeenCalledWith([]);
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('owned by other-agent'),
+      );
+    });
+
+    test('handleContainerSync(): rejects a container report with a missing or empty id', async () => {
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+
+      await client.handleContainerSync([
+        { name: 'no-id', watcher: 'local' } as never,
+        { id: '', name: 'empty-id', watcher: 'local' } as never,
+      ]);
+
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReports).toHaveBeenCalledWith([]);
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        'Ignoring authoritative container ingest without an id from agent test-agent',
+      );
+    });
+
+    test('watch(): an agent recheck of its own container still updates the store', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        name: 'owned',
+        watcher: 'local',
+        agent: 'test-agent',
+        resultChanged: vi.fn().mockReturnValue(true),
+      } as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((c) => c);
+      const reports = [{ container: { id: 'c1', name: 'owned-updated', watcher: 'local' } }];
+      axios.post.mockResolvedValue({ data: reports });
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+
+      await client.watch('docker', 'local');
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', name: 'owned-updated', agent: 'test-agent' }),
+      );
+    });
+
+    test('handshake(): a genuinely new container id still inserts with agent stamped', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((c) => c);
+      axios.get
+        .mockResolvedValueOnce({
+          data: [{ id: 'brand-new-id', name: 'first-seen', watcher: 'local' }],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'brand-new-id', agent: 'test-agent' }),
+      );
+    });
+
+    test('handshake(): a normal multi-container handshake still populates the store for each container', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((c) => ({
+        ...c,
+        updateAvailable: false,
+      }));
+      axios.get
+        .mockResolvedValueOnce({
+          data: [
+            { id: 'm1', name: 'one', watcher: 'local' },
+            { id: 'm2', name: 'two', watcher: 'local' },
+          ],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledTimes(2);
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'm1', agent: 'test-agent' }),
+        }),
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'm2', agent: 'test-agent' }),
+        }),
+      ]);
+    });
+
+    // Pinned regression lock, not a bug repro: canMutateContainer (the
+    // incremental dd:container-* event gate) also rejects a `watcher`
+    // mismatch against the stored record, and that third check is
+    // deliberately NOT carried into canIngestAuthoritativeContainer. Bulk
+    // ingestion is exactly how a legitimate watcher rename (an operator
+    // renaming a DD_WATCHER_<NAME>_SOCKET key) propagates. pruneOldContainers
+    // keys on container id, which a rename doesn't change, so if this path
+    // rejected on watcher mismatch the record would never be pruned and
+    // never retried — updates would silently stop landing forever. If
+    // someone "fixes" this by reintroducing the watcher-equality check here,
+    // this test must fail.
+    test('handleContainerSync(): a watcher rename on an already-owned container is NOT rejected', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValue({
+        id: 'c1',
+        name: 'renamed-watcher-container',
+        watcher: 'old-watcher-name',
+        agent: 'test-agent',
+        resultChanged: vi.fn().mockReturnValue(true),
+      } as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((c) => c);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+
+      await client.handleContainerSync([
+        { id: 'c1', name: 'renamed-watcher-container', watcher: 'new-watcher-name' } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', watcher: 'new-watcher-name', agent: 'test-agent' }),
+      );
+      expect(mockLogChild.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('watcher does not match'),
+      );
+    });
+  });
+
   describe('handshake', () => {
     test('registers controller transport marker before applying the standard-mode inventory', async () => {
       axios.get
@@ -711,6 +947,7 @@ describe('AgentClient', () => {
       const existing = {
         id: 'c1',
         watcher: 'docker',
+        agent: 'test-agent',
         result: { tag: '2.0.0' },
         updateAvailable: true,
         updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
@@ -2124,6 +2361,42 @@ describe('AgentClient', () => {
       });
       expect(rows.get('new-agent-a-id')).toMatchObject({ agent: 'agent-a' });
       agentA.stop();
+    });
+
+    test('rejects a no-record insert whose watcher collides with the controller local watcher namespace', async () => {
+      // No store record exists yet for this id (storeContainer.getContainer
+      // defaults to undefined in beforeEach) — this is the pre-insert race:
+      // an agent claiming a watcher name the controller's own local Docker
+      // watcher already owns, before the controller's own watch cycle ever
+      // writes the real record.
+      mockRegistryState.watcher['docker.local'] = {};
+
+      await client.handleEvent('dd:container-added', {
+        id: 'controller-future-id',
+        name: 'spoofed-controller-container',
+        watcher: 'local',
+      });
+
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReport).not.toHaveBeenCalled();
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('controller-future-id'),
+      );
+    });
+
+    test('allows a no-record insert whose watcher does not collide with any controller local watcher', async () => {
+      mockRegistryState.watcher['docker.other'] = {};
+
+      await client.handleEvent('dd:container-added', {
+        id: 'genuinely-new-id',
+        name: 'first-seen-container',
+        watcher: 'local',
+      });
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'genuinely-new-id', agent: 'test-agent' }),
+      );
     });
 
     test('removes only same-owner containers and preserves pending state on rejected removals', async () => {
@@ -4235,6 +4508,7 @@ describe('AgentClient', () => {
       storeContainer.getContainer.mockReturnValue({
         id: 'c1',
         name: 'test',
+        agent: 'test-agent',
         updateAvailable: false,
         updatePolicy: controllerOverrides,
         updatePolicyDeclarative: { env: {}, label: {} },
@@ -4288,6 +4562,7 @@ describe('AgentClient', () => {
       storeContainer.getContainer.mockReturnValue({
         id: 'c1',
         name: 'test',
+        agent: 'test-agent',
         updateAvailable: false,
         updatePolicy: controllerOverrides,
         updatePolicyDeclarative: { env: {}, label: {} },
@@ -4341,6 +4616,7 @@ describe('AgentClient', () => {
       storeContainer.getContainer.mockReturnValue({
         id: 'c1',
         name: 'test',
+        agent: 'test-agent',
         updateAvailable: false,
         updatePolicy: { skipTags: ['stable'] },
         updatePolicyDeclarative: { env: { skipTags: ['stable'] }, label: {} },
@@ -8787,6 +9063,7 @@ describe('AgentClient', () => {
       vi.mocked(storeContainer.getContainer).mockReturnValue({
         id: 'c1',
         watcher: 'docker',
+        agent: 'test-agent',
         result: { tag: '2.0.0' },
         updateAvailable: true,
         updateKind: { kind: 'tag' },
@@ -8899,6 +9176,7 @@ describe('AgentClient', () => {
       vi.mocked(storeContainer.getContainer).mockReturnValue({
         id: 'c1',
         watcher: 'docker',
+        agent: 'test-agent',
         result: { tag: '2.0.0' },
         updateAvailable: true,
         updateKind: { kind: 'tag' },

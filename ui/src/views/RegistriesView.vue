@@ -241,7 +241,7 @@ onMounted(async () => {
                  storage-key="registries"
                  :rows="filteredRegistries"
                  row-key="id"
-                 :active-row="selectedRegistry?.id"
+                 :selected-key="selectedRegistry?.id"
                  :prefer-cards="registryViewMode === 'cards'"
                  @update:card-reflow-forced="cardReflowForced = $event"
                  @row-click="openDetail($event)">
@@ -256,6 +256,7 @@ onMounted(async () => {
         </template>
         <template #cell-status="{ row }">
           <AppIcon :name="row.status === 'connected' ? 'check' : row.status === 'error' ? 'xmark' : 'warning'" :size="13" class="shrink-0 md:!hidden"
+                   role="img" :aria-label="registryStatusLabel(row.status)"
                    v-tooltip.top="registryStatusLabel(row.status)"
                    :style="{ color: row.status === 'connected' ? 'var(--dd-success)' : row.status === 'error' ? 'var(--dd-danger)' : 'var(--dd-warning)' }" />
           <AppBadge :tone="row.status === 'connected' ? 'success' : row.status === 'error' ? 'danger' : 'warning'" size="xs" class="max-md:!hidden">

@@ -105,10 +105,16 @@ pre-push:
       timeout: 30s
 
     # ── Workflow tests: CI/workflow invariants outside app coverage ───
+    # 2m, not 30s: the suite is 23 files and 233 tests and measures 28.9s on an
+    # unloaded machine, so a 30s budget was under one second of headroom. It
+    # timed out and killed a push on 2026-08-29 while other work was running,
+    # and the same run passed in 13.7s on retry. A step that fails on machine
+    # load rather than on the code teaches you to re-run it, which is the
+    # opposite of what a gate is for.
     workflow-tests:
       run: npm run test:workflows
       priority: 8
-      timeout: 30s
+      timeout: 2m
 
     # ── UI typecheck: catches TypeScript errors that vite build misses ──
     typecheck-ui:

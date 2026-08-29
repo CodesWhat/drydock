@@ -3,8 +3,8 @@
     "heading": "Caixa de saída",
     "refresh": "Atualizar",
     "loading": "Carregando entradas da caixa de saída…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Falha ao carregar a caixa de saída de notificações",
+    "ofCount": "{count} de {total}",
     "tabs": {
       "dead-letter": "Dead-letter",
       "pending": "Pendente",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Tentar novamente",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Tentar novamente a entrada da caixa de saída",
       "discard": "Descartar",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Descartar entrada da caixa de saída"
     },
     "status": {
       "dead-letter": "Dead-letter",

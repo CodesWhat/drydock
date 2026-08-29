@@ -276,7 +276,7 @@ onMounted(async () => {
       :rows="filteredWatchers"
       row-key="id"
       :hidden-column-keys="hiddenColumnKeys"
-      :active-row="selectedWatcher?.id"
+      :selected-key="selectedWatcher?.id"
       :prefer-cards="watcherViewMode === 'cards'"
       @update:card-reflow-forced="cardReflowForced = $event"
       @row-click="openDetail($event)"
@@ -289,6 +289,7 @@ onMounted(async () => {
       </template>
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 md:!hidden"
+                 role="img" :aria-label="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                  v-tooltip.top="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                  :style="{ color: watcherStatusColor(row.status) }" />
         <AppBadge :tone="row.status === 'watching' ? 'success' : 'warning'" size="xs" class="max-md:!hidden">
@@ -324,6 +325,7 @@ onMounted(async () => {
               </div>
             </div>
             <AppIcon :name="row.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 ml-2 md:!hidden"
+                     role="img" :aria-label="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                      v-tooltip.top="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                      :style="{ color: watcherStatusColor(row.status) }" />
             <AppBadge :tone="row.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 ml-2 max-md:!hidden">

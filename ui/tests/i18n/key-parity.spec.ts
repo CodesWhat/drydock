@@ -1,16 +1,27 @@
 /**
- * Locale key parity gate — catches stale/orphan locale keys and structural corruption.
+ * Locale key parity gate — catches stale/orphan locale keys, missing keys, and
+ * structural corruption.
  *
- * Asymmetric by design (Crowdin-lag tolerant):
  *   - ORPHAN keys (present in a locale but absent from en) → FAIL (stale cruft, never legitimate)
- *   - MISSING keys (present in en but absent from a locale) → TOLERATED (Crowdin fills after push)
+ *   - MISSING keys (present in en but absent from a locale) → FAIL
  *
- * Root-key parity only flags locale top-level keys that are absent from en (stale/corrupt);
- * locale files missing some of en's top-level keys are tolerated for the same Crowdin-lag reason.
- * Note: some namespace files (e.g. listViews.json) have multiple top-level keys by design.
+ * Missing keys used to be tolerated on the grounds that Crowdin would fill them
+ * after the push. It does not. Crowdin exports source text for anything it has
+ * no translation for, so the sync PR "fills" the gap with verbatim English,
+ * which renders identically to the fallback but is now indistinguishable from a
+ * real translation to any later check. The eleven action-policy badge and
+ * tooltip keys sat English-only in all sixteen locales for several releases
+ * that way, and were found by a one-off scan rather than by CI.
  *
- * Right now there are legitimately-missing keys from the last push; this gate deliberately
- * does not fail on those. Reference: Crowdin flow + #329.
+ * The cost of failing instead is that a PR adding a UI string has to translate
+ * it in the same change. That is the intended trade: the alternative is
+ * shipping English to non-English users and finding out later.
+ *
+ * A brand-new namespace file that a locale does not have yet is still tolerated,
+ * because that is a file-creation race rather than an untranslated string.
+ *
+ * Root-key parity flags locale top-level keys that are absent from en. Note that
+ * some namespace files (e.g. listViews.json) have multiple top-level keys by design.
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -49,6 +60,7 @@ interface OrphanViolation {
 
 const rootKeyViolations: RootKeyViolation[] = [];
 const orphanViolations: OrphanViolation[] = [];
+const missingViolations: OrphanViolation[] = [];
 
 for (const locale of nonEnLocales) {
   for (const nsFile of enNamespaces) {
@@ -93,7 +105,13 @@ for (const locale of nonEnLocales) {
       }
     }
 
-    // Missing keys (enLeaves not in locale) are TOLERATED — Crowdin lag is expected after push.
+    // Missing leaf check: any dotted-path leaf in en that this locale does not have.
+    const localeLeafSet = new Set(localeLeaves);
+    for (const k of enLeafSet) {
+      if (!localeLeafSet.has(k)) {
+        missingViolations.push({ locale, namespace: nsFile, key: k });
+      }
+    }
   }
 }
 
@@ -116,5 +134,24 @@ describe('key-parity', () => {
         : 'Orphan keys (present in locale but absent from en):\n' +
           orphanViolations.map((v) => `  ${v.locale}/${v.namespace}: ${v.key}`).join('\n');
     expect(orphanViolations, message).toHaveLength(0);
+  });
+
+  test('no missing keys in any locale (keys present in en)', () => {
+    const byLocale = new Map<string, number>();
+    for (const v of missingViolations) {
+      byLocale.set(v.locale, (byLocale.get(v.locale) ?? 0) + 1);
+    }
+    const message =
+      missingViolations.length === 0
+        ? ''
+        : `Missing keys (present in en, absent from a locale) — ${missingViolations.length} across ` +
+          `${byLocale.size} locale(s). Translate them in this change; Crowdin will fill them with ` +
+          'verbatim English, not a translation.\n' +
+          missingViolations
+            .slice(0, 40)
+            .map((v) => `  ${v.locale}/${v.namespace}: ${v.key}`)
+            .join('\n') +
+          (missingViolations.length > 40 ? `\n  ...and ${missingViolations.length - 40} more` : '');
+    expect(missingViolations, message).toHaveLength(0);
   });
 });

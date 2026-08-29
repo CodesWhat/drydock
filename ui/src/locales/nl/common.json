@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "rateLimitHit": "Ratelimiet van register bereikt",
+      "accessDenied": "Toegang tot register geweigerd",
+      "imageNotFound": "Image niet gevonden",
+      "authFailed": "Registerauthenticatie mislukt",
+      "unreachable": "Register onbereikbaar",
+      "cancelled": "Geannuleerd",
+      "securityBlocked": "Geblokkeerd door beveiligingsscan",
+      "signatureFailed": "Handtekeningverificatie mislukt"
     },
     "display": {
       "custom": "Custom"

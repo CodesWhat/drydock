@@ -3,8 +3,8 @@
     "heading": "Ausgang",
     "refresh": "Aktualisieren",
     "loading": "Ausgangseinträge werden geladen…",
-    "loadError": "Failed to load notification outbox",
-    "ofCount": "{count} of {total}",
+    "loadError": "Benachrichtigungsausgang konnte nicht geladen werden",
+    "ofCount": "{count} von {total}",
     "tabs": {
       "dead-letter": "Dead-Letter",
       "pending": "Ausstehend",
@@ -19,9 +19,9 @@
     },
     "actions": {
       "retry": "Erneut versuchen",
-      "retryAriaLabel": "Retry outbox entry",
+      "retryAriaLabel": "Ausgangseintrag erneut versuchen",
       "discard": "Verwerfen",
-      "discardAriaLabel": "Discard outbox entry"
+      "discardAriaLabel": "Ausgangseintrag verwerfen"
     },
     "status": {
       "dead-letter": "Dead-Letter",

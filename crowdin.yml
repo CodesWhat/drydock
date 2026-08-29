@@ -34,36 +34,32 @@ files:
         zh-CN: zh-CN
         zh-TW: zh-TW
     update_option: update_as_unapproved
-  - source: /README.md
-    translation: /README.%locale%.md
-    # Crowdin defaults content_segmentation to 1, which splits the README into
-    # sentence-level segments AND routes the translation upload through what
-    # their docs call "experimental machine learning technology". On this file
-    # that reassembled the <details>/<summary> release-history blocks in the
-    # wrong order, broke HTML tags, and spliced English source into the German
-    # and zh-CN output. The UI locale JSON was never affected because
-    # segmentation does not apply to JSON — which is what confirmed the cause.
-    # Turning it off took the file from 446 sentence segments to 382 block ones.
-    # Also set in the Crowdin UI (file 39, revision 7); this is the guard so a
-    # project re-create or a fresh upload cannot silently reintroduce it.
-    content_segmentation: 0
-    languages_mapping:
-      locale:
-        de: de
-        es-ES: es
-        fr: fr
-        pl: pl
-        pt-BR: pt-BR
-        zh-CN: zh-CN
-    excluded_target_languages:
-      - ar
-      - it
-      - ja
-      - ko
-      - nl
-      - ru
-      - tr
-      - uk
-      - vi
-      - zh-TW
-    update_option: update_as_unapproved
+# README.md is deliberately NOT in this list. The six translated READMEs are
+# hand-authored in-repo and asserted phrase by phrase by
+# .github/tests/readme-translations.test.ts, including release-specific bullets
+# that are rewritten at every cut. Crowdin can only round-trip them, and the
+# round trip has never been lossless:
+#
+#   - Segmentation was the first failure. The default content_segmentation: 1
+#     split the README into sentence segments and routed the upload through
+#     what Crowdin calls "experimental machine learning technology", which
+#     reassembled the <details>/<summary> release-history blocks in the wrong
+#     order, broke HTML tags, and spliced English into the de and zh-CN output.
+#     Setting it to 0 (#804) took the file from 446 sentence segments to 382
+#     block ones and fixed the corruption.
+#   - Orphaning was the second. Flipping segmentation renumbered every segment,
+#     so the stored translations no longer matched any of them. The export then
+#     falls back to source text: PR #919 reverted all six translated READMEs to
+#     English in a single sync (1392 deletions), caught only because
+#     readme-translations.test.ts failed 30 assertions.
+#
+# `upload_translations: true` cannot dig out of that, because re-uploading a
+# clean README.<locale>.md only adds a new unapproved candidate alongside the
+# stored one. The purge job in .github/workflows/i18n-crowdin.yml exists for
+# that and still works if these files ever go back into Crowdin, but there is
+# no reason to put them back: nobody translates the README in Crowdin, the repo
+# is where they are actually maintained, and the only thing the mapping
+# produced was a recurring PR that reverts them.
+#
+# The UI locale JSON above stays in Crowdin and is unaffected. Segmentation
+# does not apply to JSON, which is what identified the cause in the first place.

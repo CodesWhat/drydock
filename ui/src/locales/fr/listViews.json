@@ -35,6 +35,11 @@
       "trigger": "Trigger",
       "details": "Détails"
     },
+    "status": {
+      "success": "Succès",
+      "error": "Erreur",
+      "info": "Info"
+    },
     "actions": {
       "container-update": "Mise à jour de conteneur",
       "container-added": "Conteneur ajouté",
@@ -75,7 +80,7 @@
   "notificationsView": {
     "loadingRules": "Chargement des règles de notification...",
     "loadError": "Impossible de charger les règles de notification",
-    "saveError": "Failed to update notification rule",
+    "saveError": "Impossible de mettre à jour la règle de notification",
     "filterPlaceholder": "Filtrer par nom, description ou trigger...",
     "clear": "Effacer",
     "allNotificationTriggers": "Tous les triggers de notification",
@@ -110,8 +115,8 @@
         "description": "Lorsque le healthcheck Docker d'un conteneur passe à l'état « unhealthy »"
       },
       "maturity-cleared": {
-        "name": "Maturity Cleared",
-        "description": "When an update held back by the maturity policy becomes applicable"
+        "name": "Maturité effacée",
+        "description": "Quand une mise à jour retenue par la politique de maturité devient applicable"
       }
     },
     "columns": {
@@ -162,7 +167,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Chargement des données de vulnérabilité...",
-    "runtimeLoadError": "Failed to load security runtime status",
+    "runtimeLoadError": "Impossible de charger l'état runtime de la sécurité",
     "scanNow": "Scanner maintenant",
     "scanning": "Scan en cours...",
     "scanAllAriaLabel": "Scanner tous les conteneurs",
@@ -203,11 +208,11 @@
       "images": "images",
       "scanned": "scanned"
     },
-    "fixableBadge": "{count} fix",
+    "fixableBadge": "{count} corrigeables",
     "delta": {
-      "fixed": "{count} fixed",
-      "new": "{count} new",
-      "both": "{fixed} fixed, {new} new"
+      "fixed": "{count} corrigées",
+      "new": "{count} nouvelles",
+      "both": "{fixed} corrigées, {new} nouvelles"
     },
     "deltaTooltips": {
       "fixedSingle": "La mise à jour corrige {count} vulnérabilité",
@@ -299,7 +304,7 @@
       "unknown": "Inconnue"
     },
     "detail": {
-      "loadError": "Unable to load latest registry details",
+      "loadError": "Impossible de charger les derniers détails du registry",
       "refreshing": "Actualisation des détails de registry...",
       "status": "État",
       "authentication": "Authentification",
@@ -372,7 +377,7 @@
       "defaultError": "Test du trigger échoué"
     },
     "detail": {
-      "loadError": "Unable to load latest trigger details",
+      "loadError": "Impossible de charger les derniers détails du trigger",
       "status": "État",
       "refreshing": "Actualisation des détails du trigger...",
       "noConfig": "Aucune propriété de configuration"
@@ -407,7 +412,7 @@
       "maint": "Maint"
     },
     "detail": {
-      "loadError": "Unable to load latest watcher details",
+      "loadError": "Impossible de charger les derniers détails du watcher",
       "cron": "Cron",
       "lastRun": "Dernière exécution",
       "containersWatched": "Conteneurs surveillés",

@@ -192,6 +192,43 @@ describe('api/container/bulk-security', () => {
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({ error: 'Unknown container id: unknown-id' });
     });
+
+    test('returns 400 when containerIds exceeds 200 entries', async () => {
+      const harness = createHarness();
+      const containerIds = Array.from({ length: 201 }, (_, i) => `c${i}`);
+
+      const { res } = await callScanAll(harness.handlers, { containerIds });
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'containerIds must contain at most 200 entries',
+      });
+    });
+
+    test('accepts exactly 200 containerIds', async () => {
+      const harness = createHarness();
+      const containerIds = Array.from({ length: 200 }, (_, i) => `c${i}`);
+      harness.storeContainer.getContainer.mockImplementation((id: string) =>
+        createContainer({ id }),
+      );
+
+      const { res } = await callScanAll(harness.handlers, { containerIds });
+
+      expect(res.status).toHaveBeenCalledWith(202);
+    });
+
+    test('returns the length error before validating element types', async () => {
+      const harness = createHarness();
+      const containerIds: unknown[] = Array.from({ length: 201 }, (_, i) => `c${i}`);
+      containerIds[0] = 42; // non-string element, would otherwise fail element validation first
+
+      const { res } = await callScanAll(harness.handlers, { containerIds });
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'containerIds must contain at most 200 entries',
+      });
+    });
   });
 
   describe('happy-path response', () => {
@@ -276,6 +313,36 @@ describe('api/container/bulk-security', () => {
       harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
 
       await callScanAll(harness.handlers, { containerIds: ['c1'] });
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
+    });
+
+    test('scans all containers from store when containerIds is an empty array', async () => {
+      const harness = createHarness({
+        containers: [
+          { id: 'c1', name: 'nginx' },
+          { id: 'c2', name: 'redis' },
+        ],
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
+
+      await callScanAll(harness.handlers, { containerIds: [] });
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(2);
+    });
+
+    test('collapses duplicate containerIds and scans the container once', async () => {
+      const harness = createHarness({
+        containers: [{ id: 'c1', name: 'nginx' }],
+      });
+      harness.storeContainer.getContainer.mockImplementation((id: string) =>
+        createContainer({ id, name: 'nginx' }),
+      );
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
+
+      await callScanAll(harness.handlers, { containerIds: ['c1', 'c1', 'c1'] });
       await waitForCycleComplete(harness.deps);
 
       expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);

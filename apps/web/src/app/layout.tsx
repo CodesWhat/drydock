@@ -1,8 +1,8 @@
-import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import { AnalyticsPageview } from "@/components/analytics-pageview";
+import { RootProvider } from "@/components/root-provider";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 import "./globals.css";
 

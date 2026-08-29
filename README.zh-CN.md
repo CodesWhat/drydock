@@ -202,6 +202,20 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.6 亮点</strong></summary>
+
+- **在此前 #904 修复的基础上，又关闭了代理容器所有权方面的两个漏洞** — 全新的容器 id 此前完全没有所有权校验，导致代理可以冒领本应属于控制器自身的 watcher 名称；而批量摄取路径（握手、watcher 快照回退、按需的 `watch`/`watchContainer`，以及边缘的 `handleContainerSync`）都会到达 `processAuthoritativeContainer` 却没有任何中间校验，使得代理仍然可以在下一次例行快照中冒领属于另一个代理或控制器自身的容器。这两条路径现在都会执行与原始修复相同的所有权校验。
+- **registry 拉取鉴权、错误响应泄露与预览错误脱敏均得到加强** — 十三个 registry（Hub、Custom、DHI、DOCR、Harbor、Gitea、Forgejo、Codeberg、Nexus、Artifactory、Alibaba CR、OCIR、IBM CR）此前会在版本检查时完成鉴权，随后却以匿名方式拉取镜像，原因是拉取凭据构建器缺少处理已配置 `auth` 值的分支；现在它会像查询凭据构建器早已实现的那样对该值进行解码，格式错误的值现在会直接拒绝，而不是悄悄返回空值。八个 API 处理器不再把可能携带 `Authorization` 请求头或带凭据 webhook URL 的原始异常消息直接拼进 500 响应，而是统一经过既有的 `sanitizePreviewErrorReason` 脱敏器，该脱敏器现在也能捕获嵌入 URL 路径片段中的凭据（Telegram、IFTTT 与 Discord 的 webhook URL），而不仅仅是请求头或用户信息部分。
+- **日志、代理与审计端点的查询参数校验现已保持一致** — 非数字的 `tail` 或 `since` 此前会将 `NaN` 带入环形缓冲区读取而不是被拒绝，空的 `?tail=` 曾被当作缺失而非无效，带数字前缀的 `limit`/`offset`（例如 `?limit=25logs`）此前只按其前导数字校验而不会失败；这三者现在都会拒绝任何不是干净完整整数的值。
+- **修复了六处 UI 缺陷** — 行选中此前在七个视图中从未真正高亮过，因为共享数据表声明的是 `selectedKey`，而每个视图传给它的却是 `active-row`；触发器测试按钮和两处头像上对比度低至 1.37:1 的白色文字，被统一为在全部十二种主题下都能达到 4.5:1 的一个 token；通知发件箱与容器的整页详情视图各自存在一处竞态，视图会在数据完成解析前就渲染出来，现在两处都已加上防护；仪表盘上的两个 watcher 此前会错过每一次原地 SSE 更新，因为它们监听的是一个普通 ref，而不是感知长度或按行指纹的数据源；以及此前在五处以英文原始枚举值渲染的状态文本，现已在全部 16 种语言中完成翻译。
+- **2109 条此前仍显示英文原文的字符串现已真正完成翻译**，覆盖全部 16 种非英语语言 — 容器列表、更新与回滚对话框、搜索面板以及通知发件箱中的大量文案此前无论选择哪种语言都会悄悄回退成英文。每周一次的 Crowdin 同步现在也不会再把六份已翻译的 README 还原成英文：`README.md` 已不再被注册为 Crowdin 的源文件，翻译版 README 现在改为在仓库内手工维护，并在每次发布切版时逐句校验。（[#919](https://github.com/CodesWhat/drydock/pull/919)）
+- **发布与 CI 可靠性修复** — 多架构 smoke 构建现在会针对 BuildKit 的一个已知竞态问题（moby/buildkit#7089）自动重试，该问题曾导致 QEMU 模拟器路径被重复插入两次，从而直接搞垮整个多架构构建；发布切版流程本身也新增了一次完整构建重试，用于应对首次尝试根本没有产出任何 digest 的情况；每周的 DAST 扫描此前从未真正跑完，因为仅 ZAP 一项就耗尽了 40 分钟预算中的 39 分 46 秒，导致 Nuclei 完全没有机会运行，现在两个扫描器被拆分为各自独立的并行任务；此前文档搜索会在五个归档版本中返回约 1600 条结果，且最旧的更新日志排在最前面，现在则会限定在当前正在阅读的版本内。
+
+完整发行说明请参阅 [CHANGELOG.md](./CHANGELOG.md#170-rc6--2026-08-29)。
+
+</details>
+
+<details>
 <summary><strong>v1.7.0-rc.5 亮点</strong></summary>
 
 - **一次安全加固修复了 Portwing 与调试/诊断层面的五个问题** — 格式错误的 Portwing hello 负载现在会在解析前先完成校验，而不是在回调错误边界之外抛出异常；代理容器的所有权现在会在更新/删除边界处强制校验；脱敏现在还能捕获 `*_PAT` 值以及嵌入 URL 中的凭据（包括相对协议的 URL）；被拒来源的诊断路径现在也有速率限制。([#904](https://github.com/CodesWhat/drydock/pull/904))

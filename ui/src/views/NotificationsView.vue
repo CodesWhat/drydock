@@ -552,7 +552,7 @@ onMounted(async () => {
       storage-key="notifications"
       :rows="filteredNotifications"
       row-key="id"
-      :active-row="selectedRule?.id"
+      :selected-key="selectedRule?.id"
       :prefer-cards="notificationViewMode === 'cards'"
       @update:card-reflow-forced="cardReflowForced = $event"
       @row-click="openDetail($event)">

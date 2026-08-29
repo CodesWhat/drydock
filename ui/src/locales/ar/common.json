@@ -12,14 +12,14 @@
     "yes": "yes",
     "no": "no",
     "errorSummary": {
-      "rateLimitHit": "Registry rate limit hit",
-      "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
-      "authFailed": "Registry authentication failed",
-      "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
-      "signatureFailed": "Signature verification failed"
+      "rateLimitHit": "تم تجاوز حد الطلبات في السجل",
+      "accessDenied": "تم رفض الوصول إلى السجل",
+      "imageNotFound": "الصورة غير موجودة",
+      "authFailed": "فشلت مصادقة السجل",
+      "unreachable": "السجل غير قابل للوصول",
+      "cancelled": "تم الإلغاء",
+      "securityBlocked": "محظور بواسطة الفحص الأمني",
+      "signatureFailed": "فشل التحقق من التوقيع"
     },
     "display": {
       "custom": "Custom"

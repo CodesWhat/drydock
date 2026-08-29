@@ -110,7 +110,7 @@
       "scheduled": "Scheduled",
       "openingSoon": "Opening soon"
     },
-    "dataLoadFailed": "Failed to load dashboard data",
+    "dataLoadFailed": "无法加载仪表盘数据",
     "widgets": {
       "statContainers": "Containers",
       "statUpdates": "Updates Available",

@@ -51,6 +51,16 @@ const DECLARATIVE_POLICY_FIELD_LABEL_KEYS: Record<DeclarativePolicyField, string
   skipDigests: 'containerComponents.fullPageActions.skippedDigests',
 };
 
+/**
+ * The skip kind reaches the toast as the literal 'tag'/'digest' discriminator, so
+ * interpolating it raw left an English word mid-sentence in every other locale.
+ * Same treatment as the declarative field label above: resolve to a key first.
+ */
+const REMOVE_SKIP_KIND_LABEL_KEYS: Record<'tag' | 'digest', string> = {
+  tag: 'containerComponents.policy.kindLabels.tag',
+  digest: 'containerComponents.policy.kindLabels.digest',
+};
+
 interface UseContainerPolicyInput {
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   containerMetaMap: Readonly<Ref<Record<string, unknown>>>;
@@ -530,7 +540,10 @@ function createRemoveSkipSelectedAction(args: SelectedPolicyActionsArgs) {
         container,
         'remove-skip',
         { kind, value },
-        args.t('containerComponents.policy.toasts.removeSkip', { kind, value }),
+        args.t('containerComponents.policy.toasts.removeSkip', {
+          kind: args.t(REMOVE_SKIP_KIND_LABEL_KEYS[kind]),
+          value,
+        }),
       );
     });
   };

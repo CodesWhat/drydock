@@ -216,7 +216,7 @@ describe('OpenAPI document', () => {
     );
   });
 
-  test('should expose PATCH /api/settings and keep PUT as deprecated compatibility alias', () => {
+  test('should expose PATCH /api/v1/settings and keep PUT as deprecated compatibility alias', () => {
     expect(openApiDocument.paths['/api/v1/settings']?.patch).toBeDefined();
     expect(openApiDocument.paths['/api/v1/settings']?.put).toBeDefined();
     expect(openApiDocument.paths['/api/v1/settings']?.put?.deprecated).toBe(true);

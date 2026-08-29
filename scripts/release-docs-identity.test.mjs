@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.5';
-const PREV_RC_VERSION = '1.7.0-rc.4';
-const RC_DATE = '2026-08-27';
-const RC_DISPLAY_DATE = 'August 27, 2026';
+const RC_VERSION = '1.7.0-rc.6';
+const PREV_RC_VERSION = '1.7.0-rc.5';
+const RC_DATE = '2026-08-29';
+const RC_DISPLAY_DATE = 'August 29, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -142,7 +142,7 @@ test('release candidate notes cover the post-promotion fixes', () => {
     `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
   );
 
-  for (const issue of [904, 850]) {
+  for (const issue of [919]) {
     const issueLink = `https://github.com/CodesWhat/drydock/issues/${issue}`;
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${issue}`;
     assert.ok(
@@ -155,7 +155,12 @@ test('release candidate notes cover the post-promotion fixes', () => {
     );
   }
 
-  for (const fragment of ['`*_PAT`', 'WCAG 2.2', '256 KiB', '`dev/vX.Y`']) {
+  for (const fragment of [
+    '`processAuthoritativeContainer`',
+    '`sanitizePreviewErrorReason`',
+    '`?limit=25logs`',
+    '2109 strings',
+  ]) {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
   }

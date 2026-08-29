@@ -108,19 +108,19 @@
         "typeHint": "Typ",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; gebruik",
         "useTab": " om de reikwijdte te veranderen",
         "moveHint": "bewegen",
         "openHint": "geopend",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
+        "recentGroup": "Onlangs",
+        "unknownHost": "onbekende host",
         "containerSubtitle": "Container · {image} · {status} · {host}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
         "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "registrySubtitle": "Register · {type}",
+        "authSubtitle": "Authenticatie · {type}",
+        "notificationSubtitle": "Meldingsregel · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -135,10 +135,10 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
-          "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "appearanceTitle": "Uiterlijkinstellingen",
+          "appearanceSubtitle": "Configuratie · Uiterlijk",
+          "profileTitle": "Profielinstellingen",
+          "profileSubtitle": "Configuratie · Profiel"
         }
       },
       "connection": {
@@ -150,12 +150,12 @@
         "restartingService": "Dienst opnieuw opstarten"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
-        "toggleSearch": "Toggle search"
+        "title": "Sneltoetsen",
+        "close": "Sluiten",
+        "focusSearch": "Zoeken focussen",
+        "closeSearch": "Zoeken sluiten of dialoogvensters sluiten",
+        "showHelp": "Deze hulp weergeven",
+        "toggleSearch": "Zoeken schakelen"
       }
     },
     "announcementBanner": {
@@ -168,18 +168,18 @@
       "legacyApiPathTitleSingular": "{total} verzoek naar het verwijderde API-pad gedetecteerd",
       "legacyApiPathTitlePlural": "{total} verzoeken naar het verwijderde API-pad gedetecteerd",
       "dontShowAgain": "Niet meer laten zien",
-      "curlHealthcheckTitle": "Aangepaste overschrijving van krulstatus gedetecteerd",
+      "curlHealthcheckTitle": "Aangepaste, op curl gebaseerde healthcheck-overschrijving gedetecteerd",
       "envKeysLabel": "Env-sleutels ({count}): {keys}",
       "labelKeysLabel": "Labelsleutels ({count}): {keys}",
       "apiPathsLabel": "API-paden ({count}): {keys}",
       "healthcheckCommandLabel": "Healthcheck-opdracht: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
-      "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
-      "installAction": "Install"
+      "legacyConfigBody": "Verouderde triggerinvoer is nog steeds actief voor compatibiliteit met v1.6. Hernoem de {triggerEnv}-variabelen naar {actionEnv} of {notificationEnv}, en vervang {triggerLabel}-labels door {actionLabel} of {notificationLabel} vóór v1.7.",
+      "legacyApiBody": "Clients op deze instantie hebben onlangs het verwijderde ongeversioneerde {oldPrefix}-pad aangeroepen en krijgen {statusCode}-fouten. Migreer ze naar het {v1Prefix}-voorvoegsel. WUD-tijdperk-integraties zoals wud-card of de whatsupdocker-widget van Homepage kunnen {compatFlag} instellen in plaats van te migreren.",
+      "curlHealthcheckBody": "Je Drydock-container gebruikt een aangepaste, op curl gebaseerde overschrijving van de healthcheck. curl blijft beschikbaar voor achterwaartse compatibiliteit in v1.5.x en v1.6.x; v1.6.0 is de laatste waarschuwingsrelease, en curl wordt uit de image verwijderd in v1.7.0. Geef de voorkeur aan de ingebouwde image-healthcheck, of werk je overschrijving bij naar {bin}.",
+      "hiddenMore": "(+{count} meer)",
+      "installTitle": "Installeer Drydock als app",
+      "installBody": "Voeg Drydock toe aan je dock of beginscherm voor snelle toegang en een app-achtige ervaring, inclusief offline shell.",
+      "installAction": "Installeren"
     }
   }
 }

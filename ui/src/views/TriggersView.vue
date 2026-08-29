@@ -256,7 +256,7 @@ onMounted(async () => {
       storage-key="triggers"
       :rows="filteredTriggers"
       row-key="id"
-      :active-row="selectedTrigger?.id"
+      :selected-key="selectedTrigger?.id"
       show-actions
       :prefer-cards="triggerViewMode === 'cards'"
       @update:card-reflow-forced="cardReflowForced = $event"
@@ -403,10 +403,11 @@ onMounted(async () => {
 
             <!-- Test trigger button -->
             <div class="pt-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
-              <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
+              <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold tracking-wide transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :style="{ background: testResult?.id === selectedTrigger.id
                         ? (testResult.success ? 'var(--dd-success)' : 'var(--dd-danger)')
-                        : 'linear-gradient(135deg, var(--dd-primary), var(--dd-info))',
+                        : 'var(--dd-primary)',
+                        color: testResult?.id === selectedTrigger.id ? '#ffffff' : 'var(--dd-primary-fg)',
                         boxShadow: 'var(--dd-shadow-sm)' }"
                       :disabled="testingTrigger !== null"
                       @click.stop="testTrigger(selectedTrigger)">

@@ -58,7 +58,7 @@
         "entries": "{count} 件",
         "statusLive": "ライブ",
         "statusOffline": "オフライン",
-        "loadError": "Failed to load agent logs"
+        "loadError": "エージェントログの読み込みに失敗しました"
       },
       "fields": {
         "cpus": "CPU",

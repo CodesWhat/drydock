@@ -108,19 +108,19 @@
         "typeHint": "Tür",
         "slashComma": ",",
         "atOrConnector": ", or",
-        "hashSemicolon": "; use",
+        "hashSemicolon": "; kullanın",
         "useTab": " kapsamı değiştirmek",
         "moveHint": "hareket etmek",
         "openHint": "açık",
-        "recentGroup": "Recent",
-        "unknownHost": "unknown host",
-        "containerSubtitle": "Container · {image} · {status} · {host}",
-        "agentSubtitle": "Agent · {status} · {host}",
-        "triggerSubtitle": "Trigger · {type}",
-        "watcherSubtitle": "Watcher · {type}",
-        "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
-        "notificationSubtitle": "Notification rule · {id}",
+        "recentGroup": "Son kullanılanlar",
+        "unknownHost": "bilinmeyen sunucu",
+        "containerSubtitle": "Kapsayıcı · {image} · {status} · {host}",
+        "agentSubtitle": "Aracı · {status} · {host}",
+        "triggerSubtitle": "Tetikleyici · {type}",
+        "watcherSubtitle": "İzleyici · {type}",
+        "registrySubtitle": "Kayıt defteri · {type}",
+        "authSubtitle": "Kimlik doğrulama · {type}",
+        "notificationSubtitle": "Bildirim kuralı · {id}",
         "scope": {
           "all": "All",
           "pages": "Pages",
@@ -135,10 +135,10 @@
           "configuration": "Configuration"
         },
         "settings": {
-          "appearanceTitle": "Appearance Settings",
-          "appearanceSubtitle": "Config · Appearance",
-          "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "appearanceTitle": "Görünüm Ayarları",
+          "appearanceSubtitle": "Yapılandırma · Görünüm",
+          "profileTitle": "Profil Ayarları",
+          "profileSubtitle": "Yapılandırma · Profil"
         }
       },
       "connection": {
@@ -150,12 +150,12 @@
         "restartingService": "Hizmet yeniden başlatılıyor"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
-        "closeSearch": "Close search or dismiss dialogs",
-        "showHelp": "Show this help",
-        "toggleSearch": "Toggle search"
+        "title": "Klavye kısayolları",
+        "close": "Kapat",
+        "focusSearch": "Aramaya odaklan",
+        "closeSearch": "Aramayı kapat veya iletişim kutularını kapat",
+        "showHelp": "Bu yardımı göster",
+        "toggleSearch": "Aramayı aç/kapat"
       }
     },
     "announcementBanner": {
@@ -168,18 +168,18 @@
       "legacyApiPathTitleSingular": "Kaldırılan API yoluna {total} istek algılandı",
       "legacyApiPathTitlePlural": "Kaldırılan API yoluna {total} istek algılandı",
       "dontShowAgain": "Bir daha gösterme",
-      "curlHealthcheckTitle": "Özel kıvrılma durumu denetimini geçersiz kılma algılandı",
+      "curlHealthcheckTitle": "Özel curl tabanlı durum denetimi geçersiz kılması algılandı",
       "envKeysLabel": "Zarf anahtarları ({count}): {keys}",
       "labelKeysLabel": "Etiket anahtarları ({count}): {keys}",
       "apiPathsLabel": "API yolları ({count}): {keys}",
       "healthcheckCommandLabel": "Durum denetimi komutu: {command}",
-      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
-      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
-      "hiddenMore": "(+{count} more)",
-      "installTitle": "Install Drydock as an app",
-      "installBody": "Add Drydock to your dock or home screen for quick access and an app-like experience, offline shell included.",
-      "installAction": "Install"
+      "legacyConfigBody": "Eski tetikleyici girdileri v1.6 uyumluluğu için hâlâ etkin. {triggerEnv} değişkenlerini {actionEnv} veya {notificationEnv} olarak yeniden adlandırın ve {triggerLabel} etiketlerini v1.7'den önce {actionLabel} veya {notificationLabel} ile değiştirin.",
+      "legacyApiBody": "Bu örnekteki istemciler kısa süre önce kaldırılan sürümsüz {oldPrefix} yoluna istek gönderdi ve {statusCode} hatası alıyor. Bunları {v1Prefix} önekine taşıyın. wud-card veya Homepage'in whatsupdocker widget'ı gibi WUD dönemi entegrasyonlar, taşıma yapmak yerine {compatFlag} ayarlayabilir.",
+      "curlHealthcheckBody": "Drydock kapsayıcınız curl tabanlı özel bir durum denetimi geçersiz kılması kullanıyor. curl, v1.5.x ve v1.6.x sürümlerinde geriye dönük uyumluluk için kullanılabilir durumda kalacak; v1.6.0 son uyarı sürümüdür ve curl v1.7.0'da imajdan kaldırılacaktır. İmajın yerleşik durum denetimini tercih edin veya geçersiz kılmanızı {bin} olarak güncelleyin.",
+      "hiddenMore": "(+{count} daha)",
+      "installTitle": "Drydock'u uygulama olarak yükleyin",
+      "installBody": "Hızlı erişim ve çevrimdışı kabuk dahil uygulama benzeri bir deneyim için Drydock'u dock'unuza veya ana ekranınıza ekleyin.",
+      "installAction": "Yükle"
     }
   }
 }

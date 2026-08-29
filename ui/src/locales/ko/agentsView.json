@@ -45,10 +45,10 @@
         "levelInfo": "Info",
         "levelWarn": "Warn",
         "levelError": "Error",
-        "tail50": "Tail 50",
-        "tail100": "Tail 100",
-        "tail500": "Tail 500",
-        "tail1000": "Tail 1000",
+        "tail50": "최근 50개",
+        "tail100": "최근 100개",
+        "tail500": "최근 500개",
+        "tail1000": "최근 1000개",
         "componentPlaceholder": "컴포넌트로 필터...",
         "apply": "적용",
         "reset": "초기화",
@@ -58,7 +58,7 @@
         "entries": "{count}개 항목",
         "statusLive": "실시간",
         "statusOffline": "오프라인",
-        "loadError": "Failed to load agent logs"
+        "loadError": "에이전트 로그를 불러오지 못했습니다"
       },
       "fields": {
         "cpus": "CPU",

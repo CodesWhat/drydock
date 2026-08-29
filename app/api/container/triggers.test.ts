@@ -722,5 +722,36 @@ describe('api/container/triggers', () => {
         error: 'Error when running trigger (type=slack, name=notify)',
       });
     });
+
+    test('should scrub credentials embedded in the thrown error message before sending to the client', async () => {
+      const trigger = createTrigger({
+        id: 'slack.notify',
+        name: 'notify',
+        trigger: vi
+          .fn()
+          .mockRejectedValue(
+            new Error(
+              'Webhook call failed: Authorization: Bearer sk-secret-abc123, POST https://user:hunter2@hooks.example.com/notify timed out',
+            ),
+          ),
+      });
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: {
+          'slack.notify': trigger,
+        },
+      });
+
+      const res = await callRunTrigger(harness.handlers, {
+        id: 'c1',
+        triggerType: 'slack',
+        triggerName: 'notify',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      const responseBody = JSON.stringify(res.json.mock.calls[0][0]);
+      expect(responseBody).not.toContain('sk-secret-abc123');
+      expect(responseBody).not.toContain('hunter2');
+    });
   });
 });

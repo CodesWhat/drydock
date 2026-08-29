@@ -96,7 +96,7 @@ describe('agent API watcher', () => {
       );
     });
 
-    test('should return 500 with string message from non-Error objects', async () => {
+    test('should return the sanitized message for non-Error rejections, not the raw content', async () => {
       req.params = { type: 'docker', name: 'local' };
       const mockWatcher = {
         watch: vi.fn().mockRejectedValue({ message: 'watch failed as plain object' }),
@@ -109,7 +109,28 @@ describe('agent API watcher', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'watch failed as plain object' }),
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
+    });
+
+    test('should never leak sensitive content from a non-Error rejection into the response', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      const secret = 'Authorization: Bearer sk-secret-abc123';
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue({ message: secret, headers: { authorization: secret } }),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      const serializedResponse = JSON.stringify(res.json.mock.calls);
+      expect(serializedResponse).not.toContain(secret);
+      expect(serializedResponse).not.toContain('sk-secret-abc123');
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
       );
     });
   });
@@ -207,7 +228,7 @@ describe('agent API watcher', () => {
       );
     });
 
-    test('should stringify non-object errors when watchContainer throws', async () => {
+    test('should return the sanitized message for non-object rejections when watchContainer throws', async () => {
       req.params = { type: 'docker', name: 'local', id: 'c1' };
       const container = { id: 'c1', name: 'test' };
       const mockWatcher = {
@@ -221,7 +242,32 @@ describe('agent API watcher', () => {
       await watcherApi.watchContainer(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: '42' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
+    });
+
+    test('should never leak sensitive content from a non-Error rejection into the watchContainer response', async () => {
+      req.params = { type: 'docker', name: 'local', id: 'c1' };
+      const container = { id: 'c1', name: 'test' };
+      const secret = 'Authorization: Bearer sk-secret-abc123';
+      const mockWatcher = {
+        watchContainer: vi.fn().mockRejectedValue({ message: secret }),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+      storeContainer.getContainer.mockReturnValue(container);
+
+      await watcherApi.watchContainer(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      const serializedResponse = JSON.stringify(res.json.mock.calls);
+      expect(serializedResponse).not.toContain(secret);
+      expect(serializedResponse).not.toContain('sk-secret-abc123');
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
     });
   });
 
@@ -244,7 +290,7 @@ describe('agent API watcher', () => {
       );
     });
 
-    test('should use message from plain object with string message in watchWatcher', async () => {
+    test('should log the message from a plain object with a string message but respond with the sanitized message', async () => {
       req.params = { type: 'docker', name: 'local' };
       const mockWatcher = {
         watch: vi.fn().mockRejectedValue({ message: 'plain-object-msg' }),
@@ -256,10 +302,13 @@ describe('agent API watcher', () => {
       await watcherApi.watchWatcher(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'plain-object-msg' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('plain-object-msg'));
     });
 
-    test('should stringify non-object, non-Error value in watchWatcher', async () => {
+    test('should log a stringified non-object, non-Error value but respond with the sanitized message', async () => {
       req.params = { type: 'docker', name: 'local' };
       const mockWatcher = {
         watch: vi.fn().mockRejectedValue('string-error'),
@@ -271,7 +320,10 @@ describe('agent API watcher', () => {
       await watcherApi.watchWatcher(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'string-error' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('string-error'));
     });
 
     test('should use INTERNAL_SERVER_ERROR for Error instances in watchContainer', async () => {
@@ -307,11 +359,14 @@ describe('agent API watcher', () => {
       await watcherApi.watchWatcher(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      // null is not an Error, normalizeErrorMessage → String(null) = 'null'
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'null' }));
+      // null is not an Error; the client still only ever sees the sanitized message
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('null'));
     });
 
-    test('should return string from non-string message object (message=number)', async () => {
+    test('should log the stringified value for a non-string message object (message=number) but respond with the sanitized message', async () => {
       // { message: 123 } → hasStringMessage returns false → String({ message: 123 })
       req.params = { type: 'docker', name: 'local' };
       const mockWatcher = {
@@ -325,7 +380,10 @@ describe('agent API watcher', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       // hasStringMessage({ message: 123 }) → false → String({ message: 123 }) = '[object Object]'
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: '[object Object]' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('[object Object]'));
     });
 
     test('should return internal server error for object without message key', async () => {
@@ -341,7 +399,9 @@ describe('agent API watcher', () => {
       await watcherApi.watchWatcher(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: '[object Object]' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
     });
 
     test('normalizeErrorMessage should use Error.message not String(error)', async () => {
