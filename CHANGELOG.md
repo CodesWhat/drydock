@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.6] — 2026-08-29
+
 ### Added
 
 ### Security
@@ -2610,7 +2612,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.5...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.6...HEAD
+[1.7.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.5...v1.7.0-rc.6
 [1.7.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.4...v1.7.0-rc.5
 [1.7.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.3...v1.7.0-rc.4
 [1.7.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.2...v1.7.0-rc.3

@@ -66,77 +66,81 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.5</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.6</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.5</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.6</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.5</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.6</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.5</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.6</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.5</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.6</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.5 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.6 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
   {
-    securityHardening: string;
-    accessibilityContrast: string;
+    containerOwnership: string;
+    localization: string;
   }
 > = {
   'README.de.md': {
-    securityHardening:
-      '**Ein Security-Hardening-Pass schließt fünf Befunde in Portwing und auf der Debug-/Diagnose-Oberfläche**',
-    accessibilityContrast: '**Dunkle Themes erfüllen jetzt den WCAG-2.2-Kontrastmindestwert**',
+    containerOwnership:
+      '**Zwei weitere Lücken bei der Container-Eigentümerschaft von Agents werden geschlossen, zusätzlich zum früheren #904-Fix**',
+    localization:
+      '**2109 Strings, die noch englischen Quelltext zeigten, sind jetzt tatsächlich übersetzt**',
   },
   'README.es.md': {
-    securityHardening:
-      '**Un endurecimiento de seguridad corrige cinco hallazgos en Portwing y en la superficie de depuración/diagnóstico**',
-    accessibilityContrast: '**Los temas oscuros cumplen ahora el contraste mínimo WCAG 2.2**',
+    containerOwnership:
+      '**Se cierran dos brechas más en la propiedad de contenedores de los agentes, además de la corrección anterior de #904**',
+    localization:
+      '**2109 cadenas que todavía mostraban el texto fuente en inglés ahora están realmente traducidas**',
   },
   'README.fr.md': {
-    securityHardening:
-      '**Un durcissement de sécurité corrige cinq constats dans Portwing et sur la surface de débogage/diagnostic**',
-    accessibilityContrast:
-      '**Les thèmes sombres respectent désormais le contraste minimum WCAG 2.2**',
+    containerOwnership:
+      '**Deux failles supplémentaires dans la propriété des conteneurs par les agents sont corrigées, en plus du correctif #904 précédent**',
+    localization:
+      '**2109 chaînes qui affichaient encore le texte source en anglais sont désormais réellement traduites**',
   },
   'README.pl.md': {
-    securityHardening:
-      '**Przegląd wzmacniający bezpieczeństwo usuwa pięć problemów w Portwing i na powierzchni debugowania/diagnostyki**',
-    accessibilityContrast: '**Ciemne motywy spełniają teraz minimalny kontrast WCAG 2.2**',
+    containerOwnership:
+      '**Zamknięto dwie kolejne luki we własności kontenerów agentów, oprócz wcześniejszej poprawki #904**',
+    localization:
+      '**2109 ciągów znaków, które nadal pokazywały angielski tekst źródłowy, jest teraz faktycznie przetłumaczonych**',
   },
   'README.pt-BR.md': {
-    securityHardening:
-      '**Uma passagem de fortalecimento de segurança corrige cinco achados no Portwing e na superfície de depuração/diagnóstico**',
-    accessibilityContrast: '**Os temas escuros agora atendem ao contraste mínimo do WCAG 2.2**',
+    containerOwnership:
+      '**Mais duas brechas na propriedade de contêineres dos agentes são fechadas, além da correção anterior do #904**',
+    localization:
+      '**2109 strings que ainda mostravam o texto-fonte em inglês agora estão realmente traduzidas**',
   },
   'README.zh-CN.md': {
-    securityHardening: '**一次安全加固修复了 Portwing 与调试/诊断层面的五个问题**',
-    accessibilityContrast: '**暗色主题现在满足 WCAG 2.2 最低对比度要求**',
+    containerOwnership: '**在此前 #904 修复的基础上，又关闭了代理容器所有权方面的两个漏洞**',
+    localization: '**2109 条此前仍显示英文原文的字符串现已真正完成翻译**',
   },
 };
 
@@ -190,6 +194,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc3--2026-08-23',
   './CHANGELOG.md#170-rc4--2026-08-26',
   './CHANGELOG.md#170-rc5--2026-08-27',
+  './CHANGELOG.md#170-rc6--2026-08-29',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -243,16 +248,13 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const surface = localizedSurfaceFragments[readme];
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
-    const securityBullet = getBullet(releaseBlock, release.securityHardening);
-    const accessibilityBullet = getBullet(releaseBlock, release.accessibilityContrast);
+    const containerOwnershipBullet = getBullet(releaseBlock, release.containerOwnership);
+    const localizationBullet = getBullet(releaseBlock, release.localization);
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
-    expect(getUrls(securityBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/904']);
-    expect(getUrls(accessibilityBullet)).toEqual([
-      'https://github.com/CodesWhat/drydock/issues/850',
-      'https://github.com/CodesWhat/drydock/discussions/865',
-    ]);
+    expect(getUrls(containerOwnershipBullet)).toEqual([]);
+    expect(getUrls(localizationBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/919']);
   });
 
   test('preserves the exact source URL multiset', () => {
