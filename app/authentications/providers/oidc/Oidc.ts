@@ -16,7 +16,6 @@ import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorChainMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
 import Authentication from '../Authentication.js';
-import OidcStrategy from './OidcStrategy.js';
 
 const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
@@ -577,26 +576,6 @@ class Oidc extends Authentication<OidcConfiguration> {
     app.get(`/auth/oidc/${this.name}/cb`, (req, res) => {
       void this.callback(req, res);
     });
-  }
-
-  /**
-   * Return passport strategy.
-   * @param app
-   */
-  getStrategy(app?: OidcAppLike) {
-    this.registerAuthenticationRoutes(app);
-    const strategy = new OidcStrategy(
-      {
-        config: this.client,
-        scope: 'openid email profile',
-        name: 'oidc',
-      },
-      (accessToken, done) => {
-        void this.verify(accessToken, done);
-      },
-      this.log,
-    );
-    return strategy;
   }
 
   /**

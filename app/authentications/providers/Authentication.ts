@@ -1,4 +1,3 @@
-import type { Strategy } from 'passport';
 import type { Authenticator } from '../../api/authenticator-chain.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
 
@@ -24,13 +23,6 @@ class Authentication<
    */
   initAuthentication(): void | Promise<void> {
     // do nothing by default
-  }
-
-  /**
-   * Return passport strategy.
-   */
-  getStrategy(_app?: unknown): Strategy {
-    throw new Error('getStrategy must be implemented');
   }
 
   /**

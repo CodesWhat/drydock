@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import type { AuthenticatedPrincipal } from './principal.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
@@ -8,9 +9,8 @@ import {
 function createRequest(
   overrides: Partial<
     Request & {
-      isAuthenticated?: () => boolean;
       sessionID?: unknown;
-      user?: { username?: unknown };
+      principal?: AuthenticatedPrincipal;
     }
   >,
 ): Request {
@@ -23,17 +23,21 @@ function createRequest(
 const response = {} as Response;
 
 describe('isRequestAuthenticated', () => {
-  test('returns the Passport authentication state', () => {
-    const authenticated = vi.fn(() => true);
-    const anonymous = vi.fn(() => false);
-
-    expect(isRequestAuthenticated({ isAuthenticated: authenticated })).toBe(true);
-    expect(authenticated).toHaveBeenCalledOnce();
-    expect(isRequestAuthenticated({ isAuthenticated: anonymous })).toBe(false);
-    expect(anonymous).toHaveBeenCalledOnce();
+  test('returns true for principals that carry a real identity', () => {
+    expect(isRequestAuthenticated({ principal: { kind: 'basic', username: 'alice' } })).toBe(true);
+    expect(isRequestAuthenticated({ principal: { kind: 'session', username: 'alice' } })).toBe(
+      true,
+    );
+    expect(isRequestAuthenticated({ principal: { kind: 'oidc', username: 'alice' } })).toBe(true);
   });
 
-  test('returns false when the Passport helper is missing', () => {
+  test('returns false for an anonymous principal', () => {
+    expect(
+      isRequestAuthenticated({ principal: { kind: 'anonymous', username: 'anonymous' } }),
+    ).toBe(false);
+  });
+
+  test('returns false when no principal is present', () => {
     expect(isRequestAuthenticated({})).toBe(false);
   });
 });
@@ -50,18 +54,16 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     const firstUserKey = await keyGenerator!(
       createRequest({
         ip: '203.0.113.10',
-        isAuthenticated: () => true,
         sessionID: 'session-a',
-        user: { username: 'alice' },
+        principal: { kind: 'basic', username: 'alice' },
       }),
       response,
     );
     const secondUserKey = await keyGenerator!(
       createRequest({
         ip: '203.0.113.10',
-        isAuthenticated: () => true,
         sessionID: 'session-b',
-        user: { username: 'bob' },
+        principal: { kind: 'basic', username: 'bob' },
       }),
       response,
     );
@@ -78,20 +80,34 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     const firstKey = await keyGenerator!(
       createRequest({
         ip: '203.0.113.20',
-        isAuthenticated: () => false,
       }),
       response,
     );
     const secondKey = await keyGenerator!(
       createRequest({
         ip: '203.0.113.20',
-        isAuthenticated: () => false,
       }),
       response,
     );
 
     expect(firstKey).toMatch(/^ip:/);
     expect(secondKey).toBe(firstKey);
+  });
+
+  test('should treat an anonymous principal as unauthenticated for ip keying', async () => {
+    const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
+    expect(keyGenerator).toBeDefined();
+
+    const key = await keyGenerator!(
+      createRequest({
+        ip: '203.0.113.25',
+        sessionID: 'anon-session',
+        principal: { kind: 'anonymous', username: 'anonymous' },
+      }),
+      response,
+    );
+
+    expect(key).toBe('ip:203.0.113.25');
   });
 
   test('should prefer normalized request ip over proxy socket address for unauthenticated requests', async () => {
@@ -104,7 +120,6 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
         socket: {
           remoteAddress: '198.51.100.7',
         } as Request['socket'],
-        isAuthenticated: () => false,
       }),
       response,
     );
@@ -114,7 +129,6 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
         socket: {
           remoteAddress: '198.51.100.7',
         } as Request['socket'],
-        isAuthenticated: () => false,
       }),
       response,
     );
@@ -133,7 +147,6 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
         socket: {
           remoteAddress: '198.51.100.7',
         } as Request['socket'],
-        isAuthenticated: () => false,
       }),
       response,
     );
@@ -149,7 +162,6 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     const key = await keyGenerator!(
       createRequest({
         ip: undefined,
-        isAuthenticated: () => false,
       }),
       response,
     );
@@ -164,9 +176,8 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     const key = await keyGenerator!(
       createRequest({
         ip: '203.0.113.30',
-        isAuthenticated: () => true,
         sessionID: '   ',
-        user: { username: 'alice' },
+        principal: { kind: 'basic', username: 'alice' },
       }),
       response,
     );
@@ -181,9 +192,8 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     const key = await keyGenerator!(
       createRequest({
         ip: '   ',
-        isAuthenticated: () => true,
         sessionID: '   ',
-        user: { username: { raw: 'alice' } },
+        principal: { kind: 'basic', username: { raw: 'alice' } as unknown as string },
       }),
       response,
     );
@@ -198,7 +208,6 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     const key = await keyGenerator!(
       createRequest({
         ip: 42 as unknown as string,
-        isAuthenticated: () => false,
       }),
       response,
     );

@@ -17,7 +17,7 @@ describe('recordLoginAuditEvent', () => {
   });
 
   test('sanitizes explicit login identities before including them in audit details', () => {
-    const req = { user: { username: 'fallback-user' } } as any;
+    const req = { principal: { kind: 'basic', username: 'fallback-user' } } as any;
     const details = 'Authentication failed (invalid credentials)';
     const loginIdentity = 'bad-user\n\x1B[31m';
 
@@ -31,8 +31,8 @@ describe('recordLoginAuditEvent', () => {
     });
   });
 
-  test('falls back to req.user.username when loginIdentity is not provided', () => {
-    const req = { user: { username: 'alice' } } as any;
+  test('falls back to the principal username when loginIdentity is not provided', () => {
+    const req = { principal: { kind: 'basic', username: 'alice' } } as any;
     const details = 'Login success';
 
     recordLoginAuditEvent(req, 'success', details);
@@ -45,8 +45,8 @@ describe('recordLoginAuditEvent', () => {
     });
   });
 
-  test('falls back to req.user.username when loginIdentity is empty string', () => {
-    const req = { user: { username: 'bob' } } as any;
+  test('falls back to the principal username when loginIdentity is empty string', () => {
+    const req = { principal: { kind: 'basic', username: 'bob' } } as any;
     const details = 'Login attempt';
 
     recordLoginAuditEvent(req, 'error', details, '');
@@ -59,8 +59,8 @@ describe('recordLoginAuditEvent', () => {
     });
   });
 
-  test('falls back to req.user.username when loginIdentity is whitespace-only', () => {
-    const req = { user: { username: 'carol' } } as any;
+  test('falls back to the principal username when loginIdentity is whitespace-only', () => {
+    const req = { principal: { kind: 'basic', username: 'carol' } } as any;
     const details = 'Login attempt';
 
     recordLoginAuditEvent(req, 'error', details, '   ');
@@ -73,7 +73,7 @@ describe('recordLoginAuditEvent', () => {
     });
   });
 
-  test('falls back to "unknown" when req.user is absent and loginIdentity is not given', () => {
+  test('falls back to "unknown" when no principal is present and loginIdentity is not given', () => {
     const req = {} as any;
     const details = 'Login attempt with no user context';
 
@@ -87,8 +87,8 @@ describe('recordLoginAuditEvent', () => {
     });
   });
 
-  test('falls back to "unknown" when req.user.username is a number', () => {
-    const req = { user: { username: 42 } } as any;
+  test('falls back to "unknown" when the principal is anonymous', () => {
+    const req = { principal: { kind: 'anonymous', username: 'anonymous' } } as any;
     const details = 'Login attempt';
 
     recordLoginAuditEvent(req, 'error', details);
@@ -101,8 +101,22 @@ describe('recordLoginAuditEvent', () => {
     });
   });
 
-  test('uses loginIdentity over req.user.username when loginIdentity is a non-empty string', () => {
-    const req = { user: { username: 'fallback' } } as any;
+  test('falls back to "unknown" when the principal username is a number', () => {
+    const req = { principal: { kind: 'basic', username: 42 as unknown as string } } as any;
+    const details = 'Login attempt';
+
+    recordLoginAuditEvent(req, 'error', details);
+
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+      action: 'auth-login',
+      status: 'error',
+      containerName: 'authentication',
+      details: `${details}; user=unknown`,
+    });
+  });
+
+  test('uses loginIdentity over the principal username when loginIdentity is a non-empty string', () => {
+    const req = { principal: { kind: 'basic', username: 'fallback' } } as any;
     const details = 'Auth success';
 
     recordLoginAuditEvent(req, 'success', details, 'dave');
@@ -116,7 +130,7 @@ describe('recordLoginAuditEvent', () => {
   });
 
   test('audit details string contains the semicolon separator and user= label', () => {
-    const req = { user: { username: 'eve' } } as any;
+    const req = { principal: { kind: 'basic', username: 'eve' } } as any;
     const details = 'Some event';
 
     recordLoginAuditEvent(req, 'success', details);

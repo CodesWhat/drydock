@@ -1,6 +1,6 @@
 const {
   mockFs,
-  mockPassportAuthenticate,
+  mockAuthenticateRequest,
   mockRecordAuthLogin,
   mockSetAuthAccountLockedTotal,
   mockSetAuthIpLockedTotal,
@@ -14,7 +14,7 @@ const {
       writeFileSync: vi.fn(),
       mkdirSync: vi.fn(),
     },
-    mockPassportAuthenticate: vi.fn(() => vi.fn()),
+    mockAuthenticateRequest: vi.fn(),
     mockRecordAuthLogin: vi.fn(),
     mockSetAuthAccountLockedTotal: vi.fn(),
     mockSetAuthIpLockedTotal: vi.fn(),
@@ -47,12 +47,6 @@ const {
 const lockoutStateFiles = new Map<string, string>();
 const LOCKOUT_STATE_PATH = '/test/store/db.json.auth-lockouts.json';
 
-vi.mock('passport', () => ({
-  default: {
-    authenticate: mockPassportAuthenticate,
-  },
-}));
-
 vi.mock('node:fs', () => ({
   default: mockFs,
 }));
@@ -80,8 +74,8 @@ vi.mock('./auth-audit.js', () => ({
   recordLoginAuditEvent: mockRecordLoginAuditEvent,
 }));
 
-vi.mock('./auth-strategies.js', () => ({
-  getAllIds: vi.fn(() => ['basic.default']),
+vi.mock('./authenticator-chain.js', () => ({
+  authenticateRequest: mockAuthenticateRequest,
 }));
 
 vi.mock('./error-response.js', () => ({
@@ -108,15 +102,15 @@ function createResponse() {
   };
 }
 
-function makePassportInvalidCredentials() {
-  mockPassportAuthenticate.mockImplementation((_ids, _options, callback) => {
-    return () => callback(null, false);
-  });
+function makeAuthenticatorInvalidCredentials() {
+  mockAuthenticateRequest.mockResolvedValue(undefined);
 }
 
-function makePassportSuccess(username = 'john') {
-  mockPassportAuthenticate.mockImplementation((_ids, _options, callback) => {
-    return () => callback(null, { username });
+function makeAuthenticatorSuccess(username = 'john') {
+  mockAuthenticateRequest.mockImplementation((request: any) => {
+    const principal = { kind: 'basic', username };
+    request.principal = principal;
+    return Promise.resolve(principal);
   });
 }
 
@@ -164,8 +158,8 @@ describe('auth-lockout', () => {
     resetLoginLockoutStateForTests();
   });
 
-  test('returns 401 and records an audit event for invalid credentials', () => {
-    makePassportInvalidCredentials();
+  test('returns 401 and records an audit event for invalid credentials', async () => {
+    makeAuthenticatorInvalidCredentials();
     const req = {
       body: { username: ' Alice ' },
       ip: '203.0.113.10',
@@ -173,13 +167,9 @@ describe('auth-lockout', () => {
     const res = createResponse();
     const next = vi.fn();
 
-    authenticateLogin(req, res as any, next);
+    await authenticateLogin(req, res as any, next);
 
-    expect(mockPassportAuthenticate).toHaveBeenCalledWith(
-      ['basic.default'],
-      { session: false },
-      expect.any(Function),
-    );
+    expect(mockAuthenticateRequest).toHaveBeenCalledWith(req);
     expect(mockRecordLoginAuditEvent).toHaveBeenCalledWith(
       req,
       'error',
@@ -190,59 +180,60 @@ describe('auth-lockout', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  test('forwards passport authenticate errors to next', () => {
-    const error = new Error('passport failure');
-    mockPassportAuthenticate.mockImplementation((_ids, _options, callback) => {
-      return () => callback(error, false);
-    });
+  test('forwards authenticator chain errors to next', async () => {
+    const error = new Error('authenticator chain failure');
+    mockAuthenticateRequest.mockRejectedValue(error);
     const req = { ip: '203.0.113.11' } as any;
     const res = createResponse();
     const next = vi.fn();
 
-    authenticateLogin(req, res as any, next);
+    await authenticateLogin(req, res as any, next);
 
     expect(next).toHaveBeenCalledWith(error);
     expect(mockSendErrorResponse).not.toHaveBeenCalled();
   });
 
-  test('releases login verification capacity when passport middleware throws synchronously', () => {
-    const passportError = new Error('passport middleware failed');
-    mockPassportAuthenticate.mockImplementationOnce(() => () => {
-      throw passportError;
+  test('releases login verification capacity when the authenticator chain throws synchronously', async () => {
+    const chainError = new Error('authenticator chain failed');
+    mockAuthenticateRequest.mockImplementationOnce(() => {
+      throw chainError;
     });
     const next = vi.fn();
 
-    expect(() =>
+    await expect(
       authenticateLogin(
         { body: { username: 'alice' }, ip: '203.0.113.11' } as any,
         createResponse() as any,
         next,
       ),
-    ).not.toThrow();
+    ).resolves.toBeUndefined();
 
-    expect(next).toHaveBeenCalledWith(passportError);
-    makePassportInvalidCredentials();
-    authenticateLogin(
+    expect(next).toHaveBeenCalledWith(chainError);
+    makeAuthenticatorInvalidCredentials();
+    await authenticateLogin(
       { body: { username: 'bob' }, ip: '203.0.113.12' } as any,
       createResponse() as any,
       vi.fn(),
     );
-    expect(mockPassportAuthenticate).toHaveBeenCalledTimes(2);
+    expect(mockAuthenticateRequest).toHaveBeenCalledTimes(2);
   });
 
-  test('rejects excess concurrent login verifications before passport runs', () => {
-    const pendingCallbacks: Array<(error: unknown, user: false) => void> = [];
-    mockPassportAuthenticate.mockImplementation((_ids, _options, callback) => {
-      return () => pendingCallbacks.push(callback);
-    });
+  test('rejects excess concurrent login verifications before the authenticator chain runs', async () => {
+    const pendingResolvers: Array<(principal: unknown) => void> = [];
+    mockAuthenticateRequest.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pendingResolvers.push(resolve);
+        }),
+    );
     const req = { body: { username: 'alice' }, ip: '203.0.113.11' } as any;
     const rejectedResponse = createResponse();
 
-    authenticateLogin(req, createResponse() as any, vi.fn());
-    authenticateLogin(req, createResponse() as any, vi.fn());
-    authenticateLogin(req, rejectedResponse as any, vi.fn());
+    const first = authenticateLogin(req, createResponse() as any, vi.fn());
+    const second = authenticateLogin(req, createResponse() as any, vi.fn());
+    const third = authenticateLogin(req, rejectedResponse as any, vi.fn());
 
-    expect(mockPassportAuthenticate).toHaveBeenCalledTimes(2);
+    expect(mockAuthenticateRequest).toHaveBeenCalledTimes(2);
     expect(rejectedResponse.setHeader).toHaveBeenCalledWith('Retry-After', '1');
     expect(mockSendErrorResponse).toHaveBeenCalledWith(
       rejectedResponse,
@@ -250,13 +241,19 @@ describe('auth-lockout', () => {
       'Too many concurrent login attempts',
     );
 
-    pendingCallbacks[0](null, false);
-    authenticateLogin(req, createResponse() as any, vi.fn());
-    expect(mockPassportAuthenticate).toHaveBeenCalledTimes(3);
+    pendingResolvers[0](undefined);
+    await first;
+
+    const fourth = authenticateLogin(req, createResponse() as any, vi.fn());
+    expect(mockAuthenticateRequest).toHaveBeenCalledTimes(3);
+
+    pendingResolvers[1](undefined);
+    pendingResolvers[2](undefined);
+    await Promise.all([second, third, fourth]);
   });
 
-  test('locks account after repeated failures and sets Retry-After', () => {
-    makePassportInvalidCredentials();
+  test('locks account after repeated failures and sets Retry-After', async () => {
+    makeAuthenticatorInvalidCredentials();
     const req = {
       body: { username: 'lock-user' },
       ip: '203.0.113.12',
@@ -264,11 +261,11 @@ describe('auth-lockout', () => {
     const next = vi.fn();
 
     for (let index = 0; index < 4; index += 1) {
-      authenticateLogin(req, createResponse() as any, next);
+      await authenticateLogin(req, createResponse() as any, next);
     }
 
     const lockedResponse = createResponse();
-    authenticateLogin(req, lockedResponse as any, next);
+    await authenticateLogin(req, lockedResponse as any, next);
 
     expect(lockedResponse.status).toHaveBeenCalledWith(423);
     expect(lockedResponse.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
@@ -280,13 +277,13 @@ describe('auth-lockout', () => {
     );
   });
 
-  test('locks account without throwing when res has no setHeader function (setRetryAfterHeader false branch)', () => {
+  test('locks account without throwing when res has no setHeader function (setRetryAfterHeader false branch)', async () => {
     // Regression guard for setRetryAfterHeader (auth-lockout.ts:445): some
     // callers hand authenticateLogin a minimal res stand-in with no
     // setHeader function at all. The Retry-After header must be skipped
     // silently rather than throwing, and the 423 lockout response must
     // still complete.
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const req = {
       body: { username: 'lock-user-no-setheader' },
       ip: '203.0.113.98',
@@ -294,7 +291,7 @@ describe('auth-lockout', () => {
     const next = vi.fn();
 
     for (let index = 0; index < 4; index += 1) {
-      authenticateLogin(req, createResponse() as any, next);
+      await authenticateLogin(req, createResponse() as any, next);
     }
 
     const resWithoutSetHeader = {
@@ -303,7 +300,7 @@ describe('auth-lockout', () => {
       // Deliberately no setHeader.
     };
 
-    expect(() => authenticateLogin(req, resWithoutSetHeader as any, next)).not.toThrow();
+    await expect(authenticateLogin(req, resWithoutSetHeader as any, next)).resolves.toBeUndefined();
 
     expect(mockRecordAuthLogin).toHaveBeenCalledWith('locked', 'basic');
     expect(mockSendErrorResponse).toHaveBeenCalledWith(
@@ -313,8 +310,8 @@ describe('auth-lockout', () => {
     );
   });
 
-  test('rejects already-locked identities before invoking passport', () => {
-    makePassportInvalidCredentials();
+  test('rejects already-locked identities before invoking the authenticator chain', async () => {
+    makeAuthenticatorInvalidCredentials();
     const req = {
       body: { username: 'prelock-user' },
       ip: '203.0.113.13',
@@ -322,21 +319,21 @@ describe('auth-lockout', () => {
     const next = vi.fn();
 
     for (let index = 0; index < 5; index += 1) {
-      authenticateLogin(req, createResponse() as any, next);
+      await authenticateLogin(req, createResponse() as any, next);
     }
-    const authenticateCallCount = mockPassportAuthenticate.mock.calls.length;
+    const authenticateCallCount = mockAuthenticateRequest.mock.calls.length;
 
     const lockedResponse = createResponse();
-    authenticateLogin(req, lockedResponse as any, next);
+    await authenticateLogin(req, lockedResponse as any, next);
 
-    expect(mockPassportAuthenticate).toHaveBeenCalledTimes(authenticateCallCount);
+    expect(mockAuthenticateRequest).toHaveBeenCalledTimes(authenticateCallCount);
     expect(lockedResponse.status).toHaveBeenCalledWith(423);
   });
 
-  test('keeps lockout pressure after lockout duration expires when failures continue', () => {
+  test('keeps lockout pressure after lockout duration expires when failures continue', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const req = {
       body: { username: 'sustained-user' },
       ip: '203.0.113.14',
@@ -344,39 +341,39 @@ describe('auth-lockout', () => {
     const next = vi.fn();
 
     for (let index = 0; index < 5; index += 1) {
-      authenticateLogin(req, createResponse() as any, next);
+      await authenticateLogin(req, createResponse() as any, next);
     }
 
     vi.setSystemTime(new Date('2026-01-01T00:15:00.000Z'));
     const responseAfterExpiry = createResponse();
-    authenticateLogin(req, responseAfterExpiry as any, next);
+    await authenticateLogin(req, responseAfterExpiry as any, next);
 
     expect(responseAfterExpiry.status).toHaveBeenCalledWith(423);
     vi.useRealTimers();
   });
 
-  test('resets stale lockout windows after the configured window elapses', () => {
+  test('resets stale lockout windows after the configured window elapses', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const req = {
       body: { username: 'window-user' },
       ip: '203.0.113.15',
     } as any;
 
     for (let index = 0; index < 4; index += 1) {
-      authenticateLogin(req, createResponse() as any, vi.fn());
+      await authenticateLogin(req, createResponse() as any, vi.fn());
     }
 
     vi.setSystemTime(new Date('2026-01-01T00:16:00.000Z'));
     const responseAfterWindow = createResponse();
-    authenticateLogin(req, responseAfterWindow as any, vi.fn());
+    await authenticateLogin(req, responseAfterWindow as any, vi.fn());
 
     expect(responseAfterWindow.status).toHaveBeenCalledWith(401);
     vi.useRealTimers();
   });
 
-  test('testable_pruneLockoutEntries evicts oldest hydrated entries when persisted state exceeds the cap', () => {
+  test('testable_pruneLockoutEntries evicts oldest hydrated entries when persisted state exceeds the cap', async () => {
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map();
 
@@ -396,7 +393,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has(`persisted-user-${LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS}`)).toBe(true);
   });
 
-  test('testable_makeTrackedIdentityCapacity removes expired unlocked entries before evicting active ones', () => {
+  test('testable_makeTrackedIdentityCapacity removes expired unlocked entries before evicting active ones', async () => {
     const now = Date.parse('2026-01-01T00:20:00.000Z');
     const expiredAttemptAt = now - testable_accountLockoutPolicy.windowMs - 1_000;
     // The expired user must be the NEWEST (highest lastAttemptAt) to avoid being picked by eviction.
@@ -453,14 +450,14 @@ describe('auth-lockout', () => {
     }
   });
 
-  test('testable_evictOldestTrackedEntries returns early when no entries remain to evict', () => {
+  test('testable_evictOldestTrackedEntries returns early when no entries remain to evict', async () => {
     const lockouts = new Map();
 
     expect(() => testable_evictOldestTrackedEntries(lockouts, 1)).not.toThrow();
     expect(lockouts.size).toBe(0);
   });
 
-  test('testable_registerFailedLoginAttempt replaces stale unlocked entries with a fresh attempt', () => {
+  test('testable_registerFailedLoginAttempt replaces stale unlocked entries with a fresh attempt', async () => {
     const now = Date.parse('2026-01-01T00:20:00.000Z');
     const expiredAttemptAt = now - testable_accountLockoutPolicy.windowMs - 1_000;
     const lockouts = new Map([
@@ -491,37 +488,37 @@ describe('auth-lockout', () => {
     });
   });
 
-  test('clears lockout state after a successful authentication', () => {
-    makePassportInvalidCredentials();
+  test('clears lockout state after a successful authentication', async () => {
+    makeAuthenticatorInvalidCredentials();
     const req = {
       body: { username: 'recover-user' },
       ip: '203.0.113.16',
     } as any;
     const next = vi.fn();
 
-    authenticateLogin(req, createResponse() as any, next);
+    await authenticateLogin(req, createResponse() as any, next);
 
-    makePassportSuccess('recover-user');
-    authenticateLogin(req, createResponse() as any, next);
+    makeAuthenticatorSuccess('recover-user');
+    await authenticateLogin(req, createResponse() as any, next);
     expect(next).toHaveBeenCalledTimes(1);
-    expect(req.user).toEqual({ username: 'recover-user' });
+    expect(req.principal).toEqual({ kind: 'basic', username: 'recover-user' });
 
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     for (let index = 0; index < 4; index += 1) {
       const res = createResponse();
-      authenticateLogin(req, res as any, vi.fn());
+      await authenticateLogin(req, res as any, vi.fn());
       expect(res.status).toHaveBeenCalledWith(401);
     }
   });
 
-  test('evicts the oldest tracked account entry when the identity cap is exceeded', () => {
+  test('evicts the oldest tracked account entry when the identity cap is exceeded', async () => {
     vi.useFakeTimers();
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const startedAt = Date.parse('2026-01-01T00:00:00.000Z');
 
     for (let index = 0; index <= LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS; index += 1) {
       vi.setSystemTime(new Date(startedAt + index));
-      authenticateLogin(
+      await authenticateLogin(
         {
           body: { username: `evict-user-${index}` },
           ip: `198.51.100.${index % 255}`,
@@ -542,8 +539,8 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('extracts login identity from the first authorization header value when headers are arrays', () => {
-    makePassportInvalidCredentials();
+  test('extracts login identity from the first authorization header value when headers are arrays', async () => {
+    makeAuthenticatorInvalidCredentials();
     const req = {
       headers: {
         authorization: [
@@ -554,7 +551,7 @@ describe('auth-lockout', () => {
       ip: '203.0.113.17',
     } as any;
 
-    authenticateLogin(req, createResponse() as any, vi.fn());
+    await authenticateLogin(req, createResponse() as any, vi.fn());
 
     expect(mockRecordLoginAuditEvent).toHaveBeenCalledWith(
       req,
@@ -564,7 +561,7 @@ describe('auth-lockout', () => {
     );
   });
 
-  test('hydrates persisted lockout state on init and blocks locked identities', () => {
+  test('hydrates persisted lockout state on init and blocks locked identities', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
     lockoutStateFiles.set(
@@ -581,11 +578,11 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     initializeLoginLockoutState();
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       {
         body: { username: 'restored-user' },
         ip: '203.0.113.18',
@@ -594,12 +591,12 @@ describe('auth-lockout', () => {
       vi.fn(),
     );
 
-    expect(mockPassportAuthenticate).not.toHaveBeenCalled();
+    expect(mockAuthenticateRequest).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(423);
     vi.useRealTimers();
   });
 
-  test('ignores invalid persisted lockout entries during hydration', () => {
+  test('ignores invalid persisted lockout entries during hydration', async () => {
     lockoutStateFiles.set(
       LOCKOUT_STATE_PATH,
       JSON.stringify({
@@ -614,11 +611,11 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     initializeLoginLockoutState();
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       {
         body: { username: 'bad-shape' },
         ip: '203.0.113.19',
@@ -627,11 +624,11 @@ describe('auth-lockout', () => {
       vi.fn(),
     );
 
-    expect(mockPassportAuthenticate).toHaveBeenCalled();
+    expect(mockAuthenticateRequest).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('prunes stale entries on the maintenance timer and persists changes', () => {
+  test('prunes stale entries on the maintenance timer and persists changes', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
     lockoutStateFiles.set(
@@ -658,14 +655,14 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('warns when persisting lockout state fails', () => {
+  test('warns when persisting lockout state fails', async () => {
     vi.useFakeTimers();
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     mockFs.writeFileSync.mockImplementation(() => {
       throw new Error('persist write failed');
     });
 
-    authenticateLogin(
+    await authenticateLogin(
       {
         body: { username: 'persist-error-user' },
         ip: '203.0.113.20',
@@ -682,7 +679,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('resetLoginLockoutStateForTests clears gauges and cancels scheduled work', () => {
+  test('resetLoginLockoutStateForTests clears gauges and cancels scheduled work', async () => {
     vi.useFakeTimers();
     initializeLoginLockoutState();
 
@@ -696,19 +693,19 @@ describe('auth-lockout', () => {
 
   // ── Mutant-killing tests ──────────────────────────────────────────────────
 
-  test('countActiveLockouts counts only entries with lockedUntil strictly greater than now', () => {
+  test('countActiveLockouts counts only entries with lockedUntil strictly greater than now', async () => {
     // Mutant: entry.lockedUntil >= now — must distinguish > vs >=
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T12:00:00.000Z');
     vi.setSystemTime(new Date(now));
 
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const req = { body: { username: 'gauge-test-user' }, ip: '10.0.0.1' } as any;
     const next = vi.fn();
 
     // Lock the account
     for (let i = 0; i < 5; i += 1) {
-      authenticateLogin(req, createResponse() as any, next);
+      await authenticateLogin(req, createResponse() as any, next);
     }
 
     // Gauges should reflect 1 active lockout (not 0 - boundary matters)
@@ -717,31 +714,31 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('countActiveLockouts returns 0 when lockedUntil equals now exactly (not strictly >)', () => {
+  test('countActiveLockouts returns 0 when lockedUntil equals now exactly (not strictly >)', async () => {
     // Ensures lockedUntil === now is NOT counted as active lockout
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T12:00:00.000Z');
     vi.setSystemTime(new Date(now));
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const req = { body: { username: 'exact-boundary-user' }, ip: '10.0.0.2' } as any;
     const next = vi.fn();
 
     // Create 5 failures to lock at now+lockoutMs
     for (let i = 0; i < 5; i += 1) {
-      authenticateLogin(req, createResponse() as any, next);
+      await authenticateLogin(req, createResponse() as any, next);
     }
     // Advance time past the lockout to just after lockedUntil
     vi.setSystemTime(new Date(now + testable_accountLockoutPolicy.lockoutMs + 1));
     // getLockoutUntil check: expired lock should not count as active
     const afterExpiry = createResponse();
-    authenticateLogin(req, afterExpiry as any, vi.fn());
+    await authenticateLogin(req, afterExpiry as any, vi.fn());
     // Should NOT be locked anymore (lockedUntil <= now)
-    // Falls through to passport, which returns invalid creds → 401
+    // Falls through to the authenticator chain, which returns invalid creds → 401
     expect(afterExpiry.status).not.toHaveBeenCalledWith(423);
     vi.useRealTimers();
   });
 
-  test('LOCKOUT_ENTRY_NUMERIC_FIELDS must be non-empty for isLoginLockoutEntry to work correctly', () => {
+  test('LOCKOUT_ENTRY_NUMERIC_FIELDS must be non-empty for isLoginLockoutEntry to work correctly', async () => {
     // Line 40: ArrayDeclaration mutant replaces array with []
     // If the array were empty, every() would return true for any object — even invalid ones
     lockoutStateFiles.set(
@@ -764,23 +761,23 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     initializeLoginLockoutState();
     const req1 = { body: { username: 'partially-valid' }, ip: '10.0.0.3' } as any;
     const res1 = createResponse();
-    authenticateLogin(req1, res1 as any, vi.fn());
-    // Invalid entry should NOT have been hydrated → passport runs → 401
+    await authenticateLogin(req1, res1 as any, vi.fn());
+    // Invalid entry should NOT have been hydrated → authenticator chain runs → 401
     expect(res1.status).toHaveBeenCalledWith(401);
 
     const req2 = { body: { username: 'fully-valid' }, ip: '10.0.0.4' } as any;
     const res2 = createResponse();
-    authenticateLogin(req2, res2 as any, vi.fn());
+    await authenticateLogin(req2, res2 as any, vi.fn());
     // Valid entry was hydrated and lockedUntil is in the future → 423
     expect(res2.status).toHaveBeenCalledWith(423);
   });
 
-  test('isLoginLockoutEntry returns false for null (guard prevents null property access crash)', () => {
+  test('isLoginLockoutEntry returns false for null (guard prevents null property access crash)', async () => {
     // Line 130: !candidate branch — verify null returns false WITHOUT crashing
     // Without the guard, null['failedAttempts'] would throw TypeError
     // The outer try/catch would catch it → log.warn called
@@ -799,7 +796,7 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
     // No crash → log.warn not called
@@ -807,7 +804,7 @@ describe('auth-lockout', () => {
 
     // null entry was skipped, valid entry was hydrated
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'valid-locked' }, ip: '10.0.0.5' } as any,
       res as any,
       vi.fn(),
@@ -815,7 +812,7 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(423);
   });
 
-  test('isLoginLockoutEntry every() returns false if even one field is non-finite', () => {
+  test('isLoginLockoutEntry every() returns false if even one field is non-finite', async () => {
     // Line 134: some() mutant — every() vs some() changes validation semantics
     // Key: with 'some', an entry with 1 finite field (e.g., lockedUntil=future) and the rest NaN
     // would be accepted as valid → user would be blocked (423) even though entry is malformed.
@@ -848,13 +845,13 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
     // 'mostly-invalid-locked': failedAttempts is non-numeric string → every() rejects → 401
     // With some(): lockedUntil (future) is finite → accepts → 423!
     const r1 = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'mostly-invalid-locked' }, ip: '10.0.0.6' } as any,
       r1 as any,
       vi.fn(),
@@ -863,7 +860,7 @@ describe('auth-lockout', () => {
 
     // 'all-good' should be hydrated and locked → 423
     const r2 = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'all-good' }, ip: '10.0.0.7' } as any,
       r2 as any,
       vi.fn(),
@@ -871,11 +868,11 @@ describe('auth-lockout', () => {
     expect(r2.status).toHaveBeenCalledWith(423);
   });
 
-  test('persistLockoutState writes account and ip maps with correct encoding and mode', () => {
+  test('persistLockoutState writes account and ip maps with correct encoding and mode', async () => {
     vi.useFakeTimers();
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'persist-map-user' }, ip: '10.0.0.8' } as any,
       createResponse() as any,
       vi.fn(),
@@ -896,17 +893,17 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('scheduleLockoutStatePersist does not schedule a second timer when one is already pending', () => {
+  test('scheduleLockoutStatePersist does not schedule a second timer when one is already pending', async () => {
     vi.useFakeTimers();
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     // Two failures in quick succession — should only write once (debounce)
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'debounce-user' }, ip: '10.0.0.9' } as any,
       createResponse() as any,
       vi.fn(),
     );
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'debounce-user2' }, ip: '10.0.0.10' } as any,
       createResponse() as any,
       vi.fn(),
@@ -918,19 +915,19 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('hydrateLockoutMap silently skips non-object serializedEntries', () => {
+  test('hydrateLockoutMap silently skips non-object serializedEntries', async () => {
     // Lines 181-182: !serializedEntries || typeof serializedEntries !== 'object' branch
     // Must test with null (not just numbers) because Object.entries(null) throws
     // Without the guard: Object.entries(null) throws → caught → log.warn called
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify({ account: null, ip: null }));
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     // Should not throw even with null account/ip
     expect(() => initializeLoginLockoutState()).not.toThrow();
     // Guard must have fired silently — no warn
     expect(log.warn).not.toHaveBeenCalled();
 
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'hydrate-skip' }, ip: '10.0.0.11' } as any,
       res as any,
       vi.fn(),
@@ -938,7 +935,7 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('hydrateLockoutMap guards null specifically (Object.entries(null) would throw)', () => {
+  test('hydrateLockoutMap guards null specifically (Object.entries(null) would throw)', async () => {
     // Lines 181:7 ConditionalExpression false — with null, would crash without guard
     // Without guard, Object.entries(null) throws → caught in outer try → log.warn called
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify({ account: null, ip: null }));
@@ -947,7 +944,7 @@ describe('auth-lockout', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('hydrateLockoutMap LogicalOperator guard: || not && — null passes first arm', () => {
+  test('hydrateLockoutMap LogicalOperator guard: || not && — null passes first arm', async () => {
     // Line 181:7 LogicalOperator && mutant — if &&, null is falsy so && short-circuits to false
     // meaning the guard never fires and Object.entries(null) would be called → log.warn
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify({ account: null }));
@@ -955,7 +952,7 @@ describe('auth-lockout', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('hydrateLockoutMap typeof check: typeof null === "object" needs separate falsy check', () => {
+  test('hydrateLockoutMap typeof check: typeof null === "object" needs separate falsy check', async () => {
     // Line 181:29 ConditionalExpression false — removes typeof check
     // null passes the truthy check (typeof null === 'object' is true in JS!)
     // So the || arm with typeof wouldn't catch null — only !null catches it
@@ -971,7 +968,7 @@ describe('auth-lockout', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('hydrateLockoutMap BlockStatement: early return prevents Object.entries on null', () => {
+  test('hydrateLockoutMap BlockStatement: early return prevents Object.entries on null', async () => {
     // Line 181:68 BlockStatement {} — if no return, Object.entries(null) called → throws →
     // caught in outer try/catch in loadPersistedLockoutState → log.warn called
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify({ account: null, ip: null }));
@@ -980,9 +977,9 @@ describe('auth-lockout', () => {
     // The guard's return must be there to prevent the crash
     expect(log.warn).not.toHaveBeenCalled();
     // Confirm no entries were hydrated (map should be empty)
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'block-hydrate' }, ip: '10.0.0.12' } as any,
       res as any,
       vi.fn(),
@@ -990,14 +987,14 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(401); // no pre-hydrated lockout
   });
 
-  test('loadPersistedLockoutState skips files that do not exist', () => {
+  test('loadPersistedLockoutState skips files that do not exist', async () => {
     // Lines 195: existsSync returns false
     mockFs.existsSync.mockReturnValue(false);
     initializeLoginLockoutState();
     expect(mockFs.readFileSync).not.toHaveBeenCalled();
   });
 
-  test('loadPersistedLockoutState skips non-object parsed state', () => {
+  test('loadPersistedLockoutState skips non-object parsed state', async () => {
     // Line 200: !parsedState check — if guard removed, accessing .account on null throws → log.warn
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify(null));
     initializeLoginLockoutState();
@@ -1007,7 +1004,18 @@ describe('auth-lockout', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('pruneAndPersistIfChanged persists when account map shrank', () => {
+  test('loadPersistedLockoutState warns when the persisted file contains invalid JSON', async () => {
+    // Line 208: the outer catch — a genuinely corrupt persisted file makes
+    // JSON.parse throw, which must be caught and logged rather than crashing
+    // startup.
+    lockoutStateFiles.set(LOCKOUT_STATE_PATH, '{not valid json');
+    expect(() => initializeLoginLockoutState()).not.toThrow();
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Unable to load login lockout state'),
+    );
+  });
+
+  test('pruneAndPersistIfChanged persists when account map shrank', async () => {
     // Lines 219-220: size !== sizeBeforePrune comparisons
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
@@ -1037,7 +1045,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('pruneAndPersistIfChanged persists when ip map shrank', () => {
+  test('pruneAndPersistIfChanged persists when ip map shrank', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
     lockoutStateFiles.set(
@@ -1065,7 +1073,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('pruneAndPersistIfChanged does NOT persist when nothing was pruned', () => {
+  test('pruneAndPersistIfChanged does NOT persist when nothing was pruned', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
     // No initial lockout entries → prune does nothing → no persist
@@ -1080,13 +1088,13 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('normalizeIdentity trims and lowercases the value', () => {
+  test('normalizeIdentity trims and lowercases the value', async () => {
     // Line 244: value.trim().toLowerCase() — MethodExpression mutant that drops toLowerCase
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     // Login with uppercase username → normalized to lowercase for lockout key
     for (let i = 0; i < 5; i += 1) {
-      authenticateLogin(
+      await authenticateLogin(
         { body: { username: 'NormUser' }, ip: '10.0.1.1' } as any,
         createResponse() as any,
         vi.fn(),
@@ -1094,7 +1102,7 @@ describe('auth-lockout', () => {
     }
     // Now attempt with lowercase — should be blocked (same lockout key)
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'normuser' }, ip: '10.0.1.2' } as any,
       res as any,
       vi.fn(),
@@ -1102,22 +1110,26 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(423);
   });
 
-  test('normalizeIdentity returns undefined for empty-after-trim string', () => {
+  test('normalizeIdentity returns undefined for empty-after-trim string', async () => {
     // Line 245: normalized.length > 0 mutant
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     // Whitespace-only username → no lockout key → no IP lockout either for this distinct IP
     const res = createResponse();
-    authenticateLogin({ body: { username: '   ' }, ip: '10.0.1.3' } as any, res as any, vi.fn());
-    // Should not crash, falls to passport
+    await authenticateLogin(
+      { body: { username: '   ' }, ip: '10.0.1.3' } as any,
+      res as any,
+      vi.fn(),
+    );
+    // Should not crash, falls to the authenticator chain
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('getLoginIdentity returns body username without lowercasing', () => {
+  test('getLoginIdentity returns body username without lowercasing', async () => {
     // Line 252: username.length > 0 mutant — ensure non-empty trim check works
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'BodyUser' }, ip: '10.0.1.4' } as any,
       res as any,
       vi.fn(),
@@ -1130,14 +1142,14 @@ describe('auth-lockout', () => {
     );
   });
 
-  test('getLoginIdentity extracts username before colon from Basic auth', () => {
+  test('getLoginIdentity extracts username before colon from Basic auth', async () => {
     // Line 270: separatorIndex >= 0 mutant — separatorIndex > 0 would skip idx=0
     // When separatorIndex=0 (colon at start), slice(0, 0) = '' → undefined
     // With > 0 mutant: when colon at index 0, fallback to full decoded string ':password'
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const encoded = Buffer.from(':password').toString('base64'); // username is empty string
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { headers: { authorization: `Basic ${encoded}` }, ip: '10.0.1.5' } as any,
       res as any,
       vi.fn(),
@@ -1153,12 +1165,12 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('getLoginIdentity returns username even when separator is at index 0', () => {
+  test('getLoginIdentity returns username even when separator is at index 0', async () => {
     // With separatorIndex >= 0, decoded.slice(0, 0) = '' → trimmed → undefined
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const encodedUser = Buffer.from('alice').toString('base64'); // no colon, full string is username
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { headers: { authorization: `Basic ${encodedUser}` }, ip: '10.0.1.6' } as any,
       res as any,
       vi.fn(),
@@ -1171,12 +1183,12 @@ describe('auth-lockout', () => {
     );
   });
 
-  test('getLoginIdentity returns trimmed username when no colon in decoded value', () => {
+  test('getLoginIdentity returns trimmed username when no colon in decoded value', async () => {
     // Line 271: MethodExpression — username = decoded.slice(0, separatorIndex) vs username
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const encoded = Buffer.from('  john  ').toString('base64'); // no colon, username with spaces
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { headers: { authorization: `Basic ${encoded}` }, ip: '10.0.1.7' } as any,
       res as any,
       vi.fn(),
@@ -1189,12 +1201,12 @@ describe('auth-lockout', () => {
     );
   });
 
-  test('getLoginIdentity returns undefined for trimmed empty username after decode', () => {
+  test('getLoginIdentity returns undefined for trimmed empty username after decode', async () => {
     // Line 272: trimmed.length > 0 — mutant makes it always return trimmed
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const encoded = Buffer.from('   :password').toString('base64');
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { headers: { authorization: `Basic ${encoded}` }, ip: '10.0.1.8' } as any,
       res as any,
       vi.fn(),
@@ -1208,7 +1220,7 @@ describe('auth-lockout', () => {
     );
   });
 
-  test('pruneLockoutEntries only removes entries where lockedUntil <= now AND window elapsed', () => {
+  test('pruneLockoutEntries only removes entries where lockedUntil <= now AND window elapsed', async () => {
     // Line 284: EqualityOperator mutants on lockedUntil <= now and now - lastAttemptAt > windowMs
     // Also tests ConditionalExpression true mutant on `true && now - lastAttemptAt > windowMs`
     const now = Date.parse('2026-01-01T00:20:00.000Z');
@@ -1263,7 +1275,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has('expired-outside-window')).toBe(false);
   });
 
-  test('pruneLockoutEntries removes oldest entries when size exceeds cap', () => {
+  test('pruneLockoutEntries removes oldest entries when size exceeds cap', async () => {
     // Line 290: lockouts.size <= maxTrackedLockoutIdentities  — if >, we prune overflow
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map();
@@ -1284,7 +1296,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has(`overflow-user-${LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS}`)).toBe(true);
   });
 
-  test('pruneLockoutEntries sort is ascending by lastAttemptAt (oldest first)', () => {
+  test('pruneLockoutEntries sort is ascending by lastAttemptAt (oldest first)', async () => {
     // Line 295: ArrowFunction mutant — ensures sort uses subtraction not constant
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map([
@@ -1346,7 +1358,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has('newest')).toBe(true);
   });
 
-  test('isExpiredUnlockedEntry uses strict > for window comparison', () => {
+  test('isExpiredUnlockedEntry uses strict > for window comparison', async () => {
     // Lines 284/308: now - entry.lastAttemptAt > policy.windowMs — EqualityOperator mutant
     const now = Date.parse('2026-01-01T00:20:00.000Z');
     const policy = testable_accountLockoutPolicy;
@@ -1375,7 +1387,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has('boundary')).toBe(true);
   });
 
-  test('pruneLockoutEntries lockedUntil <= now (not <): exactly-now lockedUntil is expired when past window', () => {
+  test('pruneLockoutEntries lockedUntil <= now (not <): exactly-now lockedUntil is expired when past window', async () => {
     // Line 284:21 EqualityOperator < mutant — lockedUntil=now with > mutant would NOT be pruned
     const now = Date.parse('2026-01-01T00:20:00.000Z');
     const policy = testable_accountLockoutPolicy;
@@ -1396,7 +1408,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has('exactly-now-locked')).toBe(false);
   });
 
-  test('getLockoutUntil returns undefined and deletes expired-outside-window entries', () => {
+  test('getLockoutUntil returns undefined and deletes expired-outside-window entries', async () => {
     // Lines 378, 379 ConditionalExpression mutants
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T00:20:00.000Z');
@@ -1417,13 +1429,13 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
     // Entry exists but is unlocked and window expired → getLockoutUntil deletes it
     // and scheduleLockoutStatePersist is called
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'getLockout-expired' }, ip: '10.0.2.1' } as any,
       res as any,
       vi.fn(),
@@ -1440,7 +1452,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('getLockoutUntil returns lockedUntil when entry is still locked', () => {
+  test('getLockoutUntil returns lockedUntil when entry is still locked', async () => {
     // Lines 378: entry.lockedUntil <= now — when strictly less, should return early
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T12:00:00.000Z');
@@ -1461,11 +1473,11 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'still-active' }, ip: '10.0.2.2' } as any,
       res as any,
       vi.fn(),
@@ -1474,7 +1486,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('isExpiredUnlockedEntry: lockedUntil <= now (not <) — exactly-now lockedUntil is expired', () => {
+  test('isExpiredUnlockedEntry: lockedUntil <= now (not <) — exactly-now lockedUntil is expired', async () => {
     // Line 308:10 EqualityOperator < mutant — lockedUntil == now should be treated as expired
     // With lockedUntil < now: entry with lockedUntil=now is NOT expired → not removed
     // With lockedUntil <= now: entry with lockedUntil=now IS expired → removed
@@ -1508,7 +1520,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has('exact-now-locked')).toBe(false);
   });
 
-  test('isExpiredUnlockedEntry: lockedUntil true mutant — locked entries (lockedUntil > now) should NOT be removed', () => {
+  test('isExpiredUnlockedEntry: lockedUntil true mutant — locked entries (lockedUntil > now) should NOT be removed', async () => {
     // Line 308:10 ConditionalExpression true — with "true &&", even locked entries appear expired
     const now = Date.parse('2026-01-01T00:20:00.000Z');
     const oldAttemptAt = now - testable_accountLockoutPolicy.windowMs - 1000; // past window
@@ -1540,7 +1552,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has('still-locked')).toBe(true);
   });
 
-  test('makeTrackedIdentityCapacity returns immediately when size is below cap', () => {
+  test('makeTrackedIdentityCapacity returns immediately when size is below cap', async () => {
     // Line 351: lockouts.size < maxTrackedLockoutIdentities
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map([
@@ -1554,7 +1566,7 @@ describe('auth-lockout', () => {
     expect(lockouts.size).toBe(1);
   });
 
-  test('makeTrackedIdentityCapacity evicts old entries when at cap', () => {
+  test('makeTrackedIdentityCapacity evicts old entries when at cap', async () => {
     // Lines 357-359: entriesToEvict > 0 check
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map();
@@ -1574,7 +1586,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has(`cap-user-${LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS - 1}`)).toBe(false);
   });
 
-  test('evictOldestTrackedEntries picks entry with strictly smallest lastAttemptAt', () => {
+  test('evictOldestTrackedEntries picks entry with strictly smallest lastAttemptAt', async () => {
     // Line 332: entry.lastAttemptAt < oldestLastAttemptAt — EqualityOperator mutant
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map([
@@ -1597,7 +1609,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has('newer')).toBe(true);
   });
 
-  test('registerFailedLoginAttempt locks account exactly at maxAttempts threshold', () => {
+  test('registerFailedLoginAttempt locks account exactly at maxAttempts threshold', async () => {
     // Lines 421: >= policy.maxAttempts — mutant changes to >
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map<string, any>([
@@ -1625,7 +1637,7 @@ describe('auth-lockout', () => {
     expect(lockouts.get('threshold-user')?.lockedUntil).toBeGreaterThan(now);
   });
 
-  test('registerFailedLoginAttempt does not lock account before maxAttempts threshold', () => {
+  test('registerFailedLoginAttempt does not lock account before maxAttempts threshold', async () => {
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map<string, any>([
       [
@@ -1650,7 +1662,7 @@ describe('auth-lockout', () => {
     expect(lockouts.get('below-threshold-user')?.lockedUntil).toBe(0);
   });
 
-  test('registerFailedLoginAttempt returns lockedUntil when lockedUntil > now after increment', () => {
+  test('registerFailedLoginAttempt returns lockedUntil when lockedUntil > now after increment', async () => {
     // Line 428: lockedUntil > now — ensures we check > not >=
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map<string, any>([
@@ -1676,7 +1688,7 @@ describe('auth-lockout', () => {
     expect(result).toBe(now + testable_accountLockoutPolicy.lockoutMs);
   });
 
-  test('registerFailedLoginAttempt returns undefined when lockedUntil stays at 0 (not > now)', () => {
+  test('registerFailedLoginAttempt returns undefined when lockedUntil stays at 0 (not > now)', async () => {
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map<string, any>([
       [
@@ -1699,9 +1711,9 @@ describe('auth-lockout', () => {
     expect(result).toBeUndefined();
   });
 
-  test('sendLockoutResponse computes retryAfterSeconds as ceil of remaining ms divided by 1000', () => {
+  test('sendLockoutResponse computes retryAfterSeconds as ceil of remaining ms divided by 1000', async () => {
     // Line 464: ArithmeticOperator mutants on (lockoutUntil - now) / 1000
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     vi.setSystemTime(new Date(now));
@@ -1710,11 +1722,11 @@ describe('auth-lockout', () => {
     const next = vi.fn();
 
     for (let i = 0; i < 5; i += 1) {
-      authenticateLogin(req, createResponse() as any, next);
+      await authenticateLogin(req, createResponse() as any, next);
     }
 
     const lockedRes = createResponse();
-    authenticateLogin(req, lockedRes as any, next);
+    await authenticateLogin(req, lockedRes as any, next);
 
     expect(lockedRes.setHeader).toHaveBeenCalledWith('Retry-After', expect.any(String));
     const retryAfterValue = Number(
@@ -1725,7 +1737,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('sendLockoutResponse uses Math.max(1, ...) for retryAfterSeconds — minimum is 1', () => {
+  test('sendLockoutResponse uses Math.max(1, ...) for retryAfterSeconds — minimum is 1', async () => {
     // Line 464: Math.max(1, ...) — mutant replaces with Math.min
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T00:00:00.000Z');
@@ -1745,11 +1757,11 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'min-retry-user' }, ip: '10.0.3.2' } as any,
       res as any,
       vi.fn(),
@@ -1763,17 +1775,17 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('sendLockoutResponse audit message includes retry_after seconds', () => {
+  test('sendLockoutResponse audit message includes retry_after seconds', async () => {
     // Line 470: StringLiteral mutant replaces template literal
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
 
     const req = { body: { username: 'audit-retry-user' }, ip: '10.0.3.3' } as any;
     for (let i = 0; i < 5; i += 1) {
-      authenticateLogin(req, createResponse() as any, vi.fn());
+      await authenticateLogin(req, createResponse() as any, vi.fn());
     }
-    authenticateLogin(req, createResponse() as any, vi.fn());
+    await authenticateLogin(req, createResponse() as any, vi.fn());
 
     expect(mockRecordLoginAuditEvent).toHaveBeenCalledWith(
       expect.anything(),
@@ -1784,11 +1796,11 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('activeLockoutUntil uses Math.max to pick the later of account and ip lockouts', () => {
+  test('activeLockoutUntil uses Math.max to pick the later of account and ip lockouts', async () => {
     // Line 489: activeLockoutUntil > now check
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     // Lock via IP (25 attempts needed), use different usernames
     const ipReqs = Array.from({ length: 25 }, (_, i) => ({
@@ -1796,11 +1808,11 @@ describe('auth-lockout', () => {
       ip: '10.0.4.1',
     }));
     for (const req of ipReqs) {
-      authenticateLogin(req as any, createResponse() as any, vi.fn());
+      await authenticateLogin(req as any, createResponse() as any, vi.fn());
     }
     // Now the IP is locked; a new username should also be blocked
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'fresh-ip-user' }, ip: '10.0.4.1' } as any,
       res as any,
       vi.fn(),
@@ -1809,9 +1821,9 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('lockoutUntil after-failure check uses > failedAt (not >=)', () => {
+  test('lockoutUntil after-failure check uses > failedAt (not >=)', async () => {
     // Line 518: lockoutUntil > failedAt — ensures the boundary is correct
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
 
@@ -1819,24 +1831,24 @@ describe('auth-lockout', () => {
     // 4 failures → not yet locked
     for (let i = 0; i < 4; i += 1) {
       const res = createResponse();
-      authenticateLogin(req, res as any, vi.fn());
+      await authenticateLogin(req, res as any, vi.fn());
       expect(res.status).toHaveBeenCalledWith(401);
     }
     // 5th failure → lockout threshold reached → locked
     const lockedRes = createResponse();
-    authenticateLogin(req, lockedRes as any, vi.fn());
+    await authenticateLogin(req, lockedRes as any, vi.fn());
     expect(lockedRes.status).toHaveBeenCalledWith(423);
     vi.useRealTimers();
   });
 
-  test('resetLoginLockoutStateForTests does not throw when timers were not scheduled', () => {
+  test('resetLoginLockoutStateForTests does not throw when timers were not scheduled', async () => {
     // Lines 560, 564: ConditionalExpression mutants on maintenanceTimer/persistTimer checks
     expect(() => resetLoginLockoutStateForTests()).not.toThrow();
     expect(mockSetAuthAccountLockedTotal).toHaveBeenCalledWith(0);
     expect(mockSetAuthIpLockedTotal).toHaveBeenCalledWith(0);
   });
 
-  test('persistenceInitialized starts as false — second init skips loading', () => {
+  test('persistenceInitialized starts as false — second init skips loading', async () => {
     // Line 69: BooleanLiteral true mutant — if initialized = true, loadPersistedLockoutState is skipped
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify({ account: {}, ip: {} }));
 
@@ -1853,15 +1865,15 @@ describe('auth-lockout', () => {
     expect(mockFs.readFileSync).toHaveBeenCalledTimes(2);
   });
 
-  test('countActiveLockouts uses if (entry.lockedUntil > now) not (true)', () => {
+  test('countActiveLockouts uses if (entry.lockedUntil > now) not (true)', async () => {
     // Line 74: ConditionalExpression true mutant — always counts as active, even unlocked entries
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T12:00:00.000Z');
     vi.setSystemTime(new Date(now));
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     // Login once (not locked) — lockedUntil = 0 which is NOT > now
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'gauge-once-user' }, ip: '10.1.0.1' } as any,
       createResponse() as any,
       vi.fn(),
@@ -1874,7 +1886,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('countActiveLockouts uses strict > (not >=) for lockedUntil vs now', () => {
+  test('countActiveLockouts uses strict > (not >=) for lockedUntil vs now', async () => {
     // Line 74: EqualityOperator >= mutant — lockedUntil=now should NOT be active
     vi.useFakeTimers();
     const lockoutTime = Date.parse('2026-01-01T12:15:00.000Z');
@@ -1900,11 +1912,11 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('parsePositiveIntegerEnv rejects a partially numeric env value', () => {
+  test('parsePositiveIntegerEnv rejects a partially numeric env value', async () => {
     expect(testable_accountLockoutPolicy.maxAttempts).toBe(5);
   });
 
-  test('isLoginLockoutEntry returns false for non-object (candidate is object string not {})', () => {
+  test('isLoginLockoutEntry returns false for non-object (candidate is object string not {})', async () => {
     // Lines 130: ConditionalExpression false, LogicalOperator && mutants
     // The || means: if truthy/non-object, return false
     // Test: typeof candidate !== 'object' check matters for non-null primitives
@@ -1919,12 +1931,12 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
-    // All should be invalid → not hydrated → passport runs → 401
+    // All should be invalid → not hydrated → authenticator chain runs → 401
     const r1 = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'number-entry' }, ip: '10.1.1.1' } as any,
       r1 as any,
       vi.fn(),
@@ -1932,7 +1944,7 @@ describe('auth-lockout', () => {
     expect(r1.status).toHaveBeenCalledWith(401);
 
     const r2 = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'string-entry' }, ip: '10.1.1.2' } as any,
       r2 as any,
       vi.fn(),
@@ -1940,7 +1952,7 @@ describe('auth-lockout', () => {
     expect(r2.status).toHaveBeenCalledWith(401);
   });
 
-  test('isLoginLockoutEntry BlockStatement — returns false not undefined when guard fires', () => {
+  test('isLoginLockoutEntry BlockStatement — returns false not undefined when guard fires', async () => {
     // Line 130:52 BlockStatement {} — if empty body, candidate object would not return false
     lockoutStateFiles.set(
       LOCKOUT_STATE_PATH,
@@ -1949,11 +1961,11 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'null-candidate' }, ip: '10.1.1.3' } as any,
       res as any,
       vi.fn(),
@@ -1961,7 +1973,7 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('isLoginLockoutEntry uses typeof !== object check (not just falsy check)', () => {
+  test('isLoginLockoutEntry uses typeof !== object check (not just falsy check)', async () => {
     // Line 130:21 ConditionalExpression false mutant — removes typeof check
     // A string candidate is truthy but not an object → should return false
     lockoutStateFiles.set(
@@ -1971,11 +1983,11 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'truthy-string' }, ip: '10.1.1.4' } as any,
       res as any,
       vi.fn(),
@@ -1983,12 +1995,12 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('persistLockoutState calls mkdirSync with recursive:true option', () => {
+  test('persistLockoutState calls mkdirSync with recursive:true option', async () => {
     // Lines 152: ObjectLiteral {} and BooleanLiteral false mutants
     vi.useFakeTimers();
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'mkdir-user' }, ip: '10.1.2.1' } as any,
       createResponse() as any,
       vi.fn(),
@@ -1999,18 +2011,18 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('hydrateLockoutMap guards against array serializedEntries (|| branch)', () => {
+  test('hydrateLockoutMap guards against array serializedEntries (|| branch)', async () => {
     // Line 181:29 ConditionalExpression false mutant — removes typeof check
     // An array is an object but has no named keys → should not cause issues
     // The key test is: null or non-object should return early without calling log.warn
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify({ account: null, ip: null }));
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
     // Guard silently skips — no warning
     expect(log.warn).not.toHaveBeenCalled();
 
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'null-hydrate' }, ip: '10.1.2.2' } as any,
       res as any,
       vi.fn(),
@@ -2018,18 +2030,18 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('hydrateLockoutMap || operator: non-object check is the second arm', () => {
+  test('hydrateLockoutMap || operator: non-object check is the second arm', async () => {
     // Line 181:7 LogicalOperator && mutant — if && instead of ||, number would pass through
     // Object.entries(123) returns [] (no throw), but entries(null) throws → warn
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify({ account: null, ip: null }));
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
     // With || operator: null is caught by first arm → guard fires → no warn
     // With && operator: !null is true, typeof null !== 'object' is false → && is false → no guard → crash → warn
     expect(log.warn).not.toHaveBeenCalled();
 
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'weird-hydrate' }, ip: '10.1.2.3' } as any,
       res as any,
       vi.fn(),
@@ -2037,7 +2049,7 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('hydrateLockoutMap BlockStatement: early return is necessary when guard fires', () => {
+  test('hydrateLockoutMap BlockStatement: early return is necessary when guard fires', async () => {
     // Line 181:68 BlockStatement {} — if no return, entries() would be called on non-object → warn
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify({ account: 0, ip: false }));
     // Should not throw even with non-object values
@@ -2047,7 +2059,7 @@ describe('auth-lockout', () => {
     // The important case is null — tested elsewhere; for 0/false, entries() returns []
   });
 
-  test('loadPersistedLockoutState ConditionalExpression: existsSync false skips read', () => {
+  test('loadPersistedLockoutState ConditionalExpression: existsSync false skips read', async () => {
     // Line 195:9 ConditionalExpression false — always reads regardless
     // Without the guard: readFileSync called even when file doesn't exist → throws → log.warn
     mockFs.existsSync.mockReturnValue(false);
@@ -2056,7 +2068,7 @@ describe('auth-lockout', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('loadPersistedLockoutState BlockStatement: early return when file missing is necessary', () => {
+  test('loadPersistedLockoutState BlockStatement: early return when file missing is necessary', async () => {
     // Line 195:43 BlockStatement {} — if empty, readFileSync called when file doesn't exist → warn
     mockFs.existsSync.mockReturnValue(false);
     expect(() => initializeLoginLockoutState()).not.toThrow();
@@ -2064,7 +2076,7 @@ describe('auth-lockout', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('loadPersistedLockoutState guards against non-object parsedState', () => {
+  test('loadPersistedLockoutState guards against non-object parsedState', async () => {
     // Lines 200:9, 200:25, 200:58 mutants
     // If guard removed (if false), null.account would throw → caught → log.warn
     lockoutStateFiles.set(LOCKOUT_STATE_PATH, JSON.stringify(null)); // null is non-object guard case
@@ -2073,7 +2085,7 @@ describe('auth-lockout', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('loadPersistedLockoutState || operator: typeof !== object check is second arm', () => {
+  test('loadPersistedLockoutState || operator: typeof !== object check is second arm', async () => {
     // Line 200:9 LogicalOperator && mutant — with &&: !42 is false, so && short-circuits → guard never fires
     // Then (42 as Partial<...>).account is undefined → hydrateLockoutMap(undefined) → no crash (undefined is not null)
     // BUT: typeof 42 !== 'object' case — if we use null, !null is true → both || arms would fire regardless
@@ -2089,7 +2101,7 @@ describe('auth-lockout', () => {
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('pruneAndPersistIfChanged: account !== check — also test account-only prune', () => {
+  test('pruneAndPersistIfChanged: account !== check — also test account-only prune', async () => {
     // Line 219:5 ConditionalExpression true — always schedules persist
     // Verify: when NOTHING changes, no persist occurs
     vi.useFakeTimers();
@@ -2121,13 +2133,13 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('normalizeIdentity: toLowerCase is applied (not just trim)', () => {
+  test('normalizeIdentity: toLowerCase is applied (not just trim)', async () => {
     // Line 244:22 MethodExpression — value.toLowerCase() mutant drops lower
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     // Trigger 5 failures with uppercase to lock account
     for (let i = 0; i < 5; i += 1) {
-      authenticateLogin(
+      await authenticateLogin(
         { body: { username: 'UPPER_CASE_USER' }, ip: '10.2.0.1' } as any,
         createResponse() as any,
         vi.fn(),
@@ -2135,7 +2147,7 @@ describe('auth-lockout', () => {
     }
     // Now attempt with lowercase — case-folded key must match
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'upper_case_user' }, ip: '10.2.0.2' } as any,
       res as any,
       vi.fn(),
@@ -2143,22 +2155,26 @@ describe('auth-lockout', () => {
     expect(res.status).toHaveBeenCalledWith(423);
   });
 
-  test('normalizeIdentity: length > 0 check (not >= 0) rejects empty string', () => {
+  test('normalizeIdentity: length > 0 check (not >= 0) rejects empty string', async () => {
     // Lines 245:10 ConditionalExpression true and EqualityOperator >=0 mutants
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     const res = createResponse();
     // Empty string after trim should return undefined, not the empty string
-    authenticateLogin({ body: { username: '' }, ip: '10.2.0.3' } as any, res as any, vi.fn());
+    await authenticateLogin({ body: { username: '' }, ip: '10.2.0.3' } as any, res as any, vi.fn());
     // No lockout key → IP-only tracking (ip = '10.2.0.3' is normalized separately)
     expect(res.status).toHaveBeenCalledWith(401);
   });
 
-  test('getLoginIdentity: username.length > 0 check rejects whitespace-only body username', () => {
+  test('getLoginIdentity: username.length > 0 check rejects whitespace-only body username', async () => {
     // Lines 252:9 ConditionalExpression true and EqualityOperator >=0 mutants
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const res = createResponse();
-    authenticateLogin({ body: { username: '   ' }, ip: '10.2.0.4' } as any, res as any, vi.fn());
+    await authenticateLogin(
+      { body: { username: '   ' }, ip: '10.2.0.4' } as any,
+      res as any,
+      vi.fn(),
+    );
     // whitespace-only → length === 0 after trim → should fall through to Basic auth or undefined
     // With no Basic header, loginIdentity should be undefined
     expect(mockRecordLoginAuditEvent).toHaveBeenCalledWith(
@@ -2169,12 +2185,12 @@ describe('auth-lockout', () => {
     );
   });
 
-  test('getLoginIdentity: startsWith("basic ") check prevents non-basic schemes', () => {
+  test('getLoginIdentity: startsWith("basic ") check prevents non-basic schemes', async () => {
     // Line 258:65 StringLiteral "" mutant — if empty string, any value would pass
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const res = createResponse();
     // Bearer token should NOT be treated as Basic auth
-    authenticateLogin(
+    await authenticateLogin(
       { headers: { authorization: 'Bearer some-token' }, ip: '10.2.0.5' } as any,
       res as any,
       vi.fn(),
@@ -2188,7 +2204,52 @@ describe('auth-lockout', () => {
     );
   });
 
-  test('getLockoutUntil: expired-and-past-window entry is deleted and persist is scheduled', () => {
+  test('getLoginIdentity returns undefined when the Basic auth payload is empty', async () => {
+    // Line 263: !encoded guard — a "Basic " header with nothing after the
+    // scheme trims to an empty string and must short-circuit before ever
+    // reaching the base64 decode/try block.
+    makeAuthenticatorInvalidCredentials();
+    const res = createResponse();
+    await authenticateLogin(
+      { headers: { authorization: 'Basic ' }, ip: '10.2.0.6' } as any,
+      res as any,
+      vi.fn(),
+    );
+    expect(mockRecordLoginAuditEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      'error',
+      'Authentication failed (invalid credentials)',
+      undefined,
+    );
+  });
+
+  test('getLoginIdentity returns undefined when decoding the Basic auth payload throws', async () => {
+    // Line 273: the catch arm around the base64 decode — forces a genuine
+    // decode failure so the guard actually fires rather than assuming it's
+    // unreachable.
+    const bufferFromSpy = vi.spyOn(Buffer, 'from').mockImplementationOnce(() => {
+      throw new Error('bad base64 payload');
+    });
+    try {
+      makeAuthenticatorInvalidCredentials();
+      const res = createResponse();
+      await authenticateLogin(
+        { headers: { authorization: 'Basic dW5kZWNvZGFibGU=' }, ip: '10.2.0.7' } as any,
+        res as any,
+        vi.fn(),
+      );
+      expect(mockRecordLoginAuditEvent).toHaveBeenCalledWith(
+        expect.anything(),
+        'error',
+        'Authentication failed (invalid credentials)',
+        undefined,
+      );
+    } finally {
+      bufferFromSpy.mockRestore();
+    }
+  });
+
+  test('getLockoutUntil: expired-and-past-window entry is deleted and persist is scheduled', async () => {
     // Lines 378:7 ConditionalExpression false, 379:9 ConditionalExpression false
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T01:00:00.000Z');
@@ -2209,11 +2270,11 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'expired-cleaned' }, ip: '10.3.0.1' } as any,
       res as any,
       vi.fn(),
@@ -2232,7 +2293,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('getLockoutUntil: unlocked entry within window stays (no delete, no persist)', () => {
+  test('getLockoutUntil: unlocked entry within window stays (no delete, no persist)', async () => {
     // Line 379:9 ConditionalExpression false — the inner if deletes only when window expired
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T01:00:00.000Z');
@@ -2253,13 +2314,13 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
     const _writeCountAfterInit = mockFs.writeFileSync.mock.calls.length;
 
     // Entry is unlocked but within window → getLockoutUntil should NOT delete it
     // (no persist triggered from getLockoutUntil)
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'recent-unlocked' }, ip: '10.3.0.2' } as any,
       createResponse() as any,
       vi.fn(),
@@ -2273,7 +2334,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('registerFailedLoginAttempt: no key returns undefined (block not empty)', () => {
+  test('registerFailedLoginAttempt: no key returns undefined (block not empty)', async () => {
     // Lines 396:7 ConditionalExpression false, 396:13 BlockStatement {} mutants
     const lockouts = new Map();
     const result = testable_registerFailedLoginAttempt(
@@ -2286,7 +2347,7 @@ describe('auth-lockout', () => {
     expect(lockouts.size).toBe(0);
   });
 
-  test('registerFailedLoginAttempt: returns lockedUntil when exactly > now, undefined when =', () => {
+  test('registerFailedLoginAttempt: returns lockedUntil when exactly > now, undefined when =', async () => {
     // Line 428:10 EqualityOperator >= mutant
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const lockouts = new Map<string, any>([
@@ -2331,41 +2392,41 @@ describe('auth-lockout', () => {
     expect(result2).toBeUndefined();
   });
 
-  test('clearLoginLockout: no key does nothing (block not empty)', () => {
+  test('clearLoginLockout: no key does nothing (block not empty)', async () => {
     // Lines 435:7 ConditionalExpression false, 435:13 BlockStatement {} mutants
     vi.useFakeTimers();
     // Add a successful auth after some failures → clearLoginLockout is called with a key
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     const req = { body: { username: 'clear-key-user' }, ip: '10.4.0.1' } as any;
-    authenticateLogin(req, createResponse() as any, vi.fn());
+    await authenticateLogin(req, createResponse() as any, vi.fn());
 
-    makePassportSuccess('clear-key-user');
+    makeAuthenticatorSuccess('clear-key-user');
     const successRes = createResponse();
-    authenticateLogin(req, successRes as any, vi.fn());
+    await authenticateLogin(req, successRes as any, vi.fn());
 
     // After success, lockout for this user was cleared → subsequent failures count fresh
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     for (let i = 0; i < 4; i += 1) {
       const r = createResponse();
-      authenticateLogin(req, r as any, vi.fn());
+      await authenticateLogin(req, r as any, vi.fn());
       expect(r.status).toHaveBeenCalledWith(401); // not locked yet
     }
     vi.useRealTimers();
   });
 
-  test('clearLoginLockout: when key is undefined, no persist or gauge update', () => {
+  test('clearLoginLockout: when key is undefined, no persist or gauge update', async () => {
     // Lines 435:7, 435:13 — undefined key guard
-    makePassportSuccess('clear-no-key-user');
+    makeAuthenticatorSuccess('clear-no-key-user');
     // User with no lockout key (empty string ip)
     const req = { body: { username: 'clear-no-key-user' }, ip: '' } as any;
     const res = createResponse();
     const next = vi.fn();
-    authenticateLogin(req, res as any, next);
+    await authenticateLogin(req, res as any, next);
     // Should succeed without throwing
     expect(next).toHaveBeenCalled();
   });
 
-  test('clearLoginLockout BlockStatement: persist fires only from the clear, not from a prior failure', () => {
+  test('clearLoginLockout BlockStatement: persist fires only from the clear, not from a prior failure', async () => {
     // Line 438:29 BlockStatement {} — if empty, scheduleLockoutStatePersist not called on clear
     // Strategy: pre-load an unlocked-but-tracked entry via persisted state (no failure write occurs).
     // After a successful login, clearLoginLockout deletes it → schedules persist.
@@ -2397,8 +2458,8 @@ describe('auth-lockout', () => {
     const writesAfterInit = mockFs.writeFileSync.mock.calls.length;
 
     // Authenticate successfully — clearLoginLockout deletes the tracked entry and schedules persist
-    makePassportSuccess('tracked-but-open');
-    authenticateLogin(
+    makeAuthenticatorSuccess('tracked-but-open');
+    await authenticateLogin(
       { body: { username: 'tracked-but-open' }, ip: '' } as any, // empty ip → no ip entry to clear
       createResponse() as any,
       vi.fn(),
@@ -2412,7 +2473,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('activeLockoutUntil: uses > now (not >= now) — 0 activeLockoutUntil does not block', () => {
+  test('activeLockoutUntil: uses > now (not >= now) — 0 activeLockoutUntil does not block', async () => {
     // Line 489:7 EqualityOperator >= mutant
     // If mutated to >=, activeLockoutUntil=0 would block (0 >= now is false for positive now)
     // but more importantly, if activeLockoutUntil is exactly now it should NOT block
@@ -2435,11 +2496,11 @@ describe('auth-lockout', () => {
         ip: {},
       }),
     );
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     initializeLoginLockoutState();
 
     const res = createResponse();
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'just-past-lock' }, ip: '10.4.0.3' } as any,
       res as any,
       vi.fn(),
@@ -2449,12 +2510,12 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('lockoutUntil > failedAt check: = failedAt does NOT trigger lockout response', () => {
+  test('lockoutUntil > failedAt check: = failedAt does NOT trigger lockout response', async () => {
     // Line 518:13 EqualityOperator >= mutant — equality should NOT send lockout response
     vi.useFakeTimers();
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     vi.setSystemTime(new Date(now));
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
 
     // Register exactly maxAttempts - 1 failures (so next attempt triggers lock with lockedUntil = now + lockoutMs)
     // But manipulate so lockoutUntil would be exactly == failedAt (impossible in practice but tests the >=)
@@ -2462,13 +2523,13 @@ describe('auth-lockout', () => {
     const req = { body: { username: 'zero-lockout-user' }, ip: '10.4.0.4' } as any;
     const res = createResponse();
     // First attempt — lockedUntil = 0 after registerFailedLoginAttempt (below threshold)
-    authenticateLogin(req, res as any, vi.fn());
+    await authenticateLogin(req, res as any, vi.fn());
     // Should be 401 not 423 (lockoutUntil = 0, 0 > now is false)
     expect(res.status).toHaveBeenCalledWith(401);
     vi.useRealTimers();
   });
 
-  test('resetLoginLockoutStateForTests clears maintenanceTimer when it was set', () => {
+  test('resetLoginLockoutStateForTests clears maintenanceTimer when it was set', async () => {
     // Lines 560:7 ConditionalExpression true/false and BlockStatement {}
     vi.useFakeTimers();
     initializeLoginLockoutState(); // sets maintenanceTimer
@@ -2486,12 +2547,12 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('resetLoginLockoutStateForTests clears persistTimer when it was set', () => {
+  test('resetLoginLockoutStateForTests clears persistTimer when it was set', async () => {
     // Line 564:7 ConditionalExpression true mutant
     vi.useFakeTimers();
-    makePassportInvalidCredentials();
+    makeAuthenticatorInvalidCredentials();
     // Trigger a failed login to schedule persistTimer
-    authenticateLogin(
+    await authenticateLogin(
       { body: { username: 'persist-timer-user' }, ip: '10.4.0.5' } as any,
       createResponse() as any,
       vi.fn(),
@@ -2507,7 +2568,7 @@ describe('auth-lockout', () => {
     vi.useRealTimers();
   });
 
-  test('evictOldestTrackedEntries evicts first-inserted when two entries share the same lastAttemptAt', () => {
+  test('evictOldestTrackedEntries evicts first-inserted when two entries share the same lastAttemptAt', async () => {
     // Line 332: EqualityOperator <= mutant — with <=, last-inserted wins as "oldest", changing which gets evicted
     // With < (original): first entry sets baseline; second has same timestamp → < is false → first stays as oldest
     // With <= (mutant): second entry satisfies <= → replaces first as oldest → wrong entry evicted
@@ -2529,7 +2590,7 @@ describe('auth-lockout', () => {
     expect(lockouts.has('second')).toBe(true);
   });
 
-  test('registerFailedLoginAttempt returns undefined when lockedUntil === now (not >= boundary)', () => {
+  test('registerFailedLoginAttempt returns undefined when lockedUntil === now (not >= boundary)', async () => {
     // Line 428: EqualityOperator >= mutant — lockedUntil === now should return undefined (not locked)
     // Original: lockedUntil > now → false → undefined
     // Mutant (>=): lockedUntil >= now → true → returns lockedUntil (the now value)

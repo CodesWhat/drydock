@@ -1,8 +1,8 @@
+import { STATUS_CODES } from 'node:http';
 import ConnectLoki from 'connect-loki';
 import express, { type Application, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
-import passport from 'passport';
 import { getServerConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
 import * as store from '../store/index.js';
@@ -17,30 +17,42 @@ import { applyRememberMe, setRememberMe } from './auth-remember-me.js';
 import {
   configureSessionLimits,
   DEFAULT_SESSION_DAYS,
-  deserializeSessionUser,
   enforceSessionLimitBeforeLogin,
   getCookieMaxAge,
   getSessionSecretKey,
   REMEMBER_ME_DAYS,
 } from './auth-session.js';
 import {
-  getAllIds,
   getAuthStatus,
   getLogoutRedirectUrl,
   getStrategies,
-  registerStrategies,
-  resetStrategyIdsForTests,
+  isAuthenticationReady,
+  registerAuthenticators,
+  resetAuthenticatorsForTests,
 } from './auth-strategies.js';
-import type { AuthRequest, SessionUser, UserWithUsername } from './auth-types.js';
+import type { AuthRequest } from './auth-types.js';
+import { authenticateRequest, getAuthenticationFailureStatus } from './authenticator-chain.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { sendErrorResponse } from './error-response.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
+import {
+  ANONYMOUS_USERNAME,
+  type AuthenticatedPrincipal,
+  getIdentityUsername,
+  getPrincipal,
+  isAuthenticated,
+} from './principal.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
   isRequestAuthenticated,
 } from './rate-limit-key.js';
 import { SESSION_COOKIE_NAME } from './session-cookie.js';
+import {
+  clearSessionPrincipal,
+  restoreSessionPrincipal,
+  writeSessionPrincipal,
+} from './session-principal.js';
 
 const LokiStore = ConnectLoki(session);
 const router = express.Router();
@@ -64,7 +76,7 @@ let sessionMiddleware: ReturnType<typeof session> | undefined;
 type LoginFinish = () => void;
 type LoginErrorHandler = (errorMessage: string, options?: { logWarning?: boolean }) => void;
 
-export { getAllIds };
+export { isAuthenticationReady };
 
 export function getSessionMiddleware() {
   return sessionMiddleware;
@@ -74,23 +86,49 @@ export function _resetLoginLockoutStateForTests(): void {
   resetLoginLockoutStateForTests();
 }
 
-export function _resetStrategyIdsForTests(): void {
-  resetStrategyIdsForTests();
+export function _resetAuthenticatorsForTests(): void {
+  resetAuthenticatorsForTests();
 }
 
-export function requireAuthentication(req: AuthRequest, res: Response, next: NextFunction): void {
-  if (req.isAuthenticated()) {
+/**
+ * Reject a request nothing in the chain accepted.
+ *
+ * Reproduces passport's allFailed(): the status an authenticator named or 401,
+ * and the bare status text as the body, with no JSON envelope and no
+ * Content-Type. Drydock suppressed Basic's WWW-Authenticate challenge so
+ * browsers never raised the native credential prompt, and no authenticator
+ * names one, so no challenge header is sent either.
+ */
+function rejectUnauthenticated(req: AuthRequest, res: Response): void {
+  const status = getAuthenticationFailureStatus(req);
+  res.statusCode = status;
+  res.end(STATUS_CODES[status]);
+}
+
+export async function requireAuthentication(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (isAuthenticated(req)) {
     next();
     return;
   }
 
-  // Header-authenticated requests (Basic/Bearer) are stateless callers like
-  // wud-card/Homepage pollers; skip req.logIn's session regenerate/save so
-  // they never persist a session row. Cookie-based logins keep session:true
-  // via /auth/login's own route-level middleware.
-  const headerAuth =
-    typeof req.headers?.authorization === 'string' && req.headers.authorization.length > 0;
-  passport.authenticate(getAllIds(), { session: !headerAuth })(req, res, next);
+  let principal: AuthenticatedPrincipal | undefined;
+  try {
+    principal = await authenticateRequest(req);
+  } catch (error: unknown) {
+    next(error);
+    return;
+  }
+
+  if (principal === undefined) {
+    rejectUnauthenticated(req, res);
+    return;
+  }
+
+  next();
 }
 
 /**
@@ -99,7 +137,7 @@ export function requireAuthentication(req: AuthRequest, res: Response, next: Nex
  * @param res
  */
 function getUser(req: AuthRequest, res: Response): void {
-  const user = req.user || { username: 'anonymous' };
+  const user = { username: getPrincipal(req)?.username ?? ANONYMOUS_USERNAME };
   res.set('Cache-Control', AUTH_USER_CACHE_CONTROL);
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
@@ -113,7 +151,7 @@ function getRememberMePreference(req: AuthRequest): boolean {
 }
 
 function getAuthenticatedUsername(req: AuthRequest): string {
-  return typeof req.user?.username === 'string' ? req.user.username.trim() : '';
+  return getIdentityUsername(req)?.trim() ?? '';
 }
 
 function createLoginFinish(resolve: () => void): LoginFinish {
@@ -155,27 +193,16 @@ function proceedWithLogin(
   failLogin: LoginErrorHandler,
 ): Promise<void> {
   return new Promise((resolveProceed) => {
-    if (typeof req.login !== 'function') {
-      handleLoginSuccess(req, res, finish);
-      resolveProceed();
-      return;
-    }
-
     try {
-      req.login(req.user as UserWithUsername, (loginError: unknown) => {
-        if (loginError) {
-          failLogin(`Unable to persist login session (${getErrorMessage(loginError)})`);
-          resolveProceed();
-          return;
-        }
-
-        handleLoginSuccess(req, res, finish);
-        resolveProceed();
-      });
+      const principal = getPrincipal(req);
+      if (principal !== undefined) {
+        writeSessionPrincipal(req, principal);
+      }
+      handleLoginSuccess(req, res, finish);
     } catch (loginError: unknown) {
       failLogin(`Unable to persist login session (${getErrorMessage(loginError)})`);
-      resolveProceed();
     }
+    resolveProceed();
   });
 }
 
@@ -278,33 +305,35 @@ function login(req: AuthRequest, res: Response): Promise<void> {
  * @param res
  */
 function logout(req: AuthRequest, res: Response): void {
-  req.logout((logoutError: unknown) => {
-    if (logoutError) {
-      log.warn(
-        `Unable to clear authentication state during logout (${getErrorMessage(logoutError)})`,
+  const failLogout = (errorMessage: string): void => {
+    log.warn(errorMessage);
+    sendErrorResponse(res, 500, 'Unable to clear session');
+  };
+
+  try {
+    clearSessionPrincipal(req);
+  } catch (logoutError: unknown) {
+    failLogout(
+      `Unable to clear authentication state during logout (${getErrorMessage(logoutError)})`,
+    );
+    return;
+  }
+
+  if (typeof req.session?.regenerate !== 'function') {
+    failLogout('Unable to regenerate session during logout (session unavailable)');
+    return;
+  }
+
+  req.session.regenerate((regenerateError: unknown) => {
+    if (regenerateError) {
+      failLogout(
+        `Unable to regenerate session during logout (${getErrorMessage(regenerateError)})`,
       );
-      sendErrorResponse(res, 500, 'Unable to clear session');
       return;
     }
 
-    if (!req.session || typeof req.session.regenerate !== 'function') {
-      const errorMessage = 'Unable to regenerate session during logout (session unavailable)';
-      log.warn(errorMessage);
-      sendErrorResponse(res, 500, 'Unable to clear session');
-      return;
-    }
-
-    req.session.regenerate((regenerateError: unknown) => {
-      if (regenerateError) {
-        const errorMessage = `Unable to regenerate session during logout (${getErrorMessage(regenerateError)})`;
-        log.warn(errorMessage);
-        sendErrorResponse(res, 500, 'Unable to clear session');
-        return;
-      }
-
-      res.status(200).json({
-        logoutUrl: getLogoutRedirectUrl(),
-      });
+    res.status(200).json({
+      logoutUrl: getLogoutRedirectUrl(),
     });
   });
 }
@@ -331,7 +360,7 @@ function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
 }
 
 /**
- * Init auth (passport.js).
+ * Init auth: session middleware, the authenticator chain, and the /auth routes.
  * @returns {*}
  */
 export function init(app: Application): void {
@@ -377,29 +406,13 @@ export function init(app: Application): void {
   });
   app.use(sessionMiddleware);
 
-  // Init passport middleware
-  app.use(passport.initialize());
-  app.use(passport.session());
+  // Publish the session identity as req.principal before anything downstream
+  // reads it — the outer API rate limiter keys on it and runs ahead of the
+  // authentication guard, exactly as it did behind passport.session().
+  app.use(restoreSessionPrincipal);
 
   // Register all authentications
-  registerStrategies(app);
-
-  passport.serializeUser(
-    (user: UserWithUsername, done: (error: unknown, payload?: string) => void) => {
-      done(null, JSON.stringify(user));
-    },
-  );
-
-  passport.deserializeUser(
-    (user: unknown, done: (error: unknown, payload?: SessionUser | false) => void) => {
-      try {
-        done(null, deserializeSessionUser(user));
-      } catch (error: unknown) {
-        log.warn(`Unable to deserialize session user (${getErrorMessage(error)})`);
-        done(null, false);
-      }
-    },
-  );
+  registerAuthenticators(app);
 
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,

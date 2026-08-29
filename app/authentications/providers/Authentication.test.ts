@@ -22,10 +22,6 @@ describe('Authentication Base Class', () => {
     expect(authentication.getId()).toBe('test.test-auth');
   });
 
-  test('should throw error when getStrategy is called on base class', async () => {
-    expect(() => authentication.getStrategy()).toThrow('getStrategy must be implemented');
-  });
-
   test('should throw error when getAuthenticator is called on base class', async () => {
     expect(() => authentication.getAuthenticator()).toThrow('getAuthenticator must be implemented');
   });

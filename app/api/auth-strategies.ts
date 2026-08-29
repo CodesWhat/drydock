@@ -1,40 +1,36 @@
 import type { Application, Request, Response } from 'express';
-import passport from 'passport';
 import type Authentication from '../authentications/providers/Authentication.js';
 import type { StrategyDescription } from '../authentications/providers/Authentication.js';
 import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
-
-const STRATEGY_IDS: string[] = [];
+import {
+  clearAuthenticators,
+  getAuthenticators,
+  registerAuthenticator,
+} from './authenticator-chain.js';
+import { SESSION_AUTHENTICATOR_ID, sessionAuthenticator } from './session-principal.js';
 
 interface AuthStatusResponse {
   providers: StrategyDescription[];
   errors: registry.AuthenticationRegistrationError[];
 }
 
-/**
- * Get all strategies id.
- * @returns {[]}
- */
-export function getAllIds(): string[] {
-  return [...STRATEGY_IDS];
-}
-
-export function resetStrategyIdsForTests(): void {
-  STRATEGY_IDS.length = 0;
+export function resetAuthenticatorsForTests(): void {
+  clearAuthenticators();
 }
 
 /**
- * Register a strategy to passport.
- * @param authentication
- * @param app
+ * Add one provider's authenticator to the chain.
+ *
+ * A provider that refuses to produce one — anonymous access without
+ * DD_ANONYMOUS_AUTH_CONFIRM is the live case — is logged and skipped, exactly
+ * as a strategy that refused to build was. The chain is left shorter, which is
+ * what keeps /health reporting 503 rather than opening an unguarded dashboard.
  */
-function useStrategy(authentication: Authentication, app: Application): void {
+function useAuthenticator(authentication: Authentication, app: Application): void {
   try {
-    const strategy = authentication.getStrategy(app);
-    passport.use(authentication.getId(), strategy);
-    STRATEGY_IDS.push(authentication.getId());
+    registerAuthenticator(authentication.getAuthenticator(app));
   } catch (error: unknown) {
     log.warn(
       `Unable to apply authentication ${authentication.getId()} (${getErrorMessage(error)})`,
@@ -42,10 +38,34 @@ function useStrategy(authentication: Authentication, app: Application): void {
   }
 }
 
-export function registerStrategies(app: Application): void {
+/**
+ * Build the chain: the session authenticator first, then every registered
+ * provider in registry order.
+ *
+ * Session goes first because a request that already carries a valid session
+ * must resolve to it before any credential is inspected — which is what
+ * passport's per-strategy `if (req.isAuthenticated())` short-circuit did, once
+ * per strategy, and what Phase 11.1's API-key authenticator will be registered
+ * ahead of.
+ */
+export function registerAuthenticators(app: Application): void {
+  clearAuthenticators();
+  registerAuthenticator(sessionAuthenticator);
   Object.values(registry.getState().authentication).forEach((authentication: Authentication) => {
-    useStrategy(authentication, app);
+    useAuthenticator(authentication, app);
   });
+}
+
+/**
+ * Whether anything can actually authenticate a caller yet.
+ *
+ * The session authenticator does not count: it can only restore an identity
+ * some other authenticator established, so a chain holding nothing else can
+ * never admit a first request. This is the readiness signal /health gates on,
+ * and it answers the same question the old `getAllIds().length > 0` did.
+ */
+export function isAuthenticationReady(): boolean {
+  return getAuthenticators().some((authenticator) => authenticator.id !== SESSION_AUTHENTICATOR_ID);
 }
 
 function getUniqueStrategies(): StrategyDescription[] {

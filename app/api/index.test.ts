@@ -125,7 +125,7 @@ vi.mock('./prometheus', () => ({
 }));
 
 const mockSetAuthReadyFn = vi.hoisted(() => vi.fn());
-const mockGetAllIdsForIndex = vi.hoisted(() => vi.fn(() => []));
+const mockIsAuthenticationReadyForIndex = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('./health', () => ({
   init: vi.fn(() => 'health-router'),
@@ -133,7 +133,7 @@ vi.mock('./health', () => ({
 }));
 
 vi.mock('./auth-strategies', () => ({
-  getAllIds: mockGetAllIdsForIndex,
+  isAuthenticationReady: mockIsAuthenticationReadyForIndex,
 }));
 
 vi.mock('./container/log-stream', () => ({
@@ -1406,7 +1406,7 @@ describe('API Index', () => {
     expect(mockApp.use).not.toHaveBeenCalledWith('json-middleware');
   });
 
-  test('setAuthReadyFn should be wired before auth.init so /health gates on strategy registration', async () => {
+  test('setAuthReadyFn should be wired before auth.init so /health gates on authenticator registration', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -1427,7 +1427,7 @@ describe('API Index', () => {
     expect(setAuthReadyFnCallOrder).toBeLessThan(authInitCallOrder);
   });
 
-  test('the readiness fn passed to setAuthReadyFn should reflect getAllIds liveness', async () => {
+  test('the readiness fn passed to setAuthReadyFn should reflect authenticator chain liveness', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -1436,19 +1436,19 @@ describe('API Index', () => {
     });
 
     vi.resetModules();
-    // Mock getAllIds to start empty
-    mockGetAllIdsForIndex.mockReturnValue([]);
+    // Chain holds nothing that can authenticate a caller yet
+    mockIsAuthenticationReadyForIndex.mockReturnValue(false);
 
     const indexRouter = await import('./index.js');
     const freshHealth = await import('./health.js');
     await indexRouter.init();
 
     const readinessFn = freshHealth.setAuthReadyFn.mock.calls[0][0];
-    // Empty strategies → not ready
+    // Empty chain → not ready
     expect(readinessFn()).toBe(false);
 
-    // Populated strategies → ready
-    mockGetAllIdsForIndex.mockReturnValue(['local']);
+    // A registered authenticator → ready
+    mockIsAuthenticationReadyForIndex.mockReturnValue(true);
     expect(readinessFn()).toBe(true);
   });
 

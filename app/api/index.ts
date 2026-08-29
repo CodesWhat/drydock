@@ -20,7 +20,7 @@ import { recordLegacyInput } from '../prometheus/compatibility.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
-import { getAllIds } from './auth-strategies.js';
+import { isAuthenticationReady } from './auth-strategies.js';
 import * as wudCardCompatRouter from './compat/wudcard.js';
 import { attachContainerLogStreamWebSocketServer } from './container/log-stream.js';
 import { sendErrorResponse } from './error-response.js';
@@ -211,12 +211,12 @@ function sendUnversionedApiTombstone(req, res, next) {
 
 function registerRoutes(app) {
   // Wire the health readiness gate before auth.init() so that /health
-  // returns 503 if somehow a request arrives before passport strategies
-  // are registered. getAllIds() is a live check: empty until
-  // registerStrategies() populates STRATEGY_IDS inside auth.init().
+  // returns 503 if somehow a request arrives before the authenticator chain
+  // is built. isAuthenticationReady() is a live check: false until
+  // registerAuthenticators() runs inside auth.init().
   // This closes the gap where /health can flip 200 before login is ready
   // (the DAST post-rc.28 401 race).
-  healthRouter.setAuthReadyFn(() => getAllIds().length > 0);
+  healthRouter.setAuthReadyFn(isAuthenticationReady);
   auth.init(app);
   app.use('/health', healthRouter.init());
   // Built exactly once and reused for both mounts below (rather than calling

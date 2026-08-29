@@ -67,34 +67,14 @@ describe('Anonymous Authentication', () => {
       );
     });
 
-    test('should throw from getStrategy without confirmation', () => {
-      expect(() => anonymous.getStrategy()).toThrow(
-        'Anonymous authentication cannot be enabled on a fresh install',
-      );
-    });
-
     test('should not throw during initAuthentication with confirmation', () => {
       process.env.DD_ANONYMOUS_AUTH_CONFIRM = 'true';
       expect(() => anonymous.initAuthentication()).not.toThrow();
     });
 
-    test('should return anonymous strategy with confirmation', () => {
-      process.env.DD_ANONYMOUS_AUTH_CONFIRM = 'true';
-      const strategy = anonymous.getStrategy();
-      expect(strategy).toBeDefined();
-      expect(strategy.name).toBe('anonymous');
-    });
-
     test('should not throw during initAuthentication with DD_AUTH_ANONYMOUS_CONFIRM alias', () => {
       process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
       expect(() => anonymous.initAuthentication()).not.toThrow();
-    });
-
-    test('should return anonymous strategy with DD_AUTH_ANONYMOUS_CONFIRM alias', () => {
-      process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
-      const strategy = anonymous.getStrategy();
-      expect(strategy).toBeDefined();
-      expect(strategy.name).toBe('anonymous');
     });
   });
 
@@ -113,25 +93,15 @@ describe('Anonymous Authentication', () => {
       expect(() => anonymous.initAuthentication()).toThrow(/DD_ANONYMOUS_AUTH_CONFIRM=true/);
     });
 
-    test('should fail closed from getStrategy without confirmation', () => {
-      expect(() => anonymous.getStrategy()).toThrow(
-        'Anonymous authentication cannot be enabled during an upgrade',
-      );
-    });
-
     test('should not downgrade the missing confirmation to a warning', () => {
-      expect(() => anonymous.getStrategy()).toThrow();
+      expect(() => anonymous.getAuthenticator()).toThrow();
       expect(log.warn).not.toHaveBeenCalled();
     });
 
     test('should support the confirmation alias during an upgrade', () => {
       process.env.DD_AUTH_ANONYMOUS_CONFIRM = 'true';
       expect(() => anonymous.initAuthentication()).not.toThrow();
-      expect(anonymous.getStrategy()).toEqual(
-        expect.objectContaining({
-          name: 'anonymous',
-        }),
-      );
+      expect(() => anonymous.getAuthenticator()).not.toThrow();
     });
 
     test('should not throw during initAuthentication with confirmation', () => {
@@ -139,17 +109,15 @@ describe('Anonymous Authentication', () => {
       expect(() => anonymous.initAuthentication()).not.toThrow();
     });
 
-    test('should return anonymous strategy with confirmation', () => {
+    test('should return anonymous authenticator with confirmation', () => {
       process.env.DD_ANONYMOUS_AUTH_CONFIRM = 'true';
-      const strategy = anonymous.getStrategy();
-      expect(strategy).toBeDefined();
-      expect(strategy.name).toBe('anonymous');
+      expect(() => anonymous.getAuthenticator()).not.toThrow();
     });
 
     test('should not log warning with confirmation', () => {
       process.env.DD_ANONYMOUS_AUTH_CONFIRM = 'true';
       anonymous.initAuthentication();
-      anonymous.getStrategy();
+      anonymous.getAuthenticator();
       expect(log.warn).not.toHaveBeenCalled();
     });
   });

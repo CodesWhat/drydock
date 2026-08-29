@@ -58,7 +58,12 @@ export function getAuthenticators(): readonly Authenticator[] {
   return [...chain];
 }
 
-export function resetAuthenticatorChainForTests(): void {
+/**
+ * Empty the chain. Called at the start of every registration pass so that
+ * building the chain twice — which only happens in tests, but used to leave
+ * passport's id list holding duplicates — yields the same chain both times.
+ */
+export function clearAuthenticators(): void {
   chain.length = 0;
 }
 

@@ -10,10 +10,10 @@ import type { AuthRequest } from './auth-types.js';
 import {
   type Authenticator,
   authenticateRequest,
+  clearAuthenticators,
   getAuthenticationFailureStatus,
   getAuthenticators,
   registerAuthenticator,
-  resetAuthenticatorChainForTests,
 } from './authenticator-chain.js';
 import type { AuthenticatedPrincipal } from './principal.js';
 
@@ -37,11 +37,11 @@ function createRequest(): AuthRequest {
 describe('authenticator-chain', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetAuthenticatorChainForTests();
+    clearAuthenticators();
   });
 
   afterEach(() => {
-    resetAuthenticatorChainForTests();
+    clearAuthenticators();
   });
 
   describe('registration', () => {
@@ -67,7 +67,7 @@ describe('authenticator-chain', () => {
     test('resets to empty', () => {
       registerAuthenticator(createAuthenticator('first', undefined));
 
-      resetAuthenticatorChainForTests();
+      clearAuthenticators();
 
       expect(getAuthenticators()).toEqual([]);
     });

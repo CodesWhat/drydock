@@ -130,17 +130,6 @@ describe('Basic Authentication', () => {
     expect(basic).toBeInstanceOf(Basic);
   });
 
-  test('should return basic strategy', async () => {
-    basic.configuration = {
-      user: 'testuser',
-      hash: createArgon2Hash('password'),
-    };
-
-    const strategy = basic.getStrategy();
-    expect(strategy).toBeDefined();
-    expect(strategy.name).toBe('basic');
-  });
-
   test('should return strategy description', async () => {
     const description = basic.getStrategyDescription();
     expect(description).toEqual({
@@ -485,21 +474,6 @@ describe('Basic Authentication', () => {
 
   test('should throw on invalid configuration', async () => {
     expect(() => basic.validateConfiguration({})).toThrow('"user" is required');
-  });
-
-  test('should delegate authentication through strategy callback', async () => {
-    basic.configuration = {
-      user: 'testuser',
-      hash: createArgon2Hash('password'),
-    };
-
-    const strategy = basic.getStrategy();
-    await new Promise<void>((resolve) => {
-      strategy._verify('testuser', 'password', (err, result) => {
-        expect(result).toEqual({ username: 'testuser' });
-        resolve();
-      });
-    });
   });
 
   test('should reject authentication when argon2id derivation fails', async () => {

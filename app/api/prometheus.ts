@@ -2,7 +2,6 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import express from 'express';
 import nocache from 'nocache';
-import passport from 'passport';
 import { getServerConfiguration } from '../configuration/index.js';
 import { output } from '../prometheus/index.js';
 import * as auth from './auth.js';
@@ -70,8 +69,14 @@ export function init() {
     // Bearer token auth takes priority when DD_SERVER_METRICS_TOKEN is set
     router.use(authenticateMetricsToken);
   } else if (configuration.metrics?.auth !== false) {
-    // Fallback to passport/session auth
-    router.use(passport.authenticate(auth.getAllIds()));
+    // Fallback to the authenticator chain: a session cookie, or any credential
+    // a configured provider accepts. `passport.authenticate(getAllIds())` never
+    // looked at the session it had just restored, so a logged-in browser used to
+    // get a 401 here despite the comment above it saying "passport/session auth";
+    // going through requireAuthentication makes the session work as intended. It
+    // widens nothing, since a session can only exist for a principal one of those
+    // same providers already accepted.
+    router.use(auth.requireAuthentication);
   }
 
   router.get('/', outputMetrics);

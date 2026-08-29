@@ -19,7 +19,7 @@ const BASIC_SCHEME_PATTERN = /Basic/i;
 const MALFORMED_AUTHORIZATION_STATUS = 400;
 const CREDENTIAL_FIELD_COUNT = 2;
 
-export interface BasicCredentials {
+interface BasicCredentials {
   readonly userid: string;
   readonly password: string;
 }

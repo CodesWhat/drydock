@@ -8,7 +8,6 @@ import {
   recordAuthUsernameMismatch,
 } from '../../../prometheus/auth.js';
 import Authentication from '../Authentication.js';
-import BasicStrategy from './BasicStrategy.js';
 import {
   getBasicAuthorizationFailureStatus,
   parseBasicAuthorization,
@@ -320,13 +319,6 @@ class Basic extends Authentication<BasicConfiguration> {
       user: this.configuration.user,
       hash: Basic.mask(this.configuration.hash),
     };
-  }
-
-  /**
-   * Return passport strategy.
-   */
-  getStrategy(_app?: unknown) {
-    return new BasicStrategy((user, pass, done) => this.authenticate(user, pass, done));
   }
 
   /**

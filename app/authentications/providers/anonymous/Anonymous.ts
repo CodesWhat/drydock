@@ -1,4 +1,3 @@
-import { Strategy as AnonymousStrategy } from 'passport-anonymous';
 import type { Authenticator } from '../../../api/authenticator-chain.js';
 import { ANONYMOUS_USERNAME, type AuthenticatedPrincipal } from '../../../api/principal.js';
 import { isUpgrade } from '../../../store/app.js';
@@ -40,14 +39,6 @@ class Anonymous extends Authentication {
     throw new Error(
       'No authentication configured and this is a fresh install. Set DD_AUTH_BASIC_<name>_USER / DD_AUTH_BASIC_<name>_HASH to secure the dashboard, or set DD_ANONYMOUS_AUTH_CONFIRM=true to allow anonymous access.',
     );
-  }
-
-  /**
-   * Return passport strategy.
-   */
-  getStrategy() {
-    this.assertAnonymousAccessConfirmed();
-    return new AnonymousStrategy();
   }
 
   /**

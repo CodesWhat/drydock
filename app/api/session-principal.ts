@@ -8,10 +8,10 @@
 import type { NextFunction, Request, Response } from 'express';
 import log from '../log/index.js';
 import { getErrorMessage } from '../util/error.js';
-import { deserializeSessionUser } from './auth-session.js';
 import type { AuthRequest } from './auth-types.js';
 import type { Authenticator } from './authenticator-chain.js';
 import type { AuthenticatedPrincipal } from './principal.js';
+import { deserializeSessionUser } from './session-user.js';
 
 /**
  * Key the serialized user is stored under inside the session payload.

@@ -9,31 +9,22 @@
  * so, and the two questions are asked with two different helpers.
  */
 
-/**
- * Every identity Drydock can put on a request. `kind` is the discriminant:
- * consumers branch on it instead of probing for the presence of a field.
- *
- * `api-key` is declared here rather than in Phase 11.1 so the set of identities
- * is written down in exactly one place.
- */
-export type PrincipalKind = 'session' | 'basic' | 'oidc' | 'anonymous' | 'api-key';
-
 interface PrincipalBase {
   readonly username: string;
 }
 
 /** Identity restored from an existing express-session cookie. */
-export interface SessionPrincipal extends PrincipalBase {
+interface SessionPrincipal extends PrincipalBase {
   readonly kind: 'session';
 }
 
 /** Identity proven by an `Authorization: Basic` header on this request. */
-export interface BasicPrincipal extends PrincipalBase {
+interface BasicPrincipal extends PrincipalBase {
   readonly kind: 'basic';
 }
 
 /** Identity proven by an `Authorization: Bearer` OIDC access token. */
-export interface OidcPrincipal extends PrincipalBase {
+interface OidcPrincipal extends PrincipalBase {
   readonly kind: 'oidc';
 }
 
@@ -41,18 +32,26 @@ export interface OidcPrincipal extends PrincipalBase {
  * Access granted without credentials because anonymous auth is configured and
  * explicitly confirmed. Carries no identity: see {@link isIdentityPrincipal}.
  */
-export interface AnonymousPrincipal extends PrincipalBase {
+interface AnonymousPrincipal extends PrincipalBase {
   readonly kind: 'anonymous';
 }
 
 /** Identity proven by a scoped API key. Populated by Phase 11.1. */
-export interface ApiKeyPrincipal extends PrincipalBase {
+interface ApiKeyPrincipal extends PrincipalBase {
   readonly kind: 'api-key';
   readonly keyId: string;
   readonly scopes: readonly string[];
   readonly parentKeyId?: string;
 }
 
+/**
+ * Every identity Drydock can put on a request. `kind` is the discriminant:
+ * consumers branch on it instead of probing for the presence of a field.
+ *
+ * The members are not exported individually. Narrowing on `kind` gets you the
+ * right one without naming it, and `api-key` is declared here rather than in
+ * Phase 11.1 so the set of identities is written down in exactly one place.
+ */
 export type AuthenticatedPrincipal =
   | SessionPrincipal
   | BasicPrincipal
@@ -92,12 +91,17 @@ export function isAuthenticated(req: PrincipalCarrier): boolean {
   return req.principal !== undefined;
 }
 
+/** Every principal except the anonymous one: the kinds that name someone. */
+type IdentityPrincipal = Exclude<AuthenticatedPrincipal, { kind: 'anonymous' }>;
+
 /**
  * Does this request carry a real identity — something worth keying a rate limit
  * or an audit record on? False for anonymous, which is what Passport expressed
  * by leaving `req.user` undefined on the anonymous path.
  */
-export function isIdentityPrincipal(principal: AuthenticatedPrincipal | undefined): boolean {
+export function isIdentityPrincipal(
+  principal: AuthenticatedPrincipal | undefined,
+): principal is IdentityPrincipal {
   return principal !== undefined && principal.kind !== 'anonymous';
 }
 

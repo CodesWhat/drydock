@@ -3,7 +3,7 @@ const { mockDeserializeSessionUser, mockWarn } = vi.hoisted(() => ({
   mockWarn: vi.fn(),
 }));
 
-vi.mock('./auth-session.js', () => ({
+vi.mock('./session-user.js', () => ({
   deserializeSessionUser: mockDeserializeSessionUser,
 }));
 

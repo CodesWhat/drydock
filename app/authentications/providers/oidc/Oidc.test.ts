@@ -296,16 +296,7 @@ test('validateConfiguration should allow cafile and insecure TLS options', async
   }
 });
 
-test('getStrategy should return an Authentication strategy', async () => {
-  const strategy = oidc.getStrategy(app);
-  expect(strategy.name).toEqual('oidc');
-});
-
-test('getStrategy should throw when express app instance is missing', async () => {
-  expect(() => oidc.getStrategy()).toThrowError('OIDC strategy requires an express app instance');
-});
-
-test('getStrategy should wire redirect/callback routes to oidc handlers', async () => {
+test('getAuthenticator should wire redirect/callback routes to oidc handlers', async () => {
   const appMock = {
     use: vi.fn(),
     get: vi.fn(),
@@ -313,7 +304,7 @@ test('getStrategy should wire redirect/callback routes to oidc handlers', async 
   const redirectSpy = vi.spyOn(oidc, 'redirect').mockResolvedValue(undefined);
   const callbackSpy = vi.spyOn(oidc, 'callback').mockResolvedValue(undefined);
 
-  oidc.getStrategy(appMock);
+  oidc.getAuthenticator(appMock);
 
   const redirectHandler = appMock.get.mock.calls.find(([path]) => path.endsWith('/redirect'))[1];
   const callbackHandler = appMock.get.mock.calls.find(([path]) => path.endsWith('/cb'))[1];
@@ -325,20 +316,6 @@ test('getStrategy should wire redirect/callback routes to oidc handlers', async 
 
   expect(redirectSpy).toHaveBeenCalledWith(req, res);
   expect(callbackSpy).toHaveBeenCalledWith(req, res);
-});
-
-test('getStrategy should delegate strategy verify callback to oidc.verify', async () => {
-  const appMock = {
-    use: vi.fn(),
-    get: vi.fn(),
-  };
-  const verifySpy = vi.spyOn(oidc, 'verify').mockResolvedValue(undefined);
-  const strategy = oidc.getStrategy(appMock);
-  const done = vi.fn();
-
-  strategy.verify('access-token', done);
-
-  expect(verifySpy).toHaveBeenCalledWith('access-token', done);
 });
 
 describe('getAuthenticator / authenticateBearer', () => {
@@ -446,7 +423,7 @@ describe('getAuthenticator / authenticateBearer', () => {
   });
 });
 
-test('getStrategy should enforce OIDC route rate limiting in express integration', async () => {
+test('getAuthenticator should enforce OIDC route rate limiting in express integration', async () => {
   const integrationApp = express();
   oidc.name = 'default';
 
@@ -457,7 +434,7 @@ test('getStrategy should enforce OIDC route rate limiting in express integration
     res.status(204).send();
   });
 
-  oidc.getStrategy(integrationApp);
+  oidc.getAuthenticator(integrationApp);
 
   const server = await new Promise<any>((resolve) => {
     const startedServer = integrationApp.listen(0, () => resolve(startedServer));
@@ -1709,7 +1686,7 @@ test('initAuthentication should tolerate startup discovery failure and recover o
   openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
 
   await expect(oidc.initAuthentication()).resolves.toBeUndefined();
-  expect(() => oidc.getStrategy(app)).not.toThrow();
+  expect(() => oidc.getAuthenticator(app)).not.toThrow();
 
   const req = createReq({
     session: {
@@ -2683,27 +2660,16 @@ test('initAuthentication should pass exact integer timeout for round millisecond
   expect(callArgs[4].timeout).toBe(3);
 });
 
-// --- getStrategy / rateLimit config mutant killers ---
+// --- getAuthenticator / rateLimit config mutant killers ---
 
-test('getStrategy should configure rate limiter with 50 max requests per window', async () => {
+test('getAuthenticator should configure rate limiter with 50 max requests per window', async () => {
   const appMock = { use: vi.fn(), get: vi.fn() };
   oidc.name = 'test-oidc';
 
-  oidc.getStrategy(appMock);
+  oidc.getAuthenticator(appMock);
 
   // The rate limiter is applied via app.use for the OIDC path prefix
   expect(appMock.use).toHaveBeenCalledWith('/auth/oidc/test-oidc', expect.any(Function));
-});
-
-test('getStrategy should register strategy with scope openid email profile', async () => {
-  const appMock = { use: vi.fn(), get: vi.fn() };
-
-  const strategy = oidc.getStrategy(appMock);
-
-  // Verify the returned strategy has the correct name
-  expect(strategy.name).toBe('oidc');
-  // Verify options contain the correct scope
-  expect((strategy as any).options.scope).toBe('openid email profile');
 });
 
 // --- redirect flow specific debug log mutant killers ---
