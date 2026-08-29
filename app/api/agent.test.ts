@@ -646,6 +646,70 @@ describe('Agent Log Entries Route', () => {
     },
   );
 
+  test('should return 400 when tail query parameter has a numeric prefix followed by trailing characters', async () => {
+    // Number.parseInt('25logs', 10) === 25, which used to slip past the finite check.
+    const getLogEntries = vi.fn().mockResolvedValue([]);
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries,
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: { tail: '25logs' },
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+    expect(getLogEntries).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when since query parameter has a numeric prefix followed by trailing characters', async () => {
+    // Number.parseInt('1000ms', 10) === 1000, which used to slip past the finite check.
+    const getLogEntries = vi.fn().mockResolvedValue([]);
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries,
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: { since: '1000ms' },
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid since query parameter' });
+    expect(getLogEntries).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when tail query parameter is a digit string that exceeds Number.MAX_SAFE_INTEGER', async () => {
+    // Passes the /^-?\d+$/ shape check but loses precision as a Number, so
+    // Number.isSafeInteger must reject it.
+    const getLogEntries = vi.fn().mockResolvedValue([]);
+    mockGetAgent.mockReturnValue({
+      isConnected: true,
+      getLogEntries,
+    });
+
+    const req = createMockRequest({
+      params: { name: 'agent-1' },
+      query: { tail: '99999999999999999999' },
+    });
+    const res = createResponse();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+    expect(getLogEntries).not.toHaveBeenCalled();
+  });
+
   test('should return 400 when component query parameter contains unsafe characters', async () => {
     const getLogEntries = vi.fn().mockResolvedValue([]);
     mockGetAgent.mockReturnValue({

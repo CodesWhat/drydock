@@ -261,6 +261,52 @@ describe('Log Entries Route', () => {
     expect(mockGetEntries).not.toHaveBeenCalled();
   });
 
+  test('should return 400 when tail query parameter has a numeric prefix followed by trailing characters', () => {
+    // Number.parseInt('25logs', 10) === 25, which used to slip past the finite check.
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
+
+    const req = createMockRequest({ query: { tail: '25logs' } });
+    const res = createResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+    expect(mockGetEntries).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when since query parameter has a numeric prefix followed by trailing characters', () => {
+    // Number.parseInt('1000ms', 10) === 1000, which used to slip past the finite check.
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
+
+    const req = createMockRequest({ query: { since: '1000ms' } });
+    const res = createResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid since query parameter' });
+    expect(mockGetEntries).not.toHaveBeenCalled();
+  });
+
+  test('should return 400 when tail query parameter is a digit string that exceeds Number.MAX_SAFE_INTEGER', () => {
+    // Passes the /^-?\d+$/ shape check but loses precision as a Number, so
+    // Number.isSafeInteger must reject it.
+    logRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
+
+    const req = createMockRequest({ query: { tail: '99999999999999999999' } });
+    const res = createResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+    expect(mockGetEntries).not.toHaveBeenCalled();
+  });
+
   test('should pass tail=0 through to getEntries', () => {
     logRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/entries')[1];
