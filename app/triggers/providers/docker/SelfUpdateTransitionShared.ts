@@ -1,5 +1,6 @@
 import { isRollbackContainerName } from '../../../model/container.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { sleep } from '../../../util/sleep.js';
 import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
@@ -17,6 +18,7 @@ import type {
   SelfUpdateCreatedContainer,
   SelfUpdateDockerApi,
   SelfUpdateExecutionContext,
+  SelfUpdateHelperContainer,
   SelfUpdateHelperContainerCreateOptions,
   SelfUpdateLogger,
 } from './self-update-types.js';
@@ -62,6 +64,87 @@ interface SelfUpdateTransitionDependencies {
   // grace window for the post-restart finalize is measured from after the (potentially
   // slow) image pull, not from prepare time.
   touchOperation?: (operationId: string) => void;
+  // How long to wait after starting the helper before checking that it is still
+  // alive. Overridable so tests don't sit on a real timer.
+  helperExitCheckDelayMs?: number;
+}
+
+// The helper's very first action is stopping the old container — this process.
+// So a helper that is still gone or stopped after a few poll intervals, while
+// we are demonstrably still running, never got far enough to take over.
+const HELPER_EXIT_CHECK_DELAY_MS = SELF_UPDATE_POLL_INTERVAL_MS * 3;
+
+// Both are required together by Docker.entrypoint.sh: DD_RUN_AS_ROOT alone hits
+// require_insecure_root_ack and exits 1.
+const ROOT_BREAK_GLASS_ENV_KEYS = ['DD_RUN_AS_ROOT', 'DD_ALLOW_INSECURE_ROOT'] as const;
+
+/**
+ * Carry the root break-glass pair from the running container's own spec into the
+ * helper's environment. The helper is the drydock image with only `Cmd` overridden,
+ * so it still runs Docker.entrypoint.sh as uid 0; on a host where the Docker socket
+ * is owned by GID 0 (Docker Desktop, OrbStack, a root-owned socket) the entrypoint
+ * refuses implicit root mode and exits 1 unless both variables say true. Read from
+ * the inspected spec rather than process.env so an agent-side spawn works the same.
+ */
+function resolveRootBreakGlassHelperEnv(currentContainerSpec: SelfUpdateContainerSpec): string[] {
+  const parentEnv = currentContainerSpec.Config?.Env;
+  if (!Array.isArray(parentEnv)) {
+    return [];
+  }
+  const values = new Map<string, string>();
+  for (const entry of parentEnv) {
+    if (typeof entry !== 'string') {
+      continue;
+    }
+    const separatorIndex = entry.indexOf('=');
+    if (separatorIndex < 1) {
+      continue;
+    }
+    values.set(entry.slice(0, separatorIndex), entry.slice(separatorIndex + 1));
+  }
+  if (ROOT_BREAK_GLASS_ENV_KEYS.some((key) => values.get(key) !== 'true')) {
+    return [];
+  }
+  return ROOT_BREAK_GLASS_ENV_KEYS.map((key) => `${key}=true`);
+}
+
+function isHelperAlreadyGoneError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const { statusCode } = error as { statusCode?: unknown };
+  return statusCode === 404;
+}
+
+/**
+ * Watchdog for a helper that dies on startup. dockerode's `start()` resolves on
+ * exec, not on exit, so a helper that the entrypoint refuses to run reports as
+ * spawned and then vanishes under AutoRemove, leaving the old container renamed
+ * to `-old-<ts>`, the new one never started and the next attempt tripping the
+ * rollback cascade guard. Returns a reason string when the helper is provably
+ * gone; an inspect failure that is not a 404 tells us nothing, so it returns
+ * undefined rather than tearing down a transition that may still be fine.
+ */
+async function detectEarlyHelperExit(
+  helperContainer: SelfUpdateHelperContainer,
+  delayMs: number,
+): Promise<string | undefined> {
+  if (typeof helperContainer.inspect !== 'function') {
+    return undefined;
+  }
+  await sleep(delayMs);
+  try {
+    const state = (await helperContainer.inspect()).State;
+    if (state?.Running === true) {
+      return undefined;
+    }
+    return `helper container exited with code ${state?.ExitCode ?? 'unknown'}`;
+  } catch (inspectError: unknown) {
+    if (isHelperAlreadyGoneError(inspectError)) {
+      return 'helper container exited and was auto-removed before it could stop the previous container';
+    }
+    return undefined;
+  }
 }
 
 type HelperDockerConnection =
@@ -278,21 +361,21 @@ async function executeSelfUpdateTransition(
 
   dependencies.touchOperation?.(selfUpdateOperationId);
   logContainer.info('Spawning helper container for self-update transition');
+  let helperContainer: SelfUpdateHelperContainer;
   try {
-    await dockerApi
-      .createContainer({
-        Image: dependencies.resolveHelperImage?.() ?? newImage,
-        Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller-entrypoint.js'],
-        Env: [...baseEnv, ...tcpEnv],
-        Labels: {
-          'dd.self-update.helper': 'true',
-          'dd.self-update.operation-id': selfUpdateOperationId,
-          'dd.watch': 'false',
-        },
-        HostConfig: hostConfig,
-        name: `drydock-self-update-${Date.now()}`,
-      })
-      .then((helperContainer) => helperContainer.start());
+    helperContainer = await dockerApi.createContainer({
+      Image: dependencies.resolveHelperImage?.() ?? newImage,
+      Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller-entrypoint.js'],
+      Env: [...baseEnv, ...tcpEnv, ...resolveRootBreakGlassHelperEnv(currentContainerSpec)],
+      Labels: {
+        'dd.self-update.helper': 'true',
+        'dd.self-update.operation-id': selfUpdateOperationId,
+        'dd.watch': 'false',
+      },
+      HostConfig: hostConfig,
+      name: `drydock-self-update-${Date.now()}`,
+    });
+    await helperContainer.start();
   } catch (e: unknown) {
     logContainer.warn(
       `Failed to spawn helper container, rolling back: ${getErrorMessage(e, String(e))}`,
@@ -304,6 +387,21 @@ async function executeSelfUpdateTransition(
     }
     await currentContainer.rename({ name: oldName });
     throw e;
+  }
+
+  const earlyExitReason = await detectEarlyHelperExit(
+    helperContainer,
+    dependencies.helperExitCheckDelayMs ?? HELPER_EXIT_CHECK_DELAY_MS,
+  );
+  if (earlyExitReason) {
+    logContainer.warn(`Self-update ${earlyExitReason}, rolling back`);
+    try {
+      await newContainer.remove({ force: true });
+    } catch {
+      // best effort
+    }
+    await currentContainer.rename({ name: oldName });
+    throw new Error(`Self-update ${earlyExitReason}`);
   }
 
   logContainer.info('Helper container started — process will terminate when old container stops');
