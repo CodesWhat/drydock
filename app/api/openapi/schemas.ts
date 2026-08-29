@@ -1371,6 +1371,118 @@ export const openApiSchemas = {
     required: ['data', 'total', 'counts'],
     additionalProperties: false,
   },
+  Approval: {
+    type: 'object',
+    description:
+      'One pending-approval ledger row, inserted the first time a candidate is sighted ' +
+      '(spec-ca-2-approval-queue.md). The row records the decision and the candidate it ' +
+      'points at; everything live — eligibility, hold reasons, release-notes body, current ' +
+      'vulnerability counts — is read from the container at render time and is never frozen ' +
+      'into the row.',
+    properties: {
+      schemaVersion: { type: 'integer', minimum: 1 },
+      id: { type: 'string' },
+      containerId: { type: 'string' },
+      containerIdentityKey: { type: 'string' },
+      containerName: { type: 'string' },
+      watcher: { type: 'string' },
+      agent: { type: 'string' },
+      image: { type: 'string' },
+      fromRef: { type: 'string' },
+      toRef: { type: 'string' },
+      candidateRef: { type: 'string' },
+      updateKind: { type: 'string', enum: ['tag', 'digest', 'unknown'] },
+      semverDiff: {
+        type: 'string',
+        enum: ['major', 'minor', 'patch', 'prerelease', 'unknown'],
+      },
+      releaseNotesUrl: { type: 'string' },
+      scanCritical: { type: 'integer', minimum: 0 },
+      scanHigh: { type: 'integer', minimum: 0 },
+      scanMedium: { type: 'integer', minimum: 0 },
+      scanLow: { type: 'integer', minimum: 0 },
+      scanUnknown: { type: 'integer', minimum: 0 },
+      scanAt: { type: 'string', format: 'date-time' },
+      createdAt: { type: 'string', format: 'date-time' },
+      createdAtMs: { type: 'integer', minimum: 0 },
+      decision: { type: 'string', enum: ['pending', 'approved', 'rejected', 'deferred'] },
+      decidedAt: { type: 'string', format: 'date-time' },
+      decidedBy: { type: 'string' },
+      decisionNote: { type: 'string' },
+      deferredUntil: { type: 'string', format: 'date-time' },
+      operationId: { type: 'string' },
+      outcome: { type: 'string', enum: ['applied', 'rolled-back', 'failed'] },
+      resolvedAt: { type: 'string', format: 'date-time' },
+      resolution: {
+        type: 'string',
+        enum: ['superseded', 'container-removed', 'candidate-withdrawn', 'auto-applied'],
+      },
+    },
+    required: [
+      'schemaVersion',
+      'id',
+      'containerId',
+      'containerIdentityKey',
+      'containerName',
+      'watcher',
+      'image',
+      'fromRef',
+      'toRef',
+      'candidateRef',
+      'updateKind',
+      'semverDiff',
+      'createdAt',
+      'createdAtMs',
+      'decision',
+    ],
+    additionalProperties: false,
+  },
+  ApprovalListResult: {
+    type: 'object',
+    properties: {
+      data: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/Approval' },
+      },
+      total: { type: 'integer', minimum: 0 },
+      limit: { type: 'integer', minimum: 0 },
+      offset: { type: 'integer', minimum: 0 },
+      hasMore: { type: 'boolean' },
+      _links: { $ref: '#/components/schemas/PaginationLinks' },
+    },
+    required: ['data', 'total', 'limit', 'offset', 'hasMore'],
+    additionalProperties: false,
+  },
+  ApprovalSummary: {
+    type: 'object',
+    description: 'Counts behind the nav badge and the dashboard tile.',
+    properties: {
+      pending: { type: 'integer', minimum: 0 },
+      deferred: { type: 'integer', minimum: 0 },
+      decidedToday: { type: 'integer', minimum: 0 },
+    },
+    required: ['pending', 'deferred', 'decidedToday'],
+    additionalProperties: false,
+  },
+  ApprovalDetail: {
+    type: 'object',
+    description:
+      'A row plus everything live about it. `eligibility` is recomputed per request and is ' +
+      'omitted when the container the row points at no longer exists. `holdReasons` is its ' +
+      'soft blockers: what is holding the candidate back without hiding it. A hard blocker ' +
+      'stays in `eligibility.blockers` carrying the exact message a manual update would ' +
+      'return.',
+    properties: {
+      approval: { $ref: '#/components/schemas/Approval' },
+      eligibility: { $ref: '#/components/schemas/UpdateEligibility' },
+      holdReasons: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/UpdateBlocker' },
+      },
+    },
+    required: ['approval', 'holdReasons'],
+    additionalProperties: false,
+  },
   UpdateOperation: {
     type: 'object',
     properties: {

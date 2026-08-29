@@ -134,6 +134,7 @@ vi.mock('../event/index', () => ({
   registerContainerUpdateApplied: mockRegisterContainerUpdateApplied,
   registerContainerUpdateFailed: mockRegisterContainerUpdateFailed,
   registerBatchUpdateCompleted: mockRegisterBatchUpdateCompleted,
+  registerApprovalEvent: vi.fn(),
   getContainerUpdateAppliedEventContainerName: (payload: unknown) => {
     if (typeof payload === 'string') return payload || undefined;
     if (!payload || typeof payload !== 'object') return undefined;

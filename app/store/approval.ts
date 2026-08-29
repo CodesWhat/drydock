@@ -26,7 +26,7 @@ import { daysToMs } from '../model/maturity-policy.js';
 import { initCollection } from './util.js';
 
 const APPROVAL_COLLECTION_INDICES = ['containerId', 'candidateRef', 'decision', 'createdAtMs'];
-export const APPROVAL_RETENTION_DAYS = 30;
+const APPROVAL_RETENTION_DAYS = 30;
 export const APPROVAL_PRUNE_INSERT_INTERVAL = 100;
 const APPROVAL_PRUNE_TIMER_INTERVAL_MS = 60 * 60 * 1000;
 

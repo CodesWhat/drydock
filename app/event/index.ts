@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import log from '../log/index.js';
+import type { ApprovalDecision } from '../model/approval.js';
 import type { Container, ContainerReport } from '../model/container.js';
 import {
   clearAuditSubscriptionCachesForTests,
@@ -201,6 +202,26 @@ export interface MaturityGateClearedEventPayload {
   clockSource?: string;
 }
 
+/**
+ * A row entering or leaving the approval queue. Emitted only by the controller-side
+ * reconciler; the SSE layer turns it into `dd:approval-created` / `dd:approval-resolved`.
+ *
+ * Five scalars and nothing else, by design. DR-4 is the standing lesson: the SSE ring
+ * buffer caps a client at 256 KB of pending bytes, and a lifecycle payload carrying a
+ * container snapshot (per-CVE arrays, SBOM, signatures) disconnects every listener. The
+ * queue's rich data is fetched from `/api/v1/approvals` on demand instead.
+ */
+export interface ApprovalEventPayload {
+  kind: ApprovalEventKind;
+  id: string;
+  containerId: string;
+  containerName: string;
+  decision: ApprovalDecision;
+  pendingCount: number;
+}
+
+export type ApprovalEventKind = 'created' | 'resolved';
+
 export interface AgentConnectedEventPayload {
   agentName: string;
   reconnected: boolean;
@@ -275,6 +296,7 @@ const batchUpdateCompletedHandlers = new Map<
   number,
   OrderedEventHandler<BatchUpdateCompletedEventPayload>
 >();
+const approvalEventHandlers = new Map<number, OrderedEventHandler<ApprovalEventPayload>>();
 let handlerRegistrationSequence = 0;
 
 function registerOrderedEventHandler<TPayload>(
@@ -742,6 +764,26 @@ export function registerBatchUpdateCompleted(
   return registerOrderedEventHandler(batchUpdateCompletedHandlers, handler, options);
 }
 
+/**
+ * Emit ApprovalEvent. Fired when the reconciler adds a row to the approval queue or
+ * resolves one out of it.
+ * @param payload
+ */
+export async function emitApprovalEvent(payload: ApprovalEventPayload): Promise<void> {
+  await emitOrderedHandlers(approvalEventHandlers, payload);
+}
+
+/**
+ * Register to ApprovalEvent.
+ * @param handler
+ */
+export function registerApprovalEvent(
+  handler: OrderedEventHandlerFn<ApprovalEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(approvalEventHandlers, handler, options);
+}
+
 // Audit log integration
 registerAuditLogSubscriptions({
   registerContainerReport,
@@ -783,6 +825,7 @@ export function clearAllListenersForTests(): void {
   agentStatsChangedHandlers.clear();
   selfUpdateStartingHandlers.clear();
   batchUpdateCompletedHandlers.clear();
+  approvalEventHandlers.clear();
   clearAuditSubscriptionCachesForTests();
   handlerRegistrationSequence = 0;
 }

@@ -29,7 +29,7 @@ export type ApprovalResolution =
   | 'candidate-withdrawn'
   | 'auto-applied';
 export type ApprovalOutcome = 'applied' | 'rolled-back' | 'failed';
-export type ApprovalUpdateKind = 'tag' | 'digest' | 'unknown';
+type ApprovalUpdateKind = 'tag' | 'digest' | 'unknown';
 export type ApprovalSemverDiff = 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
 
 /**

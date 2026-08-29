@@ -8,21 +8,26 @@
  * left untouched. Nothing here re-derives eligibility — `classifyApprovalCandidate` owns
  * that, so the queue can never disagree with the Update button about the same container.
  *
- * **The ledger is controller-owned (the DR-8 lesson).** The only writers are the
- * listeners registered below, and `init()` is called from the controller branch of the
- * entrypoint. `processAuthoritativeContainer` and the `dd:container_sync` bulk path never
- * reach an approval-store write, so an enrolled agent can neither mint, decide, nor
- * resolve a row; a rejected sync frame emits an empty batch and mints nothing. The
- * record's `agent` field is a filter, not a capability.
+ * **The ledger is controller-owned (the DR-8 lesson).** The only writers are the listeners
+ * registered below, they are registered only from the controller branch of the entrypoint,
+ * and nothing under `app/agent` touches the approval store. An agent's containers do reach
+ * these listeners, which is the point (an agent-owned candidate belongs in the queue), but
+ * only through `processAuthoritativeContainers`, which drops a container the agent does not
+ * own before it emits anything: a `dd:container_sync` frame naming a foreign id emits an
+ * empty batch and mints nothing. So an agent can never mint a row for a container it does
+ * not own, and can never decide or resolve any row at all. The record's `agent` field is a
+ * filter, not a capability.
  *
  * Every listener is failure-isolated. Reconciliation is bookkeeping that hangs off the
  * watch cycle, and the update lifecycle awaits the same emit chain, so a store error here
  * must never propagate into the cycle that produced the report.
  */
 import {
+  type ApprovalEventKind,
   type ContainerLifecycleEventPayload,
   type ContainerUpdateAppliedEvent,
   type ContainerUpdateFailedEventPayload,
+  emitApprovalEvent,
   registerContainerRemoved,
   registerContainerReport,
   registerContainerReports,
@@ -43,6 +48,7 @@ import type { Container, ContainerReport } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import {
   type ApprovalPatch,
+  countApprovals,
   findApprovalByOperationId,
   findApprovalsByContainerId,
   insertApproval,
@@ -75,6 +81,27 @@ function isOpen(record: ApprovalRecord): boolean {
   return record.decision === 'pending' || record.decision === 'deferred';
 }
 
+/**
+ * Tell the SSE layer a row entered or left the queue. Dispatched rather than awaited: the
+ * store write is what matters and it has already happened, the container-removed listener
+ * is on the synchronous legacy channel and cannot await anything, and a subscriber's
+ * failure must not become the watch cycle's.
+ */
+function announce(kind: ApprovalEventKind, record: ApprovalRecord): void {
+  void emitApprovalEvent({
+    kind,
+    id: record.id,
+    containerId: record.containerId,
+    containerName: record.containerName,
+    decision: record.decision,
+    // Read after the write, so the badge count a client patches in is the count the list
+    // endpoint would return for the same instant.
+    pendingCount: countApprovals().pending,
+  }).catch((error) => {
+    log.warn(`Approval event dispatch failed: ${getErrorMessage(error)}`);
+  });
+}
+
 function resolveRows(
   records: ApprovalRecord[],
   resolution: ApprovalResolution,
@@ -82,7 +109,9 @@ function resolveRows(
 ): void {
   const resolvedAt = new Date().toISOString();
   for (const record of records) {
-    updateApproval(record.id, { ...extra, resolution, resolvedAt });
+    const patch: ApprovalPatch = { ...extra, resolution, resolvedAt };
+    updateApproval(record.id, patch);
+    announce('resolved', { ...record, ...patch });
   }
 }
 
@@ -93,7 +122,7 @@ function resolveRows(
  * policy changed), and `changed` only describes the detection result.
  * @param container
  */
-export function reconcileContainer(container: Container | undefined): void {
+function reconcileContainer(container: Container | undefined): void {
   if (!container?.id) {
     return;
   }
@@ -144,7 +173,7 @@ export function reconcileContainer(container: Container | undefined): void {
     return;
   }
 
-  insertApproval(input);
+  announce('created', insertApproval(input));
 }
 
 function stampOutcome(operationId: string | undefined, outcome: ApprovalOutcome): void {

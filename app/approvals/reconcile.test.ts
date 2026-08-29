@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Loki from 'lokijs';
+import * as events from '../event/index.js';
 import {
   clearAllListenersForTests,
   emitContainerRemoved,
@@ -22,10 +23,11 @@ import type { Container } from '../model/container.js';
 import * as approvalStore from '../store/approval.js';
 import * as reconcile from './reconcile.js';
 
-const { getStateMock, getUpdateModeMock, isSelfUpdateAvailableMock } = vi.hoisted(() => ({
+const { getStateMock, getUpdateModeMock, isSelfUpdateAvailableMock, warnMock } = vi.hoisted(() => ({
   getStateMock: vi.fn(),
   getUpdateModeMock: vi.fn(),
   isSelfUpdateAvailableMock: vi.fn(),
+  warnMock: vi.fn(),
 }));
 
 vi.mock('../registry/index.js', () => ({ getState: getStateMock }));
@@ -35,7 +37,7 @@ vi.mock('../triggers/providers/docker/self-update-availability.js', () => ({
 }));
 vi.mock('../log/index.js', () => ({
   default: {
-    child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }),
+    child: () => ({ info: vi.fn(), warn: warnMock, debug: vi.fn(), error: vi.fn() }),
   },
 }));
 
@@ -565,6 +567,108 @@ describe('failure isolation', () => {
     } finally {
       insertSpy.mockRestore();
     }
+
+    expect(warnMock).toHaveBeenCalledWith('Approval reconciliation failed: collection gone');
+  });
+
+  test('a rejected event dispatch is logged rather than left unhandled', async () => {
+    const emitSpy = vi
+      .spyOn(events, 'emitApprovalEvent')
+      .mockRejectedValue(new Error('bus is down'));
+
+    try {
+      await emitContainerReport({ container: createContainer(), changed: true });
+      await vi.waitFor(() =>
+        expect(warnMock).toHaveBeenCalledWith('Approval event dispatch failed: bus is down'),
+      );
+    } finally {
+      emitSpy.mockRestore();
+    }
+
+    expect(allRows()).toHaveLength(1);
+  });
+});
+
+// Spec edge case 14 / the DR-4 lesson.
+describe('queue-change events', () => {
+  function approvalEvents() {
+    return vi
+      .mocked(events.emitApprovalEvent)
+      .mock.calls.map(([payload]: [events.ApprovalEventPayload]) => payload);
+  }
+
+  beforeEach(() => {
+    vi.spyOn(events, 'emitApprovalEvent');
+  });
+
+  afterEach(() => {
+    vi.mocked(events.emitApprovalEvent).mockRestore();
+  });
+
+  test('announces a created row with five scalars and no container payload', async () => {
+    await emitContainerReport({
+      container: createContainer({
+        security: {
+          updateScan: {
+            status: 'passed',
+            image: 'library/nginx:1.2.4',
+            scannedAt: '2026-01-01T00:00:00.000Z',
+            summary: { critical: 1, high: 2, medium: 3, low: 4, unknown: 5 },
+            vulnerabilities: Array.from({ length: 500 }, (_unused, index) => ({
+              id: `CVE-2026-${index}`,
+              severity: 'HIGH',
+            })),
+          },
+        },
+      } as unknown as Partial<Container>),
+      changed: true,
+    });
+
+    const [payload] = approvalEvents();
+    expect(Object.keys(payload).sort()).toStrictEqual([
+      'containerId',
+      'containerName',
+      'decision',
+      'id',
+      'kind',
+      'pendingCount',
+    ]);
+    expect(payload).toMatchObject({
+      kind: 'created',
+      containerId: 'container-1',
+      containerName: 'nginx',
+      decision: 'pending',
+      pendingCount: 1,
+    });
+    expect(JSON.stringify(payload).length).toBeLessThan(256 * 1024);
+  });
+
+  test('announces a resolved row with the count it leaves behind', async () => {
+    await emitContainerReport({ container: createContainer(), changed: true });
+
+    emitContainerRemoved({ id: 'container-1' });
+
+    expect(approvalEvents().map((payload) => [payload.kind, payload.pendingCount])).toStrictEqual([
+      ['created', 1],
+      ['resolved', 0],
+    ]);
+  });
+
+  test('announces one resolved event per row a supersession retires', async () => {
+    await emitContainerReport({ container: createContainer(), changed: true });
+    await emitContainerReport({
+      container: createContainer({
+        result: { tag: '1.2.5' },
+        updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '1.2.5' },
+      }),
+      changed: true,
+    });
+
+    expect(approvalEvents().map((payload) => payload.kind)).toStrictEqual([
+      'created',
+      'resolved',
+      'created',
+    ]);
   });
 });
 

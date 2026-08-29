@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type {
+  ApprovalEventKind,
+  ApprovalEventPayload,
   BatchUpdateCompletedEventPayload,
   ContainerHealthTransitionEventPayload,
   ContainerLifecycleEventPayload,
@@ -15,6 +17,7 @@ import {
   registerAgentConnected,
   registerAgentDisconnected,
   registerAgentStatsChanged,
+  registerApprovalEvent,
   registerBatchUpdateCompleted,
   registerContainerAdded,
   registerContainerHealthTransition,
@@ -76,7 +79,19 @@ const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:update-applied',
   'dd:update-failed',
   'dd:batch-update-completed',
+  'dd:approval-created',
+  'dd:approval-resolved',
 ]);
+
+/**
+ * Wire names for the approval queue's two lifecycle transitions. The bus carries one event
+ * with a `kind`; the browser gets two distinct event names, so a client can listen for the
+ * one it cares about without parsing a payload.
+ */
+const APPROVAL_SSE_EVENT_NAMES: Record<ApprovalEventKind, string> = {
+  created: 'dd:approval-created',
+  resolved: 'dd:approval-resolved',
+};
 
 // Events that carry no id: line because they are ephemeral (not cross-client
 // durable state). Heartbeats and per-client handshakes must not be buffered.
@@ -685,6 +700,22 @@ function projectContainerLifecyclePayload(
   };
 }
 
+/**
+ * Five scalars, built by naming each field rather than by stripping a container. There is
+ * no projection to keep in step with the container schema and no way for a vulnerability
+ * array, an SBOM or a release-notes body to reach a client through this event: everything
+ * the queue view needs beyond the count is fetched from `/api/v1/approvals`.
+ */
+function buildApprovalSsePayload(payload: ApprovalEventPayload): Record<string, unknown> {
+  return {
+    id: payload.id,
+    containerId: payload.containerId,
+    containerName: payload.containerName,
+    decision: payload.decision,
+    pendingCount: payload.pendingCount,
+  };
+}
+
 function broadcastContainerEvent(eventName: string, payload: unknown): void {
   if (!ALLOWED_CONTAINER_EVENT_NAMES.has(eventName)) {
     log.child({ component: 'sse' }).warn(`Dropping invalid SSE container event name: ${eventName}`);
@@ -775,6 +806,17 @@ export function init(): express.Router {
     registerContainerUpdateFailed(
       (payload: ContainerUpdateFailedEventPayload) => {
         broadcastContainerEvent('dd:update-failed', buildUpdateFailedSsePayload(payload));
+      },
+      { order: 1000 },
+    ),
+  );
+  trackEventListenerDeregistration(
+    registerApprovalEvent(
+      (payload: ApprovalEventPayload) => {
+        broadcastContainerEvent(
+          APPROVAL_SSE_EVENT_NAMES[payload.kind],
+          buildApprovalSsePayload(payload),
+        );
       },
       { order: 1000 },
     ),
