@@ -761,18 +761,40 @@ jobs:
       - name: Set up QEMU (multi-arch smoke build)
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4.2.0
 
+      # moby/buildkit#7089 (open, fix unmerged in #7092): ExecOp mutates its own
+      # Meta.Args in place to prepend the QEMU emulator path, so when the solver
+      # cancels an in-flight arm64 op and a later caller re-executes it, the
+      # emulator path gets prepended twice, QEMU tries to exec itself, and the
+      # build dies 0.078s in with "Invalid ELF image for this architecture"
+      # before apk or anything else has produced a line of output.
+      #
+      # It is a scheduler-timing race inside buildkit, not something this build
+      # config controls. It has fired once: an identical arm64-emulated build
+      # passed 55 minutes earlier, and every run since has passed. Retrying the
+      # whole build is mechanism-agnostic, because each attempt is a fresh
+      # Solve() that reparses the LLB graph from the Dockerfile, so a mutated
+      # Meta.Args from a canceled attempt cannot carry over.
+      #
+      # Raw CLI rather than docker/build-push-action because nick-fields/retry
+      # wraps a shell command, not a `uses:` step. Safe here specifically
+      # because nothing downstream reads this step's outputs. Same idiom this
+      # job already uses for npm ci and the Playwright pull. Drop it once
+      # buildkit ships the fix.
       - name: Docker build (multi-arch smoke)
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          context: .
-          push: false
-          platforms: linux/amd64,linux/arm64
-          build-args: DD_VERSION=ci-multiarch-smoke
+          timeout_minutes: 10
+          max_attempts: 2
+          retry_wait_seconds: 5
           # Smoke build never lands in a registry, so attesting it adds noise
           # without value. Real attestations live on release-cut.yml.
-          provenance: false
-          cache-from: type=gha,scope=drydock
-          cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
+          command: |
+            docker buildx build . \
+              --platform linux/amd64,linux/arm64 \
+              --build-arg DD_VERSION=ci-multiarch-smoke \
+              --provenance=false \
+              --cache-from type=gha,scope=drydock \
+              --cache-to type=gha,mode=max,scope=drydock,ignore-error=true
 
       - name: Export QA image artifact
         run: |
