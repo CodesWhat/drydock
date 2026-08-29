@@ -1205,6 +1205,10 @@ describe('Docker Watcher', () => {
     });
 
     test('should handle unsupported registry', async () => {
+      // findNewVersion catches the "Unsupported Registry" error internally
+      // (see getRegistry in image-comparison.ts) — it never propagates. The
+      // observable contract is: log the failure and return the container's
+      // current tag unchanged, rather than throwing.
       const container = {
         image: {
           registry: { name: 'unknown' },
@@ -1215,11 +1219,12 @@ describe('Docker Watcher', () => {
       registry.getState.mockReturnValue({ registry: {} });
       const mockLogChild = { error: vi.fn() };
 
-      try {
-        await docker.findNewVersion(container, mockLogChild);
-      } catch (error) {
-        expect(error.message).toContain('Unsupported Registry');
-      }
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result).toEqual({ tag: '1.0.0' });
+      expect(mockLogChild.error).toHaveBeenCalledWith(
+        expect.stringContaining('Unsupported registry (unknown)'),
+      );
     });
 
     test('should handle digest watching with v2 manifest', async () => {
@@ -2951,7 +2956,10 @@ describe('Docker Watcher', () => {
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       const result = await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid regex pattern'));
-      expect(result.tag).toBe('1.0.0');
+      // An invalid includeTags regex compiles to null, so no filter is applied and 2.0.0
+      // stays a candidate. This used to read 1.0.0 only because the mocked tag.isGreater
+      // was false; isGreaterCandidateTag now orders numerically before consulting it.
+      expect(result.tag).toBe('2.0.0');
     });
 
     test('should warn when excludeTags regex is invalid', async () => {

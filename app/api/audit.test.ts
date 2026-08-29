@@ -444,6 +444,65 @@ describe('Audit Router', () => {
     });
   });
 
+  test('should fall back to default limit when limit has a numeric prefix followed by trailing characters', () => {
+    // Number.parseInt('25logs', 10) === 25, which used to slip past validation
+    // as a legitimate limit instead of falling back to the default. Audit's
+    // contract is to fall back rather than 400 on a bad value (see the decision
+    // note in audit.ts), so an unparseable value should behave the same as an
+    // absent one, not silently truncate to whatever digits happen to lead it.
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({ query: { limit: '25logs' } });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+    });
+  });
+
+  test('should fall back to default offset when offset has a numeric prefix followed by trailing characters', () => {
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({ query: { offset: '10ms' } });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+    });
+  });
+
+  test('should fall back to default limit when limit exceeds Number.MAX_SAFE_INTEGER', () => {
+    // Passes the old Number.parseInt-based check but loses precision, so
+    // Number.isSafeInteger must reject it rather than clamping the rounded
+    // (wrong) value to the [1, 200] range.
+    auditRouter.init();
+    const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+
+    const req = createMockRequest({ query: { limit: '99999999999999999999' } });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+    });
+  });
+
   test('should prefer action over actions when both provided', () => {
     auditRouter.init();
     const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];

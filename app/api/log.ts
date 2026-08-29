@@ -8,6 +8,11 @@ import { sendErrorResponse } from './error-response.js';
 const router = express.Router();
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
 const SAFE_LOG_COMPONENT_PATTERN = /^[a-zA-Z0-9._-]+$/;
+// Requires the entire string to be an optional sign followed by one or more digits, so a
+// numeric-prefix string like '25logs' or '1000ms' is rejected rather than silently truncated
+// by Number.parseInt. Negative values are intentionally still accepted here — see
+// getValidatedLogInteger below.
+const SAFE_LOG_INTEGER_PATTERN = /^-?\d+$/;
 
 function getValidatedLogLevel(level: unknown): string | undefined | null {
   if (level == null) {
@@ -34,6 +39,25 @@ function getValidatedLogComponent(component: unknown): string | undefined | null
     return null;
   }
   return component;
+}
+
+function getValidatedLogInteger(value: unknown): number | undefined | null {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  // The whole string must be a complete integer literal — no leading/trailing whitespace,
+  // no decimal point, no exponent, no hex/octal prefix, no partial-numeric-prefix garbage
+  // (e.g. '25logs', '1000ms'). Number.parseInt would silently truncate those to a valid
+  // number instead of rejecting them, which is exactly the hole this closes.
+  // Negative values (e.g. '-5') are deliberately still accepted: app/log/buffer.ts's
+  // applyTail() treats a negative tail as "return no entries" rather than erroring or
+  // reading out of bounds, so there's no unsafe behavior downstream to guard against, and
+  // rejecting sign is a separate behavior change from the reported bug.
+  if (typeof value !== 'string' || !SAFE_LOG_INTEGER_PATTERN.test(value)) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 /**
@@ -70,8 +94,18 @@ function getLogEntries(req, res) {
     return;
   }
 
-  const tail = req.query.tail ? Number.parseInt(req.query.tail as string, 10) : undefined;
-  const since = req.query.since ? Number.parseInt(req.query.since as string, 10) : undefined;
+  const tail = getValidatedLogInteger(req.query.tail);
+  if (tail === null) {
+    sendErrorResponse(res, 400, 'Invalid tail query parameter');
+    return;
+  }
+
+  const since = getValidatedLogInteger(req.query.since);
+  if (since === null) {
+    sendErrorResponse(res, 400, 'Invalid since query parameter');
+    return;
+  }
+
   const entries = getEntries({ level, component, tail, since }).map((entry) =>
     toDisplayLogEntry(entry),
   );

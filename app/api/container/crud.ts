@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { buildContainerDashboardSummary } from '../../util/container-summary.js';
 import { sendErrorResponse } from '../error-response.js';
+import { sanitizePreviewErrorReason } from '../preview-errors.js';
 import {
   buildCrudHandlerContext,
   type CrudHandlerContext,
@@ -103,7 +104,7 @@ async function deleteContainerHandler(context: CrudHandlerContext, req: Request,
       sendErrorResponse(
         res,
         500,
-        `Error deleting container on agent (${context.getErrorMessage(error)})`,
+        `Error deleting container on agent (${sanitizePreviewErrorReason(context.getErrorMessage(error))})`,
       );
     }
   }

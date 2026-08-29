@@ -86,7 +86,10 @@ describe('Docker Watcher', () => {
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       const result = await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid regex pattern'));
-      expect(result.tag).toBe('1.0.0');
+      // An invalid includeTags regex compiles to null, so no filter is applied and 2.0.0
+      // stays a candidate. This used to read 1.0.0 only because the mocked tag.isGreater
+      // was false; isGreaterCandidateTag now orders numerically before consulting it.
+      expect(result.tag).toBe('2.0.0');
     });
 
     test('should warn when excludeTags regex is invalid', async () => {
