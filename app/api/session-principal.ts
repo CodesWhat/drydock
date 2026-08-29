@@ -130,7 +130,9 @@ export const sessionAuthenticator: Authenticator = {
 export function restoreSessionPrincipal(req: Request, _res: Response, next: NextFunction): void {
   const principal = readSessionPrincipal(req as AuthRequest);
   if (principal !== undefined) {
-    req.principal = principal;
+    if ((req as AuthRequest).headers?.authorization === undefined) {
+      req.principal = principal;
+    }
   }
   next();
 }

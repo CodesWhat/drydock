@@ -193,6 +193,28 @@ describe('auth-lockout', () => {
     expect(mockSendErrorResponse).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ['anonymous', { kind: 'anonymous', username: 'anonymous' }],
+    ['oidc', { kind: 'oidc', username: 'alice@example.com' }],
+    ['api-key', { kind: 'api-key', username: 'automation', keyId: 'abcdef012345', scopes: [] }],
+  ])('rejects a %s principal as a login session', async (_kind, principal) => {
+    mockAuthenticateRequest.mockResolvedValue(principal);
+    const req = { body: { username: 'alice' }, ip: '203.0.113.12' } as any;
+    const res = createResponse();
+    const next = vi.fn();
+
+    await authenticateLogin(req, res as any, next);
+
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 401, 'Unauthorized');
+    expect(mockRecordLoginAuditEvent).toHaveBeenCalledWith(
+      req,
+      'error',
+      'Authentication failed (invalid credentials)',
+      'alice',
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
   test('releases login verification capacity when the authenticator chain throws synchronously', async () => {
     const chainError = new Error('authenticator chain failed');
     mockAuthenticateRequest.mockImplementationOnce(() => {

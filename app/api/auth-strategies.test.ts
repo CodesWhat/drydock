@@ -80,7 +80,7 @@ describe('auth-strategies', () => {
   });
 
   describe('registerAuthenticators', () => {
-    test('puts the session authenticator ahead of every provider', () => {
+    test('puts the session authenticator after every provider', () => {
       const auth = createMockAuthentication({
         id: 'basic.local',
         description: { type: 'basic', name: 'Local' },
@@ -89,7 +89,7 @@ describe('auth-strategies', () => {
 
       registerAuthenticators({} as Application);
 
-      expect(getRegisteredIds()).toEqual([SESSION_AUTHENTICATOR_ID, 'basic.local']);
+      expect(getRegisteredIds()).toEqual(['basic.local', SESSION_AUTHENTICATOR_ID]);
     });
 
     test('registers multiple providers in registry order', () => {
@@ -105,7 +105,32 @@ describe('auth-strategies', () => {
 
       registerAuthenticators({} as Application);
 
-      expect(getRegisteredIds()).toEqual([SESSION_AUTHENTICATOR_ID, 'basic.local', 'oidc.google']);
+      expect(getRegisteredIds()).toEqual(['basic.local', 'oidc.google', SESSION_AUTHENTICATOR_ID]);
+    });
+
+    test('puts credentialless anonymous authentication after the session fallback', () => {
+      const basic = createMockAuthentication({
+        id: 'basic.local',
+        description: { type: 'basic', name: 'Local' },
+      });
+      const anonymous = createMockAuthentication({
+        id: 'anonymous',
+        description: { type: 'anonymous', name: 'Anonymous' },
+      });
+      const oidc = createMockAuthentication({
+        id: 'oidc.google',
+        description: { type: 'oidc', name: 'Google' },
+      });
+      mockGetState.mockReturnValue({ authentication: { basic, anonymous, oidc } });
+
+      registerAuthenticators({} as Application);
+
+      expect(getRegisteredIds()).toEqual([
+        'basic.local',
+        'oidc.google',
+        SESSION_AUTHENTICATOR_ID,
+        'anonymous',
+      ]);
     });
 
     test('catches and logs errors from getAuthenticator without crashing', () => {
@@ -138,7 +163,7 @@ describe('auth-strategies', () => {
 
       registerAuthenticators({} as Application);
 
-      expect(getRegisteredIds()).toEqual([SESSION_AUTHENTICATOR_ID, 'basic.local']);
+      expect(getRegisteredIds()).toEqual(['basic.local', SESSION_AUTHENTICATOR_ID]);
     });
 
     test('hands the express app to each provider so it can mount its routes', () => {

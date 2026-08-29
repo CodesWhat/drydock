@@ -1770,6 +1770,47 @@ describe('Auth Router', () => {
       );
     });
 
+    test('login should not create a session for an anonymous principal', async () => {
+      const handler = getRouteHandler('post', '/login');
+      const res = createResponse();
+      const req: any = {
+        principal: { kind: 'anonymous', username: 'anonymous' },
+        session: { cookie: {}, regenerate: vi.fn() },
+      };
+
+      await handler(req, res);
+
+      expect(req.session.regenerate).not.toHaveBeenCalled();
+      expect(req.session.passport).toBeUndefined();
+      expect(res.end).toHaveBeenCalledWith('Unauthorized');
+      expect(mockRecordAuditEvent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'success' }),
+      );
+    });
+
+    test('login should not create a session for an API-key principal', async () => {
+      const handler = getRouteHandler('post', '/login');
+      const res = createResponse();
+      const req: any = {
+        principal: {
+          kind: 'api-key',
+          username: 'automation',
+          keyId: 'abcdef012345',
+          scopes: ['read'],
+        },
+        session: { cookie: {}, regenerate: vi.fn() },
+      };
+
+      await handler(req, res);
+
+      expect(req.session.regenerate).not.toHaveBeenCalled();
+      expect(req.session.passport).toBeUndefined();
+      expect(res.end).toHaveBeenCalledWith('Unauthorized');
+      expect(mockRecordAuditEvent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'success' }),
+      );
+    });
+
     test('login should continue without session-limit enforcement for blank usernames', async () => {
       const handler = getRouteHandler('post', '/login');
       const req = {
@@ -3149,7 +3190,7 @@ describe('Auth Router', () => {
 
       // Should not crash (optional chain protects against a missing principal)
       await expect(handler(req, res)).resolves.toBeUndefined();
-      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.end).toHaveBeenCalledWith('Unauthorized');
     });
 
     test('returns trimmed username (MethodExpression trim matters)', async () => {

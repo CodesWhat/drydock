@@ -39,21 +39,26 @@ function useAuthenticator(authentication: Authentication, app: Application): voi
 }
 
 /**
- * Build the chain: the session authenticator first, then every registered
- * provider in registry order.
+ * Build the chain: credential-bearing providers in registry order, then the
+ * session fallback, then credentialless anonymous access.
  *
- * Session goes first because a request that already carries a valid session
- * must resolve to it before any credential is inspected — which is what
- * passport's per-strategy `if (req.isAuthenticated())` short-circuit did, once
- * per strategy, and what Phase 11.1's API-key authenticator will be registered
- * ahead of.
+ * Header credentials can therefore win over a cookie, while an invalid header
+ * still falls back to the session before anonymous access is considered.
  */
 export function registerAuthenticators(app: Application): void {
   clearAuthenticators();
+  const authentications = Object.values(registry.getState().authentication);
+  const categorized = authentications.map((authentication: Authentication) => ({
+    authentication,
+    isAnonymous: authentication.getStrategyDescription?.().type === 'anonymous',
+  }));
+  categorized
+    .filter(({ isAnonymous }) => !isAnonymous)
+    .forEach(({ authentication }) => useAuthenticator(authentication, app));
   registerAuthenticator(sessionAuthenticator);
-  Object.values(registry.getState().authentication).forEach((authentication: Authentication) => {
-    useAuthenticator(authentication, app);
-  });
+  categorized
+    .filter(({ isAnonymous }) => isAnonymous)
+    .forEach(({ authentication }) => useAuthenticator(authentication, app));
 }
 
 /**

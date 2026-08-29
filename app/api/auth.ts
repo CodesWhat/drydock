@@ -41,6 +41,7 @@ import {
   getIdentityUsername,
   getPrincipal,
   isAuthenticated,
+  isLoginSessionEligible,
 } from './principal.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
@@ -279,6 +280,13 @@ function login(req: AuthRequest, res: Response): Promise<void> {
     const finish = createLoginFinish(resolve);
     const failLogin: LoginErrorHandler = (errorMessage, options) =>
       handleLoginError(req, res, finish, errorMessage, options);
+
+    if (!isLoginSessionEligible(getPrincipal(req))) {
+      rejectUnauthenticated(req, res);
+      finish();
+      resolve();
+      return;
+    }
 
     regenerateSessionForLogin(
       req,

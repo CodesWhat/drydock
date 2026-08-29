@@ -15,7 +15,7 @@ import type { AuthRequest } from './auth-types.js';
 import { authenticateRequest } from './authenticator-chain.js';
 import { sendErrorResponse } from './error-response.js';
 import { getFirstHeaderValue } from './header-value.js';
-import type { AuthenticatedPrincipal } from './principal.js';
+import { type AuthenticatedPrincipal, isLoginSessionEligible } from './principal.js';
 
 const MS_PER_MINUTE = 60 * 1000;
 const DEFAULT_LOCKOUT_WINDOW_MINUTES = 15;
@@ -551,6 +551,11 @@ export async function authenticateLogin(
 
   finishAttempt();
   if (principal === undefined) {
+    rejectFailedLogin();
+    return;
+  }
+
+  if (!isLoginSessionEligible(principal)) {
     rejectFailedLogin();
     return;
   }

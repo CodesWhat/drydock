@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { AuthenticatedPrincipal } from './principal.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
+  getAuthenticatedRouteRateLimitKey,
   isIdentityAwareRateLimitKeyingEnabled,
   isRequestAuthenticated,
 } from './rate-limit-key.js';
@@ -47,7 +48,7 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     expect(createAuthenticatedRouteRateLimitKeyGenerator(false)).toBeUndefined();
   });
 
-  test('should separate authenticated users behind the same proxy ip', async () => {
+  test('should separate authenticated sessions behind the same proxy ip', async () => {
     const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
     expect(keyGenerator).toBeDefined();
 
@@ -55,7 +56,7 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
       createRequest({
         ip: '203.0.113.10',
         sessionID: 'session-a',
-        principal: { kind: 'basic', username: 'alice' },
+        principal: { kind: 'session', username: 'alice' },
       }),
       response,
     );
@@ -63,7 +64,7 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
       createRequest({
         ip: '203.0.113.10',
         sessionID: 'session-b',
-        principal: { kind: 'basic', username: 'bob' },
+        principal: { kind: 'session', username: 'bob' },
       }),
       response,
     );
@@ -108,6 +109,42 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     );
 
     expect(key).toBe('ip:203.0.113.25');
+  });
+
+  test('should keep login attempts IP-keyed even when a non-session principal is present', () => {
+    expect(
+      getAuthenticatedRouteRateLimitKey({
+        path: '/login',
+        ip: '203.0.113.10',
+        principal: { kind: 'api-key', username: 'automation', keyId: 'abcdef012345', scopes: [] },
+      }),
+    ).toBe('ip:203.0.113.10');
+  });
+
+  test('should keep any request with an authorization header IP-keyed before authentication', () => {
+    expect(
+      getAuthenticatedRouteRateLimitKey({
+        ip: '203.0.113.11',
+        headers: { authorization: 'Bearer ddk_key' },
+        sessionID: 'cookie-or-unsaved-session',
+      }),
+    ).toBe('ip:203.0.113.11');
+  });
+
+  test('should use the resolved header identity after authentication', () => {
+    expect(
+      getAuthenticatedRouteRateLimitKey({
+        ip: '203.0.113.11',
+        headers: { authorization: 'Bearer ddk_key' },
+        sessionID: 'cookie-or-unsaved-session',
+        principal: {
+          kind: 'api-key',
+          username: 'automation',
+          keyId: 'abcdef012345',
+          scopes: [],
+        },
+      }),
+    ).toBe('user:automation');
   });
 
   test('should prefer normalized request ip over proxy socket address for unauthenticated requests', async () => {

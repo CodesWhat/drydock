@@ -7,11 +7,13 @@ import {
 } from './principal.js';
 
 export type IdentityAwareRateLimitRequestLike = {
+  path?: unknown;
   ip?: unknown;
   socket?: {
     remoteAddress?: unknown;
   };
   principal?: AuthenticatedPrincipal;
+  headers?: { authorization?: unknown };
   sessionID?: unknown;
 };
 
@@ -56,7 +58,8 @@ function getAuthenticatedIdentityRateLimitKey(
     return undefined;
   }
 
-  const sessionId = getTrimmedString(request.sessionID);
+  const sessionId =
+    request.principal?.kind === 'session' ? getTrimmedString(request.sessionID) : undefined;
   if (sessionId) {
     return `session:${sessionId}`;
   }
@@ -72,6 +75,9 @@ function getAuthenticatedIdentityRateLimitKey(
 export function getAuthenticatedRouteRateLimitKey(
   request: IdentityAwareRateLimitRequestLike,
 ): string {
+  if (request.path === '/login') {
+    return getIpRateLimitKey(request);
+  }
   return getAuthenticatedIdentityRateLimitKey(request) || getIpRateLimitKey(request);
 }
 

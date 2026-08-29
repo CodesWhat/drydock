@@ -105,6 +105,11 @@ export function isIdentityPrincipal(
   return principal !== undefined && principal.kind !== 'anonymous';
 }
 
+/** Only principals backed by a login-capable credential may create a session. */
+export function isLoginSessionEligible(principal: AuthenticatedPrincipal | undefined): boolean {
+  return principal?.kind === 'basic' || principal?.kind === 'session';
+}
+
 /**
  * The identified username, or undefined when the request is unauthenticated or
  * anonymous. Returned verbatim — callers that need it trimmed trim it, because

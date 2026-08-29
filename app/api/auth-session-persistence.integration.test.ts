@@ -93,8 +93,18 @@ async function createTestApp(store: LokiSessionStore): Promise<Application> {
   });
 
   clearAuthenticators();
-  registerAuthenticator(sessionAuthenticator);
+  registerAuthenticator({
+    id: 'header-test',
+    persistsSession: false,
+    authenticate: (req: AuthRequest) =>
+      Promise.resolve(
+        req.headers?.authorization === 'Bearer header'
+          ? { kind: 'basic', username: 'header-user' }
+          : undefined,
+      ),
+  });
   registerAuthenticator(basic.getAuthenticator());
+  registerAuthenticator(sessionAuthenticator);
 
   const app = express();
   app.set('trust proxy', 1);
@@ -222,6 +232,58 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
     await expect(protectedResponse.json()).resolves.toEqual({ user: { username: TEST_USER } });
 
     await expect(storeLength(store)).resolves.toBe(1);
+  });
+
+  test('a higher-priority header identity wins over an eagerly restored cookie identity', async () => {
+    const store = createStore();
+    await waitForStoreReady(store);
+    const app = await createTestApp(store);
+    const { server, port } = await startServer(app);
+    openServers.push(server);
+
+    const loginResponse = await fetch(`http://127.0.0.1:${port}/login`, {
+      method: 'POST',
+      headers: { ...HTTPS_HEADERS, Authorization: BASIC_AUTH_HEADER },
+    });
+    const cookie = extractCookie(loginResponse);
+    expect(cookie).toBeDefined();
+
+    const response = await fetch(`http://127.0.0.1:${port}/protected`, {
+      headers: {
+        ...HTTPS_HEADERS,
+        Cookie: cookie as string,
+        Authorization: 'Bearer header',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ user: { username: 'header-user' } });
+    await expect(storeLength(store)).resolves.toBe(1);
+  });
+
+  test('an invalid header does not displace a valid cookie session', async () => {
+    const store = createStore();
+    await waitForStoreReady(store);
+    const app = await createTestApp(store);
+    const { server, port } = await startServer(app);
+    openServers.push(server);
+
+    const loginResponse = await fetch(`http://127.0.0.1:${port}/login`, {
+      method: 'POST',
+      headers: { ...HTTPS_HEADERS, Authorization: BASIC_AUTH_HEADER },
+    });
+    const cookie = extractCookie(loginResponse);
+
+    const response = await fetch(`http://127.0.0.1:${port}/protected`, {
+      headers: {
+        ...HTTPS_HEADERS,
+        Cookie: cookie as string,
+        Authorization: 'Bearer unrelated',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ user: { username: TEST_USER } });
   });
 
   test('a wrong password is rejected with a bare 401 and still writes nothing', async () => {
