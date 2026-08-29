@@ -78,6 +78,20 @@ test("CSP builder rejects values that could inject another directive", () => {
   assert.throws(() => buildContentSecurityPolicy("nonce'; script-src *", false), /nonce/u);
 });
 
+test("CSP permits the badge image origins the homepage hero loads", () => {
+  const policy = buildContentSecurityPolicy("c2VjdXJlLW5vbmNl", false);
+
+  assert.deepEqual(getDirectiveSources(policy, "img-src"), [
+    "'self'",
+    "data:",
+    "https://img.shields.io",
+    "https://github.com",
+    "https://qlty.sh",
+    "https://www.bestpractices.dev",
+    "https://codecov.io",
+  ]);
+});
+
 test("proxy propagates a fresh nonce and CSP through request and response headers", () => {
   assert.match(proxySource, /crypto\.randomUUID\(\)/u);
   assert.match(proxySource, /requestHeaders\.set\("x-nonce", nonce\)/u);

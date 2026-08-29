@@ -911,7 +911,61 @@ export class AgentClient {
     }
   }
 
-  private async processAuthoritativeContainer(container: Container): Promise<ContainerReport> {
+  /**
+   * Ownership gate for the bulk/authoritative ingestion funnel
+   * (`processAuthoritativeContainer`), which every full-inventory and
+   * snapshot path reaches with no other check in between: handshake,
+   * watcher-snapshot fallback, on-demand watch/watchContainer, and edge
+   * container sync. Without this, any of those paths can report an id
+   * already owned by another agent or by the controller's own local
+   * watcher and have `buildContainerReport`'s unconditional
+   * `container.agent = this.name` stamp reassign it.
+   *
+   * Carries the first two of `canMutateContainer`'s three checks — no
+   * existing record while claiming the controller-local watcher namespace,
+   * and an existing record owned by a different agent — but deliberately
+   * NOT its third (rejecting a `watcher` mismatch against the stored
+   * record). Bulk ingestion is exactly how a legitimate watcher rename
+   * propagates (an operator renaming a `DD_WATCHER_<NAME>_SOCKET` key), and
+   * rejecting on watcher mismatch here would refuse every subsequent
+   * report for that container id forever: `pruneOldContainers` keys on
+   * container id, which a rename doesn't change, so the record is never
+   * pruned and never retried. Updates would just stop landing with no
+   * error surfaced.
+   */
+  private canIngestAuthoritativeContainer(container: Container): boolean {
+    if (typeof container.id !== 'string' || container.id.length === 0) {
+      this.log.warn(
+        `Ignoring authoritative container ingest without an id from agent ${this.name}`,
+      );
+      return false;
+    }
+
+    const existing = storeContainer.getContainer(container.id);
+    if (!existing) {
+      if (this.claimsControllerLocalWatcherNamespace(container.watcher)) {
+        this.log.warn(
+          `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: watcher '${sanitizeLogParam(container.watcher)}' belongs to the controller's local watcher namespace`,
+        );
+        return false;
+      }
+      return true;
+    }
+    if (existing.agent !== this.name) {
+      this.log.warn(
+        `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: container is owned by ${sanitizeLogParam(existing.agent ?? 'controller')}`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  private async processAuthoritativeContainer(
+    container: Container,
+  ): Promise<ContainerReport | undefined> {
+    if (!this.canIngestAuthoritativeContainer(container)) {
+      return undefined;
+    }
     this.clearPendingFreshState(container.id);
     return this.processContainer(container);
   }
@@ -922,7 +976,10 @@ export class AgentClient {
     const containerReports: ContainerReport[] = [];
     for (const container of containers) {
       try {
-        containerReports.push(await this.processAuthoritativeContainer(container));
+        const containerReport = await this.processAuthoritativeContainer(container);
+        if (containerReport) {
+          containerReports.push(containerReport);
+        }
       } catch (error: unknown) {
         this.log.error(
           `Failed to process authoritative container ${sanitizeLogParam(container.id)} (${sanitizeLogParam(getErrorMessage(error))})`,
@@ -1039,10 +1096,14 @@ export class AgentClient {
         this.log.warn(`Failed to fetch/register watchers: ${getErrorMessage(error)}`);
       }
 
-      // Apply inventory only after watcher registration. Controller-transport
-      // descriptors change which fields are authoritative: Portwing owns live
-      // runtime state, while Drydock's native watcher owns update enrichment.
-      await this.processAuthoritativeContainers(containers);
+      // Prune (and, for a same-identity replacement, stash the retained update
+      // policy) before applying the incoming inventory. deleteContainer(...,
+      // {replacementExpected: true}) stashes updatePolicy keyed by identity
+      // (agent::watcher::name); insertContainer() consumes that stash as its
+      // first action. Running the insert first — as this used to — leaves
+      // nothing to consume, so a recreated agent-owned container silently
+      // lost its maturity policy on every restart-driven replacement.
+      //
       // A zero-container handshake is ambiguous: it could mean the agent has
       // no running containers, or its in-memory store is fresh-empty after a
       // restart while docker still has running containers. Defer the prune
@@ -1058,6 +1119,10 @@ export class AgentClient {
           'Handshake returned 0 containers; preserving last-known state until the first watch cycle completes',
         );
       }
+      // Apply inventory only after watcher registration. Controller-transport
+      // descriptors change which fields are authoritative: Portwing owns live
+      // runtime state, while Drydock's native watcher owns update enrichment.
+      await this.processAuthoritativeContainers(containers);
 
       // Fetch and register triggers
       try {
@@ -1351,7 +1416,16 @@ export class AgentClient {
 
     const existing = storeContainer.getContainer(candidate.id);
     if (!existing) {
-      return operation === 'upsert';
+      if (operation !== 'upsert') {
+        return false;
+      }
+      if (this.claimsControllerLocalWatcherNamespace(candidate.watcher)) {
+        this.log.warn(
+          `Ignoring container ${operation} for ${sanitizeLogParam(candidate.id)} from agent ${this.name}: watcher '${sanitizeLogParam(candidate.watcher as string)}' belongs to the controller's local watcher namespace`,
+        );
+        return false;
+      }
+      return true;
     }
     if (existing.agent !== this.name) {
       this.log.warn(
@@ -1369,6 +1443,30 @@ export class AgentClient {
       return false;
     }
     return true;
+  }
+
+  /**
+   * True when `watcherName` names a watcher registered directly by the
+   * controller (no `agent` prefix on its registry component id, e.g.
+   * `docker.local`) rather than by any connected agent (whose components are
+   * always registered as `<agentName>.docker.<watcherName>`, per
+   * `Component.getId()`). An agent cannot forge this: it only controls its
+   * own handshake-reported watcher descriptors, which the controller always
+   * registers under that agent's own prefix, never bare.
+   *
+   * Used to close the no-record race in `canMutateContainer`: without it, an
+   * agent could pre-insert a container under a controller-local container id
+   * before the controller's own watch cycle writes the real record, claiming
+   * ownership (via `buildContainerReport`'s `container.agent` stamp) and
+   * redirecting future lifecycle actions on that container to itself
+   * (`isTriggerCompatibleWithContainer` in `api/docker-trigger.ts` routes
+   * purely on the stored `agent` field).
+   */
+  private claimsControllerLocalWatcherNamespace(watcherName: unknown): boolean {
+    if (typeof watcherName !== 'string' || watcherName.length === 0) {
+      return false;
+    }
+    return Boolean(registry.getState().watcher[`docker.${watcherName}`]);
   }
 
   private async handleContainerChangeEvent(data: unknown) {
@@ -1445,6 +1543,14 @@ export class AgentClient {
       });
     }
 
+    // Prune (and stash any same-identity replacement's update policy) before
+    // the loop below inserts/updates the incoming containers — insertContainer()
+    // consumes the stash as its first action, so it must already exist. See the
+    // reorder note in _doHandshake() above for the full mechanism.
+    if (watcherName) {
+      this.pruneOldContainers(containers, watcherName);
+    }
+
     const containerReports: ContainerReport[] = [];
     for (const container of containers) {
       try {
@@ -1456,7 +1562,10 @@ export class AgentClient {
           );
           continue;
         }
-        containerReports.push(await this.processAuthoritativeContainer(container));
+        const authoritativeReport = await this.processAuthoritativeContainer(container);
+        if (authoritativeReport) {
+          containerReports.push(authoritativeReport);
+        }
       } catch (error: unknown) {
         this.log.error(
           `Failed to process watcher snapshot container ${sanitizeLogParam(container.id)} (${sanitizeLogParam(getErrorMessage(error))})`,
@@ -1465,10 +1574,6 @@ export class AgentClient {
     }
     this.clearPendingWatcherCycleReports(watcherName);
     await emitContainerReports(containerReports);
-
-    if (watcherName) {
-      this.pruneOldContainers(containers, watcherName);
-    }
 
     this.scheduleStatsChanged();
   }
@@ -2259,9 +2364,25 @@ export class AgentClient {
         this.buildRequestConfig('POST', target, {}),
       );
       const reports = response.data;
-      await this.processAuthoritativeContainers(reports.map((report) => report.container));
       const containers = reports.map((report) => report.container);
-      this.pruneOldContainers(containers, watcherName);
+      // Prune (and stash any same-identity replacement's update policy) before
+      // processAuthoritativeContainers() inserts/updates below — insertContainer()
+      // consumes the stash as its first action, so it must already exist. See the
+      // reorder note in _doHandshake() for the full mechanism.
+      //
+      // An empty report list is ambiguous the same way a zero-container handshake
+      // is: it could mean the watcher genuinely has nothing to report, or that
+      // enumeration failed entirely on the agent (Docker.watch() returns []
+      // without distinguishing the two). Skip the prune in that case rather than
+      // wiping every container this watcher owns.
+      if (containers.length > 0) {
+        this.pruneOldContainers(containers, watcherName);
+      } else if (this.hasConnectedOnce) {
+        this.log.warn(
+          'Watch returned 0 containers; preserving last-known state until the next watch cycle completes',
+        );
+      }
+      await this.processAuthoritativeContainers(containers);
       this.scheduleStatsChanged();
       return reports;
     } catch (error: unknown) {
@@ -2297,10 +2418,14 @@ export class AgentClient {
    * agent via dd:container_sync. Replaces handshake() for edge connections.
    */
   async handleContainerSync(containers: Container[]): Promise<void> {
-    const reports = await this.processAuthoritativeContainers(containers);
+    // Prune (and stash any same-identity replacement's update policy) before
+    // processAuthoritativeContainers() inserts/updates below — insertContainer()
+    // consumes the stash as its first action, so it must already exist. See the
+    // reorder note in _doHandshake() for the full mechanism.
     if (containers.length > 0) {
       this.pruneOldContainers(containers);
     }
+    const reports = await this.processAuthoritativeContainers(containers);
     this.scheduleStatsChanged();
     // Suppress unused variable warning — reports are emitted internally.
     void reports;

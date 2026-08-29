@@ -767,6 +767,41 @@ class BaseRegistry<
   }
 
   /**
+   * Decode a base64 `login:password` `auth` value into dockerode's
+   * `{username, password}` pull-auth shape. Splits on the first colon only
+   * (RFC 7617: the password may itself contain colons).
+   *
+   * Throws rather than returning undefined on a malformed value: `auth` is
+   * always set deliberately (it is mutually exclusive with login/password in
+   * every provider schema that accepts it), so silently falling through to
+   * an anonymous pull would reproduce the exact bug this decode exists to
+   * fix, just for a different malformed input.
+   */
+  private decodeAuthCredentials(auth: string): { username: string; password: string } {
+    const malformedAuthError = new Error(
+      `Unable to authenticate registry ${this.getId()}: configured auth value is not a valid base64-encoded login:password pair`,
+    );
+    const decodedBuffer = Buffer.from(auth, 'base64');
+    // Buffer.from(x, 'base64') silently drops characters outside the base64 alphabet
+    // instead of throwing — e.g. 'dXNlcjpwYXNz!'.toString() still decodes to 'user:pass',
+    // discarding the trailing '!' rather than erroring. Re-encoding the decoded bytes and
+    // comparing against the original catches that: any character the decoder ignored, or
+    // stripped whitespace, makes the round trip diverge from the input.
+    if (decodedBuffer.toString('base64') !== auth) {
+      throw malformedAuthError;
+    }
+    const decoded = decodedBuffer.toString('utf-8');
+    const separatorIndex = decoded.indexOf(':');
+    if (separatorIndex <= 0) {
+      throw malformedAuthError;
+    }
+    return {
+      username: decoded.slice(0, separatorIndex),
+      password: decoded.slice(separatorIndex + 1),
+    };
+  }
+
+  /**
    * Common auth pull credentials
    */
   async getAuthPull() {
@@ -781,6 +816,9 @@ class BaseRegistry<
         username: this.configuration.username,
         password: this.configuration.token,
       };
+    }
+    if (this.configuration.auth) {
+      return this.decodeAuthCredentials(this.configuration.auth);
     }
     return undefined;
   }

@@ -6,17 +6,19 @@ Active deprecations and their removal timeline. Each entry includes the version 
 
 ## Active
 
-### PUT /api/settings
+### PUT /api/v1/settings
 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.4.0 |
 | **Removal** | Deferred to API v2 — `/api/v1` is frozen, so the method cannot be dropped from it; the `Sunset` header advertises 2027-01-01 as the earliest retirement instant |
-| **Affects** | API consumers using `PUT /api/settings` |
+| **Affects** | API consumers using `PUT /api/v1/settings` |
 
-`PUT /api/settings` is a compatibility alias for `PATCH /api/settings`. Use `PATCH` for partial settings updates. An earlier revision of this entry scheduled the removal for v1.6.0; that predated the API versioning policy freezing `/api/v1`, under which removing a method from the versioned surface is a breaking change reserved for `/api/v2`.
+`PUT /api/v1/settings` is a compatibility alias for `PATCH /api/v1/settings`. Use `PATCH` for partial settings updates. An earlier revision of this entry scheduled the removal for v1.6.0; that predated the API versioning policy freezing `/api/v1`, under which removing a method from the versioned surface is a breaking change reserved for `/api/v2`.
 
-**Migration:** Replace `PUT /api/settings` calls with `PATCH /api/settings`.
+The unversioned `/api/settings` path is not a working alias for this endpoint. Like the rest of the unversioned surface it returns `410 Gone` (see the Unversioned `/api/*` path entry below); settings is not one of the four wud-card compatibility endpoints exempted from that tombstone.
+
+**Migration:** Replace `PUT /api/v1/settings` calls with `PATCH /api/v1/settings`.
 
 ---
 
