@@ -36,6 +36,7 @@ Feature: Drydock WebSocket Log Stream API
     When I authenticate for WebSocket
     And I open WebSocket at /api/v1/containers/`containerId`/logs/stream?tail=10&follow=false
     Then WebSocket should have closed with code 1000
+    And WebSocket should have received at least 1 message
     And every WebSocket message should be valid json
     And every WebSocket message should have path $.type
     And every WebSocket message should have path $.ts
