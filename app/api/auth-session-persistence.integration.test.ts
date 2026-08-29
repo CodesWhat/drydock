@@ -16,7 +16,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import ConnectLoki from 'connect-loki';
-import express, { type Application, type Request, type Response } from 'express';
+import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
 import session from 'express-session';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import Basic from '../authentications/providers/basic/Basic.js';
@@ -108,13 +108,13 @@ async function createTestApp(store: LokiSessionStore): Promise<Application> {
   );
   app.use(restoreSessionPrincipal);
 
-  app.get('/protected', requireAuthentication, (req: Request, res: Response) => {
+  app.get('/protected', requireAuthentication, (req: Request, res: ExpressResponse) => {
     res.status(200).json({ user: { username: (req as AuthRequest).principal?.username } });
   });
 
   // The shape of auth.ts's login route: authenticate, regenerate, then write the
   // identity into the session. This is the only path that is allowed to create one.
-  app.post('/login', (req: Request, res: Response) => {
+  app.post('/login', (req: Request, res: ExpressResponse) => {
     void authenticateRequest(req as AuthRequest).then((principal) => {
       if (principal === undefined) {
         res.status(401).json({ error: 'invalid credentials' });
@@ -149,7 +149,10 @@ function closeServer(server: http.Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-function extractCookie(response: Response): string | undefined {
+// The argument is a fetch Response, not express's. They are unrelated types and
+// only fetch's carries a Headers object, so annotating it with the express one
+// would be wrong about the only property this reads.
+function extractCookie(response: Awaited<ReturnType<typeof fetch>>): string | undefined {
   const setCookie = response.headers.get('set-cookie');
   return setCookie?.split(';')[0];
 }
