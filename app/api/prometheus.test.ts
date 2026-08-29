@@ -26,6 +26,11 @@ vi.mock('./auth', () => ({
   requireAuthentication: mockRequireAuthentication,
 }));
 
+const { mockRateLimit } = vi.hoisted(() => ({
+  mockRateLimit: vi.fn(() => 'metrics-auth-limiter'),
+}));
+vi.mock('express-rate-limit', () => ({ default: mockRateLimit }));
+
 import { getServerConfiguration } from '../configuration/index.js';
 import { output } from '../prometheus/index.js';
 import * as prometheusRouter from './prometheus.js';
@@ -46,6 +51,26 @@ describe('Prometheus Router', () => {
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
   });
 
+  test('should charge only failed attempts against the credential fallback budget', () => {
+    const router = prometheusRouter.init();
+
+    expect(mockRateLimit).toHaveBeenCalledWith({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      skipSuccessfulRequests: true,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
+    });
+    // The budget has to sit in front of the credential check, or a guess is
+    // answered before it is counted.
+    const useArguments = router.use.mock.calls.map(([middleware]) => middleware);
+    expect(useArguments.indexOf('metrics-auth-limiter')).toBeGreaterThanOrEqual(0);
+    expect(useArguments.indexOf('metrics-auth-limiter')).toBeLessThan(
+      useArguments.indexOf(mockRequireAuthentication),
+    );
+  });
+
   test('should allow unauthenticated metrics when disabled in configuration', async () => {
     getServerConfiguration.mockReturnValue({
       metrics: {
@@ -57,6 +82,7 @@ describe('Prometheus Router', () => {
 
     expect(router).toBeDefined();
     expect(router.use).not.toHaveBeenCalledWith(mockRequireAuthentication);
+    expect(mockRateLimit).not.toHaveBeenCalled();
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
   });
 
@@ -105,6 +131,8 @@ describe('Prometheus Router', () => {
 
       expect(router.use).not.toHaveBeenCalledWith(mockRequireAuthentication);
       expect(router.use).toHaveBeenCalledWith(prometheusRouter.authenticateMetricsToken);
+      // A single configured secret compared in constant time; no budget needed.
+      expect(mockRateLimit).not.toHaveBeenCalled();
     });
 
     test('should return 200 for valid bearer token', () => {

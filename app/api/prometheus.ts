@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
 import { output } from '../prometheus/index.js';
@@ -12,6 +13,26 @@ import * as auth from './auth.js';
  */
 const router = express.Router();
 let expectedMetricsTokenHash: Buffer | null = null;
+
+/**
+ * Failed-attempt budget for the credential fallback below.
+ *
+ * `/metrics` only reaches the authenticator chain when `DD_SERVER_METRICS_TOKEN`
+ * is unset, and on that branch any credential a configured provider accepts gets
+ * in. Nothing sat in front of it: `/api/v1` has its own limiter and the login
+ * route has lockout, but this route had neither, under the chain and under
+ * `passport.authenticate()` before it, so a password could be guessed against it
+ * at whatever rate the network allowed.
+ *
+ * `skipSuccessfulRequests` is what makes a budget this small safe. A scrape that
+ * authenticates is never charged, so no scrape interval and no number of
+ * Prometheus servers can exhaust it; only 4xx and 5xx responses accumulate. The
+ * window rolls off on its own, so a target left holding a stale credential
+ * recovers without an operator. The bearer branch is not limited and does not
+ * need to be: it is a constant-time compare against a single configured secret.
+ */
+const METRICS_AUTH_FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const METRICS_AUTH_MAX_FAILURES = 100;
 
 function hashMetricsToken(token: string): Buffer {
   return createHash('sha256').update(token, 'utf8').digest();
@@ -69,6 +90,17 @@ export function init() {
     // Bearer token auth takes priority when DD_SERVER_METRICS_TOKEN is set
     router.use(authenticateMetricsToken);
   } else if (configuration.metrics?.auth !== false) {
+    // Charges failed attempts only, so a working scrape never meets it.
+    router.use(
+      rateLimit({
+        windowMs: METRICS_AUTH_FAILURE_WINDOW_MS,
+        max: METRICS_AUTH_MAX_FAILURES,
+        skipSuccessfulRequests: true,
+        standardHeaders: true,
+        legacyHeaders: false,
+        validate: { xForwardedForHeader: false },
+      }),
+    );
     // Fallback to the authenticator chain: a session cookie, or any credential
     // a configured provider accepts. `passport.authenticate(getAllIds())` never
     // looked at the session it had just restored, so a logged-in browser used to
