@@ -244,6 +244,16 @@ export function findApprovalsByContainerId(containerId: string): ApprovalRecord[
 }
 
 /**
+ * Look a row up by the update operation an approval was dispatched as. Used by the
+ * reconciler to stamp the operation's outcome back onto the row that started it.
+ * @param operationId
+ */
+export function findApprovalByOperationId(operationId: string): ApprovalRecord | undefined {
+  const document = approvalCollection?.findOne({ operationId });
+  return document ? toApprovalRecord(document) : undefined;
+}
+
+/**
  * Apply a decision patch. Only the fields in `APPROVAL_MUTABLE_FIELDS` are written, so a
  * caller can never rewrite the candidate identity a row was minted with.
  * @param id

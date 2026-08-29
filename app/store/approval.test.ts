@@ -169,6 +169,27 @@ describe('findApprovalsByContainerId', () => {
   });
 });
 
+describe('findApprovalByOperationId', () => {
+  test('returns the row carrying that operation id', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.updateApproval(inserted.id, { operationId: 'op-1' });
+
+    expect(approvalStore.findApprovalByOperationId('op-1')?.id).toBe(inserted.id);
+  });
+
+  test('returns undefined for an operation id no row carries', () => {
+    approvalStore.insertApproval(createInput());
+
+    expect(approvalStore.findApprovalByOperationId('op-1')).toBeUndefined();
+  });
+
+  test('returns undefined when the collection has not been created', () => {
+    approvalStore.resetApprovalStoreForTests();
+
+    expect(approvalStore.findApprovalByOperationId('op-1')).toBeUndefined();
+  });
+});
+
 describe('updateApproval', () => {
   test('applies only the known mutable fields and persists them', () => {
     const inserted = approvalStore.insertApproval(createInput());

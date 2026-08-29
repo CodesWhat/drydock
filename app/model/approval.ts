@@ -115,13 +115,40 @@ export interface ShouldQueueForApprovalOptions {
 }
 
 /**
- * `shouldQueueForApproval(container, triggers, updateMode)`:
+ * Whether the normal trigger path will apply this candidate on its own. The global
+ * `updateMode` ceiling is applied here rather than inside the 6.0.1 resolver, which
+ * stays mode-agnostic so display, manual admission and auto-dispatch can all reuse it.
+ */
+export function isAutoDispatchable(
+  container: Container,
+  triggers: Record<string, ActionPolicyTrigger> | undefined,
+  updateMode: UpdateMode,
+): boolean {
+  if (updateMode !== 'auto') {
+    return false;
+  }
+  return selectActionTrigger(triggers, container, { requireAuto: true })?.state === 'auto';
+}
+
+/**
+ * Why a candidate is, or is not, in the queue on this watch cycle.
  *
- *      hasRawUpdate(container)                                   # NOT updateAvailable
- *  AND getPrimaryHardBlocker(computeUpdateEligibility(...)) is undefined
- *  AND NOT ( updateMode === 'auto'
- *            AND selectActionTrigger(triggers, container, { requireAuto: true }) is auto )
+ * `shouldQueueForApproval` is the spec's predicate and the only thing that decides
+ * whether a row exists; the reconciler needs the reason as well, because the three
+ * negative verdicts resolve an existing row three different ways. Deriving both from one
+ * pass also means the answer and its reason can never disagree, which they could if the
+ * reconciler re-derived the hard-blocker check on its own.
  *
+ * - `no-candidate`   — no raw update at all; a queued row's candidate has been withdrawn.
+ * - `blocked`        — a hard blocker; the Update button is disabled, so nothing is
+ *                      queued, but an existing row is left alone because the candidate
+ *                      still stands and the blocker may lift.
+ * - `auto-dispatch`  — the normal trigger path will apply this on its own.
+ * - `queue`          — the manual path would accept it; this is the queue's candidate set.
+ */
+export type ApprovalCandidateVerdict = 'no-candidate' | 'blocked' | 'auto-dispatch' | 'queue';
+
+/**
  * `hasRawUpdate`, not `container.updateAvailable`, is load-bearing: soft gates (snooze,
  * threshold, maturity, skip-tag/skip-digest, maintenance window) suppress the public
  * `updateAvailable` getter while the raw candidate stays in `image`/`result`. Keying off
@@ -129,25 +156,24 @@ export interface ShouldQueueForApprovalOptions {
  * is precisely the set an operator most wants to review; soft blockers instead render as
  * the row's hold reasons.
  *
- * The auto conjunct tests the resolved state rather than the mere presence of a result,
- * because an explicit `dd.action.exclude` match is returned as a `blocked` verdict even
- * under `requireAuto`. That case is already excluded by the hard-blocker conjunct
- * (`trigger-excluded` is hard), so the two forms agree today; testing the state keeps
- * them agreeing if that severity ever changes again.
+ * The hard-blocker check runs before the auto check so a container that is both
+ * auto-resolved and hard-blocked reads as `blocked`. The auto path cannot apply it
+ * either, and calling that `auto-dispatch` would let the reconciler resolve a live row as
+ * `auto-applied` for an update that never ran.
  *
  * There is deliberately no injectable clock: every time-dependent blocker (`snoozed`,
  * `maturity-not-reached`) is soft, so no value of `now` can change this answer. The
  * queue's only time-dependent state is deferral, which is a query predicate on the
  * record rather than an input to the predicate.
  */
-export function shouldQueueForApproval(
+export function classifyApprovalCandidate(
   container: Container,
   triggers: Record<string, ActionPolicyTrigger> | undefined,
   updateMode: UpdateMode,
   options: ShouldQueueForApprovalOptions = {},
-): boolean {
+): ApprovalCandidateVerdict {
   if (!hasRawUpdate(container)) {
-    return false;
+    return 'no-candidate';
   }
 
   const eligibility = computeUpdateEligibility(container, {
@@ -164,14 +190,33 @@ export function shouldQueueForApproval(
   });
 
   if (getPrimaryHardBlocker(eligibility) !== undefined) {
-    return false;
+    return 'blocked';
   }
 
-  if (updateMode !== 'auto') {
-    return true;
-  }
+  return isAutoDispatchable(container, triggers, updateMode) ? 'auto-dispatch' : 'queue';
+}
 
-  return selectActionTrigger(triggers, container, { requireAuto: true })?.state !== 'auto';
+/**
+ * `shouldQueueForApproval(container, triggers, updateMode)`:
+ *
+ *      hasRawUpdate(container)                                   # NOT updateAvailable
+ *  AND getPrimaryHardBlocker(computeUpdateEligibility(...)) is undefined
+ *  AND NOT ( updateMode === 'auto'
+ *            AND selectActionTrigger(triggers, container, { requireAuto: true }) is auto )
+ *
+ * The auto conjunct tests the resolved state rather than the mere presence of a result,
+ * because an explicit `dd.action.exclude` match is returned as a `blocked` verdict even
+ * under `requireAuto`. That case is already excluded by the hard-blocker conjunct
+ * (`trigger-excluded` is hard), so the two forms agree today; testing the state keeps
+ * them agreeing if that severity ever changes again.
+ */
+export function shouldQueueForApproval(
+  container: Container,
+  triggers: Record<string, ActionPolicyTrigger> | undefined,
+  updateMode: UpdateMode,
+  options: ShouldQueueForApprovalOptions = {},
+): boolean {
+  return classifyApprovalCandidate(container, triggers, updateMode, options) === 'queue';
 }
 
 /**

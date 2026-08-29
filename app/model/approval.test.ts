@@ -10,10 +10,12 @@ import {
   APPROVAL_SCHEMA_VERSION,
   type ApprovalRecord,
   buildApprovalRecordInput,
+  classifyApprovalCandidate,
   getApprovalCandidateRef,
   isApprovalDeferred,
   isApprovalPending,
   isApprovalResolved,
+  isAutoDispatchable,
   shouldQueueForApproval,
 } from './approval.js';
 import type { Container } from './container.js';
@@ -265,6 +267,83 @@ describe('shouldQueueForApproval', () => {
         );
       },
     );
+  });
+});
+
+describe('isAutoDispatchable', () => {
+  test.each(['notify', 'manual'] as const)(
+    'is false under updateMode %s however the action policy resolves',
+    (updateMode) => {
+      expect(
+        isAutoDispatchable(createContainer(), createTrigger({ auto: 'all' }), updateMode),
+      ).toBe(false);
+    },
+  );
+
+  test('is true only when the resolver returns an auto verdict under updateMode auto', () => {
+    expect(isAutoDispatchable(createContainer(), createTrigger({ auto: 'all' }), 'auto')).toBe(
+      true,
+    );
+    expect(isAutoDispatchable(createContainer(), createTrigger({ auto: 'none' }), 'auto')).toBe(
+      false,
+    );
+  });
+
+  test('is false when an explicit exclude wins the walk', () => {
+    const container = createContainer({ actionTriggerExclude: 'docker.local' });
+
+    expect(isAutoDispatchable(container, createTrigger({ auto: 'all' }), 'auto')).toBe(false);
+  });
+});
+
+describe('classifyApprovalCandidate', () => {
+  test('reads no-candidate when nothing newer was detected', () => {
+    const container = createContainer({
+      result: { tag: '1.2.3' },
+      updateKind: { kind: 'unknown' },
+    });
+
+    expect(classifyApprovalCandidate(container, createTrigger(), 'manual')).toBe('no-candidate');
+  });
+
+  test('reads blocked for a hard blocker and queue once it lifts', () => {
+    const container = createContainer({ actionTriggerExclude: 'docker.local' });
+
+    expect(classifyApprovalCandidate(container, createTrigger({ auto: 'all' }), 'manual')).toBe(
+      'blocked',
+    );
+    expect(classifyApprovalCandidate(createContainer(), createTrigger(), 'manual')).toBe('queue');
+  });
+
+  test('reads auto-dispatch only when the trigger path will apply the candidate itself', () => {
+    const triggers = createTrigger({ auto: 'all' });
+
+    expect(classifyApprovalCandidate(createContainer(), triggers, 'auto')).toBe('auto-dispatch');
+    expect(classifyApprovalCandidate(createContainer(), triggers, 'manual')).toBe('queue');
+  });
+
+  // A hard blocker stops the auto path too, so calling this auto-dispatch would let the
+  // reconciler resolve a live row as `auto-applied` for an update that never runs.
+  test('a hard blocker outranks an auto resolution', () => {
+    const container = createContainer({
+      updateRollback: { targetDigest: '1.2.4', reason: 'health-gate' },
+    } as Partial<Container>);
+    const triggers = createTrigger({ auto: 'all' });
+
+    expect(isAutoDispatchable(container, triggers, 'auto')).toBe(true);
+    expect(classifyApprovalCandidate(container, triggers, 'auto')).toBe('blocked');
+  });
+
+  test('the self-update option reaches the eligibility context', () => {
+    const container = createContainer({
+      image: { ...createContainer().image, name: 'codeswhat/drydock' },
+    });
+
+    expect(
+      classifyApprovalCandidate(container, createTrigger(), 'manual', {
+        isSelfUpdateAvailable: false,
+      }),
+    ).toBe('blocked');
   });
 });
 
