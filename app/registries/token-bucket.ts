@@ -81,6 +81,11 @@ const HOST_CONFIGS: Array<{ pattern: RegExp; ratePerSec: number; burst: number }
     burst: 10,
   },
   { pattern: /^api\.github\.com$/, ratePerSec: 1, burst: 3 },
+  // AWS ECR Public throttles anonymous reads harder than the 5/s default
+  // allows for. A compose stack pulled from one ECR namespace (Supabase
+  // self-host is the common case) puts a dozen containers on this host in the
+  // same cycle and drew widespread 429s at the default.
+  { pattern: /^public\.ecr\.aws$/, ratePerSec: 2, burst: 10 },
 ];
 
 const DEFAULT_RATE_PER_SEC = 5;

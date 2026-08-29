@@ -306,6 +306,325 @@ describe('getTags', () => {
   });
 });
 
+// --- getTagsPage link header cursor tests ---
+//
+// Pagination cursors are opaque under the OCI distribution spec. The old code
+// captured the `Link` header and threw it away, rebuilding the cursor as
+// `last=<literal tag name>` from the previous page's last tag. AWS ECR Public
+// rejects that with HTTP 405 ("Invalid parameter at 'NextToken' failed to
+// satisfy constraint: 'Invalid next token provided'"), so page 2+ of any
+// repository with 1000+ tags was unreachable there. These tests guard the fix:
+// the registry's own cursor is followed verbatim when it gives one, and the
+// hand-built form is only used as a fallback.
+
+describe('getTagsPage link header cursor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('should follow a relative-path Link header cursor verbatim, not rebuild it as &last=<tag> (405 regression guard)', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '</v2/team/img/tags/list?last=OPAQUE%2Bcursor&n=1000>; rel="next"',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    const result = await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    expect(callRegistrySpy).toHaveBeenCalledTimes(2);
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe(
+      'https://reg.io/v2/team/img/tags/list?last=OPAQUE%2Bcursor&n=1000',
+    );
+    // Must NOT be the rebuilt form (?n=1000&last=<tag>) that 405s on ECR Public.
+    expect(secondCallOptions.url).not.toContain('?n=1000&last=');
+    expect(result).toStrictEqual(['v3', 'v2', 'v1']);
+  });
+
+  test('should follow an absolute-URL Link header cursor as-is', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '<https://reg.io/v2/team/img/tags/list?last=abs-cursor&n=1000>; rel="next"',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe(
+      'https://reg.io/v2/team/img/tags/list?last=abs-cursor&n=1000',
+    );
+  });
+
+  test('should accept an unquoted rel=next parameter', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '</v2/team/img/tags/list?last=unquoted-cursor&n=1000>; rel=next',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe(
+      'https://reg.io/v2/team/img/tags/list?last=unquoted-cursor&n=1000',
+    );
+  });
+
+  test('should pick the rel="next" entry when a rel="prev" entry precedes it', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link:
+              '</v2/team/img/tags/list?last=prev-cursor&n=1000>; rel="prev", ' +
+              '</v2/team/img/tags/list?last=next-cursor&n=1000>; rel="next"',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toContain('last=next-cursor');
+    expect(secondCallOptions.url).not.toContain('last=prev-cursor');
+  });
+
+  test('should fall back to the hand-built &last= URL when the Link header has no rel="next"', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: { link: '</v2/team/img/tags/list?last=prev-cursor&n=1000>; rel="prev"' },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe('https://reg.io/v2/team/img/tags/list?n=1000&last=v2');
+  });
+
+  test('should fall back to the hand-built &last= URL when the Link header is malformed', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: { link: 'not-a-valid-link-header' },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe('https://reg.io/v2/team/img/tags/list?n=1000&last=v2');
+  });
+
+  test('should refuse a cross-origin Link header cursor and fall back to the hand-built URL (credential-leak guard)', async () => {
+    // The request carries registry credentials, so following a cursor to a
+    // different origin would hand them to whatever host the registry named.
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: {
+            link: '<https://evil.example.com/v2/team/img/tags/list?last=stolen&n=1000>; rel="next"',
+          },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).not.toContain('evil.example.com');
+    expect(secondCallOptions.url).toBe('https://reg.io/v2/team/img/tags/list?n=1000&last=v2');
+  });
+
+  test('should fall back to the hand-built URL when the registry base URL itself is unparseable (try/catch guard)', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: { link: '</v2/img/tags/list?last=cursor&n=1000>; rel="next"' },
+          data: { tags: ['v1', 'v2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'img',
+      registry: { url: 'not a valid url' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe('not a valid url/img/tags/list?n=1000&last=v2');
+  });
+
+  test('should URL-encode a lastItem tag containing reserved characters in the fallback URL', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: { link: 'not-a-valid-link-header' },
+          data: { tags: ['v1', '1.0.0+build.2'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe(
+      'https://reg.io/v2/team/img/tags/list?n=1000&last=1.0.0%2Bbuild.2',
+    );
+  });
+
+  test('should leave an ordinary tag unchanged in the fallback URL (encoding is a no-op)', async () => {
+    const registryMocked = createMockedRegistry();
+    const callRegistrySpy = vi.fn();
+    let callCount = 0;
+    callRegistrySpy.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          headers: { link: 'not-a-valid-link-header' },
+          data: { tags: ['v1', '1.2.3'] },
+        };
+      }
+      return { headers: {}, data: { tags: ['v3'] } };
+    });
+    registryMocked.callRegistry = callRegistrySpy;
+
+    await registryMocked.getTags({
+      name: 'team/img',
+      registry: { url: 'https://reg.io/v2' },
+    });
+
+    const secondCallOptions = callRegistrySpy.mock.calls[1][0];
+    expect(secondCallOptions.url).toBe('https://reg.io/v2/team/img/tags/list?n=1000&last=1.2.3');
+  });
+
+  test('should stop pagination after MAX_TAG_PAGES and warn when the registry keeps reporting more', async () => {
+    const registryMocked = createMockedRegistry();
+    const warnSpy = vi.fn();
+    registryMocked.log = { debug: vi.fn(), warn: warnSpy } as any;
+    let callCount = 0;
+    registryMocked.callRegistry = vi.fn(() => {
+      callCount++;
+      return {
+        headers: {
+          link: '<https://reg.io/v2/img/tags/list?last=cursor&n=1000>; rel="next"',
+        },
+        data: { tags: [`t${callCount}`] },
+      };
+    });
+
+    await registryMocked.getTags({ name: 'img', registry: { url: 'https://reg.io/v2' } });
+
+    // 50 requests, not one more — the loop must stop AT the bound, not after it.
+    expect(callCount).toBe(50);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Stopped listing'));
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('img'));
+  });
+});
+
 // --- getImageManifestDigest tests ---
 
 describe('getImageManifestDigest', () => {

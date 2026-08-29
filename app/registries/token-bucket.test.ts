@@ -23,6 +23,10 @@ describe('getBucketForUrl', () => {
       10,
     ],
     ['https://api.github.com/repos/acme/svc/releases/tags/v1', 'api.github.com', 1, 3],
+    // AWS ECR Public throttles anonymous reads harder than the 5/s default
+    // allows for; a compose stack pulled from one ECR namespace draws 429s at
+    // the default, so it gets the same conservative 2/10 as the other hosts.
+    ['https://public.ecr.aws/v2/supabase/postgres/tags/list', 'public.ecr.aws', 2, 10],
     ['https://registry.example.com/v2/img/tags/list', 'registry.example.com', 5, 10],
     ['https://quay.io/v2/acme/img/tags/list', 'quay.io', 5, 10],
   ])(
@@ -348,6 +352,20 @@ describe('getBucketForUrl regex anchoring', () => {
   test('prefix "xapi.github.com" does NOT match api.github.com (^ anchor)', async () => {
     // Kills: /api\.github\.com$/ without ^ — xapi.github.com ends with api.github.com
     const bucket = getBucketForUrl('https://xapi.github.com/repos');
+    expect(bucket.ratePerSec).toBe(5);
+    expect(bucket.burst).toBe(10);
+  });
+
+  test('public.ecr.aws with trailing suffix does NOT match ($ anchor)', async () => {
+    // Kills: /^public\.ecr\.aws/ without $ — "public.ecr.aws.evil" would match without $
+    const bucket = getBucketForUrl('https://public.ecr.aws.evil/v2/img');
+    expect(bucket.ratePerSec).toBe(5);
+    expect(bucket.burst).toBe(10);
+  });
+
+  test('prefix "xpublic.ecr.aws" does NOT match public.ecr.aws (^ anchor)', async () => {
+    // Kills: /public\.ecr\.aws$/ without ^ — xpublic.ecr.aws ends with public.ecr.aws
+    const bucket = getBucketForUrl('https://xpublic.ecr.aws/v2/img');
     expect(bucket.ratePerSec).toBe(5);
     expect(bucket.burst).toBe(10);
   });
