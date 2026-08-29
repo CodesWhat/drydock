@@ -812,6 +812,65 @@ describe('AgentClient', () => {
       );
     });
 
+    test.each([
+      ['another agent', { agent: 'other-agent' }],
+      ['the controller', {}],
+    ])(
+      'handleContainerSync(): an id owned by %s never reaches the prune',
+      async (_ownerKind, ownerFields) => {
+        // The prune runs before the ingest gate, so a foreign id in the frame
+        // used to take part in the keep-set and in the #496 replacement-identity
+        // match: naming a container this agent does not own was enough to turn
+        // the removal of one of its own rows into a replacement, which retains
+        // the update policy and skips the Home Assistant discovery cleanup.
+        vi.mocked(storeContainer.getContainers).mockReturnValue([
+          {
+            id: 'stale-1',
+            name: 'web',
+            watcher: 'local',
+            agent: 'test-agent',
+          },
+        ] as never);
+        vi.mocked(storeContainer.getContainer).mockImplementation((id: string) =>
+          id === 'foreign-1'
+            ? ({ id: 'foreign-1', name: 'web', watcher: 'local', ...ownerFields } as never)
+            : undefined,
+        );
+
+        await client.handleContainerSync([
+          { id: 'foreign-1', name: 'web', watcher: 'local' } as never,
+        ]);
+
+        expect(storeContainer.deleteContainer).toHaveBeenCalledWith('stale-1');
+        expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('stale-1', {
+          replacementExpected: true,
+        });
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+        expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          expect.stringContaining(
+            `owned by ${ownerFields.agent === undefined ? 'controller' : ownerFields.agent}`,
+          ),
+        );
+      },
+    );
+
+    test('handleContainerSync(): the agent owns the replacement identity of its own containers', async () => {
+      // Positive control for the prune filter above: a same-identity row this
+      // agent does own is still flagged as a replacement rather than a removal.
+      vi.mocked(storeContainer.getContainers).mockReturnValue([
+        { id: 'stale-1', name: 'web', watcher: 'local', agent: 'test-agent' },
+      ] as never);
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((c) => c);
+
+      await client.handleContainerSync([{ id: 'fresh-1', name: 'web', watcher: 'local' } as never]);
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('stale-1', {
+        replacementExpected: true,
+      });
+    });
+
     test('watch(): an agent recheck of its own container still updates the store', async () => {
       vi.mocked(storeContainer.getContainer).mockReturnValue({
         id: 'c1',
@@ -1378,7 +1437,10 @@ describe('AgentClient', () => {
       client.pruneOldContainers(newContainers);
 
       expect(storeContainer.deleteContainer).toHaveBeenCalledTimes(15);
-      expect(newIdReads).toBeLessThanOrEqual(80);
+      // Three reads per incoming container: the ownership filter, the keep-set,
+      // and the identity-key spread. The bound this guards is quadratic
+      // rescanning, which for 30 by 30 would be 900 reads, not the constant.
+      expect(newIdReads).toBeLessThanOrEqual(100);
       expect(storeIdReads).toBeLessThanOrEqual(80);
     });
 
