@@ -4,7 +4,11 @@ import { sanitizeLogParam } from './sanitize.js';
 describe('sanitizeLogParam', () => {
   test('should remove control characters and ANSI escape sequences', () => {
     const value = 'hello\x1b[31m world\x1b[0m\nnext\tline';
-    expect(sanitizeLogParam(value)).toBe('hello[31m world[0mnextline');
+    expect(sanitizeLogParam(value)).toBe('hello worldnextline');
+  });
+
+  test('should remove non-color CSI sequences without leaving residue', () => {
+    expect(sanitizeLogParam('a\x1b[2Jb\x1b[1;31;42mc\x1b[?25ld')).toBe('abcd');
   });
 
   test('should truncate values longer than maxLength', () => {
