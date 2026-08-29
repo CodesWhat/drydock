@@ -431,10 +431,27 @@ test('current and archived provider setup remains copy-paste safe', () => {
     );
     assert.match(webhooks, /DD_SERVER_WEBHOOK_SECRET=your-registry-webhook-secret/u);
     assert.match(webhooks, /raw request body with HMAC-SHA256/u);
-    assert.match(
-      command,
-      /-e 'DD_ACTION_COMMAND_LOCAL_CMD=echo \$\{display_name\} can be updated to \$\{update_kind_remote_value\}' \\\n/u,
-    );
+    if (root.endsWith('/current')) {
+      // Both canonical examples quote the expansion, and neither unquoted form
+      // survives anywhere in the page.
+      assert.match(
+        command,
+        /-e 'DD_ACTION_COMMAND_LOCAL_CMD=echo "\$\{display_name\}" can be updated to "\$\{update_kind_remote_value\}"' \\\n/u,
+      );
+      assert.match(
+        command,
+        /- DD_ACTION_COMMAND_LOCAL_CMD=echo "\$\$\{display_name\}" can be updated to "\$\$\{update_kind_remote_value\}"\n/u,
+      );
+      assert.doesNotMatch(command, /=echo \$+\{display_name\}/u);
+    } else {
+      // v1.6 and v1.5 are byte-for-byte bound to their published GA docs trees
+      // by release-docs-archive.test.mjs, so the pre-hardening example is what
+      // they must keep carrying.
+      assert.match(
+        command,
+        /-e 'DD_ACTION_COMMAND_LOCAL_CMD=echo \$\{display_name\} can be updated to \$\{update_kind_remote_value\}' \\\n/u,
+      );
+    }
     assert.match(command, /-v \$\{PWD\}\/drydock\/trigger\.sh:\/drydock\/trigger\.sh \\\n/u);
     assert.match(storage, /-v \/path-on-my-host:\/store \\\n/u);
     assert.match(security, /DD_AUTH_OIDC_SSO_DISCOVERY=/u);

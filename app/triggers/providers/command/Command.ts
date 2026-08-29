@@ -6,6 +6,44 @@ import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '..
 let hasLoggedShellExecutionWarning = false;
 
 const SHELL_UNSAFE_ENV_CHARACTERS = new Set(['`', '$', ';', '&', '|', '<', '>', '(', ')']);
+
+/**
+ * Scrubbed on top of the metacharacters above, for values an operator is
+ * likely to expand unquoted as a single argument. A space splits one value
+ * into several arguments, and the glob characters make the shell expand each
+ * field against the working directory, so a bare `*` becomes one argument per
+ * file. Neither is a metacharacter, so the original set let both through.
+ */
+const SHELL_UNSAFE_ARGUMENT_CHARACTERS = new Set([
+  ' ',
+  '*',
+  '?',
+  '[',
+  ']',
+  '{',
+  '}',
+  '~',
+  '\\',
+  '"',
+  "'",
+]);
+
+/**
+ * Keys drydock supplies as a structured or prose payload rather than as a
+ * scalar argument. The JSON blobs have to keep their quotes and braces to stay
+ * pipeable into `jq`, and the digest title/body are message text that is meant
+ * to contain spaces. They keep the metacharacter scrub only; the docs tell
+ * operators to double-quote every expansion, which is the real defence for
+ * these.
+ */
+const COMMAND_PAYLOAD_ENV_KEYS = new Set([
+  'container_json',
+  'containers_json',
+  'dd_title',
+  'dd_body',
+  'dd_event_kind',
+]);
+
 const DELETE_CONTROL_CODE_POINT = 0x7f;
 
 /**
@@ -33,24 +71,32 @@ interface CommandConfiguration extends TriggerConfiguration {
   env: string[];
 }
 
-function sanitizeCommandEnvString(value: string) {
-  return Array.from(value)
+function sanitizeCommandEnvString(value: string, asArgument: boolean) {
+  const scrubbed = Array.from(value)
     .map((character) => {
       const codePoint = character.codePointAt(0);
       if (
         codePoint === undefined ||
         codePoint < 0x20 ||
         codePoint === DELETE_CONTROL_CODE_POINT ||
-        SHELL_UNSAFE_ENV_CHARACTERS.has(character)
+        SHELL_UNSAFE_ENV_CHARACTERS.has(character) ||
+        (asArgument && SHELL_UNSAFE_ARGUMENT_CHARACTERS.has(character))
       ) {
         return '_';
       }
       return character;
     })
     .join('');
+  if (!asArgument) {
+    return scrubbed;
+  }
+  // A leading '-' makes the value parse as an option to whatever the operator's
+  // script hands it to. Drop it rather than replace it: '_-registry' would
+  // still be one word, but the value should not look like a flag at all.
+  return scrubbed.replace(/^-+/u, '');
 }
 
-function toCommandEnvValue(value: unknown) {
+function toCommandEnvValue(value: unknown, asArgument: boolean) {
   if (value === undefined) {
     return undefined;
   }
@@ -58,15 +104,15 @@ function toCommandEnvValue(value: unknown) {
     return '';
   }
   if (typeof value === 'string') {
-    return sanitizeCommandEnvString(value);
+    return sanitizeCommandEnvString(value, asArgument);
   }
-  return sanitizeCommandEnvString(String(value));
+  return sanitizeCommandEnvString(String(value), asArgument);
 }
 
 function sanitizeCommandEnvVars(extraEnvVars: Record<string, unknown>) {
   const sanitizedEnvVars: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(extraEnvVars)) {
-    sanitizedEnvVars[key] = toCommandEnvValue(value);
+    sanitizedEnvVars[key] = toCommandEnvValue(value, !COMMAND_PAYLOAD_ENV_KEYS.has(key));
   }
   return sanitizedEnvVars;
 }
