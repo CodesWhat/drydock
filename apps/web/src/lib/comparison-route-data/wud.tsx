@@ -9,8 +9,8 @@ Language|TypeScript|TypeScript (full ESM)|tie
 Web UI|Yes|Yes (redesigned)|tie
 Auto-update containers|Yes|Yes|tie
 Docker Compose updates|Yes|Yes, with multi-network support|self
-Registry providers|13|23|self
-Notifications|16 triggers|20 native trigger integrations|self
+Registry providers|12|23|self
+Notifications|17 triggers|20 native trigger integrations|self
 Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|OIDC supported (Authelia, Auth0, Authentik)|Authelia, Auth0, Authentik|tie
 REST API|Yes|Yes (expanded)|self

@@ -10,7 +10,7 @@ Web UI|Yes|Yes|tie
 Image update detection|Yes|Yes|tie
 Auto-update containers|Yes|Yes (monitor-first)|tie
 Automatic rollback|No|Yes, on health check failure|self
-Maintenance windows|No|Yes|self
+Maintenance windows|Yes|Yes|tie
 Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
 Image backup|No|Pre-update backup with retention|self
 Security scanning (Trivy)|No|Trivy + SBOM + cosign verification|self
@@ -25,7 +25,7 @@ TOML GitOps config|Yes|Planned (YAML)|competitor
 CLI tool|Yes|Planned|competitor
 Prometheus metrics|No|Full /metrics endpoint + Grafana template|self
 Audit log|Yes|Yes, with REST API|tie
-Dry-run preview|No|Yes|self
+Dry-run preview|Limited|Yes|self
 License|GPL-3.0|AGPL-3.0|tie
 `,
   highlightsTable: `
