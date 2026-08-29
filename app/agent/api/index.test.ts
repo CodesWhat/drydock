@@ -526,9 +526,49 @@ describe('Agent API index', () => {
         expect(getEntries).not.toHaveBeenCalled();
       });
 
+      test('should return 400 when tail query parameter is not a finite number', async () => {
+        const { getEntries } = await import('../../log/buffer.js');
+        const req = { query: { tail: 'abc' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+        logEntriesHandler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid tail query parameter' });
+        expect(getEntries).not.toHaveBeenCalled();
+      });
+
+      test('should return 400 when since query parameter is not a finite number', async () => {
+        const { getEntries } = await import('../../log/buffer.js');
+        const req = { query: { since: 'abc' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+        logEntriesHandler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid since query parameter' });
+        expect(getEntries).not.toHaveBeenCalled();
+      });
+
+      test('should pass undefined tail/since to getEntries so the default cap applies when the params are absent', async () => {
+        const { getEntries } = await import('../../log/buffer.js');
+        getEntries.mockReturnValue([]);
+        const req = { query: {} };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+        logEntriesHandler(req, res);
+
+        expect(getEntries).toHaveBeenCalledWith(
+          expect.objectContaining({ tail: undefined, since: undefined }),
+        );
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
+
       test.each([
         ['level', 123, 'Invalid level query parameter'],
         ['component', ['docker'], 'Invalid component query parameter'],
+        ['tail', ['50'], 'Invalid tail query parameter'],
+        ['since', ['99999'], 'Invalid since query parameter'],
       ])(
         'should return 400 when %s query parameter is not a string',
         async (param, value, error) => {
