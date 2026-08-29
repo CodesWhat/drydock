@@ -380,6 +380,31 @@ function preserveExplicitDockerIoPrefix(
   return `docker.io/${targetImageReference}`;
 }
 
+const HUB_ALIAS_HOST_PREFIX = /^(?:index\.docker\.io|registry-1\.docker\.io|docker\.io)\//i;
+const HUB_LIBRARY_NAMESPACE_PREFIX = /^library\//;
+
+/**
+ * Reduce an image reference to the repository it names, with the tag, the
+ * digest and the Docker Hub aliases that `Hub.getImageFullName` strips removed,
+ * so `docker.io/library/nginx:1.27.0` and `nginx@sha256:...` compare equal.
+ * @param imageReference
+ * @returns the normalized repository, or '' when there is nothing to compare
+ */
+function getImageRepositoryKey(imageReference: unknown): string {
+  const reference = typeof imageReference === 'string' ? imageReference.trim() : '';
+  const referenceWithoutDigest = reference.split('@')[0];
+  const lastSlashIndex = referenceWithoutDigest.lastIndexOf('/');
+  const lastColonIndex = referenceWithoutDigest.lastIndexOf(':');
+  const repository =
+    lastColonIndex > lastSlashIndex
+      ? referenceWithoutDigest.slice(0, lastColonIndex)
+      : referenceWithoutDigest;
+  const repositoryWithoutHubHost = repository.replace(HUB_ALIAS_HOST_PREFIX, '');
+  return hasExplicitRegistryHost(repositoryWithoutHubHost)
+    ? repositoryWithoutHubHost
+    : repositoryWithoutHubHost.replace(HUB_LIBRARY_NAMESPACE_PREFIX, '');
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -920,7 +945,33 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return registry.getImageFullName(container.image as ContainerImage, container.image.tag.value);
   }
 
+  /**
+   * Refuse to touch a service whose compose `image:` names a different
+   * repository than the container is actually running. `getServiceKey` resolves
+   * the service from the `com.docker.compose.service` label without comparing
+   * images, so a container carrying a label for a service it is not an instance
+   * of would otherwise have that service's `image:` rewritten to its own
+   * repository. Runs in every `reconciliationMode`, `off` included, because a
+   * repository mismatch is not drift to reconcile: the container is not that
+   * service. Tag-only drift keeps its warn/block/off behaviour below.
+   * @param composeFileChainSummary
+   * @param versionMappings
+   */
+  assertComposeRepositoryContinuity(composeFileChainSummary, versionMappings) {
+    for (const mapping of versionMappings) {
+      if (getImageRepositoryKey(mapping.runtimeImage) === getImageRepositoryKey(mapping.current)) {
+        continue;
+      }
+      throw new Error(
+        `Compose service ${mapping.service} in ${composeFileChainSummary} declares image ` +
+          `${mapping.current} but container ${mapping.container?.name} runs ${mapping.runtimeImage}; ` +
+          'refusing to rewrite a different repository',
+      );
+    }
+  }
+
   reconcileComposeMappings(composeFileChainSummary, versionMappings) {
+    this.assertComposeRepositoryContinuity(composeFileChainSummary, versionMappings);
     const reconciliationMode = this.configuration.reconciliationMode || 'warn';
     if (reconciliationMode === 'off') {
       return;
@@ -2797,6 +2848,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 export default Dockercompose;
 
 export {
+  getImageRepositoryKey as testable_getImageRepositoryKey,
   hasExplicitRegistryHost as testable_hasExplicitRegistryHost,
   normalizeImplicitLatest as testable_normalizeImplicitLatest,
   normalizePostStartEnvironmentValue as testable_normalizePostStartEnvironmentValue,
