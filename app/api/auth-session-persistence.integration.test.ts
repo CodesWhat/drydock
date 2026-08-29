@@ -17,8 +17,8 @@ import os from 'node:os';
 import path from 'node:path';
 import ConnectLoki from 'connect-loki';
 import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
+import rateLimit from 'express-rate-limit';
 import session from 'express-session';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import Basic from '../authentications/providers/basic/Basic.js';
 import { requireAuthentication } from './auth.js';
 import type { AuthRequest } from './auth-types.js';
@@ -37,6 +37,7 @@ const LokiStore = ConnectLoki(session);
 const TEST_USER = 'wud-card';
 const TEST_PASSWORD = 'correct-horse-battery-staple';
 const BASIC_AUTH_HEADER = `Basic ${Buffer.from(`${TEST_USER}:${TEST_PASSWORD}`).toString('base64')}`;
+const HTTPS_HEADERS = { 'X-Forwarded-Proto': 'https' };
 
 type LokiSessionStore = InstanceType<typeof LokiStore>;
 
@@ -96,6 +97,7 @@ async function createTestApp(store: LokiSessionStore): Promise<Application> {
   registerAuthenticator(basic.getAuthenticator());
 
   const app = express();
+  app.set('trust proxy', 1);
   app.use(
     session({
       name: 'dd.sid.test',
@@ -103,10 +105,19 @@ async function createTestApp(store: LokiSessionStore): Promise<Application> {
       resave: false,
       saveUninitialized: false,
       store,
-      cookie: { httpOnly: true, secure: false },
+      cookie: { httpOnly: true, secure: true },
     }),
   );
   app.use(restoreSessionPrincipal);
+  app.use(
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
+    }),
+  );
 
   app.get('/protected', requireAuthentication, (req: Request, res: ExpressResponse) => {
     res.status(200).json({ user: { username: (req as AuthRequest).principal?.username } });
@@ -178,7 +189,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
 
     for (let i = 0; i < 3; i += 1) {
       const response = await fetch(`http://127.0.0.1:${port}/protected`, {
-        headers: { Authorization: BASIC_AUTH_HEADER },
+        headers: { ...HTTPS_HEADERS, Authorization: BASIC_AUTH_HEADER },
       });
       expect(response.status).toBe(200);
       expect(response.headers.get('set-cookie')).toBeNull();
@@ -196,7 +207,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
 
     const loginResponse = await fetch(`http://127.0.0.1:${port}/login`, {
       method: 'POST',
-      headers: { Authorization: BASIC_AUTH_HEADER },
+      headers: { ...HTTPS_HEADERS, Authorization: BASIC_AUTH_HEADER },
     });
     expect(loginResponse.status).toBe(200);
     const cookie = extractCookie(loginResponse);
@@ -205,7 +216,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
     await expect(storeLength(store)).resolves.toBe(1);
 
     const protectedResponse = await fetch(`http://127.0.0.1:${port}/protected`, {
-      headers: { Cookie: cookie as string },
+      headers: { ...HTTPS_HEADERS, Cookie: cookie as string },
     });
     expect(protectedResponse.status).toBe(200);
     await expect(protectedResponse.json()).resolves.toEqual({ user: { username: TEST_USER } });
@@ -222,6 +233,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
 
     const response = await fetch(`http://127.0.0.1:${port}/protected`, {
       headers: {
+        ...HTTPS_HEADERS,
         Authorization: `Basic ${Buffer.from(`${TEST_USER}:wrong`).toString('base64')}`,
       },
     });
@@ -239,7 +251,7 @@ describe('DR-7: header-authenticated requests do not persist sessions', () => {
     openServers.push(server);
 
     const response = await fetch(`http://127.0.0.1:${port}/protected`, {
-      headers: { Authorization: 'Basic' },
+      headers: { ...HTTPS_HEADERS, Authorization: 'Basic' },
     });
 
     expect(response.status).toBe(400);
