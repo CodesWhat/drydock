@@ -219,7 +219,22 @@ test.describe('v1.6 mobile release promises', () => {
     await expect(popover).toHaveCount(0);
     await expect(releaseButtons[0]).toBeFocused();
 
+    // Settle the first popover before tapping the second. Without this the two
+    // taps go out back to back, and the second one is simultaneously card 0's
+    // outside-click and card 1's trigger-click. Each card owns its own
+    // capturing document listener and its own Teleport plus enter transition,
+    // so whether exactly one popover exists at that instant depends on whether
+    // card 0 had finished opening and registering its listener. Under CI load
+    // it sometimes had not: the failing run polled 2 elements three times and
+    // then 0 eleven times, never 1.
+    //
+    // The block above already asserts before moving on, which is the pattern to
+    // copy. Asserting the intermediate state also means a future failure names
+    // which tap broke rather than just reporting the wrong final count.
     await releaseButtons[0].tap();
+    await expect(popover).toHaveCount(1);
+    await expect(popover).toContainText(`${FIXTURE_NAMES[0]} release`);
+
     await releaseButtons[1].tap();
     await expect(popover).toHaveCount(1);
     await expect(popover).toContainText(`${FIXTURE_NAMES[1]} release`);
