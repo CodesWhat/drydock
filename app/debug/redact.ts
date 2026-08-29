@@ -1,4 +1,4 @@
-import { hasUrlCredentials } from '../api/container/shared.js';
+import { hasUrlCredentials, isSensitiveEnvEntry } from '../api/container/shared.js';
 
 export const REDACTED_VALUE = '[REDACTED]';
 
@@ -106,6 +106,16 @@ function isNameValuePair(
   return typeof node.key === 'string' && 'value' in node;
 }
 
+/**
+ * A `{key, value}` pair is the shape `GET /containers` classifies, and that
+ * view uses its own rule set. Take both, or the dump is the laxer of the two
+ * on the same entry: the shared rule reads `auth` in any key shape, this one
+ * only in an env-style key, so a lowercase `basic_auth` came back in the clear.
+ */
+function isSensitivePairValue(key: string, value: unknown): boolean {
+  return isSensitiveKey(key) || isSensitiveEnvEntry({ key, value });
+}
+
 function redactNode(node: unknown, nodeKey?: string): unknown {
   if (nodeKey && isSensitiveKey(nodeKey)) {
     return redactMatchedValue(node);
@@ -129,7 +139,7 @@ function redactNode(node: unknown, nodeKey?: string): unknown {
       if (key === 'key') {
         redactedPair[key] = value;
       } else if (key === 'value') {
-        redactedPair[key] = isSensitiveKey(node.key)
+        redactedPair[key] = isSensitivePairValue(node.key, value)
           ? redactMatchedValue(value)
           : redactNode(value);
       } else {

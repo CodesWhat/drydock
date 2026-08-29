@@ -481,6 +481,8 @@ describe('debug/redact', () => {
       { key: 'MY_API_KEY', value: 'v' },
       { key: 'APIKEY', value: 'v' },
       { key: 'BASIC_AUTH', value: 'v' },
+      { key: 'basic_auth', value: 'v' },
+      { key: 'Authorization', value: 'v' },
       { key: 'AUTH_HEADER', value: 'v' },
       { key: 'SSL_PRIVATE_KEY', value: 'v' },
       { key: 'GCP_CREDENTIAL', value: 'v' },
