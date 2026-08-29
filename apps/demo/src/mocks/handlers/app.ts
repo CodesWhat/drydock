@@ -4,7 +4,7 @@ export const appHandlers = [
   http.get('/api/v1/app', () =>
     HttpResponse.json({
       name: 'Drydock',
-      version: '1.7.0-rc.6',
+      version: '1.7.0-rc.7',
       description: 'Docker container update manager',
       repository: 'https://github.com/CodesWhat/drydock',
       documentation: 'https://getdrydock.com/docs',
@@ -16,7 +16,7 @@ export const appHandlers = [
     return HttpResponse.json(
       {
         generatedAt: new Date().toISOString(),
-        server: { version: '1.7.0-rc.6', mode: 'demo' },
+        server: { version: '1.7.0-rc.7', mode: 'demo' },
         summary: {
           containers: 25,
           watchers: 2,

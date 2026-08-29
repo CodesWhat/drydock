@@ -202,6 +202,20 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.7</strong></summary>
+
+- **A paginação dos registros agora segue o cursor de cada registro**, evitando pular páginas ou parar cedo. ([#927](https://github.com/CodesWhat/drydock/pull/927))
+- **As atualizações continuam bem-sucedidas quando a limpeza falha após a verificação de integridade**; as cargas SSE são menores e as autoatualizações aguardam os ciclos ativos terminarem antes de assumir o bloqueio exclusivo. ([#931](https://github.com/CodesWhat/drydock/pull/931), [#942](https://github.com/CodesWhat/drydock/pull/942))
+- **A redação de credenciais agora cobre gatilhos, registros, dumps de depuração e hosts semelhantes**, impedindo registrar ou enviar segredos a hosts de registro controlados por invasores. ([#932](https://github.com/CodesWhat/drydock/pull/932))
+- **As reescritas do Compose verificam o repositório em execução antes de gravar**; a poda de agentes e falhas de reversão também são tratadas com segurança. ([#933](https://github.com/CodesWhat/drydock/pull/933))
+- **Solicitações autenticadas por cabeçalho não persistem mais sessões**, então o polling com Basic Auth não aumenta o armazenamento de sessões. ([#935](https://github.com/CodesWhat/drydock/pull/935))
+- **A comparação com concorrentes e o roadmap foram atualizados para 2026**, mantendo a documentação da versão atualizada. ([#936](https://github.com/CodesWhat/drydock/pull/936))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc7--2026-08-29).
+
+</details>
+
+<details open>
 <summary><strong>Destaques da v1.7.0-rc.6</strong></summary>
 
 - **Mais duas brechas na propriedade de contêineres dos agentes são fechadas, além da correção anterior do #904** — um id de contêiner totalmente novo não tinha nenhuma verificação de propriedade, permitindo que um agente reivindicasse um nome de watcher que pertence ao próprio controlador; e os caminhos de ingestão em massa (o handshake, o fallback de snapshot do watcher, o `watch`/`watchContainer` sob demanda, e o `handleContainerSync` de borda) chegavam a `processAuthoritativeContainer` sem nenhuma verificação intermediária, de modo que um agente ainda podia reivindicar o contêiner de outro agente ou do próprio controlador no seu próximo snapshot de rotina. Os dois caminhos agora aplicam as mesmas verificações de propriedade que a correção original adicionou.

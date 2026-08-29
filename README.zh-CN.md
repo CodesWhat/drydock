@@ -202,6 +202,20 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.7 亮点</strong></summary>
+
+- **注册表分页现在遵循各注册表自己的游标**，避免更新检查跳过页面或过早停止。([#927](https://github.com/CodesWhat/drydock/pull/927))
+- **健康检查通过后即使清理失败，更新仍会保持成功**；SSE 负载更小，自更新会等待活动生命周期完成后再获取独占闸门。([#931](https://github.com/CodesWhat/drydock/pull/931)，[#942](https://github.com/CodesWhat/drydock/pull/942))
+- **凭据脱敏现在覆盖触发器、注册表、调试转储和相似主机**，防止机密被记录或发送到攻击者控制的注册表主机。([#932](https://github.com/CodesWhat/drydock/pull/932))
+- **Compose 重写会在写入前验证运行时仓库**；代理清理和回滚失败也得到安全处理。([#933](https://github.com/CodesWhat/drydock/pull/933))
+- **通过请求头认证的请求不再持久化会话**，因此 Basic Auth 轮询不会扩大会话存储。([#935](https://github.com/CodesWhat/drydock/pull/935))
+- **竞争者对比和路线图已更新至 2026 年**，让版本文档保持最新。([#936](https://github.com/CodesWhat/drydock/pull/936))
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc7--2026-08-29)。
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.6 亮点</strong></summary>
 
 - **在此前 #904 修复的基础上，又关闭了代理容器所有权方面的两个漏洞** — 全新的容器 id 此前完全没有所有权校验，导致代理可以冒领本应属于控制器自身的 watcher 名称；而批量摄取路径（握手、watcher 快照回退、按需的 `watch`/`watchContainer`，以及边缘的 `handleContainerSync`）都会到达 `processAuthoritativeContainer` 却没有任何中间校验，使得代理仍然可以在下一次例行快照中冒领属于另一个代理或控制器自身的容器。这两条路径现在都会执行与原始修复相同的所有权校验。
