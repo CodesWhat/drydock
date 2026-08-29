@@ -636,7 +636,7 @@ export const openApiSchemas = {
     description:
       'Non-blocker reflection of the action-policy resolver verdict for this container ' +
       '(spec-6.0.1-action-policy.md). Omitted entirely from UpdateEligibility when no ' +
-      'compatible docker/dockercompose action trigger exists at all — the ' +
+      'compatible docker/dockercompose/portainer action trigger exists at all — the ' +
       'no-update-trigger-configured/agent-mismatch blockers own that messaging in that case. ' +
       "A `state` of 'manual' or 'auto' never produces an UpdateEligibility blocker; a " +
       "`state` of 'blocked' duplicates information already carried by the trigger-excluded/" +
@@ -698,7 +698,7 @@ export const openApiSchemas = {
         type: 'string',
         example: 'dockercompose.local:minor',
         description:
-          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label. The legacy dd.trigger.include fallback was removed in v1.7.0. Applies only to action triggers (docker, dockercompose, command).',
+          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label. The legacy dd.trigger.include fallback was removed in v1.7.0. Applies only to action triggers (docker, dockercompose, portainer, command).',
       },
       actionTriggerExclude: {
         type: 'string',
@@ -1182,7 +1182,7 @@ export const openApiSchemas = {
             enum: ['blocked', 'manual', 'auto'],
             description:
               'Action-policy resolver verdict (spec-6.0.1-action-policy.md) for this trigger ' +
-              'against the requested container. Only present for docker/dockercompose ' +
+              'against the requested container. Only present for docker/dockercompose/portainer ' +
               '(update-action) triggers — notification and command triggers have no ' +
               'automatic-execution policy and never carry this field. A trigger can appear ' +
               "here with resolvedState 'blocked' (e.g. AUTO=oninclude with no matching " +

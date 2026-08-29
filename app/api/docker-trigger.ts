@@ -7,7 +7,7 @@ import type Trigger from '../triggers/providers/Trigger.js';
 export const NO_DOCKER_TRIGGER_FOUND_ERROR = 'No docker trigger found for this container';
 export const AGENT_LIFECYCLE_UNSUPPORTED_ERROR =
   "Lifecycle actions (start/stop/restart) are not supported over this container's agent connection, typically because the agent has not advertised the usesControllerDockerTransport capability.";
-const DEFAULT_TRIGGER_TYPES = ['docker', 'dockercompose'];
+const DEFAULT_TRIGGER_TYPES = ['docker', 'dockercompose', 'portainer'];
 const COMPOSE_DIRECTORY_FILE_CANDIDATES = new Set([
   'compose.yaml',
   'compose.yml',
@@ -47,7 +47,7 @@ export type ContainerTriggerContext = Pick<Container, 'agent' | 'labels'> &
   Partial<Pick<Container, 'name' | 'watcher'>>;
 
 /**
- * Relative specificity of a compatible docker/dockercompose trigger, used by
+ * Relative specificity of a compatible docker/dockercompose/portainer trigger, used by
  * `model/action-policy.ts`'s `selectActionTrigger` to rank multiple
  * compatible candidates (spec-6.0.1-action-policy.md decision 3): a
  * dockercompose trigger whose configured file was actually verified against
@@ -231,7 +231,11 @@ function isTriggerAgentCompatible(
   if (trigger.agent && trigger.agent !== container.agent) {
     return false;
   }
-  if (container.agent && !trigger.agent && ['docker', 'dockercompose'].includes(trigger.type)) {
+  if (
+    container.agent &&
+    !trigger.agent &&
+    ['docker', 'dockercompose', 'portainer'].includes(trigger.type)
+  ) {
     return false;
   }
   return true;

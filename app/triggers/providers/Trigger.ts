@@ -243,7 +243,7 @@ export const BUFFER_ENTRY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
  * taxonomy stays in sync. That module owns the action/notification split; this
  * set is the narrower "actually runs the Docker update lifecycle" subset.
  */
-const UPDATE_ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+const UPDATE_ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
 
 function getContainerNotificationKey(
   container: Pick<Container, 'id' | 'name' | 'watcher'> | undefined,
@@ -1040,7 +1040,7 @@ class Trigger<
     container: TriggerContainer | undefined,
     options: EventDispatchOptions = {},
   ): Promise<boolean> {
-    // Update-action triggers (docker, dockercompose) implement `trigger()` as
+    // Update-action triggers (docker, dockercompose, portainer) implement `trigger()` as
     // the full pull-scan-recreate update lifecycle. Lifecycle handlers route
     // here for notification dispatch; calling `trigger()` from this path
     // re-executes the update lifecycle in response to security-alert /
@@ -3006,7 +3006,7 @@ class Trigger<
    * Build the candidate trigger map for the action-policy hybrid specificity
    * walk (`selectActionTrigger`, spec-6.0.1-action-policy.md). Sourced from
    * the live registry (`registry.getState().trigger`) so every other
-   * registered docker/dockercompose trigger competes on equal footing, with
+   * registered docker/dockercompose/portainer trigger competes on equal footing, with
    * `this` unioned in explicitly (self wins any id collision) so the walk
    * always sees this instance as a candidate even if the registry snapshot
    * is momentarily stale (e.g. mid-registration) or, in unit tests, not

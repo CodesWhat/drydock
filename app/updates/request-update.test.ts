@@ -1645,7 +1645,9 @@ describe('request-update', () => {
         Partial<UpdateRequestError>
       >({
         statusCode: 404,
-        message: expect.stringContaining('No docker or dockercompose action trigger is configured'),
+        message: expect.stringContaining(
+          'No docker, dockercompose, or portainer action trigger is configured',
+        ),
       });
     });
 

@@ -44,7 +44,7 @@ interface UpdateQueueBatchMetadata {
   queueTotal: number;
 }
 
-type UpdateTriggerType = 'docker' | 'dockercompose';
+type UpdateTriggerType = 'docker' | 'dockercompose' | 'portainer';
 
 type UpdateTriggerLike = {
   type: string;
@@ -106,7 +106,7 @@ interface EnqueueContainerUpdateOptions {
 export interface RequestContainerUpdateOptions
   extends Omit<EnqueueContainerUpdateOptions, 'allowSoftPolicyOverride' | 'source'> {}
 
-const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose'];
+const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose', 'portainer'];
 const log = logger.child({ component: 'updates.request-update' });
 const NOTIFY_MODE_REJECTION_MESSAGE = 'Update mode is notify; Drydock will not apply updates';
 const MANUAL_MODE_REJECTION_MESSAGE = 'Update mode is manual; automatic updates are disabled';

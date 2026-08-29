@@ -33,7 +33,7 @@ async function previewContainer(req: Request, res: Response) {
   }
 
   const trigger = findDockerTriggerForContainer(registry.getState().trigger, container, {
-    triggerTypes: ['docker', 'dockercompose'],
+    triggerTypes: ['docker', 'dockercompose', 'portainer'],
   });
   if (!trigger) {
     log.warn(`${NO_DOCKER_TRIGGER_FOUND_ERROR} (${sanitizeLogParam(id)})`);

@@ -450,13 +450,13 @@ export function computeUpdateEligibility(
     }
   }
 
-  // Resolve a candidate docker/dockercompose trigger for trigger-level checks.
+  // Resolve a candidate docker/dockercompose/portainer trigger for trigger-level checks.
   //
   // findDockerTriggerForContainer uses full compatibility checking (including agent matching),
   // so it won't return a trigger when the agent doesn't match. To distinguish
   // "no docker trigger at all" from "trigger exists but agent is wrong", we also do a
   // type-only lookup that ignores agent constraints.
-  const DOCKER_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+  const DOCKER_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
 
   function findDockerTriggerByTypeOnly(
     triggers: Record<string, TriggerInstanceMethods> | undefined,
@@ -489,7 +489,7 @@ export function computeUpdateEligibility(
   let actionPolicy: UpdateEligibilityActionPolicy | undefined;
 
   if (!typeOnlyTrigger) {
-    // 11. no-update-trigger-configured — no docker/dockercompose trigger exists at all.
+    // 11. no-update-trigger-configured — no docker/dockercompose/portainer trigger exists at all.
     // AgentClient._doHandshake() deregisters an agent's components before re-registering,
     // so an agent-owned container can transiently see zero triggers of any kind during that
     // window too. Apply the same #605 downgrade as agent-mismatch below.
@@ -500,9 +500,11 @@ export function computeUpdateEligibility(
       makeBlocker(
         {
           reason: 'no-update-trigger-configured',
-          message: 'No docker or dockercompose action trigger is configured for this container.',
+          message:
+            'No docker, dockercompose, or portainer action trigger is configured for this container.',
           actionable: true,
-          actionHint: 'Configure `DD_ACTION_DOCKER_*` or `DD_ACTION_DOCKERCOMPOSE_*`.',
+          actionHint:
+            'Configure `DD_ACTION_DOCKER_*`, `DD_ACTION_DOCKERCOMPOSE_*`, or `DD_ACTION_PORTAINER_*`.',
         },
         isPendingRegistration ? 'soft' : undefined,
       ),

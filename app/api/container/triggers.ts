@@ -39,7 +39,7 @@ interface TriggerRuntimeComponent extends TriggerComponent {
   trigger: (container: Container) => Promise<unknown>;
 }
 
-const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
 
 interface TriggerStaticApi {
   parseIncludeOrIncludeTriggerString: (value: string) => ParsedTriggerReference;
@@ -107,7 +107,7 @@ function isDefined<T>(value: T | undefined): value is T {
 }
 
 /**
- * Attach the action-policy resolver's `resolvedState` to a docker/dockercompose
+ * Attach the action-policy resolver's `resolvedState` to a docker/dockercompose/portainer
  * (update-action) trigger entry in the `GET /containers/:id/triggers` response
  * (spec-6.0.1-action-policy.md API surface). Notification and command triggers
  * are left untouched — `resolvedState` has no meaning outside the update-action
@@ -213,7 +213,7 @@ function getRemoteContainerTriggerError(
   if (!containerToTrigger.agent || triggerAgent) {
     return undefined;
   }
-  if (triggerType !== 'docker' && triggerType !== 'dockercompose') {
+  if (triggerType !== 'docker' && triggerType !== 'dockercompose' && triggerType !== 'portainer') {
     return undefined;
   }
   return `Cannot execute local ${triggerType} trigger on remote container ${containerToTrigger.agent}.${containerToTrigger.id}`;

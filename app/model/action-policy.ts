@@ -72,7 +72,7 @@ export interface SelectActionTriggerResult extends ActionPolicyResult {
   triggerId: string;
 }
 
-const CANDIDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+const CANDIDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
 
 const SPECIFICITY_RANK: Record<DockerTriggerSpecificity, number> = {
   'compose-file-matched': 0,
@@ -296,7 +296,7 @@ function rankCandidates(candidates: RankedCandidate[]): RankedCandidate[] {
 
 /**
  * Select the winning action trigger for a container across every compatible
- * docker/dockercompose trigger (agent + compose-file affinity via
+ * docker/dockercompose/portainer trigger (agent + compose-file affinity via
  * `isTriggerCompatibleWithContainer`; command triggers are never candidates
  * — they aren't in `CANDIDATE_TRIGGER_TYPES`, matching
  * `findDockerTriggerForContainer`'s default type scope).
