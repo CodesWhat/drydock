@@ -41,11 +41,24 @@ test('ZAP and Nuclei run as separate top-level jobs, not steps in one job', () =
 test('neither DAST job depends on the other, so they run in parallel', () => {
   const workflow = loadWorkflow();
 
-  // A `needs` edge here would recreate the sequential-budget failure even
-  // with separate timeouts: a slow ZAP run would still delay Nuclei past a
-  // scheduled window instead of the two racing independently.
-  expect(workflow.jobs?.[ZAP_JOB]?.needs).toBeUndefined();
-  expect(workflow.jobs?.[NUCLEI_JOB]?.needs).toBeUndefined();
+  // A `needs` edge between these two would recreate the sequential-budget
+  // failure even with separate timeouts: a slow ZAP run would still delay
+  // Nuclei past a scheduled window instead of the two racing independently.
+  //
+  // Only the edge BETWEEN them matters. A shared prerequisite (say both
+  // needing a `prepare-dast` job) still lets them run in parallel, so assert
+  // the sibling is absent rather than that `needs` is unset. `needs` is a
+  // string when there is one dependency and an array when there are several.
+  const dependenciesOf = (jobId: string): string[] => {
+    const needs = workflow.jobs?.[jobId]?.needs;
+    if (needs === undefined) {
+      return [];
+    }
+    return Array.isArray(needs) ? needs : [needs];
+  };
+
+  expect(dependenciesOf(ZAP_JOB)).not.toContain(NUCLEI_JOB);
+  expect(dependenciesOf(NUCLEI_JOB)).not.toContain(ZAP_JOB);
 });
 
 test("ZAP's own budget exceeds the measured full-scan duration", () => {
@@ -92,12 +105,12 @@ test("each scanner's gate reads a report file produced in its own job, never the
   // The ZAP job must never reference the Nuclei job's report -- that's the
   // exact shape of the original bug (a gate reading a sibling job's file
   // that a cancelled/starved job never wrote).
+  // Serialize the whole step rather than naming fields. A report path reaches
+  // the shell just as well through `env:` as through `run:`, so an allow-list
+  // of fields passes while the sibling reference is still live.
   const zapSteps = loadWorkflow().jobs?.[ZAP_JOB]?.steps ?? [];
-  const zapReferencesNucleiReport = zapSteps.some(
-    (step) =>
-      step.run?.includes('nuclei-report') ||
-      step.if?.includes('nuclei-report') ||
-      JSON.stringify(step.with ?? {}).includes('nuclei-report'),
+  const zapReferencesNucleiReport = zapSteps.some((step) =>
+    JSON.stringify(step).includes('nuclei-report'),
   );
   expect(zapReferencesNucleiReport).toBe(false);
 
