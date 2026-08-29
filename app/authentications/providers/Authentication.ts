@@ -1,4 +1,5 @@
 import type { Strategy } from 'passport';
+import type { Authenticator } from '../../api/authenticator-chain.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
 
 export interface StrategyDescription {
@@ -30,6 +31,13 @@ class Authentication<
    */
   getStrategy(_app?: unknown): Strategy {
     throw new Error('getStrategy must be implemented');
+  }
+
+  /**
+   * Return the authenticator this provider contributes to the chain.
+   */
+  getAuthenticator(_app?: unknown): Authenticator {
+    throw new Error('getAuthenticator must be implemented');
   }
 
   getStrategyDescription(): StrategyDescription {
