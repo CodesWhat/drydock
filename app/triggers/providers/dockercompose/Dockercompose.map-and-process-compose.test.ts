@@ -536,6 +536,106 @@ describe('Dockercompose Trigger', () => {
     expect(composeUpdateSpy).not.toHaveBeenCalled();
   });
 
+  test.each(['warn', 'off', 'block'])(
+    'processComposeFile should refuse to rewrite a service whose repository differs from the runtime image (reconciliationMode=%s)',
+    async (reconciliationMode) => {
+      trigger.configuration.dryrun = false;
+      trigger.configuration.backup = false;
+      trigger.configuration.reconciliationMode = reconciliationMode;
+
+      // The container claims service `db` through the compose label but runs a
+      // different repository entirely. Rewriting `db.image` would repoint the
+      // operator's stack file at this container's image.
+      const container = makeContainer({
+        tagValue: '1.20.0',
+        remoteValue: '1.27.0',
+        labels: { 'com.docker.compose.service': 'db' },
+      });
+
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ db: { image: 'postgres:16' } }),
+      );
+
+      const { writeComposeFileSpy, composeUpdateSpy, backupSpy } =
+        spyOnProcessComposeHelpers(trigger);
+
+      await expect(
+        trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+      ).rejects.toThrow('refusing to rewrite a different repository');
+
+      expect(writeComposeFileSpy).not.toHaveBeenCalled();
+      expect(composeUpdateSpy).not.toHaveBeenCalled();
+      expect(backupSpy).not.toHaveBeenCalled();
+    },
+  );
+
+  test('processComposeFile should update a docker.io/library alias instead of treating it as another repository', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+
+    const container = makeContainer({
+      tagValue: '1.20.0',
+      remoteValue: '1.27.0',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'docker.io/library/nginx:1.20.0' } }),
+    );
+
+    const { writeComposeFileSpy } = spyOnProcessComposeHelpers(
+      trigger,
+      ['services:', '  nginx:', '    image: docker.io/library/nginx:1.20.0', ''].join('\n'),
+    );
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      expect.stringContaining('image: docker.io/nginx:1.27.0'),
+    );
+  });
+
+  test('reconcileComposeMappings should accept a digest-pinned compose image for the same repository', () => {
+    trigger.configuration.reconciliationMode = 'off';
+
+    expect(() =>
+      trigger.reconcileComposeMappings('stack.yml', [
+        {
+          container: { name: 'db' },
+          service: 'db',
+          runtimeImage: 'postgres:16',
+          runtimeNormalized: 'postgres:16',
+          current: 'postgres@sha256:0123456789abcdef',
+          currentNormalized: 'postgres@sha256:0123456789abcdef',
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  test.each([
+    ['names the container when the mapping carries one', { name: 'web' }, 'container web runs'],
+    ['falls back when the mapping carries no container', undefined, 'container undefined runs'],
+  ])(
+    'reconcileComposeMappings repository guard %s',
+    (_label, container, expectedMessageFragment) => {
+      trigger.configuration.reconciliationMode = 'off';
+
+      expect(() =>
+        trigger.reconcileComposeMappings('stack.yml', [
+          {
+            container,
+            service: 'db',
+            runtimeImage: 'nginx:1.20.0',
+            runtimeNormalized: 'nginx:1.20.0',
+            current: 'postgres:16',
+            currentNormalized: 'postgres:16',
+          },
+        ]),
+      ).toThrow(expectedMessageFragment);
+    },
+  );
+
   test('processComposeFile should backup and write when not in dryrun mode', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.backup = true;
