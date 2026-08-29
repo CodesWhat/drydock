@@ -35,6 +35,11 @@
       "trigger": "Wyzwalacz",
       "details": "Szczegóły"
     },
+    "status": {
+      "success": "Sukces",
+      "error": "Błąd",
+      "info": "Informacja"
+    },
     "actions": {
       "container-update": "Aktualizacja kontenera",
       "container-added": "Kontener dodany",

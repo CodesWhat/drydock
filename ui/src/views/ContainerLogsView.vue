@@ -11,7 +11,16 @@ import { ROUTES } from '../router/routes';
 
 const route = useRoute();
 const router = useRouter();
-const { t } = useI18n();
+const { t, te } = useI18n();
+
+// Reuses the containersView.status.* catalog (already fully translated in all
+// 16 locales) instead of minting a duplicate key -- same pattern as
+// ContainerSideDetail.vue / ContainerFullPageDetail.vue / ContainersGroupedViews.vue.
+function localizeContainerStatus(status: string | undefined): string {
+  if (!status) return t('common.unknown');
+  const key = `containersView.status.${status}`;
+  return te(key) ? t(key) : status;
+}
 
 const containerId = computed(() => {
   const raw = route.params.id;
@@ -46,7 +55,10 @@ onMounted(() => {
 
 const containerName = computed(() => container.value?.name ?? containerId.value);
 const containerImage = computed(() => container.value?.image ?? '');
-const containerStatus = computed(() => container.value?.status ?? t('common.unknown'));
+// Raw status -- used for style-branch comparisons below, which must stay
+// keyed on the literal enum value regardless of active locale.
+const containerStatus = computed(() => container.value?.status);
+const containerStatusLabel = computed(() => localizeContainerStatus(containerStatus.value));
 
 function goBack() {
   router.push(ROUTES.CONTAINERS);
@@ -77,7 +89,7 @@ function goBack() {
               backgroundColor: containerStatus === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
               color: containerStatus === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
             }"
-          >{{ containerStatus }}</span>
+          >{{ containerStatusLabel }}</span>
         </div>
         <span v-if="containerImage" class="text-2xs dd-text-muted truncate">{{ containerImage }}</span>
       </div>

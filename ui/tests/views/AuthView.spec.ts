@@ -78,23 +78,14 @@ const authCardFilterBarStub = defineComponent({
 });
 
 const authCardDataTableStub = defineComponent({
-  props: [
-    'columns',
-    'rows',
-    'rowKey',
-    'activeRow',
-    'selectedKey',
-    'sortKey',
-    'sortAsc',
-    'preferCards',
-  ],
+  props: ['columns', 'rows', 'rowKey', 'selectedKey', 'sortKey', 'sortAsc', 'preferCards'],
   emits: ['row-click', 'update:cardReflowForced'],
   template: `
     <div
       class="data-table auth-card-table"
       :data-row-count="rows?.length ?? 0"
       :data-prefer-cards="String(preferCards)"
-      :data-selected-key="selectedKey || activeRow || ''">
+      :data-selected-key="selectedKey || ''">
       <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
         Force cards
       </button>
@@ -172,7 +163,8 @@ describe('AuthView', () => {
 
     expect(wrapper.text()).toContain('Local Basic');
     expect(wrapper.text()).toContain('Basic');
-    expect(wrapper.text()).toContain('active');
+    expect(wrapper.text()).toContain('Active');
+    expect(wrapper.text()).not.toContain('active');
     expect(wrapper.text()).toContain('No configuration properties');
   });
 
@@ -234,6 +226,7 @@ describe('AuthView', () => {
     });
     expect(wrapper.text()).toContain('issuer');
     expect(wrapper.text()).toContain('https://issuer.example');
+    expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe('auth-basic');
   });
 
   it('renders auth provider cards and wires the card-mode reflow controls', async () => {
@@ -264,7 +257,7 @@ describe('AuthView', () => {
     expect(basicCard.text()).toContain('Basic');
     expect(basicCard.text()).toContain('users');
     expect(basicCard.text()).toContain('local');
-    expect(basicCard.text()).toContain('active');
+    expect(basicCard.text()).toContain('Active');
 
     const oidcCard = wrapper.get('[data-card-id="auth-github"]');
     expect(oidcCard.text()).toContain('GitHub OIDC');
@@ -279,5 +272,41 @@ describe('AuthView', () => {
     await wrapper.get('.clear-card-reflow').trigger('click');
     await nextTick();
     expect(wrapper.get('.auth-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+  });
+
+  it('table cell-status badge shows translated Active/Inactive labels', async () => {
+    mockGetAllAuthentications.mockResolvedValue([
+      makeAuthentication({
+        id: 'auth-basic',
+        name: 'local',
+        type: 'basic',
+        configuration: undefined,
+      }),
+    ]);
+
+    // Stub renders cell-status with both the real (active) row AND an injected inactive row
+    const dualStatusTableStub = defineComponent({
+      props: ['columns', 'rows', 'rowKey', 'selectedKey'],
+      emits: ['row-click'],
+      template: `
+        <div class="data-table" :data-row-count="rows?.length ?? 0">
+          <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
+            <button class="row-click-first" @click="$emit('row-click', row)">Open</button>
+            <slot name="cell-status" :row="row" />
+          </div>
+          <div class="data-table-row-inactive">
+            <slot name="cell-status" :row="{ status: 'disabled' }" />
+          </div>
+        </div>
+      `,
+    });
+
+    const wrapper = mountWithPlugins(AuthView, {
+      global: { stubs: { ...dataViewStubs, DataTable: dualStatusTableStub } },
+    });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Active');
+    expect(wrapper.text()).toContain('Inactive');
   });
 });

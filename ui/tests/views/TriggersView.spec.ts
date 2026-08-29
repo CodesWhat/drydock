@@ -86,7 +86,6 @@ const triggerCardDataTableStub = defineComponent({
     'columns',
     'rows',
     'rowKey',
-    'activeRow',
     'selectedKey',
     'sortKey',
     'sortAsc',
@@ -99,7 +98,7 @@ const triggerCardDataTableStub = defineComponent({
       class="data-table trigger-card-table"
       :data-row-count="rows?.length ?? 0"
       :data-prefer-cards="String(preferCards)"
-      :data-selected-key="selectedKey || activeRow || ''">
+      :data-selected-key="selectedKey || ''">
       <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
         Force cards
       </button>
@@ -277,6 +276,9 @@ describe('TriggersView', () => {
     });
     expect(wrapper.text()).toContain('#detail-alerts');
     expect(wrapper.text()).toContain('3');
+    expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe(
+      'trigger:slack-alerts',
+    );
   });
 
   it('status badges render translated text not raw data values', async () => {
@@ -304,7 +306,6 @@ describe('TriggersView', () => {
               'columns',
               'rows',
               'rowKey',
-              'activeRow',
               'selectedKey',
               'sortKey',
               'sortAsc',
@@ -314,7 +315,7 @@ describe('TriggersView', () => {
             template: `
               <div class="data-table"
                    :data-row-count="rows?.length ?? 0"
-                   :data-selected-key="selectedKey || activeRow || ''"
+                   :data-selected-key="selectedKey || ''"
                    :data-show-actions="showActions">
                 <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
                 <div v-if="rows?.[0]" class="actions-cell"><slot name="actions" :row="rows[0]" /></div>

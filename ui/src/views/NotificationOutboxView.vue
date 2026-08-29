@@ -50,6 +50,7 @@ const counts = ref<NotificationOutboxStatusCounts>({
 const loading = ref(true);
 const error = ref('');
 const actingId = ref<string | null>(null);
+let loadRequestId = 0;
 
 const tableColumns = computed(() => [
   {
@@ -106,16 +107,21 @@ function statusToCount(s: NotificationOutboxEntryStatus): number {
 }
 
 async function loadEntries() {
+  const requestId = ++loadRequestId;
   loading.value = true;
   error.value = '';
   try {
     const response = await getOutboxEntries(status.value);
+    if (requestId !== loadRequestId) return;
     entries.value = response.data;
     counts.value = response.counts;
   } catch (e: unknown) {
+    if (requestId !== loadRequestId) return;
     error.value = errorMessage(e, t('notificationOutboxView.loadError'));
   } finally {
-    loading.value = false;
+    if (requestId === loadRequestId) {
+      loading.value = false;
+    }
   }
 }
 

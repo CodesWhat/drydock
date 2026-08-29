@@ -35,6 +35,11 @@
       "trigger": "Trigger",
       "details": "Details"
     },
+    "status": {
+      "success": "Erfolg",
+      "error": "Fehler",
+      "info": "Info"
+    },
     "actions": {
       "container-update": "Container-Update",
       "container-added": "Container hinzugefügt",

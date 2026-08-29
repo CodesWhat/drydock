@@ -166,6 +166,15 @@ describe('useDetailPanel', () => {
       closePanel();
       expect(sessionStorage.getItem('dd-panel')).toBeNull();
     });
+
+    it('should clear containerFullPage so closing the selection never strands the full-page view', () => {
+      const { containerFullPage, selectContainer, openFullPage, closePanel } = withDetailPanel();
+      selectContainer(makeContainer());
+      openFullPage();
+      expect(containerFullPage.value).toBe(true);
+      closePanel();
+      expect(containerFullPage.value).toBe(false);
+    });
   });
 
   describe('openFullPage / closeFullPage', () => {

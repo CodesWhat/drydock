@@ -35,6 +35,11 @@
       "trigger": "Tetikleyici",
       "details": "Ayrıntılar"
     },
+    "status": {
+      "success": "Başarılı",
+      "error": "Hata",
+      "info": "Bilgi"
+    },
     "actions": {
       "container-update": "Kapsayıcı Güncellemesi",
       "container-added": "Kapsayıcı Eklendi",

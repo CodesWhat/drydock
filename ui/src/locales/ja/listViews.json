@@ -35,6 +35,11 @@
       "trigger": "トリガー",
       "details": "詳細"
     },
+    "status": {
+      "success": "成功",
+      "error": "エラー",
+      "info": "情報"
+    },
     "actions": {
       "container-update": "コンテナ更新",
       "container-added": "コンテナ追加",

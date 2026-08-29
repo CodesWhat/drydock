@@ -19,6 +19,10 @@
     "badge": {
       "basic": "Basis",
       "oidc": "OIDC"
+    },
+    "status": {
+      "active": "Actief",
+      "inactive": "Inactief"
     }
   }
 }

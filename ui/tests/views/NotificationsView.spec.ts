@@ -98,23 +98,14 @@ const notificationCardFilterBarStub = defineComponent({
 });
 
 const notificationCardDataTableStub = defineComponent({
-  props: [
-    'columns',
-    'rows',
-    'rowKey',
-    'activeRow',
-    'selectedKey',
-    'sortKey',
-    'sortAsc',
-    'preferCards',
-  ],
+  props: ['columns', 'rows', 'rowKey', 'selectedKey', 'sortKey', 'sortAsc', 'preferCards'],
   emits: ['row-click', 'update:cardReflowForced'],
   template: `
     <div
       class="data-table notification-card-table"
       :data-row-count="rows?.length ?? 0"
       :data-prefer-cards="String(preferCards)"
-      :data-selected-key="selectedKey || activeRow || ''">
+      :data-selected-key="selectedKey || ''">
       <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
         Force cards
       </button>
@@ -210,6 +201,7 @@ describe('NotificationsView', () => {
     // Docker triggers are excluded from notification assignments in detail view.
     expect(wrapper.text()).toContain('Slack Alerts');
     expect(wrapper.text()).not.toContain('Docker Policy');
+    expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe('security-alert');
   });
 
   it('truncates compact notification surfaces in table mode', async () => {
@@ -233,12 +225,12 @@ describe('NotificationsView', () => {
 
     const wrapper = await mountNotificationsView({
       DataTable: defineComponent({
-        props: ['columns', 'rows', 'rowKey', 'activeRow', 'selectedKey', 'sortKey', 'sortAsc'],
+        props: ['columns', 'rows', 'rowKey', 'selectedKey', 'sortKey', 'sortAsc'],
         emits: ['row-click', 'update:sort-key', 'update:sort-asc'],
         template: `
           <div class="data-table"
                :data-row-count="rows?.length ?? 0"
-               :data-selected-key="selectedKey || activeRow || ''">
+               :data-selected-key="selectedKey || ''">
             <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
             <slot name="cell-name" v-if="rows?.[0]" :row="rows[0]" />
             <slot name="cell-triggers" v-if="rows?.[0]" :row="rows[0]" />
@@ -506,12 +498,12 @@ describe('NotificationsView', () => {
   it('renders shared switch controls in table and detail contexts', async () => {
     const wrapper = await mountNotificationsView({
       DataTable: defineComponent({
-        props: ['rows', 'rowKey', 'activeRow', 'selectedKey', 'sortKey', 'sortAsc'],
+        props: ['rows', 'rowKey', 'selectedKey', 'sortKey', 'sortAsc'],
         emits: ['row-click', 'update:sort-key', 'update:sort-asc'],
         template: `
           <div class="data-table"
                :data-row-count="rows?.length ?? 0"
-               :data-selected-key="selectedKey || activeRow || ''">
+               :data-selected-key="selectedKey || ''">
             <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
             <slot name="cell-enabled" v-if="rows?.[0]" :row="rows[0]" />
             <slot name="empty" v-if="!rows || rows.length === 0" />

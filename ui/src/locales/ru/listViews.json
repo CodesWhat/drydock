@@ -35,6 +35,11 @@
       "trigger": "Триггер",
       "details": "Детали"
     },
+    "status": {
+      "success": "Успешно",
+      "error": "Ошибка",
+      "info": "Информация"
+    },
     "actions": {
       "container-update": "Обновление контейнера",
       "container-added": "Контейнер добавлен",

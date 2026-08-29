@@ -16,6 +16,7 @@ import {
   actionLabel,
   statusBg,
   statusColor,
+  statusLabel,
   targetLabel,
 } from '../utils/audit-helpers';
 const { t, te } = useI18n();
@@ -429,7 +430,7 @@ onUnmounted(() => {
       :rows="filteredEntries"
       row-key="id"
       :hidden-column-keys="hiddenColumnKeys"
-      :active-row="selectedEntry?.id"
+      :selected-key="selectedEntry?.id"
       :prefer-cards="auditViewMode === 'cards'"
       @update:card-reflow-forced="cardReflowForced = $event"
       @row-click="openDetail($event)"
@@ -451,9 +452,9 @@ onUnmounted(() => {
       <template #cell-status="{ row }">
         <AppIcon :name="row.status === 'success' ? 'check' : row.status === 'error' ? 'xmark' : 'info'" :size="13" class="shrink-0 md:!hidden"
                  :style="{ color: statusColor(row.status) }"
-                 v-tooltip.top="row.status" />
+                 v-tooltip.top="statusLabel(row.status, { t, te })" />
         <AppBadge :custom="{ bg: statusBg(row.status), text: statusColor(row.status) }" size="xs" class="max-md:!hidden">
-          {{ row.status }}
+          {{ statusLabel(row.status, { t, te }) }}
         </AppBadge>
       </template>
       <template #cell-details="{ row }">
@@ -479,7 +480,7 @@ onUnmounted(() => {
               </div>
             </div>
             <AppBadge :custom="{ bg: statusBg(row.status), text: statusColor(row.status) }" size="xs" class="shrink-0 ml-2">
-              {{ row.status }}
+              {{ statusLabel(row.status, { t, te }) }}
             </AppBadge>
           </div>
           <!-- Body: time / version -->
@@ -551,7 +552,7 @@ onUnmounted(() => {
             <AppIcon v-if="selectedEntry" :name="actionIcon(selectedEntry.action)" :size="14" class="dd-text-secondary shrink-0" />
             <span class="text-sm font-bold truncate dd-text">{{ selectedEntry ? actionLabel(selectedEntry.action, { t, te }) : '' }}</span>
             <AppBadge v-if="selectedEntry" :custom="{ bg: statusBg(selectedEntry.status), text: statusColor(selectedEntry.status) }" size="xs" class="shrink-0">
-              {{ selectedEntry.status }}
+              {{ statusLabel(selectedEntry.status, { t, te }) }}
             </AppBadge>
           </div>
         </template>

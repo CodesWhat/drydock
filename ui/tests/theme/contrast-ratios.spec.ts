@@ -226,6 +226,9 @@ describe('AppToast tone surfaces (WCAG 2.2 normal-text target, 4.5:1)', () => {
 const PRIMARY_CTA_FILES = [
   join(process.cwd(), 'src/views/LoginView.vue'),
   join(process.cwd(), 'src/views/NotificationsView.vue'),
+  join(process.cwd(), 'src/views/TriggersView.vue'),
+  join(process.cwd(), 'src/components/config/ConfigProfileTab.vue'),
+  join(process.cwd(), 'src/layouts/AppLayout.vue'),
 ];
 
 describe('primary CTA foreground contrast (WCAG 2.2 normal-text target, 4.5:1)', () => {
@@ -266,5 +269,68 @@ describe('theme picker accents match the dark --dd-primary they preview', () => 
     const accent = getPaletteAccent(palettesSource, name);
     const primary = getHex(extractBlock(tokensSource, selector), '--dd-primary').toLowerCase();
     expect(accent).toBe(primary);
+  });
+});
+
+// `contrast-ratios` above only checks token-pair math against tokens.css, so it structurally
+// cannot catch a component that hardcodes a foreground color instead of referencing a token.
+// TriggersView's test-trigger button and the two profile-avatar circles (ConfigProfileTab,
+// AppLayout) all did exactly that: Tailwind `text-white` painted over a `--dd-primary`
+// background/gradient, which measures 2.16:1 against One Dark's `--dd-primary` (#8ab0ff) — a
+// third of the 4.5:1 AA minimum. This scans owned .vue files for that pattern directly instead
+// of trusting the token math to imply the component math.
+const HARDCODED_WHITE_ON_PRIMARY_FILES = [
+  join(process.cwd(), 'src/components/DataTable.vue'),
+  join(process.cwd(), 'src/views/ServersView.vue'),
+  join(process.cwd(), 'src/views/RegistriesView.vue'),
+  join(process.cwd(), 'src/views/WatchersView.vue'),
+  join(process.cwd(), 'src/views/AuditView.vue'),
+  join(process.cwd(), 'src/views/AuthView.vue'),
+  join(process.cwd(), 'src/views/NotificationsView.vue'),
+  join(process.cwd(), 'src/views/TriggersView.vue'),
+  join(process.cwd(), 'src/views/NotificationOutboxView.vue'),
+  join(process.cwd(), 'src/components/config/ConfigProfileTab.vue'),
+  join(process.cwd(), 'src/layouts/AppLayout.vue'),
+];
+
+// Extracts opening tags (including multi-line, multi-attribute ones) from a Vue template,
+// treating quoted attribute values as opaque so a stray `>` inside `v-if="a > b"` doesn't
+// truncate the match early.
+function extractOpeningTags(source: string): string[] {
+  const tagPattern = /<[A-Za-z][A-Za-z0-9-]*(?:"[^"]*"|'[^']*'|`[^`]*`|[^"'`>])*>/g;
+  return source.match(tagPattern) ?? [];
+}
+
+// A tag hardcodes white-on-primary when it carries the literal `text-white` utility class AND
+// its own style references `--dd-primary` as a real fill (not the dedicated `--dd-primary-fg`
+// foreground token or the low-alpha `--dd-primary-muted` surface, both of which are safe to
+// pair with a fixed foreground).
+function tagsWithHardcodedWhiteOnPrimary(source: string): string[] {
+  return extractOpeningTags(source).filter(
+    (tag) => /\btext-white\b/.test(tag) && /--dd-primary(?!-)/.test(tag),
+  );
+}
+
+describe('hardcoded white text on a --dd-primary background (component scan)', () => {
+  it('flags a synthetic tag reproducing the fixed bug shape', () => {
+    const buggy =
+      '<div class="text-white" :style="{ background: \'linear-gradient(135deg, var(--dd-primary), var(--dd-info))\' }">';
+    expect(tagsWithHardcodedWhiteOnPrimary(buggy)).toHaveLength(1);
+  });
+
+  it('does not flag the --dd-primary-fg fix pattern', () => {
+    const fixed =
+      "<div :style=\"{ backgroundColor: 'var(--dd-primary)', color: 'var(--dd-primary-fg)' }\">";
+    expect(tagsWithHardcodedWhiteOnPrimary(fixed)).toHaveLength(0);
+  });
+
+  it('does not flag text-white paired with an unrelated (non-primary) background', () => {
+    const unrelated = '<div class="text-white" style="background: var(--dd-danger);">';
+    expect(tagsWithHardcodedWhiteOnPrimary(unrelated)).toHaveLength(0);
+  });
+
+  it.each(HARDCODED_WHITE_ON_PRIMARY_FILES)('%s has no such element', (filePath) => {
+    const source = readFileSync(filePath, 'utf8');
+    expect(tagsWithHardcodedWhiteOnPrimary(source)).toEqual([]);
   });
 });

@@ -85,6 +85,11 @@ function getAgentLogs(agentId: string): AgentLog[] {
   return agentLogsCache.value[agentId] ?? [];
 }
 
+function agentStatusLabel(status: string): string {
+  if (status === 'connected') return t('agentsView.list.status.connected');
+  return t('agentsView.list.status.disconnected');
+}
+
 function formatLastFetched(iso: string): string {
   if (!iso) {
     return t('agentsView.detail.fields.never');
@@ -609,14 +614,14 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                      @row-click="selectAgent($event)">
             <template #cell-name="{ row }">
               <div class="flex items-start gap-2 min-w-0">
-                <StatusDot :status="row.status" size="md" class="mt-1.5" v-tooltip.top="row.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
+                <StatusDot :status="row.status" size="md" class="mt-1.5" :aria-label="agentStatusLabel(row.status)" v-tooltip.top="agentStatusLabel(row.status)" />
                 <div class="min-w-0 flex-1">
                   <div class="font-medium truncate dd-text">{{ row.name }}</div>
                   <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ row.host }}</div>
                   <!-- Compact mode: folded badge row -->
                   <div v-if="isCompact" class="flex items-center gap-1.5 mt-1.5">
                     <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 hidden md:inline-flex">
-                      {{ row.status }}
+                      {{ agentStatusLabel(row.status) }}
                     </AppBadge>
                     <span class="text-3xs dd-text-secondary">
                       {{ row.containers.running }}/{{ row.containers.total }}
@@ -628,7 +633,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             </template>
             <template #cell-status="{ row }">
               <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="hidden md:inline-flex">
-                {{ row.status }}
+                {{ agentStatusLabel(row.status) }}
               </AppBadge>
             </template>
             <template #cell-containers="{ row }">
@@ -725,7 +730,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               <StatusDot :status="selectedAgent?.status === 'connected' ? 'connected' : 'disconnected'" size="lg" v-tooltip.top="selectedAgent?.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
               <span class="text-sm font-bold truncate dd-text">{{ selectedAgent?.name }}</span>
               <AppBadge :tone="selectedAgent?.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0">
-                {{ selectedAgent?.status }}
+                {{ selectedAgent ? agentStatusLabel(selectedAgent.status) : '' }}
               </AppBadge>
             </div>
           </template>

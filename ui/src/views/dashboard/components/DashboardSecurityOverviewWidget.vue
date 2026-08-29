@@ -49,6 +49,14 @@ function severityTone(severity: VulnerabilityRow['severity']) {
   return severity === 'CRITICAL' ? 'danger' : 'warning';
 }
 
+// Reuses the securityView.badge.critical/high catalog (already fully
+// translated in all 16 locales, and already the vocabulary SecurityView.vue's
+// own severityBadgeLabel uses for the same per-item severity badge) instead
+// of minting a duplicate key.
+function severityLabel(severity: VulnerabilityRow['severity']) {
+  return severity === 'CRITICAL' ? t('securityView.badge.critical') : t('securityView.badge.high');
+}
+
 const rootEl = ref<HTMLElement | null>(null);
 const containerHeight = ref(999);
 
@@ -177,7 +185,7 @@ watchEffect(() => {
               <AppStatusIndicator
                 size="xs"
                 :tone="severityTone(vuln.severity)"
-                :label="vuln.severity" />
+                :label="severityLabel(vuln.severity)" />
             </div>
             <div class="flex-1 min-w-0">
               <div class="text-2xs-plus font-semibold truncate dd-text">{{ vuln.id }}</div>

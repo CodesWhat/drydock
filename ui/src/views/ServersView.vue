@@ -272,7 +272,7 @@ onMounted(fetchServers);
           :rows="filteredServers"
           row-key="id"
           :hidden-column-keys="hiddenColumnKeys"
-          :active-row="selectedServer?.id"
+          :selected-key="selectedServer?.id"
           :prefer-cards="serverViewMode === 'cards'"
           @update:card-reflow-forced="cardReflowForced = $event"
           @row-click="openDetail($event)"
@@ -291,7 +291,7 @@ onMounted(fetchServers);
             </span>
           </template>
           <template #cell-status="{ row }">
-            <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 md:!hidden" v-tooltip.top="serverStatusLabel(row.status)">
+            <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 md:!hidden" role="img" :aria-label="serverStatusLabel(row.status)" v-tooltip.top="serverStatusLabel(row.status)">
               <AppIcon :name="row.status === 'connected' ? 'check' : 'xmark'" :size="12" />
             </AppBadge>
             <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
@@ -326,7 +326,7 @@ onMounted(fetchServers);
                     </div>
                   </div>
                 </div>
-                <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden" v-tooltip.top="serverStatusLabel(row.status)">
+                <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden" role="img" :aria-label="serverStatusLabel(row.status)" v-tooltip.top="serverStatusLabel(row.status)">
                   <AppIcon :name="row.status === 'connected' ? 'check' : 'xmark'" :size="12" />
                 </AppBadge>
                 <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0 ml-2 max-md:!hidden">

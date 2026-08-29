@@ -5,6 +5,7 @@ import {
   imageAge,
   statusBg,
   statusColor,
+  statusLabel,
   targetLabel,
   timeAgo,
 } from '@/utils/audit-helpers';
@@ -37,6 +38,38 @@ describe('audit-helpers', () => {
     });
     it('returns info-muted bg for unknown status', () => {
       expect(statusBg('other')).toBe('var(--dd-info-muted)');
+    });
+  });
+
+  describe('statusLabel', () => {
+    it('title-cases success/error/info without i18n', () => {
+      expect(statusLabel('success')).toBe('Success');
+      expect(statusLabel('error')).toBe('Error');
+      expect(statusLabel('info')).toBe('Info');
+    });
+    it('title-cases an unrecognized status without i18n', () => {
+      expect(statusLabel('pending')).toBe('Pending');
+    });
+    it('uses i18n translation when key exists', () => {
+      const i18n = {
+        te: (key: string) => key === 'auditView.status.success',
+        t: (key: string) => (key === 'auditView.status.success' ? '成功' : key),
+      };
+      expect(statusLabel('success', i18n)).toBe('成功');
+    });
+    it('falls back to title-case when i18n key is missing', () => {
+      const i18n = {
+        te: (_key: string) => false,
+        t: (key: string) => key,
+      };
+      expect(statusLabel('info', i18n)).toBe('Info');
+    });
+    it('falls back to title-case for an unrecognized status when i18n key is missing', () => {
+      const i18n = {
+        te: (_key: string) => false,
+        t: (key: string) => key,
+      };
+      expect(statusLabel('pending', i18n)).toBe('Pending');
     });
   });
 
