@@ -193,6 +193,8 @@ function createMetadataSafeLookup(allowmetadata: boolean): MetadataSafeLookup | 
 
 const SUPPORTED_PROXY_PROTOCOLS = new Set(['http:', 'https:']);
 
+const HTTP_AUTH_SECRET_FIELDS = ['password', 'bearer'] as const;
+
 interface HttpConfiguration extends TriggerConfiguration {
   url: string;
   method: 'GET' | 'POST';
@@ -278,6 +280,8 @@ class Http extends Trigger<HttpConfiguration> {
    *
    * The credentials live under a nested `auth` object, which the flat
    * `maskFields()` helper cannot reach, so the masking is written out here.
+   * The nested object is rebuilt field by field rather than spread, so a field
+   * added to `auth` later cannot reach a log line until it is listed here.
    * @returns {*}
    */
   maskConfiguration() {
@@ -285,13 +289,18 @@ class Http extends Trigger<HttpConfiguration> {
     if (!auth) {
       return { ...rest } as HttpConfiguration;
     }
+    const maskedAuth: Record<string, unknown> = {
+      type: auth.type,
+      user: auth.user,
+    };
+    for (const field of HTTP_AUTH_SECRET_FIELDS) {
+      if (auth[field]) {
+        maskedAuth[field] = Http.mask(auth[field]);
+      }
+    }
     return {
       ...rest,
-      auth: {
-        ...auth,
-        password: Http.mask(auth.password),
-        bearer: Http.mask(auth.bearer),
-      },
+      auth: maskedAuth,
     } as HttpConfiguration;
   }
 
