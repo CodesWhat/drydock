@@ -13,6 +13,7 @@ import { getPortwingAuthorizedKeysPath, getStoreConfiguration } from '../configu
 
 import * as agentKeys from './agent-keys.js';
 import * as app from './app.js';
+import * as approval from './approval.js';
 import * as audit from './audit.js';
 import * as backup from './backup.js';
 import * as container from './container.js';
@@ -94,6 +95,7 @@ function enforceStorePermissions(storeDirectory: string, storePath: string): voi
 function createCollections() {
   agentKeys.createCollections(db);
   app.createCollections(db);
+  approval.createCollections(db);
   audit.createCollections(db);
   backup.createCollections(db);
   container.createCollections(db);

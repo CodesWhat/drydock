@@ -124,6 +124,7 @@ const {
     });
     vi.doMock('./agent-keys', createAgentKeysMock);
     vi.doMock('./app', createCollectionsMock);
+    vi.doMock('./approval', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', () => createContainerMock(overrides.container));
@@ -162,6 +163,7 @@ vi.mock('../configuration', () => ({
   getPortwingAuthorizedKeysPath: vi.fn(() => undefined),
 }));
 vi.mock('./app', createCollectionsMock);
+vi.mock('./approval', createCollectionsMock);
 vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createContainerMock);
