@@ -11,6 +11,7 @@ import { requestContainerUpdate, UpdateRequestError } from '../../updates/reques
 import type { ApiComponent } from '../component.js';
 import { isTriggerCompatibleWithContainer } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
+import { sanitizePreviewErrorReason } from '../preview-errors.js';
 import { getPathParamValue } from './request-helpers.js';
 
 interface TriggerStoreContainerApi {
@@ -290,14 +291,15 @@ function createRunTriggerHandler({
         return;
       }
 
+      const errorMessage = getErrorMessage(error);
+      const sanitizedReason = errorMessage ? sanitizePreviewErrorReason(errorMessage) : '';
       log.warn(
-        `Error when running trigger (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}) (${sanitizeLogParam(getErrorMessage(error))})`,
+        `Error when running trigger (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}) (${sanitizeLogParam(sanitizedReason)})`,
       );
       sendErrorResponse(
         res,
         500,
-        getErrorMessage(error) ||
-          `Error when running trigger (type=${triggerType}, name=${triggerName})`,
+        sanitizedReason || `Error when running trigger (type=${triggerType}, name=${triggerName})`,
       );
     }
   };

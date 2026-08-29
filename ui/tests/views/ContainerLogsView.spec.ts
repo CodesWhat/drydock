@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import { setI18nLocale } from '@/boot/i18n';
 import ContainerLogsView from '@/views/ContainerLogsView.vue';
 
 const mocks = vi.hoisted(() => ({
@@ -65,6 +66,7 @@ describe('ContainerLogsView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getAllContainers.mockResolvedValue([]);
+    setI18nLocale('en');
   });
 
   describe('layout', () => {
@@ -97,6 +99,19 @@ describe('ContainerLogsView', () => {
       const wrapper = mountView();
       await flushPromises();
       expect(wrapper.text()).toContain('running');
+    });
+
+    it('translates the status badge for the active locale instead of rendering the raw English enum (defect 2)', async () => {
+      mocks.getAllContainers.mockResolvedValue([{ id: 'container-1', name: 'web' }]);
+      setI18nLocale('de');
+      const wrapper = mountView();
+      await flushPromises();
+      // containersView.status.running === "laufend" in de — see
+      // src/locales/de/containersView.json. If this ever renders the raw
+      // English enum instead, "running" (lowercase, matching the English
+      // catalog value) would leak into the badge text.
+      expect(wrapper.text()).not.toContain('running');
+      expect(wrapper.text()).toContain('laufend');
     });
 
     it('shows "Container Logs" label', () => {

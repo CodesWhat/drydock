@@ -1,6 +1,11 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { Container } from '../model/container.js';
-import { classifyPreviewError, sendPreviewError, TRIGGER_ACTION } from './preview-errors.js';
+import {
+  classifyPreviewError,
+  sanitizePreviewErrorReason,
+  sendPreviewError,
+  TRIGGER_ACTION,
+} from './preview-errors.js';
 
 function container(options: { registry?: unknown; imageName?: unknown } = {}): Container {
   const registry = Object.hasOwn(options, 'registry') ? options.registry : 'ghcr.io';
@@ -163,6 +168,63 @@ describe('preview errors', () => {
       expect(result.payload.details).toBeUndefined();
     },
   );
+
+  test('redacts a telegram bot credential embedded in the request URL path', () => {
+    const secret = '123456789:FAKE-TELEGRAM-BOT-SECRET-abcXYZ';
+    const reason = sanitizePreviewErrorReason(
+      new Error(
+        `Request failed with status code 404: https://api.telegram.org/bot${secret}/sendMessage`,
+      ),
+    );
+    expect(reason).not.toContain(secret);
+    expect(reason).toBe(
+      'Request failed with status code 404: https://api.telegram.org/bot[REDACTED]/sendMessage',
+    );
+  });
+
+  test('redacts an ifttt maker key embedded in the request URL path', () => {
+    const secret = 'FAKE-IFTTT-MAKER-SECRET-7890';
+    const reason = sanitizePreviewErrorReason(
+      new Error(`connect ETIMEDOUT https://maker.ifttt.com/trigger/dd-image/with/key/${secret}`),
+    );
+    expect(reason).not.toContain(secret);
+    expect(reason).toBe(
+      'connect ETIMEDOUT https://maker.ifttt.com/trigger/dd-image/with/key/[REDACTED]',
+    );
+  });
+
+  test('redacts a discord webhook credential embedded in the request URL path', () => {
+    const secret = 'FAKE-DISCORD-WEBHOOK-SECRET-abcXYZ';
+    const reason = sanitizePreviewErrorReason(
+      new Error(
+        `Request failed with status code 401: https://discord.com/api/webhooks/123456789012345678/${secret}`,
+      ),
+    );
+    expect(reason).not.toContain(secret);
+    expect(reason).toBe(
+      'Request failed with status code 401: https://discord.com/api/webhooks/123456789012345678/[REDACTED]',
+    );
+  });
+
+  test('leaves an ordinary registry URL path unredacted', () => {
+    const message =
+      'manifest unknown: https://registry.example.com/v2/myorg/myimage/manifests/sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567';
+    const reason = sanitizePreviewErrorReason(new Error(message));
+    expect(reason).toBe(message);
+  });
+
+  test('leaves a telegram-hosted URL with a non-credential path unredacted', () => {
+    const message = 'ENOTFOUND https://api.telegram.org/health-check';
+    const reason = sanitizePreviewErrorReason(new Error(message));
+    expect(reason).toBe(message);
+  });
+
+  test('leaves an ifttt-hosted URL with a different path shape unredacted', () => {
+    const message =
+      'https://maker.ifttt.com/some/other/path/FAKE-LOOKS-LIKE-A-KEY-1234567890abcdef';
+    const reason = sanitizePreviewErrorReason(new Error(message));
+    expect(reason).toBe(message);
+  });
 
   test('sends an exact typed payload', () => {
     const json = vi.fn();

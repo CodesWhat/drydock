@@ -8,9 +8,9 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
-import { getErrorMessage } from '../util/error.js';
 import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
+import { sanitizePreviewErrorReason } from './preview-errors.js';
 
 const log = logger.child({ component: 'trigger' });
 
@@ -224,13 +224,13 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
       return;
     }
 
-    const errorMessage = getErrorMessage(e);
+    const sanitizedReason = sanitizePreviewErrorReason(e);
     log.warn(
-      `Error when running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (${sanitizeLogParam(errorMessage)})`,
+      `Error when running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (${sanitizeLogParam(sanitizedReason)})`,
     );
     sendErrorResponse(res, 500, {
       message: `Error when running trigger ${triggerType}.${triggerName}`,
-      details: errorMessage ? { reason: errorMessage } : undefined,
+      details: sanitizedReason ? { reason: sanitizedReason } : undefined,
     });
   }
 }
@@ -314,9 +314,9 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
       return;
     }
 
-    const errorMessage = getErrorMessage(e);
+    const sanitizedReason = sanitizePreviewErrorReason(e);
     log.warn(
-      `Error when running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on agent ${sanitizeLogParam(agentName)} (${sanitizeLogParam(errorMessage)})`,
+      `Error when running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on agent ${sanitizeLogParam(agentName)} (${sanitizeLogParam(sanitizedReason)})`,
     );
     const remoteStatusCode = getRemoteErrorStatusCode(e);
     const remoteErrorMessage = getRemoteErrorMessage(e);
@@ -330,7 +330,7 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
     }
     sendErrorResponse(res, 500, {
       message: `Error when running remote trigger ${triggerType}.${triggerName} on agent ${agentName}`,
-      details: errorMessage ? { reason: errorMessage } : undefined,
+      details: sanitizedReason ? { reason: sanitizedReason } : undefined,
     });
   }
 }

@@ -280,6 +280,29 @@ function getDashboardContainerReconciliationKey(container: {
   return container.identityKey || container.id || container.name || '';
 }
 
+// Per-row (identity, updateOperation.status, updateOperation.updatedAt)
+// fingerprint used as a watch source for reconcileHoldsAgainstContainers below.
+// useDashboardData's SSE handlers write container.updateOperation in place
+// (Object.assign on 'updated' patches, a direct `row.updateOperation = ...`
+// write for operation-status patches) without ever reassigning containers.value
+// or changing its length, so neither a reference-only watch nor a
+// length-augmented one (see the watch right above this function) observes
+// them. Mapping + joining only the fields reconcileHoldsAgainstContainers
+// actually reads is deliberately NOT { deep: true } on the containers ref:
+// a deep watch would re-run this on every unrelated in-place field mutation
+// (image tag, stats, security fields, ...) to every row -- exactly the
+// per-row invalidation the in-place patch pipeline exists to avoid.
+function dashboardUpdateOperationFingerprint(list: Container[]): string {
+  const parts = new Array<string>(list.length);
+  for (let i = 0; i < list.length; i += 1) {
+    const container = list[i]!;
+    const operation = container.updateOperation;
+    parts[i] =
+      `${getDashboardContainerReconciliationKey(container)}:${operation?.status ?? ''}:${operation?.updatedAt ?? ''}`;
+  }
+  return parts.join('\n');
+}
+
 function stopDashboardPendingUpdatePolling() {
   if (!dashboardPendingUpdatePollTimer.value) {
     dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
@@ -460,7 +483,18 @@ const statById = computed(() => {
   return map;
 });
 
-watch(containers, () => {
+// Watches both the containers ref itself (fires on the full-reload path's
+// containers.value = mapped reassignment, e.g. applyFetchedDashboardData) and
+// its length (fires on the SSE patch pipeline's in-place push/splice for
+// added/removed rows in useDashboardData's applyDashboardContainerPatch,
+// which never replaces the array reference so a reference-only watch misses
+// them). pruneDashboardPendingUpdateRows/pruneDashboardUpdateSequence only
+// care about container-list *membership* -- is a given identity key now live
+// -- which push/splice fully cover; an in-place Object.assign field patch to
+// an already-present row doesn't change membership, so it doesn't need to
+// retrigger this watcher. Not { deep: true }: identical rationale to
+// ContainersView.vue's sibling watch on its own containers ref.
+watch([() => containers.value, () => containers.value.length], () => {
   pruneDashboardPendingUpdateRows();
   pruneDashboardUpdateSequence();
 });
@@ -507,11 +541,24 @@ function applyDashboardOperationSse(event: Event) {
   applyDashboardParsedOperationSse(parsed);
 }
 
-watch(containers, (next) => {
-  // After every container-list refresh, reconcile holds against the raw container
-  // state so a replayed or reconciled terminal state releases the display hold.
-  reconcileHoldsAgainstContainers(next, Date.now());
-});
+// After every container-list refresh AND after any in-place updateOperation
+// patch, reconcile holds against the raw container state so a replayed or
+// reconciled terminal state releases the display hold. Watches
+// dashboardUpdateOperationFingerprint(containers.value) rather than the
+// containers ref itself: a reference-only watch fires on the full-reload
+// reassignment but never on the SSE patch pipeline's in-place
+// container.updateOperation writes (useDashboardData's
+// applyDashboardContainerPatch Object.assign on 'updated' events, and
+// applyDashboardOperationPatch's direct `row.updateOperation = ...` /
+// `= undefined` writes on operation-status events) -- exactly the missed-SSE
+// case this safety net exists to cover. See dashboardUpdateOperationFingerprint
+// above for why this isn't { deep: true } on containers instead.
+watch(
+  () => dashboardUpdateOperationFingerprint(containers.value),
+  () => {
+    reconcileHoldsAgainstContainers(containers.value, Date.now());
+  },
+);
 
 function handleDashboardSseUpdateApplied(event: Event) {
   const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;

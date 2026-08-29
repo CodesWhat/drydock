@@ -473,6 +473,34 @@ describe('Trigger Router', () => {
       expect(responsePayload.error).toBe('Error when running trigger slack.default');
       expect(responsePayload.details).toBeUndefined();
     });
+
+    test('should scrub credentials embedded in the thrown error message before sending to the client', async () => {
+      const mockTrigger = {
+        trigger: vi
+          .fn()
+          .mockRejectedValue(
+            new Error(
+              'Webhook call failed: Authorization: Bearer sk-secret-abc123, POST https://user:hunter2@hooks.example.com/notify timed out',
+            ),
+          ),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'slack.default': mockTrigger },
+      });
+
+      const req = {
+        params: { type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createMockResponse();
+
+      await runTrigger(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      const responseBody = JSON.stringify(res.json.mock.calls[0][0]);
+      expect(responseBody).not.toContain('sk-secret-abc123');
+      expect(responseBody).not.toContain('hunter2');
+    });
   });
 
   describe('runRemoteTrigger', () => {
@@ -659,6 +687,33 @@ describe('Trigger Router', () => {
         'Error when running remote trigger slack.default on agent my-agent',
       );
       expect(responsePayload.details).toBeUndefined();
+    });
+
+    test('should scrub credentials embedded in the remote trigger error message before sending to the client', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi
+          .fn()
+          .mockRejectedValue(
+            new Error(
+              'Webhook call failed: Authorization: Bearer sk-secret-abc123, POST https://user:hunter2@hooks.example.com/notify timed out',
+            ),
+          ),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'my-agent', type: 'slack', name: 'default' },
+        body: { id: 'c1' },
+      };
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      const responseBody = JSON.stringify(res.json.mock.calls[0][0]);
+      expect(responseBody).not.toContain('sk-secret-abc123');
+      expect(responseBody).not.toContain('hunter2');
     });
 
     test('should ignore remote status codes outside the HTTP error range', async () => {

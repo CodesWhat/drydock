@@ -3273,6 +3273,27 @@ describe('api/container/crud', () => {
         error: 'Error deleting container on agent (upstream unavailable)',
       });
     });
+
+    test('should scrub credentials embedded in the remote delete error message before sending to the client', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', agent: 'remote-a' })],
+      });
+      const remoteError = new Error(
+        'Webhook call failed: Authorization: Bearer sk-secret-abc123, POST https://user:hunter2@hooks.example.com/notify timed out',
+      );
+      (remoteError as any).response = { status: 500 };
+      const agent = {
+        deleteContainer: vi.fn().mockRejectedValue(remoteError),
+      };
+      harness.deps.getAgent.mockReturnValue(agent);
+
+      const res = await callDeleteContainer(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      const responseBody = JSON.stringify(res.json.mock.calls[0][0]);
+      expect(responseBody).not.toContain('sk-secret-abc123');
+      expect(responseBody).not.toContain('hunter2');
+    });
   });
 
   describe('watch handlers', () => {
@@ -3317,6 +3338,26 @@ describe('api/container/crud', () => {
       expect(res.json).toHaveBeenCalledWith({
         error: 'Error when watching images (watch failed)',
       });
+    });
+
+    test('should scrub credentials embedded in the watcher failure message before sending to the client', async () => {
+      const harness = createHarness();
+      const failure = new Error(
+        'Webhook call failed: Authorization: Bearer sk-secret-abc123, POST https://user:hunter2@hooks.example.com/notify timed out',
+      );
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': {
+          watch: vi.fn().mockRejectedValue(failure),
+          watchContainer: vi.fn(),
+        },
+      });
+
+      const res = await callWatchContainers(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      const responseBody = JSON.stringify(res.json.mock.calls[0][0]);
+      expect(responseBody).not.toContain('sk-secret-abc123');
+      expect(responseBody).not.toContain('hunter2');
     });
 
     test('watchContainers validates request payload and rejects unknown properties', async () => {

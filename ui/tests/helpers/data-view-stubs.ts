@@ -37,21 +37,12 @@ export const dataViewStubs: Record<string, any> = {
     `,
   }),
   DataTable: defineComponent({
-    props: [
-      'columns',
-      'rows',
-      'rowKey',
-      'activeRow',
-      'selectedKey',
-      'sortKey',
-      'sortAsc',
-      'hiddenColumnKeys',
-    ],
+    props: ['columns', 'rows', 'rowKey', 'selectedKey', 'sortKey', 'sortAsc', 'hiddenColumnKeys'],
     emits: ['row-click', 'update:sort-key', 'update:sort-asc'],
     template: `
       <div class="data-table"
            :data-row-count="rows?.length ?? 0"
-           :data-selected-key="selectedKey || activeRow || ''">
+           :data-selected-key="selectedKey || ''">
         <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
         <button v-if="rows?.[1]" class="row-click-second" @click="$emit('row-click', rows[1])">Open 2</button>
         <div v-if="rows?.[0]" data-cell="status"><slot name="cell-status" :row="rows[0]" /></div>

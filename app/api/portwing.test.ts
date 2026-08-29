@@ -13,12 +13,20 @@ const { capturedHandlers, mockAgentKeys, mockSendErrorResponse, mockDisconnectBy
       deleteKey?: (req: unknown, res: unknown) => void;
     } = {};
 
+    class AgentKeyConflictError extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = 'AgentKeyConflictError';
+      }
+    }
+
     return {
       capturedHandlers: handlers,
       mockAgentKeys: {
         listKeys: vi.fn(() => []),
         addKey: vi.fn(),
         revokeKey: vi.fn(() => false),
+        AgentKeyConflictError,
       },
       mockSendErrorResponse: vi.fn(),
       mockDisconnectByKeyId: vi.fn(() => 0),
@@ -44,6 +52,9 @@ vi.mock('express', () => ({
 vi.mock('../store/agent-keys.js', () => mockAgentKeys);
 vi.mock('./error-response.js', () => ({ sendErrorResponse: mockSendErrorResponse }));
 vi.mock('./portwing-ws.js', () => ({ disconnectByKeyId: mockDisconnectByKeyId }));
+vi.mock('../log/index.js', () => ({
+  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
+}));
 
 import * as portwingRouterModule from './portwing.js';
 
@@ -179,10 +190,10 @@ describe('POST /keys', () => {
     });
   });
 
-  test('returns 409 when addKey throws (duplicate key)', () => {
+  test('returns 409 when addKey throws AgentKeyConflictError (duplicate key)', () => {
     const rawKey = generateEd25519RawPubkey();
     mockAgentKeys.addKey.mockImplementation(() => {
-      throw new Error('Key aabbccddeeff0011 is already active');
+      throw new mockAgentKeys.AgentKeyConflictError('Key aabbccddeeff0011 is already active');
     });
 
     const req = createMockRequest({
@@ -194,8 +205,23 @@ describe('POST /keys', () => {
     expect(mockSendErrorResponse).toHaveBeenCalledWith(
       res,
       409,
-      expect.stringContaining('already active'),
+      'Key aabbccddeeff0011 is already active',
     );
+  });
+
+  test('returns 500 with a generic message when addKey throws an unexpected (non-conflict) error', () => {
+    const rawKey = generateEd25519RawPubkey();
+    mockAgentKeys.addKey.mockImplementation(() => {
+      throw new Error('agent-keys collection not initialized');
+    });
+
+    const req = createMockRequest({
+      body: { pubkeyBase64: rawKey.toString('base64'), label: 'agent' },
+    });
+    const res = createMockResponse();
+    capturedHandlers.postKeys!(req, res);
+
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 500, 'Internal server error');
   });
 });
 

@@ -328,6 +328,59 @@ describe('AgentsView', () => {
     expect(wrapper.find('[data-col-key="containers"]').exists()).toBe(true);
   });
 
+  describe('status label translation', () => {
+    it('renders the translated status label (not the raw API value) in the desktop table cell', async () => {
+      mockGetAgents.mockResolvedValue([
+        makeAgent({ name: 'edge-1', connected: true }),
+        makeAgent({ name: 'edge-2', connected: false }),
+      ]);
+
+      const wrapper = await mountAgentsView();
+      const rows = wrapper.findAll('.data-table-row');
+
+      expect(rows[0].text()).toContain('Connected');
+      expect(rows[0].text()).not.toContain('connected');
+      expect(rows[1].text()).toContain('Disconnected');
+    });
+
+    it('renders the translated status label in the compact folded badge row', async () => {
+      mockWindowNarrow.value = true;
+      mockGetAgents.mockResolvedValue([
+        makeAgent({ name: 'edge-1', connected: true }),
+        makeAgent({ name: 'edge-2', connected: false }),
+      ]);
+
+      const wrapper = await mountAgentsView();
+      const badgeRows = wrapper.findAll('.flex.items-center.gap-1\\.5.mt-1\\.5');
+
+      expect(badgeRows[0].text()).toContain('Connected');
+      expect(badgeRows[1].text()).toContain('Disconnected');
+    });
+
+    it('renders the translated status label in the DetailPanel header badge', async () => {
+      mockGetAgents.mockResolvedValue([makeAgent({ name: 'edge-1', connected: false })]);
+
+      const wrapper = await mountAgentsView();
+      await wrapper.find('.row-click-first').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.detail-header').text()).toContain('Disconnected');
+    });
+
+    it('gives the compact status dot an accessible name sourced from the translated label', async () => {
+      mockGetAgents.mockResolvedValue([
+        makeAgent({ name: 'edge-1', connected: true }),
+        makeAgent({ name: 'edge-2', connected: false }),
+      ]);
+
+      const wrapper = await mountAgentsView();
+      const rows = wrapper.findAll('.data-table-row');
+
+      expect(rows[0].find('[aria-label="Connected"]').exists()).toBe(true);
+      expect(rows[1].find('[aria-label="Disconnected"]').exists()).toBe(true);
+    });
+  });
+
   it('successful load renders agent rows', async () => {
     mockGetAgents.mockResolvedValue([
       makeAgent({ name: 'edge-1' }),

@@ -77,6 +77,11 @@ vi.mock('@/composables/useUpdateMode', () => ({
 
 vi.mock('@/utils/container-mapper', () => ({
   mapApiContainers: vi.fn((x: any) => x),
+  // Only used by the two new defect-1 regression tests below (SSE container
+  // add/update patches, which call mapApiContainer singular). No existing
+  // test in this file dispatches dd:sse-container-added/updated, so this is
+  // inert for the rest of the suite.
+  mapApiContainer: vi.fn((x: any) => x),
 }));
 
 vi.mock('@/utils/dashboard-container-metrics', async () => {
@@ -1226,14 +1231,22 @@ describe('DashboardView', () => {
     it('shows blocked containers as CRITICAL severity', async () => {
       const containers = [makeContainer({ bouncer: 'blocked', name: 'bad-container' })];
       const wrapper = await mountDashboard(containers);
-      expect(wrapper.text()).toContain('CRITICAL');
+      // Rendered label is translated (defect 3 fix) — the raw enum used to
+      // leak into the DOM here; see DashboardSecurityOverviewWidget's
+      // severityLabel().
+      expect(wrapper.text()).toContain('Critical');
+      expect(wrapper.text()).not.toContain('CRITICAL');
       expect(wrapper.text()).toContain('bad-container');
     });
 
     it('shows unsafe containers as HIGH severity', async () => {
       const containers = [makeContainer({ bouncer: 'unsafe', name: 'risky-one' })];
       const wrapper = await mountDashboard(containers);
-      expect(wrapper.text()).toContain('HIGH');
+      // Rendered label is translated (defect 3 fix) — the raw enum used to
+      // leak into the DOM here; see DashboardSecurityOverviewWidget's
+      // severityLabel().
+      expect(wrapper.text()).toContain('High');
+      expect(wrapper.text()).not.toContain('HIGH');
       expect(wrapper.text()).toContain('risky-one');
     });
 
@@ -2802,6 +2815,130 @@ describe('DashboardView', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  // Defect 1: watch(containers, ...) with no { deep: true } and no length
+  // source only fires on a full containers.value = reassignment. Both
+  // watchers below only ran after applyFetchedDashboardData (initial load,
+  // dd:sse-resync-required, or a TTL-guarded reconnect refresh) and never
+  // after the SSE patch pipeline's routine in-place container mutations
+  // (splice/push/Object.assign/direct field writes in useDashboardData.ts),
+  // which is the normal way containers.value actually changes.
+  describe('pending ghost row pruning via in-place SSE add (defect 1, watcher at :497)', () => {
+    it('prunes a ghost updating row the instant the recreated container reappears via dd:sse-container-added, without waiting for the next background poll', async () => {
+      vi.useFakeTimers();
+      try {
+        const pending = makeContainer({
+          id: 'c-pending-2',
+          name: 'api',
+          newTag: '2.0.0',
+          updateKind: 'minor',
+        });
+        const recreated = makeContainer({
+          id: 'c-pending-2-recreated',
+          identityKey: pending.identityKey,
+          name: pending.name,
+          newTag: null,
+          updateKind: null,
+        });
+        mockUpdateContainer.mockResolvedValueOnce({});
+
+        const wrapper = await mountDashboard(
+          [pending],
+          [],
+          {},
+          { recentStatuses: { api: 'pending' } },
+        );
+
+        // The immediate background refetch inside confirmDashboardUpdate's
+        // onAccepted returns an empty list -- the container has disappeared
+        // mid-recreate -- so capturePendingDashboardRows captures a ghost row.
+        const { mapApiContainers, mapApiContainer } = await import('@/utils/container-mapper');
+        mockGetAllContainers.mockResolvedValueOnce([]);
+        mockGetContainerRecentStatus.mockResolvedValueOnce({ statuses: {} });
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([]);
+
+        const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+        const confirm = useConfirmDialog();
+
+        await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+        await confirm.accept();
+        await flushPromises();
+
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
+
+        // Reintroduce the recreated container via the SSE add stream -- an
+        // in-place Array.prototype.push onto containers.value inside
+        // applyDashboardContainerPatch, never a containers.value =
+        // reassignment. Deliberately never advance the fake timers, so the
+        // 2s background poll (which WOULD reload via a full reassignment,
+        // and already correctly triggers a reference-only watch) never runs
+        // -- only the SSE-driven push can be responsible for any pruning
+        // observed below.
+        (mapApiContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(recreated);
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: recreated }));
+        await flushPromises();
+
+        expect(wrapper.find('[data-widget-id="recent-updates"]').text()).not.toContain('Updating');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('operation display hold reconciliation via in-place SSE patches (defect 1, watcher at :556)', () => {
+    it('folds a stale hold once an in-place dd:sse-container-updated patch clears updateOperation, without waiting for a full container-list reload', async () => {
+      const container = makeContainer({ id: 'c1', name: 'nginx', identityKey: '::local::nginx' });
+      await mountDashboard([container]);
+
+      const { useOperationDisplayHold } = await import('@/composables/useOperationDisplayHold');
+      const { heldOperations } = useOperationDisplayHold();
+
+      // Active-status SSE creates a ~10-minute hold (OPERATION_ACTIVE_HOLD_MS)
+      // via DashboardView's own applyDashboardOperationSse handler, and
+      // separately writes containers.value[0].updateOperation in place via
+      // useDashboardData's operationPatchListener -- two independent
+      // listeners on the same globalThis event.
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-update-operation-changed', {
+          detail: {
+            operationId: 'op-1',
+            containerId: 'c1',
+            containerName: 'nginx',
+            status: 'in-progress',
+            phase: 'pulling',
+          },
+        }),
+      );
+      await flushPromises();
+
+      const holdAfterCreate = heldOperations.value.get('op-1');
+      expect(holdAfterCreate).toBeDefined();
+      expect(holdAfterCreate!.displayUntil - Date.now()).toBeGreaterThan(60_000);
+
+      // A general container-state patch (dd:sse-container-updated -- a
+      // different SSE channel than update-operation, and one DashboardView's
+      // own hold-management code never listens to) resolves the operation to
+      // absent, in place: Object.assign onto the existing containers.value[0]
+      // inside applyDashboardContainerPatch. Never a containers.value =
+      // reassignment, never a length change.
+      const { mapApiContainer } = await import('@/utils/container-mapper');
+      const resolvedContainer = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        identityKey: '::local::nginx',
+        updateOperation: undefined,
+      });
+      (mapApiContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(resolvedContainer);
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-container-updated', { detail: resolvedContainer }),
+      );
+      await flushPromises();
+
+      const holdAfterPatch = heldOperations.value.get('op-1');
+      expect(holdAfterPatch).toBeDefined();
+      expect(holdAfterPatch!.displayUntil - Date.now()).toBeLessThanOrEqual(1_500);
     });
   });
 });

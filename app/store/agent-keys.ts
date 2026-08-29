@@ -30,6 +30,19 @@ interface AgentKeyStoreDb {
   addCollection(name: string, options?: Record<string, unknown>): AgentKeyCollection;
 }
 
+/**
+ * Thrown by addKey() when a non-revoked key with the same keyId already exists.
+ * Callers (the portwing REST API) can recognise this via instanceof and
+ * surface the message as a 409, while any other addKey failure is an
+ * unexpected error that should be sanitized before reaching a client.
+ */
+export class AgentKeyConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AgentKeyConflictError';
+  }
+}
+
 let agentKeyCollection: AgentKeyCollection | undefined;
 
 /**
@@ -73,7 +86,7 @@ export function addKey(pubkeyBuffer: Buffer, label: string): AgentKeyRecord {
   const keyId = deriveKeyId(pubkeyBuffer);
   const existing = agentKeyCollection.findOne({ keyId, revokedAt: null });
   if (existing) {
-    throw new Error(`Key ${keyId} is already active`);
+    throw new AgentKeyConflictError(`Key ${keyId} is already active`);
   }
 
   const record: AgentKeyRecord = {

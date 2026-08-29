@@ -35,6 +35,11 @@
       "trigger": "트리거",
       "details": "상세 정보"
     },
+    "status": {
+      "success": "성공",
+      "error": "오류",
+      "info": "정보"
+    },
     "actions": {
       "container-update": "컨테이너 업데이트",
       "container-added": "컨테이너 추가됨",

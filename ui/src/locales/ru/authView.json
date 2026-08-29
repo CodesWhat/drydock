@@ -19,6 +19,10 @@
     "badge": {
       "basic": "Базовая",
       "oidc": "OpenID Connect (OIDC)"
+    },
+    "status": {
+      "active": "Активен",
+      "inactive": "Неактивен"
     }
   }
 }

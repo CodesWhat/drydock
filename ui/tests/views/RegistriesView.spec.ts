@@ -44,10 +44,10 @@ async function mountRegistriesView() {
       stubs: {
         ...dataViewStubs,
         DataTable: defineComponent({
-          props: ['columns', 'rows', 'rowKey', 'activeRow'],
+          props: ['columns', 'rows', 'rowKey', 'selectedKey'],
           emits: ['row-click'],
           template: `
-            <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+            <div class="data-table" :data-row-count="rows?.length ?? 0" :data-selected-key="selectedKey || ''">
               <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
                 <button v-if="row" class="row-click-first" @click="$emit('row-click', row)">Open</button>
                 <slot name="cell-name" :row="row" />
@@ -96,14 +96,14 @@ const registryCardFilterBarStub = defineComponent({
 });
 
 const registryCardDataTableStub = defineComponent({
-  props: ['columns', 'rows', 'rowKey', 'activeRow', 'selectedKey', 'preferCards'],
+  props: ['columns', 'rows', 'rowKey', 'selectedKey', 'preferCards'],
   emits: ['row-click', 'update:cardReflowForced'],
   template: `
     <div
       class="data-table registry-card-table"
       :data-row-count="rows?.length ?? 0"
       :data-prefer-cards="String(preferCards)"
-      :data-selected-key="selectedKey || activeRow || ''">
+      :data-selected-key="selectedKey || ''">
       <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
         Force cards
       </button>
@@ -155,6 +155,18 @@ describe('RegistriesView', () => {
 
     expect(mockGetAllRegistries).toHaveBeenCalledTimes(1);
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('2');
+  });
+
+  it('gives the compact icon-only status indicator an accessible name (table mode)', async () => {
+    mockGetAllRegistries.mockResolvedValue([
+      makeRegistry({ id: 'registry-1', name: 'Docker Hub', type: 'hub' }),
+    ]);
+
+    const wrapper = await mountRegistriesView();
+
+    const compactStatus = wrapper.find('[role="img"]');
+    expect(compactStatus.exists()).toBe(true);
+    expect(compactStatus.attributes('aria-label')).toBe('Connected');
   });
 
   it('route query q filters rows', async () => {
@@ -231,6 +243,7 @@ describe('RegistriesView', () => {
     });
     expect(wrapper.text()).toContain('https://detail.example');
     expect(wrapper.text()).toContain('team-a');
+    expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe('registry-1');
   });
 
   it('caps long registry URLs in compact table and detail surfaces', async () => {

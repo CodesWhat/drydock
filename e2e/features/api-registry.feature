@@ -10,20 +10,20 @@ Feature: Drydock Registry API Exposure
     And response body path $.data[`registryIndex`].type should be acr
     And response body path $.data[`registryIndex`].name should be private
     And response body path $.data[`registryIndex`].configuration.clientid should be 89dcf54b-ef99-4dc1-bebb-8e0eacafdac8
-    And response body path $.data[`registryIndex`].configuration.clientsecret should be .*
+    And response body path $.data[`registryIndex`].configuration.clientsecret should be [REDACTED]
 
     And I store the index of registry id ecr.private as registryIndex in scenario scope
     And response body path $.data[`registryIndex`].type should be ecr
     And response body path $.data[`registryIndex`].name should be private
     And response body path $.data[`registryIndex`].configuration.region should be eu-west-1
-    And response body path $.data[`registryIndex`].configuration.accesskeyid should be .*
-    And response body path $.data[`registryIndex`].configuration.secretaccesskey should be .*
+    And response body path $.data[`registryIndex`].configuration.accesskeyid should be [REDACTED]
+    And response body path $.data[`registryIndex`].configuration.secretaccesskey should be [REDACTED]
 
     And I store the index of registry id gcr.private as registryIndex in scenario scope
     And response body path $.data[`registryIndex`].type should be gcr
     And response body path $.data[`registryIndex`].name should be private
     And response body path $.data[`registryIndex`].configuration.clientemail should be gcr@.*\.iam\.gserviceaccount\.com
-    And response body path $.data[`registryIndex`].configuration.privatekey should be .*
+    And response body path $.data[`registryIndex`].configuration.privatekey should be [REDACTED]
 
     And I store the index of registry id ghcr.private as registryIndex in scenario scope
     And response body path $.data[`registryIndex`].type should be ghcr
@@ -53,4 +53,4 @@ Feature: Drydock Registry API Exposure
     And response body path $.type should be acr
     And response body path $.name should be private
     And response body path $.configuration.clientid should be 89dcf54b-ef99-4dc1-bebb-8e0eacafdac8
-    And response body path $.configuration.clientsecret should be .*
+    And response body path $.configuration.clientsecret should be [REDACTED]

@@ -19,6 +19,10 @@
     "badge": {
       "basic": "基本",
       "oidc": "OIDC"
+    },
+    "status": {
+      "active": "已啟用",
+      "inactive": "已停用"
     }
   }
 }

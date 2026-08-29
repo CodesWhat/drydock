@@ -40,10 +40,10 @@ function withStats(total: number) {
 }
 
 const richDataTableStub = defineComponent({
-  props: ['columns', 'rows', 'rowKey', 'activeRow', 'hiddenColumnKeys'],
+  props: ['columns', 'rows', 'rowKey', 'selectedKey', 'hiddenColumnKeys'],
   emits: ['row-click'],
   template: `
-    <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+    <div class="data-table" :data-row-count="rows?.length ?? 0" :data-selected-key="selectedKey || ''">
       <div
         v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
         :key="col.key"
@@ -112,7 +112,6 @@ const watcherCardDataTableStub = defineComponent({
     'columns',
     'rows',
     'rowKey',
-    'activeRow',
     'selectedKey',
     'sortKey',
     'sortAsc',
@@ -125,7 +124,7 @@ const watcherCardDataTableStub = defineComponent({
       class="data-table watcher-card-table"
       :data-row-count="rows?.length ?? 0"
       :data-prefer-cards="String(preferCards)"
-      :data-selected-key="selectedKey || activeRow || ''">
+      :data-selected-key="selectedKey || ''">
       <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
         Force cards
       </button>
@@ -280,6 +279,24 @@ describe('WatchersView', () => {
         expect.objectContaining({ id: 'watcher-beta', containers: 1 }),
       ]),
     );
+  });
+
+  it('gives the compact icon-only status indicator an accessible name (table mode)', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+        ...withStats(1),
+      },
+    ]);
+
+    const wrapper = await mountWatchersView();
+
+    const compactStatus = wrapper.find('[role="img"]');
+    expect(compactStatus.exists()).toBe(true);
+    expect(compactStatus.attributes('aria-label')).toBe('Watching');
   });
 
   it('uses watcher name for container counts and defaults missing watchers to 0', async () => {
@@ -514,6 +531,7 @@ describe('WatchersView', () => {
     });
     expect(wrapper.text()).toContain('*/1 * * * *');
     expect(wrapper.text()).toContain('30s');
+    expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe('watcher-alpha');
   });
 
   it('reads containers total from metadata (issue #301)', async () => {
@@ -665,6 +683,7 @@ describe('WatchersView', () => {
     expect(card.text()).toContain('Alpha Watcher');
     expect(card.text()).toContain('*/5 * * * *');
     expect(card.text()).toContain('Watching');
+    expect(card.find('[role="img"]').attributes('aria-label')).toBe('Watching');
     expect(card.text()).toContain('Containers');
     expect(card.text()).toContain('3');
     expect(card.text()).toContain('Next run');

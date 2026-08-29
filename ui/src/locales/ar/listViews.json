@@ -35,6 +35,11 @@
       "trigger": "المشغّل",
       "details": "التفاصيل"
     },
+    "status": {
+      "success": "نجاح",
+      "error": "خطأ",
+      "info": "معلومات"
+    },
     "actions": {
       "container-update": "تحديث الحاوية",
       "container-added": "إضافة الحاوية",

@@ -32,10 +32,10 @@ const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 
 const richDataTableStub = defineComponent({
-  props: ['columns', 'rows', 'rowKey', 'activeRow', 'hiddenColumnKeys'],
+  props: ['columns', 'rows', 'rowKey', 'selectedKey', 'hiddenColumnKeys'],
   emits: ['row-click'],
   template: `
-    <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+    <div class="data-table" :data-row-count="rows?.length ?? 0" :data-selected-key="selectedKey || ''">
       <div
         v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
         :key="col.key"
@@ -114,7 +114,6 @@ const serverCardDataTableStub = defineComponent({
     'columns',
     'rows',
     'rowKey',
-    'activeRow',
     'selectedKey',
     'sortKey',
     'sortAsc',
@@ -127,7 +126,7 @@ const serverCardDataTableStub = defineComponent({
       class="data-table server-card-table"
       :data-row-count="rows?.length ?? 0"
       :data-prefer-cards="String(preferCards)"
-      :data-selected-key="selectedKey || activeRow || ''">
+      :data-selected-key="selectedKey || ''">
       <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
         Force cards
       </button>
@@ -267,6 +266,14 @@ describe('ServersView', () => {
       '10.0.0.22',
     ]);
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('3');
+  });
+
+  it('gives the compact icon-only status indicator an accessible name (table mode)', async () => {
+    const wrapper = await mountServersView();
+
+    const compactStatus = wrapper.find('[role="img"]');
+    expect(compactStatus.exists()).toBe(true);
+    expect(compactStatus.attributes('aria-label')).toBe('Connected');
   });
 
   it('filters server rows when typing in the search input', async () => {
@@ -420,10 +427,12 @@ describe('ServersView', () => {
     await wrapper.find('.row-click-first').trigger('click');
     await nextTick();
     expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
+    expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe('docker.local');
 
     await wrapper.find('.close-detail').trigger('click');
     await nextTick();
     expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
+    expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe('');
   });
 
   it('caps long host values in compact table and detail surfaces', async () => {
@@ -541,6 +550,7 @@ describe('ServersView', () => {
     expect(localCard.text()).toContain('Local');
     expect(localCard.text()).toContain('unix:///var/run/docker.sock');
     expect(localCard.text()).toContain('Connected');
+    expect(localCard.find('[role="img"]').attributes('aria-label')).toBe('Connected');
     expect(localCard.text()).toContain('Containers');
     expect(localCard.text()).toContain('Running');
     expect(localCard.text()).toContain('Images');

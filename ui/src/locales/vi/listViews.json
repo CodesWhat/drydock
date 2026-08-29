@@ -35,6 +35,11 @@
       "trigger": "Trigger",
       "details": "Chi tiết"
     },
+    "status": {
+      "success": "Thành công",
+      "error": "Lỗi",
+      "info": "Thông tin"
+    },
     "actions": {
       "container-update": "Cập nhật Container",
       "container-added": "Container đã được thêm",
