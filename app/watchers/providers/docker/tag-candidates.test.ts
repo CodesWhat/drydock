@@ -1850,6 +1850,64 @@ describe('docker tag candidates module', () => {
       expect(result.tags).toEqual(['v1.0.0-ls10', 'v1.0.0-ls9']);
     });
 
+    // #921: getSuffixDigitRuns/compareNumericSegmentsDescending used
+    // Number.parseInt on the digit run before comparing. Above
+    // Number.MAX_SAFE_INTEGER, two distinct digit strings can parse to the
+    // same double (float precision loss), so compareByNumericShape reports a
+    // tie and isGreaterCandidateTag rejects a candidate that is genuinely
+    // higher. Fixed by comparing the digit-run strings themselves (length
+    // first, then lexically) instead of parsing them to Number at all.
+    test('#921: a higher suffix counter above Number.MAX_SAFE_INTEGER is still recognized as an update', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: 'v1.0.0-ls9007199254740992', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(
+        container,
+        ['v1.0.0-ls9007199254740992', 'v1.0.0-ls9007199254740993'],
+        log,
+      );
+
+      expect(result.tags).toEqual(['v1.0.0-ls9007199254740993']);
+    });
+
+    // #921: proves the comparison is length-first, not naive lexical — "9"
+    // sorts lexically ahead of "10" (byte '9' > byte '1'), so a purely
+    // lexical string compare would rank ls9 above ls10 despite 10 > 9.
+    test('#921: a suffix counter with more digits ranks higher than a shorter one (ls9 vs ls10)', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: 'v1.0.0-ls9', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.0.0-ls9', 'v1.0.0-ls10'], log);
+
+      expect(result.tags).toEqual(['v1.0.0-ls10']);
+    });
+
+    // #921: leading zeros must keep comparing equal to their stripped form,
+    // matching the pre-existing Number.parseInt('007', 10) === 7 behavior.
+    test('#921: a suffix counter with a leading zero compares equal to its stripped-zero counterpart', () => {
+      const container = createContainer({
+        image: {
+          tag: { value: 'v1.0.0-ls007', semver: true, tagPrecision: 'specific' },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.0.0-ls007', 'v1.0.0-ls7'], log);
+
+      expect(result.tags).toEqual([]);
+    });
+
     test('falls back to legacy semver comparison when the current tag has no numeric shape at all', () => {
       // Defensive fallback: when the reference tag has no derivable numeric
       // shape, the numeric-counter comparison cannot apply (there is nothing

@@ -468,6 +468,44 @@ export function filterBySegmentCount(tags: string[], container: Container): stri
 }
 
 /**
+ * #921: strip leading zeros from a digit run, matching the value
+ * Number.parseInt(run, 10) would have produced (e.g. "007" -> "7"; "000" ->
+ * "0"), but as a string so no precision is lost for runs longer than
+ * Number.MAX_SAFE_INTEGER can represent exactly.
+ */
+function normalizeDigitRun(run: string): string {
+  const stripped = run.replace(/^0+/, '');
+  return stripped === '' ? '0' : stripped;
+}
+
+/**
+ * #921: compare two digit-run strings numerically without ever converting
+ * either to a Number, so runs of arbitrary length compare exactly. Above
+ * Number.MAX_SAFE_INTEGER, distinct digit strings can round to the same
+ * double (e.g. "9007199254740993" and "9007199254740992" both parse to
+ * 9007199254740992), which silently turned a genuinely higher tag into a
+ * tie. After stripping leading zeros, two non-negative integers compare
+ * correctly by comparing string length first (a longer digit string is
+ * always the larger value) and only falling back to a lexical compare when
+ * the lengths match, which is exact for equal-length digit strings. Returns
+ * the same descending-sort "b minus a" convention as
+ * compareNumericSegmentsDescending/compareNumericTuplesDescending below
+ * (negative when `a` is numerically greater, positive when `b` is greater,
+ * 0 on an exact tie — including a leading-zero pair like "007" and "7").
+ */
+function compareDigitRunsDescending(a: string, b: string): number {
+  const normalizedA = normalizeDigitRun(a);
+  const normalizedB = normalizeDigitRun(b);
+  if (normalizedA.length !== normalizedB.length) {
+    return normalizedB.length - normalizedA.length;
+  }
+  if (normalizedA === normalizedB) {
+    return 0;
+  }
+  return normalizedA < normalizedB ? 1 : -1;
+}
+
+/**
  * Compare two numeric-tag shapes by their numeric segments only (descending),
  * matching semver major/minor/patch precedence but ignoring the suffix.
  * Missing trailing segments are treated as 0. Returns 0 when all segments tie.
@@ -475,10 +513,11 @@ export function filterBySegmentCount(tags: string[], container: Container): stri
 function compareNumericSegmentsDescending(a: NumericTagShape, b: NumericTagShape): number {
   const segmentCount = Math.max(a.numericSegments.length, b.numericSegments.length);
   for (let i = 0; i < segmentCount; i += 1) {
-    const aSegment = Number.parseInt(a.numericSegments[i] ?? '0', 10);
-    const bSegment = Number.parseInt(b.numericSegments[i] ?? '0', 10);
-    if (aSegment !== bSegment) {
-      return bSegment - aSegment;
+    const aSegment = a.numericSegments[i] ?? '0';
+    const bSegment = b.numericSegments[i] ?? '0';
+    const comparison = compareDigitRunsDescending(aSegment, bSegment);
+    if (comparison !== 0) {
+      return comparison;
     }
   }
   return 0;
@@ -509,25 +548,28 @@ function compareExactSuffixMatch(
 
 /**
  * #918: the numeric runs embedded in a suffix, in order (e.g. "-ls101" ->
- * [101]; "b3.dev101-ls250" -> [3, 101, 250]).
+ * ["101"]; "b3.dev101-ls250" -> ["3", "101", "250"]). Kept as raw digit
+ * strings (#921) rather than parsed to Number, so a run longer than
+ * Number.MAX_SAFE_INTEGER can still be compared exactly — see
+ * compareDigitRunsDescending.
  */
-function getSuffixDigitRuns(suffix: string): number[] {
-  const runs = suffix.match(/\d+/g);
-  return runs ? runs.map((run) => Number.parseInt(run, 10)) : [];
+function getSuffixDigitRuns(suffix: string): string[] {
+  return suffix.match(/\d+/g) ?? [];
 }
 
 /**
- * #918: compare two numeric tuples element-by-element, most-significant
+ * #918: compare two digit-run tuples element-by-element, most-significant
  * first, using the same descending-sort "b minus a" convention as
  * compareNumericSegmentsDescending above (negative when `a` is numerically
  * greater). Its sole caller (compareSuffixCounters) only ever passes
  * equal-length tuples: two suffixes whose normalized templates match are
  * guaranteed to have the same count of digit runs, one '#' per run.
  */
-function compareNumericTuplesDescending(a: number[], b: number[]): number {
+function compareNumericTuplesDescending(a: string[], b: string[]): number {
   for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) {
-      return b[i] - a[i];
+    const comparison = compareDigitRunsDescending(a[i], b[i]);
+    if (comparison !== 0) {
+      return comparison;
     }
   }
   return 0;
