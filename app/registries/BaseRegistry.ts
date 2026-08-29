@@ -778,12 +778,22 @@ class BaseRegistry<
    * fix, just for a different malformed input.
    */
   private decodeAuthCredentials(auth: string): { username: string; password: string } {
-    const decoded = Buffer.from(auth, 'base64').toString('utf-8');
+    const malformedAuthError = new Error(
+      `Unable to authenticate registry ${this.getId()}: configured auth value is not a valid base64-encoded login:password pair`,
+    );
+    const decodedBuffer = Buffer.from(auth, 'base64');
+    // Buffer.from(x, 'base64') silently drops characters outside the base64 alphabet
+    // instead of throwing — e.g. 'dXNlcjpwYXNz!'.toString() still decodes to 'user:pass',
+    // discarding the trailing '!' rather than erroring. Re-encoding the decoded bytes and
+    // comparing against the original catches that: any character the decoder ignored, or
+    // stripped whitespace, makes the round trip diverge from the input.
+    if (decodedBuffer.toString('base64') !== auth) {
+      throw malformedAuthError;
+    }
+    const decoded = decodedBuffer.toString('utf-8');
     const separatorIndex = decoded.indexOf(':');
     if (separatorIndex <= 0) {
-      throw new Error(
-        `Unable to authenticate registry ${this.getId()}: configured auth value is not a valid base64-encoded login:password pair`,
-      );
+      throw malformedAuthError;
     }
     return {
       username: decoded.slice(0, separatorIndex),

@@ -258,6 +258,19 @@ test('getAuthPull should throw when auth decodes with an empty login', async () 
   );
 });
 
+test('getAuthPull should throw when auth has a trailing character outside the base64 alphabet', async () => {
+  // Buffer.from(x, 'base64') silently drops characters it can't decode instead of
+  // erroring, so 'dXNlcjpwYXNz!'.toString() still yields 'user:pass' — the appended '!'
+  // is dropped rather than causing a decode failure. Without a round-trip check this
+  // would decode to valid-looking credentials instead of being rejected.
+  baseRegistry.type = 'registry';
+  baseRegistry.name = 'test';
+  baseRegistry.configuration = { auth: `${Buffer.from('user:pass').toString('base64')}!` };
+  await expect(baseRegistry.getAuthPull()).rejects.toThrow(
+    'Unable to authenticate registry registry.test: configured auth value is not a valid base64-encoded login:password pair',
+  );
+});
+
 test('matchUrlPattern should test image url against pattern', () => {
   expect(
     baseRegistry.matchUrlPattern({ registry: { url: 'test.azurecr.io' } }, /azurecr\.io$/),
