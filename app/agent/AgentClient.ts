@@ -911,7 +911,61 @@ export class AgentClient {
     }
   }
 
-  private async processAuthoritativeContainer(container: Container): Promise<ContainerReport> {
+  /**
+   * Ownership gate for the bulk/authoritative ingestion funnel
+   * (`processAuthoritativeContainer`), which every full-inventory and
+   * snapshot path reaches with no other check in between: handshake,
+   * watcher-snapshot fallback, on-demand watch/watchContainer, and edge
+   * container sync. Without this, any of those paths can report an id
+   * already owned by another agent or by the controller's own local
+   * watcher and have `buildContainerReport`'s unconditional
+   * `container.agent = this.name` stamp reassign it.
+   *
+   * Carries the first two of `canMutateContainer`'s three checks — no
+   * existing record while claiming the controller-local watcher namespace,
+   * and an existing record owned by a different agent — but deliberately
+   * NOT its third (rejecting a `watcher` mismatch against the stored
+   * record). Bulk ingestion is exactly how a legitimate watcher rename
+   * propagates (an operator renaming a `DD_WATCHER_<NAME>_SOCKET` key), and
+   * rejecting on watcher mismatch here would refuse every subsequent
+   * report for that container id forever: `pruneOldContainers` keys on
+   * container id, which a rename doesn't change, so the record is never
+   * pruned and never retried. Updates would just stop landing with no
+   * error surfaced.
+   */
+  private canIngestAuthoritativeContainer(container: Container): boolean {
+    if (typeof container.id !== 'string' || container.id.length === 0) {
+      this.log.warn(
+        `Ignoring authoritative container ingest without an id from agent ${this.name}`,
+      );
+      return false;
+    }
+
+    const existing = storeContainer.getContainer(container.id);
+    if (!existing) {
+      if (this.claimsControllerLocalWatcherNamespace(container.watcher)) {
+        this.log.warn(
+          `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: watcher '${sanitizeLogParam(container.watcher)}' belongs to the controller's local watcher namespace`,
+        );
+        return false;
+      }
+      return true;
+    }
+    if (existing.agent !== this.name) {
+      this.log.warn(
+        `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: container is owned by ${sanitizeLogParam(existing.agent ?? 'controller')}`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  private async processAuthoritativeContainer(
+    container: Container,
+  ): Promise<ContainerReport | undefined> {
+    if (!this.canIngestAuthoritativeContainer(container)) {
+      return undefined;
+    }
     this.clearPendingFreshState(container.id);
     return this.processContainer(container);
   }
@@ -922,7 +976,10 @@ export class AgentClient {
     const containerReports: ContainerReport[] = [];
     for (const container of containers) {
       try {
-        containerReports.push(await this.processAuthoritativeContainer(container));
+        const containerReport = await this.processAuthoritativeContainer(container);
+        if (containerReport) {
+          containerReports.push(containerReport);
+        }
       } catch (error: unknown) {
         this.log.error(
           `Failed to process authoritative container ${sanitizeLogParam(container.id)} (${sanitizeLogParam(getErrorMessage(error))})`,
@@ -1505,7 +1562,10 @@ export class AgentClient {
           );
           continue;
         }
-        containerReports.push(await this.processAuthoritativeContainer(container));
+        const authoritativeReport = await this.processAuthoritativeContainer(container);
+        if (authoritativeReport) {
+          containerReports.push(authoritativeReport);
+        }
       } catch (error: unknown) {
         this.log.error(
           `Failed to process watcher snapshot container ${sanitizeLogParam(container.id)} (${sanitizeLogParam(getErrorMessage(error))})`,
