@@ -47,6 +47,17 @@ describe('GitHub Container Registry', () => {
     expect(ghcr.match({ registry: { url: 'docker.io' } })).toBe(false);
   });
 
+  test.each(['evilghcr.io', 'ghcrXio', 'ghcr.io.attacker.com'])(
+    'match should reject the ghcr.io lookalike %s',
+    (registryUrl) => {
+      expect(ghcr.match({ registry: { url: registryUrl } })).toBe(false);
+    },
+  );
+
+  test.each(['ghcr.io'])('match should still accept %s', (registryUrl) => {
+    expect(ghcr.match({ registry: { url: registryUrl } })).toBe(true);
+  });
+
   test('should normalize image name', async () => {
     const image = { name: 'user/repo', registry: { url: 'ghcr.io' } };
     const normalized = ghcr.normalizeImage(image);

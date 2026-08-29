@@ -17,10 +17,12 @@ const normalizeImageUrlImageIsTyped: ExpectNotAny<
 > = true;
 const normalizeImageUrlReturnIsTyped: ExpectNotAny<ReturnType<BaseRegistry['normalizeImageUrl']>> =
   true;
-const matchUrlPatternImageIsTyped: ExpectNotAny<Parameters<BaseRegistry['matchUrlPattern']>[0]> =
-  true;
-const matchUrlPatternPatternIsTyped: ExpectNotAny<Parameters<BaseRegistry['matchUrlPattern']>[1]> =
-  true;
+const matchRegistryHostImageIsTyped: ExpectNotAny<
+  Parameters<BaseRegistry['matchRegistryHost']>[0]
+> = true;
+const matchRegistryHostBaseHostsIsTyped: ExpectNotAny<
+  Parameters<BaseRegistry['matchRegistryHost']>[1]
+> = true;
 const maskSensitiveFieldsFieldsIsTyped: ExpectNotAny<
   Parameters<BaseRegistry['maskSensitiveFields']>[0]
 > = true;
@@ -42,8 +44,8 @@ baseRegistry.authenticateBasic({ headers: 'bad-headers' }, 'credentials');
 // @ts-expect-error normalizeImageUrl expects a container image
 baseRegistry.normalizeImageUrl({ registry: {} });
 
-// @ts-expect-error matchUrlPattern expects a RegExp pattern
-baseRegistry.matchUrlPattern({ registry: { url: 'docker.io' } }, 'docker.io');
+// @ts-expect-error matchRegistryHost expects string base hosts
+baseRegistry.matchRegistryHost({ registry: { url: 'docker.io' } }, /^docker\.io$/);
 
 // @ts-expect-error maskSensitiveFields expects string field names
 baseRegistry.maskSensitiveFields([123]);
@@ -53,7 +55,7 @@ void authenticateBearerRequestOptionsIsTyped;
 void authenticateBearerFromAuthUrlRequestOptionsIsTyped;
 void normalizeImageUrlImageIsTyped;
 void normalizeImageUrlReturnIsTyped;
-void matchUrlPatternImageIsTyped;
-void matchUrlPatternPatternIsTyped;
+void matchRegistryHostImageIsTyped;
+void matchRegistryHostBaseHostsIsTyped;
 void maskSensitiveFieldsFieldsIsTyped;
 void maskSensitiveFieldsReturnIsTyped;

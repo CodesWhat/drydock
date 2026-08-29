@@ -406,3 +406,14 @@ test('getTagsPage should handle RFC 5988 link with next_page cursor cleanly', as
   expect(calledUrl).toContain('next_page=gAAAAcursorXYZ');
   expect(calledUrl).not.toContain('gAAAAcursorXYZ%3E');
 });
+
+test.each(['evilquay.io', 'quayXio', 'quay.io.attacker.com'])(
+  'match should reject the quay.io lookalike %s',
+  (registryUrl) => {
+    expect(quay.match({ registry: { url: registryUrl } })).toBe(false);
+  },
+);
+
+test.each(['quay.io'])('match should still accept %s', (registryUrl) => {
+  expect(quay.match({ registry: { url: registryUrl } })).toBe(true);
+});

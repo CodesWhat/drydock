@@ -276,3 +276,17 @@ test('getAuthPull should return undefined when only clientemail is set', async (
   const result = await gcrPartial.getAuthPull();
   expect(result).toBeUndefined();
 });
+
+test.each(['evilgcr.io', 'gcrXio', 'gcr.io.attacker.com'])(
+  'match should reject the gcr.io lookalike %s',
+  (registryUrl) => {
+    expect(gcr.match({ registry: { url: registryUrl } })).toBe(false);
+  },
+);
+
+test.each(['gcr.io', 'eu.gcr.io', 'us.gcr.io', 'asia.gcr.io'])(
+  'match should still accept %s',
+  (registryUrl) => {
+    expect(gcr.match({ registry: { url: registryUrl } })).toBe(true);
+  },
+);

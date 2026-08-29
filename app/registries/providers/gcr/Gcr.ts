@@ -60,7 +60,7 @@ class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
   }
 
   match(image) {
-    return this.matchUrlPattern(image, /^.*\.?gcr.io$/);
+    return this.matchRegistryHost(image, 'gcr.io');
   }
 
   normalizeImage(image) {

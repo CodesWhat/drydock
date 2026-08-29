@@ -118,7 +118,17 @@ Providers are `trivy`, `grype`, and `syft`; operations are `pull` and `warm`. Th
 
 Downloads a comprehensive, redacted diagnostic dump of the running drydock instance as a JSON file. Useful for troubleshooting and support requests.
 
-The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. Store statistics include document counts and UTF-8 serialized byte attribution for the whole LokiJS store and each collection, making unexpected persistence growth traceable without exposing raw store contents. Values whose keys contain sensitive tokens such as `password`, `passwd`, `pass`, `token`, `secret`, `credential`, `hash`, `key`, `apikey`, `accesskey`, or `privatekey` are automatically redacted. Environment-style keys containing `AUTH`, `BEARER`, `LOGIN`, or `URL` are also redacted, which covers webhook URLs with embedded secrets.
+The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. Store statistics include document counts and UTF-8 serialized byte attribution for the whole LokiJS store and each collection, making unexpected persistence growth traceable without exposing raw store contents.
+
+Redaction works on the key name, and the exact rule matters — a key that falls outside it is returned verbatim:
+
+- A value is redacted when its key **contains** `password`, `passwd`, `secret`, `token`, `credential`, `hash`, `apikey`, `accesskey`, `privatekey`, `clientkey`, or `signingkey`, ignoring case and word separators. This is what covers compound names such as `CLIENTSECRET`, `BOTTOKEN` and `SECRETACCESSKEY`.
+- `pass`, `key` and `pat` only match a whole word segment, so `COMPASS_MODE`, `KEYFILE` and `DISPATCH` stay visible.
+- Environment-style keys (uppercase with underscores) additionally redact on the segments `AUTH`, `BEARER`, `LOGIN` and `URL`, which covers webhook URLs with an embedded secret. `DD_PUBLIC_URL` is redacted along with them, deliberately.
+- Any string value carrying URL credentials (`postgres://user:pass@host`) is redacted whatever its key is called.
+- Container runtime environment variables come from the same redactor `GET /containers` uses, so the dump is never a laxer view of them than the API is.
+
+Names are always kept; only values are replaced with `[REDACTED]`. Downloads are recorded in the audit log as `debug-dump` and the route is limited to 5 requests per minute.
 
 ```bash
 curl -O -J "http://drydock:3000/api/v1/debug/dump?minutes=30"
@@ -143,6 +153,6 @@ The response is a JSON attachment with a timestamped filename (e.g. `drydock-deb
 | `aliasFiltering` | Recent container alias filter decisions |
 | `store` | LokiJS collection document counts and serialized byte attribution, including per-collection `serializedBytes` |
 | `dockerApi` | Docker daemon version and info per watcher (connection errors captured gracefully) |
-| `environment` | All `DD_*` environment variable names with values redacted |
+| `environment` | All `DD_*` environment variable names, with values redacted by the rules above |
 
-Returns 200 with the JSON attachment on success, 401 if not authenticated, or 500 if the dump cannot be generated.
+Returns 200 with the JSON attachment on success, 401 if not authenticated, 429 if more than 5 dumps are requested in a minute, or 500 if the dump cannot be generated.
