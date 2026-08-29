@@ -2126,6 +2126,42 @@ describe('AgentClient', () => {
       agentA.stop();
     });
 
+    test('rejects a no-record insert whose watcher collides with the controller local watcher namespace', async () => {
+      // No store record exists yet for this id (storeContainer.getContainer
+      // defaults to undefined in beforeEach) — this is the pre-insert race:
+      // an agent claiming a watcher name the controller's own local Docker
+      // watcher already owns, before the controller's own watch cycle ever
+      // writes the real record.
+      mockRegistryState.watcher['docker.local'] = {};
+
+      await client.handleEvent('dd:container-added', {
+        id: 'controller-future-id',
+        name: 'spoofed-controller-container',
+        watcher: 'local',
+      });
+
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(event.emitContainerReport).not.toHaveBeenCalled();
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('controller-future-id'),
+      );
+    });
+
+    test('allows a no-record insert whose watcher does not collide with any controller local watcher', async () => {
+      mockRegistryState.watcher['docker.other'] = {};
+
+      await client.handleEvent('dd:container-added', {
+        id: 'genuinely-new-id',
+        name: 'first-seen-container',
+        watcher: 'local',
+      });
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'genuinely-new-id', agent: 'test-agent' }),
+      );
+    });
+
     test('removes only same-owner containers and preserves pending state on rejected removals', async () => {
       const rows = new Map<string, Record<string, unknown>>([
         ['agent-b-id', { id: 'agent-b-id', name: 'agent-b', watcher: 'local', agent: 'agent-b' }],

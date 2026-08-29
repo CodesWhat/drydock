@@ -1359,7 +1359,16 @@ export class AgentClient {
 
     const existing = storeContainer.getContainer(candidate.id);
     if (!existing) {
-      return operation === 'upsert';
+      if (operation !== 'upsert') {
+        return false;
+      }
+      if (this.claimsControllerLocalWatcherNamespace(candidate.watcher)) {
+        this.log.warn(
+          `Ignoring container ${operation} for ${sanitizeLogParam(candidate.id)} from agent ${this.name}: watcher '${sanitizeLogParam(candidate.watcher as string)}' belongs to the controller's local watcher namespace`,
+        );
+        return false;
+      }
+      return true;
     }
     if (existing.agent !== this.name) {
       this.log.warn(
@@ -1377,6 +1386,30 @@ export class AgentClient {
       return false;
     }
     return true;
+  }
+
+  /**
+   * True when `watcherName` names a watcher registered directly by the
+   * controller (no `agent` prefix on its registry component id, e.g.
+   * `docker.local`) rather than by any connected agent (whose components are
+   * always registered as `<agentName>.docker.<watcherName>`, per
+   * `Component.getId()`). An agent cannot forge this: it only controls its
+   * own handshake-reported watcher descriptors, which the controller always
+   * registers under that agent's own prefix, never bare.
+   *
+   * Used to close the no-record race in `canMutateContainer`: without it, an
+   * agent could pre-insert a container under a controller-local container id
+   * before the controller's own watch cycle writes the real record, claiming
+   * ownership (via `buildContainerReport`'s `container.agent` stamp) and
+   * redirecting future lifecycle actions on that container to itself
+   * (`isTriggerCompatibleWithContainer` in `api/docker-trigger.ts` routes
+   * purely on the stored `agent` field).
+   */
+  private claimsControllerLocalWatcherNamespace(watcherName: unknown): boolean {
+    if (typeof watcherName !== 'string' || watcherName.length === 0) {
+      return false;
+    }
+    return Boolean(registry.getState().watcher[`docker.${watcherName}`]);
   }
 
   private async handleContainerChangeEvent(data: unknown) {
