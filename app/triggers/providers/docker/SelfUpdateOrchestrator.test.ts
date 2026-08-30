@@ -4,6 +4,7 @@ import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
 
 function createContainer(overrides = {}) {
   return {
+    id: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
     name: 'drydock',
     image: {
       name: 'ghcr.io/acme/drydock',
@@ -58,6 +59,7 @@ function createOrchestrator(overrides = {}) {
     insertContainerImageBackup: vi.fn(),
     emitSelfUpdateStarting: vi.fn().mockResolvedValue(undefined),
     createOperationId: vi.fn(() => 'generated-operation-id'),
+    resolveSelfContainerIdentifier: vi.fn(() => 'abcdef123456'),
     ...overrides,
   });
 }
@@ -93,7 +95,7 @@ describe('SelfUpdateOrchestrator', () => {
     ).rejects.toThrow('SelfUpdateOrchestrator requires dependency "createContainer"');
   });
 
-  test('identifies self-update containers and docker socket bind path', () => {
+  test('identifies only the current Drydock process container as a self-update', () => {
     const orchestrator = createOrchestrator();
 
     expect(orchestrator.isSelfUpdate(createContainer({ image: { name: 'drydock' } }))).toBe(true);
@@ -101,8 +103,44 @@ describe('SelfUpdateOrchestrator', () => {
       orchestrator.isSelfUpdate(createContainer({ image: { name: 'ghcr.io/acme/drydock' } })),
     ).toBe(true);
     expect(
+      orchestrator.isSelfUpdate(
+        createContainer({
+          id: 'fedcba6543217890fedcba6543217890fedcba6543217890fedcba6543217890',
+          name: 'drydock-peer',
+          image: { name: 'ghcr.io/acme/drydock' },
+        }),
+      ),
+    ).toBe(false);
+    expect(
       orchestrator.isSelfUpdate(createContainer({ image: { name: 'ghcr.io/acme/web' } })),
     ).toBe(false);
+  });
+
+  test('recognizes an explicitly named self container when its hostname is not an id prefix', () => {
+    const orchestrator = createOrchestrator({
+      resolveSelfContainerIdentifier: vi.fn(() => 'drydock-primary'),
+    });
+
+    expect(
+      orchestrator.isSelfUpdate(
+        createContainer({
+          id: 'fedcba6543217890fedcba6543217890fedcba6543217890fedcba6543217890',
+          name: 'drydock-primary',
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  test('fails closed when current container identity is unavailable', () => {
+    const orchestrator = createOrchestrator({
+      resolveSelfContainerIdentifier: vi.fn(() => null),
+    });
+
+    expect(orchestrator.isSelfUpdate(createContainer())).toBe(false);
+  });
+
+  test('finds the docker socket bind path', () => {
+    const orchestrator = createOrchestrator();
 
     expect(
       orchestrator.findDockerSocketBind({

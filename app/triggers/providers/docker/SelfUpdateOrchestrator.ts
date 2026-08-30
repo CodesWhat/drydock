@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { getSelfContainerIdentifier } from '../dockercompose/ComposePathBindMounts.js';
 import {
   executeSelfUpdateTransition,
   findDockerSocketBind as findDockerSocketBindFromSpec,
@@ -51,6 +52,7 @@ interface SelfUpdateOrchestratorDependencies {
   createOperationId: () => string;
   resolveFinalizeUrl: () => string;
   resolveFinalizeSecret: (operationId: string) => string;
+  resolveSelfContainerIdentifier: () => string | null;
 }
 
 interface SelfUpdateOrchestratorConstructorOptions {
@@ -78,6 +80,7 @@ interface SelfUpdateOrchestratorConstructorOptions {
   createOperationId?: SelfUpdateOrchestratorDependencies['createOperationId'];
   resolveFinalizeUrl?: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
   resolveFinalizeSecret?: (operationId: string) => string;
+  resolveSelfContainerIdentifier?: () => string | null;
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
   touchOperation?: (operationId: string) => void;
 }
@@ -106,6 +109,8 @@ class SelfUpdateOrchestrator {
   resolveFinalizeUrl: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
 
   resolveFinalizeSecret: SelfUpdateOrchestratorDependencies['resolveFinalizeSecret'];
+
+  resolveSelfContainerIdentifier: SelfUpdateOrchestratorDependencies['resolveSelfContainerIdentifier'];
 
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
 
@@ -138,12 +143,35 @@ class SelfUpdateOrchestrator {
     this.resolveFinalizeSecret =
       options.resolveFinalizeSecret ||
       ((_operationId: string) => 'missing-self-update-finalize-secret');
+    this.resolveSelfContainerIdentifier =
+      options.resolveSelfContainerIdentifier || getSelfContainerIdentifier;
     this.resolveHelperImage = options.resolveHelperImage;
     this.touchOperation = options.touchOperation;
   }
 
   isSelfUpdate(container: SelfUpdateContainerRef): boolean {
-    return container.image.name === 'drydock' || container.image.name.endsWith('/drydock');
+    const imageName = container.image?.name;
+    if (imageName !== 'drydock' && !imageName?.endsWith('/drydock')) {
+      return false;
+    }
+
+    const selfContainerIdentifier = this.resolveSelfContainerIdentifier();
+    if (!selfContainerIdentifier) {
+      return false;
+    }
+
+    const containerId = typeof container.id === 'string' ? container.id.trim() : '';
+    const containerName =
+      typeof container.name === 'string' ? container.name.trim().replace(/^\/+/, '') : '';
+    if (containerId === selfContainerIdentifier || containerName === selfContainerIdentifier) {
+      return true;
+    }
+
+    return (
+      /^[a-f0-9]{12,64}$/i.test(selfContainerIdentifier) &&
+      /^[a-f0-9]{12,64}$/i.test(containerId) &&
+      containerId.startsWith(selfContainerIdentifier)
+    );
   }
 
   isInfrastructureUpdate(container: SelfUpdateContainerRef): boolean {
