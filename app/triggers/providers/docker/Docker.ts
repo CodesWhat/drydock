@@ -64,6 +64,7 @@ import { getRequestedOperationId } from './update-runtime-context.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
 const DEFAULT_PULL_TIMEOUT_MS = 600_000;
+const MAX_SIGNED_32_BIT_TIMEOUT_MS = 2_147_483_647;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const TRIGGER_BATCH_CONCURRENCY = 3;
@@ -685,7 +686,12 @@ class Docker<
       prune: this.joi.boolean().default(false),
       dryrun: this.joi.boolean().default(false),
       autoremovetimeout: this.joi.number().default(10_000),
-      pulltimeout: this.joi.number().integer().positive().default(DEFAULT_PULL_TIMEOUT_MS),
+      pulltimeout: this.joi
+        .number()
+        .integer()
+        .positive()
+        .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
+        .default(DEFAULT_PULL_TIMEOUT_MS),
       backupcount: this.joi.number().default(3),
     });
   }

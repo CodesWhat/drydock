@@ -57,6 +57,15 @@ test('validateConfiguration should reject a non-positive pull deadline', () => {
   ).toThrowError(joi.ValidationError);
 });
 
+test('validateConfiguration should reject pull deadlines above the Node timer ceiling', () => {
+  expect(() =>
+    docker.validateConfiguration({
+      ...configurationValid,
+      pulltimeout: 2_147_483_648,
+    }),
+  ).toThrowError(joi.ValidationError);
+});
+
 // --- getWatcher ---
 
 test('getWatcher should return watcher responsible for a container', async () => {
