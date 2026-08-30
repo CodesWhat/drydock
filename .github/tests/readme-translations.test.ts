@@ -66,81 +66,122 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.6</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.7</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.6</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.7</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.6</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.7</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.6</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.7</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.6</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.7</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.6 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.7 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
   {
-    containerOwnership: string;
-    localization: string;
+    pagination: string;
+    updates: string;
+    selfUpdate: string;
+    security: string;
+    compose: string;
+    sessions: string;
+    roadmap: string;
   }
 > = {
   'README.de.md': {
-    containerOwnership:
-      '**Zwei weitere Lücken bei der Container-Eigentümerschaft von Agents werden geschlossen, zusätzlich zum früheren #904-Fix**',
-    localization:
-      '**2109 Strings, die noch englischen Quelltext zeigten, sind jetzt tatsächlich übersetzt**',
+    pagination: '**Die Registry-Paginierung folgt jetzt dem Cursor jeder Registry**',
+    updates:
+      '**Updates bleiben erfolgreich, wenn die Bereinigung nach der Gesundheitsprüfung fehlschlägt**',
+    selfUpdate: 'Self-Updates warten vor dem exklusiven Gate auf aktive Lebenszyklen',
+    security:
+      '**Die Anmeldedaten-Redaktion deckt jetzt Trigger, Registries, Debug-Dumps und Lookalike-Hosts ab**',
+    compose: '**Compose-Umschreibungen prüfen vor dem Schreiben das Laufzeit-Repository**',
+    sessions: '**Header-authentifizierte Anfragen speichern keine Sessions mehr**',
+    roadmap: '**Der Wettbewerbsvergleich und die Roadmap wurden für 2026 aktualisiert**',
   },
   'README.es.md': {
-    containerOwnership:
-      '**Se cierran dos brechas más en la propiedad de contenedores de los agentes, además de la corrección anterior de #904**',
-    localization:
-      '**2109 cadenas que todavía mostraban el texto fuente en inglés ahora están realmente traducidas**',
+    pagination: '**La paginación de los registros sigue ahora el cursor de cada registro**',
+    updates:
+      '**Las actualizaciones siguen siendo exitosas cuando falla la limpieza después de la comprobación de salud**',
+    selfUpdate:
+      'las autoactualizaciones esperan a que terminen los ciclos activos antes de tomar el bloqueo exclusivo',
+    security:
+      '**La redacción de credenciales cubre ahora activadores, registros, volcados de depuración y hosts parecidos**',
+    compose:
+      '**Las reescrituras de Compose verifican el repositorio en ejecución antes de escribir**',
+    sessions: '**Las solicitudes autenticadas por cabecera ya no persisten sesiones**',
+    roadmap: '**La comparación de competidores y la hoja de ruta se actualizaron para 2026**',
   },
   'README.fr.md': {
-    containerOwnership:
-      '**Deux failles supplémentaires dans la propriété des conteneurs par les agents sont corrigées, en plus du correctif #904 précédent**',
-    localization:
-      '**2109 chaînes qui affichaient encore le texte source en anglais sont désormais réellement traduites**',
+    pagination:
+      '**La pagination des registres suit désormais le curseur propre à chaque registre**',
+    updates: '**Une mise à jour reste réussie si le nettoyage échoue après le contrôle de santé**',
+    selfUpdate:
+      'les auto-mises à jour attendent la fin des cycles actifs avant de prendre le verrou exclusif',
+    security:
+      '**La rédaction des identifiants couvre désormais les déclencheurs, registres, vidages de débogage et hôtes ressemblants**',
+    compose: '**Les réécritures Compose vérifient le dépôt d’exécution avant toute écriture**',
+    sessions: '**Les requêtes authentifiées par en-tête ne persistent plus de sessions**',
+    roadmap:
+      '**La comparaison des concurrents et la feuille de route ont été actualisées pour 2026**',
   },
   'README.pl.md': {
-    containerOwnership:
-      '**Zamknięto dwie kolejne luki we własności kontenerów agentów, oprócz wcześniejszej poprawki #904**',
-    localization:
-      '**2109 ciągów znaków, które nadal pokazywały angielski tekst źródłowy, jest teraz faktycznie przetłumaczonych**',
+    pagination: '**Paginacja rejestrów korzysta teraz z kursora właściwego dla każdego rejestru**',
+    updates:
+      '**Aktualizacje pozostają pomyślne, gdy czyszczenie nie powiedzie się po kontroli stanu**',
+    selfUpdate:
+      'samoaktualizacje czekają na zakończenie aktywnych cykli przed przejęciem wyłącznej blokady',
+    security:
+      '**Redakcja poświadczeń obejmuje teraz wyzwalacze, rejestry, zrzuty debugowania i podobne hosty**',
+    compose: '**Przepisywanie Compose sprawdza repozytorium uruchomieniowe przed zapisem**',
+    sessions: '**Żądania uwierzytelnione nagłówkiem nie zapisują już sesji**',
+    roadmap: '**Porównanie konkurencji i mapa drogowa zostały odświeżone na 2026 rok**',
   },
   'README.pt-BR.md': {
-    containerOwnership:
-      '**Mais duas brechas na propriedade de contêineres dos agentes são fechadas, além da correção anterior do #904**',
-    localization:
-      '**2109 strings que ainda mostravam o texto-fonte em inglês agora estão realmente traduzidas**',
+    pagination: '**A paginação dos registros agora segue o cursor de cada registro**',
+    updates:
+      '**As atualizações continuam bem-sucedidas quando a limpeza falha após a verificação de integridade**',
+    selfUpdate:
+      'as autoatualizações aguardam os ciclos ativos terminarem antes de assumir o bloqueio exclusivo',
+    security:
+      '**A redação de credenciais agora cobre gatilhos, registros, dumps de depuração e hosts semelhantes**',
+    compose: '**As reescritas do Compose verificam o repositório em execução antes de gravar**',
+    sessions: '**Solicitações autenticadas por cabeçalho não persistem mais sessões**',
+    roadmap: '**A comparação com concorrentes e o roadmap foram atualizados para 2026**',
   },
   'README.zh-CN.md': {
-    containerOwnership: '**在此前 #904 修复的基础上，又关闭了代理容器所有权方面的两个漏洞**',
-    localization: '**2109 条此前仍显示英文原文的字符串现已真正完成翻译**',
+    pagination: '**注册表分页现在遵循各注册表自己的游标**',
+    updates: '**健康检查通过后即使清理失败，更新仍会保持成功**',
+    selfUpdate: '自更新会等待活动生命周期完成后再获取独占闸门',
+    security: '**凭据脱敏现在覆盖触发器、注册表、调试转储和相似主机**',
+    compose: '**Compose 重写会在写入前验证运行时仓库**',
+    sessions: '**通过请求头认证的请求不再持久化会话**',
+    roadmap: '**竞争者对比和路线图已更新至 2026 年**',
   },
 };
 
@@ -195,6 +236,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc4--2026-08-26',
   './CHANGELOG.md#170-rc5--2026-08-27',
   './CHANGELOG.md#170-rc6--2026-08-29',
+  './CHANGELOG.md#170-rc7--2026-08-29',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -248,13 +290,32 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const surface = localizedSurfaceFragments[readme];
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
-    const containerOwnershipBullet = getBullet(releaseBlock, release.containerOwnership);
-    const localizationBullet = getBullet(releaseBlock, release.localization);
+    const releaseBullets = [
+      release.pagination,
+      release.updates,
+      release.security,
+      release.compose,
+      release.sessions,
+      release.roadmap,
+    ].map((fragment) => getBullet(releaseBlock, fragment));
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
-    expect(getUrls(containerOwnershipBullet)).toEqual([]);
-    expect(getUrls(localizationBullet)).toEqual(['https://github.com/CodesWhat/drydock/pull/919']);
+    expect(releaseBullets.every(Boolean)).toBe(true);
+    expect(releaseBullets[1]).toContain(release.selfUpdate);
+    expect(releaseBullets.flatMap(getUrls).sort()).toEqual([
+      'https://github.com/CodesWhat/drydock/pull/927',
+      'https://github.com/CodesWhat/drydock/pull/931',
+      'https://github.com/CodesWhat/drydock/pull/932',
+      'https://github.com/CodesWhat/drydock/pull/933',
+      'https://github.com/CodesWhat/drydock/pull/935',
+      'https://github.com/CodesWhat/drydock/pull/936',
+      'https://github.com/CodesWhat/drydock/pull/942',
+    ]);
+    expect(getUrls(releaseBullets[1]).sort()).toEqual([
+      'https://github.com/CodesWhat/drydock/pull/931',
+      'https://github.com/CodesWhat/drydock/pull/942',
+    ]);
   });
 
   test('preserves the exact source URL multiset', () => {
@@ -268,6 +329,28 @@ describe.each(translatedReadmes)('%s', (readme) => {
       expect(content, `unexpected source-English prose: ${prose}`).not.toContain(prose);
     }
   });
+});
+
+test('English rc.7 update highlight scopes cleanup failures to the health gate', () => {
+  const releaseBlock = getReleaseBlock(
+    sourceReadme,
+    '<summary><strong>v1.7.0-rc.7 highlights</strong></summary>',
+  );
+  const bullet = getBullet(releaseBlock, '**Update execution stays successful');
+  const urls = [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"]+/g)].map(([url]) => url);
+
+  expect(bullet).toContain('after the health gate');
+  expect(bullet).toContain('self-updates wait for active lifecycles');
+  expect(urls.sort()).toEqual([
+    'https://github.com/CodesWhat/drydock/pull/931',
+    'https://github.com/CodesWhat/drydock/pull/942',
+  ]);
+});
+
+test('German rc.7 release notes use registry terminology', () => {
+  const german = readFileSync(`${repoRoot}/README.de.md`, 'utf8');
+
+  expect(german).not.toContain('Registrierungspaginierung');
 });
 
 describe.each(allReadmes)('%s star history', (readme) => {
