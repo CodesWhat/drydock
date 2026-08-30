@@ -718,7 +718,7 @@ describe('additional direct wrapper coverage', () => {
 describe('trigger self-update routing', () => {
   test('should route to executeSelfUpdate for drydock image', async () => {
     stubTriggerFlow({ running: true });
-    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(true);
+    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(false);
     const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
 
     await docker.trigger(
@@ -928,5 +928,91 @@ describe('performContainerUpdate compose file sync', () => {
     expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
 
     executeUpdateSpy.mockRestore();
+  });
+});
+
+describe('self-update lifecycle exclusivity', () => {
+  test('waits for active regular work and releases queued work after a dry-run', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const order: string[] = [];
+    let releaseRegular: () => void = () => {};
+    const regularGate = new Promise<void>((resolve) => {
+      releaseRegular = resolve;
+    });
+    let markRegularStarted: () => void = () => {};
+    const regularStarted = new Promise<void>((resolve) => {
+      markRegularStarted = resolve;
+    });
+    const run = vi.fn(async (container) => {
+      if (container.image.name === 'drydock') {
+        order.push('self-dry-run');
+        return false;
+      }
+      order.push(`regular-${container.name}-start`);
+      markRegularStarted();
+      await regularGate;
+      order.push(`regular-${container.name}-end`);
+      return undefined;
+    });
+    docker.updateLifecycleExecutor = { run } as any;
+
+    try {
+      const activeRegular = docker.runContainerUpdateLifecycle(
+        createTriggerContainer({ name: 'active' }),
+      );
+      await regularStarted;
+      const selfUpdate = docker.runContainerUpdateLifecycle(
+        createTriggerContainer({
+          name: 'drydock',
+          image: { name: 'drydock' },
+        }),
+      );
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+      const orderBeforeDrain = [...order];
+
+      releaseRegular();
+      await Promise.all([activeRegular, selfUpdate]);
+      await docker.runContainerUpdateLifecycle(createTriggerContainer({ name: 'after-dry-run' }));
+
+      expect(orderBeforeDrain).toEqual(['regular-active-start']);
+      expect(order).toEqual([
+        'regular-active-start',
+        'regular-active-end',
+        'self-dry-run',
+        'regular-after-dry-run-start',
+        'regular-after-dry-run-end',
+      ]);
+    } finally {
+      releaseRegular();
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('keeps later regular work blocked after a successful helper handoff', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockResolvedValue(true);
+    docker.updateLifecycleExecutor = { run } as any;
+
+    try {
+      await docker.runContainerUpdateLifecycle(
+        createTriggerContainer({
+          name: 'drydock',
+          image: { name: 'drydock' },
+        }),
+      );
+      void docker.runContainerUpdateLifecycle(
+        createTriggerContainer({ name: 'queued-after-self' }),
+      );
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+
+      expect(run).toHaveBeenCalledOnce();
+      expect(run).toHaveBeenCalledWith(expect.objectContaining({ name: 'drydock' }), undefined);
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
   });
 });

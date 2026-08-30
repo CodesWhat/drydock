@@ -1685,7 +1685,8 @@ class Docker<
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    const bypassGlobalCap = this.isSelfUpdate(container) || this.isInfrastructureUpdate(container);
+    const selfUpdate = this.isSelfUpdate(container);
+    const bypassGlobalCap = selfUpdate || this.isInfrastructureUpdate(container);
     return withContainerUpdateLocks(
       this.getUpdateLockKeys(container),
       async () => {
@@ -1783,7 +1784,11 @@ class Docker<
           throw error;
         }
       },
-      { bypassGlobalCap },
+      {
+        bypassGlobalCap,
+        exclusive: selfUpdate,
+        retainExclusiveOnResult: (result) => result === true,
+      },
     );
   }
 

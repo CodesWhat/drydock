@@ -367,9 +367,9 @@ class UpdateLifecycleExecutor {
                 `Failed to mark self-update operation ${selfUpdateOperationId} as skipped: ${String((markErr as Error)?.message ?? markErr)}`,
               );
             }
-            return;
+            return updated;
           }
-          return;
+          return updated;
         } catch (e: unknown) {
           const errorMessage = String((e as Error)?.message ?? e);
           try {

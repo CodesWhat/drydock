@@ -300,6 +300,142 @@ describe('withContainerUpdateLocks (no global semaphore — default unlimited)',
   });
 });
 
+describe('withContainerUpdateLocks (exclusive lifecycle coordination)', () => {
+  test('drains active updates and grants a waiting exclusive update before later regular updates', async () => {
+    const order: string[] = [];
+    const regularStarted = deferred();
+    const releaseRegular = deferred();
+    const exclusiveStarted = deferred();
+    const releaseExclusive = deferred();
+
+    const regular = withContainerUpdateLocks(['container:local:regular-active'], async () => {
+      order.push('regular-start');
+      regularStarted.resolve();
+      await releaseRegular.promise;
+      order.push('regular-end');
+    });
+    await regularStarted.promise;
+
+    const exclusive = withContainerUpdateLocks(
+      ['container:local:self'],
+      async () => {
+        order.push('exclusive-start');
+        exclusiveStarted.resolve();
+        await releaseExclusive.promise;
+        order.push('exclusive-end');
+      },
+      { bypassGlobalCap: true, exclusive: true },
+    );
+    const laterRegularOne = withContainerUpdateLocks(
+      ['container:local:regular-later-1'],
+      async () => {
+        order.push('later-regular-1');
+      },
+    );
+    const laterRegularTwo = withContainerUpdateLocks(
+      ['container:local:regular-later-2'],
+      async () => {
+        order.push('later-regular-2');
+      },
+    );
+
+    releaseRegular.resolve();
+    await exclusiveStarted.promise;
+    expect(order).toEqual(['regular-start', 'regular-end', 'exclusive-start']);
+
+    releaseExclusive.resolve();
+    await Promise.all([regular, exclusive, laterRegularOne, laterRegularTwo]);
+
+    expect(order).toEqual([
+      'regular-start',
+      'regular-end',
+      'exclusive-start',
+      'exclusive-end',
+      'later-regular-1',
+      'later-regular-2',
+    ]);
+  }, 1_000);
+
+  test('retains exclusive ownership after a successful handoff until module restart', async () => {
+    vi.resetModules();
+    const retainedModule = await import('./update-locks.js?retained-exclusive');
+    let queuedRegularStarted = false;
+
+    await retainedModule.withContainerUpdateLocks(
+      ['container:local:self-retained'],
+      async () => true,
+      {
+        bypassGlobalCap: true,
+        exclusive: true,
+        retainExclusiveOnResult: (result) => result === true,
+      },
+    );
+    void retainedModule.withContainerUpdateLocks(
+      ['container:local:regular-blocked-after-handoff'],
+      async () => {
+        queuedRegularStarted = true;
+      },
+    );
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+
+    expect(queuedRegularStarted).toBe(false);
+
+    vi.resetModules();
+    const restartedModule = await import('./update-locks.js?after-retained-exclusive');
+    await restartedModule.withContainerUpdateLocks(
+      ['container:local:regular-after-restart'],
+      async () => {
+        queuedRegularStarted = true;
+      },
+    );
+    expect(queuedRegularStarted).toBe(true);
+  });
+
+  test('releases exclusive ownership when the result does not request retention', async () => {
+    const result = await withContainerUpdateLocks(
+      ['container:local:self-dry-run'],
+      async () => false,
+      {
+        bypassGlobalCap: true,
+        exclusive: true,
+        retainExclusiveOnResult: (updated) => updated !== false,
+      },
+    );
+    let regularStarted = false;
+
+    await withContainerUpdateLocks(['container:local:regular-after-dry-run'], async () => {
+      regularStarted = true;
+    });
+
+    expect(result).toBe(false);
+    expect(regularStarted).toBe(true);
+  });
+
+  test('releases exclusive ownership when the exclusive update rejects', async () => {
+    const failure = new Error('helper start failed');
+
+    await expect(
+      withContainerUpdateLocks(
+        ['container:local:self-failed'],
+        async () => {
+          throw failure;
+        },
+        {
+          bypassGlobalCap: true,
+          exclusive: true,
+          retainExclusiveOnResult: () => true,
+        },
+      ),
+    ).rejects.toBe(failure);
+
+    await expect(
+      withContainerUpdateLocks(['container:local:regular-after-self-failure'], async () => 'ran'),
+    ).resolves.toBe('ran');
+  });
+});
+
 describe('withContainerUpdateLocks (global semaphore — via dynamic module import)', () => {
   // Each describe block that needs a different env uses vi.resetModules() +
   // a dynamic import so the module-level semaphore is constructed with the

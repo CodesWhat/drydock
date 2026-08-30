@@ -4478,7 +4478,7 @@ describe('Dockercompose Trigger', () => {
     );
     vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
     const notifySpy = vi.spyOn(trigger, 'maybeNotifySelfUpdate').mockResolvedValue();
-    const executeSelfUpdateSpy = vi.spyOn(trigger, 'executeSelfUpdate').mockResolvedValue(true);
+    const executeSelfUpdateSpy = vi.spyOn(trigger, 'executeSelfUpdate').mockResolvedValue(false);
     const postHookSpy = vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);

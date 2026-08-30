@@ -345,7 +345,10 @@ describe('UpdateLifecycleExecutor', () => {
       executeSelfUpdate: vi.fn().mockResolvedValue(false),
     });
 
-    await harness.executor.run(createContainer(), { runtime: true, operationId: 'queued-op-1' });
+    const result = await harness.executor.run(createContainer(), {
+      runtime: true,
+      operationId: 'queued-op-1',
+    });
 
     expect(harness.prepareSelfUpdateOperation).toHaveBeenCalledWith(
       expect.anything(),
@@ -367,6 +370,7 @@ describe('UpdateLifecycleExecutor', () => {
     );
     expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
     expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
+    expect(result).toBe(false);
   });
 
   test('marks self-update operation as skipped when executeSelfUpdate resolves false', async () => {
@@ -376,7 +380,7 @@ describe('UpdateLifecycleExecutor', () => {
       executeSelfUpdate: vi.fn().mockResolvedValue(false),
     });
 
-    await harness.executor.run(createContainer());
+    const result = await harness.executor.run(createContainer());
 
     expect(harness.markSelfUpdateOperationSkipped).toHaveBeenCalledWith(
       'op-self-update-dryrun',
@@ -385,6 +389,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.markSelfUpdateOperationFailed).not.toHaveBeenCalled();
     expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
     expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
+    expect(result).toBe(false);
   });
 
   test('logs but swallows markSelfUpdateOperationSkipped errors so run still returns cleanly', async () => {
@@ -397,7 +402,7 @@ describe('UpdateLifecycleExecutor', () => {
     });
     harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
 
-    await expect(harness.executor.run(createContainer())).resolves.toBeUndefined();
+    await expect(harness.executor.run(createContainer())).resolves.toBe(false);
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -412,10 +417,11 @@ describe('UpdateLifecycleExecutor', () => {
       executeSelfUpdate: vi.fn().mockResolvedValue(true),
     });
 
-    await harness.executor.run(createContainer());
+    const result = await harness.executor.run(createContainer());
 
     expect(harness.executeSelfUpdate).toHaveBeenCalled();
     expect(harness.performContainerUpdate).not.toHaveBeenCalled();
+    expect(result).toBe(true);
   });
 
   test('runs non-self-update path and emits fallback update-applied telemetry without operation id', async () => {
@@ -687,7 +693,7 @@ describe('UpdateLifecycleExecutor', () => {
     });
     harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
 
-    await expect(harness.executor.run(createContainer())).resolves.toBeUndefined();
+    await expect(harness.executor.run(createContainer())).resolves.toBe(false);
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining(
