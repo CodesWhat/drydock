@@ -22,7 +22,10 @@ vi.mock('../registry', () => ({
 }));
 
 vi.mock('../log', () => ({
-  default: { child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })) },
+  default: {
+    warn: vi.fn(),
+    child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })),
+  },
 }));
 
 import * as registry from '../registry/index.js';
@@ -102,6 +105,7 @@ describe('Preview Router', () => {
       };
       const mockTrigger = {
         type: 'docker',
+        getId: () => 'docker.default',
         preview: vi.fn().mockResolvedValue(previewResult),
       };
       storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
@@ -121,6 +125,7 @@ describe('Preview Router', () => {
       });
       const mockTrigger = {
         type: 'docker',
+        getId: () => 'docker.default',
         preview: vi.fn().mockRejectedValue(authenticationError),
       };
       storeContainer.getContainer.mockReturnValue({
@@ -152,6 +157,7 @@ describe('Preview Router', () => {
       );
       const mockTrigger = {
         type: 'docker',
+        getId: () => 'docker.default',
         preview: vi.fn().mockRejectedValue(configurationError),
       };
       storeContainer.getContainer.mockReturnValue({
@@ -186,6 +192,7 @@ describe('Preview Router', () => {
       );
       const mockTrigger = {
         type: 'docker',
+        getId: () => 'docker.default',
         preview: vi.fn().mockRejectedValue(networkError),
       };
       storeContainer.getContainer.mockReturnValue({
@@ -216,6 +223,7 @@ describe('Preview Router', () => {
     test('should type unknown preview failures instead of returning a generic error shape', async () => {
       const mockTrigger = {
         type: 'docker',
+        getId: () => 'docker.default',
         preview: vi.fn().mockRejectedValue('preview failed as string'),
       };
       storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
@@ -241,6 +249,7 @@ describe('Preview Router', () => {
       });
       const mockTrigger = {
         type: 'docker',
+        getId: () => 'docker.default',
         preview: vi.fn().mockRejectedValue(new Error('opaque preview failure')),
       };
       storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
@@ -261,6 +270,7 @@ describe('Preview Router', () => {
     test('should turn trigger-level preview errors into typed API failures', async () => {
       const mockTrigger = {
         type: 'docker',
+        getId: () => 'docker.default',
         preview: vi.fn().mockResolvedValue({ error: 'Container not found in Docker' }),
       };
       storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
@@ -280,6 +290,7 @@ describe('Preview Router', () => {
       const mockTrigger = {
         type: 'docker',
         agent: 'agent-2',
+        getId: () => 'docker.default',
         preview: vi.fn(),
       };
       storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local', agent: 'agent-1' });
@@ -295,6 +306,7 @@ describe('Preview Router', () => {
     test('should skip local docker triggers for agent containers', async () => {
       const mockTrigger = {
         type: 'docker',
+        getId: () => 'docker.default',
         preview: vi.fn(),
       };
       storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local', agent: 'remote' });
@@ -312,6 +324,7 @@ describe('Preview Router', () => {
       const mockTrigger = {
         type: 'docker',
         agent: 'remote',
+        getId: () => 'remote.docker.default',
         preview: vi.fn().mockResolvedValue(previewResult),
       };
       storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local', agent: 'remote' });
@@ -342,6 +355,7 @@ describe('Preview Router', () => {
       };
       const composeTrigger = {
         type: 'dockercompose',
+        getId: () => 'dockercompose.default',
         preview: vi.fn().mockResolvedValue(previewResult),
       };
       storeContainer.getContainer.mockReturnValue({ id: 'c1', watcher: 'local' });
@@ -353,6 +367,137 @@ describe('Preview Router', () => {
       expect(composeTrigger.preview).toHaveBeenCalledWith({ id: 'c1', watcher: 'local' });
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(previewResult);
+    });
+
+    test('should preview the included Portainer trigger when Docker is registered first', async () => {
+      const dockerPreview = vi.fn().mockResolvedValue({ containerName: 'docker-preview' });
+      const portainerPreview = vi.fn().mockResolvedValue({
+        containerName: 'portainer-preview',
+        portainer: { stackId: 12, service: 'web', mode: 'compose' },
+      });
+      const dockerTrigger = {
+        type: 'docker',
+        configuration: { auto: 'oninclude' },
+        getId: () => 'docker.update',
+        preview: dockerPreview,
+      };
+      const portainerTrigger = {
+        type: 'portainer',
+        configuration: { auto: 'oninclude' },
+        getId: () => 'portainer.update',
+        preview: portainerPreview,
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+        actionTriggerInclude: 'portainer.update',
+      });
+      registry.getState.mockReturnValue({
+        trigger: {
+          'docker.update': dockerTrigger,
+          'portainer.update': portainerTrigger,
+        },
+      });
+
+      const res = await callPreview();
+
+      expect(dockerPreview).not.toHaveBeenCalled();
+      expect(portainerPreview).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }));
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        containerName: 'portainer-preview',
+        portainer: { stackId: 12, service: 'web', mode: 'compose' },
+      });
+    });
+
+    test('should stop at an excluded Docker trigger instead of previewing a fallback', async () => {
+      const dockerPreview = vi.fn().mockResolvedValue({ containerName: 'docker-preview' });
+      const portainerPreview = vi.fn().mockResolvedValue({ containerName: 'portainer-preview' });
+      const dockerTrigger = {
+        type: 'docker',
+        getId: () => 'docker.update',
+        preview: dockerPreview,
+      };
+      const portainerTrigger = {
+        type: 'portainer',
+        getId: () => 'portainer.update',
+        preview: portainerPreview,
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+        actionTriggerExclude: 'docker.update',
+      });
+      registry.getState.mockReturnValue({
+        trigger: {
+          'docker.update': dockerTrigger,
+          'portainer.update': portainerTrigger,
+        },
+      });
+
+      const res = await callPreview();
+
+      expect(dockerPreview).not.toHaveBeenCalled();
+      expect(portainerPreview).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'no-trigger-configured',
+        message: 'No action trigger configured for this container',
+        action: {
+          code: 'open-trigger-settings',
+          href: '/triggers',
+        },
+      });
+    });
+
+    test('should return 404 when compatible triggers are all outside the action policy', async () => {
+      const dockerTrigger = {
+        type: 'docker',
+        configuration: { auto: 'oninclude' },
+        getId: () => 'docker.update',
+        preview: vi.fn(),
+      };
+      const portainerTrigger = {
+        type: 'portainer',
+        configuration: { auto: 'oninclude' },
+        getId: () => 'portainer.update',
+        preview: vi.fn(),
+      };
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        watcher: 'local',
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+        actionTriggerInclude: 'docker.other',
+      });
+      registry.getState.mockReturnValue({
+        trigger: {
+          'docker.update': dockerTrigger,
+          'portainer.update': portainerTrigger,
+        },
+      });
+
+      const res = await callPreview();
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        code: 'no-trigger-configured',
+        message: 'No action trigger configured for this container',
+        action: {
+          code: 'open-trigger-settings',
+          href: '/triggers',
+        },
+      });
     });
   });
 });
