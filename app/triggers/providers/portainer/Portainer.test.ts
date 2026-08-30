@@ -350,7 +350,14 @@ test('resolvePortainerUpdate auto mode updates stack env when image tag uses a v
     Env: [{ name: 'PIHOLE_TAG', value: '2026.05.0' }],
   });
   vi.spyOn(trigger, 'getPortainerStackFile').mockResolvedValue(
-    ['services:', '  pihole:', '    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}', ''].join('\n'),
+    [
+      'services:',
+      '  pihole:',
+      '    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}',
+      '    command: echo $$PIHOLE_TAG',
+      '    healthcheck: ${OTHER_TAG:-$$PIHOLE_TAG}',
+      '',
+    ].join('\n'),
   );
 
   const update = await trigger.resolvePortainerUpdate(makeContainer(), 'pihole/pihole:2026.07.2');
@@ -361,10 +368,56 @@ test('resolvePortainerUpdate auto mode updates stack env when image tag uses a v
   expect(update.updatedEnv).toEqual([{ name: 'PIHOLE_TAG', value: '2026.07.2' }]);
 });
 
+test('resolvePortainerUpdate env mode allows a selected image variable with a nested fallback', async () => {
+  const trigger = makeTrigger();
+  vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
+    { Id: 12, Name: 'pihole', EndpointId: 1, ProjectPath: '/data/compose/12' },
+  ]);
+  vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({
+    Id: 12,
+    Name: 'pihole',
+    EndpointId: 1,
+    ProjectPath: '/data/compose/12',
+    Env: [{ name: 'PIHOLE_TAG', value: '2026.05.0' }],
+  });
+  vi.spyOn(trigger, 'getPortainerStackFile').mockResolvedValue(
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-${DEFAULT_TAG:-2026.05.0}}',
+  );
+
+  const update = await trigger.resolvePortainerUpdate(makeContainer(), 'pihole/pihole:2026.07.2');
+
+  expect(update.mode).toBe('env');
+  expect(update.versionVar).toBe('PIHOLE_TAG');
+});
+
 test.each([
   [
     'a sibling service image',
     'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n  other:\n    image: other/image:${PIHOLE_TAG}',
+  ],
+  [
+    'a nested sibling service image fallback',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n  other:\n    image: other/image:${OTHER_TAG:-${PIHOLE_TAG}}',
+  ],
+  [
+    'a deeply nested sibling service image replacement',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n  other:\n    image: other/image:${OTHER_TAG:+${OTHER_DEFAULT?${PIHOLE_TAG}}}',
+  ],
+  [
+    'a nested sibling service image with a bare fallback reference',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n  other:\n    image: other/image:${OTHER_TAG:-$PIHOLE_TAG}',
+  ],
+  [
+    'a malformed nested sibling service image interpolation',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n  other:\n    image: other/image:${OTHER_TAG:-${PIHOLE_TAG}',
+  ],
+  [
+    'an invalid nested sibling service image interpolation',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n  other:\n    image: other/image:${OTHER_TAG:-${}}',
+  ],
+  [
+    'an unsupported nested sibling service image operator',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n  other:\n    image: other/image:${OTHER_TAG:$PIHOLE_TAG}',
   ],
   [
     'a non-image service value',
@@ -373,6 +426,10 @@ test.each([
   [
     'a top-level value',
     'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\nx-version: ${PIHOLE_TAG}\nx-other: ${OTHER}',
+  ],
+  [
+    'a nested non-image service value',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n    command:\n      - ${OTHER_TAG:-${PIHOLE_TAG}}\n      - ${OTHER_TAG:-$}\n      - $PIHOLE_TAG\n      - $OTHER_DEFAULT\n      - $',
   ],
 ])(
   'resolvePortainerUpdate env mode rejects a variable also referenced by %s',

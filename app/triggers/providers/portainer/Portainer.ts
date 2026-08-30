@@ -339,6 +339,89 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isComposeVariableStart(value: string | undefined): boolean {
+  return value !== undefined && /^[A-Za-z_]$/.test(value);
+}
+
+function isComposeVariablePart(value: string | undefined): boolean {
+  return value !== undefined && /^[A-Za-z0-9_]$/.test(value);
+}
+
+interface ComposeInterpolationResult {
+  variable?: string;
+  operator?: string;
+  valid: boolean;
+  nextIndex: number;
+  closed: boolean;
+}
+
+function scanComposeInterpolation(
+  value: string,
+  startIndex: number,
+  onVariable: (variable: string) => void,
+): ComposeInterpolationResult {
+  let index = startIndex;
+  if (!isComposeVariableStart(value[index])) {
+    return { valid: false, nextIndex: value.length, closed: false };
+  }
+  index += 1;
+  while (isComposeVariablePart(value[index])) {
+    index += 1;
+  }
+  const variable = value.slice(startIndex, index);
+  onVariable(variable);
+
+  let operator: string | undefined;
+  const firstOperatorPart = value[index];
+  const secondOperatorPart = value[index + 1];
+  let valid = firstOperatorPart === '}';
+  if (
+    firstOperatorPart === ':' &&
+    (secondOperatorPart === '-' || secondOperatorPart === '+' || secondOperatorPart === '?')
+  ) {
+    valid = true;
+    operator = `:${secondOperatorPart}`;
+    index += 2;
+  } else if (firstOperatorPart === '-' || firstOperatorPart === '+' || firstOperatorPart === '?') {
+    valid = true;
+    operator = firstOperatorPart;
+    index += 1;
+  }
+
+  while (index < value.length) {
+    if (value[index] === '}') {
+      return { variable, operator, valid, nextIndex: index + 1, closed: true };
+    }
+    if (value[index] !== '$') {
+      index += 1;
+      continue;
+    }
+    if (value[index + 1] === '$') {
+      index += 2;
+      continue;
+    }
+    if (value[index + 1] === '{') {
+      const nested = scanComposeInterpolation(value, index + 2, onVariable);
+      if (!nested.valid || !nested.closed) {
+        valid = false;
+      }
+      index = nested.nextIndex;
+      continue;
+    }
+    if (isComposeVariableStart(value[index + 1])) {
+      let end = index + 2;
+      while (isComposeVariablePart(value[end])) {
+        end += 1;
+      }
+      onVariable(value.slice(index + 1, end));
+      index = end;
+      continue;
+    }
+    index += 1;
+  }
+  return { variable, operator, valid, nextIndex: value.length, closed: false };
+}
+
 function extractTagVariable(image: string | undefined): string | undefined {
   if (!image || image.includes('@')) {
     return undefined;
@@ -350,8 +433,14 @@ function extractTagVariable(image: string | undefined): string | undefined {
   }
 
   const tag = image.slice(lastColonIndex + 1).trim();
-  const match = tag.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-[^}]*)?\}$/);
-  return match?.[1];
+  if (!tag.startsWith('${')) {
+    return undefined;
+  }
+  const parsed = scanComposeInterpolation(tag, 2, () => undefined);
+  const supportedOperator = parsed.operator === undefined || parsed.operator === ':-';
+  return parsed.valid && parsed.closed && parsed.nextIndex === tag.length && supportedOperator
+    ? parsed.variable
+    : undefined;
 }
 
 function findComposeVariableReferences(
@@ -361,11 +450,40 @@ function findComposeVariableReferences(
 ): (string | number)[][] {
   if (typeof value === 'string') {
     const references: (string | number)[][] = [];
-    const pattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?:[:+?-][^}]*)?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
-    for (const match of value.matchAll(pattern)) {
-      if (match[1] === variable || match[2] === variable) {
-        references.push(currentPath);
+    let index = 0;
+    while (index < value.length) {
+      if (value[index] !== '$') {
+        index += 1;
+        continue;
       }
+      if (value[index + 1] === '$') {
+        index += 2;
+        continue;
+      }
+      if (value[index + 1] === '{') {
+        const parsed = scanComposeInterpolation(value, index + 2, (nestedVariable) => {
+          if (nestedVariable === variable) {
+            references.push(currentPath);
+          }
+        });
+        if (!parsed.valid || !parsed.closed) {
+          references.push(currentPath);
+        }
+        index = parsed.nextIndex;
+        continue;
+      }
+      if (isComposeVariableStart(value[index + 1])) {
+        let end = index + 2;
+        while (isComposeVariablePart(value[end])) {
+          end += 1;
+        }
+        if (value.slice(index + 1, end) === variable) {
+          references.push(currentPath);
+        }
+        index = end;
+        continue;
+      }
+      index += 1;
     }
     return references;
   }
