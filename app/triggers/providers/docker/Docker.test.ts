@@ -5926,7 +5926,7 @@ describe('persistRollbackState callback', () => {
 describe('trigger self-update routing', () => {
   test('should route to executeSelfUpdate for drydock image', async () => {
     stubTriggerFlow({ running: true });
-    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(true);
+    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(false);
     const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
 
     await docker.trigger(
