@@ -630,7 +630,7 @@ describe('Dockercompose Trigger', () => {
   test('getComposeResolvedImages should fail closed for unsupported project environment syntax', async () => {
     vi.spyOn(fs, 'readFile').mockResolvedValue(
       Buffer.from(
-        'IMAGE=$(hostname)\nBARE=$HOST\nBADESC="foo\\q"\nBADQUOTE=\'ok\' trailing\nBROKEN="unterminated\n',
+        'IMAGE=$(hostname)\nBARE=$HOST\nBADESC="foo\\q"\nTRAILING="ok" trailing\nBADQUOTE=\'ok\' trailing\nBROKEN="unterminated\n',
       ),
     );
 
@@ -746,6 +746,22 @@ describe('Dockercompose Trigger', () => {
   test('getComposeResolvedImages should consume a poisoned multiline duplicate before continuing', async () => {
     vi.spyOn(fs, 'readFile').mockResolvedValue(
       Buffer.from("IMAGE=$(hostname)\nIMAGE='ignored\nOTHER=nginx:1\n'\n"),
+    );
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({
+        image: { image: '${IMAGE}' },
+        other: { image: '${OTHER:-postgres:16}' },
+      }),
+    );
+
+    expect(result).toEqual(new Map([['other', 'postgres:16']]));
+  });
+
+  test('getComposeResolvedImages should consume a poisoned multiline double-quoted duplicate before continuing', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(
+      Buffer.from('IMAGE=$(hostname)\nIMAGE="ignored\nOTHER=nginx:1\n"\n'),
     );
 
     const result = await trigger.getComposeResolvedImages(

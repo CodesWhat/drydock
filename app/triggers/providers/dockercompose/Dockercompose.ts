@@ -425,19 +425,20 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
       continue;
     }
     if (value.startsWith('"')) {
-      let closingIndex = -1;
-      for (let index = 1; index < value.length; index++) {
-        if (value[index] === '"' && value[index - 1] !== '\\') {
-          closingIndex = index;
-          break;
-        }
+      let quotedValue = value.slice(1);
+      let closingIndex = quotedValue.search(/(?<!\\)"/);
+      while (closingIndex < 0 && lineIndex + 1 < lines.length) {
+        lineIndex++;
+        quotedValue += `\n${lines[lineIndex]}`;
+        closingIndex = quotedValue.search(/(?<!\\)"/);
       }
-      if (closingIndex < 0 || !/^\s*(?:#.*)?$/.test(value.slice(closingIndex + 1))) {
+      const remainder = quotedValue.slice(closingIndex + 1).trim();
+      if (closingIndex < 0 || (remainder !== '' && !remainder.startsWith('#'))) {
         invalidEnvironmentKeys.add(variableName);
         delete resolvedEnvironment[variableName];
         continue;
       }
-      const decoded = parseDoubleQuotedComposeEnvironmentValue(value.slice(1, closingIndex));
+      const decoded = parseDoubleQuotedComposeEnvironmentValue(quotedValue.slice(0, closingIndex));
       if (decoded === undefined || /(?<!\\)\$(?!\{)/.test(decoded)) {
         invalidEnvironmentKeys.add(variableName);
         delete resolvedEnvironment[variableName];
@@ -472,7 +473,6 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
   }
   return resolvedEnvironment;
 }
-
 function getServiceKey(compose, container, currentImage) {
   const composeServiceName = container.labels?.['com.docker.compose.service'];
   if (composeServiceName) {
