@@ -215,6 +215,9 @@ test.describe('v1.6 mobile release promises', () => {
     expect(popoverBox!.y + popoverBox!.height).toBeLessThanOrEqual(844);
     await expect(popover.getByRole('button').first()).toBeFocused();
 
+    await popover.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((animation) => animation.finished));
+    });
     await popover.getByRole('button', { name: 'Close' }).tap();
     await expect(popover).toHaveCount(0);
     await expect(releaseButtons[0]).toBeFocused();
