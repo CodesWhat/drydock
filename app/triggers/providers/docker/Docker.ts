@@ -33,13 +33,14 @@ import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
-import { isMemoryStore } from '../../../store/index.js';
+import { isMemoryStore, save as saveStore } from '../../../store/index.js';
 import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { createContainerBackupScope } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { getDockerWatcherSourceKey } from '../../../watchers/providers/docker/container-init.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
@@ -52,6 +53,7 @@ import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
 import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
 import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
+import { RetainSelfUpdateLifecycleError } from './SelfUpdateTransitionShared.js';
 import {
   markSelfUpdateOperationFailed as markSelfUpdateOperationFailedFromStore,
   markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
@@ -97,6 +99,7 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   dryrun: boolean;
   autoremovetimeout: number;
   pulltimeout: number;
+  helpercompletiontimeout: number;
   backupcount: number;
 }
 
@@ -413,6 +416,7 @@ class Docker<
       emitSelfUpdateStarting,
       resolveFinalizeUrl: () => this.getSelfUpdateFinalizeUrl(),
       resolveFinalizeSecret: (operationId) => this.getSelfUpdateFinalizeSecret(operationId),
+      resolveObserverNetworkMode: () => this.resolveObserverNetworkMode(),
       finalizeObservedHelperOperation: (operationId, status, lastError) =>
         this.finalizeObservedHelperOperation(operationId, status, lastError),
       resolveHelperImage: (container) => {
@@ -689,6 +693,12 @@ class Docker<
       dryrun: this.joi.boolean().default(false),
       autoremovetimeout: this.joi.number().default(10_000),
       pulltimeout: this.joi
+        .number()
+        .integer()
+        .positive()
+        .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
+        .default(DEFAULT_PULL_TIMEOUT_MS),
+      helpercompletiontimeout: this.joi
         .number()
         .integer()
         .positive()
@@ -1520,13 +1530,43 @@ class Docker<
   }
 
   async classifySelfUpdate(container) {
-    let dockerApi: unknown;
+    let candidateWatcher: unknown;
     try {
-      dockerApi = this.getWatcher(container)?.dockerApi;
+      candidateWatcher = this.getWatcher(container);
     } catch {
-      dockerApi = undefined;
+      candidateWatcher = undefined;
     }
-    return this.selfUpdateOrchestrator.classifySelfUpdate(container, dockerApi);
+    const localWatcher = getState().watcher['docker.local'] as
+      | { dockerApi?: unknown; configuration?: unknown; agent?: unknown }
+      | undefined;
+    if (!candidateWatcher || !localWatcher) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(
+        container,
+        undefined,
+        candidateWatcher ? 'peer' : 'authoritative',
+      );
+    }
+    const candidateSourceKey = getDockerWatcherSourceKey(candidateWatcher as never);
+    const localSourceKey = getDockerWatcherSourceKey(localWatcher as never);
+    return this.selfUpdateOrchestrator.classifySelfUpdate(
+      container,
+      localWatcher.dockerApi,
+      candidateSourceKey === localSourceKey ? 'authoritative' : 'peer',
+    );
+  }
+
+  async resolveObserverNetworkMode(): Promise<string> {
+    const localWatcher = getState().watcher['docker.local'] as { dockerApi?: unknown } | undefined;
+    if (!localWatcher?.dockerApi) {
+      throw new Error('Observed self-update requires an authoritative local Docker watcher');
+    }
+    const identity = await this.selfUpdateOrchestrator.resolveSelfContainerIdentity(
+      localWatcher.dockerApi,
+    );
+    if (!identity?.id) {
+      throw new Error('Observed self-update could not resolve the local Drydock container');
+    }
+    return `container:${identity.id}`;
   }
 
   isInfrastructureUpdate(container) {
@@ -1593,25 +1633,32 @@ class Docker<
     markSelfUpdateOperationSkippedFromStore(operationId, lastError);
   }
 
-  finalizeObservedHelperOperation(
+  async finalizeObservedHelperOperation(
     operationId: string,
-    status: 'succeeded' | 'rolled-back',
+    status: 'succeeded' | 'rolled-back' | 'failed',
     lastError?: string,
-  ): void {
+  ): Promise<void> {
     const operation =
       status === 'succeeded'
         ? updateOperationStore.markOperationTerminal(operationId, {
             status: 'succeeded',
             phase: 'succeeded',
           })
-        : updateOperationStore.markOperationTerminal(operationId, {
-            status: 'rolled-back',
-            phase: 'rolled-back',
-            ...(lastError ? { lastError } : {}),
-          });
+        : status === 'rolled-back'
+          ? updateOperationStore.markOperationTerminal(operationId, {
+              status: 'rolled-back',
+              phase: 'rolled-back',
+              ...(lastError ? { lastError } : {}),
+            })
+          : updateOperationStore.markOperationTerminal(operationId, {
+              status: 'failed',
+              phase: 'failed',
+              ...(lastError ? { lastError } : {}),
+            });
     if (!operation || operation.status !== status) {
       throw new Error(`Failed to durably finalize observed helper operation ${operationId}`);
     }
+    await saveStore();
   }
 
   async persistSecurityState(container, securityPatch: SecurityStatePatch, logContainer) {
@@ -1908,6 +1955,10 @@ class Docker<
         retainExclusiveOnResult: (result) =>
           selfUpdate && result === true && exclusiveUpdateOperationId
             ? { operationId: exclusiveUpdateOperationId }
+            : undefined,
+        retainExclusiveOnError: (error) =>
+          error instanceof RetainSelfUpdateLifecycleError
+            ? { operationId: error.operationId }
             : undefined,
       },
     );

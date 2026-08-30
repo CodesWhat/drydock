@@ -1,5 +1,6 @@
 export interface SelfUpdateConfiguration {
   dryrun?: boolean;
+  helpercompletiontimeout?: number;
 }
 
 export interface SelfUpdateLogger {

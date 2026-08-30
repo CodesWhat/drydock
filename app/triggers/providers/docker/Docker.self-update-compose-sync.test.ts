@@ -10,10 +10,10 @@ import {
   registerCommonDockerBeforeEach,
   stubTriggerFlow,
 } from './Docker.test.helpers.js';
-import { SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE } from './self-update-controller.js';
+import { RetainSelfUpdateLifecycleError } from './SelfUpdateTransitionShared.js';
 
 registerCommonDockerBeforeEach();
-const { mockGetRollbackCounter, mockMarkOperationTerminal, mockSyncComposeFileTag } =
+const { mockGetRollbackCounter, mockMarkOperationTerminal, mockSaveStore, mockSyncComposeFileTag } =
   getDockerTestMocks();
 
 // --- Self-update ---
@@ -981,7 +981,7 @@ describe('self-update lifecycle exclusivity', () => {
   });
 
   function installObservedInfrastructureExecution(
-    helperCompletion: Promise<{ StatusCode: number }>,
+    helperCompletion: Promise<{ status: 'succeeded' | 'rolled-back'; lastError?: string }>,
     onRegularStart: () => void,
   ) {
     const targetContainerWithoutDrydockRuntime = {
@@ -990,7 +990,7 @@ describe('self-update lifecycle exclusivity', () => {
     };
     const helperContainer = {
       start: vi.fn().mockResolvedValue(undefined),
-      wait: vi.fn(() => helperCompletion),
+      wait: vi.fn().mockRejectedValue(new Error('proxy watcher disconnected during replacement')),
     };
     const context = {
       dockerApi: { createContainer: vi.fn().mockResolvedValue(helperContainer) },
@@ -1016,7 +1016,15 @@ describe('self-update lifecycle exclusivity', () => {
       .spyOn(docker, 'createContainer')
       .mockResolvedValue(targetContainerWithoutDrydockRuntime as never);
     const originalResolveHelperImage = docker.selfUpdateOrchestrator.resolveHelperImage;
+    const originalWaitForObservedHelperCompletion =
+      docker.selfUpdateOrchestrator.waitForObservedHelperCompletion;
+    const originalResolveObserverNetworkMode =
+      docker.selfUpdateOrchestrator.resolveObserverNetworkMode;
     docker.selfUpdateOrchestrator.resolveHelperImage = () => 'ghcr.io/codeswhat/drydock:1.8.0';
+    docker.selfUpdateOrchestrator.waitForObservedHelperCompletion = vi.fn(() => helperCompletion);
+    docker.selfUpdateOrchestrator.resolveObserverNetworkMode = vi
+      .fn()
+      .mockResolvedValue('container:drydock-current-id');
     mockMarkOperationTerminal.mockImplementation((id, patch) => ({ id, ...patch }));
 
     const run = vi.fn(async (container) => {
@@ -1038,12 +1046,17 @@ describe('self-update lifecycle exclusivity', () => {
       cloneContainer,
       cloneRuntimeConfig,
       createContainer,
+      dockerApi: context.dockerApi,
       helperContainer,
       pullImage,
       run,
       targetContainerWithoutDrydockRuntime,
       restore: () => {
         docker.selfUpdateOrchestrator.resolveHelperImage = originalResolveHelperImage;
+        docker.selfUpdateOrchestrator.waitForObservedHelperCompletion =
+          originalWaitForObservedHelperCompletion;
+        docker.selfUpdateOrchestrator.resolveObserverNetworkMode =
+          originalResolveObserverNetworkMode;
         pullImage.mockRestore();
         cloneRuntimeConfig.mockRestore();
         cloneContainer.mockRestore();
@@ -1188,8 +1201,8 @@ describe('self-update lifecycle exclusivity', () => {
 
   test('keeps infrastructure exclusive while the surviving process observes helper success', async () => {
     const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
-    let completeHelper: (result: { StatusCode: number }) => void = () => {};
-    const helperCompletion = new Promise<{ StatusCode: number }>((resolve) => {
+    let completeHelper: (result: { status: 'succeeded' }) => void = () => {};
+    const helperCompletion = new Promise<{ status: 'succeeded' }>((resolve) => {
       completeHelper = resolve;
     });
     let regularStarted = false;
@@ -1213,17 +1226,28 @@ describe('self-update lifecycle exclusivity', () => {
 
       expect(regularStarted).toBe(false);
       expect(harness.targetContainerWithoutDrydockRuntime).not.toHaveProperty('exec');
-      expect(harness.helperContainer.wait).toHaveBeenCalledOnce();
-      completeHelper({ StatusCode: 0 });
+      expect(harness.helperContainer.wait).not.toHaveBeenCalled();
+      expect(harness.helperContainer.start).toHaveBeenCalledOnce();
+      expect(harness.dockerApi.createContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          HostConfig: expect.objectContaining({
+            AutoRemove: true,
+            NetworkMode: 'container:drydock-current-id',
+          }),
+        }),
+      );
+      releaseFinalizedHelperLifecycle(
+        { helperLifecycleOwner: 'surviving-process' },
+        'succeeded',
+        'infrastructure-observed-op',
+      );
+      completeHelper({ status: 'succeeded' });
       await infrastructure;
       await regular;
       expect(regularStarted).toBe(true);
-      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('infrastructure-observed-op', {
-        status: 'succeeded',
-        phase: 'succeeded',
-      });
+      expect(harness.targetContainerWithoutDrydockRuntime).not.toHaveProperty('exec');
     } finally {
-      completeHelper({ StatusCode: 0 });
+      completeHelper({ status: 'succeeded' });
       releaseRetainedSelfUpdateLifecycle('infrastructure-observed-op');
       await infrastructure;
       await regular;
@@ -1234,8 +1258,11 @@ describe('self-update lifecycle exclusivity', () => {
 
   test('releases infrastructure exclusivity after an observed helper rollback', async () => {
     const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
-    let completeRollback: (result: { StatusCode: number }) => void = () => {};
-    const rollbackCompletion = new Promise<{ StatusCode: number }>((resolve) => {
+    let completeRollback: (result: { status: 'rolled-back'; lastError: string }) => void = () => {};
+    const rollbackCompletion = new Promise<{
+      status: 'rolled-back';
+      lastError: string;
+    }>((resolve) => {
       completeRollback = resolve;
     });
     let regularStarted = false;
@@ -1257,20 +1284,139 @@ describe('self-update lifecycle exclusivity', () => {
       expect(regularStarted).toBe(false);
       expect(harness.targetContainerWithoutDrydockRuntime).not.toHaveProperty('exec');
 
-      completeRollback({ StatusCode: SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE });
+      releaseFinalizedHelperLifecycle(
+        { helperLifecycleOwner: 'surviving-process' },
+        'rolled-back',
+        'infrastructure-observed-op',
+      );
+      completeRollback({
+        status: 'rolled-back',
+        lastError: 'Self-update helper completed rollback',
+      });
       await expect(infrastructure).rejects.toThrow('Self-update helper completed rollback');
       await regular;
       expect(regularStarted).toBe(true);
-      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('infrastructure-observed-op', {
+      expect(harness.helperContainer.wait).not.toHaveBeenCalled();
+    } finally {
+      completeRollback({
         status: 'rolled-back',
-        phase: 'rolled-back',
         lastError: 'Self-update helper completed rollback',
       });
-    } finally {
-      completeRollback({ StatusCode: SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE });
       await infrastructure.catch(() => undefined);
       await regular;
       harness.restore();
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('hard-stops a helper with no callback before later lifecycle work proceeds', async () => {
+    vi.useFakeTimers();
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const originalConfiguration = docker.configuration;
+    const neverCompletes = new Promise<{
+      status: 'succeeded' | 'rolled-back';
+      lastError?: string;
+    }>(() => {});
+    let regularStarted = false;
+    const harness = installObservedInfrastructureExecution(neverCompletes, () => {
+      regularStarted = true;
+    });
+    docker.configuration = { ...configurationValid, helpercompletiontimeout: 25 };
+    docker.selfUpdateOrchestrator.waitForObservedHelperCompletion = vi.fn(
+      (_operationId, timeoutMs) =>
+        new Promise((_, reject) => {
+          setTimeout(
+            () =>
+              reject(
+                new Error(`Observed self-update helper completion timed out after ${timeoutMs}ms`),
+              ),
+            timeoutMs,
+          );
+        }),
+    );
+
+    const infrastructure = docker.runContainerUpdateLifecycle(
+      createTriggerContainer({
+        name: 'socket-proxy',
+        labels: { 'dd.update.mode': 'infrastructure' },
+      }),
+    );
+    const infrastructureFailure = expect(infrastructure).rejects.toThrow(
+      'Observed self-update helper completion timed out after 5025ms',
+    );
+    const regular = docker.runContainerUpdateLifecycle(
+      createTriggerContainer({ name: 'regular-after-stalled-helper' }),
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(regularStarted).toBe(false);
+      expect(harness.helperContainer.wait).not.toHaveBeenCalled();
+      expect(harness.dockerApi.createContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Env: expect.arrayContaining(['DD_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS=25']),
+          HostConfig: expect.objectContaining({ AutoRemove: true }),
+        }),
+      );
+
+      await vi.advanceTimersByTimeAsync(5_025);
+      await infrastructureFailure;
+      await regular;
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'infrastructure-observed-op',
+        expect.objectContaining({ status: 'failed', phase: 'failed' }),
+      );
+      expect(mockSaveStore).toHaveBeenCalled();
+      expect(regularStarted).toBe(true);
+    } finally {
+      await infrastructure.catch(() => undefined);
+      await regular;
+      harness.restore();
+      docker.configuration = originalConfiguration;
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      vi.useRealTimers();
+    }
+  });
+
+  test('keeps later work blocked when terminal helper state cannot be saved', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    let regularStarted = false;
+    const run = vi.fn(async (container) => {
+      if (container.labels?.['dd.update.mode'] === 'infrastructure') {
+        throw new RetainSelfUpdateLifecycleError(
+          'infrastructure-save-failure-op',
+          'terminal state save failed',
+        );
+      }
+      regularStarted = true;
+    });
+    docker.updateLifecycleExecutor = { run } as never;
+
+    const infrastructure = docker.runContainerUpdateLifecycle(
+      createTriggerContainer({
+        name: 'socket-proxy',
+        labels: { 'dd.update.mode': 'infrastructure' },
+      }),
+    );
+    const infrastructureFailure = expect(infrastructure).rejects.toThrow(
+      'terminal state save failed',
+    );
+
+    try {
+      await infrastructureFailure;
+      const regular = docker.runContainerUpdateLifecycle(
+        createTriggerContainer({ name: 'regular-after-save-failure' }),
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(regularStarted).toBe(false);
+      releaseRetainedSelfUpdateLifecycle('infrastructure-save-failure-op');
+      await regular;
+      expect(regularStarted).toBe(true);
+    } finally {
+      releaseRetainedSelfUpdateLifecycle('infrastructure-save-failure-op');
+      await infrastructure.catch(() => undefined);
       docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
     }
   });

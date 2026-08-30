@@ -66,6 +66,27 @@ test('validateConfiguration should reject pull deadlines above the Node timer ce
   ).toThrowError(joi.ValidationError);
 });
 
+test('validateConfiguration should default the helper completion deadline to ten minutes', () => {
+  const validatedConfiguration = docker.validateConfiguration({
+    ...configurationValid,
+    helpercompletiontimeout: undefined,
+  });
+
+  expect(validatedConfiguration.helpercompletiontimeout).toBe(600_000);
+});
+
+test.each([0, 2_147_483_648])(
+  'validateConfiguration should reject unsafe helper completion deadline %s',
+  (helpercompletiontimeout) => {
+    expect(() =>
+      docker.validateConfiguration({
+        ...configurationValid,
+        helpercompletiontimeout,
+      }),
+    ).toThrowError(joi.ValidationError);
+  },
+);
+
 // --- getWatcher ---
 
 test('getWatcher should return watcher responsible for a container', async () => {

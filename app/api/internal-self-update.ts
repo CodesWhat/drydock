@@ -11,7 +11,9 @@ import {
   type TerminalContainerUpdateOperationPhase,
   type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
+import * as store from '../store/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { notifySelfUpdateHelperCompletion } from '../triggers/providers/docker/self-update-helper-completion.js';
 import { releaseRetainedSelfUpdateLifecycle } from '../updates/update-locks.js';
 import { sendErrorResponse } from './error-response.js';
 
@@ -207,7 +209,7 @@ export function releaseFinalizedHelperLifecycle(
 }
 
 export function createFinalizeSelfUpdateHandler() {
-  return function finalizeSelfUpdate(req: Request, res: Response): void {
+  return async function finalizeSelfUpdate(req: Request, res: Response): Promise<void> {
     if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       sendErrorResponse(res, 403, 'Loopback access required');
       return;
@@ -255,7 +257,22 @@ export function createFinalizeSelfUpdateHandler() {
     }
 
     if (isAlreadyTerminalOperation(operation)) {
+      try {
+        await store.save();
+      } catch {
+        sendErrorResponse(res, 503, 'Self-update terminal state was not saved');
+        return;
+      }
       operationFinalizeSecrets.delete(body.operationId);
+      if (
+        operation.helperLifecycleOwner === 'surviving-process' &&
+        (operation.status === 'succeeded' || operation.status === 'rolled-back')
+      ) {
+        notifySelfUpdateHelperCompletion(body.operationId, {
+          status: operation.status,
+          ...(typeof operation.lastError === 'string' ? { lastError: operation.lastError } : {}),
+        });
+      }
       releaseFinalizedHelperLifecycle(operation, body.status, body.operationId);
       res.status(202).json({
         status: 'ignored',
@@ -269,6 +286,21 @@ export function createFinalizeSelfUpdateHandler() {
     if (!finalizedOperation) {
       sendErrorResponse(res, 409, 'Update operation could not be finalized');
       return;
+    }
+    try {
+      await store.save();
+    } catch {
+      sendErrorResponse(res, 503, 'Self-update terminal state was not saved');
+      return;
+    }
+    if (
+      operation.helperLifecycleOwner === 'surviving-process' &&
+      (body.status === 'succeeded' || body.status === 'rolled-back')
+    ) {
+      notifySelfUpdateHelperCompletion(body.operationId, {
+        status: body.status,
+        ...(body.lastError ? { lastError: body.lastError } : {}),
+      });
     }
     releaseFinalizedHelperLifecycle(operation, body.status, body.operationId);
     operationFinalizeSecrets.delete(body.operationId);

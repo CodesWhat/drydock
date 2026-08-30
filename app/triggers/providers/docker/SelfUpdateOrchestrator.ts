@@ -7,6 +7,7 @@ import {
   executeSelfUpdateTransition,
   findDockerSocketBind as findDockerSocketBindFromSpec,
 } from './SelfUpdateTransitionShared.js';
+import { waitForSelfUpdateHelperCompletion } from './self-update-helper-completion.js';
 import type {
   SelfUpdateConfiguration,
   SelfUpdateContainerRef,
@@ -60,7 +61,7 @@ interface SelfUpdateOrchestratorDependencies {
   resolveSelfContainerIdentity: (dockerApi: unknown) => Promise<SelfContainerIdentity | null>;
   finalizeObservedHelperOperation: (
     operationId: string,
-    status: 'succeeded' | 'rolled-back',
+    status: 'succeeded' | 'rolled-back' | 'failed',
     lastError?: string,
   ) => Promise<void> | void;
 }
@@ -92,6 +93,8 @@ interface SelfUpdateOrchestratorConstructorOptions {
   resolveFinalizeSecret?: (operationId: string) => string;
   resolveSelfContainerIdentity?: (dockerApi: unknown) => Promise<SelfContainerIdentity | null>;
   finalizeObservedHelperOperation?: SelfUpdateOrchestratorDependencies['finalizeObservedHelperOperation'];
+  waitForObservedHelperCompletion?: typeof waitForSelfUpdateHelperCompletion;
+  resolveObserverNetworkMode?: () => Promise<string>;
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
   touchOperation?: (operationId: string) => void;
 }
@@ -124,6 +127,10 @@ class SelfUpdateOrchestrator {
   resolveSelfContainerIdentity: SelfUpdateOrchestratorDependencies['resolveSelfContainerIdentity'];
 
   finalizeObservedHelperOperation: SelfUpdateOrchestratorDependencies['finalizeObservedHelperOperation'];
+
+  waitForObservedHelperCompletion: typeof waitForSelfUpdateHelperCompletion;
+
+  resolveObserverNetworkMode: () => Promise<string>;
 
   private readonly selfUpdateClassifications = new WeakMap<object, SelfUpdateClassification>();
 
@@ -164,6 +171,11 @@ class SelfUpdateOrchestrator {
     this.finalizeObservedHelperOperation =
       options.finalizeObservedHelperOperation ||
       (() => missingDependency('finalizeObservedHelperOperation'));
+    this.waitForObservedHelperCompletion =
+      options.waitForObservedHelperCompletion || waitForSelfUpdateHelperCompletion;
+    this.resolveObserverNetworkMode =
+      options.resolveObserverNetworkMode ||
+      (async () => missingDependency('resolveObserverNetworkMode'));
     this.resolveHelperImage = options.resolveHelperImage;
     this.touchOperation = options.touchOperation;
   }
@@ -171,9 +183,14 @@ class SelfUpdateOrchestrator {
   async classifySelfUpdate(
     container: SelfUpdateContainerRef,
     dockerApi: unknown,
+    identityScope: 'authoritative' | 'peer' = 'authoritative',
   ): Promise<SelfUpdateClassification> {
     const imageName = container.image?.name;
     if (imageName !== 'drydock' && !imageName?.endsWith('/drydock')) {
+      this.selfUpdateClassifications.set(container, 'peer');
+      return 'peer';
+    }
+    if (identityScope === 'peer') {
       this.selfUpdateClassifications.set(container, 'peer');
       return 'peer';
     }
@@ -287,6 +304,8 @@ class SelfUpdateOrchestrator {
         observeHelperCompletion:
           classification === 'peer' && this.isInfrastructureUpdate(container),
         finalizeObservedHelperOperation: this.finalizeObservedHelperOperation,
+        waitForObservedHelperCompletion: this.waitForObservedHelperCompletion,
+        resolveObserverNetworkMode: this.resolveObserverNetworkMode,
       },
       context,
       container,

@@ -9,7 +9,6 @@ import {
   resolveHelperDockerConnection,
   validateTcpDockerHost,
 } from './SelfUpdateTransitionShared.js';
-import { SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE } from './self-update-controller.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
@@ -100,6 +99,28 @@ describe('SelfUpdateTransitionShared', () => {
     ).toBe('/var/run/docker.sock');
     expect(findDockerSocketBind({ HostConfig: { Binds: [] } })).toBeUndefined();
     expect(findDockerSocketBind(undefined)).toBeUndefined();
+  });
+
+  test.each([
+    'finalizeObservedHelperOperation',
+    'waitForObservedHelperCompletion',
+    'resolveObserverNetworkMode',
+  ])('observer mode rejects a missing %s dependency', async (missingDependency) => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(),
+      resolveObserverNetworkMode: vi.fn(),
+    });
+    delete dependencies[missingDependency];
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toThrow('Observed self-update helper completion requires a durable finalizer');
   });
 
   test('rolls back rename when helper container creation fails', async () => {
@@ -372,21 +393,20 @@ describe('SelfUpdateTransitionShared', () => {
     );
   });
 
-  test('observer mode waits for helper success and finalizes without a target callback channel', async () => {
+  test('observer mode uses an authenticated survivor callback instead of the proxy watcher', async () => {
     const context = createContext();
-    context.helperContainer.wait = vi.fn().mockResolvedValue({ StatusCode: 0 });
-    context.helperContainer.remove = vi.fn().mockResolvedValue(undefined);
-    const finalizeObservedHelperOperation = vi.fn();
-    const resolveFinalizeUrl = vi.fn(() => {
-      throw new Error('observer must not resolve a loopback callback URL');
-    });
-    const resolveFinalizeSecret = vi.fn(() => {
-      throw new Error('observer must not issue a callback secret');
-    });
+    context.helperContainer.wait = vi.fn().mockRejectedValue(new Error('proxy connection reset'));
+    context.helperContainer.remove = vi.fn().mockRejectedValue(new Error('proxy unavailable'));
+    const waitForObservedHelperCompletion = vi.fn().mockResolvedValue({ status: 'succeeded' });
+    const resolveFinalizeUrl = vi.fn(() => 'http://127.0.0.1:3000/internal/finalize');
+    const resolveFinalizeSecret = vi.fn(() => 'operation-secret');
     const dependencies = createDependencies({
+      getConfiguration: () => ({ dryrun: false, helpercompletiontimeout: 600_000 }),
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
       observeHelperCompletion: true,
-      finalizeObservedHelperOperation,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion,
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
       resolveFinalizeUrl,
       resolveFinalizeSecret,
     });
@@ -401,30 +421,37 @@ describe('SelfUpdateTransitionShared', () => {
       ),
     ).resolves.toBe(true);
 
-    expect(context.helperContainer.wait).toHaveBeenCalledOnce();
-    expect(context.helperContainer.remove).toHaveBeenCalledWith({ force: true });
-    expect(finalizeObservedHelperOperation).toHaveBeenCalledWith('infrastructure-op', 'succeeded');
-    expect(resolveFinalizeUrl).not.toHaveBeenCalled();
-    expect(resolveFinalizeSecret).not.toHaveBeenCalled();
+    expect(context.helperContainer.wait).not.toHaveBeenCalled();
+    expect(context.helperContainer.remove).not.toHaveBeenCalled();
+    expect(waitForObservedHelperCompletion).toHaveBeenCalledWith('infrastructure-op', 605_000);
+    expect(resolveFinalizeUrl).toHaveBeenCalledOnce();
+    expect(resolveFinalizeSecret).toHaveBeenCalledWith('infrastructure-op');
     expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
       expect.objectContaining({
-        Env: expect.arrayContaining(['DD_SELF_UPDATE_COMPLETION_MODE=observer']),
-        HostConfig: expect.objectContaining({ AutoRemove: false }),
+        Env: expect.arrayContaining([
+          'DD_SELF_UPDATE_COMPLETION_MODE=observer',
+          'DD_SELF_UPDATE_FINALIZE_SECRET=operation-secret',
+          'DD_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS=600000',
+        ]),
+        HostConfig: expect.objectContaining({
+          AutoRemove: true,
+          NetworkMode: 'container:drydock-current-id',
+        }),
       }),
     );
   });
 
-  test('observer mode durably finalizes a completed helper rollback', async () => {
+  test('observer mode reports a durably callback-finalized helper rollback', async () => {
     const context = createContext();
-    context.helperContainer.wait = vi
-      .fn()
-      .mockResolvedValue({ StatusCode: SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE });
-    context.helperContainer.remove = vi.fn().mockResolvedValue(undefined);
-    const finalizeObservedHelperOperation = vi.fn();
     const dependencies = createDependencies({
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
       observeHelperCompletion: true,
-      finalizeObservedHelperOperation,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({
+        status: 'rolled-back',
+        lastError: 'Self-update helper completed rollback',
+      }),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
     });
 
     await expect(
@@ -436,41 +463,51 @@ describe('SelfUpdateTransitionShared', () => {
         'infrastructure-rollback-op',
       ),
     ).rejects.toThrow('Self-update helper completed rollback');
+  });
 
-    expect(finalizeObservedHelperOperation).toHaveBeenCalledWith(
-      'infrastructure-rollback-op',
-      'rolled-back',
-      'Self-update helper completed rollback',
+  test('observer mode uses its callback network namespace with a TCP Docker connection', async () => {
+    const baseContext = createContext();
+    const dockerApi = {
+      createContainer: vi.fn().mockResolvedValue(baseContext.helperContainer),
+      modem: { host: 'docker-api', port: 2375, protocol: 'http' },
+    };
+    const context = createContext({
+      dockerApi,
+      currentContainerSpec: createCurrentContainerSpec({ HostConfig: { Binds: [] } }),
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({ status: 'succeeded' }),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+      finalizeObservedHelperOperation: vi.fn(),
+    });
+
+    await executeSelfUpdateTransition(
+      dependencies,
+      context,
+      createContainer({ name: 'remote-proxy' }),
+      { info: vi.fn(), warn: vi.fn() },
+      'tcp-observer-op',
     );
-    expect(context.helperContainer.remove).toHaveBeenCalledWith({ force: true });
+
+    expect(dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        HostConfig: {
+          AutoRemove: true,
+          NetworkMode: 'container:drydock-current-id',
+        },
+      }),
+    );
   });
 
-  test('observer mode requires a durable finalizer before mutating the target', async () => {
+  test('observer mode supplies a deterministic rollback error when callback omits one', async () => {
     const context = createContext();
-    const dependencies = createDependencies({
-      observeHelperCompletion: true,
-      finalizeObservedHelperOperation: undefined,
-    });
-
-    await expect(
-      executeSelfUpdateTransition(
-        dependencies,
-        context,
-        createContainer({ name: 'socket-proxy' }),
-        { info: vi.fn(), warn: vi.fn() },
-      ),
-    ).rejects.toThrow('Observed self-update helper completion requires a durable finalizer');
-
-    expect(dependencies.pullImage).not.toHaveBeenCalled();
-    expect(context.currentContainer.rename).not.toHaveBeenCalled();
-  });
-
-  test('observer mode rejects a helper without a completion wait contract', async () => {
-    const context = createContext();
-    context.helperContainer.remove = vi.fn().mockResolvedValue(undefined);
     const dependencies = createDependencies({
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
       observeHelperCompletion: true,
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({ status: 'rolled-back' }),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
       finalizeObservedHelperOperation: vi.fn(),
     });
 
@@ -480,21 +517,25 @@ describe('SelfUpdateTransitionShared', () => {
         context,
         createContainer({ name: 'socket-proxy' }),
         { info: vi.fn(), warn: vi.fn() },
+        'rollback-without-error-op',
       ),
-    ).rejects.toThrow('Observed self-update helper does not support waiting for completion');
-    expect(context.helperContainer.remove).toHaveBeenCalledWith({ force: true });
+    ).rejects.toThrow('Self-update helper completed rollback');
   });
 
-  test.each([
-    [1, '1'],
-    [undefined, 'unknown'],
-  ])('observer mode rejects unrecognized helper exit status %s', async (StatusCode, label) => {
+  test('observer mode durably fails after its helper hard deadline before releasing', async () => {
     const context = createContext();
-    context.helperContainer.wait = vi.fn().mockResolvedValue({ StatusCode });
+    const finalizeObservedHelperOperation = vi.fn();
     const dependencies = createDependencies({
+      getConfiguration: () => ({ dryrun: false, helpercompletiontimeout: 25 }),
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
       observeHelperCompletion: true,
-      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi
+        .fn()
+        .mockRejectedValue(
+          new Error('Observed self-update helper completion timed out after 5025ms'),
+        ),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+      finalizeObservedHelperOperation,
     });
 
     await expect(
@@ -504,30 +545,38 @@ describe('SelfUpdateTransitionShared', () => {
         createContainer({ name: 'socket-proxy' }),
         { info: vi.fn(), warn: vi.fn() },
       ),
-    ).rejects.toThrow(`Self-update helper exited with code ${label}`);
+    ).rejects.toThrow('Observed self-update helper completion timed out after 5025ms');
+    expect(finalizeObservedHelperOperation).toHaveBeenCalledWith(
+      'generated-operation-id',
+      'failed',
+      'Observed self-update helper completion timed out after 5025ms',
+    );
   });
 
-  test('observer mode does not mask success when helper cleanup fails', async () => {
+  test('observer mode requests retained exclusivity when its terminal save fails', async () => {
     const context = createContext();
-    context.helperContainer.wait = vi.fn().mockResolvedValue({ StatusCode: 0 });
-    context.helperContainer.remove = vi.fn().mockRejectedValue(new Error('remove unavailable'));
     const dependencies = createDependencies({
+      getConfiguration: () => ({ dryrun: false, helpercompletiontimeout: 25 }),
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
       observeHelperCompletion: true,
-      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi
+        .fn()
+        .mockRejectedValue(
+          new Error('Observed self-update helper completion timed out after 5025ms'),
+        ),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+      finalizeObservedHelperOperation: vi.fn().mockRejectedValue(new Error('save failed')),
     });
-    const log = { info: vi.fn(), warn: vi.fn() };
 
     await expect(
       executeSelfUpdateTransition(
         dependencies,
         context,
         createContainer({ name: 'socket-proxy' }),
-        log,
+        { info: vi.fn(), warn: vi.fn() },
       ),
-    ).resolves.toBe(true);
-    expect(log.warn).toHaveBeenCalledWith(
-      'Failed to remove observed self-update helper: remove unavailable',
+    ).rejects.toThrow(
+      'Observed self-update helper stopped but its failure was not durably saved: save failed',
     );
   });
 
@@ -582,7 +631,6 @@ describe('SelfUpdateTransitionShared', () => {
       log,
       'op-touch-test',
     );
-
     expect(touchOperation).toHaveBeenCalledOnce();
     expect(touchOperation).toHaveBeenCalledWith('op-touch-test');
 

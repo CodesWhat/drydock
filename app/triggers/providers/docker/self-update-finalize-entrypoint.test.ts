@@ -33,6 +33,42 @@ const REQUIRED_ENV_KEYS = [
 ] as const;
 
 describe('self-update-finalize entrypoint', () => {
+  test('destroys a stalled callback request at its bounded request deadline', async () => {
+    mockHttpRequest.mockReset();
+    let errorHandler: ((error: Error) => void) | undefined;
+    let timeoutHandler: (() => void) | undefined;
+    const destroy = vi.fn((error: Error) => {
+      queueMicrotask(() => errorHandler?.(error));
+    });
+    mockHttpRequest.mockReturnValue({
+      setTimeout: vi.fn((_timeoutMs: number, handler: () => void) => {
+        timeoutHandler = handler;
+      }),
+      destroy,
+      once: vi.fn((event: string, handler: (error: Error) => void) => {
+        if (event === 'error') {
+          errorHandler = handler;
+        }
+      }),
+      write: vi.fn(),
+      end: vi.fn(),
+    });
+    const { postFinalizeCallback } = await import('./self-update-finalize-client.js');
+
+    const callback = postFinalizeCallback({
+      finalizeUrl: 'http://127.0.0.1:3000/internal/finalize',
+      finalizeSecret: 'secret',
+      operationId: 'stalled-op',
+      status: 'succeeded',
+      timeoutMs: 25,
+      retryIntervalMs: 1,
+    });
+    timeoutHandler?.();
+
+    await expect(callback).rejects.toThrow('Finalize callback request timed out after 25ms');
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   test('sends the finalize secret header on callback requests', async () => {
     vi.resetModules();
     mockHttpRequest.mockReset();

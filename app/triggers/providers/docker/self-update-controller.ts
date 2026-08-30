@@ -6,9 +6,11 @@ import { disableSocketRedirects } from '../../../watchers/providers/docker/disab
 import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket-version-probe.js';
 import { waitForExecStream } from '../exec-stream.js';
 import {
+  DEFAULT_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS,
   SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE,
   validateTcpDockerHost,
 } from './SelfUpdateTransitionShared.js';
+import { finalizeSelfUpdateOperation } from './self-update-finalize-client.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
@@ -26,6 +28,7 @@ type SelfUpdateControllerConfig = {
   startTimeoutMs: number;
   healthTimeoutMs: number;
   pollIntervalMs: number;
+  helperCompletionTimeoutMs: number;
 };
 
 type ErrorWithStatusCode = {
@@ -90,12 +93,8 @@ function readConfigFromEnv(): SelfUpdateControllerConfig {
     oldContainerId: getRequiredEnv('DD_SELF_UPDATE_OLD_CONTAINER_ID'),
     oldContainerName: process.env.DD_SELF_UPDATE_OLD_CONTAINER_NAME || 'drydock',
     newContainerId: getRequiredEnv('DD_SELF_UPDATE_NEW_CONTAINER_ID'),
-    ...(completionMode === 'target-callback'
-      ? {
-          finalizeUrl: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_URL'),
-          finalizeSecret: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_SECRET'),
-        }
-      : { finalizeUrl: '', finalizeSecret: '' }),
+    finalizeUrl: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_URL'),
+    finalizeSecret: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_SECRET'),
     completionMode,
     startTimeoutMs: toPositiveInteger(
       process.env.DD_SELF_UPDATE_START_TIMEOUT_MS,
@@ -108,6 +107,10 @@ function readConfigFromEnv(): SelfUpdateControllerConfig {
     pollIntervalMs: toPositiveInteger(
       process.env.DD_SELF_UPDATE_POLL_INTERVAL_MS,
       SELF_UPDATE_POLL_INTERVAL_MS,
+    ),
+    helperCompletionTimeoutMs: toPositiveInteger(
+      process.env.DD_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS,
+      DEFAULT_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS,
     ),
   };
 }
@@ -314,6 +317,19 @@ class SelfUpdateController {
     }
   }
 
+  async finalizeFromHelper(payload: SelfUpdateTerminalFinalizePayload): Promise<void> {
+    await finalizeSelfUpdateOperation({
+      finalizeUrl: this.config.finalizeUrl,
+      finalizeSecret: this.config.finalizeSecret,
+      operationId: this.config.opId,
+      status: payload.status,
+      phase: payload.phase,
+      ...(payload.lastError ? { lastError: payload.lastError } : {}),
+      timeoutMs: this.config.helperCompletionTimeoutMs,
+      retryIntervalMs: this.config.pollIntervalMs,
+    });
+  }
+
   async restoreOldContainerName(oldContainer: Dockerode.Container): Promise<void> {
     const oldContainerInspect = await oldContainer.inspect();
     const currentName = normalizeContainerName(oldContainerInspect?.Name);
@@ -367,6 +383,11 @@ class SelfUpdateController {
 
     if (rollbackRestoreSucceeded && rollbackRestartSucceeded) {
       if (this.config.completionMode === 'observer') {
+        await this.finalizeFromHelper({
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          lastError: reason,
+        });
         throw new SelfUpdateRollbackCompletedError(reason);
       }
       await this.maybeFinalizeCallbackInContainer(this.config.oldContainerId, {
@@ -395,7 +416,12 @@ class SelfUpdateController {
     } catch (error: unknown) {
       await this.rollback(error);
     }
-    if (this.config.completionMode === 'target-callback') {
+    if (this.config.completionMode === 'observer') {
+      await this.finalizeFromHelper({
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+    } else {
       await this.maybeFinalizeCallbackInContainer(this.config.newContainerId, {
         status: 'succeeded',
         phase: 'succeeded',
@@ -436,7 +462,21 @@ export async function runSelfUpdateController(): Promise<void> {
 
 export async function runSelfUpdateControllerEntrypoint(
   runner: () => Promise<void> = runSelfUpdateController,
+  terminate: (exitCode: number) => never = process.exit,
 ): Promise<void> {
+  const observerMode = process.env.DD_SELF_UPDATE_COMPLETION_MODE === 'observer';
+  const helperCompletionTimeoutMs = toPositiveInteger(
+    process.env.DD_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS,
+    DEFAULT_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS,
+  );
+  const hardDeadline = observerMode
+    ? setTimeout(() => {
+        globalThis.console.error(
+          `[self-update] helper hard deadline reached after ${helperCompletionTimeoutMs}ms`,
+        );
+        terminate(1);
+      }, helperCompletionTimeoutMs)
+    : undefined;
   try {
     await runner();
   } catch (error: unknown) {
@@ -448,6 +488,10 @@ export async function runSelfUpdateControllerEntrypoint(
       `[self-update] controller failed: ${getErrorMessage(error, String(error))}`,
     );
     process.exitCode = 1;
+  } finally {
+    if (hardDeadline) {
+      clearTimeout(hardDeadline);
+    }
   }
 }
 

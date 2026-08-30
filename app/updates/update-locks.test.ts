@@ -437,6 +437,45 @@ describe('withContainerUpdateLocks (exclusive lifecycle coordination)', () => {
     ).resolves.toBe('ran');
   });
 
+  test('retains exclusive ownership when durable helper finalization rejects', async () => {
+    vi.resetModules();
+    const mod = await import('./update-locks.js?durable-finalize-failure');
+    const failure = new Error('terminal state save failed');
+    let regularStarted = false;
+
+    await expect(
+      mod.withContainerUpdateLocks(
+        ['container:local:infrastructure-save-failure'],
+        async () => {
+          throw failure;
+        },
+        {
+          bypassGlobalCap: true,
+          exclusive: true,
+          retainExclusiveOnError: () => ({ operationId: 'infrastructure-save-failure' }),
+        },
+      ),
+    ).rejects.toBe(failure);
+    const regular = mod.withContainerUpdateLocks(
+      ['container:local:regular-after-save-failure'],
+      async () => {
+        regularStarted = true;
+      },
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(regularStarted).toBe(false);
+    expect(mod.getUpdateLockSnapshot().lifecycle).toMatchObject({
+      retainedExclusive: true,
+      retainedOperationId: 'infrastructure-save-failure',
+      pending: 1,
+    });
+
+    mod.releaseRetainedSelfUpdateLifecycle('infrastructure-save-failure');
+    await regular;
+    expect(regularStarted).toBe(true);
+  });
+
   test('releases a retained self-update lifecycle once and drains queued regular work', async () => {
     vi.resetModules();
     const mod = await import('./update-locks.js?rollback-release');

@@ -11,6 +11,7 @@ export const configurationValid = {
   order: 100,
   autoremovetimeout: 10000,
   pulltimeout: 600000,
+  helpercompletiontimeout: 600000,
   backupcount: 3,
   simpletitle:
     '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
@@ -42,8 +43,10 @@ vi.mock('../../../configuration/index.js', async () => {
 });
 
 const mockIsMemoryStore = vi.hoisted(() => vi.fn());
+const mockSaveStore = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/index.js', () => ({
   isMemoryStore: (...args: any[]) => mockIsMemoryStore(...args),
+  save: (...args: any[]) => mockSaveStore(...args),
 }));
 
 const mockOffloadSbomDocuments = vi.hoisted(() => vi.fn());
@@ -168,7 +171,7 @@ vi.mock('../../../registry', () => ({
 
 /** Default registry state used by the Docker trigger test suite */
 function createDefaultRegistryState() {
-  return {
+  const state = {
     watcher: {
       'docker.test': {
         getId: () => 'docker.test',
@@ -251,6 +254,8 @@ function createDefaultRegistryState() {
       },
     },
   };
+  state.watcher['docker.local'] = state.watcher['docker.test'];
+  return state;
 }
 
 // --- Shared factories and helpers ---
@@ -456,6 +461,7 @@ export function registerCommonDockerBeforeEach() {
     });
     mockGetStoreConfiguration.mockReturnValue({ path: '/test/store' });
     mockIsMemoryStore.mockReturnValue(true);
+    mockSaveStore.mockResolvedValue(undefined);
     mockOffloadSbomDocuments.mockImplementation(async ({ sbom }) => sbom);
     mockCreateSbomStorage.mockReturnValue(mockSbomStorage);
     mockResolveConfiguredPath.mockImplementation((value: string) => value);
@@ -492,6 +498,7 @@ export function getDockerTestMocks() {
     mockGetSecurityConfiguration,
     mockGetStoreConfiguration,
     mockIsMemoryStore,
+    mockSaveStore,
     mockOffloadSbomDocuments,
     mockCreateSbomStorage,
     mockSbomStorage,

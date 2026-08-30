@@ -10,6 +10,7 @@ import {
 } from './self-update-controller.js';
 
 const mockDockerodeCtor = vi.hoisted(() => vi.fn());
+const mockFinalizeSelfUpdateOperation = vi.hoisted(() => vi.fn());
 
 vi.mock('dockerode', () => ({
   default: mockDockerodeCtor,
@@ -19,6 +20,9 @@ vi.mock('../../../watchers/providers/docker/disable-socket-redirects.js', () => 
 }));
 vi.mock('../../../watchers/providers/docker/socket-version-probe.js', () => ({
   probeSocketApiVersion: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('./self-update-finalize-client.js', () => ({
+  finalizeSelfUpdateOperation: (...args: unknown[]) => mockFinalizeSelfUpdateOperation(...args),
 }));
 
 const DEFAULT_CONTROLLER_ENV = {
@@ -32,6 +36,7 @@ const DEFAULT_CONTROLLER_ENV = {
   DD_SELF_UPDATE_START_TIMEOUT_MS: '1000',
   DD_SELF_UPDATE_HEALTH_TIMEOUT_MS: '1000',
   DD_SELF_UPDATE_POLL_INTERVAL_MS: '1',
+  DD_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS: '1000',
 } as const;
 
 type ControllerEnvName = keyof typeof DEFAULT_CONTROLLER_ENV;
@@ -187,6 +192,7 @@ describe('self-update-controller orchestration', () => {
     setControllerEnv();
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockFinalizeSelfUpdateOperation.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -224,8 +230,6 @@ describe('self-update-controller orchestration', () => {
   test('observer mode completes a third-party target without target-side Node or scripts', async () => {
     setControllerEnv({
       DD_SELF_UPDATE_COMPLETION_MODE: 'observer',
-      DD_SELF_UPDATE_FINALIZE_URL: undefined,
-      DD_SELF_UPDATE_FINALIZE_SECRET: undefined,
     });
     const oldContainer = createThirdPartyOldContainer();
     const newContainer = createThirdPartyNewContainer();
@@ -235,14 +239,19 @@ describe('self-update-controller orchestration', () => {
 
     expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
     expect(newContainer).not.toHaveProperty('exec');
+    expect(mockFinalizeSelfUpdateOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: 'op-123',
+        status: 'succeeded',
+        phase: 'succeeded',
+      }),
+    );
     expect(getLoggedStates().some((line) => line.includes('FINALIZE_FAILED'))).toBe(false);
   });
 
   test('observer mode reports a completed third-party rollback through the helper exit status', async () => {
     setControllerEnv({
       DD_SELF_UPDATE_COMPLETION_MODE: 'observer',
-      DD_SELF_UPDATE_FINALIZE_URL: undefined,
-      DD_SELF_UPDATE_FINALIZE_SECRET: undefined,
     });
     const oldContainer = createThirdPartyOldContainer({
       inspect: vi
@@ -264,6 +273,14 @@ describe('self-update-controller orchestration', () => {
       expect(oldContainer.rename).toHaveBeenCalledWith({ name: 'drydock' });
       expect(oldContainer.start).toHaveBeenCalledOnce();
       expect(oldContainer).not.toHaveProperty('exec');
+      expect(mockFinalizeSelfUpdateOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operationId: 'op-123',
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          lastError: 'proxy failed to start',
+        }),
+      );
     } finally {
       process.exitCode = originalExitCode;
     }
@@ -671,6 +688,33 @@ describe('self-update-controller orchestration', () => {
     expect(console.error).toHaveBeenCalledWith('[self-update] controller failed: entrypoint boom');
     expect(process.exitCode).toBe(1);
     process.exitCode = originalExitCode;
+  });
+
+  test('observer helper hard deadline terminates a controller stalled in Docker', async () => {
+    vi.useFakeTimers();
+    setControllerEnv({
+      DD_SELF_UPDATE_COMPLETION_MODE: 'observer',
+      DD_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS: '25',
+    });
+    let finishRunner: () => void = () => {};
+    const runner = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishRunner = resolve;
+        }),
+    );
+    const terminate = vi.fn(() => undefined as never);
+
+    const entrypoint = runSelfUpdateControllerEntrypoint(runner, terminate);
+    await vi.advanceTimersByTimeAsync(25);
+
+    expect(terminate).toHaveBeenCalledWith(1);
+    expect(console.error).toHaveBeenCalledWith(
+      '[self-update] helper hard deadline reached after 25ms',
+    );
+    finishRunner();
+    await entrypoint;
+    vi.useRealTimers();
   });
 
   test('tcp branch: logs resolved host at INFO level', async () => {

@@ -37,6 +37,7 @@ If Drydock restarts while an update is in progress, it automatically reconciles 
 | `DD_ACTION_DOCKER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
 | `DD_ACTION_DOCKER_{trigger_name}_AUTOREMOVETIMEOUT` | ⚪ | Wait timeout for container auto-removal (ms) | Integer | `10000` |
 | `DD_ACTION_DOCKER_{trigger_name}_PULLTIMEOUT` | ⚪ | Maximum time allowed for an image pull and its progress stream (ms) | Positive integer | `600000` (10 min) |
+| `DD_ACTION_DOCKER_{trigger_name}_HELPERCOMPLETIONTIMEOUT` | ⚪ | Hard deadline for an infrastructure-update helper to complete and report its durably saved result (ms) | Positive integer | `600000` (10 min) |
 
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). It picks up the Docker configuration from the [configured Docker watchers](/docs/configuration/watchers) so it can handle updates on Local **and** Remote Docker hosts.
 

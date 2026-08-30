@@ -62,6 +62,7 @@ class UpdateLifecycleGate {
     exclusive: boolean,
     fn: () => Promise<T>,
     retainExclusiveOnResult?: (result: T) => RetainedExclusiveLifecycle | undefined,
+    retainExclusiveOnError?: (error: unknown) => RetainedExclusiveLifecycle | undefined,
   ): Promise<T> {
     const release = await this.acquire(exclusive);
     if (exclusive) {
@@ -75,6 +76,12 @@ class UpdateLifecycleGate {
           ? retainExclusiveOnResult(result)
           : undefined;
       return result;
+    } catch (error: unknown) {
+      retainedLifecycle =
+        exclusive && retainExclusiveOnError !== undefined
+          ? retainExclusiveOnError(error)
+          : undefined;
+      throw error;
     } finally {
       if (retainedLifecycle) {
         const releasedEarly = this.earlyReleaseOperationIds.has(retainedLifecycle.operationId);
@@ -222,6 +229,7 @@ export async function withContainerUpdateLocks<T>(
     bypassGlobalCap?: boolean;
     exclusive?: boolean;
     retainExclusiveOnResult?: (result: T) => RetainedExclusiveLifecycle | undefined;
+    retainExclusiveOnError?: (error: unknown) => RetainedExclusiveLifecycle | undefined;
   },
 ): Promise<T> {
   return updateLifecycleGate.withAccess(
@@ -239,6 +247,7 @@ export async function withContainerUpdateLocks<T>(
       }
     },
     options?.retainExclusiveOnResult,
+    options?.retainExclusiveOnError,
   );
 }
 

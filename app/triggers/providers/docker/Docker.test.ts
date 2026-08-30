@@ -22,6 +22,7 @@ const configurationValid = {
   order: 100,
   autoremovetimeout: 10000,
   pulltimeout: 600000,
+  helpercompletiontimeout: 600000,
   backupcount: 3,
   simpletitle:
     '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
@@ -155,73 +156,75 @@ vi.mock('./compose-file-sync.js', () => ({
 
 vi.mock('../../../registry', () => ({
   getState() {
-    return {
-      watcher: {
-        'docker.test': {
-          getId: () => 'docker.test',
-          watch: () => Promise.resolve(),
-          dockerApi: {
-            getContainer: (id) => {
-              if (id === '123456789') {
-                return Promise.resolve({
-                  inspect: () =>
-                    Promise.resolve({
-                      Name: '/container-name',
-                      Id: '123456798',
-                      State: {
-                        Running: true,
+    const dockerWatcher = {
+      getId: () => 'docker.test',
+      watch: () => Promise.resolve(),
+      dockerApi: {
+        getContainer: (id) => {
+          if (id === '123456789') {
+            return Promise.resolve({
+              inspect: () =>
+                Promise.resolve({
+                  Name: '/container-name',
+                  Id: '123456798',
+                  State: {
+                    Running: true,
+                  },
+                  NetworkSettings: {
+                    Networks: {
+                      test: {
+                        Aliases: ['9708fc7b44f2', 'test'],
                       },
-                      NetworkSettings: {
-                        Networks: {
-                          test: {
-                            Aliases: ['9708fc7b44f2', 'test'],
-                          },
-                        },
-                      },
-                    }),
-                  stop: () => Promise.resolve(),
-                  remove: () => Promise.resolve(),
-                  start: () => Promise.resolve(),
-                  rename: () => Promise.resolve(),
-                });
-              }
-              return Promise.reject(new Error('Error when getting container'));
-            },
-            createContainer: (container) => {
-              if (container.name === 'container-name') {
-                return Promise.resolve({
-                  start: () => Promise.resolve(),
-                  inspect: () =>
-                    Promise.resolve({
-                      Id: 'new-container-id',
-                      State: { Health: { Status: 'healthy' } },
-                    }),
-                  stop: () => Promise.resolve(),
-                  remove: () => Promise.resolve(),
-                });
-              }
-              return Promise.reject(new Error('Error when creating container'));
-            },
-            pull: (image) => {
-              if (image === 'test/test:1.2.3' || image === 'my-registry/test/test:4.5.6') {
+                    },
+                  },
+                }),
+              stop: () => Promise.resolve(),
+              remove: () => Promise.resolve(),
+              start: () => Promise.resolve(),
+              rename: () => Promise.resolve(),
+            });
+          }
+          return Promise.reject(new Error('Error when getting container'));
+        },
+        createContainer: (container) => {
+          if (container.name === 'container-name') {
+            return Promise.resolve({
+              start: () => Promise.resolve(),
+              inspect: () =>
+                Promise.resolve({
+                  Id: 'new-container-id',
+                  State: { Health: { Status: 'healthy' } },
+                }),
+              stop: () => Promise.resolve(),
+              remove: () => Promise.resolve(),
+            });
+          }
+          return Promise.reject(new Error('Error when creating container'));
+        },
+        pull: (image) => {
+          if (image === 'test/test:1.2.3' || image === 'my-registry/test/test:4.5.6') {
+            return Promise.resolve();
+          }
+          return Promise.reject(new Error('Error when pulling image'));
+        },
+        getImage: (image) =>
+          Promise.resolve({
+            remove: () => {
+              if (image === 'test/test:1.2.3') {
                 return Promise.resolve();
               }
-              return Promise.reject(new Error('Error when pulling image'));
+              return Promise.reject(new Error('Error when removing image'));
             },
-            getImage: (image) =>
-              Promise.resolve({
-                remove: () => {
-                  if (image === 'test/test:1.2.3') {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('Error when removing image'));
-                },
-              }),
-            modem: {
-              followProgress: (pullStream, res) => res(),
-            },
-          },
+          }),
+        modem: {
+          followProgress: (pullStream, res) => res(),
         },
+      },
+    };
+    return {
+      watcher: {
+        'docker.test': dockerWatcher,
+        'docker.local': dockerWatcher,
       },
       registry: {
         hub: {
@@ -4436,17 +4439,21 @@ describe('extracted lifecycle delegation', () => {
     });
   });
 
-  test('finalizeObservedHelperOperation durably records helper success and rollback', () => {
+  test('finalizeObservedHelperOperation durably records helper success, rollback, and failure', async () => {
     mockMarkOperationTerminal
       .mockReturnValueOnce({ id: 'op-success', status: 'succeeded' })
-      .mockReturnValueOnce({ id: 'op-rollback', status: 'rolled-back' });
+      .mockReturnValueOnce({ id: 'op-rollback', status: 'rolled-back' })
+      .mockReturnValueOnce({ id: 'op-failed', status: 'failed' })
+      .mockReturnValueOnce({ id: 'op-failed-without-error', status: 'failed' });
 
-    docker.finalizeObservedHelperOperation('op-success', 'succeeded');
-    docker.finalizeObservedHelperOperation(
+    await docker.finalizeObservedHelperOperation('op-success', 'succeeded');
+    await docker.finalizeObservedHelperOperation(
       'op-rollback',
       'rolled-back',
       'Self-update helper completed rollback',
     );
+    await docker.finalizeObservedHelperOperation('op-failed', 'failed', 'helper deadline');
+    await docker.finalizeObservedHelperOperation('op-failed-without-error', 'failed');
 
     expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(1, 'op-success', {
       status: 'succeeded',
@@ -4457,19 +4464,24 @@ describe('extracted lifecycle delegation', () => {
       phase: 'rolled-back',
       lastError: 'Self-update helper completed rollback',
     });
+    expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(3, 'op-failed', {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'helper deadline',
+    });
   });
 
-  test('finalizeObservedHelperOperation rejects missing or conflicting durable state', () => {
+  test('finalizeObservedHelperOperation rejects missing or conflicting durable state', async () => {
     mockMarkOperationTerminal
       .mockReturnValueOnce(undefined)
       .mockReturnValueOnce({ id: 'op-conflict', status: 'failed' });
 
-    expect(() => docker.finalizeObservedHelperOperation('op-missing', 'succeeded')).toThrow(
+    await expect(docker.finalizeObservedHelperOperation('op-missing', 'succeeded')).rejects.toThrow(
       'Failed to durably finalize observed helper operation op-missing',
     );
-    expect(() => docker.finalizeObservedHelperOperation('op-conflict', 'rolled-back')).toThrow(
-      'Failed to durably finalize observed helper operation op-conflict',
-    );
+    await expect(
+      docker.finalizeObservedHelperOperation('op-conflict', 'rolled-back'),
+    ).rejects.toThrow('Failed to durably finalize observed helper operation op-conflict');
   });
 
   test('executeContainerUpdate should delegate to containerUpdateExecutor', async () => {
@@ -4754,7 +4766,7 @@ describe('extracted lifecycle delegation', () => {
         phase: 'succeeded',
       });
 
-      handler(req, res);
+      await handler(req, res);
 
       expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-self-1', {
         status: 'succeeded',

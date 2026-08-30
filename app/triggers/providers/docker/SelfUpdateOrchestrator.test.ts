@@ -99,6 +99,9 @@ describe('SelfUpdateOrchestrator', () => {
     expect(() => orchestrator.finalizeObservedHelperOperation('op-1', 'succeeded')).toThrow(
       'SelfUpdateOrchestrator requires dependency "finalizeObservedHelperOperation"',
     );
+    await expect(orchestrator.resolveObserverNetworkMode()).rejects.toThrow(
+      'SelfUpdateOrchestrator requires dependency "resolveObserverNetworkMode"',
+    );
   });
 
   test('constructor default identity resolver uses Docker runtime evidence', async () => {
@@ -308,6 +311,8 @@ describe('SelfUpdateOrchestrator', () => {
     const orchestrator = createOrchestrator({
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
       finalizeObservedHelperOperation,
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({ status: 'succeeded' }),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
     });
     const infrastructure = createContainer({
       name: 'socket-proxy',
@@ -319,7 +324,7 @@ describe('SelfUpdateOrchestrator', () => {
       orchestrator.execute(context, infrastructure, { info: vi.fn(), warn: vi.fn() }, 'infra-op'),
     ).resolves.toBe(true);
 
-    expect(finalizeObservedHelperOperation).toHaveBeenCalledWith('infra-op', 'succeeded');
+    expect(finalizeObservedHelperOperation).not.toHaveBeenCalled();
   });
 
   test('maybeNotify emits self-update-starting only for self-update containers', async () => {
