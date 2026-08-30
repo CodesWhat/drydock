@@ -1,11 +1,17 @@
 import { argon2, createHash, timingSafeEqual } from 'node:crypto';
+import type { AuthRequest } from '../../../api/auth-types.js';
+import type { Authenticator } from '../../../api/authenticator-chain.js';
+import type { AuthenticatedPrincipal } from '../../../api/principal.js';
 import {
   observeAuthLoginDuration,
   recordAuthLogin,
   recordAuthUsernameMismatch,
 } from '../../../prometheus/auth.js';
 import Authentication from '../Authentication.js';
-import BasicStrategy from './BasicStrategy.js';
+import {
+  getBasicAuthorizationFailureStatus,
+  parseBasicAuthorization,
+} from './basic-authorization.js';
 
 interface BasicConfiguration {
   user: string;
@@ -316,10 +322,39 @@ class Basic extends Authentication<BasicConfiguration> {
   }
 
   /**
-   * Return passport strategy.
+   * Return the authenticator this provider contributes to the chain.
+   *
+   * persistsSession is false: a credential presented in a header proves the
+   * caller for this request only, and nothing on this path can turn it into a
+   * stored session.
    */
-  getStrategy(_app?: unknown) {
-    return new BasicStrategy((user, pass, done) => this.authenticate(user, pass, done));
+  getAuthenticator(_app?: unknown): Authenticator {
+    return {
+      id: this.getId(),
+      persistsSession: false,
+      authenticate: (req: AuthRequest) => this.authenticateRequest(req),
+      getFailureStatus: (req: AuthRequest) =>
+        getBasicAuthorizationFailureStatus(req.headers?.authorization),
+    };
+  }
+
+  /**
+   * Resolve an `Authorization: Basic` header to a principal, or undefined so
+   * the chain moves on. A wrong password and a missing header are the same
+   * answer here; only the shared login route distinguishes them, and only to
+   * count the attempt against the lockout budget.
+   */
+  authenticateRequest(req: AuthRequest): Promise<AuthenticatedPrincipal | undefined> {
+    const authorization = parseBasicAuthorization(req.headers?.authorization);
+    if (authorization.outcome !== 'credentials') {
+      return Promise.resolve(undefined);
+    }
+
+    return new Promise((resolve) => {
+      this.authenticate(authorization.userid, authorization.password, (_error, user) => {
+        resolve(user ? { kind: 'basic', username: user.username } : undefined);
+      });
+    });
   }
 
   getStrategyDescription() {

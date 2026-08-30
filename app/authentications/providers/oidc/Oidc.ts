@@ -5,6 +5,10 @@ import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
 import { Agent, fetch as undiciFetch } from 'undici';
 import { v4 as uuid } from 'uuid';
+import type { AuthRequest } from '../../../api/auth-types.js';
+import type { Authenticator } from '../../../api/authenticator-chain.js';
+import type { AuthenticatedPrincipal } from '../../../api/principal.js';
+import { writeSessionPrincipal } from '../../../api/session-principal.js';
 import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
 import { sanitizeLogParam } from '../../../log/sanitize.js';
 import { observeAuthLoginDuration, recordAuthLogin } from '../../../prometheus/auth.js';
@@ -12,7 +16,6 @@ import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorChainMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
 import Authentication from '../Authentication.js';
-import OidcStrategy from './OidcStrategy.js';
 
 const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
@@ -101,7 +104,7 @@ type OidcCallbackRequest = Request & {
   };
   originalUrl?: string;
   url: string;
-  login: (user: OidcAuthenticatedUser, done: (error?: unknown) => void) => void;
+  principal?: AuthenticatedPrincipal;
 };
 
 interface OidcCallbackValidationResult {
@@ -552,10 +555,10 @@ class Oidc extends Authentication<OidcConfiguration> {
   }
 
   /**
-   * Return passport strategy.
-   * @param app
+   * Mount the browser-facing redirect and callback routes, plus the limiter
+   * that fronts them. Called once, when the provider joins the chain.
    */
-  getStrategy(app?: OidcAppLike) {
+  registerAuthenticationRoutes(app?: OidcAppLike): void {
     if (!app) {
       throw new Error('OIDC strategy requires an express app instance');
     }
@@ -573,18 +576,55 @@ class Oidc extends Authentication<OidcConfiguration> {
     app.get(`/auth/oidc/${this.name}/cb`, (req, res) => {
       void this.callback(req, res);
     });
-    const strategy = new OidcStrategy(
-      {
-        config: this.client,
-        scope: 'openid email profile',
-        name: 'oidc',
-      },
-      (accessToken, done) => {
-        void this.verify(accessToken, done);
-      },
-      this.log,
-    );
-    return strategy;
+  }
+
+  /**
+   * Return the authenticator this provider contributes to the chain.
+   *
+   * It covers the bearer path only — a machine client presenting an OIDC
+   * access token on the request. The browser flow is the redirect/callback
+   * pair above, which establishes a session and is then served by the session
+   * authenticator that fronts the chain.
+   *
+   * persistsSession is false: a token in a header proves the caller for this
+   * request and nothing more.
+   */
+  getAuthenticator(app?: OidcAppLike): Authenticator {
+    this.registerAuthenticationRoutes(app);
+    return {
+      id: this.getId(),
+      persistsSession: false,
+      authenticate: (req: AuthRequest) => this.authenticateBearer(req),
+    };
+  }
+
+  /**
+   * Resolve an `Authorization: Bearer` access token to a principal, or
+   * undefined so the chain moves on.
+   */
+  authenticateBearer(req: AuthRequest): Promise<AuthenticatedPrincipal | undefined> {
+    this.log.debug('Executing oidc strategy');
+    const rawAuthorization = req.headers?.authorization;
+    const authorization = Array.isArray(rawAuthorization)
+      ? rawAuthorization[0] || ''
+      : (rawAuthorization ?? '');
+    const accessToken = authorization.match(/^Bearer\s+(\S+)$/)?.[1] ?? '';
+    if (accessToken === '') {
+      this.log.debug('No bearer token provided');
+      return Promise.resolve(undefined);
+    }
+
+    return new Promise((resolve) => {
+      void this.verify(accessToken, (error, user) => {
+        if (error || !user) {
+          this.log.warn('Bearer token validation failed');
+          resolve(undefined);
+          return;
+        }
+        this.log.debug('Bearer token validated');
+        resolve({ kind: 'oidc', username: user.username });
+      });
+    });
   }
 
   getStrategyDescription() {
@@ -746,7 +786,7 @@ class Oidc extends Authentication<OidcConfiguration> {
         currentSessionId: req.sessionID,
       });
 
-      this.completePassportLogin(req, res, user, loginVerificationStartedAt);
+      this.completeLogin(req, res, user, loginVerificationStartedAt);
     } catch (err: unknown) {
       this.log.warn(`Error when logging the user [${sanitizeOidcErrorMessage(err)}]`);
       this.recordLoginMetrics('error', loginVerificationStartedAt);
@@ -893,27 +933,32 @@ class Oidc extends Authentication<OidcConfiguration> {
     session.cookie.maxAge = null;
   }
 
-  completePassportLogin(
+  /**
+   * Write the authenticated identity into the session and send the browser on.
+   *
+   * This used to be `req.login()`, which regenerated the session a second time
+   * — persistCallbackSession has already regenerated it — and wiped the
+   * remember-me preference that was set moments earlier, so the 30-day cookie
+   * never survived to be applied. Writing the principal directly leaves the
+   * session persistCallbackSession created intact, and express-session saves it
+   * before the redirect is flushed.
+   */
+  completeLogin(
     req: OidcCallbackRequest,
     res: Response,
     user: OidcAuthenticatedUser,
     loginVerificationStartedAt: bigint,
   ): void {
-    this.log.debug('Perform passport login');
-    req.login(user, (err) => {
-      if (err) {
-        this.log.warn(`Error when logging the user [${sanitizeOidcErrorMessage(err)}]`);
-        this.recordLoginMetrics('error', loginVerificationStartedAt);
-        this.respondAuthenticationError(res, 'Authentication failed');
-        return;
-      }
+    this.log.debug('Persist the authenticated session');
+    const principal: AuthenticatedPrincipal = { kind: 'oidc', username: user.username };
+    writeSessionPrincipal(req as unknown as AuthRequest, principal);
+    req.principal = principal;
 
-      // Apply remember-me preference stored before OIDC redirect
-      this.applyRememberMePreference(req.session);
-      this.log.debug('User authenticated => redirect to app');
-      this.recordLoginMetrics('success', loginVerificationStartedAt);
-      res.redirect(getPublicUrl(req) || '/');
-    });
+    // Apply remember-me preference stored before OIDC redirect
+    this.applyRememberMePreference(req.session);
+    this.log.debug('User authenticated => redirect to app');
+    this.recordLoginMetrics('success', loginVerificationStartedAt);
+    res.redirect(getPublicUrl(req) || '/');
   }
 
   async verify(accessToken: string, done: OidcVerifyDone): Promise<void> {

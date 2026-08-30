@@ -1,22 +1,36 @@
 import type { Request } from 'express';
 import { ipKeyGenerator, type ValueDeterminingMiddleware } from 'express-rate-limit';
+import {
+  type AuthenticatedPrincipal,
+  getIdentityUsername,
+  isIdentityPrincipal,
+} from './principal.js';
 
 export type IdentityAwareRateLimitRequestLike = {
+  path?: unknown;
   ip?: unknown;
   socket?: {
     remoteAddress?: unknown;
   };
-  isAuthenticated?: () => boolean;
+  principal?: AuthenticatedPrincipal;
+  headers?: { authorization?: unknown };
   sessionID?: unknown;
-  user?: {
-    username?: unknown;
-  };
 };
 
+/**
+ * Whether this request carries an identity a budget can be charged to.
+ *
+ * Anonymous access does not count. It produces a principal so that the access
+ * gate has something to read, but every anonymous caller is the same caller,
+ * and express-session mints a fresh sessionID per cookie-less request — keying
+ * on it would hand every request its own budget. This is the same answer
+ * passport's `req.isAuthenticated()` gave, which was `!!req.user`, and
+ * passport-anonymous never set a user.
+ */
 export function isRequestAuthenticated(
-  request: Pick<IdentityAwareRateLimitRequestLike, 'isAuthenticated'>,
+  request: Pick<IdentityAwareRateLimitRequestLike, 'principal'>,
 ): boolean {
-  return typeof request.isAuthenticated === 'function' && request.isAuthenticated();
+  return isIdentityPrincipal(request.principal);
 }
 
 function getTrimmedString(value: unknown): string | undefined {
@@ -44,12 +58,13 @@ function getAuthenticatedIdentityRateLimitKey(
     return undefined;
   }
 
-  const sessionId = getTrimmedString(request.sessionID);
+  const sessionId =
+    request.principal?.kind === 'session' ? getTrimmedString(request.sessionID) : undefined;
   if (sessionId) {
     return `session:${sessionId}`;
   }
 
-  const username = getTrimmedString(request.user?.username);
+  const username = getTrimmedString(getIdentityUsername(request));
   if (username) {
     return `user:${username}`;
   }
@@ -60,6 +75,9 @@ function getAuthenticatedIdentityRateLimitKey(
 export function getAuthenticatedRouteRateLimitKey(
   request: IdentityAwareRateLimitRequestLike,
 ): string {
+  if (request.path === '/login') {
+    return getIpRateLimitKey(request);
+  }
   return getAuthenticatedIdentityRateLimitKey(request) || getIpRateLimitKey(request);
 }
 

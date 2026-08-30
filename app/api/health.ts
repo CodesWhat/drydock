@@ -14,9 +14,9 @@ let isAuthReady: AuthReadyFn = () => true;
 
 /**
  * Set the auth readiness check.
- * Called by api/index.ts after auth strategies have been registered so that
- * /health will not report healthy until passport is fully wired up and login
- * requests will be accepted.
+ * Called by api/index.ts before auth.init() so that /health will not report
+ * healthy until the authenticator chain holds something that can authenticate
+ * a caller and login requests will be accepted.
  */
 export function setAuthReadyFn(fn: AuthReadyFn): void {
   isAuthReady = fn;

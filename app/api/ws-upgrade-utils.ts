@@ -2,6 +2,7 @@ import { type IncomingMessage, ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import type { AuthenticatedPrincipal } from './principal.js';
 import {
   getAuthenticatedRouteRateLimitKey,
   type IdentityAwareRateLimitRequestLike,
@@ -19,9 +20,8 @@ export type SessionMiddleware = (
 export type UpgradeRequest = IncomingMessage & {
   session?: { passport?: { user?: unknown } };
   sessionID?: unknown;
-  isAuthenticated?: () => boolean;
   ip?: string;
-  user?: { username?: unknown };
+  principal?: AuthenticatedPrincipal;
 };
 
 /**
@@ -355,19 +355,20 @@ function getUsernameFromPassportSessionUser(passportUser: unknown): unknown {
   }
 }
 
-function getUpgradeRateLimitUser(
-  request: UpgradeRequest,
-): IdentityAwareRateLimitRequestLike['user'] | undefined {
-  if (request.user) {
-    return request.user;
+/**
+ * The identity to charge this upgrade to.
+ *
+ * An upgrade never runs the authenticator chain — it only gets the session
+ * middleware — so the principal is reconstructed from the stored session
+ * payload unless a caller already attached one.
+ */
+function getUpgradeRateLimitPrincipal(request: UpgradeRequest): AuthenticatedPrincipal | undefined {
+  if (request.principal) {
+    return request.principal;
   }
 
   const username = getUsernameFromPassportSessionUser(request.session?.passport?.user);
-  if (username === undefined) {
-    return undefined;
-  }
-
-  return { username };
+  return { kind: 'session', username: typeof username === 'string' ? username : '' };
 }
 
 function toIdentityAwareUpgradeRateLimitRequest(
@@ -376,8 +377,12 @@ function toIdentityAwareUpgradeRateLimitRequest(
 ): IdentityAwareRateLimitRequestLike {
   return {
     ip: request.socket.remoteAddress,
-    isAuthenticated: () => authenticated === true,
     sessionID: request.sessionID,
-    user: getUpgradeRateLimitUser(request),
+    // An unauthenticated upgrade carries no principal at all, so it keys by
+    // address exactly as it did when isAuthenticated() answered false. The
+    // strict comparison is deliberate: a truthy non-boolean is not an
+    // authenticated request, which is what `authenticated === true` meant here
+    // before the principal replaced the isAuthenticated() thunk.
+    principal: authenticated === true ? getUpgradeRateLimitPrincipal(request) : undefined,
   };
 }

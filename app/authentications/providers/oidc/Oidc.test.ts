@@ -2,7 +2,10 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import express from 'express';
+import session from 'express-session';
 import { ClientSecretPost, Configuration } from 'openid-client';
+import { setRememberMe } from '../../../api/auth-remember-me.js';
+import { requireSameOriginForMutations } from '../../../api/csrf.js';
 import * as configuration from '../../../configuration/index.js';
 
 const { mockRecordAuthLogin, mockObserveAuthLoginDuration, mockUndiciFetch } = vi.hoisted(() => ({
@@ -64,7 +67,6 @@ function createReq(overrides = {}) {
   return {
     protocol: 'https',
     hostname: 'dd.example.com',
-    login: vi.fn(),
     ...overrides,
   };
 }
@@ -83,16 +85,24 @@ function createPendingCheck(codeVerifier = 'code-verifier') {
   return { codeVerifier, createdAt: Date.now() };
 }
 
-function createCallbackReq(
-  originalUrl: string,
-  session: any,
-  loginBehavior?: (user, done) => void,
-) {
-  return createReq({
-    originalUrl,
-    session,
-    login: vi.fn(loginBehavior || ((user, done) => done())),
+function createCallbackReq(originalUrl: string, session: any) {
+  return createReq({ originalUrl, session });
+}
+
+/** Make persisting the authenticated identity throw, as a store failure would. */
+function failSessionPersistence(session: any, message: string) {
+  Object.defineProperty(session, 'passport', {
+    configurable: true,
+    get: () => undefined,
+    set: () => {
+      throw new Error(message);
+    },
   });
+}
+
+/** Assert the callback persisted the identity under the session user key. */
+function expectPersistedUser(session: any, username: string) {
+  expect(session.passport).toEqual({ user: JSON.stringify({ username }) });
 }
 
 /** Set up a successful grant + userInfo mock on the openidClientMock */
@@ -289,16 +299,7 @@ test('validateConfiguration should allow cafile and insecure TLS options', async
   }
 });
 
-test('getStrategy should return an Authentication strategy', async () => {
-  const strategy = oidc.getStrategy(app);
-  expect(strategy.name).toEqual('oidc');
-});
-
-test('getStrategy should throw when express app instance is missing', async () => {
-  expect(() => oidc.getStrategy()).toThrowError('OIDC strategy requires an express app instance');
-});
-
-test('getStrategy should wire redirect/callback routes to oidc handlers', async () => {
+test('getAuthenticator should wire redirect/callback routes to oidc handlers', async () => {
   const appMock = {
     use: vi.fn(),
     get: vi.fn(),
@@ -306,7 +307,7 @@ test('getStrategy should wire redirect/callback routes to oidc handlers', async 
   const redirectSpy = vi.spyOn(oidc, 'redirect').mockResolvedValue(undefined);
   const callbackSpy = vi.spyOn(oidc, 'callback').mockResolvedValue(undefined);
 
-  oidc.getStrategy(appMock);
+  oidc.getAuthenticator(appMock);
 
   const redirectHandler = appMock.get.mock.calls.find(([path]) => path.endsWith('/redirect'))[1];
   const callbackHandler = appMock.get.mock.calls.find(([path]) => path.endsWith('/cb'))[1];
@@ -320,21 +321,112 @@ test('getStrategy should wire redirect/callback routes to oidc handlers', async 
   expect(callbackSpy).toHaveBeenCalledWith(req, res);
 });
 
-test('getStrategy should delegate strategy verify callback to oidc.verify', async () => {
-  const appMock = {
-    use: vi.fn(),
-    get: vi.fn(),
-  };
-  const verifySpy = vi.spyOn(oidc, 'verify').mockResolvedValue(undefined);
-  const strategy = oidc.getStrategy(appMock);
-  const done = vi.fn();
+describe('getAuthenticator / authenticateBearer', () => {
+  function createAuthenticatorApp() {
+    return { use: vi.fn(), get: vi.fn() };
+  }
 
-  strategy.verify('access-token', done);
+  beforeEach(() => {
+    oidc.type = 'oidc';
+    oidc.name = 'default';
+  });
 
-  expect(verifySpy).toHaveBeenCalledWith('access-token', done);
+  test('declares its registry id and refuses to persist a session', () => {
+    const authenticator = oidc.getAuthenticator(createAuthenticatorApp());
+
+    expect(authenticator.id).toBe('oidc.default');
+    expect(authenticator.persistsSession).toBe(false);
+  });
+
+  test('wires the redirect and callback routes exactly as the strategy did', () => {
+    const appMock = createAuthenticatorApp();
+
+    oidc.getAuthenticator(appMock);
+
+    expect(appMock.get.mock.calls.map(([routePath]) => routePath)).toEqual([
+      '/auth/oidc/default/redirect',
+      '/auth/oidc/default/cb',
+    ]);
+    expect(appMock.use).toHaveBeenCalledWith('/auth/oidc/default', expect.any(Function));
+  });
+
+  test('throws when no express app instance is supplied', () => {
+    expect(() => oidc.getAuthenticator()).toThrowError(
+      'OIDC strategy requires an express app instance',
+    );
+  });
+
+  test('declines a request carrying no Authorization header', async () => {
+    await expect(oidc.authenticateBearer({ headers: {} })).resolves.toBeUndefined();
+
+    expect(oidc.log.debug).toHaveBeenCalledWith('No bearer token provided');
+  });
+
+  test('declines a request with no headers at all', async () => {
+    await expect(oidc.authenticateBearer({})).resolves.toBeUndefined();
+  });
+
+  test('declines another scheme without inspecting it', async () => {
+    const verifySpy = vi.spyOn(oidc, 'verify');
+
+    await expect(
+      oidc.authenticateBearer({ headers: { authorization: 'Basic abcdef' } }),
+    ).resolves.toBeUndefined();
+    expect(verifySpy).not.toHaveBeenCalled();
+  });
+
+  test('reads the first value of a repeated Authorization header', async () => {
+    vi.spyOn(oidc, 'verify').mockImplementation(async (_accessToken, done) => {
+      done(null, { username: 'user@example.com' });
+    });
+
+    await expect(
+      oidc.authenticateBearer({ headers: { authorization: ['Bearer first', 'Bearer second'] } }),
+    ).resolves.toEqual({ kind: 'oidc', username: 'user@example.com' });
+    expect(oidc.verify).toHaveBeenCalledWith('first', expect.any(Function));
+  });
+
+  test('declines a repeated Authorization header whose first value is empty', async () => {
+    await expect(
+      oidc.authenticateBearer({ headers: { authorization: [''] } }),
+    ).resolves.toBeUndefined();
+  });
+
+  test('declines when token verification reports an error', async () => {
+    vi.spyOn(oidc, 'verify').mockImplementation(async (_accessToken, done) => {
+      done(new Error('boom'));
+    });
+
+    await expect(
+      oidc.authenticateBearer({ headers: { authorization: 'Bearer abcdef' } }),
+    ).resolves.toBeUndefined();
+    expect(oidc.log.warn).toHaveBeenCalledWith('Bearer token validation failed');
+  });
+
+  test('declines when token verification returns no user', async () => {
+    vi.spyOn(oidc, 'verify').mockImplementation(async (_accessToken, done) => {
+      done(null, false);
+    });
+
+    await expect(
+      oidc.authenticateBearer({ headers: { authorization: 'Bearer abcdef' } }),
+    ).resolves.toBeUndefined();
+  });
+
+  test('resolves a validated bearer token to an oidc principal through the chain entry', async () => {
+    vi.spyOn(oidc, 'verify').mockImplementation(async (_accessToken, done) => {
+      done(null, { username: 'user@example.com' });
+    });
+    const authenticator = oidc.getAuthenticator(createAuthenticatorApp());
+
+    await expect(
+      authenticator.authenticate({ headers: { authorization: 'Bearer abcdef' } }),
+    ).resolves.toEqual({ kind: 'oidc', username: 'user@example.com' });
+    expect(oidc.log.debug).toHaveBeenCalledWith('Bearer token validated');
+  });
 });
 
-test('getStrategy should enforce OIDC route rate limiting in express integration', async () => {
+test('getAuthenticator should enforce OIDC route rate limiting in express integration', async () => {
   const integrationApp = express();
   oidc.name = 'default';
 
@@ -345,7 +437,7 @@ test('getStrategy should enforce OIDC route rate limiting in express integration
     res.status(204).send();
   });
 
-  oidc.getStrategy(integrationApp);
+  oidc.getAuthenticator(integrationApp);
 
   const server = await new Promise<any>((resolve) => {
     const startedServer = integrationApp.listen(0, () => resolve(startedServer));
@@ -369,6 +461,119 @@ test('getStrategy should enforce OIDC route rate limiting in express integration
 
     expect(lastStatus).toBe(429);
     expect(redirectSpy).toHaveBeenCalledTimes(50);
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve(undefined)));
+    });
+  }
+});
+
+async function runOidcRememberFlow(remember: boolean): Promise<Response> {
+  mockSuccessfulGrant(openidClientMock);
+  openidClientMock.buildAuthorizationUrl = vi.fn((_client, options) => {
+    const redirectUrl = new URL('https://idp/auth');
+    redirectUrl.searchParams.set('state', options.state);
+    return redirectUrl;
+  });
+  oidc.name = 'default';
+  const integrationApp = express();
+  integrationApp.use(
+    session({
+      secret: 'oidc-remember-test-secret',
+      resave: false,
+      saveUninitialized: false,
+    }),
+  );
+  integrationApp.use(express.json());
+  integrationApp.post('/auth/remember', requireSameOriginForMutations, setRememberMe);
+  oidc.getAuthenticator(integrationApp);
+
+  const server = await new Promise<any>((resolve) => {
+    const startedServer = integrationApp.listen(0, () => resolve(startedServer));
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve(undefined)));
+    });
+    throw new Error('Unable to resolve test server address');
+  }
+
+  try {
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const rememberResponse = await fetch(`${baseUrl}/auth/remember`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ remember }),
+    });
+    expect(rememberResponse.status).toBe(200);
+    const rememberCookie = rememberResponse.headers.get('set-cookie')?.split(';')[0];
+    expect(rememberCookie).toBeDefined();
+
+    const redirectResponse = await fetch(`${baseUrl}/auth/oidc/default/redirect`, {
+      headers: { Cookie: rememberCookie as string },
+    });
+    expect(redirectResponse.status).toBe(200);
+    const redirectPayload = (await redirectResponse.json()) as { redirect: string };
+    const redirectUrl = new URL(redirectPayload.redirect);
+    const state = redirectUrl.searchParams.get('state');
+    expect(state).toBeTruthy();
+
+    const callbackResponse = await fetch(
+      `${baseUrl}/auth/oidc/default/cb?code=abc&state=${encodeURIComponent(state as string)}`,
+      { headers: { Cookie: rememberCookie as string }, redirect: 'manual' },
+    );
+    expect(callbackResponse.status).toBe(302);
+    return callbackResponse;
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve(undefined)));
+    });
+  }
+}
+
+test('OIDC remember route survives redirect and callback with a persistent cookie', async () => {
+  const callbackResponse = await runOidcRememberFlow(true);
+  expect(callbackResponse.headers.get('set-cookie')).toMatch(/Expires=/i);
+});
+
+test('OIDC remember route survives redirect and callback with a session cookie', async () => {
+  const callbackResponse = await runOidcRememberFlow(false);
+  expect(callbackResponse.headers.get('set-cookie')).not.toMatch(/Expires=/i);
+});
+
+test('OIDC remember route rejects malformed preferences before creating a session', async () => {
+  const integrationApp = express();
+  integrationApp.use(
+    session({
+      secret: 'oidc-remember-invalid-test-secret',
+      resave: false,
+      saveUninitialized: false,
+    }),
+  );
+  integrationApp.use(express.json());
+  integrationApp.post('/auth/remember', requireSameOriginForMutations, setRememberMe);
+
+  const server = await new Promise<any>((resolve) => {
+    const startedServer = integrationApp.listen(0, () => resolve(startedServer));
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve(undefined)));
+    });
+    throw new Error('Unable to resolve test server address');
+  }
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/auth/remember`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ remember: 'true' }),
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'remember must be a boolean' });
+    expect(response.headers.get('set-cookie')).toBeNull();
   } finally {
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve(undefined)));
@@ -610,12 +815,12 @@ test('getUserFromAccessToken should pass skipSubjectCheck when no expectedSubjec
 test('getUserFromAccessToken should pass expectedSubject when provided (login path)', async () => {
   openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
 
-  await oidc.getUserFromAccessToken('access-token', 'expected-sub-123');
+  await oidc.getUserFromAccessToken('access-token', 'sub-123');
 
   expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(
     oidc.client,
     'access-token',
-    'expected-sub-123',
+    'sub-123',
   );
 });
 
@@ -1174,11 +1379,8 @@ test('callback should return 401 when login fails with error', async () => {
   const { session } = await performRedirect(oidc, openidClientMock);
 
   const state = Object.keys(session.oidc.default.pending)[0];
-  const req = createCallbackReq(
-    `/auth/oidc/default/cb?code=abc&state=${state}`,
-    session,
-    (user, done) => done(new Error('login failed')),
-  );
+  failSessionPersistence(session, 'login failed');
+  const req = createCallbackReq(`/auth/oidc/default/cb?code=abc&state=${state}`, session);
   const res = createRes();
 
   await oidc.callback(req, res);
@@ -1192,16 +1394,11 @@ test('callback should redact sensitive token values from login error logs', asyn
   const { session } = await performRedirect(oidc, openidClientMock);
 
   const state = Object.keys(session.oidc.default.pending)[0];
-  const req = createCallbackReq(
-    `/auth/oidc/default/cb?code=abc&state=${state}`,
+  failSessionPersistence(
     session,
-    (_user, done) =>
-      done(
-        new Error(
-          'login failed: access_token=secret-access refresh_token=secret-refresh id_token=secret-id',
-        ),
-      ),
+    'login failed: access_token=secret-access refresh_token=secret-refresh id_token=secret-id',
   );
+  const req = createCallbackReq(`/auth/oidc/default/cb?code=abc&state=${state}`, session);
   const res = createRes();
 
   await oidc.callback(req, res);
@@ -1267,7 +1464,7 @@ test('callback should evict oldest sessions when concurrent session cap is reach
 
     expect(req.sessionStore.destroy).toHaveBeenCalledTimes(1);
     expect(req.sessionStore.destroy).toHaveBeenCalledWith('session-oldest', expect.any(Function));
-    expect(req.login).toHaveBeenCalled();
+    expectPersistedUser(req.session, 'user@example.com');
     expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
   } finally {
     getServerConfigurationSpy.mockRestore();
@@ -1307,7 +1504,7 @@ test('callback should regenerate the session before completing login', async () 
   await oidc.callback(req, res);
 
   expect(regenerate).toHaveBeenCalledTimes(1);
-  expect(req.login).toHaveBeenCalled();
+  expectPersistedUser(req.session, 'user@example.com');
   expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
 });
 
@@ -1605,7 +1802,7 @@ test('initAuthentication should tolerate startup discovery failure and recover o
   openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
 
   await expect(oidc.initAuthentication()).resolves.toBeUndefined();
-  expect(() => oidc.getStrategy(app)).not.toThrow();
+  expect(() => oidc.getAuthenticator(app)).not.toThrow();
 
   const req = createReq({
     session: {
@@ -1980,11 +2177,8 @@ test('callback should record oidc error metrics when session login fails', async
   mockSuccessfulGrant(openidClientMock);
   const { session } = await performRedirect(oidc, openidClientMock);
   const state = Object.keys(session.oidc.default.pending)[0];
-  const req = createCallbackReq(
-    `/auth/oidc/default/cb?code=abc&state=${state}`,
-    session,
-    (_user, done) => done(new Error('login failed')),
-  );
+  failSessionPersistence(session, 'login failed');
+  const req = createCallbackReq(`/auth/oidc/default/cb?code=abc&state=${state}`, session);
   const res = createRes();
 
   await oidc.callback(req, res);
@@ -2582,27 +2776,16 @@ test('initAuthentication should pass exact integer timeout for round millisecond
   expect(callArgs[4].timeout).toBe(3);
 });
 
-// --- getStrategy / rateLimit config mutant killers ---
+// --- getAuthenticator / rateLimit config mutant killers ---
 
-test('getStrategy should configure rate limiter with 50 max requests per window', async () => {
+test('getAuthenticator should configure rate limiter with 50 max requests per window', async () => {
   const appMock = { use: vi.fn(), get: vi.fn() };
   oidc.name = 'test-oidc';
 
-  oidc.getStrategy(appMock);
+  oidc.getAuthenticator(appMock);
 
   // The rate limiter is applied via app.use for the OIDC path prefix
   expect(appMock.use).toHaveBeenCalledWith('/auth/oidc/test-oidc', expect.any(Function));
-});
-
-test('getStrategy should register strategy with scope openid email profile', async () => {
-  const appMock = { use: vi.fn(), get: vi.fn() };
-
-  const strategy = oidc.getStrategy(appMock);
-
-  // Verify the returned strategy has the correct name
-  expect(strategy.name).toBe('oidc');
-  // Verify options contain the correct scope
-  expect((strategy as any).options.scope).toBe('openid email profile');
 });
 
 // --- redirect flow specific debug log mutant killers ---
@@ -2671,7 +2854,7 @@ test('callback should log "Get user info" debug message', async () => {
   expect(oidc.log.debug).toHaveBeenCalledWith('Get user info');
 });
 
-test('completePassportLogin should log "Perform passport login" debug message', async () => {
+test('completeLogin should log "Persist the authenticated session" debug message', async () => {
   mockSuccessfulGrant(openidClientMock);
   const { session } = await performRedirect(oidc, openidClientMock);
   const state = Object.keys(session.oidc.default.pending)[0];
@@ -2680,10 +2863,10 @@ test('completePassportLogin should log "Perform passport login" debug message', 
 
   await oidc.callback(req, res);
 
-  expect(oidc.log.debug).toHaveBeenCalledWith('Perform passport login');
+  expect(oidc.log.debug).toHaveBeenCalledWith('Persist the authenticated session');
 });
 
-test('completePassportLogin should log "User authenticated => redirect to app" debug message', async () => {
+test('completeLogin should log "User authenticated => redirect to app" debug message', async () => {
   mockSuccessfulGrant(openidClientMock);
   const { session } = await performRedirect(oidc, openidClientMock);
   const state = Object.keys(session.oidc.default.pending)[0];

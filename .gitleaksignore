@@ -242,7 +242,6 @@ a45d533b6a2e3450556dc9407da60d6b10ce2553:content/docs/v1.4/configuration/webhook
 ab7027d791b5aac9d59436c20a782d34f67859fa:app/registries/providers/custom/Custom.test.ts:generic-api-key:62
 ab7027d791b5aac9d59436c20a782d34f67859fa:website/app/page.tsx:generic-api-key:168
 app/agent/components/Agent.test.ts:private-key:152
-app/authentications/providers/oidc/Oidc.test.ts:generic-api-key:613
 app/debug/redact.test.ts:generic-api-key:74
 app/registries/BaseRegistry.test.ts:generic-api-key:3549
 app/registries/BaseRegistry.test.ts:generic-api-key:3550

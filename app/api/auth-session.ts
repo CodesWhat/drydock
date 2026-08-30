@@ -1,11 +1,10 @@
 import { randomBytes } from 'node:crypto';
-import joi from 'joi';
 import { ddEnvVars } from '../configuration/index.js';
 import log from '../log/index.js';
 import { getStoredSessionSecret, setStoredSessionSecret } from '../store/secrets.js';
 import { getErrorMessage } from '../util/error.js';
 import { enforceConcurrentSessionLimit } from '../util/session-limit.js';
-import type { AuthRequest, SessionUser } from './auth-types.js';
+import type { AuthRequest } from './auth-types.js';
 
 export const DEFAULT_SESSION_DAYS = 7;
 export const REMEMBER_ME_DAYS = 30;
@@ -15,13 +14,6 @@ const BASIC_SESSION_LOCK_STALE_TTL_MS = 60 * 1000;
 
 let maxConcurrentSessionsPerUser = DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER;
 const basicSessionLocks = new Map<string, Promise<void>>();
-
-const sessionUserSchema = joi
-  .object({
-    username: joi.string().required(),
-  })
-  .required()
-  .unknown(false);
 
 /**
  * Get cookie max age.
@@ -68,29 +60,6 @@ export function getSessionSecretKey(): string {
   setStoredSessionSecret(newSecret);
   log.info('Generated and persisted a new session secret to the store');
   return newSecret;
-}
-
-export function deserializeSessionUser(serializedUser: unknown): SessionUser {
-  if (typeof serializedUser !== 'string') {
-    throw new Error('Serialized user must be a JSON string');
-  }
-
-  let parsedUser: unknown;
-  try {
-    parsedUser = JSON.parse(serializedUser);
-  } catch {
-    throw new Error('Serialized user JSON is malformed');
-  }
-
-  const validatedUser = sessionUserSchema.validate(parsedUser, {
-    convert: false,
-    stripUnknown: false,
-  });
-  if (validatedUser.error) {
-    throw new Error(validatedUser.error.message);
-  }
-
-  return validatedUser.value as SessionUser;
 }
 
 function getMaxConcurrentSessionsPerUser(serverConfiguration: Record<string, unknown>): number {
