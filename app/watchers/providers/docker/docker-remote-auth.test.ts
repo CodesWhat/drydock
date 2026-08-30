@@ -138,6 +138,12 @@ describe('docker remote auth module', () => {
 
     expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/var/run/docker.sock');
     expect(mockDockerodeCtor).toHaveBeenCalledWith({
+      ca: undefined,
+      cert: undefined,
+      host: undefined,
+      key: undefined,
+      port: undefined,
+      protocol: 'http',
       socketPath: '/var/run/docker.sock',
     });
     expect(mockDisableSocketRedirects).toHaveBeenCalledWith(dockerApi);
@@ -173,6 +179,91 @@ describe('docker remote auth module', () => {
         delete process.env.DOCKER_HOST;
       } else {
         process.env.DOCKER_HOST = previousDockerHost;
+      }
+    }
+  });
+
+  test.each([
+    [
+      'secure Docker port',
+      {
+        DOCKER_HOST: 'tcp://remote-daemon.example:2376',
+      },
+    ],
+    [
+      'TLS verification',
+      {
+        DOCKER_HOST: 'tcp://remote-daemon.example:2375',
+        DOCKER_TLS_VERIFY: '1',
+      },
+    ],
+    [
+      'TLS certificate directory',
+      {
+        DOCKER_HOST: 'tcp://remote-daemon.example:2376',
+        DOCKER_TLS_VERIFY: '1',
+        DOCKER_CERT_PATH: '/missing/ambient-docker-certs',
+      },
+    ],
+  ])('local socket watcher ignores ambient %s defaults', async (_description, ambientEnv) => {
+    const dockerodeModule = await vi.importActual<typeof import('dockerode')>('dockerode');
+    const RealDockerode = dockerodeModule.default;
+    mockDockerodeCtor.mockImplementation(function DockerodeMock(options) {
+      const dockerApi = new RealDockerode(options);
+      dockerApi.info = vi.fn().mockResolvedValue({ Name: 'local-daemon' });
+      return dockerApi;
+    });
+    const environmentKeys = ['DOCKER_HOST', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'] as const;
+    const previousEnvironment = Object.fromEntries(
+      environmentKeys.map((key) => [key, process.env[key]]),
+    );
+    for (const key of environmentKeys) {
+      delete process.env[key];
+    }
+    Object.assign(process.env, ambientEnv);
+    const watcher = createWatcher({
+      configuration: {
+        socket: '/run/docker-local.sock',
+        port: 0,
+      },
+    });
+
+    try {
+      await initWatcherWithRemoteAuth(watcher as any);
+
+      const modem = watcher.dockerApi.modem;
+      expect(modem.socketPath).toBe('/run/docker-local.sock');
+      expect(modem.host).toBeUndefined();
+      expect(modem.port).toBeUndefined();
+      expect(modem.protocol).toBe('http');
+      expect(modem.ca).toBeUndefined();
+      expect(modem.cert).toBeUndefined();
+      expect(modem.key).toBeUndefined();
+
+      const buildRequest = vi.fn();
+      modem.buildRequest = buildRequest;
+      modem.dial({ path: '/info', method: 'GET' }, vi.fn());
+      await vi.waitFor(() =>
+        expect(buildRequest).toHaveBeenCalledWith(
+          expect.objectContaining({
+            path: '/info',
+            socketPath: '/run/docker-local.sock',
+          }),
+          expect.anything(),
+          undefined,
+          expect.any(Function),
+        ),
+      );
+      expect(buildRequest.mock.calls[0][0]).not.toHaveProperty('hostname');
+      expect(buildRequest.mock.calls[0][0]).not.toHaveProperty('port');
+    } finally {
+      for (const key of environmentKeys) {
+        const previousValue = previousEnvironment[key];
+        if (previousValue === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = previousValue;
+        }
       }
     }
   });
@@ -261,6 +352,12 @@ describe('docker remote auth module', () => {
 
     expect(mockProbeSocketApiVersion).toHaveBeenCalledWith('/run/podman/podman.sock');
     expect(mockDockerodeCtor).toHaveBeenCalledWith({
+      ca: undefined,
+      cert: undefined,
+      host: undefined,
+      key: undefined,
+      port: undefined,
+      protocol: 'http',
       socketPath: '/run/podman/podman.sock',
       version: 'v1.44',
     });

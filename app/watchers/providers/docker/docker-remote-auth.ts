@@ -88,6 +88,23 @@ async function detectLocalDaemonServerName(watcher: DockerRemoteAuthWatcher): Pr
   }
 }
 
+function createSocketDockerApi(options: Dockerode.DockerOptions): Dockerode {
+  const ambientDockerHost = process.env.DOCKER_HOST;
+  try {
+    // docker-modem reads all Docker CLI environment defaults before merging
+    // explicit options. Hiding DOCKER_HOST for this synchronous construction
+    // keeps ambient TLS and certificate settings out of a Unix-socket client.
+    delete process.env.DOCKER_HOST;
+    return new Dockerode(options);
+  } finally {
+    if (ambientDockerHost === undefined) {
+      delete process.env.DOCKER_HOST;
+    } else {
+      process.env.DOCKER_HOST = ambientDockerHost;
+    }
+  }
+}
+
 export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): Promise<void> {
   const options: Dockerode.DockerOptions = {};
   watcher.remoteAuthBlockedReason = undefined;
@@ -132,9 +149,14 @@ export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher
     }
   } else {
     // docker-modem merges explicit options over defaults sourced from DOCKER_HOST.
-    // An explicit undefined host is required to clear an ambient remote default so
-    // the configured local socketPath is actually selected.
+    // Explicitly clear every remote/TLS option and force plain HTTP, which is the
+    // request transport used over a local Unix socket.
     options.host = undefined;
+    options.port = undefined;
+    options.protocol = 'http';
+    options.ca = undefined;
+    options.cert = undefined;
+    options.key = undefined;
     options.socketPath = watcher.configuration.socket;
     // Pin the daemon's API version so all requests use versioned paths
     // (e.g. /v1.44/images/…).  This prevents Podman's Docker-compat
@@ -146,7 +168,9 @@ export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher
       options.version = `v${apiVersion}`;
     }
   }
-  watcher.dockerApi = new Dockerode(options);
+  watcher.dockerApi = watcher.configuration.host
+    ? new Dockerode(options)
+    : createSocketDockerApi(options);
   if (!watcher.configuration.host) {
     disableSocketRedirects(watcher.dockerApi);
   }
