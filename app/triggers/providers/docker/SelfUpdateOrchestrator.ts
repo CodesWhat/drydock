@@ -16,6 +16,7 @@ import type {
   SelfUpdateDockerApi,
   SelfUpdateExecutionContext,
   SelfUpdateLogger,
+  SelfUpdateObservedHelperRuntime,
   SelfUpdateRuntimeConfigManager,
 } from './self-update-types.js';
 
@@ -95,6 +96,10 @@ interface SelfUpdateOrchestratorConstructorOptions {
   finalizeObservedHelperOperation?: SelfUpdateOrchestratorDependencies['finalizeObservedHelperOperation'];
   waitForObservedHelperCompletion?: typeof waitForSelfUpdateHelperCompletion;
   resolveObserverNetworkMode?: () => Promise<string>;
+  resolveObservedHelperRuntime?: (
+    context: SelfUpdateExecutionContext,
+    container: SelfUpdateContainerRef,
+  ) => Promise<SelfUpdateObservedHelperRuntime>;
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
   touchOperation?: (operationId: string) => void;
 }
@@ -131,6 +136,11 @@ class SelfUpdateOrchestrator {
   waitForObservedHelperCompletion: typeof waitForSelfUpdateHelperCompletion;
 
   resolveObserverNetworkMode: () => Promise<string>;
+
+  resolveObservedHelperRuntime: (
+    context: SelfUpdateExecutionContext,
+    container: SelfUpdateContainerRef,
+  ) => Promise<SelfUpdateObservedHelperRuntime>;
 
   private readonly selfUpdateClassifications = new WeakMap<object, SelfUpdateClassification>();
 
@@ -176,6 +186,9 @@ class SelfUpdateOrchestrator {
     this.resolveObserverNetworkMode =
       options.resolveObserverNetworkMode ||
       (async () => missingDependency('resolveObserverNetworkMode'));
+    this.resolveObservedHelperRuntime =
+      options.resolveObservedHelperRuntime ||
+      (async () => missingDependency('resolveObservedHelperRuntime'));
     this.resolveHelperImage = options.resolveHelperImage;
     this.touchOperation = options.touchOperation;
   }
@@ -206,6 +219,13 @@ class SelfUpdateOrchestrator {
       return 'indeterminate';
     }
 
+    return this.classifySelfUpdateFromIdentity(container, selfContainerIdentity);
+  }
+
+  classifySelfUpdateFromIdentity(
+    container: SelfUpdateContainerRef,
+    selfContainerIdentity: SelfContainerIdentity,
+  ): SelfUpdateClassification {
     const containerId = typeof container.id === 'string' ? container.id.trim() : '';
     const containerName =
       typeof container.name === 'string' ? container.name.trim().replace(/^\/+/, '') : '';
@@ -224,6 +244,11 @@ class SelfUpdateOrchestrator {
       idMatches || (!!containerName && containerName === identityName) ? 'current' : 'peer';
     this.selfUpdateClassifications.set(container, classification);
     return classification;
+  }
+
+  classifySelfUpdateAsIndeterminate(container: SelfUpdateContainerRef): SelfUpdateClassification {
+    this.selfUpdateClassifications.set(container, 'indeterminate');
+    return 'indeterminate';
   }
 
   isSelfUpdate(container: SelfUpdateContainerRef): boolean {
@@ -305,7 +330,7 @@ class SelfUpdateOrchestrator {
           classification === 'peer' && this.isInfrastructureUpdate(container),
         finalizeObservedHelperOperation: this.finalizeObservedHelperOperation,
         waitForObservedHelperCompletion: this.waitForObservedHelperCompletion,
-        resolveObserverNetworkMode: this.resolveObserverNetworkMode,
+        resolveObservedHelperRuntime: this.resolveObservedHelperRuntime,
       },
       context,
       container,

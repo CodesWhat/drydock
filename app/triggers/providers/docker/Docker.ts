@@ -59,6 +59,7 @@ import {
   markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
   prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation,
 } from './self-update-operation.js';
+import type { SelfUpdateDockerApi, SelfUpdateObservedHelperRuntime } from './self-update-types.js';
 import UpdateLifecycleExecutor, {
   type SelfUpdateLifecycleResult,
 } from './UpdateLifecycleExecutor.js';
@@ -109,6 +110,48 @@ type ContainerFullNameReference = {
   name: string;
   watcher?: unknown;
 };
+
+type DirectLocalDockerWatcher = {
+  agent?: unknown;
+  configuration?: {
+    host?: unknown;
+    socket?: unknown;
+    protocol?: unknown;
+    port?: unknown;
+  };
+  dockerApi: unknown;
+};
+
+type AuthoritativeLocalDockerRuntime = {
+  dockerApi: unknown;
+  identity: { id: string; name: string };
+  sourceKey: string;
+};
+
+function normalizeNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized === '' ? undefined : normalized;
+}
+
+function isDirectLocalDockerWatcher(
+  registryId: string,
+  watcher: unknown,
+): watcher is DirectLocalDockerWatcher {
+  if (!registryId.startsWith('docker.') || !watcher || typeof watcher !== 'object') {
+    return false;
+  }
+  const candidate = watcher as DirectLocalDockerWatcher;
+  if (normalizeNonEmptyString(candidate.agent)) {
+    return false;
+  }
+  if (normalizeNonEmptyString(candidate.configuration?.host)) {
+    return false;
+  }
+  return !!candidate.dockerApi;
+}
 
 function getPreferredLabelValue(labels, ddKey, _logger?) {
   return labels?.[ddKey];
@@ -417,6 +460,8 @@ class Docker<
       resolveFinalizeUrl: () => this.getSelfUpdateFinalizeUrl(),
       resolveFinalizeSecret: (operationId) => this.getSelfUpdateFinalizeSecret(operationId),
       resolveObserverNetworkMode: () => this.resolveObserverNetworkMode(),
+      resolveObservedHelperRuntime: (context, container) =>
+        this.resolveObservedHelperRuntime(context, container),
       finalizeObservedHelperOperation: (operationId, status, lastError) =>
         this.finalizeObservedHelperOperation(operationId, status, lastError),
       resolveHelperImage: (container) => {
@@ -1530,43 +1575,136 @@ class Docker<
   }
 
   async classifySelfUpdate(container) {
+    const imageName = container?.image?.name;
+    if (imageName !== 'drydock' && !imageName?.endsWith('/drydock')) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
+    }
     let candidateWatcher: unknown;
     try {
       candidateWatcher = this.getWatcher(container);
     } catch {
       candidateWatcher = undefined;
     }
-    const localWatcher = getState().watcher['docker.local'] as
-      | { dockerApi?: unknown; configuration?: unknown; agent?: unknown }
-      | undefined;
-    if (!candidateWatcher || !localWatcher) {
-      return this.selfUpdateOrchestrator.classifySelfUpdate(
-        container,
-        undefined,
-        candidateWatcher ? 'peer' : 'authoritative',
-      );
+    if (!candidateWatcher) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'authoritative');
+    }
+    const candidateRegistryId = container?.agent
+      ? `${container.agent}.docker.${container.watcher}`
+      : `docker.${container.watcher}`;
+    if (!isDirectLocalDockerWatcher(candidateRegistryId, candidateWatcher)) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
+    }
+    const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();
+    if (!localRuntime) {
+      return this.selfUpdateOrchestrator.classifySelfUpdateAsIndeterminate(container);
     }
     const candidateSourceKey = getDockerWatcherSourceKey(candidateWatcher as never);
-    const localSourceKey = getDockerWatcherSourceKey(localWatcher as never);
-    return this.selfUpdateOrchestrator.classifySelfUpdate(
+    if (candidateSourceKey !== localRuntime.sourceKey) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
+    }
+    return this.selfUpdateOrchestrator.classifySelfUpdateFromIdentity(
       container,
-      localWatcher.dockerApi,
-      candidateSourceKey === localSourceKey ? 'authoritative' : 'peer',
+      localRuntime.identity,
     );
   }
 
+  async resolveAuthoritativeLocalDockerRuntime(): Promise<AuthoritativeLocalDockerRuntime | null> {
+    const uniqueSources = new Map<string, DirectLocalDockerWatcher>();
+    for (const [registryId, watcher] of Object.entries(getState().watcher)) {
+      if (!isDirectLocalDockerWatcher(registryId, watcher)) {
+        continue;
+      }
+      uniqueSources.set(getDockerWatcherSourceKey(watcher as never), watcher);
+    }
+    if (uniqueSources.size !== 1) {
+      return null;
+    }
+    const [sourceKey, watcher] = uniqueSources.entries().next().value as [
+      string,
+      DirectLocalDockerWatcher,
+    ];
+    let identity: { id: string; name: string } | null;
+    try {
+      identity = await this.selfUpdateOrchestrator.resolveSelfContainerIdentity(watcher.dockerApi);
+    } catch {
+      identity = null;
+    }
+    if (!identity?.id || !identity.name) {
+      return null;
+    }
+    return { dockerApi: watcher.dockerApi, identity, sourceKey };
+  }
+
   async resolveObserverNetworkMode(): Promise<string> {
-    const localWatcher = getState().watcher['docker.local'] as { dockerApi?: unknown } | undefined;
-    if (!localWatcher?.dockerApi) {
+    const directLocalWatchers = Object.entries(getState().watcher).filter(([registryId, watcher]) =>
+      isDirectLocalDockerWatcher(registryId, watcher),
+    );
+    if (directLocalWatchers.length === 0) {
       throw new Error('Observed self-update requires an authoritative local Docker watcher');
     }
-    const identity = await this.selfUpdateOrchestrator.resolveSelfContainerIdentity(
-      localWatcher.dockerApi,
-    );
-    if (!identity?.id) {
+    const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();
+    if (!localRuntime) {
       throw new Error('Observed self-update could not resolve the local Drydock container');
     }
-    return `container:${identity.id}`;
+    return `container:${localRuntime.identity.id}`;
+  }
+
+  async resolveObservedHelperRuntime(context, container): Promise<SelfUpdateObservedHelperRuntime> {
+    if (normalizeNonEmptyString(container?.agent)) {
+      throw new Error('Infrastructure helper updates are unsupported for agent-owned watchers');
+    }
+    let targetWatcher: unknown;
+    try {
+      targetWatcher = this.getWatcher(container);
+    } catch (error: unknown) {
+      throw new Error(`Infrastructure helper watcher is unavailable: ${getErrorMessage(error)}`);
+    }
+    const targetWatcherRuntime = targetWatcher as DirectLocalDockerWatcher;
+    if (normalizeNonEmptyString(targetWatcherRuntime.agent)) {
+      throw new Error('Infrastructure helper updates are unsupported for agent-owned watchers');
+    }
+    if (
+      normalizeNonEmptyString(targetWatcherRuntime.configuration?.host) &&
+      !this.findDockerSocketBind(context.currentContainerSpec)
+    ) {
+      throw new Error('Infrastructure helper updates are unsupported for remote Docker watchers');
+    }
+    const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();
+    if (!localRuntime) {
+      throw new Error('Infrastructure helper update requires one direct local Docker watcher');
+    }
+    const stableDockerApi = localRuntime.dockerApi as SelfUpdateDockerApi;
+    if (
+      typeof stableDockerApi.createContainer !== 'function' ||
+      typeof stableDockerApi.getContainer !== 'function'
+    ) {
+      throw new Error('Infrastructure helper update requires stable local Docker control');
+    }
+    const targetId = context.currentContainerSpec?.Id;
+    const targetName = context.currentContainerSpec?.Name?.replace(/^\/+/, '');
+    let targetInspect: { Id?: unknown; Name?: unknown };
+    try {
+      const targetHandle = (await Promise.resolve(stableDockerApi.getContainer(targetId))) as {
+        inspect?: () => Promise<{ Id?: unknown; Name?: unknown }>;
+      };
+      if (typeof targetHandle?.inspect !== 'function') {
+        throw new Error('stable Docker target handle is not inspectable');
+      }
+      targetInspect = await targetHandle.inspect();
+    } catch (error: unknown) {
+      throw new Error(
+        `Infrastructure target is not proven on the local Docker daemon: ${getErrorMessage(error)}`,
+      );
+    }
+    const inspectedName =
+      typeof targetInspect.Name === 'string' ? targetInspect.Name.replace(/^\/+/, '') : '';
+    if (targetInspect.Id !== targetId || inspectedName !== targetName) {
+      throw new Error('Infrastructure target identity does not match the local Docker daemon');
+    }
+    return {
+      dockerApi: stableDockerApi,
+      networkMode: `container:${localRuntime.identity.id}`,
+    };
   }
 
   isInfrastructureUpdate(container) {

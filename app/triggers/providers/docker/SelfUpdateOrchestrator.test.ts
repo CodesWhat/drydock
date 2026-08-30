@@ -102,6 +102,9 @@ describe('SelfUpdateOrchestrator', () => {
     await expect(orchestrator.resolveObserverNetworkMode()).rejects.toThrow(
       'SelfUpdateOrchestrator requires dependency "resolveObserverNetworkMode"',
     );
+    await expect(orchestrator.resolveObservedHelperRuntime({} as never, {})).rejects.toThrow(
+      'SelfUpdateOrchestrator requires dependency "resolveObservedHelperRuntime"',
+    );
   });
 
   test('constructor default identity resolver uses Docker runtime evidence', async () => {
@@ -312,7 +315,10 @@ describe('SelfUpdateOrchestrator', () => {
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
       finalizeObservedHelperOperation,
       waitForObservedHelperCompletion: vi.fn().mockResolvedValue({ status: 'succeeded' }),
-      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: context.dockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
     });
     const infrastructure = createContainer({
       name: 'socket-proxy',

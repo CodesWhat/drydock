@@ -21,6 +21,7 @@ import type {
   SelfUpdateHelperContainer,
   SelfUpdateHelperContainerCreateOptions,
   SelfUpdateLogger,
+  SelfUpdateObservedHelperRuntime,
 } from './self-update-types.js';
 
 type SelfUpdateRuntimeConfigOptions = Record<string, unknown>;
@@ -29,6 +30,7 @@ type SelfUpdateContainerCreateSpec = Record<string, unknown>;
 export const SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE = 20;
 export const DEFAULT_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS = 600_000;
 export const SELF_UPDATE_HELPER_EXIT_GRACE_MS = 5_000;
+export const SELF_UPDATE_HELPER_API_TIMEOUT_MS = 30_000;
 
 export class RetainSelfUpdateLifecycleError extends Error {
   readonly operationId: string;
@@ -82,7 +84,10 @@ interface SelfUpdateTransitionDependencies {
     operationId: string,
     timeoutMs: number,
   ) => Promise<{ status: 'succeeded' | 'rolled-back'; lastError?: string }>;
-  resolveObserverNetworkMode?: () => Promise<string>;
+  resolveObservedHelperRuntime?: (
+    context: SelfUpdateExecutionContext,
+    container: SelfUpdateContainerRef,
+  ) => Promise<SelfUpdateObservedHelperRuntime>;
   finalizeObservedHelperOperation?: (
     operationId: string,
     status: 'succeeded' | 'rolled-back' | 'failed',
@@ -91,6 +96,7 @@ interface SelfUpdateTransitionDependencies {
   // How long to wait after starting the helper before checking that it is still
   // alive. Overridable so tests don't sit on a real timer.
   helperExitCheckDelayMs?: number;
+  helperApiTimeoutMs?: number;
 }
 
 // The helper's very first action is stopping the old container — this process.
@@ -138,6 +144,53 @@ function isHelperAlreadyGoneError(error: unknown): boolean {
   }
   const { statusCode } = error as { statusCode?: unknown };
   return statusCode === 404;
+}
+
+async function runBoundedHelperRequest<T>(
+  description: string,
+  timeoutMs: number,
+  request: (abortSignal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const abortController = new AbortController();
+  let timeout: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      abortController.abort();
+      reject(new Error(`${description} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([request(abortController.signal), deadline]);
+  } finally {
+    clearTimeout(timeout!);
+  }
+}
+
+type ReconciledHelperContainer = {
+  container: SelfUpdateHelperContainer;
+  running: boolean;
+};
+
+async function reconcileHelperContainer(
+  dockerApi: SelfUpdateDockerApi,
+  helperName: string,
+): Promise<ReconciledHelperContainer | null | undefined> {
+  if (typeof dockerApi.getContainer !== 'function') {
+    return undefined;
+  }
+  try {
+    const container = await Promise.resolve(dockerApi.getContainer(helperName));
+    if (!container || typeof container.inspect !== 'function') {
+      throw new Error('recovered helper is not inspectable');
+    }
+    const inspect = await container.inspect();
+    return { container, running: inspect.State?.Running === true };
+  } catch (error: unknown) {
+    if (isHelperAlreadyGoneError(error)) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -282,16 +335,53 @@ async function executeSelfUpdateTransition(
     dependencies.observeHelperCompletion === true &&
     (!dependencies.finalizeObservedHelperOperation ||
       !dependencies.waitForObservedHelperCompletion ||
-      !dependencies.resolveObserverNetworkMode)
+      !dependencies.resolveObservedHelperRuntime)
   ) {
     throw new Error('Observed self-update helper completion requires a durable finalizer');
   }
 
+  const selfUpdateOperationId = operationId || dependencies.createOperationId();
+  const observeHelperCompletion = dependencies.observeHelperCompletion === true;
+  const finalizeObservedHelperOperation = dependencies.finalizeObservedHelperOperation;
+  const helperCompletionTimeoutMs =
+    dependencies.getConfiguration()?.helpercompletiontimeout ??
+    DEFAULT_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS;
   const connection = resolveHelperDockerConnection(dependencies, dockerApi, currentContainerSpec);
   if (connection.mode === 'tcp') {
     logContainer.info(
       `Self-update helper will connect to Docker via TCP: ${connection.host}:${connection.port}`,
     );
+  }
+  const observedHelperRuntime = observeHelperCompletion
+    ? await dependencies.resolveObservedHelperRuntime!(context, container)
+    : undefined;
+  const helperDockerApi = observedHelperRuntime?.dockerApi ?? dockerApi;
+  const finalizeUrl = dependencies.resolveFinalizeUrl();
+  const finalizeSecret = dependencies.resolveFinalizeSecret(selfUpdateOperationId);
+  const helperImage = dependencies.resolveHelperImage?.() ?? newImage;
+
+  let hostConfig: SelfUpdateHelperContainerCreateOptions['HostConfig'];
+  if (observedHelperRuntime) {
+    hostConfig = {
+      AutoRemove: true,
+      ...(connection.mode === 'socket'
+        ? { Binds: [`${connection.socketPath}:/var/run/docker.sock`] }
+        : {}),
+      NetworkMode: observedHelperRuntime.networkMode,
+    };
+  } else if (connection.mode === 'socket') {
+    hostConfig = {
+      AutoRemove: true,
+      Binds: [`${connection.socketPath}:/var/run/docker.sock`],
+    };
+  } else {
+    const networkMode = currentContainerSpec.HostConfig?.NetworkMode;
+    hostConfig = {
+      AutoRemove: true,
+      ...(typeof networkMode === 'string' && networkMode.length > 0
+        ? { NetworkMode: networkMode }
+        : {}),
+    };
   }
 
   dependencies.insertContainerImageBackup(context, container);
@@ -351,22 +441,16 @@ async function executeSelfUpdateTransition(
   }
 
   const oldContainerId = currentContainerSpec.Id;
-  const selfUpdateOperationId = operationId || dependencies.createOperationId();
-  const observeHelperCompletion = dependencies.observeHelperCompletion === true;
-  const finalizeObservedHelperOperation = dependencies.finalizeObservedHelperOperation;
-  const helperCompletionTimeoutMs =
-    dependencies.getConfiguration()?.helpercompletiontimeout ??
-    DEFAULT_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS;
   const finalizeEnv = observeHelperCompletion
     ? [
         'DD_SELF_UPDATE_COMPLETION_MODE=observer',
-        `DD_SELF_UPDATE_FINALIZE_URL=${dependencies.resolveFinalizeUrl()}`,
-        `DD_SELF_UPDATE_FINALIZE_SECRET=${dependencies.resolveFinalizeSecret(selfUpdateOperationId)}`,
+        `DD_SELF_UPDATE_FINALIZE_URL=${finalizeUrl}`,
+        `DD_SELF_UPDATE_FINALIZE_SECRET=${finalizeSecret}`,
         `DD_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS=${helperCompletionTimeoutMs}`,
       ]
     : [
-        `DD_SELF_UPDATE_FINALIZE_URL=${dependencies.resolveFinalizeUrl()}`,
-        `DD_SELF_UPDATE_FINALIZE_SECRET=${dependencies.resolveFinalizeSecret(selfUpdateOperationId)}`,
+        `DD_SELF_UPDATE_FINALIZE_URL=${finalizeUrl}`,
+        `DD_SELF_UPDATE_FINALIZE_SECRET=${finalizeSecret}`,
       ];
 
   const baseEnv = [
@@ -389,48 +473,93 @@ async function executeSelfUpdateTransition(
         ]
       : [];
 
-  let hostConfig: SelfUpdateHelperContainerCreateOptions['HostConfig'];
-  if (observeHelperCompletion) {
-    hostConfig = {
-      AutoRemove: true,
-      ...(connection.mode === 'socket'
-        ? { Binds: [`${connection.socketPath}:/var/run/docker.sock`] }
-        : {}),
-      NetworkMode: await dependencies.resolveObserverNetworkMode!(),
-    };
-  } else if (connection.mode === 'socket') {
-    hostConfig = {
-      AutoRemove: true,
-      Binds: [`${connection.socketPath}:/var/run/docker.sock`],
-    };
-  } else {
-    const networkMode = currentContainerSpec.HostConfig?.NetworkMode;
-    hostConfig = {
-      AutoRemove: true,
-      ...(typeof networkMode === 'string' && networkMode.length > 0
-        ? { NetworkMode: networkMode }
-        : {}),
-    };
-  }
-
   dependencies.touchOperation?.(selfUpdateOperationId);
   logContainer.info('Spawning helper container for self-update transition');
+  const helperName = `drydock-self-update-${Date.now()}`;
+  const helperApiTimeoutMs = dependencies.helperApiTimeoutMs ?? SELF_UPDATE_HELPER_API_TIMEOUT_MS;
   let helperContainer: SelfUpdateHelperContainer;
+  let helperAlreadyRunning = false;
   try {
-    helperContainer = await dockerApi.createContainer({
-      Image: dependencies.resolveHelperImage?.() ?? newImage,
-      Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller-entrypoint.js'],
-      Env: [...baseEnv, ...tcpEnv, ...resolveRootBreakGlassHelperEnv(currentContainerSpec)],
-      Labels: {
-        'dd.self-update.helper': 'true',
-        'dd.self-update.operation-id': selfUpdateOperationId,
-        'dd.watch': 'false',
-      },
-      HostConfig: hostConfig,
-      name: `drydock-self-update-${Date.now()}`,
-    });
-    await helperContainer.start();
+    try {
+      helperContainer = await runBoundedHelperRequest(
+        'Self-update helper create request',
+        helperApiTimeoutMs,
+        (abortSignal) =>
+          helperDockerApi.createContainer({
+            Image: helperImage,
+            Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller-entrypoint.js'],
+            Env: [...baseEnv, ...tcpEnv, ...resolveRootBreakGlassHelperEnv(currentContainerSpec)],
+            Labels: {
+              'dd.self-update.helper': 'true',
+              'dd.self-update.operation-id': selfUpdateOperationId,
+              'dd.watch': 'false',
+            },
+            HostConfig: hostConfig,
+            name: helperName,
+            abortSignal,
+          }),
+      );
+    } catch (createError: unknown) {
+      let reconciled: ReconciledHelperContainer | null | undefined;
+      try {
+        reconciled = await reconcileHelperContainer(helperDockerApi, helperName);
+      } catch (inspectError: unknown) {
+        throw new RetainSelfUpdateLifecycleError(
+          selfUpdateOperationId,
+          `Self-update helper create response was uncertain and reconciliation failed: ${getErrorMessage(inspectError)}`,
+        );
+      }
+      if (!reconciled) {
+        throw createError;
+      }
+      helperContainer = reconciled.container;
+      if (reconciled.running) {
+        helperAlreadyRunning = true;
+        logContainer.info(
+          'Self-update helper was already running after its create response was lost',
+        );
+      }
+    }
+    if (!helperAlreadyRunning) {
+      try {
+        await runBoundedHelperRequest(
+          'Self-update helper start request',
+          helperApiTimeoutMs,
+          (abortSignal) => helperContainer.start({ abortSignal }),
+        );
+      } catch (startError: unknown) {
+        let reconciled: ReconciledHelperContainer | null | undefined;
+        try {
+          reconciled = await reconcileHelperContainer(helperDockerApi, helperName);
+        } catch (inspectError: unknown) {
+          throw new RetainSelfUpdateLifecycleError(
+            selfUpdateOperationId,
+            `Self-update helper start response was uncertain and reconciliation failed: ${getErrorMessage(inspectError)}`,
+          );
+        }
+        if (!reconciled?.running) {
+          if (reconciled) {
+            try {
+              await reconciled.container.remove({ force: true });
+            } catch (removeError: unknown) {
+              if (!isHelperAlreadyGoneError(removeError)) {
+                throw new RetainSelfUpdateLifecycleError(
+                  selfUpdateOperationId,
+                  `Self-update helper stopped but removal failed: ${getErrorMessage(removeError)}`,
+                );
+              }
+            }
+          }
+          throw startError;
+        }
+        helperContainer = reconciled.container;
+        logContainer.info('Self-update helper is running after its start response was lost');
+      }
+    }
   } catch (e: unknown) {
+    if (e instanceof RetainSelfUpdateLifecycleError) {
+      throw e;
+    }
     logContainer.warn(
       `Failed to spawn helper container, rolling back: ${getErrorMessage(e, String(e))}`,
     );

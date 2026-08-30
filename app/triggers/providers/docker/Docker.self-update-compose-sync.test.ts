@@ -235,6 +235,11 @@ describe('executeSelfUpdate', () => {
     // First call is createContainer for the new drydock container (via spy on docker.createContainer)
     // Second call is dockerApi.createContainer for the helper — make it fail
     context.dockerApi.createContainer.mockRejectedValue(new Error('helper spawn failed'));
+    context.dockerApi.getContainer.mockReturnValue({
+      inspect: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('helper absent'), { statusCode: 404 })),
+    });
 
     await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
       'helper spawn failed',
@@ -992,8 +997,14 @@ describe('self-update lifecycle exclusivity', () => {
       start: vi.fn().mockResolvedValue(undefined),
       wait: vi.fn().mockRejectedValue(new Error('proxy watcher disconnected during replacement')),
     };
+    const stableDockerApi = {
+      createContainer: vi.fn().mockResolvedValue(helperContainer),
+      getContainer: vi.fn().mockReturnValue(helperContainer),
+    };
     const context = {
-      dockerApi: { createContainer: vi.fn().mockResolvedValue(helperContainer) },
+      dockerApi: {
+        createContainer: vi.fn().mockRejectedValue(new Error('proxy watcher disconnected')),
+      },
       registry: {
         getImageFullName: vi.fn(() => 'tecnativa/docker-socket-proxy:__TAG__'),
       },
@@ -1018,13 +1029,14 @@ describe('self-update lifecycle exclusivity', () => {
     const originalResolveHelperImage = docker.selfUpdateOrchestrator.resolveHelperImage;
     const originalWaitForObservedHelperCompletion =
       docker.selfUpdateOrchestrator.waitForObservedHelperCompletion;
-    const originalResolveObserverNetworkMode =
-      docker.selfUpdateOrchestrator.resolveObserverNetworkMode;
+    const originalResolveObservedHelperRuntime =
+      docker.selfUpdateOrchestrator.resolveObservedHelperRuntime;
     docker.selfUpdateOrchestrator.resolveHelperImage = () => 'ghcr.io/codeswhat/drydock:1.8.0';
     docker.selfUpdateOrchestrator.waitForObservedHelperCompletion = vi.fn(() => helperCompletion);
-    docker.selfUpdateOrchestrator.resolveObserverNetworkMode = vi
-      .fn()
-      .mockResolvedValue('container:drydock-current-id');
+    docker.selfUpdateOrchestrator.resolveObservedHelperRuntime = vi.fn().mockResolvedValue({
+      dockerApi: stableDockerApi,
+      networkMode: 'container:drydock-current-id',
+    });
     mockMarkOperationTerminal.mockImplementation((id, patch) => ({ id, ...patch }));
 
     const run = vi.fn(async (container) => {
@@ -1046,7 +1058,7 @@ describe('self-update lifecycle exclusivity', () => {
       cloneContainer,
       cloneRuntimeConfig,
       createContainer,
-      dockerApi: context.dockerApi,
+      dockerApi: stableDockerApi,
       helperContainer,
       pullImage,
       run,
@@ -1055,8 +1067,8 @@ describe('self-update lifecycle exclusivity', () => {
         docker.selfUpdateOrchestrator.resolveHelperImage = originalResolveHelperImage;
         docker.selfUpdateOrchestrator.waitForObservedHelperCompletion =
           originalWaitForObservedHelperCompletion;
-        docker.selfUpdateOrchestrator.resolveObserverNetworkMode =
-          originalResolveObserverNetworkMode;
+        docker.selfUpdateOrchestrator.resolveObservedHelperRuntime =
+          originalResolveObservedHelperRuntime;
         pullImage.mockRestore();
         cloneRuntimeConfig.mockRestore();
         cloneContainer.mockRestore();

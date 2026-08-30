@@ -39,10 +39,10 @@ export interface SelfUpdateCreatedContainer {
 }
 
 export interface SelfUpdateHelperContainer {
-  start: () => Promise<void>;
+  start: (options?: { abortSignal?: AbortSignal }) => Promise<void>;
   inspect?: () => Promise<{ State?: { Running?: boolean; ExitCode?: number } }>;
   wait?: () => Promise<{ StatusCode?: number }>;
-  remove?: (options: { force: boolean }) => Promise<void>;
+  remove: (options: { force: boolean }) => Promise<void>;
 }
 
 export interface SelfUpdateHelperContainerCreateOptions {
@@ -56,12 +56,16 @@ export interface SelfUpdateHelperContainerCreateOptions {
     NetworkMode?: string;
   };
   name: string;
+  abortSignal?: AbortSignal;
 }
 
 export interface SelfUpdateDockerApi {
   createContainer: (
     options: SelfUpdateHelperContainerCreateOptions,
   ) => Promise<SelfUpdateHelperContainer>;
+  getContainer?: (
+    idOrName: string,
+  ) => SelfUpdateHelperContainer | Promise<SelfUpdateHelperContainer>;
   getImage?: (imageRef: string) =>
     | {
         inspect?: () => Promise<{ Config?: Record<string, unknown> }>;
@@ -73,6 +77,11 @@ export interface SelfUpdateDockerApi {
     protocol?: string;
     socketPath?: string;
   };
+}
+
+export interface SelfUpdateObservedHelperRuntime {
+  dockerApi: SelfUpdateDockerApi;
+  networkMode: string;
 }
 
 export interface SelfUpdateExecutionContext {

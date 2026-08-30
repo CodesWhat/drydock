@@ -4323,6 +4323,11 @@ describe('executeSelfUpdate', () => {
     // First call is createContainer for the new drydock container (via spy on docker.createContainer)
     // Second call is dockerApi.createContainer for the helper — make it fail
     context.dockerApi.createContainer.mockRejectedValue(new Error('helper spawn failed'));
+    context.dockerApi.getContainer.mockReturnValue({
+      inspect: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('helper absent'), { statusCode: 404 })),
+    });
 
     await expect(docker.executeSelfUpdate(context, container, logContainer)).rejects.toThrow(
       'helper spawn failed',
