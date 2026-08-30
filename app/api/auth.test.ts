@@ -432,6 +432,73 @@ describe('Auth Router', () => {
       expect(res.sendStatus).not.toHaveBeenCalled();
     });
 
+    test.each([
+      ['a valid bearer credential', { kind: 'oidc', username: 'oidc-user' }],
+      [
+        'an invalid bearer credential that falls back to a session',
+        { kind: 'session', username: 'session-user' },
+      ],
+    ])(
+      'should reject %s on login when an Authorization header is present',
+      async (_label, principal) => {
+        mockAuthenticate.mockResolvedValue(principal);
+
+        const authenticateLoginFn = getLoginMiddleware();
+        const req = { headers: { authorization: 'Bearer candidate' } };
+        const res = createResponse();
+        const next = vi.fn();
+
+        await authenticateLoginFn(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+        expect(next).not.toHaveBeenCalled();
+      },
+    );
+
+    test('should allow a Basic Authorization principal to continue to login', async () => {
+      mockAuthenticate.mockResolvedValue({ kind: 'basic', username: 'basic-user' });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = { headers: { authorization: 'Basic credentials' } };
+      const res = createResponse();
+      const next = vi.fn();
+
+      await authenticateLoginFn(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should allow a session principal without an Authorization header to continue to login', async () => {
+      mockAuthenticate.mockResolvedValue({ kind: 'session', username: 'session-user' });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = { headers: {} };
+      const res = createResponse();
+      const next = vi.fn();
+
+      await authenticateLoginFn(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('should reject a malformed Basic Authorization header even when a session falls back', async () => {
+      mockAuthenticate.mockResolvedValue({ kind: 'session', username: 'session-user' });
+
+      const authenticateLoginFn = getLoginMiddleware();
+      const req = { headers: { authorization: 'Basic' } };
+      const res = createResponse();
+      const next = vi.fn();
+
+      await authenticateLoginFn(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+      expect(next).not.toHaveBeenCalled();
+    });
+
     test('should lock account after repeated failed login attempts', async () => {
       mockAuthenticate.mockResolvedValue(undefined);
 
@@ -1427,7 +1494,7 @@ describe('Auth Router', () => {
       expect(typeof loginCall[2]).toBe('function'); // login handler
     });
 
-    test('should register /remember after authentication middleware', () => {
+    test('should register /remember before authentication middleware with CSRF middleware', () => {
       const app = createApp();
       auth.init(app);
 
@@ -1441,7 +1508,9 @@ describe('Auth Router', () => {
 
       expect(rememberRouteIndex).toBeGreaterThanOrEqual(0);
       expect(authMiddlewareIndex).toBeGreaterThanOrEqual(0);
-      expect(rememberRouteOrder).toBeGreaterThan(authMiddlewareOrder);
+      expect(rememberRouteOrder).toBeLessThan(authMiddlewareOrder);
+      expect(mockRouter.post.mock.calls[rememberRouteIndex]).toHaveLength(3);
+      expect(mockRouter.post.mock.calls[rememberRouteIndex][1]).toBe(requireSameOriginForMutations);
     });
 
     test('should configure store ttl for remember-me duration', () => {

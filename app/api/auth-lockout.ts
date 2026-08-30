@@ -507,6 +507,11 @@ export async function authenticateLogin(
     activeLoginAttempts = Math.max(0, activeLoginAttempts - 1);
   };
 
+  const authorization = getFirstHeaderValue(req.headers?.authorization);
+  const hasAuthorizationHeader = typeof authorization === 'string' && authorization.trim() !== '';
+  const isBasicAuthorization =
+    hasAuthorizationHeader && authorization.toLowerCase().startsWith('basic ');
+
   const rejectFailedLogin = (): void => {
     const failedAt = Date.now();
     const accountLockoutAfterFailure = registerFailedLoginAttempt(
@@ -536,6 +541,12 @@ export async function authenticateLogin(
     sendUnauthorized(res);
   };
 
+  if (hasAuthorizationHeader && !isBasicAuthorization) {
+    finishAttempt();
+    rejectFailedLogin();
+    return;
+  }
+
   // The chain leaves the principal on the request, so there is nothing to hand
   // forward here and nothing that could persist a session on the way past:
   // the login route establishes the session itself, once, after the concurrent
@@ -555,7 +566,10 @@ export async function authenticateLogin(
     return;
   }
 
-  if (!isLoginSessionEligible(principal)) {
+  if (
+    !isLoginSessionEligible(principal) ||
+    (hasAuthorizationHeader && principal.kind !== 'basic')
+  ) {
     rejectFailedLogin();
     return;
   }
