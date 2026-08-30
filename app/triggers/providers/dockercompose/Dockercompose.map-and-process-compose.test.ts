@@ -775,6 +775,43 @@ describe('Dockercompose Trigger', () => {
     expect(result).toEqual(new Map([['other', 'postgres:16']]));
   });
 
+  test.each(["'", '"'])(
+    'getComposeResolvedImages should close a quoted value after two backslashes (%s)',
+    async (quote) => {
+      const escapedQuote = `${'\\'.repeat(2)}${quote}`;
+      vi.spyOn(fs, 'readFile').mockResolvedValue(
+        Buffer.from(`PREFIX=${quote}literal${escapedQuote}\nIMAGE=nginx:1\n`),
+      );
+
+      const result = await trigger.getComposeResolvedImages(
+        ['/opt/drydock/test/stack.yml'],
+        makeCompose({ nginx: { image: '${IMAGE}' } }),
+      );
+
+      expect(result).toEqual(new Map([['nginx', 'nginx:1']]));
+    },
+  );
+
+  test.each([
+    ['single', "'"],
+    ['double', '"'],
+  ])(
+    'getComposeResolvedImages should continue a quoted value after odd backslash parity (%s)',
+    async (_label, quote) => {
+      const escapedQuote = `${'\\'.repeat(3)}${quote}`;
+      vi.spyOn(fs, 'readFile').mockResolvedValue(
+        Buffer.from(`PREFIX=${quote}literal${escapedQuote}\ncontinued${quote}\nIMAGE=nginx:1\n`),
+      );
+
+      const result = await trigger.getComposeResolvedImages(
+        ['/opt/drydock/test/stack.yml'],
+        makeCompose({ nginx: { image: '${IMAGE}' } }),
+      );
+
+      expect(result).toEqual(new Map([['nginx', 'nginx:1']]));
+    },
+  );
+
   test('getComposeResolvedImages should honor the last supported duplicate assignment', async () => {
     vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from('IMAGE=nginx:1\nIMAGE=postgres:16\n'));
 

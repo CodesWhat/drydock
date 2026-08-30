@@ -391,6 +391,22 @@ function parseDoubleQuotedComposeEnvironmentValue(value: string): string | undef
   return decoded;
 }
 
+function findComposeQuotedValueEnd(value: string, quote: string): number {
+  for (let index = 0; index < value.length; index++) {
+    if (value[index] !== quote) {
+      continue;
+    }
+    let backslashCount = 0;
+    for (let preceding = index - 1; preceding >= 0 && value[preceding] === '\\'; preceding--) {
+      backslashCount++;
+    }
+    if (backslashCount % 2 === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
 function parseComposeEnvironmentFile(contents: string): Record<string, string> {
   const resolvedEnvironment: Record<string, string> = {};
   const invalidEnvironmentKeys = new Set<string>();
@@ -407,11 +423,11 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
     const value = assignment[2].trimStart();
     if (value.startsWith("'")) {
       let quotedValue = value.slice(1);
-      let closingIndex = quotedValue.search(/(?<!\\)'/);
+      let closingIndex = findComposeQuotedValueEnd(quotedValue, "'");
       while (closingIndex < 0 && lineIndex + 1 < lines.length) {
         lineIndex++;
         quotedValue += `\n${lines[lineIndex]}`;
-        closingIndex = quotedValue.search(/(?<!\\)'/);
+        closingIndex = findComposeQuotedValueEnd(quotedValue, "'");
       }
       const remainder = quotedValue.slice(closingIndex + 1).trim();
       if (closingIndex < 0 || (remainder !== '' && !remainder.startsWith('#'))) {
@@ -426,11 +442,11 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
     }
     if (value.startsWith('"')) {
       let quotedValue = value.slice(1);
-      let closingIndex = quotedValue.search(/(?<!\\)"/);
+      let closingIndex = findComposeQuotedValueEnd(quotedValue, '"');
       while (closingIndex < 0 && lineIndex + 1 < lines.length) {
         lineIndex++;
         quotedValue += `\n${lines[lineIndex]}`;
-        closingIndex = quotedValue.search(/(?<!\\)"/);
+        closingIndex = findComposeQuotedValueEnd(quotedValue, '"');
       }
       const remainder = quotedValue.slice(closingIndex + 1).trim();
       if (closingIndex < 0 || (remainder !== '' && !remainder.startsWith('#'))) {
