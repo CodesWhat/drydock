@@ -38,7 +38,7 @@ Please find below the documentation for each of them:
 
 ## Diagnostics
 
-Drydock includes a one-click diagnostic debug dump available in **Config > Diagnostics** or via the API at `GET /api/v1/debug/dump`. The dump collects a time-windowed snapshot of recent events, redacts all sensitive values (tokens, passwords, secrets), and downloads as a JSON attachment. Use the `?minutes=N` query parameter to control how many minutes of event history to include (default 30).
+Drydock includes a one-click diagnostic debug dump available in **Config > Diagnostics** or via the API at `GET /api/v1/debug/dump`. The dump collects a time-windowed snapshot of recent events, redacts values whose key names match the credential rules documented on the [app API page](/docs/api/app), and downloads as a JSON attachment. Downloads are audited and rate-limited to 5 per minute. Use the `?minutes=N` query parameter to control how many minutes of event history to include (default 30).
 
 See [Diagnostic debug dump](/docs/api/app#download-diagnostic-debug-dump) for the full API reference.
 

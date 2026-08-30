@@ -308,7 +308,11 @@ function collectMqttHomeAssistantSensors(
 
 export async function collectDebugDump(options: CollectDebugDumpOptions = {}) {
   const recentMinutes = normalizeRecentMinutes(options.recentMinutes);
-  const containers = storeContainer.getContainersRaw().map(storeContainer.cloneContainer);
+  // getContainers() returns the same redacted clones GET /containers serves.
+  // getContainersRaw() is documented as "internal callers that do not return
+  // container data to users", which the dump is not: it is downloaded and
+  // pasted into support threads.
+  const containers = storeContainer.getContainers();
   const registryState = registry.getState();
   const dockerWatchers = getDockerWatchers(registryState.watcher);
 

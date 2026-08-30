@@ -25,7 +25,26 @@ This trigger also supports the [common configuration variables](/docs/configurat
 
 <Callout type="info">**Environment isolation (v1.5.0+):** The subprocess no longer inherits the full drydock process environment. Only a restricted set of standard shell variables (`PATH`, `HOME`, `TMPDIR`, `TMP`, `TEMP`, `LANG`, `LC_ALL`, `TZ`, `USER`, `SHELL`) is inherited from the parent, along with all drydock-provided container variables. `DD_*` secrets (registry tokens, OIDC credentials, agent tokens, etc.) are excluded by default. Use `DD_ACTION_COMMAND_{trigger_name}_ENV` to explicitly pass any additional parent environment variable your script needs.</Callout>
 
-<Callout type="info">Container-derived values injected as environment variables are automatically sanitized before being passed to the subprocess. The characters `` ` `` (backtick), `$`, `;`, `&`, `|`, `<`, `>`, `(`, and `)` are replaced with `_` in any string value sourced from container metadata (image name, tags, labels, etc.). This prevents shell injection through container-controlled strings. Static values configured directly in `CMD` are not modified.</Callout>
+<Callout type="info">
+
+Container-derived values injected as environment variables are automatically sanitized before being passed to the subprocess. In any scalar value sourced from container metadata (image name, tags, labels, etc.), these are replaced with `_`:
+
+- the shell metacharacters `` ` ``, `$`, `;`, `&`, `|`, `<`, `>`, `(`, `)`
+- whitespace, which would otherwise split one value into several arguments
+- the globbing characters `*`, `?`, `[`, `]`, `{`, `}`, `~`, and the quoting characters `\`, `"`, `'`
+- control characters and DEL
+
+A leading `-` is removed entirely, so a value can never parse as a command-line option. Note that this means a `dd.display.name` containing spaces reaches your script with underscores in place of them.
+
+`container_json`, `containers_json`, `dd_title` and `dd_body` keep their spaces and quotes: the JSON has to stay pipeable into `jq`, and the digest title and body are message text. Static values configured directly in `CMD` are not modified.
+
+</Callout>
+
+<Callout type="warn">
+
+**Always double-quote expansions in your command.** Write `echo "$${display_name}"`, not `echo $${display_name}`. The sanitizer removes what would split or glob a scalar value, but quoting is what actually makes an expansion a single argument, and the JSON and message variables are deliberately left unscrubbed for spaces.
+
+</Callout>
 
 ## Migration note (upgrading from pre-v1.5.0)
 
@@ -116,14 +135,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_ACTION_COMMAND_LOCAL_CMD=echo $${display_name} can be updated to $${update_kind_remote_value}
+      - DD_ACTION_COMMAND_LOCAL_CMD=echo "$${display_name}" can be updated to "$${update_kind_remote_value}"
 ```
 
 </Tab>
 <Tab value="Docker (Arbitrary Command)">
 ```bash
 docker run \
-  -e 'DD_ACTION_COMMAND_LOCAL_CMD=echo ${display_name} can be updated to ${update_kind_remote_value}' \
+  -e 'DD_ACTION_COMMAND_LOCAL_CMD=echo "${display_name}" can be updated to "${update_kind_remote_value}"' \
   ...
   codeswhat/drydock
 ```

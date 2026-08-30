@@ -45,7 +45,7 @@ class Quay extends BaseRegistry<QuayRegistryConfiguration> {
    * @returns {boolean}
    */
   match(image) {
-    return this.matchUrlPattern(image, /^.*\.?quay\.io$/);
+    return this.matchRegistryHost(image, 'quay.io');
   }
 
   /**

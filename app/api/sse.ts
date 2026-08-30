@@ -28,6 +28,7 @@ import {
 import log from '../log/index.js';
 import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { hashToken } from '../util/crypto.js';
+import { stripContainerDetailOnlySecurityFields } from './container/container-projection.js';
 import { sendErrorResponse } from './error-response.js';
 import {
   type ActiveSseClient,
@@ -648,6 +649,42 @@ export function broadcastPreferencesUpdated(): void {
   broadcastWithId('dd:preferences-updated', {});
 }
 
+/**
+ * Project a container lifecycle payload down to the same security shape
+ * GET /api/v1/containers returns: per-CVE arrays emptied, SBOM and signature
+ * documents dropped. A container with a few hundred vulnerabilities serialises
+ * to hundreds of KB, well past the 256 KB backpressure budget a blocked client
+ * is allowed, so a scan cycle over a handful of replicas used to disconnect
+ * every listener and then trip again on the replay of the same events. The UI
+ * never reads those arrays off the event — it fetches them from the security
+ * detail endpoints after `dd:scan-completed` — so nothing downstream loses data.
+ *
+ * The result is spread into a plain object rather than left as the projection
+ * view, because the payload is retained in the replay ring for five minutes and
+ * a view would keep the original scan objects, and their vulnerability arrays,
+ * reachable for that whole window.
+ */
+function projectContainerLifecyclePayload(
+  payload: ContainerLifecycleEventPayload,
+): ContainerLifecycleEventPayload {
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+  const projected = stripContainerDetailOnlySecurityFields(payload);
+  if (!projected.security) {
+    return { ...projected };
+  }
+  const { scan, updateScan } = projected.security;
+  return {
+    ...projected,
+    security: {
+      ...projected.security,
+      ...(scan ? { scan: { ...scan } } : {}),
+      ...(updateScan ? { updateScan: { ...updateScan } } : {}),
+    },
+  };
+}
+
 function broadcastContainerEvent(eventName: string, payload: unknown): void {
   if (!ALLOWED_CONTAINER_EVENT_NAMES.has(eventName)) {
     log.child({ component: 'sse' }).warn(`Dropping invalid SSE container event name: ${eventName}`);
@@ -678,7 +715,7 @@ export function init(): express.Router {
     registerContainerAdded((payload: ContainerLifecycleEventPayload) => {
       broadcastContainerEvent(
         'dd:container-added',
-        enrichContainerLifecyclePayloadWithEligibility(payload),
+        enrichContainerLifecyclePayloadWithEligibility(projectContainerLifecyclePayload(payload)),
       );
     }),
   );
@@ -686,7 +723,7 @@ export function init(): express.Router {
     registerContainerUpdated((payload: ContainerLifecycleEventPayload) => {
       broadcastContainerEvent(
         'dd:container-updated',
-        enrichContainerLifecyclePayloadWithEligibility(payload),
+        enrichContainerLifecyclePayloadWithEligibility(projectContainerLifecyclePayload(payload)),
       );
     }),
   );
@@ -699,8 +736,8 @@ export function init(): express.Router {
     ),
   );
   trackEventListenerDeregistration(
-    registerContainerRemoved((payload: unknown) => {
-      broadcastContainerEvent('dd:container-removed', payload);
+    registerContainerRemoved((payload: ContainerLifecycleEventPayload) => {
+      broadcastContainerEvent('dd:container-removed', projectContainerLifecyclePayload(payload));
     }),
   );
   trackEventListenerDeregistration(

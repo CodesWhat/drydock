@@ -18,7 +18,7 @@ const {
   mockGetVersion,
   mockDdEnvVars,
   mockGetState,
-  mockGetContainersRaw,
+  mockGetContainers,
   mockGetDebugSnapshot,
   mockRedactDebugDump,
 } = vi.hoisted(() => {
@@ -38,7 +38,7 @@ const {
     mockGetVersion: vi.fn(),
     mockDdEnvVars: {} as Record<string, string | undefined>,
     mockGetState: vi.fn(),
-    mockGetContainersRaw: vi.fn(),
+    mockGetContainers: vi.fn(),
     mockGetDebugSnapshot: vi.fn(),
     mockRedactDebugDump: vi.fn((payload: unknown) => payload),
   };
@@ -58,7 +58,10 @@ vi.mock('../registry/index.js', () => ({
 }));
 
 vi.mock('../store/container.js', () => ({
-  getContainersRaw: mockGetContainersRaw,
+  getContainers: mockGetContainers,
+  getContainersRaw: () => {
+    throw new Error('collectDebugDump must not read unredacted containers');
+  },
   cloneContainer: (container: unknown) => structuredClone(container),
 }));
 
@@ -390,7 +393,7 @@ function configureFixture() {
   const fixture = createFixture();
 
   mockGetState.mockReturnValue(fixture.state);
-  mockGetContainersRaw.mockReturnValue(fixture.containers);
+  mockGetContainers.mockImplementation(() => structuredClone(fixture.containers));
   mockGetDebugSnapshot.mockReturnValue(fixture.storeSnapshot);
   mockGetVersion.mockReturnValue(VERSION);
 
@@ -687,6 +690,66 @@ describe('debug dump utilities', () => {
       },
     });
     expect(mockRedactDebugDump).toHaveBeenCalledTimes(1);
+  });
+
+  test('collectDebugDump reads containers through the redacted store accessor', async () => {
+    configureFixture();
+
+    await collectDebugDump();
+
+    expect(mockGetContainers).toHaveBeenCalled();
+  });
+
+  test('container runtime env in the dump carries the same redaction as GET /containers', async () => {
+    const { redactContainersRuntimeEnv } = await vi.importActual<
+      typeof import('../api/container/shared.js')
+    >('../api/container/shared.js');
+    configureFixture();
+    mockGetContainers.mockImplementation(() =>
+      redactContainersRuntimeEnv(
+        structuredClone([
+          {
+            id: 'alpha-container-1',
+            name: 'alpha-one',
+            watcher: 'alpha',
+            details: {
+              env: [
+                { key: 'MINIO_SECRETKEY', value: 'minio-secret' },
+                { key: 'DEBIAN_FRONTEND', value: 'noninteractive' },
+              ],
+            },
+          },
+        ]),
+      ),
+    );
+
+    const dump = (await collectDebugDump()) as {
+      state: { containers: { details: { env: unknown[] } }[] };
+    };
+
+    expect(dump.state.containers[0].details.env).toEqual([
+      { key: 'MINIO_SECRETKEY', value: '[REDACTED]', sensitive: true },
+      { key: 'DEBIAN_FRONTEND', value: 'noninteractive', sensitive: false },
+    ]);
+  });
+
+  test('serializeDebugDump never carries a raw ECR secret through the real redactor', async () => {
+    const { redactDebugDump: realRedact } =
+      await vi.importActual<typeof import('./redact.js')>('./redact.js');
+
+    const serialized = serializeDebugDump(
+      realRedact({
+        environment: {
+          ddEnvVars: {
+            DD_REGISTRY_ECR_PRIVATE_SECRETACCESSKEY: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+            DD_REGISTRY_ECR_PRIVATE_REGION: 'eu-west-1',
+          },
+        },
+      }),
+    );
+
+    expect(serialized).not.toContain('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
+    expect(serialized).toContain('eu-west-1');
   });
 
   test('serializeDebugDump appends a trailing newline', () => {

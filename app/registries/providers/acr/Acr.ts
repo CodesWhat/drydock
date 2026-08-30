@@ -31,7 +31,7 @@ class Acr extends BaseRegistry<AcrRegistryConfiguration> {
    */
 
   match(image) {
-    return /^.*\.?azurecr.io$/.test(image.registry.url);
+    return this.matchRegistryHost(image, 'azurecr.io');
   }
 
   /**

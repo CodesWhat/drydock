@@ -52,7 +52,7 @@ export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_SEGMENT_PATTERNS.some((pattern) => segments.includes(pattern));
 }
 
-function hasUrlCredentials(value: unknown): boolean {
+export function hasUrlCredentials(value: unknown): boolean {
   if (typeof value !== 'string') {
     return false;
   }

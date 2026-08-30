@@ -391,6 +391,14 @@ function createAcceptedContainerUpdateRequest(
   batchMetadata?: UpdateQueueBatchMetadata,
   providedOperationId?: string,
 ): AcceptedContainerUpdateRequest {
+  // A caller-supplied id is only unique by convention: LokiJS indexes data.id
+  // without a unique constraint, so inserting a duplicate leaves two rows that
+  // findOne resolves to the newest, stranding the original as permanently
+  // queued and letting a later queue turn overwrite the other container's row.
+  // Reject it here, where the id is first used, rather than in the store.
+  if (providedOperationId && updateOperationStore.getOperationById(providedOperationId)) {
+    throw new UpdateRequestError(409, 'Update operation id already exists');
+  }
   const operationId = providedOperationId ?? crypto.randomUUID();
 
   // Suppress the `queued` SSE when no global concurrency cap is configured:
