@@ -378,6 +378,7 @@ function emitOperationChangedEvent(operation: UpdateOperation): void {
   void emitUpdateOperationChanged({
     operationId: operation.id,
     containerName: operation.containerName,
+    ...(operation.triggerName ? { triggerName: operation.triggerName } : {}),
     containerId: operation.containerId,
     newContainerId: operation.newContainerId,
     batchId:

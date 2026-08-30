@@ -209,6 +209,7 @@ describe('request-update', () => {
       expect.objectContaining({
         containerId: 'c1',
         containerName: 'nginx',
+        triggerName: 'docker.update',
         status: 'queued',
         phase: 'queued',
       }),
@@ -467,6 +468,316 @@ describe('request-update', () => {
       statusCode: 400,
       message: 'Trigger is not a container update trigger',
     });
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger without local Compose identity', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+    };
+
+    await expect(requestContainerUpdate(createContainer(), { trigger })).rejects.toMatchObject<
+      Partial<UpdateRequestError>
+    >({
+      statusCode: 404,
+      message: 'No docker trigger found for this container',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided local Portainer trigger for an agent container', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+    };
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          agent: 'remote-1',
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+        }),
+        { trigger },
+      ),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 404,
+      message: 'No docker trigger found for this container',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger for digest updates before enqueue', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'all' },
+    };
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          updateKind: { kind: 'digest', remoteValue: 'sha256:new' },
+        }),
+        { trigger },
+      ),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 404,
+      message: 'No docker trigger found for this container',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger for unknown updates before enqueue', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'all' },
+    };
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          updateKind: { kind: 'unknown' },
+        }),
+        { trigger },
+      ),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 404,
+      message: 'No docker trigger found for this container',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger excluded by the container policy', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const dockerTrigger = {
+      type: 'docker',
+      trigger: vi.fn(),
+      getId: () => 'docker.update',
+      configuration: { auto: 'all' },
+    };
+    mockGetState.mockReturnValue({ trigger: { 'docker.update': dockerTrigger } });
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          actionTriggerExclude: 'portainer.update',
+        }),
+        { trigger },
+      ),
+    ).rejects.toThrow("Trigger excluded by container label dd.action.exclude='portainer.update'.");
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger not included by the container policy', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const dockerTrigger = {
+      type: 'docker',
+      trigger: vi.fn(),
+      getId: () => 'docker.update',
+      configuration: { auto: 'oninclude' },
+    };
+    mockGetState.mockReturnValue({ trigger: { 'docker.update': dockerTrigger } });
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          actionTriggerInclude: 'docker',
+        }),
+        { trigger },
+      ),
+    ).rejects.toThrow("Trigger not matched by container label dd.action.include='docker'.");
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('uses the generic not-included message when no include label is present', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+        }),
+        { trigger },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Trigger not matched by container label dd.action.include.',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Docker trigger when Portainer is explicitly included', async () => {
+    const dockerTrigger = {
+      type: 'docker',
+      trigger: vi.fn(),
+      getId: () => 'docker.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const portainerTrigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    mockGetState.mockReturnValue({
+      trigger: {
+        'docker.update': dockerTrigger,
+        'portainer.update': portainerTrigger,
+      },
+    });
+
+    await expect(
+      requestContainerUpdate(createContainer({ actionTriggerInclude: 'portainer' }), {
+        trigger: dockerTrigger,
+      }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 409,
+      message: "Trigger not matched by container label dd.action.include='portainer'.",
+    });
+    expect(dockerTrigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Docker Compose trigger when Portainer is explicitly included', async () => {
+    const dockerComposeTrigger = {
+      type: 'dockercompose',
+      trigger: vi.fn(),
+      getId: () => 'dockercompose.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const portainerTrigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    mockGetState.mockReturnValue({
+      trigger: {
+        'dockercompose.update': dockerComposeTrigger,
+        'portainer.update': portainerTrigger,
+      },
+    });
+
+    await expect(
+      requestContainerUpdate(createContainer({ actionTriggerInclude: 'portainer' }), {
+        trigger: dockerComposeTrigger,
+      }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 409,
+      message: "Trigger not matched by container label dd.action.include='portainer'.",
+    });
+    expect(dockerComposeTrigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger when Docker Compose is explicitly included', async () => {
+    const portainerTrigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const dockerComposeTrigger = {
+      type: 'dockercompose',
+      trigger: vi.fn(),
+      getId: () => 'dockercompose.update',
+      configuration: { auto: 'oninclude' },
+    };
+    mockGetState.mockReturnValue({
+      trigger: {
+        'portainer.update': portainerTrigger,
+        'dockercompose.update': dockerComposeTrigger,
+      },
+    });
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          actionTriggerInclude: 'dockercompose',
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+        }),
+        { trigger: portainerTrigger },
+      ),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 409,
+      message: "Trigger not matched by container label dd.action.include='dockercompose'.",
+    });
+    expect(portainerTrigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('enqueueContainerUpdate rejects an explicitly provided Portainer trigger excluded for automatic dispatch', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'all' },
+    };
+
+    await expect(
+      enqueueContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          actionTriggerExclude: 'portainer.update',
+        }),
+        { trigger, source: 'automatic' },
+      ),
+    ).rejects.toThrow("Trigger excluded by container label dd.action.exclude='portainer.update'.");
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
   });
 
   test('enqueueContainerUpdate rejects when no docker trigger is found', async () => {
@@ -2233,6 +2544,7 @@ describe('request-update', () => {
 
       const trigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn().mockResolvedValue(undefined),
         getId: () => 'docker.update',
       };
@@ -2369,6 +2681,7 @@ describe('request-update', () => {
       });
       const trigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn().mockRejectedValue(docker404Error),
         getId: () => 'docker.update',
       };
@@ -2478,6 +2791,7 @@ describe('request-update', () => {
       });
       const trigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn().mockRejectedValue(conflict409Error),
         getId: () => 'docker.update',
       };
@@ -2565,11 +2879,13 @@ describe('request-update', () => {
 
       const winnerTrigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn(() => winnerPull.promise),
         getId: () => 'docker.update',
       };
       const loserTrigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn().mockRejectedValue(loserConflict409),
         getId: () => 'docker.update',
       };

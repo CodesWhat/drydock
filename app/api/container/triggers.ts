@@ -9,7 +9,7 @@ import Trigger from '../../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../updates/request-update.js';
 import type { ApiComponent } from '../component.js';
-import { isTriggerCompatibleWithContainer } from '../docker-trigger.js';
+import { isTriggerAssociatedWithContainer } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
 import { sanitizePreviewErrorReason } from '../preview-errors.js';
 import { getPathParamValue } from './request-helpers.js';
@@ -172,7 +172,7 @@ function createGetContainerTriggersHandler({
       .filter((trigger) => {
         const triggerId = trigger.id || `${trigger.type}.${trigger.name}`;
         const runtimeTrigger = triggerMap[triggerId];
-        return isTriggerCompatibleWithContainer(
+        return isTriggerAssociatedWithContainer(
           (runtimeTrigger || trigger) as unknown as TriggerComponent,
           container,
         );

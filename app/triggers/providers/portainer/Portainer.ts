@@ -19,16 +19,17 @@ const STACK_ID_LABEL = 'dd.portainer.stack-id';
 const ENDPOINT_ID_LABEL = 'dd.portainer.endpoint-id';
 const DEFAULT_REDEPLOY_TIMEOUT_MS = 5 * 60 * 1000;
 const REDEPLOY_POLL_INTERVAL_MS = 2 * 1000;
+const PORTAINER_REQUEST_TIMEOUT_MS = 30 * 1000;
 
 type PortainerUpdateMode = 'auto' | 'env' | 'compose';
 
 interface PortainerTriggerConfiguration extends DockerTriggerConfiguration {
   url: string;
   apikey: string;
+  allowHttp: boolean;
   updateMode: PortainerUpdateMode;
   versionVarLabel: string;
   updateModeLabel: string;
-  pullImage: boolean;
   pruneStack: boolean;
   redeployTimeout: number;
 }
@@ -55,7 +56,7 @@ interface PortainerStackFileResponse {
 }
 
 interface ComposeFile {
-  services?: Record<string, { image?: string } | unknown>;
+  services?: Record<string, { image?: string; pull_policy?: unknown; build?: unknown } | unknown>;
 }
 
 interface ResolvedPortainerStack {
@@ -71,13 +72,18 @@ interface ResolvedPortainerUpdate {
   serviceImage?: string;
   versionVar?: string;
   targetImage: string;
+  targetImageId?: string;
   targetTag?: string;
+  originalImage: string;
+  originalImageId?: string;
+  prePutRunningReplicas?: number;
   updatedStackFileContent: string;
   updatedEnv: PortainerStackEnv[];
 }
 
 interface DockerContainerListItem {
   Id?: string;
+  ImageID?: string;
   Image?: string;
   State?: string;
   Status?: string;
@@ -87,6 +93,21 @@ interface DockerContainerListItem {
 
 interface DockerApiWithListContainers {
   listContainers: (options?: { all?: boolean }) => Promise<DockerContainerListItem[]>;
+  getImage?: (image: string) => { inspect: () => Promise<{ Id?: string; id?: string }> };
+}
+
+interface DockerContainerInspectLike {
+  Id?: string;
+  Image?: string;
+  Config?: { Image?: string };
+  State?: { Running?: boolean; Status?: string };
+}
+
+interface PortainerDockerApiContext {
+  Id?: string;
+  Image?: string;
+  Config?: { Image?: string };
+  State?: { Running?: boolean; Status?: string };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -95,6 +116,20 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function normalizePortainerUrl(url: string): string {
   return url.replace(/\/+$/, '');
+}
+
+function parseEndpointId(rawValue: string | undefined): number | undefined {
+  if (rawValue === undefined || rawValue.trim() === '') {
+    return undefined;
+  }
+  if (!/^\d+$/.test(rawValue.trim())) {
+    throw new Error(`Portainer endpoint label ${ENDPOINT_ID_LABEL} must be a positive integer`);
+  }
+  const endpointId = Number(rawValue);
+  if (!Number.isSafeInteger(endpointId) || endpointId <= 0) {
+    throw new Error(`Portainer endpoint label ${ENDPOINT_ID_LABEL} must be a positive integer`);
+  }
+  return endpointId;
 }
 
 function normalizePath(value: unknown): string | null {
@@ -146,29 +181,83 @@ function normalizeImplicitLatest(image: string | undefined): string | undefined 
   return `${image}:latest`;
 }
 
-function getServiceKey(compose: ComposeFile, container, currentImage: string): string | undefined {
-  const composeServiceName = container.labels?.[COMPOSE_SERVICE_LABEL];
-  if (composeServiceName && compose.services?.[composeServiceName]) {
-    return composeServiceName;
-  }
-
-  const hasComposeIdentityLabels = Boolean(
-    container.labels?.[COMPOSE_PROJECT_LABEL] ||
-      container.labels?.[COMPOSE_PROJECT_CONFIG_FILES_LABEL] ||
-      container.labels?.[COMPOSE_PROJECT_WORKING_DIR_LABEL],
-  );
-  if (hasComposeIdentityLabels) {
+function normalizeImageRepository(image: string | undefined): string | undefined {
+  if (typeof image !== 'string' || image.trim() === '') {
     return undefined;
   }
-
-  return Object.entries(compose.services || {}).find(([, service]) => {
-    const image = isPlainObject(service) ? service.image : undefined;
-    if (typeof image !== 'string') {
-      return false;
+  let reference = image.trim().split('@', 1)[0];
+  const lastSlash = reference.lastIndexOf('/');
+  const lastColon = reference.indexOf(':', lastSlash + 1);
+  if (lastColon > lastSlash) {
+    reference = reference.slice(0, lastColon);
+  }
+  if (reference.includes('$')) {
+    return undefined;
+  }
+  const parts = reference.split('/').filter(Boolean);
+  if (parts.length === 0) {
+    return undefined;
+  }
+  const firstPart = parts[0].toLowerCase();
+  const hasExplicitRegistry =
+    parts.length > 1 &&
+    (firstPart.includes('.') || firstPart.includes(':') || firstPart === 'localhost');
+  let registry = 'docker.io';
+  if (hasExplicitRegistry) {
+    registry = parts.shift()!.toLowerCase();
+    if (registry === 'index.docker.io' || registry === 'registry-1.docker.io') {
+      registry = 'docker.io';
     }
-    const normalized = normalizeImplicitLatest(image);
-    return image === currentImage || normalized === currentImage || image.includes(currentImage);
-  })?.[0];
+  }
+  if (registry === 'docker.io' && parts.length === 1) {
+    parts.unshift('library');
+  }
+  return `${registry}/${parts.join('/')}`.toLowerCase();
+}
+
+function normalizeImageReference(image: string | undefined): string | undefined {
+  if (typeof image !== 'string' || image.trim() === '') {
+    return undefined;
+  }
+  const trimmed = image.trim();
+  const [reference, digest] = trimmed.split('@', 2);
+  const repository = normalizeImageRepository(reference);
+  if (!repository) {
+    return undefined;
+  }
+  if (digest !== undefined) {
+    return digest.trim() ? `${repository}@${digest.trim().toLowerCase()}` : undefined;
+  }
+  const lastSlash = reference.lastIndexOf('/');
+  const lastColon = reference.indexOf(':', lastSlash + 1);
+  const tag = lastColon > lastSlash ? reference.slice(lastColon + 1).trim() : 'latest';
+  return tag && !tag.includes('$') ? `${repository}:${tag}` : undefined;
+}
+
+function validateComposeImageExpression(image: string): void {
+  if (!image.includes('$')) {
+    return;
+  }
+  const tagVariable = extractTagVariable(image);
+  const lastSlash = image.lastIndexOf('/');
+  const lastColon = image.indexOf(':', lastSlash + 1);
+  const repository = image.slice(0, lastColon > lastSlash ? lastColon : image.length);
+  if (!tagVariable || repository.includes('$')) {
+    throw new Error('Portainer service image contains unsupported Compose interpolation');
+  }
+}
+
+function getServiceKey(compose: ComposeFile, container): string | undefined {
+  const composeServiceName = container.labels?.[COMPOSE_SERVICE_LABEL];
+  const composeProjectName = container.labels?.[COMPOSE_PROJECT_LABEL];
+  if (
+    composeProjectName?.trim() &&
+    composeServiceName?.trim() &&
+    compose.services?.[composeServiceName]
+  ) {
+    return composeServiceName;
+  }
+  return undefined;
 }
 
 function getServiceImage(compose: ComposeFile, service: string): string | undefined {
@@ -177,6 +266,30 @@ function getServiceImage(compose: ComposeFile, service: string): string | undefi
     return undefined;
   }
   return typeof serviceDefinition.image === 'string' ? serviceDefinition.image : undefined;
+}
+
+function validateComposePullPolicy(
+  compose: ComposeFile,
+  service: string,
+  serviceImage: string,
+): void {
+  const serviceDefinition = compose.services?.[service];
+  if (!isPlainObject(serviceDefinition)) {
+    return;
+  }
+  const pullPolicy = serviceDefinition.pull_policy;
+  if (pullPolicy === undefined || pullPolicy === 'never') {
+    return;
+  }
+  if (pullPolicy === 'missing' || pullPolicy === 'if_not_present') {
+    const normalizedImage = normalizeImageReference(serviceImage);
+    if (normalizedImage && !normalizedImage.endsWith(':latest')) {
+      return;
+    }
+  }
+  throw new Error(
+    `Portainer service ${service} has unsafe Compose pull_policy ${String(pullPolicy)}`,
+  );
 }
 
 function delay(ms: number): Promise<void> {
@@ -198,7 +311,28 @@ function isTargetServiceContainer(
   if (expectedProject && project !== expectedProject) {
     return false;
   }
-  return item.Image === resolved.targetImage;
+  return (
+    item.State?.toLowerCase() === 'running' &&
+    normalizeImageReference(item.Image) === normalizeImageReference(resolved.targetImage) &&
+    Boolean(resolved.targetImageId) &&
+    item.ImageID === resolved.targetImageId
+  );
+}
+
+function isMatchingServiceContainer(
+  item: DockerContainerListItem,
+  container,
+  resolved: ResolvedPortainerUpdate,
+): boolean {
+  const labels = item.Labels || {};
+  return (
+    labels[COMPOSE_SERVICE_LABEL] === resolved.service &&
+    labels[COMPOSE_PROJECT_LABEL] === container.labels?.[COMPOSE_PROJECT_LABEL]
+  );
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function extractTagVariable(image: string | undefined): string | undefined {
@@ -248,14 +382,21 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
           .uri({
             scheme: ['http', 'https'],
           })
+          .custom((value, helpers) => {
+            const configuration = helpers.state.ancestors[0] as { allowHttp?: boolean };
+            if (value.startsWith('http://') && configuration.allowHttp !== true) {
+              return helpers.error('any.invalid');
+            }
+            return value;
+          })
           .required(),
         apikey: this.joi.string().required(),
+        allowHttp: this.joi.boolean().default(false),
         updateMode: this.joi.string().valid('auto', 'env', 'compose').default('auto'),
         versionVarLabel: this.joi.string().default(DEFAULT_VERSION_VAR_LABEL),
         updateModeLabel: this.joi.string().default(DEFAULT_UPDATE_MODE_LABEL),
-        pullImage: this.joi.boolean().default(true),
         pruneStack: this.joi.boolean().default(false),
-        redeployTimeout: this.joi.number().integer().min(0).default(DEFAULT_REDEPLOY_TIMEOUT_MS),
+        redeployTimeout: this.joi.number().integer().min(1).default(DEFAULT_REDEPLOY_TIMEOUT_MS),
       })
       .rename('updatemode', 'updateMode', {
         ignoreUndefined: true,
@@ -269,15 +410,15 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         ignoreUndefined: true,
         override: true,
       })
-      .rename('pullimage', 'pullImage', {
-        ignoreUndefined: true,
-        override: true,
-      })
       .rename('prunestack', 'pruneStack', {
         ignoreUndefined: true,
         override: true,
       })
       .rename('redeploytimeout', 'redeployTimeout', {
+        ignoreUndefined: true,
+        override: true,
+      })
+      .rename('allowhttp', 'allowHttp', {
         ignoreUndefined: true,
         override: true,
       });
@@ -288,7 +429,11 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
   }
 
   getPortainerUrl() {
-    return normalizePortainerUrl(this.configuration.url);
+    const url = normalizePortainerUrl(this.configuration.url);
+    if (url.startsWith('http://') && this.configuration.allowHttp !== true) {
+      throw new Error('Portainer HTTP requires allowHttp to be enabled');
+    }
+    return url;
   }
 
   getHeaders() {
@@ -301,6 +446,8 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
   async portainerFetch<T>(pathname: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`${this.getPortainerUrl()}${pathname}`, {
       ...init,
+      redirect: 'error',
+      signal: init.signal ?? AbortSignal.timeout(PORTAINER_REQUEST_TIMEOUT_MS),
       headers: {
         ...this.getHeaders(),
         ...(init.headers || {}),
@@ -308,10 +455,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     });
 
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(
-        `Portainer API request ${pathname} failed with HTTP ${response.status}${body ? ` (${body})` : ''}`,
-      );
+      throw new Error(`Portainer API request ${pathname} failed with HTTP ${response.status}`);
     }
 
     if (response.status === 204) {
@@ -354,7 +498,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         stackFileContent,
         env,
         prune: this.configuration.pruneStack,
-        pullImage: this.configuration.pullImage,
+        pullImage: false,
       }),
     });
   }
@@ -366,41 +510,38 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     logContainer,
   ) {
     if (!dockerApi || typeof dockerApi.listContainers !== 'function') {
-      logContainer.warn(
+      throw new Error(
         'Unable to verify Portainer redeploy because Docker listContainers is unavailable',
       );
-      return;
     }
 
     const timeoutMs = this.configuration.redeployTimeout;
     if (!(timeoutMs > 0)) {
-      logContainer.info(
-        'Skip Portainer redeploy verification because redeploy timeout is disabled',
-      );
-      return;
+      throw new Error('Portainer redeploy verification requires a positive timeout');
     }
 
+    const expectedReplicas = resolved.prePutRunningReplicas ?? 1;
     const startedAt = Date.now();
     let lastSeen: string | undefined;
     do {
       const containers = await dockerApi.listContainers({ all: true });
-      const matched = containers.find((item) =>
-        isTargetServiceContainer(item, container, resolved),
+      const matching = containers.filter(
+        (item) =>
+          item.State?.toLowerCase() === 'running' &&
+          isMatchingServiceContainer(item, container, resolved),
       );
-      if (matched) {
+      if (
+        matching.length >= expectedReplicas &&
+        matching.every((item) => isTargetServiceContainer(item, container, resolved))
+      ) {
+        const verified = matching[0];
         logContainer.info(
-          `Portainer redeploy verified: ${matched.Names?.[0]?.replace(/^\//, '') || matched.Id?.substring(0, 12) || resolved.service} now uses ${resolved.targetImage}`,
+          `Portainer redeploy verified: ${verified.Names?.[0]?.replace(/^\//, '') || verified.Id?.substring(0, 12) || resolved.service} now uses ${resolved.targetImage}`,
         );
         return;
       }
 
-      const sameService = containers.find((item) => {
-        const labels = item.Labels || {};
-        return (
-          labels[COMPOSE_SERVICE_LABEL] === resolved.service &&
-          labels[COMPOSE_PROJECT_LABEL] === container.labels?.[COMPOSE_PROJECT_LABEL]
-        );
-      });
+      const sameService = matching.find((item) => item.Image);
       if (sameService?.Image && sameService.Image !== lastSeen) {
         lastSeen = sameService.Image;
         logContainer.debug(
@@ -416,7 +557,82 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     );
   }
 
+  async capturePulledImageId(
+    dockerApi: DockerApiWithListContainers | undefined,
+    image: string,
+  ): Promise<string> {
+    if (!dockerApi || typeof dockerApi.getImage !== 'function') {
+      throw new Error('Unable to verify pulled image because Docker getImage is unavailable');
+    }
+    const inspected = await dockerApi.getImage(image).inspect();
+    const imageId = inspected.Id || inspected.id;
+    if (typeof imageId !== 'string' || imageId.trim() === '') {
+      throw new Error('Unable to verify pulled image because its image ID is unavailable');
+    }
+    return imageId.trim();
+  }
+
+  async verifyPortainerEndpoint(
+    endpointId: number | undefined,
+    container,
+    currentContainerSpec: DockerContainerInspectLike | undefined,
+  ): Promise<void> {
+    if (!Number.isSafeInteger(endpointId) || (endpointId as number) <= 0) {
+      throw new Error('Portainer endpoint identity verification requires a valid endpoint');
+    }
+    const containerId = typeof container?.id === 'string' ? container.id.trim() : '';
+    const localId = currentContainerSpec?.Id?.trim();
+    const localImageId = currentContainerSpec?.Image?.trim();
+    const localImageReference = normalizeImageReference(currentContainerSpec?.Config?.Image);
+    const localRunning = currentContainerSpec?.State?.Running;
+    const localStatus = currentContainerSpec?.State?.Status?.trim();
+    if (
+      !containerId ||
+      !localId ||
+      !localImageId ||
+      !localImageReference ||
+      localRunning === undefined ||
+      !localStatus
+    ) {
+      throw new Error('Portainer endpoint identity verification data is unavailable');
+    }
+    if (localId !== containerId) {
+      throw new Error('Portainer endpoint does not match the watched Docker container');
+    }
+
+    let remote: PortainerDockerApiContext;
+    try {
+      remote = await this.portainerFetch<PortainerDockerApiContext>(
+        `/api/endpoints/${endpointId}/docker/containers/${encodeURIComponent(containerId)}/json`,
+      );
+    } catch (error: unknown) {
+      throw new Error(`Portainer endpoint verification failed: ${getErrorMessage(error)}`);
+    }
+    const remoteId = remote?.Id?.trim();
+    const remoteImageId = remote?.Image?.trim();
+    const remoteImageReference = normalizeImageReference(remote?.Config?.Image);
+    if (
+      remoteId !== containerId ||
+      remoteId !== localId ||
+      remoteImageId !== localImageId ||
+      remoteImageReference !== localImageReference ||
+      remote.State?.Running !== localRunning ||
+      remote.State?.Status?.trim() !== localStatus
+    ) {
+      throw new Error('Portainer endpoint does not match the watched Docker runtime');
+    }
+  }
+
   async resolvePortainerStack(container): Promise<ResolvedPortainerStack> {
+    const composeProject = container.labels?.[COMPOSE_PROJECT_LABEL]?.trim();
+    const composeService = container.labels?.[COMPOSE_SERVICE_LABEL]?.trim();
+    if (!composeProject || !composeService) {
+      throw new Error(
+        `Portainer updates require compose project and service identity labels for container ${container.name}`,
+      );
+    }
+
+    const endpointId = parseEndpointId(container.labels?.[ENDPOINT_ID_LABEL]);
     const configuredStackId = container.labels?.[STACK_ID_LABEL];
     const stacks = await this.getPortainerStacks();
     let matchedStack: PortainerStackSummary | undefined;
@@ -426,12 +642,29 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       if (!matchedStack) {
         throw new Error(`Unable to find Portainer stack with id ${configuredStackId}`);
       }
+      if (endpointId !== undefined && matchedStack.EndpointId !== endpointId) {
+        throw new Error(
+          `Portainer stack ${matchedStack.Id} does not belong to endpoint ${endpointId}`,
+        );
+      }
     } else {
       const containerProjectPaths = getComposeProjectPaths(container.labels);
-      matchedStack = stacks.find((stack) => {
+      const candidates = stacks.filter((stack) => {
+        if (endpointId !== undefined && stack.EndpointId !== endpointId) {
+          return false;
+        }
+        if (stack.Name !== composeProject) {
+          return false;
+        }
         const projectPath = normalizePath(stack.ProjectPath);
         return Boolean(projectPath && containerProjectPaths.has(projectPath));
       });
+      if (candidates.length > 1) {
+        throw new Error(
+          `Unable to resolve an unambiguous Portainer stack for container ${container.name}`,
+        );
+      }
+      matchedStack = candidates[0];
     }
 
     if (!matchedStack) {
@@ -439,9 +672,8 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     }
 
     const stack = await this.getPortainerStack(matchedStack.Id);
-    const endpointId = container.labels?.[ENDPOINT_ID_LABEL];
-    if (endpointId) {
-      stack.EndpointId = Number(endpointId);
+    if (endpointId !== undefined && stack.EndpointId !== endpointId) {
+      throw new Error(`Portainer stack ${stack.Id} does not belong to endpoint ${endpointId}`);
     }
 
     const stackFileContent = await this.getPortainerStackFile(stack.Id);
@@ -457,13 +689,16 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
   }
 
   resolvePortainerUpdate(container, targetImage: string): Promise<ResolvedPortainerUpdate> {
+    if (container.updateKind?.kind !== 'tag') {
+      return Promise.reject(new Error('Portainer provider only supports tag updates'));
+    }
     return this.resolvePortainerStack(container).then(({ stack, stackFileContent }) => {
       const compose = yaml.parse(stackFileContent, {
         maxAliasCount: YAML_MAX_ALIAS_COUNT,
       }) as ComposeFile;
       const registry = getState().registry[container.image.registry.name];
       const currentImage = registry.getImageFullName(container.image, container.image.tag.value);
-      const service = getServiceKey(compose, container, currentImage);
+      const service = getServiceKey(compose, container);
       if (!service) {
         throw new Error(
           `Unable to resolve Portainer stack service for container ${container.name}`,
@@ -471,6 +706,18 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       }
 
       const serviceImage = getServiceImage(compose, service);
+      if (!serviceImage) {
+        throw new Error(`Portainer service ${service} has no image repository`);
+      }
+      validateComposePullPolicy(compose, service, serviceImage);
+      validateComposeImageExpression(serviceImage);
+      const runtimeRepository = normalizeImageRepository(currentImage);
+      const serviceRepository = normalizeImageRepository(serviceImage);
+      if (!runtimeRepository || !serviceRepository || runtimeRepository !== serviceRepository) {
+        throw new Error(
+          `Portainer service ${service} image repository does not match the runtime image repository`,
+        );
+      }
       const explicitVersionVar = container.labels?.[this.configuration.versionVarLabel];
       const detectedVersionVar = extractTagVariable(serviceImage);
       const updateMode = this.resolveConfiguredUpdateMode(container);
@@ -498,6 +745,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
           service,
           serviceImage,
           versionVar,
+          originalImage: currentImage,
           targetImage,
           targetTag,
           updatedStackFileContent: stackFileContent,
@@ -511,6 +759,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         stackFileContent,
         service,
         serviceImage,
+        originalImage: currentImage,
         targetImage,
         targetTag,
         updatedStackFileContent: updateComposeServiceImageInText(
@@ -552,6 +801,9 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
   }
 
   async runPreRuntimeUpdateLifecycle(context, container, logContainer, runtimeContext?: unknown) {
+    if (container.updateKind?.kind !== 'tag') {
+      throw new Error('Portainer provider only supports tag updates');
+    }
     if (this.configuration.dryrun) {
       logContainer.info('Skip prune/backup in Portainer dry-run mode');
       return;
@@ -566,24 +818,141 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     runtimeContext?: unknown,
     postPullHook?: (operationId: string) => Promise<void>,
   ) {
+    if (container.updateKind?.kind !== 'tag') {
+      throw new Error('Portainer provider only supports tag updates');
+    }
     const resolved = await this.resolvePortainerUpdate(container, context.newImage);
     logContainer.info(
       `Redeploy Portainer stack ${resolved.stack.Name || resolved.stack.Id} service ${resolved.service} using ${resolved.mode} mode`,
     );
 
-    await this.redeployPortainerStack(
-      resolved.stack,
-      resolved.updatedStackFileContent,
-      resolved.updatedEnv,
+    await this.verifyPortainerEndpoint(
+      resolved.stack.EndpointId,
+      container,
+      context.currentContainerSpec,
     );
 
-    await this.waitForPortainerRedeploy(context.dockerApi, container, resolved, logContainer);
+    await this.pullImage(context.dockerApi, context.auth, context.newImage, logContainer);
 
+    resolved.targetImageId = await this.capturePulledImageId(context.dockerApi, context.newImage);
     if (postPullHook) {
       await postPullHook(getRequestedOperationId(container, runtimeContext) ?? '');
     }
+    const verifiedTargetImageId = await this.capturePulledImageId(
+      context.dockerApi,
+      context.newImage,
+    );
+    if (verifiedTargetImageId !== resolved.targetImageId) {
+      throw new Error('Pulled image identity changed during the post-pull hook');
+    }
 
-    return !this.configuration.dryrun;
+    if (this.configuration.dryrun) {
+      logContainer.info('Skip Portainer stack redeploy and verification in dry-run mode');
+      return false;
+    }
+
+    const dockerApi = context.dockerApi as DockerApiWithListContainers | undefined;
+    if (!dockerApi || typeof dockerApi.listContainers !== 'function') {
+      throw new Error(
+        'Unable to update Portainer stack because Docker listContainers is unavailable',
+      );
+    }
+    const currentContainers = await dockerApi.listContainers({ all: true });
+    const matchingCurrent = currentContainers.filter((item) =>
+      isMatchingServiceContainer(item, container, resolved),
+    );
+    const runningCurrent = matchingCurrent.filter(
+      (item) => item.State?.toLowerCase() === 'running',
+    );
+    resolved.prePutRunningReplicas = runningCurrent.length;
+    if (resolved.prePutRunningReplicas < 1) {
+      throw new Error(
+        `Unable to update Portainer stack because no running replicas were found for ${resolved.service}`,
+      );
+    }
+    const originalImageIds = runningCurrent.map((item) => item.ImageID?.trim());
+    const originalImages = runningCurrent.map((item) => normalizeImageReference(item.Image));
+    const expectedOriginalImage = normalizeImageReference(resolved.originalImage);
+    if (
+      originalImageIds.some((imageId) => !imageId) ||
+      originalImages.some((image) => !image) ||
+      !expectedOriginalImage ||
+      originalImages.some((image) => image !== expectedOriginalImage) ||
+      new Set(originalImageIds).size !== 1 ||
+      new Set(originalImages).size !== 1
+    ) {
+      throw new Error(
+        `Unable to update Portainer stack because running replicas do not share one original image identity`,
+      );
+    }
+    resolved.originalImageId = originalImageIds[0];
+
+    let primaryError: unknown;
+    try {
+      await this.redeployPortainerStack(
+        resolved.stack,
+        resolved.updatedStackFileContent,
+        resolved.updatedEnv,
+      );
+    } catch (error: unknown) {
+      primaryError = error;
+    }
+
+    try {
+      await this.waitForPortainerRedeploy(context.dockerApi, container, resolved, logContainer);
+      primaryError = undefined;
+    } catch (waitError: unknown) {
+      primaryError ??= waitError;
+    }
+
+    if (primaryError) {
+      let restoreWaitError: unknown;
+      try {
+        await this.redeployPortainerStack(
+          resolved.stack,
+          resolved.stackFileContent,
+          resolved.stack.Env || [],
+        );
+      } catch {
+        // The convergence wait below determines whether restoration succeeded.
+      }
+      try {
+        await this.waitForPortainerRedeploy(
+          context.dockerApi,
+          container,
+          {
+            ...resolved,
+            targetImage: resolved.originalImage,
+            targetImageId: resolved.originalImageId,
+            prePutRunningReplicas: resolved.prePutRunningReplicas,
+          },
+          logContainer,
+        );
+      } catch (restoreError: unknown) {
+        restoreWaitError = restoreError;
+      }
+      if (restoreWaitError) {
+        const restoreMessage = getErrorMessage(restoreWaitError);
+        logContainer.warn(`Portainer stack restore failed: ${restoreMessage}`);
+        throw new Error(
+          `${getErrorMessage(primaryError)} (Portainer restore failed: ${restoreMessage})`,
+        );
+      }
+      throw primaryError;
+    }
+
+    return true;
+  }
+
+  async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
+    if (container.updateKind?.kind !== 'tag') {
+      throw new Error('Portainer provider only supports tag updates');
+    }
+    return super.runContainerUpdateLifecycle(container, runtimeContext);
+  }
+
+  getRollbackConfig(container) {
+    return { ...super.getRollbackConfig(container), autoRollback: false };
   }
 
   override getUpdateLockKeys(container: {
@@ -596,6 +965,12 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     if (composeProject) {
       keys.push(buildComposeProjectLockKey(container, composeProject));
     }
+    const endpointId = container.labels?.[ENDPOINT_ID_LABEL] || 'unknown-endpoint';
+    const stackId = container.labels?.[STACK_ID_LABEL];
+    const scope = stackId
+      ? `stack:${stackId}:endpoint:${endpointId}`
+      : `project:${composeProject || 'unknown'}:endpoint:${endpointId}`;
+    keys.push(`portainer:${normalizePortainerUrl(this.configuration.url)}:${scope}`);
     return keys;
   }
 }
@@ -604,7 +979,17 @@ export default Portainer;
 
 export {
   extractTagVariable as testable_extractTagVariable,
+  getComposeConfigFiles as testable_getComposeConfigFiles,
   getComposeProjectPaths as testable_getComposeProjectPaths,
+  getServiceImage as testable_getServiceImage,
+  getServiceKey as testable_getServiceKey,
   getTargetTag as testable_getTargetTag,
+  isMatchingServiceContainer as testable_isMatchingServiceContainer,
+  isTargetServiceContainer as testable_isTargetServiceContainer,
+  normalizeImageReference as testable_normalizeImageReference,
+  normalizeImageRepository as testable_normalizeImageRepository,
+  normalizeImplicitLatest as testable_normalizeImplicitLatest,
+  normalizePath as testable_normalizePath,
   upsertStackEnv as testable_upsertStackEnv,
+  validateComposePullPolicy as testable_validateComposePullPolicy,
 };

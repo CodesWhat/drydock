@@ -1,4 +1,8 @@
-import { findDockerTriggerForContainer } from '../api/docker-trigger.js';
+import type { DockerTriggerCandidate } from '../api/docker-trigger.js';
+import {
+  findDockerTriggerForContainer,
+  isTriggerExecutionCompatibleWithContainer,
+} from '../api/docker-trigger.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
 import {
@@ -464,7 +468,13 @@ export function computeUpdateEligibility(
     if (!triggers) return undefined;
     for (const trigger of Object.values(triggers)) {
       const type = (trigger as unknown as { type?: string }).type ?? '';
-      if (DOCKER_TRIGGER_TYPES.has(type.toLowerCase())) {
+      if (
+        DOCKER_TRIGGER_TYPES.has(type.toLowerCase()) &&
+        isTriggerExecutionCompatibleWithContainer(
+          trigger as unknown as DockerTriggerCandidate,
+          container,
+        )
+      ) {
         return trigger;
       }
     }

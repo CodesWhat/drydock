@@ -26,7 +26,7 @@ Two prefixes are supported for trigger configuration (the legacy third was remov
 | `DD_NOTIFICATION_*` | **Current** | `DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com` |
 | `DD_TRIGGER_*` | **Removed in v1.7.0** — accepted in v1.6 with an `error`-level warning for every detected input; any `DD_TRIGGER_*` variable now fails startup | `DD_TRIGGER_SLACK_MYSLACK_URL=https://...` |
 
-Use `DD_ACTION_*` for update-action providers (Docker, Docker Compose, Command) and `DD_NOTIFICATION_*` for messaging providers (Slack, SMTP, Discord, etc.). The legacy `DD_TRIGGER_*` prefix no longer works as of v1.7.0 — drydock fails to start and lists every detected variable next to its exact replacement.
+Use `DD_ACTION_*` for update-action providers (Docker, Docker Compose, Portainer, Command) and `DD_NOTIFICATION_*` for messaging providers (Slack, SMTP, Discord, etc.). The legacy `DD_TRIGGER_*` prefix no longer works as of v1.7.0 — drydock fails to start and lists every detected variable next to its exact replacement.
 
 When the same trigger property is set under multiple prefixes, the merge priority is `DD_NOTIFICATION_*` > `DD_ACTION_*` (highest wins).
 
@@ -70,8 +70,11 @@ DD_NOTIFICATION_SMTP_GMAIL_PORT=465
 
 **Update actions:**
 
+Portainer is also an update-action provider and uses the `DD_ACTION_PORTAINER_*` prefix.
+
 - [**Docker**](/docs/configuration/triggers/docker) -- Update containers via the Docker Engine API
 - [**Docker Compose**](/docs/configuration/triggers/docker-compose) -- Update containers managed by Docker Compose
+- [**Portainer**](/docs/configuration/triggers/portainer) -- Redeploy local Portainer-managed Compose stacks
 - [**Command**](/docs/configuration/triggers/command) -- Execute a shell command
 
 **Messaging & notifications:**
@@ -100,7 +103,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --------------------------------------------------------- | :--------------: | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_AUTO` | ⚪ | Controls automatic execution for `update-available` events. `true` (or legacy `all`) — auto-execute for all watched containers, ignoring `dd.action.include`/`dd.action.auto`. `oninclude` — auto-execute only for containers with an explicit `dd.action.include` or `dd.notification.include` label (manual access follows the same label). `onauto` (action triggers only) — split manual and automatic access: `dd.action.include` still grants manual access, but automatic access additionally requires a `dd.action.auto` label match. `false` (or legacy `none`) — disable automatic `update-available` notifications/actions for this trigger, but still open **manual** access to every watched container, ignoring `dd.action.include`. Note: `AUTO=false` does **not** suppress lifecycle notifications (`update-applied`, `update-failed`, `security-alert`, `agent-disconnect`, `agent-reconnect`). | `true`, `false`, `oninclude`, `onauto`, `all`, `none` | `oninclude` for action triggers (docker, dockercompose, command); `true` for notification triggers |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_AUTO` | ⚪ | Controls automatic execution for `update-available` events. `true` (or legacy `all`) — auto-execute for all watched containers, ignoring `dd.action.include`/`dd.action.auto`. `oninclude` — auto-execute only for containers with an explicit `dd.action.include` or `dd.notification.include` label (manual access follows the same label). `onauto` (action triggers only) — split manual and automatic access: `dd.action.include` still grants manual access, but automatic access additionally requires a `dd.action.auto` label match. `false` (or legacy `none`) — disable automatic `update-available` notifications/actions for this trigger, but still open **manual** access to every watched container, ignoring `dd.action.include`. Note: `AUTO=false` does **not** suppress lifecycle notifications (`update-applied`, `update-failed`, `security-alert`, `agent-disconnect`, `agent-reconnect`). | `true`, `false`, `oninclude`, `onauto`, `all`, `none` | `oninclude` for action triggers (docker, dockercompose, portainer, command); `true` for notification triggers |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_BATCHTITLE` | ⚪ | The template to use to render the title of the notification (batch mode) | String template with `${containers}` context | `${containers.length} updates available` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update, trigger once with all available updates as a list, or accumulate updates and send on a schedule | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_DIGESTCRON` | ⚪ | Cron schedule for digest mode flush (only used when `MODE=digest` or `MODE=batch+digest`) | Cron expression | `0 8 * * *` |

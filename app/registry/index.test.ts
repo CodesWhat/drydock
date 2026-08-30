@@ -1541,6 +1541,9 @@ test('registerTriggers in agent mode should filter out unsupported trigger types
     mock: {
       update: {},
     },
+    portainer: {
+      update: {},
+    },
     docker: {
       update: {},
     },
@@ -1548,6 +1551,7 @@ test('registerTriggers in agent mode should filter out unsupported trigger types
   await registry.testable_registerTriggers({ agent: true });
   // mock is not in the allowed list for agent mode
   expect(registry.getState().trigger['mock.update']).toBeUndefined();
+  expect(registry.getState().trigger['portainer.update']).toBeUndefined();
   expect(registry.getState().trigger['docker.update']).toBeDefined();
 });
 

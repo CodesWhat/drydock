@@ -382,7 +382,7 @@ function mergeRecords(
  * `ddEnvVars`/`get()` from it during startup), so pulling in trigger-domain
  * modules here risks a require cycle.
  */
-const ACTION_TRIGGER_ENV_TYPES = new Set(['docker', 'dockercompose', 'command']);
+const ACTION_TRIGGER_ENV_TYPES = new Set(['docker', 'dockercompose', 'portainer', 'command']);
 
 /**
  * Suggest the DD_ACTION_ / DD_NOTIFICATION_ replacement for a detected

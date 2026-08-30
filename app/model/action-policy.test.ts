@@ -555,6 +555,31 @@ describe('selectActionTrigger — equivalence with findDockerTriggerForContainer
     expect(findDockerTriggerForContainer(triggers, container)).toBe(agentDocker);
   });
 
+  test('skips an ineligible Portainer action and selects a compatible Docker action', () => {
+    const portainerTrigger = makeTrigger('portainer.update', {
+      type: 'portainer',
+      configuration: { auto: 'all' },
+    });
+    const dockerTrigger = makeTrigger('docker.update', {
+      type: 'docker',
+      configuration: { auto: 'all' },
+    });
+    const triggers = {
+      'portainer.update': portainerTrigger,
+      'docker.update': dockerTrigger,
+    };
+    const container = makeContainer({
+      image: { name: 'drydock' },
+      labels: {
+        'com.docker.compose.project': 'demo',
+        'com.docker.compose.service': 'drydock',
+      },
+    });
+
+    expect(selectActionTrigger(triggers, container)?.trigger).toBe(dockerTrigger);
+    expect(findDockerTriggerForContainer(triggers, container)).toBe(dockerTrigger);
+  });
+
   test('returns the first matching local docker trigger for local containers', () => {
     const firstDocker = makeTrigger('docker.first', {
       type: 'docker',

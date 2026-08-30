@@ -45,7 +45,7 @@ When the same trigger is defined under multiple prefixes, the merge priority is:
 
 Container labels follow the same pattern: `dd.action.include` / `dd.action.exclude` replaced the removed `dd.trigger.include` / `dd.trigger.exclude`.
 
-<Callout type="info">Action triggers (Docker, Docker Compose, Command) default to `AUTO=oninclude`, meaning they only auto-update containers that have an explicit `dd.action.include` label matching the trigger name. Notification triggers default to `AUTO=true`.</Callout>
+<Callout type="info">Action triggers (Docker, Docker Compose, Portainer, Command) default to `AUTO=oninclude`, meaning they only auto-update containers that have an explicit `dd.action.include` label matching the trigger name. Notification triggers default to `AUTO=true`.</Callout>
 
 <Callout type="warn">**`dd.action.include` / `dd.action.exclude` are hard blockers.** A container with a non-matching include or an active exclude label rejects both automatic and manual updates — the Update button is locked and the API returns `409` for a manual update request. If you need a container to stay manually updatable while excluded from automatic dispatch, use `AUTO=onauto` with `dd.action.include` (or `dd.action.auto`) instead of relying on the old soft-blocker behavior.</Callout>
 
