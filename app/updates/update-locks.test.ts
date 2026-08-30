@@ -367,7 +367,8 @@ describe('withContainerUpdateLocks (exclusive lifecycle coordination)', () => {
       {
         bypassGlobalCap: true,
         exclusive: true,
-        retainExclusiveOnResult: (result) => result === true,
+        retainExclusiveOnResult: (result) =>
+          result === true ? { operationId: 'self-retained' } : undefined,
       },
     );
     void retainedModule.withContainerUpdateLocks(
@@ -400,7 +401,8 @@ describe('withContainerUpdateLocks (exclusive lifecycle coordination)', () => {
       {
         bypassGlobalCap: true,
         exclusive: true,
-        retainExclusiveOnResult: (updated) => updated !== false,
+        retainExclusiveOnResult: (updated) =>
+          updated !== false ? { operationId: 'self-dry-run' } : undefined,
       },
     );
     let regularStarted = false;
@@ -425,7 +427,7 @@ describe('withContainerUpdateLocks (exclusive lifecycle coordination)', () => {
         {
           bypassGlobalCap: true,
           exclusive: true,
-          retainExclusiveOnResult: () => true,
+          retainExclusiveOnResult: () => ({ operationId: 'self-failed' }),
         },
       ),
     ).rejects.toBe(failure);
@@ -433,6 +435,233 @@ describe('withContainerUpdateLocks (exclusive lifecycle coordination)', () => {
     await expect(
       withContainerUpdateLocks(['container:local:regular-after-self-failure'], async () => 'ran'),
     ).resolves.toBe('ran');
+  });
+
+  test('releases a retained self-update lifecycle once and drains queued regular work', async () => {
+    vi.resetModules();
+    const mod = await import('./update-locks.js?rollback-release');
+    let regularStarted = false;
+
+    await mod.withContainerUpdateLocks(['container:local:self-rollback'], async () => true, {
+      bypassGlobalCap: true,
+      exclusive: true,
+      retainExclusiveOnResult: (result) =>
+        result === true ? { operationId: 'self-rollback' } : undefined,
+    });
+    const regular = mod.withContainerUpdateLocks(
+      ['container:local:regular-after-rollback'],
+      async () => {
+        regularStarted = true;
+      },
+    );
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
+
+    expect(mod.getUpdateLockSnapshot().lifecycle).toMatchObject({
+      exclusiveActive: true,
+      retainedExclusive: true,
+      retainedOperationId: 'self-rollback',
+      pending: 1,
+    });
+    mod.releaseRetainedSelfUpdateLifecycle('stale-operation');
+    expect(mod.getUpdateLockSnapshot().lifecycle?.pending).toBe(1);
+    mod.releaseRetainedSelfUpdateLifecycle('self-rollback');
+    mod.releaseRetainedSelfUpdateLifecycle('self-rollback');
+    await regular;
+
+    expect(regularStarted).toBe(true);
+    expect(mod.getUpdateLockSnapshot().lifecycle).toBeUndefined();
+  });
+
+  test('does not let a stale callback release a newer retained self-update lease', async () => {
+    vi.resetModules();
+    const mod = await import('./update-locks.js?stale-release');
+
+    await mod.withContainerUpdateLocks(['container:local:self-old'], async () => true, {
+      bypassGlobalCap: true,
+      exclusive: true,
+      retainExclusiveOnResult: () => ({ operationId: 'self-old' }),
+    });
+    mod.releaseRetainedSelfUpdateLifecycle('self-old');
+
+    await mod.withContainerUpdateLocks(['container:local:self-new'], async () => true, {
+      bypassGlobalCap: true,
+      exclusive: true,
+      retainExclusiveOnResult: () => ({ operationId: 'self-new' }),
+    });
+    const regular = mod.withContainerUpdateLocks(['container:local:after-new'], async () => 'ran');
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    mod.releaseRetainedSelfUpdateLifecycle('self-old');
+    expect(mod.getUpdateLockSnapshot().lifecycle?.pending).toBe(1);
+
+    mod.releaseRetainedSelfUpdateLifecycle('self-new');
+    await expect(regular).resolves.toBe('ran');
+  });
+
+  test('consumes an early matching release from the active exclusive lifecycle', async () => {
+    vi.resetModules();
+    const mod = await import('./update-locks.js?early-release');
+    const selfUpdate = mod.withContainerUpdateLocks(
+      ['container:local:self-early'],
+      async () => {
+        mod.releaseRetainedSelfUpdateLifecycle('self-early');
+        return true;
+      },
+      {
+        bypassGlobalCap: true,
+        exclusive: true,
+        retainExclusiveOnResult: () => ({ operationId: 'self-early' }),
+      },
+    );
+    await selfUpdate;
+
+    await expect(
+      mod.withContainerUpdateLocks(['container:local:regular-after-early'], async () => 'ran'),
+    ).resolves.toBe('ran');
+    expect(mod.getUpdateLockSnapshot().lifecycle).toBeUndefined();
+  });
+
+  test('clears unrelated early releases before retaining the active operation', async () => {
+    vi.resetModules();
+    const mod = await import('./update-locks.js?early-unrelated');
+    await expect(
+      mod.withContainerUpdateLocks(
+        ['container:local:self-unrelated'],
+        async () => {
+          mod.releaseRetainedSelfUpdateLifecycle('stale-operation');
+          return true;
+        },
+        {
+          bypassGlobalCap: true,
+          exclusive: true,
+          retainExclusiveOnResult: () => ({ operationId: 'self-unrelated' }),
+        },
+      ),
+    ).resolves.toBe(true);
+
+    const regular = mod.withContainerUpdateLocks(
+      ['container:local:regular-unrelated'],
+      async () => 'ran',
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(mod.getUpdateLockSnapshot().lifecycle?.retainedOperationId).toBe('self-unrelated');
+    mod.releaseRetainedSelfUpdateLifecycle('self-unrelated');
+    await expect(regular).resolves.toBe('ran');
+  });
+
+  test('clears early releases when the active lifecycle fails or does not retain', async () => {
+    vi.resetModules();
+    const mod = await import('./update-locks.js?early-clear');
+
+    await expect(
+      mod.withContainerUpdateLocks(
+        ['container:local:self-failed-early'],
+        async () => {
+          mod.releaseRetainedSelfUpdateLifecycle('self-failed-early');
+          throw new Error('lifecycle failed');
+        },
+        {
+          bypassGlobalCap: true,
+          exclusive: true,
+          retainExclusiveOnResult: () => ({ operationId: 'self-failed-early' }),
+        },
+      ),
+    ).rejects.toThrow('lifecycle failed');
+
+    await mod.withContainerUpdateLocks(
+      ['container:local:self-dryrun-early'],
+      async () => {
+        mod.releaseRetainedSelfUpdateLifecycle('self-dryrun-early');
+        return false;
+      },
+      {
+        bypassGlobalCap: true,
+        exclusive: true,
+        retainExclusiveOnResult: (result) =>
+          result ? { operationId: 'self-dryrun-early' } : undefined,
+      },
+    );
+
+    await mod.withContainerUpdateLocks(['container:local:self-after-dryrun'], async () => true, {
+      bypassGlobalCap: true,
+      exclusive: true,
+      retainExclusiveOnResult: () => ({ operationId: 'self-dryrun-early' }),
+    });
+    const regular = mod.withContainerUpdateLocks(
+      ['container:local:after-early-clear'],
+      async () => 'ran',
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(mod.getUpdateLockSnapshot().lifecycle?.pending).toBe(1);
+    mod.releaseRetainedSelfUpdateLifecycle('self-dryrun-early');
+    await expect(regular).resolves.toBe('ran');
+  });
+
+  test.each([
+    ['matching-then-stale', ['self-order', 'stale-order']],
+    ['stale-then-matching', ['stale-order', 'self-order']],
+  ])('preserves a matching early release across callback order: %s', async (_name, callbacks) => {
+    vi.resetModules();
+    const mod =
+      _name === 'matching-then-stale'
+        ? await import('./update-locks.js?early-order-matching')
+        : await import('./update-locks.js?early-order-stale');
+
+    await mod.withContainerUpdateLocks(
+      ['container:local:self-order'],
+      async () => {
+        for (const operationId of callbacks) {
+          mod.releaseRetainedSelfUpdateLifecycle(operationId);
+        }
+        return true;
+      },
+      {
+        bypassGlobalCap: true,
+        exclusive: true,
+        retainExclusiveOnResult: () => ({ operationId: 'self-order' }),
+      },
+    );
+
+    await expect(
+      mod.withContainerUpdateLocks(['container:local:regular-after-order'], async () => 'ran'),
+    ).resolves.toBe('ran');
+    expect(mod.getUpdateLockSnapshot().lifecycle).toBeUndefined();
+  });
+
+  test('ignores a wrong release after retention without affecting a later lifecycle', async () => {
+    vi.resetModules();
+    const mod = await import('./update-locks.js?post-retention-wrong');
+
+    await mod.withContainerUpdateLocks(['container:local:self-retained-first'], async () => true, {
+      bypassGlobalCap: true,
+      exclusive: true,
+      retainExclusiveOnResult: () => ({ operationId: 'self-retained-first' }),
+    });
+    mod.releaseRetainedSelfUpdateLifecycle('wrong-after-retention');
+    const firstRegular = mod.withContainerUpdateLocks(
+      ['container:local:regular-after-first'],
+      async () => 'first-ran',
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(mod.getUpdateLockSnapshot().lifecycle?.pending).toBe(1);
+    mod.releaseRetainedSelfUpdateLifecycle('self-retained-first');
+    await expect(firstRegular).resolves.toBe('first-ran');
+
+    await mod.withContainerUpdateLocks(['container:local:self-retained-second'], async () => true, {
+      bypassGlobalCap: true,
+      exclusive: true,
+      retainExclusiveOnResult: () => ({ operationId: 'self-retained-second' }),
+    });
+    const secondRegular = mod.withContainerUpdateLocks(
+      ['container:local:regular-after-second'],
+      async () => 'second-ran',
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(mod.getUpdateLockSnapshot().lifecycle?.pending).toBe(1);
+    mod.releaseRetainedSelfUpdateLifecycle('self-retained-second');
+    await expect(secondRegular).resolves.toBe('second-ran');
   });
 });
 

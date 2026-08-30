@@ -57,7 +57,9 @@ import {
   markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
   prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation,
 } from './self-update-operation.js';
-import UpdateLifecycleExecutor from './UpdateLifecycleExecutor.js';
+import UpdateLifecycleExecutor, {
+  type SelfUpdateLifecycleResult,
+} from './UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
@@ -78,6 +80,15 @@ type ComposeRollbackTerminalPatch =
       rollbackReason?: string;
       lastError: string;
     };
+
+function isSelfUpdateLifecycleResult(value: unknown): value is SelfUpdateLifecycleResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as SelfUpdateLifecycleResult).updated === 'boolean' &&
+    typeof (value as SelfUpdateLifecycleResult).operationId === 'string'
+  );
+}
 
 export interface DockerTriggerConfiguration extends TriggerConfiguration {
   prune: boolean;
@@ -1687,12 +1698,21 @@ class Docker<
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
     const selfUpdate = this.isSelfUpdate(container);
     const bypassGlobalCap = selfUpdate || this.isInfrastructureUpdate(container);
+    let selfUpdateOperationId: string | undefined;
     return withContainerUpdateLocks(
       this.getUpdateLockKeys(container),
       async () => {
         const requestedOperationId = getRequestedOperationId(container, runtimeContext);
         try {
-          const result: unknown = await this.updateLifecycleExecutor.run(container, runtimeContext);
+          const lifecycleResult: unknown = await this.updateLifecycleExecutor.run(
+            container,
+            runtimeContext,
+          );
+          let result: unknown = lifecycleResult;
+          if (isSelfUpdateLifecycleResult(lifecycleResult)) {
+            selfUpdateOperationId = lifecycleResult.operationId;
+            result = lifecycleResult.updated;
+          }
           if (result !== false && requestedOperationId) {
             const operation = updateOperationStore.getOperationById(requestedOperationId);
             if (
@@ -1787,7 +1807,10 @@ class Docker<
       {
         bypassGlobalCap,
         exclusive: selfUpdate,
-        retainExclusiveOnResult: (result) => result === true,
+        retainExclusiveOnResult: (result) =>
+          result === true && selfUpdateOperationId
+            ? { operationId: selfUpdateOperationId }
+            : undefined,
       },
     );
   }

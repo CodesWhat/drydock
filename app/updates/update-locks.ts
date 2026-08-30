@@ -1,3 +1,4 @@
+import log from '../log/index.js';
 import { parseEnvNonNegativeInteger } from '../util/parse.js';
 import { LockManager, Semaphore } from './lock-primitives.js';
 
@@ -30,6 +31,10 @@ interface UpdateLifecycleGateWaiter {
   resolve: (release: () => void) => void;
 }
 
+export interface RetainedExclusiveLifecycle {
+  operationId: string;
+}
+
 /**
  * Fair shared/exclusive gate for complete update lifecycles.
  *
@@ -43,24 +48,61 @@ class UpdateLifecycleGate {
 
   private exclusiveActive = false;
 
+  private retainedExclusive = false;
+
+  private retainedExclusiveOperationId: string | undefined;
+
+  private retainedExclusiveRelease: (() => void) | undefined;
+
+  private readonly earlyReleaseOperationIds = new Set<string>();
+
   private readonly waiters: UpdateLifecycleGateWaiter[] = [];
 
   async withAccess<T>(
     exclusive: boolean,
     fn: () => Promise<T>,
-    retainExclusiveOnResult?: (result: T) => boolean,
+    retainExclusiveOnResult?: (result: T) => RetainedExclusiveLifecycle | undefined,
   ): Promise<T> {
     const release = await this.acquire(exclusive);
-    let retainExclusive = false;
+    if (exclusive) {
+      this.earlyReleaseOperationIds.clear();
+    }
+    let retainedLifecycle: RetainedExclusiveLifecycle | undefined;
     try {
       const result = await fn();
-      retainExclusive =
-        exclusive && retainExclusiveOnResult !== undefined && retainExclusiveOnResult(result);
+      retainedLifecycle =
+        exclusive && retainExclusiveOnResult !== undefined
+          ? retainExclusiveOnResult(result)
+          : undefined;
       return result;
     } finally {
-      if (!retainExclusive) {
+      if (retainedLifecycle) {
+        const releasedEarly = this.earlyReleaseOperationIds.has(retainedLifecycle.operationId);
+        this.earlyReleaseOperationIds.clear();
+        if (releasedEarly) {
+          release();
+        } else {
+          this.retainedExclusive = true;
+          this.retainedExclusiveOperationId = retainedLifecycle.operationId;
+          this.retainedExclusiveRelease = release;
+          log.warn(
+            'Self-update lifecycle exclusivity retained after handoff; waiting work requires rollback finalization to resume.',
+          );
+        }
+      } else {
+        this.earlyReleaseOperationIds.clear();
         release();
       }
+    }
+  }
+
+  releaseRetainedExclusive(operationId: string): void {
+    if (this.retainedExclusiveOperationId === operationId) {
+      this.retainedExclusiveRelease?.();
+      return;
+    }
+    if (!this.retainedExclusive && this.exclusiveActive) {
+      this.earlyReleaseOperationIds.add(operationId);
     }
   }
 
@@ -68,6 +110,12 @@ class UpdateLifecycleGate {
     if (this.canAcquireImmediately(exclusive)) {
       this.markAcquired(exclusive);
       return Promise.resolve(this.makeRelease(exclusive));
+    }
+
+    if (this.retainedExclusive) {
+      log.warn(
+        'Update lifecycle work is waiting behind retained self-update exclusivity; rollback finalization is required to resume it.',
+      );
     }
 
     return new Promise<() => void>((resolve) => {
@@ -91,9 +139,19 @@ class UpdateLifecycleGate {
   }
 
   private makeRelease(exclusive: boolean): () => void {
+    let released = false;
     return () => {
+      /* v8 ignore next 3 -- the release closure is private; public idempotence clears its retained reference. */
+      if (released) {
+        return;
+      }
+      released = true;
       if (exclusive) {
+        this.earlyReleaseOperationIds.clear();
         this.exclusiveActive = false;
+        this.retainedExclusive = false;
+        this.retainedExclusiveOperationId = undefined;
+        this.retainedExclusiveRelease = undefined;
       } else {
         this.activeShared--;
       }
@@ -123,9 +181,26 @@ class UpdateLifecycleGate {
       shared.resolve(this.makeRelease(false));
     }
   }
+
+  snapshot(): UpdateLifecycleSnapshot {
+    return {
+      activeShared: this.activeShared,
+      exclusiveActive: this.exclusiveActive,
+      retainedExclusive: this.retainedExclusive,
+      pending: this.waiters.length,
+      ...(this.retainedExclusiveOperationId
+        ? { retainedOperationId: this.retainedExclusiveOperationId }
+        : {}),
+    };
+  }
 }
 
 const updateLifecycleGate = new UpdateLifecycleGate();
+
+/** Release the exclusive lifecycle retained by a self-update handoff. */
+export function releaseRetainedSelfUpdateLifecycle(operationId: string): void {
+  updateLifecycleGate.releaseRetainedExclusive(operationId);
+}
 
 const _maxConcurrent = parseMaxConcurrent(process.env.DD_UPDATE_MAX_CONCURRENT);
 const globalSemaphore: Semaphore | null =
@@ -146,7 +221,7 @@ export async function withContainerUpdateLocks<T>(
   options?: {
     bypassGlobalCap?: boolean;
     exclusive?: boolean;
-    retainExclusiveOnResult?: (result: T) => boolean;
+    retainExclusiveOnResult?: (result: T) => RetainedExclusiveLifecycle | undefined;
   },
 ): Promise<T> {
   return updateLifecycleGate.withAccess(
@@ -181,10 +256,19 @@ export function buildComposeProjectLockKey(
 export interface UpdateLockSnapshot {
   held: string[];
   pending: Array<{ key: string; waiters: number }>;
+  lifecycle?: UpdateLifecycleSnapshot;
   semaphore?: {
     available: number;
     pending: number;
   };
+}
+
+export interface UpdateLifecycleSnapshot {
+  activeShared: number;
+  exclusiveActive: boolean;
+  retainedExclusive: boolean;
+  pending: number;
+  retainedOperationId?: string;
 }
 
 export function getUpdateLockSnapshot(): UpdateLockSnapshot {
@@ -192,6 +276,10 @@ export function getUpdateLockSnapshot(): UpdateLockSnapshot {
     held: updateLockManager.held(),
     pending: updateLockManager.pending(),
   };
+  const lifecycle = updateLifecycleGate.snapshot();
+  if (lifecycle.exclusiveActive || lifecycle.activeShared > 0 || lifecycle.pending > 0) {
+    snap.lifecycle = lifecycle;
+  }
   if (globalSemaphore !== null) {
     snap.semaphore = {
       available: globalSemaphore.available(),

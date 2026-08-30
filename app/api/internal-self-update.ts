@@ -12,6 +12,7 @@ import {
   type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { releaseRetainedSelfUpdateLifecycle } from '../updates/update-locks.js';
 import { sendErrorResponse } from './error-response.js';
 
 export const SELF_UPDATE_FINALIZE_SECRET_HEADER = 'x-dd-self-update-secret';
@@ -249,6 +250,9 @@ export function createFinalizeSelfUpdateHandler() {
 
     if (isAlreadyTerminalOperation(operation)) {
       operationFinalizeSecrets.delete(body.operationId);
+      if (body.status === 'rolled-back') {
+        releaseRetainedSelfUpdateLifecycle(body.operationId);
+      }
       res.status(202).json({
         status: 'ignored',
         operationId: body.operationId,
@@ -258,6 +262,9 @@ export function createFinalizeSelfUpdateHandler() {
     }
 
     applyFinalizeTerminalPatch(body);
+    if (body.status === 'rolled-back') {
+      releaseRetainedSelfUpdateLifecycle(body.operationId);
+    }
     operationFinalizeSecrets.delete(body.operationId);
 
     res.status(202).json({

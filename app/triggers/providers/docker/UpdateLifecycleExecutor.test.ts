@@ -370,7 +370,7 @@ describe('UpdateLifecycleExecutor', () => {
     );
     expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
     expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
-    expect(result).toBe(false);
+    expect(result).toEqual({ updated: false, operationId: 'op-self-update-123' });
   });
 
   test('marks self-update operation as skipped when executeSelfUpdate resolves false', async () => {
@@ -389,7 +389,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.markSelfUpdateOperationFailed).not.toHaveBeenCalled();
     expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
     expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
-    expect(result).toBe(false);
+    expect(result).toEqual({ updated: false, operationId: 'op-self-update-dryrun' });
   });
 
   test('logs but swallows markSelfUpdateOperationSkipped errors so run still returns cleanly', async () => {
@@ -402,7 +402,10 @@ describe('UpdateLifecycleExecutor', () => {
     });
     harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
 
-    await expect(harness.executor.run(createContainer())).resolves.toBe(false);
+    await expect(harness.executor.run(createContainer())).resolves.toEqual({
+      updated: false,
+      operationId: 'op-self-update-skip-err',
+    });
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -421,7 +424,7 @@ describe('UpdateLifecycleExecutor', () => {
 
     expect(harness.executeSelfUpdate).toHaveBeenCalled();
     expect(harness.performContainerUpdate).not.toHaveBeenCalled();
-    expect(result).toBe(true);
+    expect(result).toEqual({ updated: true, operationId: 'prepared-self-update-op-id' });
   });
 
   test('runs non-self-update path and emits fallback update-applied telemetry without operation id', async () => {
@@ -693,7 +696,10 @@ describe('UpdateLifecycleExecutor', () => {
     });
     harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
 
-    await expect(harness.executor.run(createContainer())).resolves.toBe(false);
+    await expect(harness.executor.run(createContainer())).resolves.toEqual({
+      updated: false,
+      operationId: 'op-self-update-skip-noe',
+    });
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining(

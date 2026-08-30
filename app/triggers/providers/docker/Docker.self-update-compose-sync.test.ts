@@ -946,7 +946,7 @@ describe('self-update lifecycle exclusivity', () => {
     const run = vi.fn(async (container) => {
       if (container.image.name === 'drydock') {
         order.push('self-dry-run');
-        return false;
+        return { updated: false, operationId: 'self-dry-run-op' };
       }
       order.push(`regular-${container.name}-start`);
       markRegularStarted();
@@ -973,7 +973,8 @@ describe('self-update lifecycle exclusivity', () => {
       const orderBeforeDrain = [...order];
 
       releaseRegular();
-      await Promise.all([activeRegular, selfUpdate]);
+      const [, selfUpdateResult] = await Promise.all([activeRegular, selfUpdate]);
+      expect(selfUpdateResult).toBe(false);
       await docker.runContainerUpdateLifecycle(createTriggerContainer({ name: 'after-dry-run' }));
 
       expect(orderBeforeDrain).toEqual(['regular-active-start']);
@@ -992,7 +993,7 @@ describe('self-update lifecycle exclusivity', () => {
 
   test('keeps later regular work blocked after a successful helper handoff', async () => {
     const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
-    const run = vi.fn().mockResolvedValue(true);
+    const run = vi.fn().mockResolvedValue({ updated: true, operationId: 'self-retained-op' });
     docker.updateLifecycleExecutor = { run } as any;
 
     try {
