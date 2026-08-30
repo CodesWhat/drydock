@@ -31,8 +31,8 @@ type SelfUpdateContainerCreateSpec = Record<string, unknown>;
 
 export const SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE = 20;
 export const DEFAULT_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS = 600_000;
-export const SELF_UPDATE_HELPER_EXIT_GRACE_MS = 5_000;
-export const SELF_UPDATE_HELPER_API_TIMEOUT_MS = 30_000;
+const SELF_UPDATE_HELPER_EXIT_GRACE_MS = 5_000;
+const SELF_UPDATE_HELPER_API_TIMEOUT_MS = 30_000;
 
 export class RetainSelfUpdateLifecycleError extends Error {
   readonly operationId: string;
