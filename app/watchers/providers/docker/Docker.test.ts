@@ -545,6 +545,12 @@ describe('Docker Watcher', () => {
         socket: '/var/run/docker.sock',
       });
       expect(mockDockerode).toHaveBeenCalledWith({
+        ca: undefined,
+        cert: undefined,
+        host: undefined,
+        key: undefined,
+        port: undefined,
+        protocol: 'http',
         socketPath: '/var/run/docker.sock',
       });
     });

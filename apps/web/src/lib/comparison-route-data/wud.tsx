@@ -9,8 +9,8 @@ Language|TypeScript|TypeScript (full ESM)|tie
 Web UI|Yes|Yes (redesigned)|tie
 Auto-update containers|Yes|Yes|tie
 Docker Compose updates|Yes|Yes, with multi-network support|self
-Registry providers|13|23|self
-Notifications|16 triggers|20 native trigger integrations|self
+Registry providers|12|23|self
+Notifications|17 triggers|20 native trigger integrations|self
 Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|OIDC supported (Authelia, Auth0, Authentik)|Authelia, Auth0, Authentik|tie
 REST API|Yes|Yes (expanded)|self
@@ -32,9 +32,9 @@ License|MIT|AGPL-3.0|tie
 git-branch|Fork & Evolve|We started as a WUD fork, then migrated to TypeScript, added security scanning, distributed agents, audit logging, and dozens of new features — taking WUD's foundation much further.
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), cosign signature verification, and Update Bouncer to block vulnerable deploys — none of which WUD includes.
 network|Distributed Agents|Monitor remote Docker hosts via lightweight SSE-based agents with a centralized dashboard — no need to expose the Docker API over TCP. WUD supports multiple Docker hosts too, but requires the remote Docker API to be exposed over TCP or TLS.
-radio|23 Registry Providers|10 more registries than WUD — including GAR, Harbor, Artifactory, Nexus, Alibaba Cloud, IBM Cloud, and Oracle Cloud.
+radio|23 Registry Providers|11 more registries than WUD — including GAR, Harbor, Artifactory, Nexus, Alibaba Cloud, IBM Cloud, and Oracle Cloud.
 rotate|Rollback & Backup|Pre-update image backups with configurable retention, dry-run preview, and automatic rollback on health check failure. None of these exist in WUD.
-bell|4 More Trigger Services|Google Chat, Matrix, Mattermost, and Microsoft Teams (Adaptive Cards) plus enhanced configuration for existing triggers.
+bell|Additional Trigger Services|Google Chat, Matrix, Mattermost, and Microsoft Teams (Adaptive Cards) plus enhanced configuration for existing triggers.
 `,
   highlightIconMap: {
     "git-branch": GitBranch,
@@ -70,7 +70,7 @@ bell|4 More Trigger Services|Google Chat, Matrix, Mattermost, and Microsoft Team
         What&apos;s Up Docker (WUD)
       </strong>{" "}
       and have evolved significantly since — migrating to TypeScript, adding security scanning,
-      distributed agents, audit logging, rollback, and 10 additional registry providers.
+      distributed agents, audit logging, rollback, and 11 additional registry providers.
     </p>
   ),
   migrationTitle: "Coming from WUD?",

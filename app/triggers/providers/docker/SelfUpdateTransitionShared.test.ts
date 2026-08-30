@@ -75,7 +75,34 @@ function createDependencies(overrides = {}) {
     createOperationId: vi.fn(() => 'generated-operation-id'),
     resolveFinalizeUrl: vi.fn(() => 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize'),
     resolveFinalizeSecret: vi.fn(() => 'self-update-finalize-secret'),
+    resolveObservedHelperRuntime: vi.fn(async (context) => ({
+      dockerApi: context.dockerApi,
+      networkMode: 'container:drydock-current-id',
+    })),
+    clearObservedHelperCompletion: vi.fn(),
     ...overrides,
+  };
+}
+
+type TestHelperSpec = {
+  Image: string;
+  Cmd: string[];
+  Env: string[];
+  Labels: Record<string, string>;
+};
+
+function createMatchingHelperInspect(
+  helperSpec: TestHelperSpec,
+  state: { Running: boolean; ExitCode?: number },
+) {
+  return {
+    State: state,
+    Config: {
+      Image: helperSpec.Image,
+      Cmd: helperSpec.Cmd,
+      Env: helperSpec.Env,
+      Labels: helperSpec.Labels,
+    },
   };
 }
 
@@ -101,6 +128,475 @@ describe('SelfUpdateTransitionShared', () => {
     expect(findDockerSocketBind(undefined)).toBeUndefined();
   });
 
+  test.each([
+    'finalizeObservedHelperOperation',
+    'waitForObservedHelperCompletion',
+    'clearObservedHelperCompletion',
+    'resolveObservedHelperRuntime',
+  ])('observer mode rejects a missing %s dependency', async (missingDependency) => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(),
+    });
+    delete dependencies[missingDependency];
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toThrow('Observed self-update helper completion requires a durable finalizer');
+  });
+
+  test('resolves observer prerequisites before changing target state', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(),
+      resolveObservedHelperRuntime: vi
+        .fn()
+        .mockRejectedValue(new Error('transient local runtime lookup failure')),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toThrow('transient local runtime lookup failure');
+
+    expect(dependencies.insertContainerImageBackup).not.toHaveBeenCalled();
+    expect(dependencies.pullImage).not.toHaveBeenCalled();
+    expect(dependencies.createContainer).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(context.dockerApi.createContainer).not.toHaveBeenCalled();
+  });
+
+  test('creates the observed helper only through its preflighted stable Docker runtime', async () => {
+    const context = createContext({
+      dockerApi: {
+        createContainer: vi.fn().mockRejectedValue(new Error('target proxy disconnected')),
+      },
+    });
+    const stableHelper = { start: vi.fn().mockResolvedValue(undefined) };
+    const stableDockerApi = {
+      createContainer: vi.fn().mockResolvedValue(stableHelper),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({ status: 'succeeded' }),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).resolves.toBe(true);
+
+    expect(stableDockerApi.createContainer).toHaveBeenCalledOnce();
+    expect(context.dockerApi.createContainer).not.toHaveBeenCalled();
+    expect(stableHelper.start).toHaveBeenCalledOnce();
+  });
+
+  test('recovers a live observed helper when its bounded start response is lost', async () => {
+    vi.useFakeTimers();
+    const context = createContext();
+    let helperSpec;
+    let completeHelper: (completion: { status: 'succeeded' }) => void = () => {};
+    const helperCompletion = new Promise<{ status: 'succeeded' }>((resolve) => {
+      completeHelper = resolve;
+    });
+    const stableHelper = {
+      start: vi.fn(
+        ({ abortSignal }: { abortSignal: AbortSignal }) =>
+          new Promise<void>((_resolve, reject) => {
+            abortSignal.addEventListener('abort', () => reject(new Error('start response lost')));
+          }),
+      ),
+      inspect: vi.fn(() =>
+        Promise.resolve(createMatchingHelperInspect(helperSpec, { Running: true })),
+      ),
+    };
+    const stableDockerApi = {
+      createContainer: vi.fn((spec) => {
+        helperSpec = spec;
+        return Promise.resolve(stableHelper);
+      }),
+      getContainer: vi.fn().mockReturnValue(stableHelper),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(() => helperCompletion),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+      helperApiTimeoutMs: 25,
+    });
+
+    try {
+      const transition = executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer(),
+        { info: vi.fn(), warn: vi.fn() },
+        'lost-start-response-op',
+      );
+      await vi.advanceTimersByTimeAsync(25);
+      completeHelper({ status: 'succeeded' });
+
+      await expect(transition).resolves.toBe(true);
+      expect(stableHelper.start).toHaveBeenCalledWith({
+        abortSignal: expect.any(AbortSignal),
+      });
+      expect(stableDockerApi.getContainer).toHaveBeenCalledWith(
+        expect.stringMatching(/^drydock-self-update-/),
+      );
+      expect(stableHelper.inspect).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('accepts durable helper success when AutoRemove wins the lost start response race', async () => {
+    vi.useFakeTimers();
+    let completeHelper: (completion: { status: 'succeeded' }) => void = () => {};
+    const helperCompletion = new Promise<{ status: 'succeeded' }>((resolve) => {
+      completeHelper = resolve;
+    });
+    const missingError = Object.assign(new Error('helper already auto-removed'), {
+      statusCode: 404,
+    });
+    const context = createContext();
+    const stableHelper = {
+      start: vi.fn(
+        ({ abortSignal }: { abortSignal: AbortSignal }) =>
+          new Promise<void>((_resolve, reject) => {
+            abortSignal.addEventListener('abort', () => reject(new Error('start response lost')));
+          }),
+      ),
+      remove: vi.fn(),
+    };
+    const stableDockerApi = {
+      createContainer: vi.fn().mockResolvedValue(stableHelper),
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(missingError),
+      }),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(() => helperCompletion),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+      helperApiTimeoutMs: 25,
+    });
+
+    try {
+      const transition = executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer(),
+        { info: vi.fn(), warn: vi.fn() },
+        'auto-removed-success-op',
+      );
+      const transitionSuccess = expect(transition).resolves.toBe(true);
+      await vi.advanceTimersByTimeAsync(10);
+      completeHelper({ status: 'succeeded' });
+      await vi.advanceTimersByTimeAsync(15);
+
+      await transitionSuccess;
+      expect(context.newContainer.remove).not.toHaveBeenCalled();
+      expect(context.currentContainer.rename).toHaveBeenCalledOnce();
+      expect(stableHelper.remove).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('accepts durable helper rollback without replaying target rollback after AutoRemove', async () => {
+    const missingError = Object.assign(new Error('helper already auto-removed'), {
+      statusCode: 404,
+    });
+    const context = createContext();
+    const stableHelper = {
+      start: vi.fn().mockRejectedValue(new Error('start response lost')),
+      remove: vi.fn(),
+    };
+    const stableDockerApi = {
+      createContainer: vi.fn().mockResolvedValue(stableHelper),
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(missingError),
+      }),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({
+        status: 'rolled-back',
+        lastError: 'helper restored the previous container',
+      }),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer(),
+        { info: vi.fn(), warn: vi.fn() },
+        'auto-removed-rollback-op',
+      ),
+    ).rejects.toThrow('helper restored the previous container');
+
+    expect(context.newContainer.remove).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).toHaveBeenCalledOnce();
+    expect(stableHelper.remove).not.toHaveBeenCalled();
+  });
+
+  test('lets durable helper completion cancel a hanging recovery inspect', async () => {
+    vi.useFakeTimers();
+    let completeHelper: (completion: { status: 'succeeded' }) => void = () => {};
+    const helperCompletion = new Promise<{ status: 'succeeded' }>((resolve) => {
+      completeHelper = resolve;
+    });
+    let inspectSignal: AbortSignal | undefined;
+    const context = createContext();
+    const stableHelper = {
+      start: vi.fn(
+        ({ abortSignal }: { abortSignal: AbortSignal }) =>
+          new Promise<void>((_resolve, reject) => {
+            abortSignal.addEventListener('abort', () => reject(new Error('start response lost')));
+          }),
+      ),
+    };
+    const stableDockerApi = {
+      createContainer: vi.fn().mockResolvedValue(stableHelper),
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn((options?: { abortSignal?: AbortSignal }) => {
+          inspectSignal = options?.abortSignal;
+          return new Promise(() => {});
+        }),
+      }),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(() => helperCompletion),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+      helperApiTimeoutMs: 25,
+    });
+
+    try {
+      let settled = false;
+      const transition = executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer(),
+        { info: vi.fn(), warn: vi.fn() },
+        'hanging-inspect-success-op',
+      );
+      transition.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await vi.advanceTimersByTimeAsync(25);
+      completeHelper({ status: 'succeeded' });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(settled).toBe(true);
+      await expect(transition).resolves.toBe(true);
+      expect(inspectSignal?.aborted).toBe(true);
+      expect(context.newContainer.remove).not.toHaveBeenCalled();
+      expect(context.currentContainer.rename).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('recovers a created helper when its bounded create response is lost', async () => {
+    vi.useFakeTimers();
+    const context = createContext();
+    let helperSpec;
+    let completeHelper: (completion: { status: 'succeeded' }) => void = () => {};
+    const helperCompletion = new Promise<{ status: 'succeeded' }>((resolve) => {
+      completeHelper = resolve;
+    });
+    const stableHelper = {
+      start: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn(() =>
+        Promise.resolve(createMatchingHelperInspect(helperSpec, { Running: false })),
+      ),
+    };
+    const stableDockerApi = {
+      createContainer: vi.fn((spec: { abortSignal: AbortSignal }) => {
+        helperSpec = spec;
+        return new Promise<void>((_resolve, reject) => {
+          const { abortSignal } = spec;
+          abortSignal.addEventListener('abort', () => reject(new Error('create response lost')));
+        });
+      }),
+      getContainer: vi.fn().mockReturnValue(stableHelper),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(() => helperCompletion),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+      helperApiTimeoutMs: 25,
+    });
+
+    try {
+      const transition = executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer(),
+        { info: vi.fn(), warn: vi.fn() },
+        'lost-create-response-op',
+      );
+      await vi.advanceTimersByTimeAsync(25);
+      completeHelper({ status: 'succeeded' });
+
+      await expect(transition).resolves.toBe(true);
+      expect(stableDockerApi.createContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ abortSignal: expect.any(AbortSignal) }),
+      );
+      expect(stableHelper.start).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('accepts durable helper success when AutoRemove wins a lost create response race', async () => {
+    vi.useFakeTimers();
+    let completeHelper: (completion: { status: 'succeeded' }) => void = () => {};
+    const helperCompletion = new Promise<{ status: 'succeeded' }>((resolve) => {
+      completeHelper = resolve;
+    });
+    let inspectSignal: AbortSignal | undefined;
+    const context = createContext();
+    const stableDockerApi = {
+      createContainer: vi.fn(
+        (spec: { abortSignal: AbortSignal }) =>
+          new Promise<void>((_resolve, reject) => {
+            spec.abortSignal.addEventListener('abort', () =>
+              reject(new Error('create response lost')),
+            );
+          }),
+      ),
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn((options?: { abortSignal?: AbortSignal }) => {
+          inspectSignal = options?.abortSignal;
+          return new Promise(() => {});
+        }),
+      }),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(() => helperCompletion),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+      helperApiTimeoutMs: 25,
+    });
+
+    try {
+      const transition = executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer(),
+        { info: vi.fn(), warn: vi.fn() },
+        'auto-removed-create-success-op',
+      );
+      await vi.advanceTimersByTimeAsync(25);
+      completeHelper({ status: 'succeeded' });
+      await vi.advanceTimersByTimeAsync(0);
+
+      await expect(transition).resolves.toBe(true);
+      expect(inspectSignal?.aborted).toBe(true);
+      expect(context.newContainer.remove).not.toHaveBeenCalled();
+      expect(context.currentContainer.rename).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('accepts durable helper rollback when AutoRemove wins a lost create response race', async () => {
+    const context = createContext();
+    const stableDockerApi = {
+      createContainer: vi.fn().mockRejectedValue(new Error('create response lost')),
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(
+          Object.assign(new Error('helper already auto-removed'), {
+            statusCode: 404,
+          }),
+        ),
+      }),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({
+        status: 'rolled-back',
+        lastError: 'helper restored the previous container',
+      }),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer(),
+        { info: vi.fn(), warn: vi.fn() },
+        'auto-removed-create-rollback-op',
+      ),
+    ).rejects.toThrow('helper restored the previous container');
+
+    expect(context.newContainer.remove).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).toHaveBeenCalledOnce();
+  });
+
   test('rolls back rename when helper container creation fails', async () => {
     const context = createContext({
       dockerApi: {
@@ -121,6 +617,413 @@ describe('SelfUpdateTransitionShared', () => {
     expect(log.warn).toHaveBeenCalledWith(
       'Failed to spawn helper container, rolling back: helper failed',
     );
+  });
+
+  test('retains lifecycle ownership when helper creation cannot be authoritatively reconciled', async () => {
+    const context = createContext({
+      dockerApi: {
+        createContainer: vi.fn().mockRejectedValue(new Error('create response lost')),
+        getContainer: vi.fn().mockReturnValue({
+          inspect: vi.fn().mockRejectedValue(new Error('stable daemon unavailable')),
+        }),
+      },
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toMatchObject({
+      operationId: 'generated-operation-id',
+      message: expect.stringContaining('reconciliation failed: stable daemon unavailable'),
+    });
+
+    expect(context.newContainer.remove).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).toHaveBeenCalledOnce();
+  });
+
+  test.each([
+    ['image', (config) => ({ ...config, Image: 'attacker/image:latest' })],
+    ['command', (config) => ({ ...config, Cmd: ['sh', '-c', 'sleep infinity'] })],
+    [
+      'finalize environment',
+      (config) => ({
+        ...config,
+        Env: config.Env.map((entry) =>
+          entry.startsWith('DD_SELF_UPDATE_FINALIZE_URL=')
+            ? 'DD_SELF_UPDATE_FINALIZE_URL=http://attacker.invalid/finalize'
+            : entry,
+        ),
+      }),
+    ],
+    [
+      'nonce label',
+      (config) => ({
+        ...config,
+        Labels: { ...config.Labels, 'dd.self-update.helper-nonce': 'attacker' },
+      }),
+    ],
+  ] satisfies Array<[string, (config: TestHelperSpec) => TestHelperSpec]>)(
+    'never adopts a same-name helper with a mismatched %s',
+    async (_description, mutateConfig) => {
+      const context = createContext();
+      let helperSpec: TestHelperSpec;
+      const maliciousHelper = {
+        start: vi.fn(),
+        inspect: vi.fn(async () => {
+          const matching = createMatchingHelperInspect(helperSpec, { Running: true });
+          return { ...matching, Config: mutateConfig(matching.Config) };
+        }),
+      };
+      const stableDockerApi = {
+        createContainer: vi.fn((spec) => {
+          helperSpec = spec;
+          return Promise.reject(new Error('name is already in use'));
+        }),
+        getContainer: vi.fn().mockReturnValue(maliciousHelper),
+      };
+      const dependencies = createDependencies({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        observeHelperCompletion: true,
+        finalizeObservedHelperOperation: vi.fn(),
+        waitForObservedHelperCompletion: vi.fn(() => new Promise(() => {})),
+        resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+          dockerApi: stableDockerApi,
+          networkMode: 'container:drydock-current-id',
+        }),
+      });
+
+      await expect(
+        executeSelfUpdateTransition(
+          dependencies,
+          context,
+          createContainer(),
+          { info: vi.fn(), warn: vi.fn() },
+          'malicious-collision-op',
+        ),
+      ).rejects.toMatchObject({
+        operationId: 'malicious-collision-op',
+        message: expect.stringContaining('recovered helper identity does not match'),
+      });
+
+      expect(maliciousHelper.start).not.toHaveBeenCalled();
+      expect(context.newContainer.remove).not.toHaveBeenCalled();
+      expect(context.currentContainer.rename).toHaveBeenCalledOnce();
+    },
+  );
+
+  test('uses distinct operation-bound helper identities across a same-millisecond collision', async () => {
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(1_788_080_000_000);
+    const helperSpecs: Array<{ name: string; Labels: Record<string, string> }> = [];
+
+    try {
+      const runTransition = (operationId: string) => {
+        const context = createContext();
+        const stableDockerApi = {
+          createContainer: vi.fn((spec) => {
+            helperSpecs.push(spec);
+            return Promise.resolve({ start: vi.fn().mockResolvedValue(undefined) });
+          }),
+        };
+        const dependencies = createDependencies({
+          createContainer: vi.fn().mockResolvedValue(context.newContainer),
+          observeHelperCompletion: true,
+          finalizeObservedHelperOperation: vi.fn(),
+          waitForObservedHelperCompletion: vi.fn().mockResolvedValue({ status: 'succeeded' }),
+          resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+            dockerApi: stableDockerApi,
+            networkMode: 'container:drydock-current-id',
+          }),
+        });
+        return executeSelfUpdateTransition(
+          dependencies,
+          context,
+          createContainer(),
+          { info: vi.fn(), warn: vi.fn() },
+          operationId,
+        );
+      };
+
+      await Promise.all([runTransition('concurrent-op-a'), runTransition('concurrent-op-b')]);
+
+      expect(helperSpecs).toHaveLength(2);
+      expect(helperSpecs[0].name).not.toBe(helperSpecs[1].name);
+      expect(helperSpecs.map((spec) => spec.Labels['dd.self-update.operation-id'])).toEqual([
+        'concurrent-op-a',
+        'concurrent-op-b',
+      ]);
+      for (const spec of helperSpecs) {
+        expect(spec.name).toMatch(/^drydock-self-update-[a-f0-9]{32}$/);
+        expect(spec.Labels['dd.self-update.helper-nonce']).toMatch(/^[a-f0-9]{32}$/);
+      }
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  test('rolls back after proving a failed helper create left no container', async () => {
+    const missingError = Object.assign(new Error('no such container'), { statusCode: 404 });
+    const context = createContext({
+      dockerApi: {
+        createContainer: vi.fn().mockRejectedValue(new Error('helper create failed')),
+        getContainer: vi.fn().mockReturnValue({
+          inspect: vi.fn().mockRejectedValue(missingError),
+        }),
+      },
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toThrow('helper create failed');
+
+    expect(context.newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+  });
+
+  test('retains lifecycle ownership when a recovered helper handle is malformed', async () => {
+    const context = createContext({
+      dockerApi: {
+        createContainer: vi.fn().mockRejectedValue(new Error('helper create failed')),
+        getContainer: vi.fn().mockReturnValue({}),
+      },
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toMatchObject({
+      operationId: 'generated-operation-id',
+      message: expect.stringContaining('recovered helper is not inspectable'),
+    });
+
+    expect(context.newContainer.remove).not.toHaveBeenCalled();
+  });
+
+  test('continues observing a recovered helper that is already running', async () => {
+    const context = createContext();
+    let helperSpec;
+    let completeHelper: (completion: { status: 'succeeded' }) => void = () => {};
+    const helperCompletion = new Promise<{ status: 'succeeded' }>((resolve) => {
+      completeHelper = resolve;
+    });
+    const recoveredHelper = {
+      start: vi.fn(),
+      inspect: vi.fn(() =>
+        Promise.resolve(createMatchingHelperInspect(helperSpec, { Running: true })),
+      ),
+    };
+    const stableDockerApi = {
+      createContainer: vi.fn((spec) => {
+        helperSpec = spec;
+        return Promise.reject(new Error('create response lost'));
+      }),
+      getContainer: vi.fn().mockReturnValue(recoveredHelper),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(() => helperCompletion),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+    });
+
+    const transition = executeSelfUpdateTransition(dependencies, context, createContainer(), {
+      info: vi.fn(),
+      warn: vi.fn(),
+    });
+    await vi.waitFor(() => expect(recoveredHelper.inspect).toHaveBeenCalledOnce());
+    completeHelper({ status: 'succeeded' });
+    await expect(transition).resolves.toBe(true);
+
+    expect(recoveredHelper.start).not.toHaveBeenCalled();
+  });
+
+  test('rolls back after a failed helper start is authoritatively stopped', async () => {
+    const context = createContext();
+    let helperSpec;
+    const stoppedHelper = {
+      start: vi.fn().mockRejectedValue(new Error('start failed')),
+      inspect: vi.fn(() =>
+        Promise.resolve(createMatchingHelperInspect(helperSpec, { Running: false, ExitCode: 1 })),
+      ),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const stableDockerApi = {
+      createContainer: vi.fn((spec) => {
+        helperSpec = spec;
+        return Promise.resolve(stoppedHelper);
+      }),
+      getContainer: vi.fn().mockReturnValue(stoppedHelper),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toThrow('start failed');
+
+    expect(context.newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(stoppedHelper.remove).toHaveBeenCalledWith({ force: true });
+    expect(stoppedHelper.remove.mock.invocationCallOrder[0]).toBeLessThan(
+      context.currentContainer.rename.mock.invocationCallOrder[1],
+    );
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+  });
+
+  test('rolls back after proving a failed helper start left no container', async () => {
+    const missingError = Object.assign(new Error('no such container'), { statusCode: 404 });
+    const helperContainer = {
+      start: vi.fn().mockRejectedValue(new Error('start failed')),
+      inspect: vi.fn(),
+      remove: vi.fn(),
+    };
+    const stableDockerApi = {
+      createContainer: vi.fn().mockResolvedValue(helperContainer),
+      getContainer: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(missingError),
+      }),
+    };
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toThrow('start failed');
+
+    expect(helperContainer.remove).not.toHaveBeenCalled();
+    expect(context.newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([
+    [
+      'already removed',
+      Object.assign(new Error('no such helper'), { statusCode: 404 }),
+      'start failed',
+      true,
+    ],
+    ['not removable', new Error('remove unavailable'), 'removal failed: remove unavailable', false],
+  ])(
+    'handles a stopped helper that is %s before target rollback',
+    async (_description, removeError, expectedError, expectRollback) => {
+      const context = createContext();
+      let helperSpec;
+      const stoppedHelper = {
+        start: vi.fn().mockRejectedValue(new Error('start failed')),
+        inspect: vi.fn(() =>
+          Promise.resolve(createMatchingHelperInspect(helperSpec, { Running: false, ExitCode: 1 })),
+        ),
+        remove: vi.fn().mockRejectedValue(removeError),
+      };
+      const stableDockerApi = {
+        createContainer: vi.fn((spec) => {
+          helperSpec = spec;
+          return Promise.resolve(stoppedHelper);
+        }),
+        getContainer: vi.fn().mockReturnValue(stoppedHelper),
+      };
+      const dependencies = createDependencies({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        observeHelperCompletion: true,
+        finalizeObservedHelperOperation: vi.fn(),
+        waitForObservedHelperCompletion: vi.fn(),
+        resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+          dockerApi: stableDockerApi,
+          networkMode: 'container:drydock-current-id',
+        }),
+      });
+
+      await expect(
+        executeSelfUpdateTransition(dependencies, context, createContainer(), {
+          info: vi.fn(),
+          warn: vi.fn(),
+        }),
+      ).rejects.toThrow(expectedError);
+
+      if (expectRollback) {
+        expect(context.newContainer.remove).toHaveBeenCalledWith({ force: true });
+        expect(context.currentContainer.rename).toHaveBeenCalledTimes(2);
+      } else {
+        expect(context.newContainer.remove).not.toHaveBeenCalled();
+        expect(context.currentContainer.rename).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  test('retains lifecycle ownership when helper start reconciliation is unavailable', async () => {
+    const context = createContext();
+    const uncertainHelper = {
+      start: vi.fn().mockRejectedValue(new Error('start response lost')),
+      inspect: vi.fn().mockRejectedValue(new Error('stable inspect failed')),
+    };
+    const stableDockerApi = {
+      createContainer: vi.fn().mockResolvedValue(uncertainHelper),
+      getContainer: vi.fn().mockReturnValue(uncertainHelper),
+    };
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn(),
+      resolveObservedHelperRuntime: vi.fn().mockResolvedValue({
+        dockerApi: stableDockerApi,
+        networkMode: 'container:drydock-current-id',
+      }),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toMatchObject({
+      operationId: 'generated-operation-id',
+      message: expect.stringContaining('reconciliation failed: stable inspect failed'),
+    });
+
+    expect(context.newContainer.remove).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).toHaveBeenCalledOnce();
   });
 
   test('cascade guard: throws before any rename, pull, or create when the container is already a rollback-orphan name', async () => {
@@ -371,6 +1274,193 @@ describe('SelfUpdateTransitionShared', () => {
     );
   });
 
+  test('observer mode uses an authenticated survivor callback instead of the proxy watcher', async () => {
+    const context = createContext();
+    context.helperContainer.wait = vi.fn().mockRejectedValue(new Error('proxy connection reset'));
+    context.helperContainer.remove = vi.fn().mockRejectedValue(new Error('proxy unavailable'));
+    const waitForObservedHelperCompletion = vi.fn().mockResolvedValue({ status: 'succeeded' });
+    const resolveFinalizeUrl = vi.fn(() => 'http://127.0.0.1:3000/internal/finalize');
+    const resolveFinalizeSecret = vi.fn(() => 'operation-secret');
+    const dependencies = createDependencies({
+      getConfiguration: () => ({ dryrun: false, helpercompletiontimeout: 600_000 }),
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion,
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+      resolveFinalizeUrl,
+      resolveFinalizeSecret,
+    });
+
+    await expect(
+      executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer({ name: 'socket-proxy' }),
+        { info: vi.fn(), warn: vi.fn() },
+        'infrastructure-op',
+      ),
+    ).resolves.toBe(true);
+
+    expect(context.helperContainer.wait).not.toHaveBeenCalled();
+    expect(context.helperContainer.remove).not.toHaveBeenCalled();
+    expect(waitForObservedHelperCompletion).toHaveBeenCalledWith('infrastructure-op', 605_000);
+    expect(resolveFinalizeUrl).toHaveBeenCalledOnce();
+    expect(resolveFinalizeSecret).toHaveBeenCalledWith('infrastructure-op');
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Env: expect.arrayContaining([
+          'DD_SELF_UPDATE_COMPLETION_MODE=observer',
+          'DD_SELF_UPDATE_FINALIZE_SECRET=operation-secret',
+          'DD_SELF_UPDATE_HELPER_COMPLETION_TIMEOUT_MS=600000',
+        ]),
+        HostConfig: expect.objectContaining({
+          AutoRemove: true,
+          NetworkMode: 'container:drydock-current-id',
+        }),
+      }),
+    );
+  });
+
+  test('observer mode reports a durably callback-finalized helper rollback', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      finalizeObservedHelperOperation: vi.fn(),
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({
+        status: 'rolled-back',
+        lastError: 'Self-update helper completed rollback',
+      }),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer({ name: 'socket-proxy' }),
+        { info: vi.fn(), warn: vi.fn() },
+        'infrastructure-rollback-op',
+      ),
+    ).rejects.toThrow('Self-update helper completed rollback');
+  });
+
+  test('observer mode uses its callback network namespace with a TCP Docker connection', async () => {
+    const baseContext = createContext();
+    const dockerApi = {
+      createContainer: vi.fn().mockResolvedValue(baseContext.helperContainer),
+      modem: { host: 'docker-api', port: 2375, protocol: 'http' },
+    };
+    const context = createContext({
+      dockerApi,
+      currentContainerSpec: createCurrentContainerSpec({ HostConfig: { Binds: [] } }),
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({ status: 'succeeded' }),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+      finalizeObservedHelperOperation: vi.fn(),
+    });
+
+    await executeSelfUpdateTransition(
+      dependencies,
+      context,
+      createContainer({ name: 'remote-proxy' }),
+      { info: vi.fn(), warn: vi.fn() },
+      'tcp-observer-op',
+    );
+
+    expect(dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        HostConfig: {
+          AutoRemove: true,
+          NetworkMode: 'container:drydock-current-id',
+        },
+      }),
+    );
+  });
+
+  test('observer mode supplies a deterministic rollback error when callback omits one', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      waitForObservedHelperCompletion: vi.fn().mockResolvedValue({ status: 'rolled-back' }),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+      finalizeObservedHelperOperation: vi.fn(),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer({ name: 'socket-proxy' }),
+        { info: vi.fn(), warn: vi.fn() },
+        'rollback-without-error-op',
+      ),
+    ).rejects.toThrow('Self-update helper completed rollback');
+  });
+
+  test('observer mode durably fails after its helper hard deadline before releasing', async () => {
+    const context = createContext();
+    const finalizeObservedHelperOperation = vi.fn();
+    const dependencies = createDependencies({
+      getConfiguration: () => ({ dryrun: false, helpercompletiontimeout: 25 }),
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      waitForObservedHelperCompletion: vi
+        .fn()
+        .mockRejectedValue(
+          new Error('Observed self-update helper completion timed out after 5025ms'),
+        ),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+      finalizeObservedHelperOperation,
+    });
+
+    await expect(
+      executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer({ name: 'socket-proxy' }),
+        { info: vi.fn(), warn: vi.fn() },
+      ),
+    ).rejects.toThrow('Observed self-update helper completion timed out after 5025ms');
+    expect(finalizeObservedHelperOperation).toHaveBeenCalledWith(
+      'generated-operation-id',
+      'failed',
+      'Observed self-update helper completion timed out after 5025ms',
+    );
+  });
+
+  test('observer mode requests retained exclusivity when its terminal save fails', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      getConfiguration: () => ({ dryrun: false, helpercompletiontimeout: 25 }),
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      observeHelperCompletion: true,
+      waitForObservedHelperCompletion: vi
+        .fn()
+        .mockRejectedValue(
+          new Error('Observed self-update helper completion timed out after 5025ms'),
+        ),
+      resolveObserverNetworkMode: vi.fn().mockResolvedValue('container:drydock-current-id'),
+      finalizeObservedHelperOperation: vi.fn().mockRejectedValue(new Error('save failed')),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(
+        dependencies,
+        context,
+        createContainer({ name: 'socket-proxy' }),
+        { info: vi.fn(), warn: vi.fn() },
+      ),
+    ).rejects.toThrow(
+      'Observed self-update helper stopped but its failure was not durably saved: save failed',
+    );
+  });
+
   test('uses container name for temp rename prefix instead of hardcoded drydock', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({ Name: '/socket-proxy' }),
@@ -422,7 +1512,6 @@ describe('SelfUpdateTransitionShared', () => {
       log,
       'op-touch-test',
     );
-
     expect(touchOperation).toHaveBeenCalledOnce();
     expect(touchOperation).toHaveBeenCalledWith('op-touch-test');
 

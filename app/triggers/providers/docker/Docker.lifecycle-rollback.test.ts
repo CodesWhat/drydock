@@ -428,15 +428,15 @@ describe('additional docker trigger coverage', () => {
 
   test('maybeNotifySelfUpdate should notify immediately for drydock image', async () => {
     const logContainer = createMockLog('info');
-
-    await docker.maybeNotifySelfUpdate(
-      {
-        image: {
-          name: 'drydock',
-        },
+    const container = {
+      id: '123456789',
+      image: {
+        name: 'drydock',
       },
-      logContainer,
-    );
+    };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+
+    await docker.maybeNotifySelfUpdate(container, logContainer);
 
     expect(logContainer.info).toHaveBeenCalledWith(
       'Self-update detected — notifying UI before proceeding',

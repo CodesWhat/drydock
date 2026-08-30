@@ -620,7 +620,17 @@ export class AgentClient {
       query.watcher = watcher;
     }
     const containersInStore = storeContainer.getContainers(query);
-    const newContainerIds = new Set(newContainers.map((container) => container.id));
+    // Every caller prunes before handing the same list to
+    // processAuthoritativeContainer(s), so the ownership gate there has not run
+    // yet. Apply the same rule silently here (the ingest pass logs each
+    // rejection): an id this agent may not write must not take part in the
+    // keep-set, nor in the #496 replacement-identity match below, where naming
+    // a foreign container would otherwise turn the removal of one of this
+    // agent's own rows into a replacement.
+    const ownedNewContainers = newContainers.filter(
+      (container) => this.getAuthoritativeIngestRejection(container) === undefined,
+    );
+    const newContainerIds = new Set(ownedNewContainers.map((container) => container.id));
 
     const containersToRemove = containersInStore.filter(
       (containerInStore) => !newContainerIds.has(containerInStore.id),
@@ -632,7 +642,7 @@ export class AgentClient {
     // (and, as before, lets Hass keep the state topic alive across the swap). A name that is
     // genuinely gone stays unflagged so its HA discovery topics are still cleaned up.
     const newContainerIdentityKeys = new Set(
-      newContainers
+      ownedNewContainers
         .map((container) =>
           deriveContainerIdentityKey({
             ...container,
@@ -643,7 +653,7 @@ export class AgentClient {
         .filter((key): key is string => key !== undefined),
     );
     const newUnscopedContainerNames = new Set(
-      newContainers
+      ownedNewContainers
         .filter((container) => !container.watcher && !watcher)
         .map((container) => container.name)
         .filter((name): name is string => typeof name === 'string' && name !== ''),
@@ -932,29 +942,35 @@ export class AgentClient {
    * container id, which a rename doesn't change, so the record is never
    * pruned and never retried. Updates would just stop landing with no
    * error surfaced.
+   *
+   * Returns the reason a container may not be ingested, or undefined when it
+   * may. Two consumers: `canIngestAuthoritativeContainer`, which logs the
+   * reason and drops the container, and `pruneOldContainers`, which runs
+   * before ingestion and needs the same rule without a second log line.
    */
-  private canIngestAuthoritativeContainer(container: Container): boolean {
-    if (typeof container.id !== 'string' || container.id.length === 0) {
-      this.log.warn(
-        `Ignoring authoritative container ingest without an id from agent ${this.name}`,
-      );
-      return false;
+  private getAuthoritativeIngestRejection(container: Container): string | undefined {
+    const containerId = container.id;
+    if (typeof containerId !== 'string' || containerId.length === 0) {
+      return `Ignoring authoritative container ingest without an id from agent ${this.name}`;
     }
 
-    const existing = storeContainer.getContainer(container.id);
+    const existing = storeContainer.getContainer(containerId);
     if (!existing) {
       if (this.claimsControllerLocalWatcherNamespace(container.watcher)) {
-        this.log.warn(
-          `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: watcher '${sanitizeLogParam(container.watcher)}' belongs to the controller's local watcher namespace`,
-        );
-        return false;
+        return `Ignoring authoritative container ingest for ${sanitizeLogParam(containerId)} from agent ${this.name}: watcher '${sanitizeLogParam(container.watcher)}' belongs to the controller's local watcher namespace`;
       }
-      return true;
+      return undefined;
     }
     if (existing.agent !== this.name) {
-      this.log.warn(
-        `Ignoring authoritative container ingest for ${sanitizeLogParam(container.id)} from agent ${this.name}: container is owned by ${sanitizeLogParam(existing.agent ?? 'controller')}`,
-      );
+      return `Ignoring authoritative container ingest for ${sanitizeLogParam(containerId)} from agent ${this.name}: container is owned by ${sanitizeLogParam(existing.agent ?? 'controller')}`;
+    }
+    return undefined;
+  }
+
+  private canIngestAuthoritativeContainer(container: Container): boolean {
+    const rejection = this.getAuthoritativeIngestRejection(container);
+    if (rejection) {
+      this.log.warn(rejection);
       return false;
     }
     return true;

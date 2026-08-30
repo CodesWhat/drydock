@@ -63,8 +63,9 @@ test('createCollections should create collection containers when not exist', asy
   const spy = vi.spyOn(db, 'addCollection');
   container.createCollections(db);
   expect(spy).toHaveBeenCalledWith('containers', {
-    indices: ['data.watcher', 'data.status', 'data.updateAvailable'],
+    indices: ['data.id', 'data.watcher', 'data.status', 'data.updateAvailable'],
   });
+  expect(collection.ensureIndex).toHaveBeenCalledWith('data.id');
   expect(collection.ensureIndex).toHaveBeenCalledWith('data.watcher');
   expect(collection.ensureIndex).toHaveBeenCalledWith('data.status');
   expect(collection.ensureIndex).toHaveBeenCalledWith('data.updateAvailable');
@@ -83,6 +84,7 @@ test('createCollections should not create collection containers when already exi
   const spy = vi.spyOn(db, 'addCollection');
   container.createCollections(db);
   expect(spy).not.toHaveBeenCalled();
+  expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.id');
   expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.watcher');
   expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.status');
   expect(existingCollection.ensureIndex).toHaveBeenCalledWith('data.updateAvailable');

@@ -34,6 +34,7 @@ interface ContainerFixture {
 }
 
 const TARGET_CONTAINER = 'Nginx (Hooked)';
+const MODE_TARGET_CONTAINER = 'Traefik Proxy';
 const RESOURCE_TARGET_CONTAINER = 'A Resources Column Fixture';
 
 async function interceptSettings(page: Page, initialMode: UpdateMode): Promise<() => UpdateMode> {
@@ -116,8 +117,23 @@ async function interceptFirstContainer(
 }
 
 test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: 'wait' });
+  });
+
   test('#325 persists notify/manual/auto and updates the Update Status panel', async ({ page }) => {
     const currentMode = await interceptSettings(page, 'manual');
+    await interceptContainer(page, MODE_TARGET_CONTAINER, (container) => {
+      container.updateAvailable = true;
+      container.result = { ...container.result, tag: 'v3.7.12' };
+      container.updateKind = {
+        kind: 'tag',
+        localValue: 'v3.0.0',
+        remoteValue: 'v3.7.12',
+        semverDiff: 'minor',
+      };
+      container.updateEligibility = { eligible: true, blockers: [] };
+    });
 
     await selectUpdateMode(page, 'notify');
     expect(currentMode()).toBe('notify');
@@ -126,7 +142,7 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
       'aria-pressed',
       'true',
     );
-    await openContainerOverview(page);
+    await openContainerOverview(page, MODE_TARGET_CONTAINER);
 
     const notifyPanel = page.locator('[data-test="update-status-panel"]');
     await expect(notifyPanel).toHaveAttribute('data-state', 'notify');
@@ -137,7 +153,7 @@ test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
 
     await selectUpdateMode(page, 'auto');
     expect(currentMode()).toBe('auto');
-    await openContainerOverview(page);
+    await openContainerOverview(page, MODE_TARGET_CONTAINER);
     const autoPanel = page.locator('[data-test="update-status-panel"]');
     await expect(autoPanel).toHaveAttribute('data-state', 'ready');
     await expect(autoPanel.locator('[data-test="update-status-summary"]')).toHaveText(

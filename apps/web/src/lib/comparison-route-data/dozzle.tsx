@@ -19,7 +19,7 @@ Prometheus metrics|No|Full /metrics endpoint + Grafana template|self
 Audit log|No|Yes, with REST API|self
 Log viewer|Advanced (SQL, split-screen, regex)|Basic (level filtering, auto-fetch)|competitor
 Log analytics / SQL|Yes|No|competitor
-Resource monitoring|Yes (CPU, memory, network — live)|Planned|competitor
+Resource monitoring|Yes (CPU, memory, network — live)|Yes (CPU, memory, network)|tie
 Multi-host agents|Yes|Yes (SSE-based)|tie
 Container start/stop/restart|Yes|Yes|tie
 OIDC authentication|Via forward proxy (Authelia, Authentik, Cloudflare)|Yes (Authelia, Auth0, Authentik)|self
