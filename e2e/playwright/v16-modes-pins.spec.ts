@@ -117,6 +117,10 @@ async function interceptFirstContainer(
 }
 
 test.describe('v1.6 update modes, scheduling, and pinned tags', () => {
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: 'wait' });
+  });
+
   test('#325 persists notify/manual/auto and updates the Update Status panel', async ({ page }) => {
     const currentMode = await interceptSettings(page, 'manual');
     await interceptContainer(page, MODE_TARGET_CONTAINER, (container) => {
