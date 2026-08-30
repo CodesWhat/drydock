@@ -3237,6 +3237,7 @@ describe('AgentClient', () => {
         operationId: 'remote-op-active',
         containerName: 'local_nginx',
         containerId: 'c1',
+        triggerName: 'test-agent.docker.update',
         status: 'in-progress',
         phase: 'pulling',
       });
@@ -3247,6 +3248,7 @@ describe('AgentClient', () => {
           kind: 'container-update',
           containerName: 'local_nginx',
           containerId: 'c1',
+          triggerName: 'test-agent.docker.update',
           status: 'in-progress',
           phase: 'pulling',
         }),
@@ -6132,6 +6134,36 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('qualifyAgentTriggerName', () => {
+    test('qualifies an unscoped update trigger id with the agent name', () => {
+      expect((client as any).qualifyAgentTriggerName('docker.update')).toBe(
+        'test-agent.docker.update',
+      );
+    });
+
+    test('leaves an already-qualified update trigger id unchanged', () => {
+      expect((client as any).qualifyAgentTriggerName('test-agent.docker.update')).toBe(
+        'test-agent.docker.update',
+      );
+    });
+
+    test('qualifies a two-part trigger id without treating its first part as an agent', () => {
+      expect((client as any).qualifyAgentTriggerName('portainer.docker')).toBe(
+        'test-agent.portainer.docker',
+      );
+    });
+
+    test('preserves an unknown trigger type when it is qualified for this agent', () => {
+      expect((client as any).qualifyAgentTriggerName('test-agent.future.update')).toBe(
+        'test-agent.future.update',
+      );
+    });
+
+    test('rejects a trigger id qualified for a different agent', () => {
+      expect((client as any).qualifyAgentTriggerName('other-agent.docker.update')).toBeUndefined();
+    });
+  });
+
   describe('getStoredContainerForAgentOperation', () => {
     test('finds one agent-owned container by name when payload ids are absent', () => {
       const row = { id: 'container-1', name: 'nginx', agent: 'test-agent' };
@@ -6224,6 +6256,32 @@ describe('AgentClient', () => {
       expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
     });
 
+    test('preserves controller trigger provenance when updating an existing active row', () => {
+      const controllerRow = {
+        id: 'uuid-controller-trigger',
+        status: 'in-progress',
+        containerName: 'tautulli',
+        triggerName: 'test-agent.docker.update',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-trigger') return controllerRow as any;
+        return undefined;
+      });
+
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'uuid-controller-trigger',
+        containerName: 'tautulli',
+        triggerName: 'docker.update',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        'uuid-controller-trigger',
+        expect.objectContaining({ triggerName: 'test-agent.docker.update' }),
+      );
+    });
+
     test('marks the controller-issued row terminal when agent echoes back the controller operationId', () => {
       const controllerRow = {
         id: 'uuid-controller-1',
@@ -6244,6 +6302,60 @@ describe('AgentClient', () => {
         'uuid-controller-1',
         expect.objectContaining({ status: 'succeeded' }),
       );
+    });
+
+    test('preserves controller trigger provenance when marking a terminal row', () => {
+      const controllerRow = {
+        id: 'uuid-controller-terminal-trigger',
+        status: 'in-progress',
+        containerName: 'tautulli',
+        triggerName: 'test-agent.docker.update',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-terminal-trigger') return controllerRow as any;
+        return undefined;
+      });
+
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'uuid-controller-terminal-trigger',
+        containerName: 'tautulli',
+        triggerName: 'docker.update',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'uuid-controller-terminal-trigger',
+        expect.objectContaining({ triggerName: 'test-agent.docker.update' }),
+      );
+    });
+
+    test('ignores an active event qualified for a different agent', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-wrong-agent-active',
+        containerName: 'tautulli',
+        triggerName: 'other-agent.docker.update',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.updateOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('ignores a terminal event qualified for a different agent', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-wrong-agent-terminal',
+        containerName: 'tautulli',
+        triggerName: 'other-agent.docker.update',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.updateOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
     });
 
     test('falls back to agent-scoped id and inserts new row when no controller row exists', () => {
