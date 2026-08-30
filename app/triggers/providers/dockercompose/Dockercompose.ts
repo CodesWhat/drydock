@@ -403,9 +403,7 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
       continue;
     }
     const variableName = assignment[1];
-    if (invalidEnvironmentKeys.has(variableName)) {
-      continue;
-    }
+    const keyAlreadyInvalid = invalidEnvironmentKeys.has(variableName);
     const value = assignment[2].trimStart();
     if (value.startsWith("'")) {
       let quotedValue = value.slice(1);
@@ -421,7 +419,9 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
         delete resolvedEnvironment[variableName];
         continue;
       }
-      resolvedEnvironment[variableName] = quotedValue.slice(0, closingIndex).replace(/\\'/g, "'");
+      if (!keyAlreadyInvalid) {
+        resolvedEnvironment[variableName] = quotedValue.slice(0, closingIndex).replace(/\\'/g, "'");
+      }
       continue;
     }
     if (value.startsWith('"')) {
@@ -443,9 +443,11 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
         delete resolvedEnvironment[variableName];
         continue;
       }
-      resolvedEnvironment[variableName] = String(
-        resolveComposeInterpolation(decoded, resolvedEnvironment),
-      ).replaceAll(COMPOSE_ESCAPED_DOLLAR, '$');
+      if (!keyAlreadyInvalid) {
+        resolvedEnvironment[variableName] = String(
+          resolveComposeInterpolation(decoded, resolvedEnvironment),
+        ).replaceAll(COMPOSE_ESCAPED_DOLLAR, '$');
+      }
       continue;
     }
     if (/["'`]|\$\(/.test(value)) {
@@ -462,9 +464,11 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
       delete resolvedEnvironment[variableName];
       continue;
     }
-    resolvedEnvironment[variableName] = String(
-      resolveComposeInterpolation(unquotedValue, resolvedEnvironment),
-    ).replaceAll(COMPOSE_ESCAPED_DOLLAR, '$');
+    if (!keyAlreadyInvalid) {
+      resolvedEnvironment[variableName] = String(
+        resolveComposeInterpolation(unquotedValue, resolvedEnvironment),
+      ).replaceAll(COMPOSE_ESCAPED_DOLLAR, '$');
+    }
   }
   return resolvedEnvironment;
 }
