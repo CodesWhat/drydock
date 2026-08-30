@@ -464,12 +464,13 @@ export function init(app: Application): void {
   // Login route with its own authentication middleware (before global auth guard)
   router.post('/login', authenticateLogin, login);
 
+  // OIDC login flows set this preference before the provider redirects away.
+  // Keep same-origin protection on the unauthenticated pre-auth session.
+  router.post('/remember', requireSameOriginForMutations, setRememberMe);
+
   // Routes to protect after this line
   router.use(requireAuthentication);
   router.use(requireSameOriginForMutations);
-
-  // Store remember-me preference for authenticated sessions
-  router.post('/remember', setRememberMe);
 
   router.get('/user', getUser);
 

@@ -2,7 +2,10 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import express from 'express';
+import session from 'express-session';
 import { ClientSecretPost, Configuration } from 'openid-client';
+import { setRememberMe } from '../../../api/auth-remember-me.js';
+import { requireSameOriginForMutations } from '../../../api/csrf.js';
 import * as configuration from '../../../configuration/index.js';
 
 const { mockRecordAuthLogin, mockObserveAuthLoginDuration, mockUndiciFetch } = vi.hoisted(() => ({
@@ -458,6 +461,119 @@ test('getAuthenticator should enforce OIDC route rate limiting in express integr
 
     expect(lastStatus).toBe(429);
     expect(redirectSpy).toHaveBeenCalledTimes(50);
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve(undefined)));
+    });
+  }
+});
+
+async function runOidcRememberFlow(remember: boolean): Promise<Response> {
+  mockSuccessfulGrant(openidClientMock);
+  openidClientMock.buildAuthorizationUrl = vi.fn((_client, options) => {
+    const redirectUrl = new URL('https://idp/auth');
+    redirectUrl.searchParams.set('state', options.state);
+    return redirectUrl;
+  });
+  oidc.name = 'default';
+  const integrationApp = express();
+  integrationApp.use(
+    session({
+      secret: 'oidc-remember-test-secret',
+      resave: false,
+      saveUninitialized: false,
+    }),
+  );
+  integrationApp.use(express.json());
+  integrationApp.post('/auth/remember', requireSameOriginForMutations, setRememberMe);
+  oidc.getAuthenticator(integrationApp);
+
+  const server = await new Promise<any>((resolve) => {
+    const startedServer = integrationApp.listen(0, () => resolve(startedServer));
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve(undefined)));
+    });
+    throw new Error('Unable to resolve test server address');
+  }
+
+  try {
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const rememberResponse = await fetch(`${baseUrl}/auth/remember`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ remember }),
+    });
+    expect(rememberResponse.status).toBe(200);
+    const rememberCookie = rememberResponse.headers.get('set-cookie')?.split(';')[0];
+    expect(rememberCookie).toBeDefined();
+
+    const redirectResponse = await fetch(`${baseUrl}/auth/oidc/default/redirect`, {
+      headers: { Cookie: rememberCookie as string },
+    });
+    expect(redirectResponse.status).toBe(200);
+    const redirectPayload = (await redirectResponse.json()) as { redirect: string };
+    const redirectUrl = new URL(redirectPayload.redirect);
+    const state = redirectUrl.searchParams.get('state');
+    expect(state).toBeTruthy();
+
+    const callbackResponse = await fetch(
+      `${baseUrl}/auth/oidc/default/cb?code=abc&state=${encodeURIComponent(state as string)}`,
+      { headers: { Cookie: rememberCookie as string }, redirect: 'manual' },
+    );
+    expect(callbackResponse.status).toBe(302);
+    return callbackResponse;
+  } finally {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve(undefined)));
+    });
+  }
+}
+
+test('OIDC remember route survives redirect and callback with a persistent cookie', async () => {
+  const callbackResponse = await runOidcRememberFlow(true);
+  expect(callbackResponse.headers.get('set-cookie')).toMatch(/Expires=/i);
+});
+
+test('OIDC remember route survives redirect and callback with a session cookie', async () => {
+  const callbackResponse = await runOidcRememberFlow(false);
+  expect(callbackResponse.headers.get('set-cookie')).not.toMatch(/Expires=/i);
+});
+
+test('OIDC remember route rejects malformed preferences before creating a session', async () => {
+  const integrationApp = express();
+  integrationApp.use(
+    session({
+      secret: 'oidc-remember-invalid-test-secret',
+      resave: false,
+      saveUninitialized: false,
+    }),
+  );
+  integrationApp.use(express.json());
+  integrationApp.post('/auth/remember', requireSameOriginForMutations, setRememberMe);
+
+  const server = await new Promise<any>((resolve) => {
+    const startedServer = integrationApp.listen(0, () => resolve(startedServer));
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    await new Promise((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve(undefined)));
+    });
+    throw new Error('Unable to resolve test server address');
+  }
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/auth/remember`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ remember: 'true' }),
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'remember must be a boolean' });
+    expect(response.headers.get('set-cookie')).toBeNull();
   } finally {
     await new Promise((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve(undefined)));
