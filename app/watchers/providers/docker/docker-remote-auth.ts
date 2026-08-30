@@ -131,6 +131,10 @@ export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher
       );
     }
   } else {
+    // docker-modem merges explicit options over defaults sourced from DOCKER_HOST.
+    // An explicit undefined host is required to clear an ambient remote default so
+    // the configured local socketPath is actually selected.
+    options.host = undefined;
     options.socketPath = watcher.configuration.socket;
     // Pin the daemon's API version so all requests use versioned paths
     // (e.g. /v1.44/images/…).  This prevents Podman's Docker-compat

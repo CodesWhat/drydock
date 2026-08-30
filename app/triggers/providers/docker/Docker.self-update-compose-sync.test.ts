@@ -1057,6 +1057,7 @@ describe('self-update lifecycle exclusivity', () => {
     return {
       cloneContainer,
       cloneRuntimeConfig,
+      context,
       createContainer,
       dockerApi: stableDockerApi,
       helperContainer,
@@ -1265,6 +1266,69 @@ describe('self-update lifecycle exclusivity', () => {
       await regular;
       harness.restore();
       docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('accepts helper callback success when AutoRemove beats a lost start response', async () => {
+    vi.useFakeTimers();
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    let completeHelper: (result: { status: 'succeeded' }) => void = () => {};
+    const helperCompletion = new Promise<{ status: 'succeeded' }>((resolve) => {
+      completeHelper = resolve;
+    });
+    let regularStarted = false;
+    const harness = installObservedInfrastructureExecution(helperCompletion, () => {
+      regularStarted = true;
+    });
+    harness.helperContainer.start.mockImplementation(
+      ({ abortSignal }: { abortSignal: AbortSignal }) =>
+        new Promise<void>((_resolve, reject) => {
+          abortSignal.addEventListener('abort', () => reject(new Error('start response lost')));
+        }),
+    );
+    harness.dockerApi.getContainer.mockReturnValue({
+      inspect: vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(new Error('helper auto-removed after callback'), { statusCode: 404 }),
+        ),
+    });
+
+    const infrastructure = docker.runContainerUpdateLifecycle(
+      createTriggerContainer({
+        name: 'socket-proxy',
+        labels: { 'dd.update.mode': 'infrastructure' },
+      }),
+    );
+    const infrastructureSuccess = expect(infrastructure).resolves.toBe(true);
+    const regular = docker.runContainerUpdateLifecycle(
+      createTriggerContainer({ name: 'regular-after-auto-removed-helper' }),
+    );
+
+    try {
+      await vi.advanceTimersByTimeAsync(10);
+      expect(regularStarted).toBe(false);
+      releaseFinalizedHelperLifecycle(
+        { helperLifecycleOwner: 'surviving-process' },
+        'succeeded',
+        'infrastructure-observed-op',
+      );
+      completeHelper({ status: 'succeeded' });
+      await vi.advanceTimersByTimeAsync(29_990);
+
+      await infrastructureSuccess;
+      await regular;
+      expect(regularStarted).toBe(true);
+      expect(harness.targetContainerWithoutDrydockRuntime.remove).not.toHaveBeenCalled();
+      expect(harness.context.currentContainer.rename).toHaveBeenCalledOnce();
+    } finally {
+      completeHelper({ status: 'succeeded' });
+      releaseRetainedSelfUpdateLifecycle('infrastructure-observed-op');
+      await infrastructure.catch(() => undefined);
+      await regular;
+      harness.restore();
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      vi.useRealTimers();
     }
   });
 

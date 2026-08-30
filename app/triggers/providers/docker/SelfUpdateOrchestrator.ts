@@ -7,7 +7,10 @@ import {
   executeSelfUpdateTransition,
   findDockerSocketBind as findDockerSocketBindFromSpec,
 } from './SelfUpdateTransitionShared.js';
-import { waitForSelfUpdateHelperCompletion } from './self-update-helper-completion.js';
+import {
+  clearSelfUpdateHelperCompletion,
+  waitForSelfUpdateHelperCompletion,
+} from './self-update-helper-completion.js';
 import type {
   SelfUpdateConfiguration,
   SelfUpdateContainerRef,
@@ -330,6 +333,7 @@ class SelfUpdateOrchestrator {
           classification === 'peer' && this.isInfrastructureUpdate(container),
         finalizeObservedHelperOperation: this.finalizeObservedHelperOperation,
         waitForObservedHelperCompletion: this.waitForObservedHelperCompletion,
+        clearObservedHelperCompletion: clearSelfUpdateHelperCompletion,
         resolveObservedHelperRuntime: this.resolveObservedHelperRuntime,
       },
       context,

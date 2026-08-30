@@ -146,6 +146,37 @@ describe('docker remote auth module', () => {
     expect(watcher.dockerApi).toBe(dockerApi);
   });
 
+  test('local socket watcher overrides an ambient remote DOCKER_HOST', async () => {
+    const dockerodeModule = await vi.importActual<typeof import('dockerode')>('dockerode');
+    const RealDockerode = dockerodeModule.default;
+    mockDockerodeCtor.mockImplementation(function DockerodeMock(options) {
+      const dockerApi = new RealDockerode(options);
+      dockerApi.info = vi.fn().mockResolvedValue({ Name: 'local-daemon' });
+      return dockerApi;
+    });
+    const previousDockerHost = process.env.DOCKER_HOST;
+    process.env.DOCKER_HOST = 'tcp://remote-daemon.example:2375';
+    const watcher = createWatcher({
+      configuration: {
+        socket: '/run/docker-local.sock',
+        port: 0,
+      },
+    });
+
+    try {
+      await initWatcherWithRemoteAuth(watcher as any);
+
+      expect(watcher.dockerApi.modem.socketPath).toBe('/run/docker-local.sock');
+      expect(watcher.dockerApi.modem.host).toBeUndefined();
+    } finally {
+      if (previousDockerHost === undefined) {
+        delete process.env.DOCKER_HOST;
+      } else {
+        process.env.DOCKER_HOST = previousDockerHost;
+      }
+    }
+  });
+
   test('initWatcherWithRemoteAuth captures the local daemon host name for notifications', async () => {
     const dockerApi = {
       modem: { headers: {} },

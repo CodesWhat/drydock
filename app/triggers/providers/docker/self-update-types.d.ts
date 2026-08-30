@@ -40,7 +40,15 @@ export interface SelfUpdateCreatedContainer {
 
 export interface SelfUpdateHelperContainer {
   start: (options?: { abortSignal?: AbortSignal }) => Promise<void>;
-  inspect?: () => Promise<{ State?: { Running?: boolean; ExitCode?: number } }>;
+  inspect?: (options?: { abortSignal?: AbortSignal }) => Promise<{
+    State?: { Running?: boolean; ExitCode?: number };
+    Config?: {
+      Image?: unknown;
+      Cmd?: unknown;
+      Env?: unknown;
+      Labels?: unknown;
+    };
+  }>;
   wait?: () => Promise<{ StatusCode?: number }>;
   remove: (options: { force: boolean }) => Promise<void>;
 }
