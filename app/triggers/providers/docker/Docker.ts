@@ -414,7 +414,7 @@ class Docker<
       resolveFinalizeUrl: () => this.getSelfUpdateFinalizeUrl(),
       resolveFinalizeSecret: (operationId) => this.getSelfUpdateFinalizeSecret(operationId),
       resolveHelperImage: (container) => {
-        if (this.selfUpdateOrchestrator.isSelfUpdate(container)) {
+        if (this.isSelfUpdate(container)) {
           return undefined;
         }
         const drydockContainer = storeContainer
@@ -1517,6 +1517,16 @@ class Docker<
     return this.selfUpdateOrchestrator.isSelfUpdate(container);
   }
 
+  async classifySelfUpdate(container): Promise<boolean> {
+    let dockerApi: unknown;
+    try {
+      dockerApi = this.getWatcher(container)?.dockerApi;
+    } catch {
+      dockerApi = undefined;
+    }
+    return this.selfUpdateOrchestrator.classifySelfUpdate(container, dockerApi);
+  }
+
   isInfrastructureUpdate(container) {
     return this.selfUpdateOrchestrator.isInfrastructureUpdate(container);
   }
@@ -1755,9 +1765,10 @@ class Docker<
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    const exclusiveUpdate = this.isSelfUpdate(container) || this.isInfrastructureUpdate(container);
+    const selfUpdate = await this.classifySelfUpdate(container);
+    const exclusiveUpdate = selfUpdate || this.isInfrastructureUpdate(container);
     let exclusiveUpdateOperationId: string | undefined;
-    return withContainerUpdateLocks(
+    const lifecycle = withContainerUpdateLocks(
       this.getUpdateLockKeys(container),
       async () => {
         const requestedOperationId = getRequestedOperationId(container, runtimeContext);
@@ -1871,6 +1882,11 @@ class Docker<
             : undefined,
       },
     );
+    try {
+      return await lifecycle;
+    } finally {
+      this.selfUpdateOrchestrator.clearSelfUpdateClassification(container);
+    }
   }
 
   /**

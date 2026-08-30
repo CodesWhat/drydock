@@ -426,7 +426,10 @@ export function registerCommonDockerBeforeEach() {
     mockGetState.mockImplementation(createDefaultRegistryState);
     docker.configuration = configurationValid;
     docker.log = log;
-    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier = () => '123456789';
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
+      id: '123456789',
+      name: 'container-name',
+    });
     mockGetSecurityConfiguration.mockReturnValue({
       enabled: false,
       scanner: '',

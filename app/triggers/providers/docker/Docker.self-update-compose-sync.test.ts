@@ -16,39 +16,41 @@ const { mockGetRollbackCounter, mockSyncComposeFileTag } = getDockerTestMocks();
 // --- Self-update ---
 
 describe('isSelfUpdate', () => {
-  const originalResolveSelfContainerIdentifier =
-    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier;
+  const originalResolveSelfContainerIdentity =
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity;
 
   beforeEach(() => {
-    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier = () => 'self-container-id';
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
+      id: 'self-container-id',
+      name: 'drydock',
+    });
   });
 
   afterEach(() => {
-    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier =
-      originalResolveSelfContainerIdentifier;
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity =
+      originalResolveSelfContainerIdentity;
   });
 
-  test('should return true for drydock image', () => {
-    expect(docker.isSelfUpdate({ id: 'self-container-id', image: { name: 'drydock' } })).toBe(true);
+  test('should return true for drydock image', async () => {
+    const container = { id: 'self-container-id', image: { name: 'drydock' } };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+    expect(docker.isSelfUpdate(container)).toBe(true);
   });
 
-  test('should return true for namespaced drydock image', () => {
-    expect(
-      docker.isSelfUpdate({
-        id: 'self-container-id',
-        image: { name: 'codeswhat/drydock' },
-      }),
-    ).toBe(true);
+  test('should return true for namespaced drydock image', async () => {
+    const container = { id: 'self-container-id', image: { name: 'codeswhat/drydock' } };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+    expect(docker.isSelfUpdate(container)).toBe(true);
   });
 
-  test('should return false for a peer running a drydock image', () => {
-    expect(
-      docker.isSelfUpdate({
-        id: 'peer-container-id',
-        name: 'drydock-peer',
-        image: { name: 'codeswhat/drydock' },
-      }),
-    ).toBe(false);
+  test('should return false for a peer running a drydock image', async () => {
+    const container = {
+      id: 'peer-container-id',
+      name: 'drydock-peer',
+      image: { name: 'codeswhat/drydock' },
+    };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+    expect(docker.isSelfUpdate(container)).toBe(false);
   });
 
   test('should return false for non-drydock image', () => {
@@ -960,16 +962,19 @@ describe('performContainerUpdate compose file sync', () => {
 });
 
 describe('self-update lifecycle exclusivity', () => {
-  const originalResolveSelfContainerIdentifier =
-    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier;
+  const originalResolveSelfContainerIdentity =
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity;
 
   beforeEach(() => {
-    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier = () => '123456789';
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
+      id: '123456789',
+      name: 'container-name',
+    });
   });
 
   afterEach(() => {
-    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier =
-      originalResolveSelfContainerIdentifier;
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity =
+      originalResolveSelfContainerIdentity;
   });
 
   test('waits for active regular work and releases queued work after a dry-run', async () => {

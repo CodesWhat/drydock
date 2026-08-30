@@ -59,7 +59,10 @@ function createOrchestrator(overrides = {}) {
     insertContainerImageBackup: vi.fn(),
     emitSelfUpdateStarting: vi.fn().mockResolvedValue(undefined),
     createOperationId: vi.fn(() => 'generated-operation-id'),
-    resolveSelfContainerIdentifier: vi.fn(() => 'abcdef123456'),
+    resolveSelfContainerIdentity: vi.fn().mockResolvedValue({
+      id: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      name: 'drydock',
+    }),
     ...overrides,
   });
 }
@@ -95,58 +98,62 @@ describe('SelfUpdateOrchestrator', () => {
     ).rejects.toThrow('SelfUpdateOrchestrator requires dependency "createContainer"');
   });
 
-  test('identifies only the current Drydock process container as a self-update', () => {
+  test('identifies only the Docker-resolved current process container as a self-update', async () => {
     const orchestrator = createOrchestrator();
+    const self = createContainer({ image: { name: 'drydock' } });
+    const namespacedSelf = createContainer({ image: { name: 'ghcr.io/acme/drydock' } });
+    const peer = createContainer({
+      id: 'fedcba6543217890fedcba6543217890fedcba6543217890fedcba6543217890',
+      name: 'drydock-peer',
+      image: { name: 'ghcr.io/acme/drydock' },
+    });
+    const nonDrydock = createContainer({ image: { name: 'ghcr.io/acme/web' } });
 
-    expect(orchestrator.isSelfUpdate(createContainer({ image: { name: 'drydock' } }))).toBe(true);
-    expect(
-      orchestrator.isSelfUpdate(createContainer({ image: { name: 'ghcr.io/acme/drydock' } })),
-    ).toBe(true);
-    expect(
-      orchestrator.isSelfUpdate(
-        createContainer({
-          id: 'fedcba6543217890fedcba6543217890fedcba6543217890fedcba6543217890',
-          name: 'drydock-peer',
-          image: { name: 'ghcr.io/acme/drydock' },
-        }),
-      ),
-    ).toBe(false);
-    expect(
-      orchestrator.isSelfUpdate(
-        createContainer({ id: undefined, name: 'drydock-peer', image: { name: 'drydock' } }),
-      ),
-    ).toBe(false);
-    expect(
-      orchestrator.isSelfUpdate(
-        createContainer({ id: 'fedcba654321', name: undefined, image: { name: 'drydock' } }),
-      ),
-    ).toBe(false);
-    expect(
-      orchestrator.isSelfUpdate(createContainer({ image: { name: 'ghcr.io/acme/web' } })),
-    ).toBe(false);
+    await expect(orchestrator.classifySelfUpdate(self, {})).resolves.toBe(true);
+    await expect(orchestrator.classifySelfUpdate(namespacedSelf, {})).resolves.toBe(true);
+    await expect(orchestrator.classifySelfUpdate(peer, {})).resolves.toBe(false);
+    await expect(orchestrator.classifySelfUpdate(nonDrydock, {})).resolves.toBe(false);
+    expect(orchestrator.isSelfUpdate(self)).toBe(true);
+    expect(orchestrator.isSelfUpdate(namespacedSelf)).toBe(true);
+    expect(orchestrator.isSelfUpdate(peer)).toBe(false);
+    expect(orchestrator.isSelfUpdate(nonDrydock)).toBe(false);
   });
 
-  test('recognizes an explicitly named self container when its hostname is not an id prefix', () => {
+  test('recognizes the authoritative container name when its hostname differs', async () => {
     const orchestrator = createOrchestrator({
-      resolveSelfContainerIdentifier: vi.fn(() => 'drydock-primary'),
+      resolveSelfContainerIdentity: vi.fn().mockResolvedValue({
+        id: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        name: 'drydock-primary',
+      }),
+    });
+    const container = createContainer({
+      id: 'fedcba6543217890fedcba6543217890fedcba6543217890fedcba6543217890',
+      name: 'drydock-primary',
     });
 
-    expect(
-      orchestrator.isSelfUpdate(
-        createContainer({
-          id: 'fedcba6543217890fedcba6543217890fedcba6543217890fedcba6543217890',
-          name: 'drydock-primary',
-        }),
-      ),
-    ).toBe(true);
+    await expect(orchestrator.classifySelfUpdate(container, {})).resolves.toBe(true);
+    expect(orchestrator.isSelfUpdate(container)).toBe(true);
   });
 
-  test('fails closed when current container identity is unavailable', () => {
+  test('fails closed when current container identity is unavailable', async () => {
     const orchestrator = createOrchestrator({
-      resolveSelfContainerIdentifier: vi.fn(() => null),
+      resolveSelfContainerIdentity: vi.fn().mockResolvedValue(null),
     });
+    const container = createContainer();
 
-    expect(orchestrator.isSelfUpdate(createContainer())).toBe(false);
+    await expect(orchestrator.classifySelfUpdate(container, {})).resolves.toBe(false);
+    expect(orchestrator.isSelfUpdate(container)).toBe(false);
+  });
+
+  test('uses the authoritative container name when the candidate id is unavailable', async () => {
+    const orchestrator = createOrchestrator();
+    const unnamedContainer = createContainer({ name: undefined });
+    const unidentifiedContainer = createContainer({ id: undefined });
+
+    await expect(orchestrator.classifySelfUpdate(unnamedContainer, {})).resolves.toBe(true);
+    await expect(orchestrator.classifySelfUpdate(unidentifiedContainer, {})).resolves.toBe(true);
+    expect(orchestrator.isSelfUpdate(unnamedContainer)).toBe(true);
+    expect(orchestrator.isSelfUpdate(unidentifiedContainer)).toBe(true);
   });
 
   test('finds the docker socket bind path', () => {
@@ -256,7 +263,9 @@ describe('SelfUpdateOrchestrator', () => {
     await orchestrator.maybeNotify(createContainer({ image: { name: 'ghcr.io/acme/web' } }), log);
     expect(emitSelfUpdateStarting).not.toHaveBeenCalled();
 
-    await orchestrator.maybeNotify(createContainer(), log, 'op-1');
+    const self = createContainer();
+    await orchestrator.classifySelfUpdate(self, {});
+    await orchestrator.maybeNotify(self, log, 'op-1');
     expect(log.info).toHaveBeenCalledWith('Self-update detected — notifying UI before proceeding');
     expect(emitSelfUpdateStarting).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -266,7 +275,9 @@ describe('SelfUpdateOrchestrator', () => {
       }),
     );
 
-    await orchestrator.maybeNotify(createContainer(), log);
+    const generatedIdSelf = createContainer();
+    await orchestrator.classifySelfUpdate(generatedIdSelf, {});
+    await orchestrator.maybeNotify(generatedIdSelf, log);
     expect(createOperationId).toHaveBeenCalled();
   });
 
@@ -278,7 +289,9 @@ describe('SelfUpdateOrchestrator', () => {
     });
     const log = { info: vi.fn(), warn: vi.fn() };
 
-    await orchestrator.maybeNotify(createContainer(), log, 'op-dryrun');
+    const self = createContainer();
+    await orchestrator.classifySelfUpdate(self, {});
+    await orchestrator.maybeNotify(self, log, 'op-dryrun');
 
     expect(emitSelfUpdateStarting).not.toHaveBeenCalled();
     expect(log.info).toHaveBeenCalledWith(
@@ -294,7 +307,9 @@ describe('SelfUpdateOrchestrator', () => {
     });
     const log = { info: vi.fn(), warn: vi.fn() };
 
-    await orchestrator.maybeNotify(createContainer(), log, 'op-live');
+    const self = createContainer();
+    await orchestrator.classifySelfUpdate(self, {});
+    await orchestrator.maybeNotify(self, log, 'op-live');
 
     expect(emitSelfUpdateStarting).toHaveBeenCalledWith(
       expect.objectContaining({ opId: 'op-live' }),
@@ -313,6 +328,25 @@ describe('SelfUpdateOrchestrator', () => {
     expect(log.info).toHaveBeenCalledWith(
       'Do not replace the existing container because dry-run mode is enabled',
     );
+  });
+
+  test('reuses an authoritative self-update classification during execution', async () => {
+    const resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
+      id: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+      name: 'drydock',
+    });
+    const orchestrator = createOrchestrator({
+      getConfiguration: () => ({ dryrun: true }),
+      resolveSelfContainerIdentity,
+    });
+    const container = createContainer();
+
+    await orchestrator.classifySelfUpdate(container, {});
+    await expect(orchestrator.execute(createContext(), container, { info: vi.fn() })).resolves.toBe(
+      false,
+    );
+
+    expect(resolveSelfContainerIdentity).toHaveBeenCalledOnce();
   });
 
   test('throws when docker socket bind is missing', async () => {

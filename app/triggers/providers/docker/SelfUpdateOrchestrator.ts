@@ -1,5 +1,8 @@
 import crypto from 'node:crypto';
-import { getSelfContainerIdentifier } from '../dockercompose/ComposePathBindMounts.js';
+import {
+  resolveSelfContainerIdentity,
+  type SelfContainerIdentity,
+} from './SelfContainerIdentity.js';
 import {
   executeSelfUpdateTransition,
   findDockerSocketBind as findDockerSocketBindFromSpec,
@@ -52,7 +55,7 @@ interface SelfUpdateOrchestratorDependencies {
   createOperationId: () => string;
   resolveFinalizeUrl: () => string;
   resolveFinalizeSecret: (operationId: string) => string;
-  resolveSelfContainerIdentifier: () => string | null;
+  resolveSelfContainerIdentity: (dockerApi: unknown) => Promise<SelfContainerIdentity | null>;
 }
 
 interface SelfUpdateOrchestratorConstructorOptions {
@@ -80,7 +83,7 @@ interface SelfUpdateOrchestratorConstructorOptions {
   createOperationId?: SelfUpdateOrchestratorDependencies['createOperationId'];
   resolveFinalizeUrl?: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
   resolveFinalizeSecret?: (operationId: string) => string;
-  resolveSelfContainerIdentifier?: () => string | null;
+  resolveSelfContainerIdentity?: (dockerApi: unknown) => Promise<SelfContainerIdentity | null>;
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
   touchOperation?: (operationId: string) => void;
 }
@@ -110,7 +113,9 @@ class SelfUpdateOrchestrator {
 
   resolveFinalizeSecret: SelfUpdateOrchestratorDependencies['resolveFinalizeSecret'];
 
-  resolveSelfContainerIdentifier: SelfUpdateOrchestratorDependencies['resolveSelfContainerIdentifier'];
+  resolveSelfContainerIdentity: SelfUpdateOrchestratorDependencies['resolveSelfContainerIdentity'];
+
+  private readonly classifiedSelfUpdateContainers = new WeakSet<object>();
 
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
 
@@ -143,35 +148,54 @@ class SelfUpdateOrchestrator {
     this.resolveFinalizeSecret =
       options.resolveFinalizeSecret ||
       ((_operationId: string) => 'missing-self-update-finalize-secret');
-    this.resolveSelfContainerIdentifier =
-      options.resolveSelfContainerIdentifier || getSelfContainerIdentifier;
+    this.resolveSelfContainerIdentity =
+      options.resolveSelfContainerIdentity ||
+      ((dockerApi) => resolveSelfContainerIdentity(dockerApi as never));
     this.resolveHelperImage = options.resolveHelperImage;
     this.touchOperation = options.touchOperation;
   }
 
-  isSelfUpdate(container: SelfUpdateContainerRef): boolean {
+  async classifySelfUpdate(
+    container: SelfUpdateContainerRef,
+    dockerApi: unknown,
+  ): Promise<boolean> {
     const imageName = container.image?.name;
     if (imageName !== 'drydock' && !imageName?.endsWith('/drydock')) {
+      this.classifiedSelfUpdateContainers.delete(container);
       return false;
     }
 
-    const selfContainerIdentifier = this.resolveSelfContainerIdentifier();
-    if (!selfContainerIdentifier) {
+    const selfContainerIdentity = await this.resolveSelfContainerIdentity(dockerApi);
+    if (!selfContainerIdentity) {
+      this.classifiedSelfUpdateContainers.delete(container);
       return false;
     }
 
     const containerId = typeof container.id === 'string' ? container.id.trim() : '';
     const containerName =
       typeof container.name === 'string' ? container.name.trim().replace(/^\/+/, '') : '';
-    if (containerId === selfContainerIdentifier || containerName === selfContainerIdentifier) {
-      return true;
+    const identityId = selfContainerIdentity.id.trim();
+    const identityName = selfContainerIdentity.name.trim().replace(/^\/+/, '');
+    const idMatches =
+      containerId === identityId ||
+      (/^[a-f0-9]{12,64}$/i.test(containerId) &&
+        /^[a-f0-9]{12,64}$/i.test(identityId) &&
+        (containerId.startsWith(identityId) || identityId.startsWith(containerId)));
+    const isSelfUpdate = idMatches || (!!containerName && containerName === identityName);
+    if (isSelfUpdate) {
+      this.classifiedSelfUpdateContainers.add(container);
+    } else {
+      this.classifiedSelfUpdateContainers.delete(container);
     }
+    return isSelfUpdate;
+  }
 
-    return (
-      /^[a-f0-9]{12,64}$/i.test(selfContainerIdentifier) &&
-      /^[a-f0-9]{12,64}$/i.test(containerId) &&
-      containerId.startsWith(selfContainerIdentifier)
-    );
+  isSelfUpdate(container: SelfUpdateContainerRef): boolean {
+    return this.classifiedSelfUpdateContainers.has(container);
+  }
+
+  clearSelfUpdateClassification(container: SelfUpdateContainerRef): void {
+    this.classifiedSelfUpdateContainers.delete(container);
   }
 
   isInfrastructureUpdate(container: SelfUpdateContainerRef): boolean {
@@ -212,6 +236,9 @@ class SelfUpdateOrchestrator {
     logContainer: SelfUpdateLogger,
     operationId?: string,
   ): Promise<boolean> {
+    if (!this.isSelfUpdate(container)) {
+      await this.classifySelfUpdate(container, context.dockerApi);
+    }
     const resolveHelperImage = this.resolveHelperImage;
     return executeSelfUpdateTransition(
       {
