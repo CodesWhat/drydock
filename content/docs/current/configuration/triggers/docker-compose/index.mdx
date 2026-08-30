@@ -32,6 +32,7 @@ The trigger will:
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_DRYRUN` | ⚪ | When enabled, only pull the new image ahead of time | `true`, `false` | `false` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_AUTOREMOVETIMEOUT` | ⚪ | Wait timeout for container auto-removal (ms) | Integer | `10000` |
+| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_PULLTIMEOUT` | ⚪ | Maximum time allowed for an image pull and its progress stream (ms) | Positive integer | `600000` (10 min) |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILELABEL` | ⚪ | Container label name used to locate the compose file per container | Label name | `dd.compose.file` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_RECONCILIATIONMODE` | ⚪ | Compose/runtime reconciliation mode before lifecycle (`warn`, `block`, or `off`) | `warn`, `block`, `off` | `warn` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_DIGESTPINNING` | ⚪ | Write digest-pinned compose image references when a digest is available | `true`, `false` | `false` |

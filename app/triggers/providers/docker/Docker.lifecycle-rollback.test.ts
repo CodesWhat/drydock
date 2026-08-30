@@ -431,6 +431,7 @@ describe('additional docker trigger coverage', () => {
 
     await docker.maybeNotifySelfUpdate(
       {
+        id: '123456789',
         image: {
           name: 'drydock',
         },

@@ -63,6 +63,7 @@ import UpdateLifecycleExecutor, {
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
+const DEFAULT_PULL_TIMEOUT_MS = 600_000;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
 const TRIGGER_BATCH_CONCURRENCY = 3;
@@ -94,6 +95,7 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   prune: boolean;
   dryrun: boolean;
   autoremovetimeout: number;
+  pulltimeout: number;
   backupcount: number;
 }
 
@@ -683,6 +685,7 @@ class Docker<
       prune: this.joi.boolean().default(false),
       dryrun: this.joi.boolean().default(false),
       autoremovetimeout: this.joi.number().default(10_000),
+      pulltimeout: this.joi.number().integer().positive().default(DEFAULT_PULL_TIMEOUT_MS),
       backupcount: this.joi.number().default(3),
     });
   }
@@ -869,29 +872,79 @@ class Docker<
   async pullImage(dockerApi, auth, newImage, logContainer) {
     logContainer.info(`Pull image ${newImage}`);
     try {
-      const pullStream = await dockerApi.pull(newImage, {
-        authconfig: auth,
-      });
       const pullProgressLogger = this.createPullProgressLogger(logContainer, newImage);
+      const pullTimeout = this.configuration.pulltimeout ?? DEFAULT_PULL_TIMEOUT_MS;
+      const abortController = new AbortController();
+      let pullStream;
 
-      await new Promise((resolve, reject) =>
-        dockerApi.modem.followProgress(
-          pullStream,
-          (error, output) => {
-            if (Array.isArray(output) && output.length > 0) {
-              pullProgressLogger.onDone(output.at(-1));
-            }
-            if (error) {
-              reject(error);
-            } else {
-              resolve(undefined);
-            }
-          },
-          (progressEvent) => {
-            pullProgressLogger.onProgress(progressEvent);
-          },
-        ),
-      );
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const settle = (error?: unknown) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeout);
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        };
+        const destroyPullStream = (stream) => {
+          if (typeof stream?.destroy !== 'function') {
+            return;
+          }
+          try {
+            stream.destroy();
+          } catch {
+            // The timeout remains the authoritative failure if stream cleanup throws.
+          }
+        };
+        const timeout = setTimeout(() => {
+          const timeoutError = new Error(`Pull image ${newImage} timed out after ${pullTimeout}ms`);
+          settle(timeoutError);
+          abortController.abort(timeoutError);
+          destroyPullStream(pullStream);
+        }, pullTimeout);
+
+        void dockerApi
+          .pull(newImage, {
+            authconfig: auth,
+            abortSignal: abortController.signal,
+          })
+          .then(
+            (stream) => {
+              pullStream = stream;
+              if (settled) {
+                destroyPullStream(stream);
+                return;
+              }
+              try {
+                dockerApi.modem.followProgress(
+                  stream,
+                  (error, output) => {
+                    if (settled) {
+                      return;
+                    }
+                    if (Array.isArray(output) && output.length > 0) {
+                      pullProgressLogger.onDone(output.at(-1));
+                    }
+                    settle(error);
+                  },
+                  (progressEvent) => {
+                    if (!settled) {
+                      pullProgressLogger.onProgress(progressEvent);
+                    }
+                  },
+                );
+              } catch (error: unknown) {
+                settle(error);
+              }
+            },
+            (error) => settle(error),
+          );
+      });
       logContainer.info(`Image ${newImage} pulled with success`);
     } catch (e: unknown) {
       logContainer.warn(`Error when pulling image ${newImage} (${getErrorMessage(e)})`);

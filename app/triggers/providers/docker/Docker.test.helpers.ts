@@ -10,6 +10,7 @@ export const configurationValid = {
   auto: 'all',
   order: 100,
   autoremovetimeout: 10000,
+  pulltimeout: 600000,
   backupcount: 3,
   simpletitle:
     '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
@@ -425,6 +426,7 @@ export function registerCommonDockerBeforeEach() {
     mockGetState.mockImplementation(createDefaultRegistryState);
     docker.configuration = configurationValid;
     docker.log = log;
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier = () => '123456789';
     mockGetSecurityConfiguration.mockReturnValue({
       enabled: false,
       scanner: '',

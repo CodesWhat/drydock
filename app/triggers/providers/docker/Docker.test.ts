@@ -21,6 +21,7 @@ const configurationValid = {
   auto: 'all',
   order: 100,
   autoremovetimeout: 10000,
+  pulltimeout: 600000,
   backupcount: 3,
   simpletitle:
     '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
@@ -411,6 +412,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   docker.configuration = configurationValid;
   docker.log = log;
+  docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier = () => '123456789';
   mockGetServerConfiguration.mockReturnValue({ port: 3000 });
   mockGetSecurityConfiguration.mockReturnValue({
     enabled: false,
@@ -2523,6 +2525,7 @@ describe('additional docker trigger coverage', () => {
 
     await docker.maybeNotifySelfUpdate(
       {
+        id: '123456789',
         image: {
           name: 'drydock',
         },
@@ -3375,12 +3378,44 @@ describe('executeContainerUpdate', () => {
 // --- Self-update ---
 
 describe('isSelfUpdate', () => {
+  const originalResolveSelfContainerIdentifier =
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier;
+
+  beforeEach(() => {
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier = () => 'self-container-id';
+  });
+
+  afterEach(() => {
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier =
+      originalResolveSelfContainerIdentifier;
+  });
+
   test('should return true for drydock image', () => {
-    expect(docker.isSelfUpdate({ image: { name: 'drydock' } })).toBe(true);
+    expect(
+      docker.isSelfUpdate({
+        id: 'self-container-id',
+        image: { name: 'drydock' },
+      }),
+    ).toBe(true);
   });
 
   test('should return true for namespaced drydock image', () => {
-    expect(docker.isSelfUpdate({ image: { name: 'codeswhat/drydock' } })).toBe(true);
+    expect(
+      docker.isSelfUpdate({
+        id: 'self-container-id',
+        image: { name: 'codeswhat/drydock' },
+      }),
+    ).toBe(true);
+  });
+
+  test('should return false for a peer running a drydock image', () => {
+    expect(
+      docker.isSelfUpdate({
+        id: 'peer-container-id',
+        name: 'drydock-peer',
+        image: { name: 'codeswhat/drydock' },
+      }),
+    ).toBe(false);
   });
 
   test('should return false for non-drydock image', () => {
@@ -3435,6 +3470,7 @@ describe('resolveHelperImage for infrastructure updates', () => {
 
   test('should return undefined for self-update containers', async () => {
     const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      id: '123456789',
       image: { name: 'ghcr.io/codeswhat/drydock' },
     });
     expect(resolved).toBeUndefined();

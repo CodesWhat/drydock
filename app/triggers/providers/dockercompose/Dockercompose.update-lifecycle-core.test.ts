@@ -118,12 +118,14 @@ describe('Dockercompose Trigger', () => {
     trigger.configuration.dryrun = false;
 
     const container = makeContainer({
+      id: '123456789abc',
       name: 'drydock',
       imageName: 'codeswhat/drydock',
       tagValue: '1.0.0',
       remoteValue: '1.1.0',
       labels: { 'com.docker.compose.service': 'drydock' },
     });
+    trigger.selfUpdateOrchestrator.resolveSelfContainerIdentifier = () => container.id;
 
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ drydock: { image: 'codeswhat/drydock:1.0.0' } }),

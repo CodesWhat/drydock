@@ -112,6 +112,16 @@ describe('SelfUpdateOrchestrator', () => {
       ),
     ).toBe(false);
     expect(
+      orchestrator.isSelfUpdate(
+        createContainer({ id: undefined, name: 'drydock-peer', image: { name: 'drydock' } }),
+      ),
+    ).toBe(false);
+    expect(
+      orchestrator.isSelfUpdate(
+        createContainer({ id: 'fedcba654321', name: undefined, image: { name: 'drydock' } }),
+      ),
+    ).toBe(false);
+    expect(
       orchestrator.isSelfUpdate(createContainer({ image: { name: 'ghcr.io/acme/web' } })),
     ).toBe(false);
   });
