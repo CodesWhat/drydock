@@ -205,6 +205,20 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.7 highlights</strong></summary>
+
+- **Registry pagination now follows each registry's own cursor**, preventing update checks from skipping pages or stopping early. ([#927](https://github.com/CodesWhat/drydock/pull/927))
+- **Update execution stays successful when cleanup fails after the health gate**, while SSE payloads are smaller and self-updates wait for active lifecycles before taking their exclusive gate. ([#931](https://github.com/CodesWhat/drydock/pull/931), [#942](https://github.com/CodesWhat/drydock/pull/942))
+- **Credential redaction now covers trigger, registry, debug-dump, and lookalike-host paths**, preventing secrets from being logged or sent to attacker-controlled registry hosts. ([#932](https://github.com/CodesWhat/drydock/pull/932))
+- **Compose rewrites now verify the runtime repository before writing**, and agent pruning plus rollback-failure handling are covered safely. ([#933](https://github.com/CodesWhat/drydock/pull/933))
+- **Header-authenticated requests no longer persist sessions**, so Basic-auth polling does not grow the session store. ([#935](https://github.com/CodesWhat/drydock/pull/935))
+- **The competitor comparison and roadmap are refreshed for 2026**, keeping the release documentation current. ([#936](https://github.com/CodesWhat/drydock/pull/936))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc7--2026-08-29).
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.6 highlights</strong></summary>
 
 - **Two more gaps in agent container ownership are closed, on top of the earlier #904 fix** — a brand-new container id had no ownership check at all, letting an agent claim a watcher name the controller itself owns; and the bulk ingestion paths (handshake, the watcher-snapshot fallback, on-demand `watch`/`watchContainer`, and edge `handleContainerSync`) reached `processAuthoritativeContainer` with no check in between, so an agent could still claim another agent's or the controller's container on its next routine snapshot. Both paths now enforce the same ownership checks the original fix added.

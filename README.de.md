@@ -202,6 +202,20 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.7</strong></summary>
+
+- **Die Registry-Paginierung folgt jetzt dem Cursor jeder Registry**, damit Prüfungen keine Seiten überspringen oder zu früh enden. ([#927](https://github.com/CodesWhat/drydock/pull/927))
+- **Updates bleiben erfolgreich, wenn die Bereinigung nach der Gesundheitsprüfung fehlschlägt**; SSE-Nutzdaten sind kleiner, und Self-Updates warten vor dem exklusiven Gate auf aktive Lebenszyklen. ([#931](https://github.com/CodesWhat/drydock/pull/931), [#942](https://github.com/CodesWhat/drydock/pull/942))
+- **Die Anmeldedaten-Redaktion deckt jetzt Trigger, Registries, Debug-Dumps und Lookalike-Hosts ab**, damit Geheimnisse weder protokolliert noch an fremde Registry-Hosts gesendet werden. ([#932](https://github.com/CodesWhat/drydock/pull/932))
+- **Compose-Umschreibungen prüfen vor dem Schreiben das Laufzeit-Repository**; Agent-Bereinigung und fehlgeschlagene Rollbacks sind sicher abgedeckt. ([#933](https://github.com/CodesWhat/drydock/pull/933))
+- **Header-authentifizierte Anfragen speichern keine Sessions mehr**, sodass Basic-Auth-Polling den Session-Speicher nicht vergrößert. ([#935](https://github.com/CodesWhat/drydock/pull/935))
+- **Der Wettbewerbsvergleich und die Roadmap wurden für 2026 aktualisiert**, damit die Release-Dokumentation aktuell bleibt. ([#936](https://github.com/CodesWhat/drydock/pull/936))
+
+Vollständige Release-Notes in [CHANGELOG.md](./CHANGELOG.md#170-rc7--2026-08-29).
+
+</details>
+
+<details open>
 <summary><strong>Highlights von v1.7.0-rc.6</strong></summary>
 
 - **Zwei weitere Lücken bei der Container-Eigentümerschaft von Agents werden geschlossen, zusätzlich zum früheren #904-Fix** – eine brandneue Container-ID hatte überhaupt keine Eigentümerschaftsprüfung, sodass ein Agent einen Watcher-Namen beanspruchen konnte, der eigentlich dem Controller gehört; und die Bulk-Ingestion-Pfade (Handshake, der Watcher-Snapshot-Fallback, das On-Demand-`watch`/`watchContainer` und das Edge-`handleContainerSync`) erreichten `processAuthoritativeContainer` ohne jede Prüfung dazwischen, sodass ein Agent bei seinem nächsten routinemäßigen Snapshot weiterhin einen Container beanspruchen konnte, der einem anderen Agent oder dem Controller gehört. Beide Pfade erzwingen jetzt dieselben Eigentümerschaftsprüfungen, die der ursprüngliche Fix eingeführt hat.

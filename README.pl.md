@@ -202,6 +202,20 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.7</strong></summary>
+
+- **Paginacja rejestrów korzysta teraz z kursora właściwego dla każdego rejestru**, więc sprawdzanie aktualizacji nie pomija stron ani nie kończy się przedwcześnie. ([#927](https://github.com/CodesWhat/drydock/pull/927))
+- **Aktualizacje pozostają pomyślne, gdy czyszczenie nie powiedzie się po kontroli stanu**; ładunki SSE są mniejsze, a samoaktualizacje czekają na zakończenie aktywnych cykli przed przejęciem wyłącznej blokady. ([#931](https://github.com/CodesWhat/drydock/pull/931), [#942](https://github.com/CodesWhat/drydock/pull/942))
+- **Redakcja poświadczeń obejmuje teraz wyzwalacze, rejestry, zrzuty debugowania i podobne hosty**, chroniąc sekrety przed logowaniem i wysyłką do złośliwych hostów rejestru. ([#932](https://github.com/CodesWhat/drydock/pull/932))
+- **Przepisywanie Compose sprawdza repozytorium uruchomieniowe przed zapisem**; bezpiecznie obsługiwane są też przycinanie agentów i nieudane wycofania. ([#933](https://github.com/CodesWhat/drydock/pull/933))
+- **Żądania uwierzytelnione nagłówkiem nie zapisują już sesji**, więc odpytywanie Basic Auth nie powiększa magazynu sesji. ([#935](https://github.com/CodesWhat/drydock/pull/935))
+- **Porównanie konkurencji i mapa drogowa zostały odświeżone na 2026 rok**, aby dokumentacja wydania pozostała aktualna. ([#936](https://github.com/CodesWhat/drydock/pull/936))
+
+Pełne informacje o wydaniu: [CHANGELOG.md](./CHANGELOG.md#170-rc7--2026-08-29).
+
+</details>
+
+<details open>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.6</strong></summary>
 
 - **Zamknięto dwie kolejne luki we własności kontenerów agentów, oprócz wcześniejszej poprawki #904** — zupełnie nowy identyfikator kontenera w ogóle nie miał sprawdzania własności, co pozwalało agentowi przejąć nazwę watchera należącą do samego kontrolera; a ścieżki masowego pozyskiwania danych (handshake, mechanizm zastępczy migawki watchera, `watch`/`watchContainer` na żądanie oraz brzegowy `handleContainerSync`) docierały do `processAuthoritativeContainer` bez żadnej pośredniej kontroli, więc agent nadal mógł przejąć kontener innego agenta lub samego kontrolera przy kolejnej rutynowej migawce. Obie ścieżki egzekwują teraz te same kontrole własności, które wprowadziła pierwotna poprawka.
