@@ -119,6 +119,8 @@ describe('prepareSelfUpdateOperation', () => {
     expect(mockInsertOperation).toHaveBeenCalledWith(
       expect.objectContaining({ helperLifecycleOwner: 'surviving-process' }),
     );
+    expect(mockInsertOperation.mock.calls[0][0]).not.toHaveProperty('finalizeSecretHash');
+    expect(mockIssueSelfUpdateFinalizeSecret).not.toHaveBeenCalled();
   });
 
   test('reuses a requested in-progress operation id and upgrades it into an active self-update operation', () => {

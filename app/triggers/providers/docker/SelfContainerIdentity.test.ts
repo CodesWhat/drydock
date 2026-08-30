@@ -1,5 +1,7 @@
 import { resolveSelfContainerIdentity } from './SelfContainerIdentity.js';
 
+vi.mock('node:os', () => ({ hostname: () => 'kernel-host' }));
+
 function createDockerApi(containers, inspections = {}) {
   return {
     listContainers: vi.fn().mockResolvedValue(containers),
@@ -10,6 +12,32 @@ function createDockerApi(containers, inspections = {}) {
 }
 
 describe('resolveSelfContainerIdentity', () => {
+  test('uses the kernel hostname instead of a mutable HOSTNAME environment value', async () => {
+    const originalHostname = process.env.HOSTNAME;
+    process.env.HOSTNAME = 'peer-host';
+    const dockerApi = createDockerApi([{ Id: 'current-id' }, { Id: 'peer-id' }], {
+      'current-id': {
+        Id: 'current-id',
+        Name: '/drydock-current',
+        Config: { Hostname: 'kernel-host' },
+      },
+      'peer-id': {
+        Id: 'peer-id',
+        Name: '/drydock-peer',
+        Config: { Hostname: 'peer-host' },
+      },
+    });
+
+    try {
+      await expect(resolveSelfContainerIdentity(dockerApi)).resolves.toEqual({
+        id: 'current-id',
+        name: 'drydock-current',
+      });
+    } finally {
+      process.env.HOSTNAME = originalHostname;
+    }
+  });
+
   test('resolves a custom runtime hostname from inspected Docker evidence, not a peer name', async () => {
     const dockerApi = createDockerApi(
       [

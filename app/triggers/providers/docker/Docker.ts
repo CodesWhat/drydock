@@ -413,6 +413,8 @@ class Docker<
       emitSelfUpdateStarting,
       resolveFinalizeUrl: () => this.getSelfUpdateFinalizeUrl(),
       resolveFinalizeSecret: (operationId) => this.getSelfUpdateFinalizeSecret(operationId),
+      finalizeObservedHelperOperation: (operationId, status, lastError) =>
+        this.finalizeObservedHelperOperation(operationId, status, lastError),
       resolveHelperImage: (container) => {
         if (this.isSelfUpdate(container)) {
           return undefined;
@@ -1517,7 +1519,7 @@ class Docker<
     return this.selfUpdateOrchestrator.isSelfUpdate(container);
   }
 
-  async classifySelfUpdate(container): Promise<boolean> {
+  async classifySelfUpdate(container) {
     let dockerApi: unknown;
     try {
       dockerApi = this.getWatcher(container)?.dockerApi;
@@ -1589,6 +1591,27 @@ class Docker<
 
   async markSelfUpdateOperationSkipped(operationId: string, lastError: string): Promise<void> {
     markSelfUpdateOperationSkippedFromStore(operationId, lastError);
+  }
+
+  finalizeObservedHelperOperation(
+    operationId: string,
+    status: 'succeeded' | 'rolled-back',
+    lastError?: string,
+  ): void {
+    const operation =
+      status === 'succeeded'
+        ? updateOperationStore.markOperationTerminal(operationId, {
+            status: 'succeeded',
+            phase: 'succeeded',
+          })
+        : updateOperationStore.markOperationTerminal(operationId, {
+            status: 'rolled-back',
+            phase: 'rolled-back',
+            ...(lastError ? { lastError } : {}),
+          });
+    if (!operation || operation.status !== status) {
+      throw new Error(`Failed to durably finalize observed helper operation ${operationId}`);
+    }
   }
 
   async persistSecurityState(container, securityPatch: SecurityStatePatch, logContainer) {
@@ -1766,7 +1789,12 @@ class Docker<
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    const selfUpdate = await this.classifySelfUpdate(container);
+    const selfUpdateClassification = await this.classifySelfUpdate(container);
+    if (selfUpdateClassification === 'indeterminate') {
+      this.selfUpdateOrchestrator.clearSelfUpdateClassification(container);
+      throw new Error('Drydock container identity is indeterminate; refusing unsafe update');
+    }
+    const selfUpdate = selfUpdateClassification === 'current';
     const exclusiveUpdate = selfUpdate || this.isInfrastructureUpdate(container);
     let exclusiveUpdateOperationId: string | undefined;
     const lifecycle = withContainerUpdateLocks(
@@ -1878,7 +1906,7 @@ class Docker<
         bypassGlobalCap: exclusiveUpdate,
         exclusive: exclusiveUpdate,
         retainExclusiveOnResult: (result) =>
-          result === true && exclusiveUpdateOperationId
+          selfUpdate && result === true && exclusiveUpdateOperationId
             ? { operationId: exclusiveUpdateOperationId }
             : undefined,
       },

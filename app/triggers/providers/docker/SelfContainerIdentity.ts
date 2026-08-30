@@ -1,3 +1,5 @@
+import { hostname as getRuntimeHostname } from 'node:os';
+
 const DOCKER_ID_PATTERN = /^[a-f0-9]{12,64}$/i;
 const HOSTNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 
@@ -40,7 +42,7 @@ function getSummaryIdentity(
 
 export async function resolveSelfContainerIdentity(
   dockerApi: DockerIdentityApi | undefined,
-  hostname = process.env.HOSTNAME,
+  hostname = getRuntimeHostname(),
 ): Promise<SelfContainerIdentity | null> {
   const runtimeHostname = hostname?.trim();
   if (!dockerApi || !runtimeHostname || !HOSTNAME_PATTERN.test(runtimeHostname)) {
@@ -53,6 +55,12 @@ export async function resolveSelfContainerIdentity(
   } catch {
     return null;
   }
+  if (
+    !Array.isArray(summaries) ||
+    summaries.some((summary) => typeof summary.Id !== 'string' || !summary.Id.trim())
+  ) {
+    return null;
+  }
 
   if (DOCKER_ID_PATTERN.test(runtimeHostname)) {
     const idMatches = summaries.filter(
@@ -63,20 +71,30 @@ export async function resolveSelfContainerIdentity(
   }
 
   const inspected = await Promise.allSettled(
-    summaries.flatMap((summary) =>
-      typeof summary.Id === 'string' && summary.Id.trim()
-        ? [Promise.resolve().then(() => dockerApi.getContainer(summary.Id as string).inspect())]
-        : [],
+    summaries.map((summary) =>
+      Promise.resolve().then(() => dockerApi.getContainer(summary.Id as string).inspect()),
     ),
   );
-  const hostnameMatches = inspected.flatMap((result) => {
-    if (result.status !== 'fulfilled' || result.value.Config?.Hostname !== runtimeHostname) {
-      return [];
-    }
-    const id = typeof result.value.Id === 'string' ? result.value.Id.trim() : '';
-    const name = normalizeName(result.value.Name);
-    return id && name ? [{ id, name }] : [];
+  if (inspected.some((result) => result.status !== 'fulfilled')) {
+    return null;
+  }
+  const inspectedIdentities = inspected.map((result) => {
+    const value = (result as PromiseFulfilledResult<DockerContainerInspect>).value;
+    const id = typeof value.Id === 'string' ? value.Id.trim() : '';
+    const name = normalizeName(value.Name);
+    const inspectedHostname = value.Config?.Hostname;
+    return id && name && typeof inspectedHostname === 'string' && inspectedHostname.trim()
+      ? { id, name, hostname: inspectedHostname }
+      : null;
   });
+  if (inspectedIdentities.some((identity) => !identity)) {
+    return null;
+  }
+  const hostnameMatches = inspectedIdentities.filter(
+    (identity) => identity?.hostname === runtimeHostname,
+  );
 
-  return hostnameMatches.length === 1 ? hostnameMatches[0] : null;
+  return hostnameMatches.length === 1
+    ? { id: hostnameMatches[0]!.id, name: hostnameMatches[0]!.name }
+    : null;
 }

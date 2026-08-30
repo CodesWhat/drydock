@@ -40,6 +40,8 @@ export interface SelfUpdateCreatedContainer {
 export interface SelfUpdateHelperContainer {
   start: () => Promise<void>;
   inspect?: () => Promise<{ State?: { Running?: boolean; ExitCode?: number } }>;
+  wait?: () => Promise<{ StatusCode?: number }>;
+  remove?: (options: { force: boolean }) => Promise<void>;
 }
 
 export interface SelfUpdateHelperContainerCreateOptions {

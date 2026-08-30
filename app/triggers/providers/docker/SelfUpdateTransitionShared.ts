@@ -26,6 +26,8 @@ import type {
 type SelfUpdateRuntimeConfigOptions = Record<string, unknown>;
 type SelfUpdateContainerCreateSpec = Record<string, unknown>;
 
+export const SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE = 20;
+
 interface SelfUpdateTransitionDependencies {
   getConfiguration: () => SelfUpdateConfiguration | undefined;
   findDockerSocketBind: (spec: SelfUpdateContainerSpec | undefined) => string | undefined;
@@ -64,6 +66,12 @@ interface SelfUpdateTransitionDependencies {
   // grace window for the post-restart finalize is measured from after the (potentially
   // slow) image pull, not from prepare time.
   touchOperation?: (operationId: string) => void;
+  observeHelperCompletion?: boolean;
+  finalizeObservedHelperOperation?: (
+    operationId: string,
+    status: 'succeeded' | 'rolled-back',
+    lastError?: string,
+  ) => Promise<void> | void;
   // How long to wait after starting the helper before checking that it is still
   // alive. Overridable so tests don't sit on a real timer.
   helperExitCheckDelayMs?: number;
@@ -254,6 +262,13 @@ async function executeSelfUpdateTransition(
     return false;
   }
 
+  if (
+    dependencies.observeHelperCompletion === true &&
+    !dependencies.finalizeObservedHelperOperation
+  ) {
+    throw new Error('Observed self-update helper completion requires a durable finalizer');
+  }
+
   const connection = resolveHelperDockerConnection(dependencies, dockerApi, currentContainerSpec);
   if (connection.mode === 'tcp') {
     logContainer.info(
@@ -319,16 +334,21 @@ async function executeSelfUpdateTransition(
 
   const oldContainerId = currentContainerSpec.Id;
   const selfUpdateOperationId = operationId || dependencies.createOperationId();
-  const finalizeUrl = dependencies.resolveFinalizeUrl();
-  const finalizeSecret = dependencies.resolveFinalizeSecret(selfUpdateOperationId);
+  const observeHelperCompletion = dependencies.observeHelperCompletion === true;
+  const finalizeObservedHelperOperation = dependencies.finalizeObservedHelperOperation;
+  const finalizeEnv = observeHelperCompletion
+    ? ['DD_SELF_UPDATE_COMPLETION_MODE=observer']
+    : [
+        `DD_SELF_UPDATE_FINALIZE_URL=${dependencies.resolveFinalizeUrl()}`,
+        `DD_SELF_UPDATE_FINALIZE_SECRET=${dependencies.resolveFinalizeSecret(selfUpdateOperationId)}`,
+      ];
 
   const baseEnv = [
     `DD_SELF_UPDATE_OP_ID=${selfUpdateOperationId}`,
     `DD_SELF_UPDATE_OLD_CONTAINER_ID=${oldContainerId}`,
     `DD_SELF_UPDATE_NEW_CONTAINER_ID=${newContainerId}`,
     `DD_SELF_UPDATE_OLD_CONTAINER_NAME=${oldName}`,
-    `DD_SELF_UPDATE_FINALIZE_URL=${finalizeUrl}`,
-    `DD_SELF_UPDATE_FINALIZE_SECRET=${finalizeSecret}`,
+    ...finalizeEnv,
     `DD_SELF_UPDATE_START_TIMEOUT_MS=${SELF_UPDATE_START_TIMEOUT_MS}`,
     `DD_SELF_UPDATE_HEALTH_TIMEOUT_MS=${SELF_UPDATE_HEALTH_TIMEOUT_MS}`,
     `DD_SELF_UPDATE_POLL_INTERVAL_MS=${SELF_UPDATE_POLL_INTERVAL_MS}`,
@@ -346,13 +366,13 @@ async function executeSelfUpdateTransition(
   let hostConfig: SelfUpdateHelperContainerCreateOptions['HostConfig'];
   if (connection.mode === 'socket') {
     hostConfig = {
-      AutoRemove: true,
+      AutoRemove: !observeHelperCompletion,
       Binds: [`${connection.socketPath}:/var/run/docker.sock`],
     };
   } else {
     const networkMode = currentContainerSpec.HostConfig?.NetworkMode;
     hostConfig = {
-      AutoRemove: true,
+      AutoRemove: !observeHelperCompletion,
       ...(typeof networkMode === 'string' && networkMode.length > 0
         ? { NetworkMode: networkMode }
         : {}),
@@ -389,19 +409,51 @@ async function executeSelfUpdateTransition(
     throw e;
   }
 
-  const earlyExitReason = await detectEarlyHelperExit(
-    helperContainer,
-    dependencies.helperExitCheckDelayMs ?? HELPER_EXIT_CHECK_DELAY_MS,
-  );
-  if (earlyExitReason) {
-    logContainer.warn(`Self-update ${earlyExitReason}, rolling back`);
+  if (observeHelperCompletion) {
     try {
-      await newContainer.remove({ force: true });
-    } catch {
-      // best effort
+      if (typeof helperContainer.wait !== 'function') {
+        throw new Error('Observed self-update helper does not support waiting for completion');
+      }
+      const { StatusCode: helperExitCode } = await helperContainer.wait();
+      if (helperExitCode === 0) {
+        await finalizeObservedHelperOperation!(selfUpdateOperationId, 'succeeded');
+        logContainer.info('Helper container completed successfully');
+        return true;
+      }
+      if (helperExitCode === SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE) {
+        const rollbackMessage = 'Self-update helper completed rollback';
+        await finalizeObservedHelperOperation!(
+          selfUpdateOperationId,
+          'rolled-back',
+          rollbackMessage,
+        );
+        throw new Error(rollbackMessage);
+      }
+      throw new Error(`Self-update helper exited with code ${helperExitCode ?? 'unknown'}`);
+    } finally {
+      try {
+        await helperContainer.remove?.({ force: true });
+      } catch (cleanupError: unknown) {
+        logContainer.warn(
+          `Failed to remove observed self-update helper: ${getErrorMessage(cleanupError, String(cleanupError))}`,
+        );
+      }
     }
-    await currentContainer.rename({ name: oldName });
-    throw new Error(`Self-update ${earlyExitReason}`);
+  } else {
+    const earlyExitReason = await detectEarlyHelperExit(
+      helperContainer,
+      dependencies.helperExitCheckDelayMs ?? HELPER_EXIT_CHECK_DELAY_MS,
+    );
+    if (earlyExitReason) {
+      logContainer.warn(`Self-update ${earlyExitReason}, rolling back`);
+      try {
+        await newContainer.remove({ force: true });
+      } catch {
+        // best effort
+      }
+      await currentContainer.rename({ name: oldName });
+      throw new Error(`Self-update ${earlyExitReason}`);
+    }
   }
 
   logContainer.info('Helper container started — process will terminate when old container stops');

@@ -96,6 +96,19 @@ describe('SelfUpdateOrchestrator', () => {
     await expect(
       orchestrator.createContainer({} as never, {}, 'name', {} as never),
     ).rejects.toThrow('SelfUpdateOrchestrator requires dependency "createContainer"');
+    expect(() => orchestrator.finalizeObservedHelperOperation('op-1', 'succeeded')).toThrow(
+      'SelfUpdateOrchestrator requires dependency "finalizeObservedHelperOperation"',
+    );
+  });
+
+  test('constructor default identity resolver uses Docker runtime evidence', async () => {
+    const orchestrator = new SelfUpdateOrchestrator();
+    const listContainers = vi.fn().mockRejectedValue(new Error('Docker unavailable'));
+
+    await expect(
+      orchestrator.classifySelfUpdate(createContainer(), { listContainers }),
+    ).resolves.toBe('indeterminate');
+    expect(listContainers).toHaveBeenCalledWith({ all: true });
   });
 
   test('identifies only the Docker-resolved current process container as a self-update', async () => {
@@ -109,10 +122,10 @@ describe('SelfUpdateOrchestrator', () => {
     });
     const nonDrydock = createContainer({ image: { name: 'ghcr.io/acme/web' } });
 
-    await expect(orchestrator.classifySelfUpdate(self, {})).resolves.toBe(true);
-    await expect(orchestrator.classifySelfUpdate(namespacedSelf, {})).resolves.toBe(true);
-    await expect(orchestrator.classifySelfUpdate(peer, {})).resolves.toBe(false);
-    await expect(orchestrator.classifySelfUpdate(nonDrydock, {})).resolves.toBe(false);
+    await expect(orchestrator.classifySelfUpdate(self, {})).resolves.toBe('current');
+    await expect(orchestrator.classifySelfUpdate(namespacedSelf, {})).resolves.toBe('current');
+    await expect(orchestrator.classifySelfUpdate(peer, {})).resolves.toBe('peer');
+    await expect(orchestrator.classifySelfUpdate(nonDrydock, {})).resolves.toBe('peer');
     expect(orchestrator.isSelfUpdate(self)).toBe(true);
     expect(orchestrator.isSelfUpdate(namespacedSelf)).toBe(true);
     expect(orchestrator.isSelfUpdate(peer)).toBe(false);
@@ -131,7 +144,7 @@ describe('SelfUpdateOrchestrator', () => {
       name: 'drydock-primary',
     });
 
-    await expect(orchestrator.classifySelfUpdate(container, {})).resolves.toBe(true);
+    await expect(orchestrator.classifySelfUpdate(container, {})).resolves.toBe('current');
     expect(orchestrator.isSelfUpdate(container)).toBe(true);
   });
 
@@ -141,8 +154,41 @@ describe('SelfUpdateOrchestrator', () => {
     });
     const container = createContainer();
 
-    await expect(orchestrator.classifySelfUpdate(container, {})).resolves.toBe(false);
+    await expect(orchestrator.classifySelfUpdate(container, {})).resolves.toBe('indeterminate');
     expect(orchestrator.isSelfUpdate(container)).toBe(false);
+    expect(orchestrator.getSelfUpdateClassification(container)).toBe('indeterminate');
+  });
+
+  test('fails closed when identity resolution rejects or returns malformed evidence', async () => {
+    const rejectedResolver = createOrchestrator({
+      resolveSelfContainerIdentity: vi.fn().mockRejectedValue(new Error('Docker unavailable')),
+    });
+    const malformedResolver = createOrchestrator({
+      resolveSelfContainerIdentity: vi.fn().mockResolvedValue({ id: '', name: '' }),
+    });
+    const candidate = createContainer();
+    const unidentifiedCandidate = createContainer({ id: undefined, name: undefined });
+
+    await expect(rejectedResolver.classifySelfUpdate(candidate, {})).resolves.toBe('indeterminate');
+    await expect(malformedResolver.classifySelfUpdate(candidate, {})).resolves.toBe(
+      'indeterminate',
+    );
+    await expect(createOrchestrator().classifySelfUpdate(unidentifiedCandidate, {})).resolves.toBe(
+      'indeterminate',
+    );
+  });
+
+  test('execute rejects an indeterminate Drydock identity before transition work', async () => {
+    const pullImage = vi.fn();
+    const orchestrator = createOrchestrator({
+      pullImage,
+      resolveSelfContainerIdentity: vi.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      orchestrator.execute(createContext(), createContainer(), { info: vi.fn(), warn: vi.fn() }),
+    ).rejects.toThrow('Drydock container identity is indeterminate');
+    expect(pullImage).not.toHaveBeenCalled();
   });
 
   test('uses the authoritative container name when the candidate id is unavailable', async () => {
@@ -150,10 +196,14 @@ describe('SelfUpdateOrchestrator', () => {
     const unnamedContainer = createContainer({ name: undefined });
     const unidentifiedContainer = createContainer({ id: undefined });
 
-    await expect(orchestrator.classifySelfUpdate(unnamedContainer, {})).resolves.toBe(true);
-    await expect(orchestrator.classifySelfUpdate(unidentifiedContainer, {})).resolves.toBe(true);
+    await expect(orchestrator.classifySelfUpdate(unnamedContainer, {})).resolves.toBe('current');
+    await expect(orchestrator.classifySelfUpdate(unidentifiedContainer, {})).resolves.toBe(
+      'current',
+    );
     expect(orchestrator.isSelfUpdate(unnamedContainer)).toBe(true);
     expect(orchestrator.isSelfUpdate(unidentifiedContainer)).toBe(true);
+    orchestrator.clearSelfUpdateClassification(unidentifiedContainer);
+    expect(orchestrator.getSelfUpdateClassification(unidentifiedContainer)).toBeUndefined();
   });
 
   test('finds the docker socket bind path', () => {
@@ -249,6 +299,27 @@ describe('SelfUpdateOrchestrator', () => {
     expect(resolveHelperImage).toHaveBeenCalled();
     const helperCreateCall = dockerApiCreateContainer.mock.calls[0][0];
     expect(helperCreateCall.Image).toBe('drydock:latest');
+  });
+
+  test('observes helper completion for a peer infrastructure target', async () => {
+    const context = createContext();
+    context.helperContainer.wait = vi.fn().mockResolvedValue({ StatusCode: 0 });
+    const finalizeObservedHelperOperation = vi.fn();
+    const orchestrator = createOrchestrator({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      finalizeObservedHelperOperation,
+    });
+    const infrastructure = createContainer({
+      name: 'socket-proxy',
+      image: { name: 'tecnativa/docker-socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+
+    await expect(
+      orchestrator.execute(context, infrastructure, { info: vi.fn(), warn: vi.fn() }, 'infra-op'),
+    ).resolves.toBe(true);
+
+    expect(finalizeObservedHelperOperation).toHaveBeenCalledWith('infra-op', 'succeeded');
   });
 
   test('maybeNotify emits self-update-starting only for self-update containers', async () => {
@@ -435,6 +506,10 @@ describe('SelfUpdateOrchestrator', () => {
       createContainer: createContainerFn,
       insertContainerImageBackup: vi.fn(),
       emitSelfUpdateStarting: vi.fn().mockResolvedValue(undefined),
+      resolveSelfContainerIdentity: vi.fn().mockResolvedValue({
+        id: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+        name: 'drydock',
+      }),
     });
 
     await orchestrator.execute(context, createContainer(), { info: vi.fn(), warn: vi.fn() });

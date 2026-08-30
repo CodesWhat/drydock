@@ -87,9 +87,12 @@ export function prepareSelfUpdateOperation(args: PrepareSelfUpdateOperationArgs)
       ? requestedOperationId
       : generateOperationId();
 
-  const { secretHash } = issueSelfUpdateFinalizeSecret(operationId);
-
-  const operationFieldsWithSecret = { ...operationFields, finalizeSecretHash: secretHash };
+  const operationFieldsWithSecret = args.isCurrentProcess
+    ? {
+        ...operationFields,
+        finalizeSecretHash: issueSelfUpdateFinalizeSecret(operationId).secretHash,
+      }
+    : operationFields;
 
   const operation = isReusable
     ? updateOperationStore.updateOperation(operationId, {

@@ -5,7 +5,10 @@ import { sleep } from '../../../util/sleep.js';
 import { disableSocketRedirects } from '../../../watchers/providers/docker/disable-socket-redirects.js';
 import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket-version-probe.js';
 import { waitForExecStream } from '../exec-stream.js';
-import { validateTcpDockerHost } from './SelfUpdateTransitionShared.js';
+import {
+  SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE,
+  validateTcpDockerHost,
+} from './SelfUpdateTransitionShared.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
@@ -19,6 +22,7 @@ type SelfUpdateControllerConfig = {
   newContainerId: string;
   finalizeUrl: string;
   finalizeSecret: string;
+  completionMode: 'observer' | 'target-callback';
   startTimeoutMs: number;
   healthTimeoutMs: number;
   pollIntervalMs: number;
@@ -60,6 +64,8 @@ type SelfUpdateTerminalFinalizePayload = {
   lastError?: string;
 };
 
+class SelfUpdateRollbackCompletedError extends Error {}
+
 function getErrorStatusCode(error: unknown): number | undefined {
   if (typeof error !== 'object' || error === null) {
     return undefined;
@@ -77,13 +83,20 @@ function getRequiredEnv(name: string): string {
 }
 
 function readConfigFromEnv(): SelfUpdateControllerConfig {
+  const completionMode =
+    process.env.DD_SELF_UPDATE_COMPLETION_MODE === 'observer' ? 'observer' : 'target-callback';
   return {
     opId: process.env.DD_SELF_UPDATE_OP_ID || 'unknown',
     oldContainerId: getRequiredEnv('DD_SELF_UPDATE_OLD_CONTAINER_ID'),
     oldContainerName: process.env.DD_SELF_UPDATE_OLD_CONTAINER_NAME || 'drydock',
     newContainerId: getRequiredEnv('DD_SELF_UPDATE_NEW_CONTAINER_ID'),
-    finalizeUrl: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_URL'),
-    finalizeSecret: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_SECRET'),
+    ...(completionMode === 'target-callback'
+      ? {
+          finalizeUrl: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_URL'),
+          finalizeSecret: getRequiredEnv('DD_SELF_UPDATE_FINALIZE_SECRET'),
+        }
+      : { finalizeUrl: '', finalizeSecret: '' }),
+    completionMode,
     startTimeoutMs: toPositiveInteger(
       process.env.DD_SELF_UPDATE_START_TIMEOUT_MS,
       SELF_UPDATE_START_TIMEOUT_MS,
@@ -353,6 +366,9 @@ class SelfUpdateController {
     }
 
     if (rollbackRestoreSucceeded && rollbackRestartSucceeded) {
+      if (this.config.completionMode === 'observer') {
+        throw new SelfUpdateRollbackCompletedError(reason);
+      }
       await this.maybeFinalizeCallbackInContainer(this.config.oldContainerId, {
         status: 'rolled-back',
         phase: 'rolled-back',
@@ -379,10 +395,12 @@ class SelfUpdateController {
     } catch (error: unknown) {
       await this.rollback(error);
     }
-    await this.maybeFinalizeCallbackInContainer(this.config.newContainerId, {
-      status: 'succeeded',
-      phase: 'succeeded',
-    });
+    if (this.config.completionMode === 'target-callback') {
+      await this.maybeFinalizeCallbackInContainer(this.config.newContainerId, {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+    }
     this.logState('SUCCEEDED');
   }
 }
@@ -422,6 +440,10 @@ export async function runSelfUpdateControllerEntrypoint(
   try {
     await runner();
   } catch (error: unknown) {
+    if (error instanceof SelfUpdateRollbackCompletedError) {
+      process.exitCode = SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE;
+      return;
+    }
     globalThis.console.error(
       `[self-update] controller failed: ${getErrorMessage(error, String(error))}`,
     );
@@ -431,5 +453,6 @@ export async function runSelfUpdateControllerEntrypoint(
 
 export {
   getRequiredEnv as testable_getRequiredEnv,
+  SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE,
   toPositiveInteger as testable_parsePositiveInt,
 };

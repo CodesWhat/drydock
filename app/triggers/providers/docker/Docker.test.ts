@@ -4436,6 +4436,42 @@ describe('extracted lifecycle delegation', () => {
     });
   });
 
+  test('finalizeObservedHelperOperation durably records helper success and rollback', () => {
+    mockMarkOperationTerminal
+      .mockReturnValueOnce({ id: 'op-success', status: 'succeeded' })
+      .mockReturnValueOnce({ id: 'op-rollback', status: 'rolled-back' });
+
+    docker.finalizeObservedHelperOperation('op-success', 'succeeded');
+    docker.finalizeObservedHelperOperation(
+      'op-rollback',
+      'rolled-back',
+      'Self-update helper completed rollback',
+    );
+
+    expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(1, 'op-success', {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(2, 'op-rollback', {
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      lastError: 'Self-update helper completed rollback',
+    });
+  });
+
+  test('finalizeObservedHelperOperation rejects missing or conflicting durable state', () => {
+    mockMarkOperationTerminal
+      .mockReturnValueOnce(undefined)
+      .mockReturnValueOnce({ id: 'op-conflict', status: 'failed' });
+
+    expect(() => docker.finalizeObservedHelperOperation('op-missing', 'succeeded')).toThrow(
+      'Failed to durably finalize observed helper operation op-missing',
+    );
+    expect(() => docker.finalizeObservedHelperOperation('op-conflict', 'rolled-back')).toThrow(
+      'Failed to durably finalize observed helper operation op-conflict',
+    );
+  });
+
   test('executeContainerUpdate should delegate to containerUpdateExecutor', async () => {
     const originalContainerUpdateExecutor = docker.containerUpdateExecutor;
     const execute = vi.fn().mockResolvedValue('delegated-container-update');

@@ -4,6 +4,7 @@ import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket
 import {
   runSelfUpdateController,
   runSelfUpdateControllerEntrypoint,
+  SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE,
   testable_getRequiredEnv,
   testable_parsePositiveInt,
 } from './self-update-controller.js';
@@ -27,6 +28,7 @@ const DEFAULT_CONTROLLER_ENV = {
   DD_SELF_UPDATE_NEW_CONTAINER_ID: 'new-container-id',
   DD_SELF_UPDATE_FINALIZE_URL: 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize',
   DD_SELF_UPDATE_FINALIZE_SECRET: 'self-update-finalize-secret',
+  DD_SELF_UPDATE_COMPLETION_MODE: 'target-callback',
   DD_SELF_UPDATE_START_TIMEOUT_MS: '1000',
   DD_SELF_UPDATE_HEALTH_TIMEOUT_MS: '1000',
   DD_SELF_UPDATE_POLL_INTERVAL_MS: '1',
@@ -97,6 +99,26 @@ function createNewContainer(overrides = {}) {
     remove: vi.fn().mockResolvedValue(undefined),
     exec,
     _mockExec: mockExec,
+    ...overrides,
+  };
+}
+
+function createThirdPartyOldContainer(overrides = {}) {
+  return {
+    stop: vi.fn().mockResolvedValue(undefined),
+    inspect: vi.fn().mockResolvedValue({ State: { Running: false }, Name: '/socket-proxy' }),
+    start: vi.fn().mockResolvedValue(undefined),
+    rename: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
+function createThirdPartyNewContainer(overrides = {}) {
+  return {
+    start: vi.fn().mockResolvedValue(undefined),
+    inspect: vi.fn().mockResolvedValue({ State: { Running: true } }),
+    remove: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -197,6 +219,54 @@ describe('self-update-controller orchestration', () => {
         ]),
       }),
     );
+  });
+
+  test('observer mode completes a third-party target without target-side Node or scripts', async () => {
+    setControllerEnv({
+      DD_SELF_UPDATE_COMPLETION_MODE: 'observer',
+      DD_SELF_UPDATE_FINALIZE_URL: undefined,
+      DD_SELF_UPDATE_FINALIZE_SECRET: undefined,
+    });
+    const oldContainer = createThirdPartyOldContainer();
+    const newContainer = createThirdPartyNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).resolves.toBeUndefined();
+
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(newContainer).not.toHaveProperty('exec');
+    expect(getLoggedStates().some((line) => line.includes('FINALIZE_FAILED'))).toBe(false);
+  });
+
+  test('observer mode reports a completed third-party rollback through the helper exit status', async () => {
+    setControllerEnv({
+      DD_SELF_UPDATE_COMPLETION_MODE: 'observer',
+      DD_SELF_UPDATE_FINALIZE_URL: undefined,
+      DD_SELF_UPDATE_FINALIZE_SECRET: undefined,
+    });
+    const oldContainer = createThirdPartyOldContainer({
+      inspect: vi
+        .fn()
+        .mockResolvedValue({ State: { Running: false }, Name: '/socket-proxy-old-123' }),
+    });
+    const newContainer = createThirdPartyNewContainer({
+      start: vi.fn().mockRejectedValue(new Error('proxy failed to start')),
+    });
+    mockDocker(oldContainer, newContainer);
+    const originalExitCode = process.exitCode;
+    process.exitCode = undefined;
+
+    try {
+      await runSelfUpdateControllerEntrypoint();
+
+      expect(process.exitCode).toBe(SELF_UPDATE_HELPER_ROLLED_BACK_EXIT_CODE);
+      expect(newContainer.remove).toHaveBeenCalledWith({ force: true });
+      expect(oldContainer.rename).toHaveBeenCalledWith({ name: 'drydock' });
+      expect(oldContainer.start).toHaveBeenCalledOnce();
+      expect(oldContainer).not.toHaveProperty('exec');
+    } finally {
+      process.exitCode = originalExitCode;
+    }
   });
 
   test('uses default op id and old container name when optional env vars are unset', async () => {
