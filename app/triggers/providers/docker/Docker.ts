@@ -52,7 +52,7 @@ import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
 import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
-import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
+import SelfUpdateOrchestrator, { type SelfUpdateClassification } from './SelfUpdateOrchestrator.js';
 import { RetainSelfUpdateLifecycleError } from './SelfUpdateTransitionShared.js';
 import {
   markSelfUpdateOperationFailed as markSelfUpdateOperationFailedFromStore,
@@ -1973,8 +1973,17 @@ class Docker<
    * Delegates the actual runtime update to `performContainerUpdate()` which
    * subclasses can override.
    */
-  async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    const selfUpdateClassification = await this.classifySelfUpdate(container);
+  async runContainerUpdateLifecycle(
+    container,
+    runtimeContext?: unknown,
+    options?: {
+      lifecycleAlreadyAcquired?: boolean;
+      selfUpdateClassification?: SelfUpdateClassification;
+      onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void;
+    },
+  ) {
+    const selfUpdateClassification =
+      options?.selfUpdateClassification ?? (await this.classifySelfUpdate(container));
     if (selfUpdateClassification === 'indeterminate') {
       this.selfUpdateOrchestrator.clearSelfUpdateClassification(container);
       throw new Error('Drydock container identity is indeterminate; refusing unsafe update');
@@ -1994,6 +2003,7 @@ class Docker<
           let result: unknown = lifecycleResult;
           if (isSelfUpdateLifecycleResult(lifecycleResult)) {
             exclusiveUpdateOperationId = lifecycleResult.operationId;
+            options?.onSelfUpdateOperationId?.(exclusiveUpdateOperationId, lifecycleResult.updated);
             result = lifecycleResult.updated;
           }
           if (result !== false && requestedOperationId) {
@@ -2090,6 +2100,8 @@ class Docker<
       {
         bypassGlobalCap: exclusiveUpdate,
         exclusive: exclusiveUpdate,
+        skipLifecycleGate: options?.lifecycleAlreadyAcquired === true,
+        skipUpdateLocks: options?.lifecycleAlreadyAcquired === true,
         retainExclusiveOnResult: (result) =>
           selfUpdate && result === true && exclusiveUpdateOperationId
             ? { operationId: exclusiveUpdateOperationId }

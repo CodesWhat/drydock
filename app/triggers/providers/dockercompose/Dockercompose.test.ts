@@ -1116,6 +1116,7 @@ describe('Dockercompose Trigger', () => {
         service: 'nginx',
         serviceDefinition: expect.objectContaining({ image: 'nginx:1.0.0' }),
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: true }),
     );
   });
 
@@ -4138,6 +4139,7 @@ describe('Dockercompose Trigger', () => {
         service: 'nginx',
         composeFileOnceApplied: false,
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: true }),
     );
     expect(runContainerUpdateLifecycleSpy).toHaveBeenNthCalledWith(
       2,
@@ -4146,6 +4148,7 @@ describe('Dockercompose Trigger', () => {
         service: 'redis',
         composeFileOnceApplied: false,
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: true }),
     );
   });
 
@@ -4175,6 +4178,7 @@ describe('Dockercompose Trigger', () => {
           service: 'nginx',
           runtimeContext: undefined,
         }),
+        expect.objectContaining({ lifecycleAlreadyAcquired: false }),
       );
     },
   );
@@ -4204,6 +4208,7 @@ describe('Dockercompose Trigger', () => {
         service: 'nginx',
         runtimeContext,
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: false }),
     );
   });
 
@@ -4295,6 +4300,7 @@ describe('Dockercompose Trigger', () => {
     expect(runContainerUpdateLifecycleSpy).toHaveBeenCalledWith(
       container,
       expect.objectContaining({ service: 'nginx' }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: false }),
     );
   });
 
@@ -4463,17 +4469,14 @@ describe('Dockercompose Trigger', () => {
     trigger.configuration.dryrun = false;
 
     const container = makeContainer({
-      id: '123456789abc',
       name: 'drydock',
       imageName: 'codeswhat/drydock',
       tagValue: '1.0.0',
       remoteValue: '1.1.0',
       labels: { 'com.docker.compose.service': 'drydock' },
     });
-    trigger.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
-      id: container.id,
-      name: container.name,
-    });
+    vi.spyOn(trigger, 'classifySelfUpdate').mockResolvedValue('current');
+    vi.spyOn(trigger, 'isSelfUpdate').mockReturnValue(true);
 
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ drydock: { image: 'codeswhat/drydock:1.0.0' } }),
@@ -5713,6 +5716,7 @@ describe('Dockercompose Trigger', () => {
         service: 'nginx',
         composeFileOnceApplied: false,
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: true }),
     );
     expect(runContainerUpdateLifecycleSpy).toHaveBeenNthCalledWith(
       2,
@@ -5721,6 +5725,7 @@ describe('Dockercompose Trigger', () => {
         service: 'nginx',
         composeFileOnceApplied: true,
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: true }),
     );
   });
 

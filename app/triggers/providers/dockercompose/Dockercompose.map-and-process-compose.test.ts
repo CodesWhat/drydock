@@ -1,6 +1,12 @@
 import { watch } from 'node:fs';
+import fs from 'node:fs/promises';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
+import {
+  getUpdateLockSnapshot,
+  releaseRetainedSelfUpdateLifecycle,
+  withContainerUpdateLocks,
+} from '../../../updates/update-locks.js';
 import Dockercompose from './Dockercompose.js';
 import {
   makeCompose,
@@ -147,6 +153,20 @@ describe('Dockercompose Trigger', () => {
     const result = trigger.mapCurrentVersionToUpdateVersion(compose, container);
 
     expect(result?.service).toBe('beta');
+  });
+
+  test('mapCurrentVersionToUpdateVersion should match a service through its resolved default image', () => {
+    const compose = makeCompose({
+      nginx: { image: '${REGISTRY:-docker.io}/library/nginx:1.0.0' },
+    });
+    const container = makeContainer({
+      imageName: 'docker.io/library/nginx',
+      labels: undefined,
+    });
+
+    const result = trigger.mapCurrentVersionToUpdateVersion(compose, container);
+
+    expect(result?.service).toBe('nginx');
   });
 
   test('mapCurrentVersionToUpdateVersion should not fall back to image matching when compose service label is unknown', () => {
@@ -511,6 +531,950 @@ describe('Dockercompose Trigger', () => {
     expect(composeUpdateSpy).toHaveBeenCalledTimes(1);
   });
 
+  test('processComposeFile should resolve an image variable for continuity while preserving it until mutation', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    try {
+      const container = makeContainer({
+        tagValue: '1.0.0',
+        remoteValue: '1.1.0',
+        labels: { 'com.docker.compose.service': 'nginx' },
+      });
+
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ nginx: { image: '${IMAGE}' } }),
+      );
+      vi.spyOn(fs, 'readFile').mockImplementation(async (filePath) =>
+        String(filePath).endsWith('/.env') ? Buffer.from('IMAGE=nginx:1.0.0\n') : Buffer.from(''),
+      );
+
+      const { writeComposeFileSpy } = spyOnProcessComposeHelpers(
+        trigger,
+        ['services:', '  nginx:', '    image: ${IMAGE}', ''].join('\n'),
+      );
+
+      await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+      expect(writeComposeFileSpy).toHaveBeenCalledWith(
+        '/opt/drydock/test/stack.yml',
+        expect.stringContaining('image: nginx:1.1.0'),
+      );
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  test('getComposeResolvedImages should not use a service declared environment file', async () => {
+    vi.spyOn(fs, 'readFile').mockImplementation(async (filePath) =>
+      String(filePath).endsWith('/stack.env')
+        ? Buffer.from('export IMAGE="nginx:1.0.0"\nBROKEN=\'unterminated\n')
+        : Buffer.from(''),
+    );
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: { image: '${IMAGE}', env_file: 'stack.env' } }),
+    );
+
+    expect(result).toEqual(new Map());
+    expect(fs.readFile).toHaveBeenCalledTimes(1);
+    expect(fs.readFile).toHaveBeenCalledWith('/opt/drydock/test/.env', 'utf8');
+  });
+
+  test('getComposeResolvedImages should return no overrides for literal images', async () => {
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+
+    expect(result).toEqual(new Map());
+  });
+
+  test('getComposeResolvedImages should handle a missing compose document', async () => {
+    await expect(
+      trigger.getComposeResolvedImages(['/opt/drydock/test/stack.yml'], undefined),
+    ).resolves.toEqual(new Map());
+  });
+
+  test('getComposeResolvedImages should ignore non-string declared environment paths', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from(''));
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: { image: '${IMAGE}', env_file: [123] } }),
+    );
+
+    expect(result).toEqual(new Map());
+    expect(fs.readFile).toHaveBeenCalledWith('/opt/drydock/test/.env', 'utf8');
+  });
+
+  test('getComposeResolvedImages should use only the base project environment file', async () => {
+    vi.spyOn(fs, 'readFile').mockImplementation(async (filePath) => {
+      if (String(filePath) === '/opt/drydock/project/.env') {
+        return Buffer.from('IMAGE=nginx:1.0.0\n');
+      }
+      return Buffer.from('IMAGE=postgres:16\n');
+    });
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/project/stack.yml', '/opt/drydock/override/stack.yml'],
+      makeCompose({ nginx: { image: '${IMAGE}', env_file: '../secrets.env' } }),
+    );
+
+    expect(result).toEqual(new Map([['nginx', 'nginx:1.0.0']]));
+    expect(fs.readFile).toHaveBeenCalledTimes(1);
+    expect(fs.readFile).toHaveBeenCalledWith('/opt/drydock/project/.env', 'utf8');
+  });
+
+  test('getComposeResolvedImages should fail closed for unsupported project environment syntax', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(
+      Buffer.from(
+        'IMAGE=$(hostname)\nBARE=$HOST\nBADESC="foo\\q"\nBADQUOTE=\'ok\' trailing\nBROKEN="unterminated\n',
+      ),
+    );
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: { image: '${IMAGE}' } }),
+    );
+
+    expect(result).toEqual(new Map());
+  });
+
+  test('getComposeResolvedImages should parse Compose project environment syntax', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(
+      Buffer.from(
+        [
+          'HOST=ghcr.io # inline comment',
+          'NAMESPACE=acme',
+          'REGISTRY: ${HOST}',
+          'DEFAULT_REGISTRY=${HOST:-docker.io}',
+          'IMAGE_PATH="${NAMESPACE}/app"',
+          "TAG='1.2'",
+          "MULTILINE='line-one",
+          "line-two'",
+          'ESCAPED="ghcr.io/acme/app:1.2\\n"',
+          'MISSING_DEFAULT=${MISSING:-fallback}',
+          'SINGLE_DEFAULT=${MISSING-fallback}',
+          'BROKEN_REF=${MISSING}',
+          'CYCLE_A=${CYCLE_B}',
+          'CYCLE_B=${CYCLE_A}',
+          '',
+        ].join('\n'),
+      ),
+    );
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({
+        nginx: { image: '${REGISTRY}/${IMAGE_PATH}:${TAG}' },
+        defaultedNested: { image: '${DEFAULT_REGISTRY}/acme/app:1.2' },
+        multiline: { image: '${MULTILINE}' },
+        escaped: { image: '${ESCAPED}' },
+      }),
+    );
+
+    expect(result).toEqual(
+      new Map([
+        ['nginx', 'ghcr.io/acme/app:1.2'],
+        ['defaultedNested', 'ghcr.io/acme/app:1.2'],
+        ['multiline', 'line-one\nline-two'],
+        ['escaped', 'ghcr.io/acme/app:1.2\n'],
+      ]),
+    );
+  });
+
+  test('getComposeResolvedImages should apply default interpolation for unset and empty values', async () => {
+    vi.spyOn(fs, 'readFile').mockImplementation(async (filePath) =>
+      String(filePath).startsWith('/opt/drydock/unset/')
+        ? ''
+        : String(filePath).startsWith('/opt/drydock/configured/')
+          ? Buffer.from('REGISTRY=ghcr.io\n')
+          : Buffer.from('REGISTRY=\n'),
+    );
+
+    const unsetResult = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/unset/stack.yml'],
+      makeCompose({
+        nginx: { image: '${REGISTRY:-docker.io}/library/nginx:1.0.0' },
+      }),
+    );
+    const emptyResult = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/empty/stack.yml'],
+      makeCompose({
+        nginx: { image: '${REGISTRY:-docker.io}/library/nginx:1.0.0' },
+      }),
+    );
+    const configuredResult = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/configured/stack.yml'],
+      makeCompose({
+        nginx: { image: '${REGISTRY:-docker.io}/library/nginx:1.0.0' },
+      }),
+    );
+
+    expect(unsetResult).toEqual(new Map([['nginx', 'docker.io/library/nginx:1.0.0']]));
+    expect(emptyResult).toEqual(new Map([['nginx', 'docker.io/library/nginx:1.0.0']]));
+    expect(configuredResult).toEqual(new Map([['nginx', 'ghcr.io/library/nginx:1.0.0']]));
+  });
+
+  test('getComposeResolvedImages should preserve empty values for the single-dash default', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from('REGISTRY=\n'));
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({
+        nginx: { image: '${REGISTRY-docker.io}/library/nginx:1.0.0' },
+      }),
+    );
+
+    expect(result).toEqual(new Map([['nginx', '/library/nginx:1.0.0']]));
+  });
+
+  test('getComposeResolvedImages should ignore malformed and image-less service definitions', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from(''));
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({
+        nginx: { image: '${IMAGE}' },
+        malformed: 'not a service',
+        noImage: { environment: { IMAGE: 'nginx:1.0.0' } },
+      }),
+    );
+
+    expect(result).toEqual(new Map());
+  });
+
+  test('processComposeFile should fail closed when an image variable is unavailable', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    try {
+      const container = makeContainer({
+        tagValue: '1.0.0',
+        remoteValue: '1.1.0',
+        labels: { 'com.docker.compose.service': 'nginx' },
+      });
+
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ nginx: { image: '${IMAGE}' } }),
+      );
+      vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from(''));
+
+      const { writeComposeFileSpy } = spyOnProcessComposeHelpers(
+        trigger,
+        ['services:', '  nginx:', '    image: ${IMAGE}', ''].join('\n'),
+      );
+
+      await expect(
+        trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+      ).rejects.toThrow('refusing to rewrite a different repository');
+
+      expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  test('processComposeFile should resolve a defaulted registry variable for continuity', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    try {
+      const container = makeContainer({
+        tagValue: '1.0.0',
+        remoteValue: '1.1.0',
+        labels: { 'com.docker.compose.service': 'nginx' },
+      });
+
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ nginx: { image: '${REGISTRY:-docker.io}/library/nginx:1.0.0' } }),
+      );
+      vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from(''));
+
+      const { writeComposeFileSpy } = spyOnProcessComposeHelpers(
+        trigger,
+        ['services:', '  nginx:', '    image: ${REGISTRY:-docker.io}/library/nginx:1.0.0', ''].join(
+          '\n',
+        ),
+      );
+
+      await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+      expect(writeComposeFileSpy).toHaveBeenCalledWith(
+        '/opt/drydock/test/stack.yml',
+        expect.stringContaining('image: nginx:1.1.0'),
+      );
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  test('processComposeFile should reject a runtime image from another registry with a literal default', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    try {
+      const container = makeContainer({
+        imageName: 'ghcr.io/library/nginx',
+        tagValue: '1.0.0',
+        remoteValue: '1.1.0',
+        labels: { 'com.docker.compose.service': 'nginx' },
+      });
+
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ nginx: { image: '${REGISTRY:-docker.io}/library/nginx:1.0.0' } }),
+      );
+      vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from(''));
+
+      const { writeComposeFileSpy } = spyOnProcessComposeHelpers(
+        trigger,
+        ['services:', '  nginx:', '    image: ${REGISTRY:-docker.io}/library/nginx:1.0.0', ''].join(
+          '\n',
+        ),
+      );
+
+      await expect(
+        trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+      ).rejects.toThrow('refusing to rewrite a different repository');
+      expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  test('processComposeFile should abort before mutation when container identity is indeterminate', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const container = makeContainer({
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'classifySelfUpdate').mockResolvedValue('indeterminate');
+    const applyMutationsSpy = vi
+      .spyOn(trigger, 'maybeApplyComposeFileMutations')
+      .mockResolvedValue([]);
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('Drydock container identity is indeterminate');
+    expect(applyMutationsSpy).not.toHaveBeenCalled();
+  });
+
+  test('processComposeFile should ignore a foreign Drydock environment value', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const previousImage = process.env.IMAGE;
+    process.env.IMAGE = 'postgres:9.9.9';
+    try {
+      const container = makeContainer({
+        tagValue: '1.0.0',
+        remoteValue: '1.1.0',
+        labels: { 'com.docker.compose.service': 'nginx' },
+      });
+
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ nginx: { image: '${IMAGE}' } }),
+      );
+      vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from(''));
+
+      const { writeComposeFileSpy, composeUpdateSpy, backupSpy } = spyOnProcessComposeHelpers(
+        trigger,
+        ['services:', '  nginx:', '    image: ${IMAGE}', ''].join('\n'),
+      );
+
+      await expect(
+        trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+      ).rejects.toThrow('refusing to rewrite a different repository');
+
+      expect(writeComposeFileSpy).not.toHaveBeenCalled();
+      expect(composeUpdateSpy).not.toHaveBeenCalled();
+      expect(backupSpy).not.toHaveBeenCalled();
+    } finally {
+      if (previousImage === undefined) {
+        delete process.env.IMAGE;
+      } else {
+        process.env.IMAGE = previousImage;
+      }
+      vi.restoreAllMocks();
+    }
+  });
+
+  test('processComposeFile should fail closed for a mislabeled runtime with unresolved image config', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const container = makeContainer({
+      imageName: 'postgres',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: '${IMAGE}' } }),
+    );
+    vi.spyOn(trigger, 'getComposeResolvedImages').mockResolvedValue(new Map());
+
+    const { writeComposeFileSpy, composeUpdateSpy, backupSpy } = spyOnProcessComposeHelpers(
+      trigger,
+      ['services:', '  nginx:', '    image: ${IMAGE}', ''].join('\n'),
+    );
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('refusing to rewrite a different repository');
+
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(composeUpdateSpy).not.toHaveBeenCalled();
+    expect(backupSpy).not.toHaveBeenCalled();
+  });
+
+  test('repository continuity should compare invariant paths around interpolation', () => {
+    const composeImage = '${REGISTRY:-docker.io}/acme/app:${TAG}';
+    const matchingMapping = {
+      service: 'app',
+      current: composeImage,
+      runtimeImage: 'docker.io/acme/app:1.0.0',
+      container: { name: 'app' },
+    };
+    const foreignMapping = {
+      ...matchingMapping,
+      runtimeImage: 'nginx:1.0.0',
+    };
+
+    expect(() =>
+      trigger.assertComposeRepositoryContinuity('/opt/drydock/test/stack.yml', [matchingMapping]),
+    ).not.toThrow();
+    expect(() =>
+      trigger.assertComposeRepositoryContinuity('/opt/drydock/test/stack.yml', [foreignMapping]),
+    ).toThrow('refusing to rewrite a different repository');
+  });
+
+  test('reconciliation should not reject a proven repository when only the tag is unresolved', () => {
+    trigger.configuration.reconciliationMode = 'block';
+
+    expect(() =>
+      trigger.reconcileComposeMappings('/opt/drydock/test/stack.yml', [
+        {
+          service: 'app',
+          current: '${REGISTRY:-docker.io}/acme/app:${TAG}',
+          currentResolved: 'docker.io/acme/app:${TAG}',
+          runtimeImage: 'docker.io/acme/app:1.0.0',
+          runtimeNormalized: 'docker.io/acme/app:1.0.0',
+          container: { name: 'app' },
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  test('processComposeFile should reject another registry when the image tag remains unresolved', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const container = makeContainer({
+      imageName: 'ghcr.io/acme/app',
+      labels: { 'com.docker.compose.service': 'app' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ app: { image: '${REGISTRY:-docker.io}/acme/app:${TAG}' } }),
+    );
+    vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from(''));
+
+    const { writeComposeFileSpy } = spyOnProcessComposeHelpers(
+      trigger,
+      ['services:', '  app:', '    image: ${REGISTRY:-docker.io}/acme/app:${TAG}', ''].join('\n'),
+    );
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('refusing to rewrite a different repository');
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
+  test('processComposeFile should wait for queued exclusive lifecycle access before mutating compose files', async () => {
+    let markExclusiveStarted!: () => void;
+    const exclusiveStarted = new Promise<void>((resolve) => {
+      markExclusiveStarted = resolve;
+    });
+    let releaseExclusive!: () => void;
+    const exclusiveFinished = new Promise<void>((resolve) => {
+      releaseExclusive = resolve;
+    });
+    const exclusive = withContainerUpdateLocks(
+      ['test:exclusive-compose-review'],
+      async () => {
+        markExclusiveStarted();
+        await exclusiveFinished;
+      },
+      { bypassGlobalCap: true, exclusive: true },
+    );
+    await exclusiveStarted;
+
+    try {
+      trigger.configuration.dryrun = false;
+      trigger.configuration.backup = false;
+      const container = makeContainer({
+        tagValue: '1.0.0',
+        remoteValue: '1.1.0',
+        labels: { 'com.docker.compose.service': 'nginx' },
+      });
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+      );
+      const { writeComposeFileSpy } = spyOnProcessComposeHelpers(trigger);
+
+      const processPromise = trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(writeComposeFileSpy).not.toHaveBeenCalled();
+
+      releaseExclusive();
+      await processPromise;
+      expect(writeComposeFileSpy).toHaveBeenCalled();
+    } finally {
+      releaseExclusive();
+      await exclusive;
+    }
+  });
+
+  test('concurrent compose processing should pass admission state per call', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const firstContainer = makeContainer({
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      name: 'redis',
+      imageName: 'redis',
+      labels: { 'com.docker.compose.service': 'redis' },
+    });
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({
+        nginx: { image: 'nginx:1.0.0' },
+        redis: { image: 'redis:1.0.0' },
+      }),
+    );
+    const applyReleases: Array<() => void> = [];
+    vi.spyOn(trigger, 'maybeApplyComposeFileMutations').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          applyReleases.push(() => resolve([]));
+        }),
+    );
+    const runLifecycleSpy = vi
+      .spyOn(trigger, 'runContainerUpdateLifecycle')
+      .mockResolvedValue(undefined);
+
+    const firstProcess = trigger.processComposeFile('/opt/drydock/test/first.yml', [
+      firstContainer,
+    ]);
+    await vi.waitFor(() => expect(applyReleases).toHaveLength(1));
+    const secondProcess = trigger.processComposeFile('/opt/drydock/test/second.yml', [
+      secondContainer,
+    ]);
+    await vi.waitFor(() => expect(applyReleases).toHaveLength(2));
+
+    applyReleases.forEach((release) => release());
+    await Promise.all([firstProcess, secondProcess]);
+
+    expect(runLifecycleSpy).toHaveBeenCalledTimes(2);
+    expect(runLifecycleSpy).toHaveBeenNthCalledWith(
+      1,
+      firstContainer,
+      expect.any(Object),
+      expect.objectContaining({
+        lifecycleAlreadyAcquired: true,
+        selfUpdateClassification: 'peer',
+      }),
+    );
+    expect(runLifecycleSpy).toHaveBeenNthCalledWith(
+      2,
+      secondContainer,
+      expect.any(Object),
+      expect.objectContaining({
+        lifecycleAlreadyAcquired: true,
+        selfUpdateClassification: 'peer',
+      }),
+    );
+    expect(applyReleases).toHaveLength(2);
+  });
+
+  test('processComposeFile should admit self-updates before mutating compose files', async () => {
+    let releaseExclusive!: () => void;
+    const exclusiveFinished = new Promise<void>((resolve) => {
+      releaseExclusive = resolve;
+    });
+    const exclusive = withContainerUpdateLocks(
+      ['test:self-compose-review'],
+      async () => exclusiveFinished,
+      { bypassGlobalCap: true, exclusive: true },
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    try {
+      trigger.configuration.dryrun = false;
+      trigger.configuration.backup = false;
+      const container = makeContainer({
+        name: 'drydock',
+        imageName: 'codeswhat/drydock',
+        labels: { 'com.docker.compose.service': 'drydock' },
+      });
+      vi.spyOn(trigger, 'classifySelfUpdate').mockResolvedValue('current');
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ drydock: { image: 'codeswhat/drydock:1.0.0' } }),
+      );
+      vi.spyOn(trigger, 'executeSelfUpdate').mockResolvedValue(false);
+      const applyMutationsSpy = vi
+        .spyOn(trigger, 'maybeApplyComposeFileMutations')
+        .mockResolvedValue([]);
+
+      const processPromise = trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(applyMutationsSpy).not.toHaveBeenCalled();
+
+      releaseExclusive();
+      await processPromise;
+    } finally {
+      releaseExclusive();
+      await exclusive;
+    }
+  });
+
+  test('processComposeFile should admit infrastructure helper updates before mutating compose files', async () => {
+    let releaseExclusive!: () => void;
+    const exclusiveFinished = new Promise<void>((resolve) => {
+      releaseExclusive = resolve;
+    });
+    const exclusive = withContainerUpdateLocks(
+      ['test:infrastructure-compose-review'],
+      async () => exclusiveFinished,
+      { bypassGlobalCap: true, exclusive: true },
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    try {
+      trigger.configuration.dryrun = false;
+      trigger.configuration.backup = false;
+      const container = makeContainer({
+        labels: {
+          'com.docker.compose.service': 'nginx',
+          'dd.update.mode': 'infrastructure',
+        },
+      });
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+      );
+      vi.spyOn(trigger, 'executeSelfUpdate').mockResolvedValue(false);
+      const applyMutationsSpy = vi
+        .spyOn(trigger, 'maybeApplyComposeFileMutations')
+        .mockResolvedValue([]);
+
+      const processPromise = trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(applyMutationsSpy).not.toHaveBeenCalled();
+
+      releaseExclusive();
+      await processPromise;
+    } finally {
+      releaseExclusive();
+      await exclusive;
+    }
+  });
+
+  test('processComposeFile should hold same-project locks through mutation and rollback', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const firstContainer = makeContainer({
+      labels: {
+        'com.docker.compose.service': 'nginx',
+        'com.docker.compose.project': 'shared',
+      },
+    });
+    const secondContainer = makeContainer({
+      name: 'redis',
+      imageName: 'redis',
+      labels: {
+        'com.docker.compose.service': 'redis',
+        'com.docker.compose.project': 'shared',
+      },
+    });
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockImplementation(async (file) =>
+      file.includes('first')
+        ? makeCompose({ nginx: { image: 'nginx:1.0.0' } })
+        : makeCompose({ redis: { image: 'redis:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockImplementation(async (file) =>
+      Buffer.from(
+        file.includes('first')
+          ? ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')
+          : ['services:', '  redis:', '    image: redis:1.0.0', ''].join('\n'),
+      ),
+    );
+    let rejectFirstLifecycle!: (error: Error) => void;
+    const lifecycleFinished = new Promise<never>((_resolve, reject) => {
+      rejectFirstLifecycle = reject;
+    });
+    const runLifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle');
+    runLifecycleSpy
+      .mockImplementationOnce(() => lifecycleFinished)
+      .mockResolvedValueOnce(undefined);
+    const writes: string[] = [];
+    vi.spyOn(trigger, 'writeComposeFile').mockImplementation(async (_file, text) => {
+      writes.push(text);
+    });
+
+    const firstProcess = trigger.processComposeFile('/opt/drydock/test/first.yml', [
+      firstContainer,
+    ]);
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    const secondProcess = trigger.processComposeFile('/opt/drydock/test/second.yml', [
+      secondContainer,
+    ]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(writes).toHaveLength(1);
+
+    rejectFirstLifecycle(new Error('first runtime failed'));
+    await expect(firstProcess).rejects.toThrow('first runtime failed');
+    await secondProcess;
+    expect(writes).toHaveLength(3);
+    expect(writes[0]).toContain('image: nginx:1.1.0');
+    expect(writes[1]).toContain('image: nginx:1.0.0');
+    expect(writes[2]).toContain('image: redis:1.1.0');
+  });
+
+  test('withContainerUpdateLocks should retain keyed locking when lifecycle admission is already held', async () => {
+    const result = await withContainerUpdateLocks(
+      ['compose-file:local:/opt/drydock/test/stack.yml'],
+      async () => 'locked',
+      { skipLifecycleGate: true },
+    );
+
+    expect(result).toBe('locked');
+  });
+
+  test('processComposeFile should hold same-file locks for unlabeled containers through rollback', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const firstContainer = makeContainer();
+    const secondContainer = makeContainer({
+      name: 'redis',
+      imageName: 'redis',
+      tagValue: '1.0.0',
+      remoteValue: '1.1.0',
+    });
+    const compose = makeCompose({
+      nginx: { image: 'nginx:1.0.0' },
+      redis: { image: 'redis:1.0.0' },
+    });
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(compose);
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(
+        [
+          'services:',
+          '  nginx:',
+          '    image: nginx:1.0.0',
+          '  redis:',
+          '    image: redis:1.0.0',
+          '',
+        ].join('\n'),
+      ),
+    );
+    let rejectFirstLifecycle!: (error: Error) => void;
+    const lifecycleFinished = new Promise<never>((_resolve, reject) => {
+      rejectFirstLifecycle = reject;
+    });
+    const runLifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle');
+    runLifecycleSpy
+      .mockImplementationOnce(() => lifecycleFinished)
+      .mockResolvedValueOnce(undefined);
+    const writes: string[] = [];
+    vi.spyOn(trigger, 'writeComposeFile').mockImplementation(async (_file, text) => {
+      writes.push(text);
+    });
+
+    const firstProcess = trigger.processComposeFile('/opt/drydock/test/stack.yml', [
+      firstContainer,
+    ]);
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    const secondProcess = trigger.processComposeFile('/opt/drydock/test/stack.yml', [
+      secondContainer,
+    ]);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(writes).toHaveLength(1);
+
+    rejectFirstLifecycle(new Error('first runtime failed'));
+    await expect(firstProcess).rejects.toThrow('first runtime failed');
+    await secondProcess;
+    expect(writes).toHaveLength(3);
+    expect(writes[0]).toContain('image: nginx:1.1.0');
+    expect(writes[1]).toContain('image: nginx:1.0.0');
+    expect(writes[2]).toContain('image: redis:1.1.0');
+  });
+
+  test('processComposeFile should serialize overlapping compose chains through rollback', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const firstContainer = makeContainer({ name: 'nginx-a' });
+    const secondContainer = makeContainer({ name: 'nginx-b' });
+    const compose = makeCompose({ nginx: { image: 'nginx:1.0.0' } });
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockImplementation(async (file) =>
+      String(file).endsWith('/base.yml') ? compose : makeCompose({}),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    let rejectFirstLifecycle!: (error: Error) => void;
+    const lifecycleFinished = new Promise<never>((_resolve, reject) => {
+      rejectFirstLifecycle = reject;
+    });
+    const runLifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle');
+    runLifecycleSpy
+      .mockImplementationOnce(() => lifecycleFinished)
+      .mockResolvedValueOnce(undefined);
+    const writes: string[] = [];
+    vi.spyOn(trigger, 'writeComposeFile').mockImplementation(async (_file, text) => {
+      writes.push(text);
+    });
+
+    const firstProcess = trigger.processComposeFile(
+      '/opt/drydock/test/base.yml',
+      [firstContainer],
+      ['/opt/drydock/test/base.yml', '/opt/drydock/test/a.yml'],
+    );
+    await vi.waitFor(() => expect(writes).toHaveLength(1));
+    const secondProcess = trigger.processComposeFile(
+      '/opt/drydock/test/base.yml',
+      [secondContainer],
+      ['/opt/drydock/test/base.yml', '/opt/drydock/test/b.yml'],
+    );
+    await new Promise<void>((resolve) => setTimeout(resolve, 25));
+    expect(writes).toHaveLength(1);
+
+    rejectFirstLifecycle(new Error('first overlapping chain failed'));
+    await expect(firstProcess).rejects.toThrow('first overlapping chain failed');
+    await secondProcess;
+    expect(writes).toHaveLength(3);
+    expect(writes[0]).toContain('image: nginx:1.1.0');
+    expect(writes[1]).toContain('image: nginx:1.0.0');
+    expect(writes[2]).toContain('image: nginx:1.1.0');
+  });
+
+  test('processComposeFile should retain exclusive lifecycle after self handoff before later failure', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const selfContainer = makeContainer({
+      name: 'drydock',
+      imageName: 'codeswhat/drydock',
+      labels: { 'com.docker.compose.service': 'drydock' },
+    });
+    vi.spyOn(trigger, 'classifySelfUpdate').mockResolvedValue('current');
+    const laterContainer = makeContainer({
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({
+        drydock: { image: 'codeswhat/drydock:1.0.0' },
+        nginx: { image: 'nginx:1.0.0' },
+      }),
+    );
+    vi.spyOn(trigger, 'maybeApplyComposeFileMutations').mockResolvedValue([]);
+    trigger.updateLifecycleExecutor = {
+      run: vi
+        .fn()
+        .mockResolvedValueOnce({ updated: true, operationId: 'self-handoff' })
+        .mockRejectedValueOnce(new Error('later service failed')),
+    } as any;
+
+    const queued = withContainerUpdateLocks([], async () => 'released');
+    const processPromise = trigger.processComposeFile('/opt/drydock/test/stack.yml', [
+      selfContainer,
+      laterContainer,
+    ]);
+    await expect(processPromise).rejects.toThrow('later service failed');
+    expect(getUpdateLockSnapshot().lifecycle).toMatchObject({
+      retainedExclusive: true,
+      retainedOperationId: 'self-handoff',
+    });
+
+    releaseRetainedSelfUpdateLifecycle('self-handoff');
+    await expect(queued).resolves.toBe('released');
+  });
+
+  test('processComposeFile should retain exclusive lifecycle after successful self handoff', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const container = makeContainer({
+      name: 'drydock',
+      imageName: 'codeswhat/drydock',
+      labels: { 'com.docker.compose.service': 'drydock' },
+    });
+    vi.spyOn(trigger, 'classifySelfUpdate').mockResolvedValue('current');
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ drydock: { image: 'codeswhat/drydock:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'maybeApplyComposeFileMutations').mockResolvedValue([]);
+    trigger.updateLifecycleExecutor = {
+      run: vi.fn().mockResolvedValue({ updated: true, operationId: 'self-success' }),
+    } as any;
+
+    const queued = withContainerUpdateLocks([], async () => 'released');
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).resolves.toBe(true);
+    expect(getUpdateLockSnapshot().lifecycle).toMatchObject({
+      retainedExclusive: true,
+      retainedOperationId: 'self-success',
+    });
+
+    releaseRetainedSelfUpdateLifecycle('self-success');
+    await expect(queued).resolves.toBe('released');
+  });
+
+  test('processComposeFile should release infrastructure exclusivity after helper success', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const container = makeContainer({
+      labels: {
+        'com.docker.compose.service': 'nginx',
+        'dd.update.mode': 'infrastructure',
+      },
+    });
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'maybeApplyComposeFileMutations').mockResolvedValue([]);
+    trigger.updateLifecycleExecutor = {
+      run: vi.fn().mockResolvedValue({ updated: true, operationId: 'helper-success' }),
+    } as any;
+
+    const queued = withContainerUpdateLocks([], async () => 'released');
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).resolves.toBe(true);
+    await expect(queued).resolves.toBe('released');
+    expect(getUpdateLockSnapshot().lifecycle).toBeUndefined();
+  });
+
+  test('processComposeFile should release infrastructure exclusivity after helper failure', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const container = makeContainer({
+      labels: {
+        'com.docker.compose.service': 'nginx',
+        'dd.update.mode': 'infrastructure',
+      },
+    });
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'maybeApplyComposeFileMutations').mockResolvedValue([]);
+    trigger.updateLifecycleExecutor = {
+      run: vi.fn().mockRejectedValue(new Error('helper failed')),
+    } as any;
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('helper failed');
+    expect(getUpdateLockSnapshot().lifecycle).toBeUndefined();
+  });
+
   test('processComposeFile should block updates on compose/runtime reconciliation mismatch when configured', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.backup = false;
@@ -608,6 +1572,23 @@ describe('Dockercompose Trigger', () => {
           runtimeNormalized: 'postgres:16',
           current: 'postgres@sha256:0123456789abcdef',
           currentNormalized: 'postgres@sha256:0123456789abcdef',
+        },
+      ]),
+    ).not.toThrow();
+  });
+
+  test('reconcileComposeMappings should resolve the raw image when no resolved image is supplied', () => {
+    trigger.configuration.reconciliationMode = 'warn';
+
+    expect(() =>
+      trigger.reconcileComposeMappings('stack.yml', [
+        {
+          container: { name: 'nginx' },
+          service: 'nginx',
+          runtimeImage: 'nginx:1.0.0',
+          runtimeNormalized: 'nginx:1.0.0',
+          current: 'nginx:1.0.0',
+          currentNormalized: 'nginx:1.0.0',
         },
       ]),
     ).not.toThrow();
@@ -964,6 +1945,10 @@ describe('Dockercompose Trigger', () => {
         composeFile: '/opt/drydock/test/stack.yml',
         service: 'nginx',
         serviceDefinition: expect.objectContaining({ image: 'nginx:1.0.0' }),
+      }),
+      expect.objectContaining({
+        lifecycleAlreadyAcquired: true,
+        selfUpdateClassification: 'peer',
       }),
     );
   });

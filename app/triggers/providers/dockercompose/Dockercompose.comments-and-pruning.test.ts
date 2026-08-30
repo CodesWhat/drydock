@@ -394,6 +394,7 @@ describe('Dockercompose Trigger', () => {
         service: 'nginx',
         composeFileOnceApplied: false,
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: true }),
     );
     expect(runContainerUpdateLifecycleSpy).toHaveBeenNthCalledWith(
       2,
@@ -402,6 +403,7 @@ describe('Dockercompose Trigger', () => {
         service: 'redis',
         composeFileOnceApplied: false,
       }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: true }),
     );
   });
 

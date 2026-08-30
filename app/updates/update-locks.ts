@@ -228,10 +228,15 @@ export async function withContainerUpdateLocks<T>(
   options?: {
     bypassGlobalCap?: boolean;
     exclusive?: boolean;
+    skipLifecycleGate?: boolean;
+    skipUpdateLocks?: boolean;
     retainExclusiveOnResult?: (result: T) => RetainedExclusiveLifecycle | undefined;
     retainExclusiveOnError?: (error: unknown) => RetainedExclusiveLifecycle | undefined;
   },
 ): Promise<T> {
+  if (options?.skipLifecycleGate === true) {
+    return options.skipUpdateLocks === true ? fn() : updateLockManager.withLocks(keys, fn);
+  }
   return updateLifecycleGate.withAccess(
     options?.exclusive === true,
     async () => {
@@ -260,6 +265,15 @@ export function buildComposeProjectLockKey(
   composeProject: string,
 ): string {
   return `compose:${container.watcher}:${composeProject}`;
+}
+
+export function buildComposeFileLockKeys(
+  container: ContainerLockReference,
+  composeFiles: readonly string[],
+): string[] {
+  return [...new Set(composeFiles)]
+    .sort()
+    .map((composeFile) => `compose-file:${container.watcher}:${composeFile}`);
 }
 
 export interface UpdateLockSnapshot {

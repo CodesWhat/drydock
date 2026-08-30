@@ -7,7 +7,11 @@ import type { ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
-import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
+import {
+  buildComposeFileLockKeys,
+  buildComposeProjectLockKey,
+  withContainerUpdateLocks,
+} from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
 import {
   attachCreatedContainerCandidate,
@@ -50,7 +54,6 @@ const COMPOSE_DIRECTORY_FILE_CANDIDATES = [
 ];
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
-
 interface DockercomposeTriggerConfiguration extends DockerTriggerConfiguration {
   file?: string;
   backup: boolean;
@@ -299,6 +302,186 @@ function getDockerApiFromWatcher(watcher: unknown): DockerApiLike | undefined {
   return maybeDockerApi as DockerApiLike;
 }
 
+function resolveComposeInterpolation(
+  value: unknown,
+  environment: Record<string, string> = {},
+): unknown {
+  if (typeof value !== 'string' || !value.includes('${')) {
+    return value;
+  }
+
+  return value.replace(
+    /\$\{([_a-zA-Z][_a-zA-Z0-9]*)(?:(:-|-)([^}]*))?\}/g,
+    (
+      expression,
+      variableName: string,
+      operator: string | undefined,
+      fallback: string | undefined,
+    ) => {
+      const configuredValue = environment[variableName];
+      if (configuredValue !== undefined && (operator !== ':-' || configuredValue !== '')) {
+        return configuredValue;
+      }
+      if (operator === ':-' || operator === '-') {
+        return fallback as string;
+      }
+      return configuredValue ?? expression;
+    },
+  );
+}
+
+function resolveComposeImageForContinuity(
+  value: unknown,
+  authoritativeResolvedImage?: unknown,
+): unknown {
+  if (typeof value !== 'string' || !value.includes('${')) {
+    return value;
+  }
+  return authoritativeResolvedImage ?? value;
+}
+
+function getComposeRepositoryPart(imageReference: string): string {
+  const withoutDigest = imageReference.split('@')[0];
+  const lastSlashIndex = withoutDigest.lastIndexOf('/');
+  const lastColonIndex = withoutDigest.lastIndexOf(':');
+  return lastColonIndex > lastSlashIndex ? withoutDigest.slice(0, lastColonIndex) : withoutDigest;
+}
+
+function composeImageRepositoryMatchesRuntime(
+  composeImage: unknown,
+  runtimeImage: unknown,
+): boolean {
+  if (typeof composeImage !== 'string' || !composeImage.includes('${')) {
+    return getImageRepositoryKey(runtimeImage) === getImageRepositoryKey(composeImage);
+  }
+  const repositoryPart = getComposeRepositoryPart(composeImage);
+  const resolvedRepository = resolveComposeInterpolation(repositoryPart, {});
+  if (typeof resolvedRepository !== 'string' || resolvedRepository.includes('${')) {
+    return false;
+  }
+  return getImageRepositoryKey(runtimeImage) === getImageRepositoryKey(resolvedRepository);
+}
+
+function resolveComposeEnvironment(environment: Record<string, string>): Record<string, string> {
+  const resolved: Record<string, string> = {};
+  const resolving = new Set<string>();
+  const resolveValue = (name: string): string | undefined => {
+    if (Object.hasOwn(resolved, name)) {
+      return resolved[name];
+    }
+    const rawValue = environment[name];
+    if (rawValue === undefined || resolving.has(name)) {
+      return undefined;
+    }
+    resolving.add(name);
+    const value = rawValue.replace(
+      /\$\{([_a-zA-Z][_a-zA-Z0-9]*)(?:(:-|-)([^}]*))?\}/g,
+      (expression, variableName: string, operator: string | undefined, fallback: string) => {
+        const configuredValue = resolveValue(variableName);
+        if (configuredValue !== undefined && (operator !== ':-' || configuredValue !== '')) {
+          return configuredValue;
+        }
+        if (operator === ':-' || operator === '-') {
+          return fallback;
+        }
+        return expression;
+      },
+    );
+    resolving.delete(name);
+    if (value.includes('${')) {
+      return undefined;
+    }
+    resolved[name] = value;
+    return value;
+  };
+  for (const name of Object.keys(environment)) {
+    resolveValue(name);
+  }
+  return resolved;
+}
+
+function parseDoubleQuotedComposeEnvironmentValue(value: string): string | undefined {
+  let decoded = '';
+  for (let index = 0; index < value.length; index++) {
+    if (value[index] !== '\\') {
+      decoded += value[index];
+      continue;
+    }
+    const escaped = value[++index];
+    const replacements: Record<string, string> = {
+      n: '\n',
+      r: '\r',
+      t: '\t',
+      '\\': '\\',
+      '"': '"',
+      $: '$',
+    };
+    if (!(escaped in replacements)) {
+      return undefined;
+    }
+    decoded += replacements[escaped];
+  }
+  return decoded;
+}
+
+function parseComposeEnvironmentFile(contents: string): Record<string, string> {
+  const rawEnvironment: Record<string, string> = {};
+  const lines = contents.split(/\r?\n/);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const assignment = lines[lineIndex].match(
+      /^\s*(?:export\s+)?([_a-zA-Z][_a-zA-Z0-9]*)\s*(?:=|:)\s*(.*)$/,
+    );
+    if (!assignment) {
+      continue;
+    }
+    const value = assignment[2].trimStart();
+    if (value.startsWith("'")) {
+      let quotedValue = value.slice(1);
+      let closingIndex = quotedValue.search(/(?<!\\)'/);
+      while (closingIndex < 0 && lineIndex + 1 < lines.length) {
+        lineIndex++;
+        quotedValue += `\n${lines[lineIndex]}`;
+        closingIndex = quotedValue.search(/(?<!\\)'/);
+      }
+      const remainder = quotedValue.slice(closingIndex + 1).trim();
+      if (closingIndex < 0 || (remainder !== '' && !remainder.startsWith('#'))) {
+        continue;
+      }
+      rawEnvironment[assignment[1]] = quotedValue.slice(0, closingIndex).replace(/\\'/g, "'");
+      continue;
+    }
+    if (value.startsWith('"')) {
+      let closingIndex = -1;
+      for (let index = 1; index < value.length; index++) {
+        if (value[index] === '"' && value[index - 1] !== '\\') {
+          closingIndex = index;
+          break;
+        }
+      }
+      if (closingIndex < 0 || !/^\s*(?:#.*)?$/.test(value.slice(closingIndex + 1))) {
+        continue;
+      }
+      const decoded = parseDoubleQuotedComposeEnvironmentValue(value.slice(1, closingIndex));
+      if (decoded === undefined) {
+        continue;
+      }
+      rawEnvironment[assignment[1]] = decoded;
+      continue;
+    }
+    if (/["'`]|\$\(/.test(value)) {
+      continue;
+    }
+    const commentIndex = value.search(/\s#/);
+    rawEnvironment[assignment[1]] = (
+      commentIndex < 0 ? value : value.slice(0, commentIndex)
+    ).trimEnd();
+  }
+  const supportedEnvironment = Object.fromEntries(
+    Object.entries(rawEnvironment).filter(([, value]) => !/[`]|(?<!\\)\$(?!\{)/.test(value)),
+  );
+  return resolveComposeEnvironment(supportedEnvironment);
+}
+
 function getServiceKey(compose, container, currentImage) {
   const composeServiceName = container.labels?.['com.docker.compose.service'];
   if (composeServiceName) {
@@ -318,11 +501,15 @@ function getServiceKey(compose, container, currentImage) {
     if (!serviceImage || !imageToMatch) {
       return false;
     }
-    const normalizedServiceImage = normalizeImplicitLatest(serviceImage);
+    const resolvedServiceImage = resolveComposeInterpolation(serviceImage);
+    const normalizedServiceImage = normalizeImplicitLatest(resolvedServiceImage);
 
     // Match priority (most strict to most lenient):
     // 1) Exact `service.image` match.
     if (serviceImage === imageToMatch) {
+      return true;
+    }
+    if (resolvedServiceImage === imageToMatch) {
       return true;
     }
     // 2) Exact match after normalizing implicit `:latest`.
@@ -492,6 +679,18 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 
   set _composeCacheMaxEntries(maxEntries: number) {
     this._composeFileParser.setComposeCacheMaxEntries(maxEntries);
+  }
+
+  override async runContainerUpdateLifecycle(
+    container,
+    runtimeContext?: unknown,
+    options?: {
+      lifecycleAlreadyAcquired?: boolean;
+      selfUpdateClassification?: 'current' | 'peer' | 'indeterminate';
+      onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void;
+    },
+  ) {
+    return super.runContainerUpdateLifecycle(container, runtimeContext, options);
   }
 
   get _composeObjectCache() {
@@ -965,7 +1164,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    */
   assertComposeRepositoryContinuity(composeFileChainSummary, versionMappings) {
     for (const mapping of versionMappings) {
-      if (getImageRepositoryKey(mapping.runtimeImage) === getImageRepositoryKey(mapping.current)) {
+      const currentImage =
+        mapping.currentResolved ?? resolveComposeImageForContinuity(mapping.current);
+      if (composeImageRepositoryMatchesRuntime(currentImage, mapping.runtimeImage)) {
         continue;
       }
       throw new Error(
@@ -1000,6 +1201,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       }
     }
     const compose = await this.getComposeFileChainAsObject(composeFileChain, composeByFile);
+    const resolvedComposeImages = await this.getComposeResolvedImages(composeFileChain, compose);
     this.assertComposeRepositoryContinuity(
       composeFileChain.join(', '),
       mappings.map((mapping) => ({
@@ -1007,6 +1209,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         current: isPlainObject(compose?.services?.[mapping.service])
           ? (compose.services[mapping.service] as { image?: unknown }).image
           : undefined,
+        currentResolved: resolveComposeImageForContinuity(
+          isPlainObject(compose?.services?.[mapping.service])
+            ? (compose.services[mapping.service] as { image?: unknown }).image
+            : undefined,
+          resolvedComposeImages.get(mapping.service),
+        ),
       })),
     );
   }
@@ -1018,7 +1226,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return;
     }
     for (const mapping of versionMappings) {
-      if (mapping.runtimeNormalized === mapping.currentNormalized) {
+      const currentImage =
+        mapping.currentResolved ?? resolveComposeImageForContinuity(mapping.current);
+      if (typeof currentImage === 'string' && currentImage.includes('${')) {
+        continue;
+      }
+      const currentResolvedNormalized = normalizeImplicitLatest(currentImage);
+      if (mapping.runtimeNormalized === currentResolvedNormalized) {
         continue;
       }
       const reconciliationMessage =
@@ -1843,7 +2057,52 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     });
   }
 
-  buildVersionMappingsForCompose(containersFiltered, compose) {
+  async getComposeResolvedImages(composeFiles: string[], compose): Promise<Map<string, string>> {
+    const composeServices = compose?.services ?? {};
+    const hasInterpolatedImage = Object.values(composeServices).some(
+      (service) =>
+        isPlainObject(service) && typeof service.image === 'string' && service.image.includes('${'),
+    );
+    if (!hasInterpolatedImage || composeFiles.length === 0) {
+      return new Map();
+    }
+
+    const environment: Record<string, string> = {};
+    try {
+      const projectEnvironmentFile = path.join(path.dirname(composeFiles[0]), '.env');
+      const contents = await fs.readFile(projectEnvironmentFile, 'utf8');
+      const environmentText =
+        typeof contents === 'string'
+          ? contents
+          : new TextDecoder().decode(contents as unknown as Uint8Array);
+      Object.assign(environment, parseComposeEnvironmentFile(environmentText));
+    } catch {
+      // An unavailable environment source cannot safely establish continuity.
+    }
+
+    const resolvedImages = new Map<string, string>();
+    for (const [serviceName, service] of Object.entries(composeServices)) {
+      if (!isPlainObject(service) || typeof service.image !== 'string') {
+        continue;
+      }
+      const resolvedImage = resolveComposeInterpolation(service.image, environment);
+      if (typeof resolvedImage === 'string' && !resolvedImage.includes('${')) {
+        resolvedImages.set(serviceName, resolvedImage);
+        continue;
+      }
+      const repositoryPart = getComposeRepositoryPart(service.image);
+      const resolvedRepository = resolveComposeInterpolation(repositoryPart, environment);
+      if (typeof resolvedRepository === 'string' && !resolvedRepository.includes('${')) {
+        resolvedImages.set(
+          serviceName,
+          resolvedRepository + service.image.slice(repositoryPart.length),
+        );
+      }
+    }
+    return resolvedImages;
+  }
+
+  buildVersionMappingsForCompose(containersFiltered, compose, resolvedComposeImages = new Map()) {
     return containersFiltered
       .map((container) => {
         const map = this.mapCurrentVersionToUpdateVersion(compose, container);
@@ -1862,6 +2121,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           runtimeNormalized: normalizeImplicitLatest(runtimeImage),
           composeUpdate,
           composeUpdateNormalized: normalizeImplicitLatest(composeUpdate),
+          currentResolved: resolveComposeImageForContinuity(
+            map.current,
+            resolvedComposeImages.get(map.service),
+          ),
           ...map,
         };
       })
@@ -2030,6 +2293,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     mappingsNeedingRuntimeUpdate,
     runtimeContext?: unknown,
     completedRuntimeUpdates: ComposeRuntimeUpdateCompletion[] = [],
+    lifecycleAlreadyAcquired = false,
+    onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void,
+    lifecycleClassifications?: Map<object, 'current' | 'peer' | 'indeterminate'>,
   ): Promise<void> {
     const requestedRuntimeContext =
       runtimeContext && typeof runtimeContext === 'object'
@@ -2082,7 +2348,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         });
       };
       composeContext.onRuntimeUpdateApplied = recordRuntimeUpdate;
-      await this.runContainerUpdateLifecycle(container, composeContext);
+      const selfUpdateOperationIdHandler =
+        lifecycleClassifications?.get(container) === 'current'
+          ? onSelfUpdateOperationId
+          : undefined;
+      await this.runContainerUpdateLifecycle(container, composeContext, {
+        lifecycleAlreadyAcquired,
+        selfUpdateClassification: lifecycleClassifications?.get(container),
+        onSelfUpdateOperationId: selfUpdateOperationIdHandler,
+      });
       recordRuntimeUpdate();
       if (composeFileOnceEnabled && !composeFileOnceApplied) {
         composeFileOnceHandledServices.add(service);
@@ -2090,41 +2364,19 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
-  /**
-   * Process a specific compose file with its associated containers.
-   * @param composeFile
-   * @param containers
-   * @returns {Promise<boolean>} true if runtime updates were applied, false otherwise
-   */
-  async processComposeFile(
+  async applyComposeMutationsAndRuntimeUpdates(
     composeFile,
-    containers,
-    composeFiles = [composeFile],
-    runtimeContext?: unknown,
+    composeFileChain,
+    composeByFile,
+    composeFileChainSummary,
+    compose,
+    mappingsNeedingComposeUpdate,
+    mappingsNeedingRuntimeUpdate,
+    runtimeContext,
+    lifecycleAlreadyAcquired = false,
+    onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void,
+    lifecycleClassifications?: Map<object, 'current' | 'peer' | 'indeterminate'>,
   ): Promise<boolean> {
-    const { composeFileChain, composeFileChainSummary, composeByFile, compose } =
-      await this.loadComposeProcessingContext(composeFile, composeFiles);
-    const containersFiltered = this.filterContainersBelongingToCompose(
-      compose,
-      containers,
-      composeFileChainSummary,
-    );
-
-    if (containersFiltered.length === 0) {
-      this.log.warn(`No containers found in compose file ${composeFileChainSummary}`);
-      return false;
-    }
-
-    const versionMappings = this.buildVersionMappingsForCompose(containersFiltered, compose);
-    this.reconcileComposeMappings(composeFileChainSummary, versionMappings);
-    const { mappingsNeedingComposeUpdate, mappingsNeedingRuntimeUpdate } =
-      this.splitComposeAndRuntimeMappings(versionMappings);
-
-    if (mappingsNeedingRuntimeUpdate.length === 0) {
-      this.logAllComposeContainersUpToDate(composeFileChainSummary, versionMappings);
-      return false;
-    }
-
     const mutationSnapshots = await this.maybeApplyComposeFileMutations(
       composeFileChain,
       composeByFile,
@@ -2140,6 +2392,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         mappingsNeedingRuntimeUpdate,
         runtimeContext,
         completedRuntimeUpdates,
+        lifecycleAlreadyAcquired,
+        onSelfUpdateOperationId,
+        lifecycleClassifications,
       );
     } catch (runtimeError: unknown) {
       if (completedRuntimeUpdates.length === 0) {
@@ -2179,6 +2434,111 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return true;
   }
 
+  /**
+   * Process a specific compose file with its associated containers.
+   * @param composeFile
+   * @param containers
+   * @returns {Promise<boolean>} true if runtime updates were applied, false otherwise
+   */
+  async processComposeFile(
+    composeFile,
+    containers,
+    composeFiles = [composeFile],
+    runtimeContext?: unknown,
+  ): Promise<boolean> {
+    const { composeFileChain, composeFileChainSummary, composeByFile, compose } =
+      await this.loadComposeProcessingContext(composeFile, composeFiles);
+    const containersFiltered = this.filterContainersBelongingToCompose(
+      compose,
+      containers,
+      composeFileChainSummary,
+    );
+
+    if (containersFiltered.length === 0) {
+      this.log.warn(`No containers found in compose file ${composeFileChainSummary}`);
+      return false;
+    }
+
+    const resolvedComposeImages = await this.getComposeResolvedImages(composeFileChain, compose);
+    const versionMappings = this.buildVersionMappingsForCompose(
+      containersFiltered,
+      compose,
+      resolvedComposeImages,
+    );
+    this.reconcileComposeMappings(composeFileChainSummary, versionMappings);
+    const { mappingsNeedingComposeUpdate, mappingsNeedingRuntimeUpdate } =
+      this.splitComposeAndRuntimeMappings(versionMappings);
+
+    if (mappingsNeedingRuntimeUpdate.length === 0) {
+      this.logAllComposeContainersUpToDate(composeFileChainSummary, versionMappings);
+      return false;
+    }
+
+    const lifecycleClassifications = new Map<object, 'current' | 'peer' | 'indeterminate'>();
+    const lifecycleAccessOptions = await Promise.all(
+      mappingsNeedingRuntimeUpdate.map(async ({ container }) => {
+        const classification = await this.classifySelfUpdate(container);
+        lifecycleClassifications.set(container, classification);
+        if (classification === 'indeterminate') {
+          throw new Error('Drydock container identity is indeterminate; refusing unsafe update');
+        }
+        const infrastructureUpdate = this.isInfrastructureUpdate(container);
+        return {
+          selfUpdate: classification === 'current',
+          bypassGlobalCap: classification === 'current' || infrastructureUpdate,
+          exclusive: classification === 'current' || infrastructureUpdate,
+        };
+      }),
+    );
+    const exclusiveLifecycleRequired = lifecycleAccessOptions.some(({ exclusive }) => exclusive);
+    const bypassGlobalCap = lifecycleAccessOptions.some(
+      ({ bypassGlobalCap: shouldBypassGlobalCap }) => shouldBypassGlobalCap,
+    );
+    const composeFileLockKeys = buildComposeFileLockKeys(containersFiltered[0], composeFileChain);
+    const updateLockKeys: string[] = [
+      ...composeFileLockKeys,
+      ...new Set(
+        mappingsNeedingRuntimeUpdate.flatMap(({ container }) => this.getUpdateLockKeys(container)),
+      ),
+    ] as string[];
+    let selfUpdateOperationId: string | undefined;
+    return withContainerUpdateLocks(
+      updateLockKeys,
+      async () => {
+        const onSelfUpdateOperationId = (operationId: string, updated: boolean) => {
+          if (updated) {
+            selfUpdateOperationId = operationId;
+          }
+        };
+        return this.applyComposeMutationsAndRuntimeUpdates(
+          composeFile,
+          composeFileChain,
+          composeByFile,
+          composeFileChainSummary,
+          compose,
+          mappingsNeedingComposeUpdate,
+          mappingsNeedingRuntimeUpdate,
+          runtimeContext,
+          true,
+          onSelfUpdateOperationId,
+          lifecycleClassifications,
+        );
+      },
+      {
+        bypassGlobalCap,
+        exclusive: exclusiveLifecycleRequired,
+        retainExclusiveOnResult: (result) =>
+          exclusiveLifecycleRequired && result === true && selfUpdateOperationId
+            ? { operationId: selfUpdateOperationId }
+            : undefined,
+        retainExclusiveOnError: () =>
+          exclusiveLifecycleRequired && selfUpdateOperationId
+            ? { operationId: selfUpdateOperationId }
+            : undefined,
+      },
+    );
+  }
+
   async resolveComposeServiceContext(container, currentImage) {
     const composeFiles = await this.resolveComposeFilesForContainer(container);
     if (composeFiles.length === 0) {
@@ -2190,6 +2550,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       composeByFile.set(composeFilePath, await this.getComposeFileAsObject(composeFilePath));
     }
     const compose = await this.getComposeFileChainAsObject(composeFiles, composeByFile);
+    const resolvedComposeImages = await this.getComposeResolvedImages(composeFiles, compose);
     const service = getServiceKey(compose, container, currentImage);
     if (!service || !compose?.services?.[service]) {
       const composeFileSummary = composeFiles.join(', ');
@@ -2204,6 +2565,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         service,
         runtimeImage: currentImage,
         current: (compose as ComposeFileWithServices).services?.[service]?.image,
+        currentResolved: resolveComposeImageForContinuity(
+          (compose as ComposeFileWithServices).services?.[service]?.image,
+          resolvedComposeImages.get(service),
+        ),
       },
     ]);
     const composeFile = await this.getWritableComposeFileForService(
@@ -2917,5 +3282,6 @@ export {
   normalizeImplicitLatest as testable_normalizeImplicitLatest,
   normalizePostStartEnvironmentValue as testable_normalizePostStartEnvironmentValue,
   normalizePostStartHooks as testable_normalizePostStartHooks,
+  resolveComposeInterpolation as testable_resolveComposeInterpolation,
   updateComposeServiceImageInText as testable_updateComposeServiceImageInText,
 };
