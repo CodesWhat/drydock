@@ -189,16 +189,14 @@ function handleLoginError(
 
 function proceedWithLogin(
   req: AuthRequest,
+  principal: AuthenticatedPrincipal,
   res: Response,
   finish: LoginFinish,
   failLogin: LoginErrorHandler,
 ): Promise<void> {
   return new Promise((resolveProceed) => {
     try {
-      const principal = getPrincipal(req);
-      if (principal !== undefined) {
-        writeSessionPrincipal(req, principal);
-      }
+      writeSessionPrincipal(req, principal);
       handleLoginSuccess(req, res, finish);
     } catch (loginError: unknown) {
       failLogin(`Unable to persist login session (${getErrorMessage(loginError)})`);
@@ -281,7 +279,8 @@ function login(req: AuthRequest, res: Response): Promise<void> {
     const failLogin: LoginErrorHandler = (errorMessage, options) =>
       handleLoginError(req, res, finish, errorMessage, options);
 
-    if (!isLoginSessionEligible(getPrincipal(req))) {
+    const principal = getPrincipal(req);
+    if (!isLoginSessionEligible(principal)) {
       rejectUnauthenticated(req, res);
       finish();
       resolve();
@@ -299,7 +298,8 @@ function login(req: AuthRequest, res: Response): Promise<void> {
         req.session.rememberMe = rememberMe;
         applyRememberMe(req);
 
-        const proceed = (): Promise<void> => proceedWithLogin(req, res, finish, failLogin);
+        const proceed = (): Promise<void> =>
+          proceedWithLogin(req, principal, res, finish, failLogin);
         enforceLoginSessionLimit(req, res, finish, proceed, failLogin);
       },
       failLogin,

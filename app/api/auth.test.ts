@@ -1839,6 +1839,25 @@ describe('Auth Router', () => {
       );
     });
 
+    test('login should persist the principal captured before session regeneration', async () => {
+      const handler = getRouteHandler('post', '/login');
+      const res = createResponse();
+      const req: any = {
+        principal: { kind: 'basic', username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => {
+            req.principal = undefined;
+            done();
+          }),
+        },
+      };
+
+      await handler(req, res);
+
+      expect(req.session.passport).toEqual({ user: JSON.stringify({ username: 'john' }) });
+    });
+
     test('login should not create a session for an anonymous principal', async () => {
       const handler = getRouteHandler('post', '/login');
       const res = createResponse();
