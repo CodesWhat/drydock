@@ -40,6 +40,10 @@ interface PortainerStackSummary {
   EndpointId?: number;
   ProjectPath?: string;
   Env?: PortainerStackEnv[];
+  WorkflowID?: number;
+  GitConfig?: unknown;
+  AutoUpdate?: unknown;
+  CurrentDeploymentInfo?: unknown;
 }
 
 interface PortainerStackDetails extends PortainerStackSummary {
@@ -350,6 +354,78 @@ function extractTagVariable(image: string | undefined): string | undefined {
   return match?.[1];
 }
 
+function findComposeVariableReferences(
+  value: unknown,
+  variable: string,
+  currentPath: (string | number)[] = [],
+): (string | number)[][] {
+  if (typeof value === 'string') {
+    const references: (string | number)[][] = [];
+    const pattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?:[:+?-][^}]*)?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
+    for (const match of value.matchAll(pattern)) {
+      if (match[1] === variable || match[2] === variable) {
+        references.push(currentPath);
+      }
+    }
+    return references;
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, index) =>
+      findComposeVariableReferences(entry, variable, [...currentPath, index]),
+    );
+  }
+  if (!isPlainObject(value)) {
+    return [];
+  }
+  return Object.entries(value).flatMap(([key, entry]) =>
+    findComposeVariableReferences(entry, variable, [...currentPath, key]),
+  );
+}
+
+function validatePortainerEnvVariable(
+  compose: ComposeFile,
+  service: string,
+  serviceImage: string,
+  versionVar: string,
+): void {
+  if (extractTagVariable(serviceImage) !== versionVar) {
+    throw new Error(
+      `Portainer env variable ${versionVar} must be referenced only by the selected service image tag`,
+    );
+  }
+  const references = findComposeVariableReferences(compose, versionVar);
+  const selectedImagePath = ['services', service, 'image'];
+  if (
+    references.length !== 1 ||
+    references[0].length !== selectedImagePath.length ||
+    references[0].some((part, index) => part !== selectedImagePath[index])
+  ) {
+    throw new Error(
+      `Portainer env variable ${versionVar} must be referenced only by the selected service image tag`,
+    );
+  }
+}
+
+function isGitBackedStack(stack: PortainerStackSummary): boolean {
+  return (
+    (typeof stack.WorkflowID === 'number' && stack.WorkflowID > 0) ||
+    (stack.GitConfig !== undefined && stack.GitConfig !== null) ||
+    (stack.AutoUpdate !== undefined && stack.AutoUpdate !== null) ||
+    (stack.CurrentDeploymentInfo !== undefined && stack.CurrentDeploymentInfo !== null)
+  );
+}
+
+function isStackBoundToContainer(
+  stack: PortainerStackSummary,
+  composeProject: string,
+  containerProjectPaths: Set<string>,
+): boolean {
+  const projectPath = normalizePath(stack.ProjectPath);
+  return (
+    stack.Name === composeProject && Boolean(projectPath && containerProjectPaths.has(projectPath))
+  );
+}
+
 function getTargetTag(container): string | undefined {
   const remoteValue = container.updateKind?.remoteValue;
   if (typeof remoteValue === 'string' && remoteValue.trim() !== '') {
@@ -635,45 +711,49 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     const endpointId = parseEndpointId(container.labels?.[ENDPOINT_ID_LABEL]);
     const configuredStackId = container.labels?.[STACK_ID_LABEL];
     const stacks = await this.getPortainerStacks();
-    let matchedStack: PortainerStackSummary | undefined;
-
-    if (configuredStackId) {
-      matchedStack = stacks.find((stack) => String(stack.Id) === configuredStackId);
-      if (!matchedStack) {
-        throw new Error(`Unable to find Portainer stack with id ${configuredStackId}`);
-      }
-      if (endpointId !== undefined && matchedStack.EndpointId !== endpointId) {
-        throw new Error(
-          `Portainer stack ${matchedStack.Id} does not belong to endpoint ${endpointId}`,
-        );
-      }
-    } else {
-      const containerProjectPaths = getComposeProjectPaths(container.labels);
-      const candidates = stacks.filter((stack) => {
-        if (endpointId !== undefined && stack.EndpointId !== endpointId) {
-          return false;
-        }
-        if (stack.Name !== composeProject) {
-          return false;
-        }
-        const projectPath = normalizePath(stack.ProjectPath);
-        return Boolean(projectPath && containerProjectPaths.has(projectPath));
-      });
-      if (candidates.length > 1) {
-        throw new Error(
-          `Unable to resolve an unambiguous Portainer stack for container ${container.name}`,
-        );
-      }
-      matchedStack = candidates[0];
+    const containerProjectPaths = getComposeProjectPaths(container.labels);
+    const candidates = stacks.filter(
+      (stack) =>
+        (endpointId === undefined || stack.EndpointId === endpointId) &&
+        isStackBoundToContainer(stack, composeProject, containerProjectPaths),
+    );
+    const explicitlySelected = configuredStackId
+      ? stacks.find((stack) => String(stack.Id) === configuredStackId)
+      : undefined;
+    if (
+      explicitlySelected &&
+      endpointId !== undefined &&
+      explicitlySelected.EndpointId !== endpointId
+    ) {
+      throw new Error(
+        `Portainer stack ${explicitlySelected.Id} does not belong to endpoint ${endpointId}`,
+      );
+    }
+    const matchedStack =
+      (configuredStackId && candidates.find((stack) => String(stack.Id) === configuredStackId)) ||
+      (candidates.length === 1 ? candidates[0] : undefined);
+    if (!configuredStackId && candidates.length > 1) {
+      throw new Error(
+        `Unable to resolve an unambiguous Portainer stack for container ${container.name}`,
+      );
     }
 
     if (!matchedStack) {
       throw new Error(`Unable to resolve Portainer stack for container ${container.name}`);
     }
 
-    const stack = await this.getPortainerStack(matchedStack.Id);
+    const stack = {
+      ...matchedStack,
+      ...(await this.getPortainerStack(matchedStack.Id)),
+    };
     if (endpointId !== undefined && stack.EndpointId !== endpointId) {
       throw new Error(`Portainer stack ${stack.Id} does not belong to endpoint ${endpointId}`);
+    }
+    if (!isStackBoundToContainer(stack, composeProject, containerProjectPaths)) {
+      throw new Error(`Unable to resolve Portainer stack for container ${container.name}`);
+    }
+    if (isGitBackedStack(stack)) {
+      throw new Error('Git-backed Portainer stacks cannot be updated through the file-stack API');
     }
 
     const stackFileContent = await this.getPortainerStackFile(stack.Id);
@@ -733,6 +813,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
             `Portainer env update for ${container.name} requires ${this.configuration.versionVarLabel} or a tag variable in the compose image`,
           );
         }
+        validatePortainerEnvVariable(compose, service, serviceImage, versionVar);
         if (!targetTag) {
           throw new Error(
             `Portainer env update for ${container.name} requires a tag update target`,
@@ -906,6 +987,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     }
 
     if (primaryError) {
+      let restorePutError: unknown;
       let restoreWaitError: unknown;
       try {
         await this.redeployPortainerStack(
@@ -913,26 +995,29 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
           resolved.stackFileContent,
           resolved.stack.Env || [],
         );
-      } catch {
-        // The convergence wait below determines whether restoration succeeded.
+      } catch (error: unknown) {
+        restorePutError = error;
       }
-      try {
-        await this.waitForPortainerRedeploy(
-          context.dockerApi,
-          container,
-          {
-            ...resolved,
-            targetImage: resolved.originalImage,
-            targetImageId: resolved.originalImageId,
-            prePutRunningReplicas: resolved.prePutRunningReplicas,
-          },
-          logContainer,
-        );
-      } catch (restoreError: unknown) {
-        restoreWaitError = restoreError;
+      if (!restorePutError) {
+        try {
+          await this.waitForPortainerRedeploy(
+            context.dockerApi,
+            container,
+            {
+              ...resolved,
+              targetImage: resolved.originalImage,
+              targetImageId: resolved.originalImageId,
+              prePutRunningReplicas: resolved.prePutRunningReplicas,
+            },
+            logContainer,
+          );
+        } catch (restoreError: unknown) {
+          restoreWaitError = restoreError;
+        }
       }
-      if (restoreWaitError) {
-        const restoreMessage = getErrorMessage(restoreWaitError);
+      const restoreError = restorePutError || restoreWaitError;
+      if (restoreError) {
+        const restoreMessage = getErrorMessage(restoreError);
         logContainer.warn(`Portainer stack restore failed: ${restoreMessage}`);
         throw new Error(
           `${getErrorMessage(primaryError)} (Portainer restore failed: ${restoreMessage})`,

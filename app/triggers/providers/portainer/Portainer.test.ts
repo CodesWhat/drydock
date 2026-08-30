@@ -361,6 +361,70 @@ test('resolvePortainerUpdate auto mode updates stack env when image tag uses a v
   expect(update.updatedEnv).toEqual([{ name: 'PIHOLE_TAG', value: '2026.07.2' }]);
 });
 
+test.each([
+  [
+    'a sibling service image',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n  other:\n    image: other/image:${PIHOLE_TAG}',
+  ],
+  [
+    'a non-image service value',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n    command:\n      - echo\n      - $PIHOLE_TAG\n    deploy:\n      replicas: 1',
+  ],
+  [
+    'a top-level value',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\nx-version: ${PIHOLE_TAG}\nx-other: ${OTHER}',
+  ],
+])(
+  'resolvePortainerUpdate env mode rejects a variable also referenced by %s',
+  async (_label, stackFile) => {
+    const trigger = makeTrigger();
+    vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
+      { Id: 12, Name: 'pihole', EndpointId: 1, ProjectPath: '/data/compose/12' },
+    ]);
+    vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({
+      Id: 12,
+      Name: 'pihole',
+      EndpointId: 1,
+      ProjectPath: '/data/compose/12',
+      Env: [{ name: 'PIHOLE_TAG', value: '2026.05.0' }],
+    });
+    vi.spyOn(trigger, 'getPortainerStackFile').mockResolvedValue(stackFile);
+
+    await expect(
+      trigger.resolvePortainerUpdate(makeContainer(), 'pihole/pihole:2026.07.2'),
+    ).rejects.toThrow('must be referenced only by the selected service image tag');
+  },
+);
+
+test('resolvePortainerUpdate env mode rejects a label variable that is not the selected image tag variable', async () => {
+  const trigger = makeTrigger();
+  vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
+    { Id: 12, Name: 'pihole', EndpointId: 1, ProjectPath: '/data/compose/12' },
+  ]);
+  vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({
+    Id: 12,
+    Name: 'pihole',
+    EndpointId: 1,
+    ProjectPath: '/data/compose/12',
+    Env: [{ name: 'PIHOLE_TAG', value: '2026.05.0' }],
+  });
+  vi.spyOn(trigger, 'getPortainerStackFile').mockResolvedValue(
+    'services:\n  pihole:\n    image: pihole/pihole:2026.05.0',
+  );
+  await expect(
+    trigger.resolvePortainerUpdate(
+      makeContainer({
+        labels: {
+          ...makeContainer().labels,
+          'dd.portainer.update-mode': 'env',
+          'dd.portainer.version-var': 'PIHOLE_TAG',
+        },
+      }),
+      'pihole/pihole:2026.07.2',
+    ),
+  ).rejects.toThrow('must be referenced only by the selected service image tag');
+});
+
 test('resolvePortainerUpdate auto mode patches stack file when image tag is hardcoded', async () => {
   const trigger = makeTrigger();
   vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
@@ -632,7 +696,7 @@ test('resolvePortainerStack never overwrites the stack endpoint', async () => {
   expect(resolved.stack.EndpointId).toBe(2);
 });
 
-test('resolvePortainerStack rejects explicit endpoint mismatch and missing stack', async () => {
+test('resolvePortainerStack rejects explicit endpoint mismatch and falls back from a missing stack id', async () => {
   const trigger = makeTrigger();
   vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
     { Id: 12, Name: 'pihole', EndpointId: 2, ProjectPath: '/data/compose/12' },
@@ -649,24 +713,105 @@ test('resolvePortainerStack rejects explicit endpoint mismatch and missing stack
       }),
     ),
   ).rejects.toThrow('does not belong to endpoint 1');
+  vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({
+    Id: 12,
+    Name: 'pihole',
+    EndpointId: 2,
+    ProjectPath: '/data/compose/12',
+  });
+  vi.spyOn(trigger, 'getPortainerStackFile').mockResolvedValue('services: {}');
   await expect(
     trigger.resolvePortainerStack(
       makeContainer({ labels: { ...baseLabels, 'dd.portainer.stack-id': '99' } }),
     ),
-  ).rejects.toThrow('Unable to find Portainer stack with id 99');
+  ).resolves.toMatchObject({ stack: { Id: 12 } });
 });
 
-test('resolvePortainerStack accepts an explicit stack without endpoint filtering', async () => {
+test('resolvePortainerStack uses an explicit stack id only after project and path binding', async () => {
   const trigger = makeTrigger();
-  vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([{ Id: 12, EndpointId: 2 }]);
-  vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({ Id: 12, EndpointId: 2 });
+  vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
+    { Id: 12, Name: 'pihole', EndpointId: 2, ProjectPath: '/data/compose/12' },
+  ]);
+  vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({
+    Id: 12,
+    Name: 'pihole',
+    EndpointId: 2,
+    ProjectPath: '/data/compose/12',
+  });
   vi.spyOn(trigger, 'getPortainerStackFile').mockResolvedValue('services: {}');
+  await expect(
+    trigger.resolvePortainerStack(
+      makeContainer({
+        labels: {
+          ...makeContainer().labels,
+          'dd.portainer.stack-id': '12',
+        },
+      }),
+    ),
+  ).resolves.toMatchObject({ stack: { Id: 12 } });
+});
+
+test.each([
+  ['project name', { Name: 'other', ProjectPath: '/data/compose/12' }],
+  ['project path', { Name: 'pihole', ProjectPath: '/data/compose/other' }],
+])('resolvePortainerStack rejects explicit stack ids without %s binding', async (_label, stack) => {
+  const trigger = makeTrigger();
+  vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([{ Id: 12, EndpointId: 1, ...stack }]);
   await expect(
     trigger.resolvePortainerStack(
       makeContainer({ labels: { ...makeContainer().labels, 'dd.portainer.stack-id': '12' } }),
     ),
+  ).rejects.toThrow('Unable to resolve Portainer stack');
+});
+
+test('resolvePortainerStack safely falls back to the sole bound stack when an explicit id is stale', async () => {
+  const trigger = makeTrigger();
+  vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
+    { Id: 12, Name: 'pihole', EndpointId: 1, ProjectPath: '/data/compose/12' },
+  ]);
+  vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({
+    Id: 12,
+    Name: 'pihole',
+    EndpointId: 1,
+    ProjectPath: '/data/compose/12',
+  });
+  vi.spyOn(trigger, 'getPortainerStackFile').mockResolvedValue('services: {}');
+  await expect(
+    trigger.resolvePortainerStack(
+      makeContainer({ labels: { ...makeContainer().labels, 'dd.portainer.stack-id': '99' } }),
+    ),
   ).resolves.toMatchObject({ stack: { Id: 12 } });
 });
+
+test.each([
+  ['WorkflowID', { WorkflowID: 42 }],
+  ['GitConfig', { GitConfig: {} }],
+  ['legacy AutoUpdate', { AutoUpdate: { RepositoryURL: 'https://git.example/stack.git' } }],
+  [
+    'current deployment source',
+    { CurrentDeploymentInfo: { RepositoryURL: 'https://git.example/stack.git' } },
+  ],
+])(
+  'resolvePortainerStack rejects Git-backed stacks marked by %s before fetching the stack file',
+  async (_label, marker) => {
+    const trigger = makeTrigger();
+    vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
+      { Id: 12, Name: 'pihole', EndpointId: 1, ProjectPath: '/data/compose/12' },
+    ]);
+    vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({
+      Id: 12,
+      Name: 'pihole',
+      EndpointId: 1,
+      ProjectPath: '/data/compose/12',
+      ...marker,
+    });
+    const stackFile = vi.spyOn(trigger, 'getPortainerStackFile');
+    await expect(trigger.resolvePortainerStack(makeContainer())).rejects.toThrow(
+      'Git-backed Portainer stacks cannot be updated',
+    );
+    expect(stackFile).not.toHaveBeenCalled();
+  },
+);
 
 test('resolvePortainerStack rejects endpoint mismatch returned by stack details', async () => {
   const trigger = makeTrigger();
@@ -681,6 +826,22 @@ test('resolvePortainerStack rejects endpoint mismatch returned by stack details'
   ).rejects.toThrow('does not belong to endpoint 1');
 });
 
+test('resolvePortainerStack rejects project binding changes returned by stack details', async () => {
+  const trigger = makeTrigger();
+  vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
+    { Id: 12, Name: 'pihole', EndpointId: 1, ProjectPath: '/data/compose/12' },
+  ]);
+  vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({
+    Id: 12,
+    Name: 'other',
+    EndpointId: 1,
+    ProjectPath: '/data/compose/12',
+  });
+  await expect(trigger.resolvePortainerStack(makeContainer())).rejects.toThrow(
+    'Unable to resolve Portainer stack',
+  );
+});
+
 test('resolvePortainerUpdate rejects unavailable env targets', async () => {
   const trigger = makeTrigger();
   vi.spyOn(trigger, 'getPortainerStacks').mockResolvedValue([
@@ -688,7 +849,7 @@ test('resolvePortainerUpdate rejects unavailable env targets', async () => {
   ]);
   vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({ Id: 12, EndpointId: 1, Env: [] });
   vi.spyOn(trigger, 'getPortainerStackFile').mockResolvedValue(
-    'services:\n  pihole:\n    image: pihole/pihole:1.0.0',
+    'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-1.0.0}',
   );
   const container = makeContainer({
     labels: {
@@ -1321,9 +1482,9 @@ test('performContainerUpdate waits for original convergence after an uncertain r
       makeContainer(),
       trigger.log,
     ),
-  ).rejects.toThrow('target PUT uncertain');
+  ).rejects.toThrow('target PUT uncertain (Portainer restore failed: restore PUT uncertain)');
   expect(redeploy).toHaveBeenCalledTimes(2);
-  expect(wait).toHaveBeenCalledTimes(2);
+  expect(wait).toHaveBeenCalledOnce();
 });
 
 test('performContainerUpdate aborts before Portainer PUT when the pulled image changes during the hook', async () => {

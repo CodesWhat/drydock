@@ -11,7 +11,7 @@ Portainer compatibility is intentionally narrow. The container must have non-emp
 
 The trigger will:
 
-- Resolve the Portainer stack from the container's Compose labels, or from `dd.portainer.stack-id`
+- Resolve the Portainer stack from the container's Compose labels, using `dd.portainer.stack-id` only to disambiguate matching stacks
 - Fetch the current Portainer stack file and stack env
 - Update either a stack env variable or the service image in the stack file
 - Ask Portainer to redeploy the stack using the locally pulled and scanned image
@@ -54,10 +54,10 @@ The env var keys for `ALLOWHTTP`, `UPDATEMODE`, `VERSIONVARLABEL`, `UPDATEMODELA
 
 `auto` is the default. Drydock inspects the service image in Portainer's stack file:
 
-- If the image tag is declared as an env variable such as `pihole/pihole:${PIHOLE_TAG:-2026.05.0}`, Drydock updates the Portainer stack env variable and leaves the compose file unchanged.
+- If the image tag is declared as an env variable such as `pihole/pihole:${PIHOLE_TAG:-2026.05.0}`, and that variable is referenced nowhere else in the Compose file, Drydock updates the Portainer stack env variable and leaves the compose file unchanged.
 - If the image tag is hardcoded such as `pihole/pihole:2026.05.0`, Drydock patches only the target service's `image` value in the Portainer stack file.
 
-`env` always updates a Portainer stack env variable. Set `dd.portainer.version-var` when the variable cannot be detected from the image tag.
+`env` updates a Portainer stack env variable only when the selected variable is referenced exclusively by the selected service's image tag. References in another service, another image, or any other Compose value fail closed. Set `dd.portainer.version-var` to name the variable when it is not detected, but the selected service image must still use that variable as its tag. Git-backed stacks, including stacks with GitOps metadata, aren't supported by the file-stack update path.
 
 `compose` always patches the service image in the Portainer stack file. The patch uses the same service-scoped, formatting-preserving compose mutation helper as the Docker Compose trigger.
 
