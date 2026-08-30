@@ -54,7 +54,12 @@ const DEFAULT_UPDATE_LIFECYCLE_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_UPDATE_POLICY_RETENTION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
-const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
+const CONTAINER_COLLECTION_INDICES = [
+  'data.id',
+  'data.watcher',
+  'data.status',
+  'data.updateAvailable',
+];
 const UNSAFE_QUERY_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 const CONTAINER_QUERY_CONTROL_KEYS = new Set(['excludeRollbackContainers']);
 const STABLE_UNDEFINED_SENTINEL = '__undefined__';
