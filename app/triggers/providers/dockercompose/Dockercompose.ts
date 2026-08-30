@@ -330,6 +330,8 @@ function resolveComposeInterpolation(
   );
 }
 
+const COMPOSE_ESCAPED_DOLLAR = '\u0000';
+
 function resolveComposeImageForContinuity(
   value: unknown,
   authoritativeResolvedImage?: unknown,
@@ -362,44 +364,6 @@ function composeImageRepositoryMatchesRuntime(
   return getImageRepositoryKey(runtimeImage) === getImageRepositoryKey(resolvedRepository);
 }
 
-function resolveComposeEnvironment(environment: Record<string, string>): Record<string, string> {
-  const resolved: Record<string, string> = {};
-  const resolving = new Set<string>();
-  const resolveValue = (name: string): string | undefined => {
-    if (Object.hasOwn(resolved, name)) {
-      return resolved[name];
-    }
-    const rawValue = environment[name];
-    if (rawValue === undefined || resolving.has(name)) {
-      return undefined;
-    }
-    resolving.add(name);
-    const value = rawValue.replace(
-      /\$\{([_a-zA-Z][_a-zA-Z0-9]*)(?:(:-|-)([^}]*))?\}/g,
-      (expression, variableName: string, operator: string | undefined, fallback: string) => {
-        const configuredValue = resolveValue(variableName);
-        if (configuredValue !== undefined && (operator !== ':-' || configuredValue !== '')) {
-          return configuredValue;
-        }
-        if (operator === ':-' || operator === '-') {
-          return fallback;
-        }
-        return expression;
-      },
-    );
-    resolving.delete(name);
-    if (value.includes('${')) {
-      return undefined;
-    }
-    resolved[name] = value;
-    return value;
-  };
-  for (const name of Object.keys(environment)) {
-    resolveValue(name);
-  }
-  return resolved;
-}
-
 function parseDoubleQuotedComposeEnvironmentValue(value: string): string | undefined {
   let decoded = '';
   for (let index = 0; index < value.length; index++) {
@@ -414,8 +378,11 @@ function parseDoubleQuotedComposeEnvironmentValue(value: string): string | undef
       t: '\t',
       '\\': '\\',
       '"': '"',
-      $: '$',
     };
+    if (escaped === '$') {
+      decoded += COMPOSE_ESCAPED_DOLLAR;
+      continue;
+    }
     if (!(escaped in replacements)) {
       return undefined;
     }
@@ -425,13 +392,18 @@ function parseDoubleQuotedComposeEnvironmentValue(value: string): string | undef
 }
 
 function parseComposeEnvironmentFile(contents: string): Record<string, string> {
-  const rawEnvironment: Record<string, string> = {};
+  const resolvedEnvironment: Record<string, string> = {};
+  const invalidEnvironmentKeys = new Set<string>();
   const lines = contents.split(/\r?\n/);
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const assignment = lines[lineIndex].match(
       /^\s*(?:export\s+)?([_a-zA-Z][_a-zA-Z0-9]*)\s*(?:=|:)\s*(.*)$/,
     );
     if (!assignment) {
+      continue;
+    }
+    const variableName = assignment[1];
+    if (invalidEnvironmentKeys.has(variableName)) {
       continue;
     }
     const value = assignment[2].trimStart();
@@ -445,9 +417,11 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
       }
       const remainder = quotedValue.slice(closingIndex + 1).trim();
       if (closingIndex < 0 || (remainder !== '' && !remainder.startsWith('#'))) {
+        invalidEnvironmentKeys.add(variableName);
+        delete resolvedEnvironment[variableName];
         continue;
       }
-      rawEnvironment[assignment[1]] = quotedValue.slice(0, closingIndex).replace(/\\'/g, "'");
+      resolvedEnvironment[variableName] = quotedValue.slice(0, closingIndex).replace(/\\'/g, "'");
       continue;
     }
     if (value.startsWith('"')) {
@@ -459,27 +433,40 @@ function parseComposeEnvironmentFile(contents: string): Record<string, string> {
         }
       }
       if (closingIndex < 0 || !/^\s*(?:#.*)?$/.test(value.slice(closingIndex + 1))) {
+        invalidEnvironmentKeys.add(variableName);
+        delete resolvedEnvironment[variableName];
         continue;
       }
       const decoded = parseDoubleQuotedComposeEnvironmentValue(value.slice(1, closingIndex));
-      if (decoded === undefined) {
+      if (decoded === undefined || /(?<!\\)\$(?!\{)/.test(decoded)) {
+        invalidEnvironmentKeys.add(variableName);
+        delete resolvedEnvironment[variableName];
         continue;
       }
-      rawEnvironment[assignment[1]] = decoded;
+      resolvedEnvironment[variableName] = String(
+        resolveComposeInterpolation(decoded, resolvedEnvironment),
+      ).replaceAll(COMPOSE_ESCAPED_DOLLAR, '$');
       continue;
     }
     if (/["'`]|\$\(/.test(value)) {
+      invalidEnvironmentKeys.add(variableName);
+      delete resolvedEnvironment[variableName];
       continue;
     }
     const commentIndex = value.search(/\s#/);
-    rawEnvironment[assignment[1]] = (
-      commentIndex < 0 ? value : value.slice(0, commentIndex)
-    ).trimEnd();
+    const unquotedValue = (commentIndex < 0 ? value : value.slice(0, commentIndex))
+      .trimEnd()
+      .replace(/\\\$/g, COMPOSE_ESCAPED_DOLLAR);
+    if (/\$(?!\{)/.test(unquotedValue)) {
+      invalidEnvironmentKeys.add(variableName);
+      delete resolvedEnvironment[variableName];
+      continue;
+    }
+    resolvedEnvironment[variableName] = String(
+      resolveComposeInterpolation(unquotedValue, resolvedEnvironment),
+    ).replaceAll(COMPOSE_ESCAPED_DOLLAR, '$');
   }
-  const supportedEnvironment = Object.fromEntries(
-    Object.entries(rawEnvironment).filter(([, value]) => !/[`]|(?<!\\)\$(?!\{)/.test(value)),
-  );
-  return resolveComposeEnvironment(supportedEnvironment);
+  return resolvedEnvironment;
 }
 
 function getServiceKey(compose, container, currentImage) {

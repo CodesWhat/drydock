@@ -2021,6 +2021,10 @@ class Docker<
           }
           return result;
         } catch (error: unknown) {
+          if (selfUpdate && error instanceof RetainSelfUpdateLifecycleError) {
+            exclusiveUpdateOperationId = error.operationId;
+            options?.onSelfUpdateOperationId?.(error.operationId, true);
+          }
           const operation = requestedOperationId
             ? updateOperationStore.getOperationById(requestedOperationId)
             : undefined;

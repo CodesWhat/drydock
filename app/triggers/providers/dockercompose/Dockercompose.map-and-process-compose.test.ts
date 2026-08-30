@@ -7,6 +7,7 @@ import {
   releaseRetainedSelfUpdateLifecycle,
   withContainerUpdateLocks,
 } from '../../../updates/update-locks.js';
+import { RetainSelfUpdateLifecycleError } from '../docker/SelfUpdateTransitionShared.js';
 import Dockercompose from './Dockercompose.js';
 import {
   makeCompose,
@@ -635,7 +636,7 @@ describe('Dockercompose Trigger', () => {
 
     const result = await trigger.getComposeResolvedImages(
       ['/opt/drydock/test/stack.yml'],
-      makeCompose({ nginx: { image: '${IMAGE}' } }),
+      makeCompose({ nginx: { image: '${IMAGE}' }, bare: { image: '${BARE}' } }),
     );
 
     expect(result).toEqual(new Map());
@@ -682,6 +683,75 @@ describe('Dockercompose Trigger', () => {
         ['escaped', 'ghcr.io/acme/app:1.2\n'],
       ]),
     );
+  });
+
+  test('getComposeResolvedImages should preserve single-quoted literals and resolve values at assignment time', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(
+      Buffer.from(
+        [
+          'HOST=ghcr.io',
+          "SINGLE='${HOST}/literal:1'",
+          'DOUBLE="${HOST}/double:1"',
+          'UNQUOTED=${HOST}/unquoted:1',
+          'ESCAPED="\\${HOST}/escaped:1"',
+          '',
+        ].join('\n'),
+      ),
+    );
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({
+        single: { image: '${SINGLE}' },
+        double: { image: '${DOUBLE}' },
+        unquoted: { image: '${UNQUOTED}' },
+        escaped: { image: '${ESCAPED}' },
+      }),
+    );
+
+    expect(result).toEqual(
+      new Map([
+        ['double', 'ghcr.io/double:1'],
+        ['unquoted', 'ghcr.io/unquoted:1'],
+      ]),
+    );
+  });
+
+  test('getComposeResolvedImages should resolve project values only from earlier assignments', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(
+      Buffer.from('IMAGE=${HOST}/before-host:1\nHOST=ghcr.io\n'),
+    );
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ before: { image: '${IMAGE}' } }),
+    );
+
+    expect(result).toEqual(new Map());
+  });
+
+  test('getComposeResolvedImages should invalidate authority after an unsupported duplicate assignment', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(
+      Buffer.from('IMAGE=nginx:1\nIMAGE=$(hostname)\nIMAGE=postgres:16\n'),
+    );
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: { image: '${IMAGE}' } }),
+    );
+
+    expect(result).toEqual(new Map());
+  });
+
+  test('getComposeResolvedImages should honor the last supported duplicate assignment', async () => {
+    vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from('IMAGE=nginx:1\nIMAGE=postgres:16\n'));
+
+    const result = await trigger.getComposeResolvedImages(
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ postgres: { image: '${IMAGE}' } }),
+    );
+
+    expect(result).toEqual(new Map([['postgres', 'postgres:16']]));
   });
 
   test('getComposeResolvedImages should apply default interpolation for unset and empty values', async () => {
@@ -1424,6 +1494,40 @@ describe('Dockercompose Trigger', () => {
     });
 
     releaseRetainedSelfUpdateLifecycle('self-success');
+    await expect(queued).resolves.toBe('released');
+  });
+
+  test('processComposeFile should retain exclusive lifecycle when self handoff throws directly', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.backup = false;
+    const container = makeContainer({
+      name: 'drydock',
+      imageName: 'codeswhat/drydock',
+      labels: { 'com.docker.compose.service': 'drydock' },
+    });
+    vi.spyOn(trigger, 'classifySelfUpdate').mockResolvedValue('current');
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ drydock: { image: 'codeswhat/drydock:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'maybeApplyComposeFileMutations').mockResolvedValue([]);
+    trigger.updateLifecycleExecutor = {
+      run: vi
+        .fn()
+        .mockRejectedValue(
+          new RetainSelfUpdateLifecycleError('self-direct-retained', 'handoff callback failed'),
+        ),
+    } as any;
+
+    const queued = withContainerUpdateLocks([], async () => 'released');
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('handoff callback failed');
+    expect(getUpdateLockSnapshot().lifecycle).toMatchObject({
+      retainedExclusive: true,
+      retainedOperationId: 'self-direct-retained',
+    });
+
+    releaseRetainedSelfUpdateLifecycle('self-direct-retained');
     await expect(queued).resolves.toBe('released');
   });
 
