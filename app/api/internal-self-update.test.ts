@@ -31,6 +31,7 @@ describe('internal-self-update', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMarkOperationTerminal.mockImplementation((id, patch) => ({ id, ...patch }));
   });
 
   function createActiveSelfUpdateOp(overrides: Record<string, unknown> = {}) {
@@ -114,6 +115,58 @@ describe('internal-self-update', () => {
     });
     expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(202);
+  });
+
+  test('releases surviving infrastructure ownership after success is durably finalized', () => {
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'surviving-process' }),
+    );
+    const handler = createFinalizeSelfUpdateHandler();
+    const res = createMockResponse();
+
+    handler(
+      createFinalizeRequest({
+        body: { operationId: 'op-123', status: 'succeeded', phase: 'succeeded' },
+      }),
+      res,
+    );
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-123', {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    expect(mockReleaseRetainedSelfUpdateLifecycle).toHaveBeenCalledWith('op-123');
+    expect(res.status).toHaveBeenCalledWith(202);
+  });
+
+  test('keeps exiting self ownership retained after successful finalize', () => {
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'exiting-process' }),
+    );
+    const handler = createFinalizeSelfUpdateHandler();
+
+    handler(
+      createFinalizeRequest({ body: { operationId: 'op-123', status: 'succeeded' } }),
+      createMockResponse(),
+    );
+
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
+  });
+
+  test('does not release surviving ownership when terminal state was not persisted', () => {
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ helperLifecycleOwner: 'surviving-process' }),
+    );
+    mockMarkOperationTerminal.mockReturnValueOnce(undefined);
+    const res = createMockResponse();
+
+    createFinalizeSelfUpdateHandler()(
+      createFinalizeRequest({ body: { operationId: 'op-123', status: 'succeeded' } }),
+      res,
+    );
+
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
   });
 
   test('releases a matching lease when rollback arrives after the operation is already terminal', () => {

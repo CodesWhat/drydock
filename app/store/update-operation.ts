@@ -81,6 +81,7 @@ interface UpdateOperationBase {
    */
   container?: Container;
   finalizeSecretHash?: string;
+  helperLifecycleOwner?: 'exiting-process' | 'surviving-process';
   [key: string]: unknown;
 }
 

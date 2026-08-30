@@ -1,3 +1,4 @@
+import { releaseFinalizedHelperLifecycle } from '../../../api/internal-self-update.js';
 import * as registryStore from '../../../registry';
 import { releaseRetainedSelfUpdateLifecycle } from '../../../updates/update-locks.js';
 import {
@@ -1058,6 +1059,21 @@ describe('self-update lifecycle exclusivity', () => {
 
       expect(run).toHaveBeenCalledOnce();
       expect(run).toHaveBeenCalledWith(expect.objectContaining({ name: 'drydock' }), undefined);
+      releaseFinalizedHelperLifecycle(
+        { helperLifecycleOwner: 'exiting-process' },
+        'succeeded',
+        'self-retained-op',
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(run).toHaveBeenCalledOnce();
+
+      releaseFinalizedHelperLifecycle(
+        { helperLifecycleOwner: 'exiting-process' },
+        'rolled-back',
+        'self-retained-op',
+      );
+      await queuedRegular;
+      expect(run).toHaveBeenCalledTimes(2);
     } finally {
       releaseRetainedSelfUpdateLifecycle('self-retained-op');
       await queuedRegular;
@@ -1122,7 +1138,11 @@ describe('self-update lifecycle exclusivity', () => {
       await new Promise<void>((resolve) => setImmediate(resolve));
 
       expect(regularStarted).toBe(false);
-      releaseRetainedSelfUpdateLifecycle('infrastructure-retained-op');
+      releaseFinalizedHelperLifecycle(
+        { helperLifecycleOwner: 'surviving-process' },
+        'succeeded',
+        'infrastructure-retained-op',
+      );
       await regular;
       expect(regularStarted).toBe(true);
     } finally {

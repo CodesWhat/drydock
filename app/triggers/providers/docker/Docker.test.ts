@@ -4712,6 +4712,11 @@ describe('extracted lifecycle delegation', () => {
         },
       });
       const res = createMockResponse();
+      mockMarkOperationTerminal.mockReturnValueOnce({
+        id: 'op-self-1',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
 
       handler(req, res);
 

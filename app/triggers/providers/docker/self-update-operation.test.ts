@@ -49,6 +49,7 @@ function createArgs(
       },
     },
     triggerName: 'docker.test',
+    isCurrentProcess: true,
     runtimeContext: undefined,
     now: () => '2026-04-11T12:00:00.000Z',
     createOperationId: () => 'generated-operation-id',
@@ -101,12 +102,23 @@ describe('prepareSelfUpdateOperation', () => {
         fromVersion: '1.0.0',
         toVersion: '2.0.0',
         targetImage: 'ghcr.io/acme/drydock:2.0.0',
+        helperLifecycleOwner: 'exiting-process',
         completedAt: undefined,
         lastError: undefined,
         finalizeSecretHash: 'test-hash',
       }),
     );
     expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('persists surviving-process ownership for infrastructure helper handoffs', () => {
+    mockInsertOperation.mockReturnValue({ id: 'generated-operation-id' });
+
+    prepareSelfUpdateOperation(createArgs({ isCurrentProcess: false }));
+
+    expect(mockInsertOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ helperLifecycleOwner: 'surviving-process' }),
+    );
   });
 
   test('reuses a requested in-progress operation id and upgrades it into an active self-update operation', () => {

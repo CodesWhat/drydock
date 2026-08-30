@@ -143,37 +143,33 @@ function validateFinalizeRequestBody(
   };
 }
 
-function applyFinalizeTerminalPatch(body: FinalizeSelfUpdateRequest): void {
+function applyFinalizeTerminalPatch(body: FinalizeSelfUpdateRequest) {
   const lastErrorPatch = body.lastError ? { lastError: body.lastError } : {};
   switch (body.status) {
     case 'succeeded':
-      updateOperationStore.markOperationTerminal(body.operationId, {
+      return updateOperationStore.markOperationTerminal(body.operationId, {
         status: 'succeeded',
         ...(body.phase ? { phase: body.phase as SucceededContainerUpdateOperationPhase } : {}),
         ...lastErrorPatch,
       });
-      return;
     case 'rolled-back':
-      updateOperationStore.markOperationTerminal(body.operationId, {
+      return updateOperationStore.markOperationTerminal(body.operationId, {
         status: 'rolled-back',
         ...(body.phase ? { phase: body.phase as RolledBackContainerUpdateOperationPhase } : {}),
         ...lastErrorPatch,
       });
-      return;
     case 'failed':
-      updateOperationStore.markOperationTerminal(body.operationId, {
+      return updateOperationStore.markOperationTerminal(body.operationId, {
         status: 'failed',
         ...(body.phase ? { phase: body.phase as FailedContainerUpdateOperationPhase } : {}),
         ...lastErrorPatch,
       });
-      return;
     case 'expired':
-      updateOperationStore.markOperationTerminal(body.operationId, {
+      return updateOperationStore.markOperationTerminal(body.operationId, {
         status: 'expired',
         ...(body.phase ? { phase: body.phase as ExpiredContainerUpdateOperationPhase } : {}),
         ...lastErrorPatch,
       });
-      return;
   }
 }
 
@@ -198,6 +194,16 @@ function isAlreadyTerminalOperation(operation: { status: string }): boolean {
     operation.status === 'failed' ||
     operation.status === 'expired'
   );
+}
+
+export function releaseFinalizedHelperLifecycle(
+  operation: { helperLifecycleOwner?: unknown },
+  status: string,
+  operationId: string,
+): void {
+  if (status === 'rolled-back' || operation.helperLifecycleOwner === 'surviving-process') {
+    releaseRetainedSelfUpdateLifecycle(operationId);
+  }
 }
 
 export function createFinalizeSelfUpdateHandler() {
@@ -250,9 +256,7 @@ export function createFinalizeSelfUpdateHandler() {
 
     if (isAlreadyTerminalOperation(operation)) {
       operationFinalizeSecrets.delete(body.operationId);
-      if (body.status === 'rolled-back') {
-        releaseRetainedSelfUpdateLifecycle(body.operationId);
-      }
+      releaseFinalizedHelperLifecycle(operation, body.status, body.operationId);
       res.status(202).json({
         status: 'ignored',
         operationId: body.operationId,
@@ -261,10 +265,12 @@ export function createFinalizeSelfUpdateHandler() {
       return;
     }
 
-    applyFinalizeTerminalPatch(body);
-    if (body.status === 'rolled-back') {
-      releaseRetainedSelfUpdateLifecycle(body.operationId);
+    const finalizedOperation = applyFinalizeTerminalPatch(body);
+    if (!finalizedOperation) {
+      sendErrorResponse(res, 409, 'Update operation could not be finalized');
+      return;
     }
+    releaseFinalizedHelperLifecycle(operation, body.status, body.operationId);
     operationFinalizeSecrets.delete(body.operationId);
 
     res.status(202).json({

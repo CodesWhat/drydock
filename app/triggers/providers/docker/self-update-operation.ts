@@ -35,6 +35,7 @@ export interface PrepareSelfUpdateOperationArgs {
   runtimeContext?: unknown;
   now?: () => string;
   createOperationId?: () => string;
+  isCurrentProcess: boolean;
 }
 
 function normalizeContainerName(name: unknown): string | undefined {
@@ -66,6 +67,7 @@ export function prepareSelfUpdateOperation(args: PrepareSelfUpdateOperationArgs)
     fromVersion,
     toVersion,
     targetImage: args.context.newImage,
+    helperLifecycleOwner: args.isCurrentProcess ? 'exiting-process' : 'surviving-process',
     status: 'in-progress' as const,
     phase: 'prepare' as const,
   };

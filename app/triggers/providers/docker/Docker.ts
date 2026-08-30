@@ -1565,6 +1565,7 @@ class Docker<
       context,
       triggerName: this.getId(),
       runtimeContext,
+      isCurrentProcess: this.isSelfUpdate(container),
     });
   }
 
