@@ -1815,7 +1815,7 @@ class Trigger<
 
     const category = this.getCategory();
 
-    // Update-action triggers (docker/dockercompose) route auto-dispatch
+    // Update-action triggers (docker/dockercompose/portainer) route auto-dispatch
     // eligibility entirely through the action-policy resolver's hybrid
     // specificity walk (spec-6.0.1-action-policy.md) instead of the plain
     // include/exclude check below. This is a deliberate REPLACEMENT, not an

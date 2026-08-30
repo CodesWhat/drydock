@@ -282,7 +282,7 @@ describe('Preview Router', () => {
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
         code: 'container-runtime-not-found',
-        message: 'Container was not found by the configured Docker watcher',
+        message: 'Container was not found by the configured update provider',
       });
     });
 

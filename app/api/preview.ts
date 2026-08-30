@@ -70,7 +70,7 @@ async function previewContainer(req: Request, res: Response) {
       });
       sendPreviewError(res, 404, {
         code: 'container-runtime-not-found',
-        message: 'Container was not found by the configured Docker watcher',
+        message: 'Container was not found by the configured update provider',
       });
       return;
     }

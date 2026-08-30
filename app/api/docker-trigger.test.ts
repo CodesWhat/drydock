@@ -136,6 +136,15 @@ describe('docker-trigger helper', () => {
         },
       }),
     ).toBe(false);
+    expect(
+      isTriggerCompatibleWithContainer(trigger, {
+        id: 'c1',
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': ' ',
+        },
+      }),
+    ).toBe(false);
   });
 
   test('only accepts tag candidates for portainer triggers', () => {

@@ -1,4 +1,3 @@
-import { expect, test, vi } from 'vitest';
 import DockerBase from '../docker/Docker.js';
 import Portainer, {
   testable_extractTagVariable,
