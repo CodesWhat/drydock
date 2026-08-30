@@ -1,4 +1,5 @@
 import * as registryStore from '../../../registry';
+import { releaseRetainedSelfUpdateLifecycle } from '../../../updates/update-locks.js';
 import {
   configurationValid,
   createMockLog,
@@ -15,12 +16,39 @@ const { mockGetRollbackCounter, mockSyncComposeFileTag } = getDockerTestMocks();
 // --- Self-update ---
 
 describe('isSelfUpdate', () => {
+  const originalResolveSelfContainerIdentifier =
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier;
+
+  beforeEach(() => {
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier = () => 'self-container-id';
+  });
+
+  afterEach(() => {
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier =
+      originalResolveSelfContainerIdentifier;
+  });
+
   test('should return true for drydock image', () => {
-    expect(docker.isSelfUpdate({ image: { name: 'drydock' } })).toBe(true);
+    expect(docker.isSelfUpdate({ id: 'self-container-id', image: { name: 'drydock' } })).toBe(true);
   });
 
   test('should return true for namespaced drydock image', () => {
-    expect(docker.isSelfUpdate({ image: { name: 'codeswhat/drydock' } })).toBe(true);
+    expect(
+      docker.isSelfUpdate({
+        id: 'self-container-id',
+        image: { name: 'codeswhat/drydock' },
+      }),
+    ).toBe(true);
+  });
+
+  test('should return false for a peer running a drydock image', () => {
+    expect(
+      docker.isSelfUpdate({
+        id: 'peer-container-id',
+        name: 'drydock-peer',
+        image: { name: 'codeswhat/drydock' },
+      }),
+    ).toBe(false);
   });
 
   test('should return false for non-drydock image', () => {
@@ -932,6 +960,18 @@ describe('performContainerUpdate compose file sync', () => {
 });
 
 describe('self-update lifecycle exclusivity', () => {
+  const originalResolveSelfContainerIdentifier =
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier;
+
+  beforeEach(() => {
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier = () => '123456789';
+  });
+
+  afterEach(() => {
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentifier =
+      originalResolveSelfContainerIdentifier;
+  });
+
   test('waits for active regular work and releases queued work after a dry-run', async () => {
     const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
     const order: string[] = [];
@@ -995,6 +1035,7 @@ describe('self-update lifecycle exclusivity', () => {
     const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
     const run = vi.fn().mockResolvedValue({ updated: true, operationId: 'self-retained-op' });
     docker.updateLifecycleExecutor = { run } as any;
+    let queuedRegular: Promise<unknown> | undefined;
 
     try {
       await docker.runContainerUpdateLifecycle(
@@ -1003,7 +1044,7 @@ describe('self-update lifecycle exclusivity', () => {
           image: { name: 'drydock' },
         }),
       );
-      void docker.runContainerUpdateLifecycle(
+      queuedRegular = docker.runContainerUpdateLifecycle(
         createTriggerContainer({ name: 'queued-after-self' }),
       );
       await new Promise<void>((resolve) => {
@@ -1012,6 +1053,101 @@ describe('self-update lifecycle exclusivity', () => {
 
       expect(run).toHaveBeenCalledOnce();
       expect(run).toHaveBeenCalledWith(expect.objectContaining({ name: 'drydock' }), undefined);
+    } finally {
+      releaseRetainedSelfUpdateLifecycle('self-retained-op');
+      await queuedRegular;
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('does not retain exclusivity when updating a peer Drydock container', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn(async (container) =>
+      container.name === 'drydock-peer'
+        ? { updated: true, operationId: 'peer-drydock-op' }
+        : undefined,
+    );
+    docker.updateLifecycleExecutor = { run } as any;
+    let regular: Promise<unknown> | undefined;
+
+    try {
+      await docker.runContainerUpdateLifecycle(
+        createTriggerContainer({
+          id: 'peer-container-id',
+          name: 'drydock-peer',
+          image: { name: 'codeswhat/drydock' },
+        }),
+      );
+      regular = docker.runContainerUpdateLifecycle(
+        createTriggerContainer({ name: 'regular-after-peer' }),
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(run).toHaveBeenCalledTimes(2);
+    } finally {
+      releaseRetainedSelfUpdateLifecycle('peer-drydock-op');
+      await regular;
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('retains infrastructure helper exclusivity until its finalize callback releases it', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    let regularStarted = false;
+    const run = vi.fn(async (container) => {
+      if (container.labels?.['dd.update.mode'] === 'infrastructure') {
+        return { updated: true, operationId: 'infrastructure-retained-op' };
+      }
+      regularStarted = true;
+      return undefined;
+    });
+    docker.updateLifecycleExecutor = { run } as any;
+    let regular: Promise<unknown> | undefined;
+
+    try {
+      await docker.runContainerUpdateLifecycle(
+        createTriggerContainer({
+          name: 'socket-proxy',
+          labels: { 'dd.update.mode': 'infrastructure' },
+        }),
+      );
+      regular = docker.runContainerUpdateLifecycle(
+        createTriggerContainer({ name: 'regular-after-infrastructure' }),
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+
+      expect(regularStarted).toBe(false);
+      releaseRetainedSelfUpdateLifecycle('infrastructure-retained-op');
+      await regular;
+      expect(regularStarted).toBe(true);
+    } finally {
+      releaseRetainedSelfUpdateLifecycle('infrastructure-retained-op');
+      await regular;
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('releases infrastructure exclusivity immediately when helper handoff is skipped', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn(async (container) =>
+      container.labels?.['dd.update.mode'] === 'infrastructure'
+        ? { updated: false, operationId: 'infrastructure-skipped-op' }
+        : undefined,
+    );
+    docker.updateLifecycleExecutor = { run } as any;
+
+    try {
+      await docker.runContainerUpdateLifecycle(
+        createTriggerContainer({
+          name: 'socket-proxy',
+          labels: { 'dd.update.mode': 'infrastructure' },
+        }),
+      );
+      await docker.runContainerUpdateLifecycle(
+        createTriggerContainer({ name: 'regular-after-infrastructure-skip' }),
+      );
+
+      expect(run).toHaveBeenCalledTimes(2);
     } finally {
       docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
     }

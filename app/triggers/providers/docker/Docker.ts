@@ -1696,9 +1696,8 @@ class Docker<
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    const selfUpdate = this.isSelfUpdate(container);
-    const bypassGlobalCap = selfUpdate || this.isInfrastructureUpdate(container);
-    let selfUpdateOperationId: string | undefined;
+    const exclusiveUpdate = this.isSelfUpdate(container) || this.isInfrastructureUpdate(container);
+    let exclusiveUpdateOperationId: string | undefined;
     return withContainerUpdateLocks(
       this.getUpdateLockKeys(container),
       async () => {
@@ -1710,7 +1709,7 @@ class Docker<
           );
           let result: unknown = lifecycleResult;
           if (isSelfUpdateLifecycleResult(lifecycleResult)) {
-            selfUpdateOperationId = lifecycleResult.operationId;
+            exclusiveUpdateOperationId = lifecycleResult.operationId;
             result = lifecycleResult.updated;
           }
           if (result !== false && requestedOperationId) {
@@ -1805,11 +1804,11 @@ class Docker<
         }
       },
       {
-        bypassGlobalCap,
-        exclusive: selfUpdate,
+        bypassGlobalCap: exclusiveUpdate,
+        exclusive: exclusiveUpdate,
         retainExclusiveOnResult: (result) =>
-          result === true && selfUpdateOperationId
-            ? { operationId: selfUpdateOperationId }
+          result === true && exclusiveUpdateOperationId
+            ? { operationId: exclusiveUpdateOperationId }
             : undefined,
       },
     );
