@@ -55,6 +55,7 @@ import { getRequestedOperationId } from '../triggers/providers/docker/update-run
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
+import { ddRegistryLookupImage, ddRegistryLookupUrl } from '../watchers/providers/docker/label.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
@@ -817,6 +818,7 @@ export class AgentClient {
       this.controllerDockerTransportWatchers.has(container.watcher) &&
       container.image?.registry?.url
     ) {
+      container = this.applyRegistryLookupLabels(container);
       container = normalizeContainer(container);
     }
     container = this.preserveControllerDockerEnrichment(container);
@@ -868,6 +870,38 @@ export class AgentClient {
     }
 
     return containerReport;
+  }
+
+  /**
+   * `normalizeContainer()` (called just after this, for controller-Docker-transport
+   * agents only) picks a registry provider by reading `image.registry.lookupImage` —
+   * it never derives that field from labels itself. The local-watcher pipeline
+   * (`container-init.ts`) does that translation for containers the controller watches
+   * directly, but nothing in the agent path ever ran it, so `dd.registry.lookup.image`
+   * (and its legacy alias `dd.registry.lookup.url`) silently did nothing for any
+   * agent-reported container. Mirrors `container-init.ts`'s own label precedence
+   * (`dd.registry.lookup.image` before the legacy `dd.registry.lookup.url` alias) and
+   * never overwrites a value the agent already reported.
+   */
+  private applyRegistryLookupLabels(container: Container): Container {
+    if (container.image.registry.lookupImage || container.image.registry.lookupUrl) {
+      return container;
+    }
+    const labels = container.labels ?? {};
+    const lookupImage = labels[ddRegistryLookupImage] || labels[ddRegistryLookupUrl];
+    if (!lookupImage) {
+      return container;
+    }
+    return {
+      ...container,
+      image: {
+        ...container.image,
+        registry: {
+          ...container.image.registry,
+          lookupImage,
+        },
+      },
+    };
   }
 
   private preserveControllerDockerEnrichment(container: Container): Container {
