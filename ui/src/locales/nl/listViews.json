@@ -3,6 +3,7 @@
     "loadingAuditLog": "Auditlogboek laden...",
     "loadError": "Kan het auditlogboek niet laden",
     "filterPlaceholder": "Filter op doel of gebeurtenis...",
+    "onThisPage": "op deze pagina",
     "containerFilterPlaceholder": "Containernaam...",
     "allEvents": "Alle evenementen",
     "eventsSelected": "{count} gebeurtenissen geselecteerd",

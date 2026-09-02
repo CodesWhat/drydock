@@ -215,6 +215,22 @@ async function fetchServers() {
     }
 
     servers.value = entries;
+
+    // fetchServers rebuilds every entry, so the object the detail panel is
+    // holding is orphaned the moment this assignment lands. The panel has its
+    // own Refresh button, which means the row behind it would update while the
+    // panel kept the snapshot taken when it was clicked. Same re-lookup
+    // AgentsView and ContainersView already do.
+    if (selectedServer.value) {
+      const refreshedSelectedServer = entries.find(
+        (server) => server.id === selectedServer.value?.id,
+      );
+      if (refreshedSelectedServer) {
+        selectedServer.value = refreshedSelectedServer;
+      } else {
+        closeDetail();
+      }
+    }
   } catch (e: unknown) {
     error.value = errorMessage(e, t('serversView.loadError'));
   } finally {

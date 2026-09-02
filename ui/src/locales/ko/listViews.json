@@ -3,6 +3,7 @@
     "loadingAuditLog": "감사 로그 불러오는 중...",
     "loadError": "감사 로그를 불러오지 못했습니다",
     "filterPlaceholder": "대상 또는 이벤트로 필터...",
+    "onThisPage": "이 페이지에서",
     "containerFilterPlaceholder": "컨테이너 이름...",
     "allEvents": "전체 이벤트",
     "eventsSelected": "{count}개 이벤트 선택됨",
