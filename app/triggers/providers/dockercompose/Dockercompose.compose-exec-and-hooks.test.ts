@@ -2,6 +2,7 @@ import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getState } from '../../../registry/index.js';
+import * as updateOperationStore from '../../../store/update-operation.js';
 import { getCreatedContainerCandidate } from '../docker/created-container-candidate.js';
 import Dockercompose from './Dockercompose.js';
 import {
@@ -110,6 +111,9 @@ describe('Dockercompose Trigger', () => {
       watchMock: watch,
       getStateMock: getState,
     }));
+    vi.spyOn(trigger.getSecurityGate().securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: false,
+    } as any);
   });
 
   // compose command execution
@@ -145,6 +149,787 @@ describe('Dockercompose Trigger', () => {
     expect(removeContainerSpy).toHaveBeenCalledTimes(1);
     expect(createContainerSpy).toHaveBeenCalledTimes(1);
     expect(startContainerSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('updateContainerWithCompose should pin the image identity before the post-pull gate', async () => {
+    trigger.configuration.dryrun = false;
+    const targetReference = 'nginx:9.9.9';
+    const localImageId = 'sha256:pulled-image';
+    const pinnedIdentity = 'nginx:9.9.9@sha256:abcdef123456';
+    const retaggedIdentity = 'sha256:retagged-image';
+    const events: string[] = [];
+    let retagged = false;
+
+    mockDockerApi.getImage.mockImplementation((imageRef) => ({
+      inspect: vi.fn().mockImplementation(async () => {
+        if (imageRef === targetReference) {
+          events.push(`inspect:${retagged ? 'retagged' : 'pulled'}`);
+          return {
+            Id: retagged ? retaggedIdentity : localImageId,
+            RepoDigests: ['nginx@sha256:abcdef123456', 'foreign/nginx@sha256:deadbeef'],
+            Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+            Os: 'linux',
+            Config: { Env: [] },
+          };
+        }
+        return { Architecture: process.arch === 'x64' ? 'amd64' : process.arch, Os: 'linux' };
+      }),
+    }));
+    vi.spyOn(trigger, 'pullImage').mockImplementation(async () => {
+      events.push('pull');
+    });
+    const gate = vi.fn().mockImplementation(async () => {
+      events.push('gate');
+      retagged = true;
+    });
+    const verifyCompatibilitySpy = vi
+      .spyOn(trigger, 'verifyPulledImageCompatibility')
+      .mockImplementation(async (_dockerApi, image) => {
+        events.push(`compatibility:${image}`);
+      });
+    const cloneRuntimeConfigSpy = vi
+      .spyOn(trigger.runtimeConfigManager, 'getCloneRuntimeConfigOptions')
+      .mockImplementation(async (_dockerApi, _currentSpec, image) => {
+        events.push(`config:${image}`);
+        return {};
+      });
+    const createContainerSpy = vi
+      .spyOn(trigger, 'createContainer')
+      .mockImplementation(async (_dockerApi, payload) => {
+        events.push(`create:${payload.Image}`);
+        return { start: vi.fn().mockResolvedValue(undefined) } as any;
+      });
+
+    await trigger.updateContainerWithCompose(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer({ name: 'nginx' }),
+      {
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          auth: {},
+          newImage: targetReference,
+        },
+        postPullHook: gate,
+      },
+    );
+
+    expect(events).toEqual([
+      'pull',
+      'inspect:pulled',
+      'gate',
+      `compatibility:${pinnedIdentity}`,
+      `config:${pinnedIdentity}`,
+      `create:${pinnedIdentity}`,
+    ]);
+    expect(gate).toHaveBeenCalledWith('', pinnedIdentity);
+    expect(verifyCompatibilitySpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      pinnedIdentity,
+      expect.anything(),
+    );
+    expect(cloneRuntimeConfigSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.anything(),
+      pinnedIdentity,
+      expect.anything(),
+    );
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: pinnedIdentity }),
+      'nginx',
+      expect.anything(),
+    );
+  });
+
+  test('updateContainerWithCompose should fail before mutation when the enabled gate lacks a matching manifest', async () => {
+    trigger.configuration.dryrun = false;
+    const securityGate = trigger.getSecurityGate();
+    vi.spyOn(securityGate.securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: true },
+      gate: { mode: 'on' },
+    } as any);
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:local-image',
+        RepoDigests: ['foreign/nginx@sha256:deadbeef'],
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const stopAndRemoveSpy = vi.spyOn(trigger, 'stopAndRemoveContainer');
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer');
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', makeContainer()),
+    ).rejects.toThrow('Unable to bind security gate to the pulled image');
+
+    expect(stopAndRemoveSpy).not.toHaveBeenCalled();
+    expect(createContainerSpy).not.toHaveBeenCalled();
+  });
+
+  test('updateContainerWithCompose should bind the exact private repository digest', async () => {
+    trigger.configuration.dryrun = false;
+    const targetReference = 'registry.example:5000/team/app:2.0.0';
+    const privateIdentity = 'registry.example:5000/team/app:2.0.0@sha256:abcdef123456';
+    vi.spyOn(trigger.getSecurityGate().securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'block',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    } as any);
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:private-image',
+        RepoDigests: [
+          'team/app@sha256:111111111111',
+          'registry.example:5000/team/app@sha256:abcdef123456',
+        ],
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const gate = vi.fn().mockResolvedValue(undefined);
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.updateContainerWithCompose(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer(),
+      {
+        runtimeContext: { dockerApi: mockDockerApi, auth: {}, newImage: targetReference },
+        postPullHook: gate,
+      },
+    );
+
+    expect(gate).toHaveBeenCalledWith('', privateIdentity);
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: privateIdentity }),
+      'nginx',
+      expect.anything(),
+    );
+  });
+
+  test('updateContainerWithCompose should preserve a matched digest-only repository identity', async () => {
+    trigger.configuration.dryrun = false;
+    const digestOnlyReference = 'registry.example:5000/team/app@sha256:abcdef123456';
+    vi.spyOn(trigger.getSecurityGate().securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'block',
+      signature: { verify: true },
+      gate: { mode: 'on' },
+    } as any);
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:digest-only-image',
+        RepoDigests: ['other.example:5000/team/app@sha256:111111111111', digestOnlyReference],
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const gate = vi.fn().mockResolvedValue(undefined);
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.updateContainerWithCompose(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer(),
+      {
+        runtimeContext: { dockerApi: mockDockerApi, auth: {}, newImage: digestOnlyReference },
+        postPullHook: gate,
+      },
+    );
+
+    expect(gate).toHaveBeenCalledWith('', digestOnlyReference);
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: digestOnlyReference }),
+      'nginx',
+      expect.anything(),
+    );
+  });
+
+  test('updateContainerWithCompose should allow an unbound image under scan availability warn policy', async () => {
+    trigger.configuration.dryrun = false;
+    const securityGate = trigger.getSecurityGate();
+    vi.spyOn(securityGate.securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    } as any);
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:local-image',
+        RepoDigests: [],
+      }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+    const securityAuditSpy = vi.spyOn(trigger, 'recordSecurityAudit');
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.updateContainerWithCompose(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer(),
+      {
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          auth: {},
+          newImage: 'nginx:9.9.9',
+        },
+        postPullHook,
+      },
+    );
+
+    expect(postPullHook).not.toHaveBeenCalled();
+    expect(securityAuditSpy).toHaveBeenCalledWith(
+      'security-scan-skipped',
+      expect.anything(),
+      'error',
+      'Security scan skipped because the pulled image could not be bound to an immutable digest; update allowed by DD_SECURITY_AVAILABILITY_POLICY=warn: Docker image inspection returned no local ID and matching manifest digest',
+    );
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:9.9.9' }),
+      'nginx',
+      expect.anything(),
+    );
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('proceeding without an immutable image reference'),
+    );
+  });
+
+  test('recordUnboundSecurityWarning should use the binding fallback reason', () => {
+    const securityAuditSpy = vi.spyOn(trigger, 'recordSecurityAudit');
+
+    (trigger as any).recordUnboundSecurityWarning(makeContainer());
+
+    expect(securityAuditSpy).toHaveBeenCalledWith(
+      'security-scan-skipped',
+      expect.objectContaining({ name: 'nginx' }),
+      'error',
+      'Security scan skipped because the pulled image could not be bound to an immutable digest; update allowed by DD_SECURITY_AVAILABILITY_POLICY=warn: unknown binding error',
+    );
+  });
+
+  test('performContainerUpdate should scan after pull and before replacing the service', async () => {
+    trigger.configuration.dryrun = false;
+    const order: string[] = [];
+    vi.spyOn(trigger, 'pullImage').mockImplementation(async () => {
+      order.push('pull');
+    });
+    vi.spyOn(trigger, 'stopContainer').mockImplementation(async () => {
+      order.push('stop');
+    });
+    vi.spyOn(trigger, 'removeContainer').mockImplementation(async () => {
+      order.push('remove');
+    });
+    vi.spyOn(trigger, 'createContainer').mockImplementation(async () => {
+      order.push('create');
+      return { start: vi.fn().mockResolvedValue(undefined) } as any;
+    });
+    vi.spyOn(trigger, 'startContainer').mockImplementation(async () => {
+      order.push('start');
+    });
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockImplementation(async () => {
+      order.push('postStart');
+    });
+    const postPullHook = vi.fn().mockImplementation(async () => {
+      order.push('postPull');
+    });
+    const container = makeContainer({ name: 'nginx' });
+
+    await trigger.performContainerUpdate(
+      {
+        dockerApi: mockDockerApi,
+        auth: {},
+        newImage: 'nginx:9.9.9',
+        registry: getState().registry.hub,
+      },
+      container,
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: {},
+        composeFileOnceApplied: false,
+        runtimeContext: { operationId: 'op-compose-order' },
+      },
+      postPullHook,
+    );
+
+    expect(order).toEqual(['pull', 'postPull', 'stop', 'remove', 'create', 'start', 'postStart']);
+    expect(postPullHook).toHaveBeenCalledTimes(1);
+    expect(postPullHook).toHaveBeenCalledWith('op-compose-order');
+  });
+
+  test('performContainerUpdate should invoke the scan once without Docker mutation in dry-run mode', async () => {
+    trigger.configuration.dryrun = true;
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const stopContainerSpy = vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    const removeContainerSpy = vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const postStartHookSpy = vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+    const updated = await trigger.performContainerUpdate(
+      {
+        dockerApi: mockDockerApi,
+        auth: {},
+        newImage: 'nginx:9.9.9',
+        registry: getState().registry.hub,
+      },
+      makeContainer({ name: 'nginx' }),
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: {},
+        composeFileOnceApplied: false,
+        runtimeContext: { operationId: 'op-compose-dryrun' },
+      },
+      postPullHook,
+    );
+
+    expect(updated).toBe(false);
+    expect(postPullHook).toHaveBeenCalledTimes(1);
+    expect(postPullHook).toHaveBeenCalledWith('op-compose-dryrun');
+    expect(pullImageSpy).not.toHaveBeenCalled();
+    expect(stopContainerSpy).not.toHaveBeenCalled();
+    expect(removeContainerSpy).not.toHaveBeenCalled();
+    expect(postStartHookSpy).toHaveBeenCalledTimes(1);
+    expect(postStartHookSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'nginx' }),
+      'nginx',
+      {},
+    );
+  });
+
+  test('performContainerUpdate should leave the existing service untouched when the scan blocks', async () => {
+    trigger.configuration.dryrun = false;
+    const stopContainerSpy = vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    const removeContainerSpy = vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    const postStartHookSpy = vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const postPullHook = vi.fn().mockRejectedValue(new Error('scan blocked'));
+    const container = makeContainer({ name: 'nginx' });
+
+    await expect(
+      trigger.performContainerUpdate(
+        {
+          dockerApi: mockDockerApi,
+          auth: {},
+          newImage: 'nginx:9.9.9',
+          registry: getState().registry.hub,
+        },
+        container,
+        mockLog,
+        {
+          composeFile: '/opt/drydock/test/stack.yml',
+          service: 'nginx',
+          serviceDefinition: {},
+          composeFileOnceApplied: false,
+        },
+        postPullHook,
+      ),
+    ).rejects.toThrow('scan blocked');
+
+    expect(postPullHook).toHaveBeenCalledTimes(1);
+    expect(stopContainerSpy).not.toHaveBeenCalled();
+    expect(removeContainerSpy).not.toHaveBeenCalled();
+    expect(createContainerSpy).not.toHaveBeenCalled();
+    expect(startContainerSpy).not.toHaveBeenCalled();
+    expect(postStartHookSpy).not.toHaveBeenCalled();
+  });
+
+  test('performContainerUpdate should scan a service already refreshed by compose-file-once mode once', async () => {
+    trigger.configuration.dryrun = false;
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+    const container = makeContainer({ id: 'container-once', name: 'nginx' });
+
+    await trigger.performContainerUpdate(
+      {} as any,
+      container,
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: {},
+        composeFileOnceApplied: true,
+        runtimeContext: { operationId: 'op-compose-once' },
+      },
+      postPullHook,
+    );
+
+    expect(updateContainerWithComposeSpy).not.toHaveBeenCalled();
+    expect(postPullHook).toHaveBeenCalledTimes(1);
+    expect(postPullHook).toHaveBeenCalledWith('op-compose-once');
+  });
+
+  test('performContainerUpdate should use a per-container operation id for a skipped compose refresh', async () => {
+    trigger.configuration.dryrun = false;
+    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+    const container = makeContainer({ id: 'container-map', name: 'nginx' });
+
+    await trigger.performContainerUpdate(
+      {} as any,
+      container,
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: {},
+        composeFileOnceApplied: true,
+        runtimeContext: {
+          operationIds: new Map([['container-map', 'op-compose-map']]),
+          imageIdentity: 'nginx:1.1.0@sha256:abcdef123456',
+        },
+      },
+      postPullHook,
+    );
+
+    expect(postPullHook).toHaveBeenCalledTimes(1);
+    expect(postPullHook).toHaveBeenCalledWith('op-compose-map', 'nginx:1.1.0@sha256:abcdef123456');
+  });
+
+  test('performContainerUpdate should use an empty operation id when a skipped refresh has none', async () => {
+    trigger.configuration.dryrun = false;
+    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+    await trigger.performContainerUpdate(
+      {} as any,
+      makeContainer({ id: 'container-no-operation', name: 'nginx' }),
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: {},
+        composeFileOnceApplied: true,
+        runtimeContext: { imageIdentity: 'nginx:1.1.0@sha256:abcdef123456' },
+      },
+      postPullHook,
+    );
+
+    expect(postPullHook).toHaveBeenCalledWith('', 'nginx:1.1.0@sha256:abcdef123456');
+  });
+
+  test('performContainerUpdate should allow a skipped compose refresh without a post-pull hook', async () => {
+    trigger.configuration.dryrun = false;
+    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+
+    await trigger.performContainerUpdate(
+      {} as any,
+      makeContainer({ id: 'container-no-hook', name: 'nginx' }),
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: {},
+        composeFileOnceApplied: true,
+      },
+    );
+  });
+
+  test('performContainerUpdate should skip the hook when the post-pull gate already completed', async () => {
+    trigger.configuration.dryrun = false;
+    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+    await trigger.performContainerUpdate(
+      {} as any,
+      makeContainer({ id: 'container-gated', name: 'nginx' }),
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: {},
+        composeFileOnceApplied: true,
+        postPullGateCompleted: true,
+      },
+      postPullHook,
+    );
+
+    expect(postPullHook).not.toHaveBeenCalled();
+  });
+
+  test('buildComposeRuntimeContext should retain the pulled image identity', () => {
+    const imageIdentity = 'nginx:1.1.0@sha256:abcdef123456';
+
+    expect(
+      (trigger as any).buildComposeRuntimeContext(
+        { imageIdentity },
+        { composeFile: '/opt/drydock/test/stack.yml', service: 'nginx' },
+      ),
+    ).toEqual({ imageIdentity });
+  });
+
+  test('compose-file-once preflight should carry an unbound-image warning into its runtime context', async () => {
+    trigger.configuration.dryrun = false;
+    const securityGate = trigger.getSecurityGate();
+    vi.spyOn(securityGate.securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    } as any);
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Id: 'sha256:local-image', RepoDigests: [] }),
+    });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+
+    const result = await (trigger as any).buildComposeFileOnceRuntimeContextByService([
+      { service: 'nginx', container: makeContainer() },
+    ]);
+
+    expect(result.get('nginx')).toEqual(
+      expect.objectContaining({
+        securityGateUnboundWarn: true,
+        securityGateUnboundReason: expect.any(String),
+      }),
+    );
+  });
+
+  test('compose-file-once post-pull gate should fail when its update context cannot be created', async () => {
+    vi.spyOn(trigger, 'createTriggerContext').mockResolvedValue(undefined);
+
+    await expect(
+      (trigger as any).runComposeFileOncePostPullGate(makeContainer(), {
+        service: 'nginx',
+        runtimeContext: {},
+      }),
+    ).rejects.toThrow('Unable to create update context for compose service nginx');
+  });
+
+  test('compose-file-once post-pull gate should record an allowed unbound security warning', async () => {
+    const recordWarningSpy = vi.spyOn(trigger, 'recordUnboundSecurityWarning');
+    vi.spyOn(trigger, 'createTriggerContext').mockResolvedValue({} as any);
+
+    await (trigger as any).runComposeFileOncePostPullGate(makeContainer(), {
+      service: 'nginx',
+      runtimeContext: {
+        securityGateUnboundWarn: true,
+        securityGateUnboundReason: 'manifest unavailable',
+      },
+    });
+
+    expect(recordWarningSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'nginx' }),
+      'manifest unavailable',
+    );
+  });
+
+  test('compose-file-once post-pull gate should update operation phase while scanning', async () => {
+    const updateOperationSpy = vi
+      .spyOn(updateOperationStore, 'updateOperation')
+      .mockReturnValue({} as any);
+    vi.spyOn(trigger, 'createTriggerContext').mockResolvedValue({} as any);
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockImplementation(
+      async (_context, _container, _log, options) => {
+        options?.setPhase?.('scanning');
+      },
+    );
+
+    await (trigger as any).runComposeFileOncePostPullGate(makeContainer(), {
+      service: 'nginx',
+      runtimeContext: { operationId: 'op-compose-gate' },
+    });
+
+    expect(updateOperationSpy).toHaveBeenCalledWith('op-compose-gate', { phase: 'scanning' });
+  });
+
+  test('compose-file-once post-pull gate should ignore phase updates without an operation id', async () => {
+    const updateOperationSpy = vi
+      .spyOn(updateOperationStore, 'updateOperation')
+      .mockReturnValue({} as any);
+    vi.spyOn(trigger, 'createTriggerContext').mockResolvedValue({} as any);
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockImplementation(
+      async (_context, _container, _log, options) => {
+        options?.setPhase?.('scanning');
+      },
+    );
+
+    await (trigger as any).runComposeFileOncePostPullGate(makeContainer(), {
+      service: 'nginx',
+      runtimeContext: {},
+    });
+
+    expect(updateOperationSpy).not.toHaveBeenCalled();
+  });
+
+  test('capturePulledImageIdentity should ignore malformed repository digests', async () => {
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:local-image',
+        RepoDigests: ['nginx', '@sha256:bad', 'nginx@not-a-digest'],
+      }),
+    });
+
+    await expect(
+      (trigger as any).capturePulledImageIdentity(
+        mockDockerApi,
+        'nginx:1.1.0',
+        makeContainer(),
+        mockLog,
+      ),
+    ).resolves.toEqual({ unboundWarn: false });
+  });
+
+  test('capturePulledImageIdentity should use the missing-identity policy when inspection fails', async () => {
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockRejectedValue(new Error('inspect failed')),
+    });
+
+    await expect(
+      (trigger as any).capturePulledImageIdentity(
+        mockDockerApi,
+        'nginx:1.1.0',
+        makeContainer(),
+        mockLog,
+      ),
+    ).resolves.toEqual({ unboundWarn: false });
+  });
+
+  test('pulled image repository candidates should handle missing paths and library aliases', () => {
+    expect((trigger as any).getPulledImageRepositoryCandidates({})).toEqual([]);
+    expect(
+      (trigger as any).getPulledImageRepositoryCandidates({
+        domain: 'docker.io',
+        path: 'library/nginx',
+      }),
+    ).toContain('nginx');
+  });
+
+  test('post-pull identity binding should disable the gate when security execution is unavailable', () => {
+    const securityGate = trigger.getSecurityGate() as any;
+    vi.spyOn(securityGate.securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'block',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    vi.spyOn(securityGate, 'shouldRunSecurityGate').mockReturnValue(false);
+
+    expect((trigger as any).getPostPullIdentityBindingPolicy(makeContainer())).toBe('disabled');
+  });
+
+  test('post-pull identity binding should disable the gate when its effective mode is off', () => {
+    const securityGate = trigger.getSecurityGate() as any;
+    vi.spyOn(securityGate.securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'block',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    });
+    vi.spyOn(securityGate, 'getEffectiveGateMode').mockReturnValue('off');
+
+    expect((trigger as any).getPostPullIdentityBindingPolicy(makeContainer())).toBe('disabled');
+  });
+
+  test('compose-file-once runtime updates should preserve requested context without a preflight context', async () => {
+    trigger.configuration.composeFileOnce = true;
+    trigger.configuration.dryrun = false;
+    vi.spyOn(trigger, 'buildComposeFileOnceRuntimeContextByService').mockResolvedValue(new Map());
+    vi.spyOn(trigger, 'runComposeFileOncePostPullGate').mockResolvedValue();
+    const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
+    const container = makeContainer({ labels: { 'com.docker.compose.service': 'nginx' } });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: {} }),
+      [{ service: 'nginx', container }],
+      { operationId: 'op-compose-context' },
+    );
+
+    expect(lifecycleSpy).toHaveBeenCalledWith(
+      container,
+      expect.objectContaining({ runtimeContext: { operationId: 'op-compose-context' } }),
+    );
+  });
+
+  test('compose-file-once runtime updates should omit runtime context when neither context is available', async () => {
+    trigger.configuration.composeFileOnce = true;
+    trigger.configuration.dryrun = false;
+    vi.spyOn(trigger, 'buildComposeFileOnceRuntimeContextByService').mockResolvedValue(new Map());
+    vi.spyOn(trigger, 'runComposeFileOncePostPullGate').mockResolvedValue();
+    const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
+    const container = makeContainer({ labels: { 'com.docker.compose.service': 'nginx' } });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: {} }),
+      [{ service: 'nginx', container }],
+    );
+
+    expect(lifecycleSpy).toHaveBeenCalledWith(
+      container,
+      expect.objectContaining({ runtimeContext: undefined }),
+    );
+  });
+
+  test('dry-run compose refresh should invoke the post-pull hook without Docker mutation', async () => {
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+    await (trigger as any).refreshComposeServiceWithDockerApi(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer(),
+      { postPullHook },
+    );
+
+    expect(postPullHook).toHaveBeenCalledWith('');
+    expect(mockDockerApi.getContainer).not.toHaveBeenCalled();
+  });
+
+  test('compose refresh should reuse a supplied image identity without recapturing it', async () => {
+    trigger.configuration.dryrun = false;
+    const imageIdentity = 'nginx:1.1.0@sha256:abcdef123456';
+    const captureIdentitySpy = vi.spyOn(trigger as any, 'capturePulledImageIdentity');
+    vi.spyOn(trigger, 'verifyPulledImageCompatibility').mockResolvedValue();
+    vi.spyOn(trigger.runtimeConfigManager, 'getCloneRuntimeConfigOptions').mockResolvedValue({});
+    vi.spyOn(trigger as any, 'recreateReplacementContainerWithCleanup').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+    await (trigger as any).refreshComposeServiceWithDockerApi(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer(),
+      {
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          auth: {},
+          newImage: 'nginx:1.1.0',
+          imageIdentity,
+        },
+        postPullHook,
+      },
+    );
+
+    expect(captureIdentitySpy).not.toHaveBeenCalled();
+    expect(postPullHook).toHaveBeenCalledWith('', imageIdentity);
   });
 
   test('updateContainerWithCompose should remove stale image-inherited env defaults while preserving runtime env', async () => {
