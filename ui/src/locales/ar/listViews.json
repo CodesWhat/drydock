@@ -3,6 +3,7 @@
     "loadingAuditLog": "جارٍ تحميل سجل التدقيق...",
     "loadError": "فشل تحميل سجل التدقيق",
     "filterPlaceholder": "تصفية حسب الهدف أو الحدث...",
+    "onThisPage": "في هذه الصفحة",
     "containerFilterPlaceholder": "اسم الحاوية...",
     "allEvents": "جميع الأحداث",
     "eventsSelected": "{count} أحداث محددة",

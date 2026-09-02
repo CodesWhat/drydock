@@ -3,6 +3,7 @@
     "loadingAuditLog": "Denetim günlüğü yükleniyor...",
     "loadError": "Denetim günlüğü yüklenemedi",
     "filterPlaceholder": "Hedefe veya etkinliğe göre filtreleyin...",
+    "onThisPage": "bu sayfada",
     "containerFilterPlaceholder": "Konteyner adı...",
     "allEvents": "Tüm etkinlikler",
     "eventsSelected": "{count} etkinlikleri seçildi",

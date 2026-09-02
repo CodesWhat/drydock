@@ -3,6 +3,7 @@
     "loadingAuditLog": "監査ログを読み込み中...",
     "loadError": "監査ログの読み込みに失敗しました",
     "filterPlaceholder": "対象またはイベントで絞り込む...",
+    "onThisPage": "このページ内",
     "containerFilterPlaceholder": "コンテナ名...",
     "allEvents": "全イベント",
     "eventsSelected": "{count} 件のイベントを選択",
