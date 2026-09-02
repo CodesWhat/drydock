@@ -3842,6 +3842,71 @@ describe('AgentClient', () => {
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c3');
     });
 
+    test('should warn when watcher snapshot returns 0 after a prior successful connect (#565)', async () => {
+      // Non-empty handshake first, to set hasConnectedOnce.
+      axios.get
+        .mockResolvedValueOnce({
+          data: [{ id: 'c1', name: 'web', watcher: 'local' }],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({
+        ...c,
+        updateAvailable: false,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      // Watcher snapshot returns zero — should warn and skip prune.
+      storeContainer.getContainers.mockReturnValue([{ id: 'c1', name: 'web', watcher: 'local' }]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [],
+      });
+
+      expect(client.log.warn).toHaveBeenCalledWith(
+        'Watcher snapshot returned 0 containers; preserving last-known state until the next snapshot arrives',
+      );
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+
+    test('should still prune normally when watcher snapshot returns at least one container', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({
+        ...c,
+        updateAvailable: false,
+      }));
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'kept', name: 'kept', watcher: 'local' },
+        { id: 'gone', name: 'gone', watcher: 'local' },
+      ]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'kept', name: 'kept', watcher: 'local' }],
+      });
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone');
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('kept');
+    });
+
+    test('first-ever zero watcher snapshot should not warn (no prior connect)', async () => {
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [],
+      });
+
+      expect(client.log.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('preserving last-known state'),
+      );
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+
     test('should emit batched container reports for watcher snapshots', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       storeContainer.insertContainer.mockImplementation((container) => ({
@@ -3971,7 +4036,10 @@ describe('AgentClient', () => {
       ]);
     });
 
-    test('should prune all containers for a watcher when a watcher snapshot is empty', async () => {
+    test('should not prune containers for a watcher when a watcher snapshot is empty (#565)', async () => {
+      // A reconnecting agent legitimately reports zero containers while its local
+      // store is still settling discovery, so an empty snapshot must never prune —
+      // see the guard tests below for the hasConnectedOnce-driven warn behavior.
       const containersInStore = [
         { id: 'c1', name: 'stale-1', watcher: 'local', agent: 'test-agent' },
         { id: 'c2', name: 'stale-2', watcher: 'local', agent: 'test-agent' },
@@ -3990,9 +4058,7 @@ describe('AgentClient', () => {
         containers: [],
       });
 
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
-      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c3');
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
     });
 
     test('should ignore invalid watcher snapshot payloads without pruning', async () => {
