@@ -3,6 +3,7 @@
     "loadingAuditLog": "Chargement du log d'audit...",
     "loadError": "Impossible de charger le log d'audit",
     "filterPlaceholder": "Filtrer par cible ou événement...",
+    "onThisPage": "sur cette page",
     "containerFilterPlaceholder": "Nom du conteneur...",
     "allEvents": "Tous les événements",
     "eventsSelected": "{count} événements sélectionnés",
