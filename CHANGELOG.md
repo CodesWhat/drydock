@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **The self-update helper could destroy a health-verified replacement when removing the old controller failed.** The main Docker update path already treated old-container cleanup as best effort after its health gate, but the helper still sent a 409, timeout, or other removal failure into rollback. That rollback force-removed the healthy replacement first and could then fail to restore an old container that Docker had already reaped. The helper now treats a missing old container as already cleaned up and records every other cleanup failure on the successful operation without rolling back the replacement.
+- **Debug dumps no longer expose Apprise service URLs, Rocket.Chat user IDs, or Telegram chat IDs.** These provider-specific credential fields are now redacted without hiding ordinary `parse.urls` configuration flags.
 
 ## [1.7.0-rc.7] — 2026-08-29
 
