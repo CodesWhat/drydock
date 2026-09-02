@@ -1497,7 +1497,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       // authoritative tag — return it directly without consulting RepoTags.
       const atDigestIndex = imageNameToParse.indexOf('@sha256:');
       if (atDigestIndex > 0 && imageNameToParse.lastIndexOf(':', atDigestIndex) > 0) {
-        const parsedHybrid = parse(imageNameToParse);
+        const parsedHybrid = parse(imageNameToParse.substring(0, atDigestIndex));
         if (parsedHybrid.tag) {
           return parsedHybrid;
         }

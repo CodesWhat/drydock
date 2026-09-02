@@ -1563,8 +1563,18 @@ export class AgentClient {
     // the loop below inserts/updates the incoming containers — insertContainer()
     // consumes the stash as its first action, so it must already exist. See the
     // reorder note in _doHandshake() above for the full mechanism.
-    if (watcherName) {
+    //
+    // A zero-container snapshot is ambiguous the same way: a reconnecting agent
+    // can legitimately report none because filterPendingDiscoveries() only
+    // bypasses the discovery-settling delay for ids already in the agent's own
+    // (just-reset) local store (#565). Skip the prune rather than wipe every
+    // container this watcher owns.
+    if (watcherName && containers.length > 0) {
       this.pruneOldContainers(containers, watcherName);
+    } else if (watcherName && this.hasConnectedOnce) {
+      this.log.warn(
+        'Watcher snapshot returned 0 containers; preserving last-known state until the next snapshot arrives',
+      );
     }
 
     const containerReports: ContainerReport[] = [];

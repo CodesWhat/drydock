@@ -14,6 +14,7 @@ import Dockercompose, {
   testable_normalizePostStartHooks,
   testable_updateComposeServiceImageInText,
 } from './Dockercompose.js';
+import { spyOnProcessComposeHelpers } from './Dockercompose.test.helpers.js';
 
 vi.mock('../../../registry', () => ({
   getState: vi.fn(),
@@ -235,60 +236,6 @@ function makeDockerContainerHandle({
     stop: vi.fn().mockResolvedValue(undefined),
     remove: vi.fn().mockResolvedValue(undefined),
     wait: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
-/**
- * Set up the common spies used by processComposeFile tests that exercise
- * the write / trigger / hooks path.
- */
-function spyOnProcessComposeHelpers(
-  triggerInstance,
-  composeFileContent = [
-    'services:',
-    '  nginx:',
-    '    image: nginx:1.0.0',
-    '  redis:',
-    '    image: redis:7.0.0',
-    '  filebrowser:',
-    '    image: filebrowser/filebrowser:v2.59.0-s6',
-    '  drydock:',
-    '    image: codeswhat/drydock:1.0.0',
-    '',
-  ].join('\n'),
-) {
-  const getComposeFileSpy = vi
-    .spyOn(triggerInstance, 'getComposeFile')
-    .mockResolvedValue(Buffer.from(composeFileContent));
-  const writeComposeFileSpy = vi.spyOn(triggerInstance, 'writeComposeFile').mockResolvedValue();
-  const composeUpdateSpy = vi
-    .spyOn(triggerInstance, 'updateContainerWithCompose')
-    .mockResolvedValue();
-  const hooksSpy = vi.spyOn(triggerInstance, 'runServicePostStartHooks').mockResolvedValue();
-  const backupSpy = vi.spyOn(triggerInstance, 'backup').mockResolvedValue();
-  // Lifecycle methods inherited from Docker trigger
-  const verifySigSpy = vi.spyOn(triggerInstance, 'verifySignaturePreUpdate').mockResolvedValue();
-  const scanAndGateSpy = vi.spyOn(triggerInstance, 'scanAndGatePostPull').mockResolvedValue();
-  const preHookSpy = vi.spyOn(triggerInstance, 'runPreUpdateHook').mockResolvedValue();
-  const postHookSpy = vi.spyOn(triggerInstance, 'runPostUpdateHook').mockResolvedValue();
-  const pruneImagesSpy = vi.spyOn(triggerInstance, 'pruneImages').mockResolvedValue();
-  const cleanupOldImagesSpy = vi.spyOn(triggerInstance, 'cleanupOldImages').mockResolvedValue();
-  const rollbackMonitorSpy = vi
-    .spyOn(triggerInstance, 'maybeStartAutoRollbackMonitor')
-    .mockResolvedValue();
-  return {
-    getComposeFileSpy,
-    writeComposeFileSpy,
-    composeUpdateSpy,
-    hooksSpy,
-    backupSpy,
-    verifySigSpy,
-    scanAndGateSpy,
-    preHookSpy,
-    postHookSpy,
-    pruneImagesSpy,
-    cleanupOldImagesSpy,
-    rollbackMonitorSpy,
   };
 }
 
@@ -5506,7 +5453,11 @@ describe('Dockercompose Trigger', () => {
       id: 'container-1',
       name: 'nginx',
     });
-    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockImplementation(async (_composeFile, _service, _container, options = {}) => {
+        await options.postPullHook?.(options.runtimeContext?.operationId ?? '');
+      });
     vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
     const postPullHook = vi.fn().mockResolvedValue(undefined);
 
@@ -5531,6 +5482,12 @@ describe('Dockercompose Trigger', () => {
     );
 
     expect(postPullHook).toHaveBeenCalledWith('op-compose-1');
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.override.yml',
+      'nginx',
+      container,
+      expect.objectContaining({ postPullHook }),
+    );
   });
 
   test('performContainerUpdate should pass skipPull in multi-file compose context', async () => {
