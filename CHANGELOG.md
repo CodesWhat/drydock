@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **The self-update helper could destroy a health-verified replacement when removing the old controller failed.** The main Docker update path already treated old-container cleanup as best effort after its health gate, but the helper still sent a 409, timeout, or other removal failure into rollback. That rollback force-removed the healthy replacement first and could then fail to restore an old container that Docker had already reaped. The helper now treats a missing old container as already cleaned up and records every other cleanup failure on the successful operation without rolling back the replacement.
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` was parsed as an agent named `allow`.** `getAgentConfigurations()` handed the whole `ddEnvVars` map to the generic `dd.agent` prefix parser, and that documented flat flag matches the prefix as `DD_AGENT_ALLOW_INSECURE_SECRET`, producing an `{insecure: {secret: 'true'}}` agent literally named `allow`. Registration then rejected it every boot with `Agent allow failed to register ("host" is required)`, on every install that set the flag regardless of whether any real agents were configured. The flag is now excluded before the map is parsed. Reported by [@depuits](https://github.com/depuits) in [#945](https://github.com/CodesWhat/drydock/issues/945).
 
 ## [1.7.0-rc.7] — 2026-08-29
 

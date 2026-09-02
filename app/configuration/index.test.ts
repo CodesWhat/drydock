@@ -461,6 +461,24 @@ test('getAgentConfigurations should return configured agents when overridden', a
   });
 });
 
+test('getAgentConfigurations should not parse DD_AGENT_ALLOW_INSECURE_SECRET as an agent', async () => {
+  delete configuration.ddEnvVars.DD_AGENT_NODE1_HOST;
+  delete configuration.ddEnvVars.DD_AGENT_NODE1_SECRET;
+  delete configuration.ddEnvVars.DD_AGENT_NODE2_HOST;
+  delete configuration.ddEnvVars.DD_AGENT_NODE2_SECRET;
+  configuration.ddEnvVars.DD_AGENT_ALLOW_INSECURE_SECRET = 'true';
+  configuration.ddEnvVars.DD_AGENT_SWARM01_HOST = 'h';
+  configuration.ddEnvVars.DD_AGENT_SWARM01_SECRET = 's';
+  const agentConfigurations = configuration.getAgentConfigurations();
+  expect(agentConfigurations).toStrictEqual({
+    swarm01: { host: 'h', secret: 's' },
+  });
+  expect(agentConfigurations).not.toHaveProperty('allow');
+  delete configuration.ddEnvVars.DD_AGENT_ALLOW_INSECURE_SECRET;
+  delete configuration.ddEnvVars.DD_AGENT_SWARM01_HOST;
+  delete configuration.ddEnvVars.DD_AGENT_SWARM01_SECRET;
+});
+
 test('getStoreConfiguration should return configured store', async () => {
   configuration.ddEnvVars.DD_STORE_X = 'x';
   configuration.ddEnvVars.DD_STORE_Y = 'y';
