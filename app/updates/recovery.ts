@@ -100,7 +100,6 @@ function isRecoveryDockerTrigger(
   trigger: AcceptedContainerUpdateRequest['trigger'] | undefined,
 ): trigger is RecoveryDockerTrigger {
   return (
-    trigger?.type !== 'portainer' &&
     typeof (trigger as Partial<RecoveryDockerTrigger> | undefined)?.getWatcher === 'function' &&
     typeof (trigger as Partial<RecoveryDockerTrigger> | undefined)
       ?.reconcileInProgressContainerUpdateOperation === 'function'
@@ -145,14 +144,22 @@ export async function recoverInProgressOperationsOnStartup(): Promise<InProgress
         );
       }
       const trigger = findRecoveryUpdateTrigger(container, operation.triggerName);
-      if (operation.triggerName?.split('.').at(-2)?.toLowerCase() === 'portainer') {
+      const isPortainer =
+        trigger?.type === 'portainer' ||
+        operation.triggerName?.split('.').at(-2)?.toLowerCase() === 'portainer';
+      if (isPortainer && container.agent) {
         throw new RecoveryUnresolvedOperationError(
-          `Portainer update operation ${operation.id} cannot use Docker recovery`,
+          `Portainer update operation ${operation.id} is agent-owned and cannot be recovered`,
         );
       }
       if (!isRecoveryDockerTrigger(trigger)) {
         throw new RecoveryUnresolvedOperationError(
-          `no compatible Docker recovery trigger for ${container.name}`,
+          `no compatible recovery trigger for ${container.name}`,
+        );
+      }
+      if (isPortainer && !operation.portainerRecovery) {
+        throw new RecoveryUnresolvedOperationError(
+          `Portainer recovery descriptor is missing for operation ${operation.id}`,
         );
       }
       const watcher = trigger.getWatcher(container);
@@ -174,7 +181,12 @@ export async function recoverInProgressOperationsOnStartup(): Promise<InProgress
       reconciled++;
     } catch (error: unknown) {
       const lastError = `Recovery abandoned: ${getErrorMessage(error)}`;
-      if (error instanceof RecoveryUnresolvedOperationError) {
+      if (
+        error instanceof RecoveryUnresolvedOperationError ||
+        (typeof error === 'object' &&
+          error !== null &&
+          (error as { recoveryUnresolved?: unknown }).recoveryUnresolved === true)
+      ) {
         updateOperationStore.markOperationTerminal(operation.id, {
           status: 'expired',
           phase: 'expired',

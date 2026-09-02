@@ -494,6 +494,71 @@ describe('recoverQueuedOperationsOnStartup', () => {
     );
   });
 
+  test('reconciles a Portainer operation carrying a persisted recovery descriptor', async () => {
+    const container = { id: 'c-portainer-recover', name: 'web', watcher: 'local' };
+    const reconcile = vi.fn().mockResolvedValue(undefined);
+    const portainerTrigger = {
+      type: 'portainer',
+      getId: () => 'portainer.update',
+      getWatcher: vi.fn(() => ({ dockerApi: {} })),
+      reconcileInProgressContainerUpdateOperation: reconcile,
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-portainer-recover',
+        status: 'in-progress',
+        phase: 'portainer-target',
+        containerName: 'web',
+        container,
+        triggerName: 'portainer.update',
+        portainerRecovery: { stackId: 12 },
+      },
+    ]);
+    mockGetState.mockReturnValue({ trigger: { 'portainer.update': portainerTrigger } });
+    mockGetOperationById.mockReturnValue({ status: 'succeeded' });
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 1,
+      abandoned: 0,
+    });
+    expect(portainerTrigger.getWatcher).toHaveBeenCalledOnce();
+    expect(reconcile).toHaveBeenCalledWith({}, container, expect.any(Object));
+  });
+
+  test('expires a Portainer operation when runtime recovery is unavailable', async () => {
+    const container = { id: 'c-portainer-unavailable', name: 'web', watcher: 'local' };
+    const unavailable = Object.assign(new Error('runtime missing'), {
+      recoveryUnresolved: true,
+    });
+    const portainerTrigger = {
+      type: 'portainer',
+      getId: () => 'portainer.update',
+      getWatcher: vi.fn(() => ({ dockerApi: {} })),
+      reconcileInProgressContainerUpdateOperation: vi.fn().mockRejectedValue(unavailable),
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-portainer-unavailable',
+        status: 'in-progress',
+        phase: 'portainer-target',
+        containerName: 'web',
+        container,
+        triggerName: 'portainer.update',
+        portainerRecovery: { stackId: 12 },
+      },
+    ]);
+    mockGetState.mockReturnValue({ trigger: { 'portainer.update': portainerTrigger } });
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 0,
+      abandoned: 1,
+    });
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-portainer-unavailable',
+      expect.objectContaining({ status: 'expired', phase: 'expired' }),
+    );
+  });
+
   test('rejects zero DD_UPDATE_RECOVERY_BOOT_CONCURRENCY values', () => {
     expect(() => parseRecoveryBootConcurrency('0')).toThrow(
       'DD_UPDATE_RECOVERY_BOOT_CONCURRENCY must be at least 1 (got "0")',

@@ -1,3 +1,5 @@
+import * as store from '../../../store/index.js';
+import * as updateOperationStore from '../../../store/update-operation.js';
 import DockerBase from '../docker/Docker.js';
 import Portainer, {
   testable_extractPinnedTagValue,
@@ -1535,6 +1537,253 @@ test('performContainerUpdate captures running replicas before PUT and verifies t
   expect(resolved.prePutRunningReplicas).toBe(1);
   expect(redeploy).toHaveBeenCalledOnce();
   expect(wait).toHaveBeenCalledOnce();
+});
+
+test('runContainerUpdateLifecycle creates a durable operation before automatic work without a runtime operation id', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  const order: string[] = [];
+  const insert = vi
+    .spyOn(updateOperationStore, 'insertOperation')
+    .mockImplementation((operation) => {
+      order.push('insert');
+      return operation as never;
+    });
+  const save = vi.spyOn(store, 'save').mockResolvedValue(undefined);
+  const inherited = vi
+    .spyOn(DockerBase.prototype, 'runContainerUpdateLifecycle')
+    .mockImplementation(async (_container, runtimeContext) => {
+      order.push('lifecycle');
+      expect(runtimeContext).toEqual({ operationId: expect.any(String) });
+      return true;
+    });
+
+  await trigger.runContainerUpdateLifecycle(makeContainer());
+
+  expect(insert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      containerId: 'container-id',
+      containerName: 'pihole',
+      triggerName: trigger.getId(),
+      status: 'queued',
+      phase: 'queued',
+    }),
+  );
+  expect(order[0]).toBe('insert');
+  expect(order.indexOf('insert')).toBeLessThan(order.indexOf('lifecycle'));
+  expect(save).toHaveBeenCalledOnce();
+  inherited.mockRestore();
+});
+
+test('runContainerUpdateLifecycle reuses an existing active operation without a runtime operation id', async () => {
+  vi.restoreAllMocks();
+  const trigger = makeTrigger();
+  const insert = vi.spyOn(updateOperationStore, 'insertOperation');
+  const existing = {
+    id: 'existing-operation',
+    status: 'in-progress',
+    phase: 'pulling',
+    containerId: 'container-id',
+    containerName: 'pihole',
+  } as never;
+  vi.spyOn(updateOperationStore, 'getActiveOperationByContainerId').mockReturnValue(existing);
+  const inherited = vi
+    .spyOn(DockerBase.prototype, 'runContainerUpdateLifecycle')
+    .mockImplementation(async (_container, runtimeContext) => {
+      expect(runtimeContext).toEqual({ operationId: 'existing-operation' });
+      return true;
+    });
+
+  await trigger.runContainerUpdateLifecycle(makeContainer());
+
+  expect(insert).not.toHaveBeenCalled();
+  inherited.mockRestore();
+});
+
+test('performContainerUpdate persists Portainer recovery state before target PUT', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  const resolved = makeResolvedUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  vi.spyOn(updateOperationStore, 'updateOperation').mockReturnValue(undefined);
+  const save = vi.spyOn(store, 'save').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Id: 'sha256:new' }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([
+      {
+        State: 'running',
+        ImageID: 'sha256:old',
+        Image: resolved.originalImage,
+        Labels: {
+          'com.docker.compose.project': 'pihole',
+          'com.docker.compose.service': 'pihole',
+        },
+      },
+    ]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    { operationId: 'portainer-operation' },
+  );
+
+  expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+    'portainer-operation',
+    expect.objectContaining({
+      phase: 'portainer-target',
+      portainerRecovery: expect.objectContaining({
+        mode: 'compose',
+        service: 'pihole',
+        originalImage: resolved.originalImage,
+        targetImage: resolved.targetImage,
+        originalImageId: 'sha256:old',
+        targetImageId: 'sha256:new',
+        runningReplicas: 1,
+      }),
+    }),
+  );
+  expect(updateOperationStore.updateOperation).toHaveBeenNthCalledWith(
+    1,
+    'portainer-operation',
+    expect.objectContaining({ status: 'in-progress', phase: 'pulling' }),
+  );
+  expect(save).toHaveBeenCalled();
+  expect(redeploy).toHaveBeenCalledOnce();
+});
+
+test('performContainerUpdate persists restore phase before restore PUT', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  const resolved = makeResolvedUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const updates: unknown[] = [];
+  vi.spyOn(updateOperationStore, 'updateOperation').mockImplementation((_id, patch) => {
+    updates.push(patch);
+    return undefined;
+  });
+  const save = vi.spyOn(store, 'save').mockResolvedValue(undefined);
+  save.mockClear();
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Id: 'sha256:new' }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([
+      {
+        State: 'running',
+        ImageID: 'sha256:old',
+        Image: resolved.originalImage,
+        Labels: {
+          'com.docker.compose.project': 'pihole',
+          'com.docker.compose.service': 'pihole',
+        },
+      },
+    ]),
+  };
+  vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy')
+    .mockRejectedValueOnce(new Error('target failed'))
+    .mockResolvedValueOnce(undefined);
+
+  await expect(
+    trigger.performContainerUpdate(
+      { dockerApi, auth: undefined, newImage: resolved.targetImage },
+      makeContainer(),
+      trigger.log,
+      { operationId: 'portainer-operation' },
+    ),
+  ).rejects.toThrow('target failed');
+
+  expect(updates).toHaveLength(3);
+  expect(updates[2]).toEqual(
+    expect.objectContaining({
+      phase: 'portainer-restore',
+      portainerRecovery: expect.any(Object),
+    }),
+  );
+  expect(save).toHaveBeenCalledTimes(3);
+});
+
+test('reconcileInProgressContainerUpdateOperation reissues target only from original state', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  const container = makeContainer();
+  vi.spyOn(updateOperationStore, 'getInProgressOperationByContainerId').mockReturnValue({
+    id: 'portainer-operation',
+    status: 'in-progress',
+    phase: 'portainer-target',
+    containerName: container.name,
+    containerId: container.id,
+    portainerRecovery: {
+      stackId: 12,
+      endpointId: 1,
+      service: 'pihole',
+      mode: 'compose',
+      field: 'compose:pihole.image',
+      originalValue: 'pihole/pihole:2026.05.0',
+      targetValue: 'pihole/pihole:2026.07.2',
+      originalImage: 'pihole/pihole:2026.05.0',
+      originalImageId: 'sha256:old',
+      targetImage: 'pihole/pihole:2026.07.2',
+      targetImageId: 'sha256:new',
+      runningReplicas: 1,
+    },
+  } as never);
+  vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({ Id: 12, EndpointId: 1 });
+  vi.spyOn(trigger, 'getPortainerStackFile').mockResolvedValue(
+    'services:\n  pihole:\n    image: pihole/pihole:2026.05.0\n',
+  );
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(updateOperationStore, 'updateOperation').mockReturnValue(undefined);
+  const terminal = vi
+    .spyOn(updateOperationStore, 'markOperationTerminal')
+    .mockReturnValue(undefined);
+  const wait = vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+  const dockerApi = {
+    listContainers: vi.fn().mockResolvedValue([
+      {
+        State: 'running',
+        ImageID: 'sha256:old',
+        Image: 'pihole/pihole:2026.05.0',
+        Labels: {
+          'com.docker.compose.project': 'pihole',
+          'com.docker.compose.service': 'pihole',
+        },
+      },
+    ]),
+  };
+
+  await trigger.reconcileInProgressContainerUpdateOperation(dockerApi, container, trigger.log);
+
+  expect(redeploy).toHaveBeenCalledOnce();
+  expect(redeploy.mock.calls[0][1]).toContain('pihole/pihole:2026.07.2');
+  expect(wait).toHaveBeenCalledOnce();
+  expect(terminal).toHaveBeenCalledWith('portainer-operation', {
+    status: 'succeeded',
+    phase: 'succeeded',
+  });
+});
+
+test('reconcileInProgressContainerUpdateOperation rejects an unversioned descriptor before remote calls', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  const container = makeContainer();
+  vi.spyOn(updateOperationStore, 'getInProgressOperationByContainerId').mockReturnValue({
+    id: 'portainer-invalid',
+    status: 'in-progress',
+    phase: 'portainer-target',
+    containerName: container.name,
+    containerId: container.id,
+    portainerRecovery: { stackId: 12 },
+  } as never);
+  const getStack = vi.spyOn(trigger, 'getPortainerStack').mockResolvedValue({ Id: 12 });
+
+  await expect(
+    trigger.reconcileInProgressContainerUpdateOperation({}, container, trigger.log),
+  ).rejects.toThrow('descriptor is invalid');
+  expect(getStack).not.toHaveBeenCalled();
 });
 
 test('performContainerUpdate captures the local image identity for convergence', async () => {

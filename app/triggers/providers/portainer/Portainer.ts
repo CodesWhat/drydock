@@ -1,6 +1,9 @@
+import crypto from 'node:crypto';
 import path from 'node:path';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
+import { save as saveStore } from '../../../store/index.js';
+import * as updateOperationStore from '../../../store/update-operation.js';
 import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
 import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
 import type { PostPullHookOptions } from '../docker/UpdateLifecycleExecutor.js';
@@ -88,6 +91,21 @@ interface ResolvedPortainerUpdate {
   prePutRunningReplicas?: number;
   updatedStackFileContent: string;
   updatedEnv: PortainerStackEnv[];
+}
+
+interface PortainerRecoveryDescriptor {
+  stackId: number;
+  endpointId?: number;
+  service: string;
+  mode: 'env' | 'compose';
+  field: string;
+  originalValue: string;
+  targetValue: string;
+  originalImage: string;
+  originalImageId: string;
+  targetImage: string;
+  targetImageId: string;
+  runningReplicas: number;
 }
 
 interface DockerContainerListItem {
@@ -348,6 +366,10 @@ function isMatchingServiceContainer(
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+class PortainerRecoveryUnavailableError extends Error {
+  recoveryUnresolved = true;
 }
 
 function isComposeVariableStart(value: string | undefined): boolean {
@@ -1143,6 +1165,37 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     logContainer.warn(`${message}; redeploying without a pinned image reference`);
   }
 
+  async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
+    if (container.updateKind?.kind !== 'tag') {
+      throw new Error('Portainer provider only supports tag updates');
+    }
+    if (getRequestedOperationId(container, runtimeContext)) {
+      return super.runContainerUpdateLifecycle(container, runtimeContext);
+    }
+
+    const existing =
+      updateOperationStore.getActiveOperationByContainerId(container.id) ||
+      updateOperationStore.getActiveOperationByContainerName(container.name, {
+        agent: container.agent,
+        watcher: container.watcher,
+      });
+    const operationId = existing?.id || crypto.randomUUID();
+    if (existing) {
+      return super.runContainerUpdateLifecycle(container, { operationId });
+    }
+    updateOperationStore.insertOperation({
+      id: operationId,
+      containerId: container.id,
+      containerName: container.name,
+      container,
+      triggerName: this.getId(),
+      status: 'queued',
+      phase: 'queued',
+    });
+    await saveStore();
+    return super.runContainerUpdateLifecycle(container, { operationId });
+  }
+
   async performContainerUpdate(
     context,
     container,
@@ -1156,6 +1209,14 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
   ) {
     if (container.updateKind?.kind !== 'tag') {
       throw new Error('Portainer provider only supports tag updates');
+    }
+    const operationId = getRequestedOperationId(container, runtimeContext);
+    if (operationId) {
+      updateOperationStore.updateOperation(operationId, {
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      await saveStore();
     }
     const resolved = await this.resolvePortainerUpdate(container, context.newImage);
     logContainer.info(
@@ -1269,6 +1330,34 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     }
     resolved.originalImageId = originalImageIds[0];
 
+    const recovery: PortainerRecoveryDescriptor = {
+      stackId: resolved.stack.Id,
+      ...(resolved.stack.EndpointId !== undefined ? { endpointId: resolved.stack.EndpointId } : {}),
+      service: resolved.service,
+      mode: resolved.mode,
+      field:
+        resolved.mode === 'env'
+          ? `env:${resolved.versionVar || ''}`
+          : `compose:${resolved.service}.image`,
+      originalValue:
+        resolved.mode === 'env'
+          ? resolved.stack.Env?.find((item) => item.name === resolved.versionVar)?.value || ''
+          : resolved.serviceImage || resolved.originalImage,
+      targetValue: resolved.mode === 'env' ? resolved.targetTag || '' : resolved.targetImage,
+      originalImage: resolved.originalImage,
+      originalImageId: resolved.originalImageId,
+      targetImage: resolved.targetImage,
+      targetImageId: resolved.targetImageId || '',
+      runningReplicas: resolved.prePutRunningReplicas,
+    };
+    if (operationId) {
+      updateOperationStore.updateOperation(operationId, {
+        phase: 'portainer-target',
+        portainerRecovery: recovery,
+      });
+      await saveStore();
+    }
+
     let primaryError: unknown;
     try {
       await this.redeployPortainerStack(
@@ -1291,6 +1380,13 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       let restorePutError: unknown;
       let restoreWaitError: unknown;
       try {
+        if (operationId) {
+          updateOperationStore.updateOperation(operationId, {
+            phase: 'portainer-restore',
+            portainerRecovery: recovery,
+          });
+          await saveStore();
+        }
         await this.redeployPortainerStack(
           resolved.stack,
           resolved.stackFileContent,
@@ -1330,11 +1426,185 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     return true;
   }
 
-  async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    if (container.updateKind?.kind !== 'tag') {
-      throw new Error('Portainer provider only supports tag updates');
+  async reconcileInProgressContainerUpdateOperation(dockerApi, container, logContainer) {
+    const pending =
+      updateOperationStore.getInProgressOperationByContainerId(container.id) ||
+      updateOperationStore.getInProgressOperationByContainerName(container.name, {
+        agent: container.agent,
+        watcher: container.watcher,
+      });
+    if (!pending) {
+      return;
     }
-    return super.runContainerUpdateLifecycle(container, runtimeContext);
+    const recovery = pending.portainerRecovery as Partial<PortainerRecoveryDescriptor> | undefined;
+    if (!recovery || typeof recovery.stackId !== 'number') {
+      throw new PortainerRecoveryUnavailableError(
+        `Portainer recovery descriptor is missing for operation ${pending.id}`,
+      );
+    }
+    if (container.agent) {
+      throw new PortainerRecoveryUnavailableError(
+        `Portainer update operation ${pending.id} is agent-owned and cannot be recovered`,
+      );
+    }
+    if (
+      (recovery.mode !== 'compose' && recovery.mode !== 'env') ||
+      typeof recovery.service !== 'string' ||
+      typeof recovery.originalImage !== 'string' ||
+      typeof recovery.originalImageId !== 'string' ||
+      typeof recovery.targetImage !== 'string' ||
+      typeof recovery.targetImageId !== 'string' ||
+      typeof recovery.runningReplicas !== 'number' ||
+      !Number.isInteger(recovery.runningReplicas) ||
+      recovery.runningReplicas < 1
+    ) {
+      throw new PortainerRecoveryUnavailableError(
+        `Portainer recovery descriptor is invalid for operation ${pending.id}`,
+      );
+    }
+    if (!dockerApi || typeof dockerApi.listContainers !== 'function') {
+      throw new PortainerRecoveryUnavailableError(
+        `Docker runtime is unavailable for Portainer operation ${pending.id}`,
+      );
+    }
+
+    const stack = await this.getPortainerStack(recovery.stackId);
+    if (recovery.endpointId !== undefined && stack.EndpointId !== recovery.endpointId) {
+      throw new Error(
+        `Refusing Portainer recovery for operation ${pending.id}: stack endpoint changed`,
+      );
+    }
+    const stackFileContent = await this.getPortainerStackFile(recovery.stackId);
+    let definition: 'original' | 'target' | undefined;
+    if (recovery.mode === 'env') {
+      const variable = recovery.field?.startsWith('env:')
+        ? recovery.field.slice('env:'.length)
+        : undefined;
+      const value = stack.Env?.find((entry) => entry.name === variable)?.value;
+      if (value === recovery.originalValue) definition = 'original';
+      if (value === recovery.targetValue) definition = 'target';
+    } else {
+      const compose = yaml.parse(stackFileContent, {
+        maxAliasCount: YAML_MAX_ALIAS_COUNT,
+      }) as ComposeFile;
+      const serviceImage = getServiceImage(compose, recovery.service);
+      const normalizedServiceImage = normalizeImageReference(serviceImage);
+      if (normalizedServiceImage === normalizeImageReference(recovery.originalValue)) {
+        definition = 'original';
+      }
+      if (normalizedServiceImage === normalizeImageReference(recovery.targetValue)) {
+        definition = 'target';
+      }
+    }
+    if (!definition) {
+      throw new Error(
+        `Refusing Portainer recovery for operation ${pending.id}: stack definition is neither original nor target`,
+      );
+    }
+
+    const containers = await dockerApi.listContainers({ all: true });
+    const matching = containers.filter((item) =>
+      isMatchingServiceContainer(item, container, {
+        service: recovery.service,
+      } as ResolvedPortainerUpdate),
+    );
+    const running = matching.filter((item) => item.State?.toLowerCase() === 'running');
+    if (running.length === 0) {
+      throw new PortainerRecoveryUnavailableError(
+        `Portainer runtime is unavailable for operation ${pending.id}`,
+      );
+    }
+    const runtime =
+      running.length === recovery.runningReplicas &&
+      running.every(
+        (item) =>
+          normalizeImageReference(item.Image) === normalizeImageReference(recovery.targetImage) &&
+          item.ImageID === recovery.targetImageId,
+      )
+        ? 'target'
+        : running.length === recovery.runningReplicas &&
+            running.every(
+              (item) =>
+                normalizeImageReference(item.Image) ===
+                  normalizeImageReference(recovery.originalImage) &&
+                item.ImageID === recovery.originalImageId,
+            )
+          ? 'original'
+          : undefined;
+    if (!runtime) {
+      throw new Error(
+        `Refusing Portainer recovery for operation ${pending.id}: runtime is neither original nor target`,
+      );
+    }
+
+    if (pending.phase === 'portainer-target' && definition === 'target' && runtime === 'target') {
+      updateOperationStore.markOperationTerminal(pending.id, {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+      return;
+    }
+    if (
+      pending.phase === 'portainer-restore' &&
+      definition === 'original' &&
+      runtime === 'original'
+    ) {
+      updateOperationStore.markOperationTerminal(pending.id, {
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        rollbackReason: 'Portainer restore completed during recovery',
+      });
+      return;
+    }
+
+    const restore = pending.phase === 'portainer-restore';
+    const desiredValue = restore ? recovery.originalValue : recovery.targetValue;
+    const updatedStackFileContent =
+      recovery.mode === 'compose'
+        ? updateComposeServiceImageInText(stackFileContent, recovery.service, desiredValue)
+        : stackFileContent;
+    const updatedEnv =
+      recovery.mode === 'env'
+        ? upsertStackEnv(stack.Env, recovery.field.slice('env:'.length), desiredValue)
+        : stack.Env || [];
+    updateOperationStore.updateOperation(pending.id, {
+      phase: restore ? 'portainer-restore' : 'portainer-target',
+      portainerRecovery: recovery,
+    });
+    await saveStore();
+    await this.redeployPortainerStack(stack, updatedStackFileContent, updatedEnv);
+    await this.waitForPortainerRedeploy(
+      dockerApi,
+      container,
+      {
+        mode: recovery.mode,
+        stack,
+        stackFileContent,
+        service: recovery.service,
+        targetImage: restore ? recovery.originalImage : recovery.targetImage,
+        targetImageId: restore ? recovery.originalImageId : recovery.targetImageId,
+        originalImage: recovery.originalImage,
+        prePutRunningReplicas: recovery.runningReplicas,
+        updatedStackFileContent,
+        updatedEnv,
+      },
+      logContainer,
+    );
+    if (restore) {
+      updateOperationStore.markOperationTerminal(pending.id, {
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        rollbackReason: 'Portainer restore completed during recovery',
+      });
+    } else {
+      updateOperationStore.markOperationTerminal(pending.id, {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+    }
+    logContainer.info(
+      `Reissued Portainer ${restore ? 'restore' : 'target'} redeploy for ${recovery.service} during recovery`,
+    );
   }
 
   getRollbackConfig(container) {
