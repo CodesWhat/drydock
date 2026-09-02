@@ -328,6 +328,13 @@ test('validateConfiguration should default auto to oninclude for command trigger
   expect(validatedConfiguration.auto).toBe('oninclude');
 });
 
+test('validateConfiguration should default auto to oninclude for portainer triggers', () => {
+  trigger.type = 'portainer';
+  const { auto, ...configurationWithoutAuto } = configurationValid;
+  const validatedConfiguration = trigger.validateConfiguration(configurationWithoutAuto);
+  expect(validatedConfiguration.auto).toBe('oninclude');
+});
+
 test('validateConfiguration should accept digest and non-digest thresholds', async () => {
   expect(
     trigger.validateConfiguration({

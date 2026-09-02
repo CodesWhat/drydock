@@ -403,7 +403,7 @@ The replay buffer is an in-memory 5-minute ring buffer. If the requested event i
 | `dd:scan-started` | `{ "containerId": "..." }` | A security scan started for a container |
 | `dd:scan-completed` | `{ "containerId": "...", "status": "..." }` | A security scan finished |
 | `dd:self-update` | `{ "opId": "...", "requiresAck": bool, "ackTimeoutMs": int, "startedAt": "..." }` | Drydock is updating its own container. If `requiresAck` is true, the UI should POST an acknowledgment before the timeout. |
-| `dd:update-operation-changed` | `{ "operationId": "...", "containerName": "...", "status": "...", "phase": "...", "queuePosition": int, "queueTotal": int }` | An in-flight update operation's status or queue position changed |
+| `dd:update-operation-changed` | `{ "operationId": "...", "containerName": "...", "triggerName": "...", "status": "...", "phase": "...", "queuePosition": int, "queueTotal": int }` | An in-flight update operation's status or queue position changed. `triggerName` is optional. |
 | `dd:update-applied` | `{ "containerName": "...", "containerId": "...", "newContainerId": "...", "operationId": "...", "batchId": "..." }` | An update was successfully applied to a container |
 | `dd:update-failed` | `{ "containerName": "...", "error": "...", "operationId": "...", "batchId": "...", "phase": "...", "rollbackReason": "..." }` | An update attempt failed (or was rolled back) |
 | `dd:batch-update-completed` | `{ "batchId": "...", "total": int, "succeeded": int, "failed": int, "durationMs": int, "items": [...] }` | A batch update run finished |

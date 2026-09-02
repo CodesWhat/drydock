@@ -235,6 +235,7 @@ interface RemoteTriggerErrorPayload {
 interface AgentUpdateOperationChangedPayload {
   operationId: string;
   containerName: string;
+  triggerName?: string;
   status: ContainerUpdateOperationStatus;
   containerId?: string;
   newContainerId?: string;
@@ -1713,6 +1714,25 @@ export class AgentClient {
     return trimmed.startsWith(prefix) ? trimmed : `${prefix}${trimmed}`;
   }
 
+  private qualifyAgentTriggerName(
+    triggerName: string | undefined,
+    existingTriggerName?: string,
+  ): string | undefined {
+    if (existingTriggerName !== undefined) {
+      return existingTriggerName;
+    }
+    if (triggerName === undefined) {
+      return undefined;
+    }
+    if (triggerName.startsWith(`${this.name}.`)) {
+      return triggerName;
+    }
+    if (triggerName.indexOf('.') !== triggerName.lastIndexOf('.')) {
+      return undefined;
+    }
+    return `${this.name}.${triggerName}`;
+  }
+
   /**
    * Resolve the operation id to use when processing a lifecycle event from
    * the agent.
@@ -1741,7 +1761,12 @@ export class AgentClient {
     const payload = data as Record<string, unknown>;
     const operationId = toNonEmptyString(payload.operationId);
     const containerName = toNonEmptyString(payload.containerName);
+    const triggerName = toOptionalString(payload.triggerName);
     if (!operationId || !containerName || !isContainerUpdateOperationStatus(payload.status)) {
+      return undefined;
+    }
+    const normalizedTriggerName = this.qualifyAgentTriggerName(triggerName);
+    if (triggerName !== undefined && normalizedTriggerName === undefined) {
       return undefined;
     }
 
@@ -1749,6 +1774,7 @@ export class AgentClient {
       operationId,
       containerName,
       status: payload.status,
+      ...(normalizedTriggerName !== undefined ? { triggerName: normalizedTriggerName } : {}),
       ...(toOptionalString(payload.containerId) !== undefined
         ? { containerId: toOptionalString(payload.containerId) }
         : {}),
@@ -1799,6 +1825,7 @@ export class AgentClient {
   private buildAgentOperationBase(payload: {
     operationId: string;
     containerName: string;
+    triggerName?: string;
     containerId?: string;
     newContainerId?: string;
     container?: Record<string, unknown>;
@@ -1816,6 +1843,9 @@ export class AgentClient {
       id: this.resolveAgentOperationId(payload.operationId),
       kind: 'container-update' as const,
       containerName: payload.containerName,
+      ...(this.qualifyAgentTriggerName(payload.triggerName) !== undefined
+        ? { triggerName: this.qualifyAgentTriggerName(payload.triggerName) }
+        : {}),
       agent: this.name,
       ...(watcher !== undefined ? { watcher } : {}),
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
@@ -1827,6 +1857,7 @@ export class AgentClient {
   private ensureAgentOperationForTerminal(payload: {
     operationId: string;
     containerName: string;
+    triggerName?: string;
     containerId?: string;
     newContainerId?: string;
     container?: Record<string, unknown>;
@@ -1859,6 +1890,15 @@ export class AgentClient {
         if (isActiveContainerUpdateOperationStatus(existing.status)) {
           updateOperationStore.updateOperation(operationId, {
             containerName: payload.containerName,
+            ...(this.qualifyAgentTriggerName(payload.triggerName, existing.triggerName) !==
+            undefined
+              ? {
+                  triggerName: this.qualifyAgentTriggerName(
+                    payload.triggerName,
+                    existing.triggerName,
+                  ),
+                }
+              : {}),
             agent: base.agent,
             /* v8 ignore next -- watcher is optional when an agent event lacks container metadata. */
             ...(base.watcher !== undefined ? { watcher: base.watcher } : {}),
@@ -1895,6 +1935,7 @@ export class AgentClient {
   private markAgentOperationTerminal(payload: {
     operationId: string;
     containerName: string;
+    triggerName?: string;
     status: TerminalContainerUpdateOperationStatus;
     containerId?: string;
     newContainerId?: string;
@@ -1910,6 +1951,11 @@ export class AgentClient {
     updateOperationStore.markOperationTerminal(operationId, {
       status: payload.status,
       containerName: payload.containerName,
+      ...(this.qualifyAgentTriggerName(payload.triggerName, existing?.triggerName) !== undefined
+        ? {
+            triggerName: this.qualifyAgentTriggerName(payload.triggerName, existing?.triggerName),
+          }
+        : {}),
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
       ...(payload.phase ? { phase: payload.phase as never } : {}),

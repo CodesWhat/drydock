@@ -8,6 +8,7 @@ const {
   mockGetContainers,
   mockGetState,
   mockFindDockerTriggerForContainer,
+  mockIsTriggerCompatibleWithContainer,
   mockDispatchAcceptedGroups,
 } = vi.hoisted(() => ({
   mockListActiveOperations: vi.fn(),
@@ -17,6 +18,7 @@ const {
   mockGetContainers: vi.fn(),
   mockGetState: vi.fn(),
   mockFindDockerTriggerForContainer: vi.fn(),
+  mockIsTriggerCompatibleWithContainer: vi.fn(() => true),
   mockDispatchAcceptedGroups: vi.fn(),
 }));
 
@@ -37,6 +39,7 @@ vi.mock('../registry/index.js', () => ({
 
 vi.mock('../api/docker-trigger.js', () => ({
   findDockerTriggerForContainer: mockFindDockerTriggerForContainer,
+  isTriggerCompatibleWithContainer: mockIsTriggerCompatibleWithContainer,
 }));
 
 vi.mock('./request-update.js', () => ({
@@ -55,6 +58,7 @@ vi.mock('../log/index.js', () => ({
 }));
 
 import {
+  findRecoveryUpdateTrigger,
   parseRecoveryBootConcurrency,
   recoverInProgressOperationsOnStartup,
   recoverQueuedOperationsOnStartup,
@@ -63,6 +67,7 @@ import {
 describe('recoverQueuedOperationsOnStartup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsTriggerCompatibleWithContainer.mockReturnValue(true);
     delete process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY;
     mockGetState.mockReturnValue({ trigger: { 'docker.local': {} } });
     mockGetContainers.mockReturnValue([]);
@@ -73,6 +78,15 @@ describe('recoverQueuedOperationsOnStartup', () => {
     mockListActiveOperations.mockReturnValue([]);
     expect(recoverQueuedOperationsOnStartup()).toEqual({ resumed: 0, abandoned: 0 });
     expect(mockDispatchAcceptedGroups).not.toHaveBeenCalled();
+  });
+
+  test('returns no persisted trigger when the trigger registry is undefined', () => {
+    mockGetState.mockReturnValue({ trigger: undefined });
+
+    expect(findRecoveryUpdateTrigger({ id: 'c-1', name: 'web' } as any, 'portainer.update')).toBe(
+      undefined,
+    );
+    expect(mockFindDockerTriggerForContainer).not.toHaveBeenCalled();
   });
 
   test('skips self-update operations entirely', () => {
@@ -226,6 +240,140 @@ describe('recoverQueuedOperationsOnStartup', () => {
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
+  test('queued recovery does not fall back when the persisted provider is missing', () => {
+    const container = { id: 'c-1', name: 'web', watcher: 'local' };
+    const dockerTrigger = { type: 'docker', getId: () => 'docker.update', trigger: vi.fn() };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-portainer',
+        status: 'queued',
+        containerId: 'c-1',
+        containerName: 'web',
+        triggerName: 'portainer.update',
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockGetState.mockReturnValue({ trigger: { 'docker.update': dockerTrigger } });
+    mockFindDockerTriggerForContainer.mockReturnValue(dockerTrigger);
+
+    const result = recoverQueuedOperationsOnStartup();
+
+    expect(result).toEqual({ resumed: 0, abandoned: 1 });
+    expect(mockFindDockerTriggerForContainer).not.toHaveBeenCalled();
+    expect(mockDispatchAcceptedGroups).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-portainer',
+      expect.objectContaining({ status: 'failed', lastError: expect.stringContaining('trigger') }),
+    );
+  });
+
+  test('queued recovery resolves an exact agent-qualified provider id', () => {
+    const container = { id: 'c-1', name: 'web', watcher: 'local', agent: 'edge-1' };
+    const trigger = {
+      type: 'docker',
+      agent: 'edge-1',
+      getId: () => 'edge-1.docker.update',
+      trigger: vi.fn(),
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-agent',
+        status: 'queued',
+        containerId: 'c-1',
+        containerName: 'web',
+        triggerName: 'edge-1.docker.update',
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockGetState.mockReturnValue({ trigger: { 'edge-1.docker.update': trigger } });
+
+    const result = recoverQueuedOperationsOnStartup();
+
+    expect(result).toEqual({ resumed: 1, abandoned: 0 });
+    expect(mockFindDockerTriggerForContainer).not.toHaveBeenCalled();
+    expect(mockDispatchAcceptedGroups).toHaveBeenCalledWith(
+      [{ accepted: [{ container, operationId: 'op-agent', trigger }], dependencyContext: [] }],
+      { concurrency: 4 },
+    );
+  });
+
+  test('queued recovery does not fall back when the persisted provider is incompatible', () => {
+    const container = { id: 'c-1', name: 'web', watcher: 'local' };
+    const portainerTrigger = {
+      type: 'portainer',
+      getId: () => 'portainer.update',
+      trigger: vi.fn(),
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-incompatible',
+        status: 'queued',
+        containerId: 'c-1',
+        containerName: 'web',
+        triggerName: 'portainer.update',
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockGetState.mockReturnValue({ trigger: { 'portainer.update': portainerTrigger } });
+    mockIsTriggerCompatibleWithContainer.mockReturnValue(false);
+    mockFindDockerTriggerForContainer.mockReturnValue({
+      type: 'docker',
+      trigger: vi.fn(),
+    });
+
+    const result = recoverQueuedOperationsOnStartup();
+
+    expect(result).toEqual({ resumed: 0, abandoned: 1 });
+    expect(mockFindDockerTriggerForContainer).not.toHaveBeenCalled();
+    expect(mockDispatchAcceptedGroups).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-incompatible',
+      expect.objectContaining({ status: 'failed' }),
+    );
+  });
+
+  test('queued recovery dispatches through the persisted Portainer provider', () => {
+    const container = {
+      id: 'c-portainer',
+      name: 'web',
+      watcher: 'local',
+      labels: {
+        'com.docker.compose.project': 'demo',
+        'com.docker.compose.service': 'web',
+      },
+      updateKind: { kind: 'tag' },
+    };
+    const portainerTrigger = {
+      type: 'portainer',
+      getId: () => 'portainer.update',
+      trigger: vi.fn(),
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-portainer',
+        status: 'queued',
+        containerId: 'c-portainer',
+        containerName: 'web',
+        triggerName: 'portainer.update',
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockGetState.mockReturnValue({ trigger: { 'portainer.update': portainerTrigger } });
+
+    const result = recoverQueuedOperationsOnStartup();
+
+    expect(result).toEqual({ resumed: 1, abandoned: 0 });
+    expect(mockDispatchAcceptedGroups).toHaveBeenCalledWith(
+      [
+        {
+          accepted: [{ container, operationId: 'op-portainer', trigger: portainerTrigger }],
+          dependencyContext: [],
+        },
+      ],
+      { concurrency: 4 },
+    );
+  });
+
   test('dispatches recovered operations with the default boot concurrency cap', () => {
     const trigger = { type: 'docker', trigger: vi.fn() };
     const operations = Array.from({ length: 5 }, (_, index) => ({
@@ -278,6 +426,72 @@ describe('recoverQueuedOperationsOnStartup', () => {
         process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY = previous;
       }
     }
+  });
+
+  test('does not run Docker recovery for a Portainer in-progress operation', async () => {
+    const container = { id: 'c-portainer', name: 'web', watcher: 'local' };
+    const reconcile = vi.fn().mockResolvedValue(undefined);
+    const portainerTrigger = {
+      type: 'portainer',
+      getId: () => 'portainer.update',
+      getWatcher: vi.fn(() => ({ dockerApi: {} })),
+      reconcileInProgressContainerUpdateOperation: reconcile,
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-portainer-in-progress',
+        status: 'in-progress',
+        phase: 'renamed',
+        containerName: 'web',
+        container,
+        triggerName: 'portainer.update',
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockGetState.mockReturnValue({ trigger: { 'portainer.update': portainerTrigger } });
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 0,
+      abandoned: 1,
+    });
+    expect(portainerTrigger.getWatcher).not.toHaveBeenCalled();
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-portainer-in-progress',
+      expect.objectContaining({ status: 'expired', phase: 'expired' }),
+    );
+  });
+
+  test('legacy in-progress recovery skips a Portainer trigger instead of invoking Docker recovery', async () => {
+    const container = { id: 'c-portainer-legacy', name: 'web', watcher: 'local' };
+    const reconcile = vi.fn().mockResolvedValue(undefined);
+    const portainerTrigger = {
+      type: 'portainer',
+      getWatcher: vi.fn(() => ({ dockerApi: {} })),
+      reconcileInProgressContainerUpdateOperation: reconcile,
+    };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-portainer-legacy',
+        status: 'in-progress',
+        phase: 'renamed',
+        containerName: 'web',
+        container,
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockFindDockerTriggerForContainer.mockReturnValue(portainerTrigger);
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 0,
+      abandoned: 1,
+    });
+    expect(portainerTrigger.getWatcher).not.toHaveBeenCalled();
+    expect(reconcile).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-portainer-legacy',
+      expect.objectContaining({ status: 'expired', phase: 'expired' }),
+    );
   });
 
   test('rejects zero DD_UPDATE_RECOVERY_BOOT_CONCURRENCY values', () => {

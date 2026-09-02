@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import {
   AGENT_LIFECYCLE_UNSUPPORTED_ERROR,
   isAgentLifecycleUnsupported,
+  isTriggerCompatibleWithContainer,
   NO_DOCKER_TRIGGER_FOUND_ERROR,
 } from '../api/docker-trigger.js';
 import {
@@ -44,7 +45,7 @@ interface UpdateQueueBatchMetadata {
   queueTotal: number;
 }
 
-type UpdateTriggerType = 'docker' | 'dockercompose';
+type UpdateTriggerType = 'docker' | 'dockercompose' | 'portainer';
 
 type UpdateTriggerLike = {
   type: string;
@@ -92,7 +93,7 @@ export interface ContainerUpdateRequestBatchResult {
 
 type PreparedContainerUpdateRequest = {
   container: Container;
-  trigger: UpdateTriggerLike;
+  trigger: ResolvedUpdateTrigger;
 };
 
 interface EnqueueContainerUpdateOptions {
@@ -106,7 +107,7 @@ interface EnqueueContainerUpdateOptions {
 export interface RequestContainerUpdateOptions
   extends Omit<EnqueueContainerUpdateOptions, 'allowSoftPolicyOverride' | 'source'> {}
 
-const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose'];
+const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose', 'portainer'];
 const log = logger.child({ component: 'updates.request-update' });
 const NOTIFY_MODE_REJECTION_MESSAGE = 'Update mode is notify; Drydock will not apply updates';
 const MANUAL_MODE_REJECTION_MESSAGE = 'Update mode is manual; automatic updates are disabled';
@@ -164,6 +165,28 @@ function resolveUpdateTrigger(
     }
     if (!DEFAULT_UPDATE_TRIGGER_TYPES.includes(providedTrigger.type as UpdateTriggerType)) {
       throw new UpdateRequestError(400, 'Trigger is not a container update trigger');
+    }
+    if (!isTriggerCompatibleWithContainer(providedTrigger, container)) {
+      throw new UpdateRequestError(404, NO_DOCKER_TRIGGER_FOUND_ERROR);
+    }
+
+    const resolvedPolicy = resolveForTrigger(
+      providedTrigger as unknown as ActionPolicyTrigger,
+      container,
+    );
+    if (resolvedPolicy.state === 'blocked') {
+      if (resolvedPolicy.reason === 'excluded') {
+        throw new UpdateRequestError(
+          409,
+          `Trigger excluded by container label dd.action.exclude='${container.actionTriggerExclude}'.`,
+        );
+      }
+      throw new UpdateRequestError(
+        409,
+        container.actionTriggerInclude
+          ? `Trigger not matched by container label dd.action.include='${container.actionTriggerInclude}'.`
+          : 'Trigger not matched by container label dd.action.include.',
+      );
     }
     return providedTrigger;
   }
@@ -414,6 +437,7 @@ function createAcceptedContainerUpdateRequest(
       containerId: prepared.container.id,
       containerName: prepared.container.name,
       container: prepared.container,
+      triggerName: prepared.trigger.getId(),
       status: 'queued',
       phase: 'queued',
       ...batchMetadata,

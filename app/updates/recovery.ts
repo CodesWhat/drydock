@@ -1,4 +1,7 @@
-import { findDockerTriggerForContainer } from '../api/docker-trigger.js';
+import {
+  findDockerTriggerForContainer,
+  isTriggerCompatibleWithContainer,
+} from '../api/docker-trigger.js';
 import log from '../log/index.js';
 import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
@@ -46,6 +49,20 @@ function getRecoveryTriggerRegistry(): RecoveryTriggerRegistry {
   return registry.getState().trigger;
 }
 
+function findTriggerByPersistedId(
+  triggerId: string,
+): AcceptedContainerUpdateRequest['trigger'] | undefined {
+  const triggers = getRecoveryTriggerRegistry();
+  const direct = triggers?.[triggerId];
+  if (direct) {
+    return direct;
+  }
+  return Object.values(triggers ?? {}).find((trigger) => {
+    const getId = (trigger as { getId?: unknown }).getId;
+    return typeof getId === 'function' && (getId as () => string)() === triggerId;
+  });
+}
+
 export function parseRecoveryBootConcurrency(raw: string | undefined): number {
   const parsed = parseEnvNonNegativeInteger(raw, RECOVERY_BOOT_CONCURRENCY_ENV);
   if (parsed === undefined) {
@@ -59,14 +76,31 @@ export function parseRecoveryBootConcurrency(raw: string | undefined): number {
 
 export function findRecoveryUpdateTrigger(
   container: Container,
+  persistedTriggerId?: string,
 ): AcceptedContainerUpdateRequest['trigger'] | undefined {
-  return findDockerTriggerForContainer(getRecoveryTriggerRegistry(), container);
+  if (typeof persistedTriggerId === 'string' && persistedTriggerId.trim() !== '') {
+    const trigger = findTriggerByPersistedId(persistedTriggerId);
+    if (
+      !trigger ||
+      !isTriggerCompatibleWithContainer(
+        trigger as unknown as Parameters<typeof isTriggerCompatibleWithContainer>[0],
+        container,
+      )
+    ) {
+      return undefined;
+    }
+    return trigger;
+  }
+  return findDockerTriggerForContainer(getRecoveryTriggerRegistry(), container, {
+    triggerTypes: ['docker', 'dockercompose'],
+  });
 }
 
 function isRecoveryDockerTrigger(
   trigger: AcceptedContainerUpdateRequest['trigger'] | undefined,
 ): trigger is RecoveryDockerTrigger {
   return (
+    trigger?.type !== 'portainer' &&
     typeof (trigger as Partial<RecoveryDockerTrigger> | undefined)?.getWatcher === 'function' &&
     typeof (trigger as Partial<RecoveryDockerTrigger> | undefined)
       ?.reconcileInProgressContainerUpdateOperation === 'function'
@@ -110,7 +144,12 @@ export async function recoverInProgressOperationsOnStartup(): Promise<InProgress
           `container ${operation.containerId || operation.containerName} not found in store or persisted operation`,
         );
       }
-      const trigger = findRecoveryUpdateTrigger(container);
+      const trigger = findRecoveryUpdateTrigger(container, operation.triggerName);
+      if (operation.triggerName?.split('.').at(-2)?.toLowerCase() === 'portainer') {
+        throw new RecoveryUnresolvedOperationError(
+          `Portainer update operation ${operation.id} cannot use Docker recovery`,
+        );
+      }
       if (!isRecoveryDockerTrigger(trigger)) {
         throw new RecoveryUnresolvedOperationError(
           `no compatible Docker recovery trigger for ${container.name}`,
@@ -197,7 +236,7 @@ export function recoverQueuedOperationsOnStartup(): RecoveryResult {
       continue;
     }
 
-    const trigger = findRecoveryUpdateTrigger(container);
+    const trigger = findRecoveryUpdateTrigger(container, operation.triggerName);
     if (!trigger) {
       updateOperationStore.markOperationTerminal(operation.id, {
         status: 'failed',

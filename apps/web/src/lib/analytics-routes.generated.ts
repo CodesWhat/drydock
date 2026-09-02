@@ -411,6 +411,7 @@ const routes = [
   "/docs/v1.7/configuration/triggers/mattermost",
   "/docs/v1.7/configuration/triggers/mqtt",
   "/docs/v1.7/configuration/triggers/ntfy",
+  "/docs/v1.7/configuration/triggers/portainer",
   "/docs/v1.7/configuration/triggers/pushover",
   "/docs/v1.7/configuration/triggers/rocketchat",
   "/docs/v1.7/configuration/triggers/slack",

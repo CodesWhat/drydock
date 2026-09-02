@@ -320,6 +320,7 @@ describe('update operation lifecycle events', () => {
       id: 'op-sse-payload',
       containerId: 'c-sse',
       containerName: 'worker',
+      triggerName: 'portainer.update',
       status: 'in-progress',
       phase: 'pulling',
     });
@@ -341,6 +342,7 @@ describe('update operation lifecycle events', () => {
       operationId: 'op-sse-payload',
       containerName: 'worker',
       status: 'rolled-back',
+      triggerName: 'portainer.update',
       lastError: 'Cancelled by operator',
       rollbackReason: 'cancelled',
     });

@@ -107,6 +107,7 @@ export interface ContainerUpdateFailedEventPayload {
 export interface UpdateOperationChangedEventPayload {
   operationId: string;
   containerName: string;
+  triggerName?: string;
   containerId?: string;
   newContainerId?: string;
   batchId?: string;

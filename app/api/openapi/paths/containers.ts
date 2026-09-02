@@ -776,7 +776,7 @@ export const containerPaths = {
       tags: ['Containers', 'Actions'],
       summary: 'Preview container update actions',
       description:
-        'Returns generic docker preview fields and compose mutation metadata when the container is managed by the dockercompose trigger.',
+        'Returns generic Docker preview fields, compose mutation metadata for dockercompose triggers, or Portainer stack mutation metadata for portainer triggers.',
       operationId: 'previewContainerUpdate',
       parameters: [containerIdPathParam],
       responses: {
@@ -865,6 +865,9 @@ export const containerPaths = {
         401: errorResponse('Authentication required'),
         428: errorResponse('Destructive confirmation header is required'),
         404: errorResponse('Container, backup, or trigger not found'),
+        409: errorResponse(
+          'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.',
+        ),
         500: errorResponse('Rollback failed'),
       },
     },

@@ -155,6 +155,54 @@ describe('api/container/triggers', () => {
       ]);
     });
 
+    test('only associates Portainer with a local Compose service identity', async () => {
+      const portainerTrigger = createTrigger({
+        id: 'portainer.update',
+        type: 'portainer',
+        name: 'update',
+      });
+      const generic = createHarness({
+        container: { id: 'c1' },
+        triggerMap: { 'portainer.update': portainerTrigger },
+      });
+      const genericResponse = await callGetContainerTriggers(generic.handlers);
+      expect(genericResponse.json.mock.calls[0][0].data).toEqual([]);
+
+      const localCompose = createHarness({
+        container: {
+          id: 'c1',
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+        },
+        triggerMap: { 'portainer.update': portainerTrigger },
+      });
+      const localResponse = await callGetContainerTriggers(localCompose.handlers);
+      expect(localResponse.json.mock.calls[0][0].data).toEqual([
+        expect.objectContaining({ id: 'portainer.update', type: 'portainer' }),
+      ]);
+
+      const validatedUnknown = createHarness({
+        container: {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          image: { name: 'nginx', tag: 'latest' },
+          updateKind: { kind: 'unknown' },
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+        },
+        triggerMap: { 'portainer.update': portainerTrigger },
+      });
+      const unknownResponse = await callGetContainerTriggers(validatedUnknown.handlers);
+      expect(unknownResponse.json.mock.calls[0][0].data).toEqual([
+        expect.objectContaining({ id: 'portainer.update', type: 'portainer' }),
+      ]);
+    });
+
     test('uses type/name fallback when a listed trigger has no explicit id', async () => {
       const triggerWithoutId = createTrigger({
         id: undefined,

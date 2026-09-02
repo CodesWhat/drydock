@@ -1815,9 +1815,10 @@ describe('legacy DD_TRIGGER_* startup failure', () => {
     );
   });
 
-  test('suggests DD_ACTION_* for action trigger types (docker, dockercompose, command)', async () => {
+  test('suggests DD_ACTION_* for action trigger types (docker, dockercompose, portainer, command)', async () => {
     const freshConfiguration = await importFreshConfiguration();
     freshConfiguration.ddEnvVars.DD_TRIGGER_DOCKERCOMPOSE_LOCAL_PRUNE = 'true';
+    freshConfiguration.ddEnvVars.DD_TRIGGER_PORTAINER_LOCAL_URL = 'https://portainer.example';
     freshConfiguration.ddEnvVars.DD_TRIGGER_COMMAND_LOCAL_SCRIPT = './deploy.sh';
 
     try {
@@ -1828,6 +1829,7 @@ describe('legacy DD_TRIGGER_* startup failure', () => {
       expect(message).toContain(
         'DD_TRIGGER_DOCKERCOMPOSE_LOCAL_PRUNE → DD_ACTION_DOCKERCOMPOSE_LOCAL_PRUNE',
       );
+      expect(message).toContain('DD_TRIGGER_PORTAINER_LOCAL_URL → DD_ACTION_PORTAINER_LOCAL_URL');
       expect(message).toContain('DD_TRIGGER_COMMAND_LOCAL_SCRIPT → DD_ACTION_COMMAND_LOCAL_SCRIPT');
     }
   });

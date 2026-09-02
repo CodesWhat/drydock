@@ -385,6 +385,141 @@ describe('Backup Router', () => {
       });
     });
 
+    test('should reject manual rollback when only a Portainer action is available', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        imageName: 'library/web',
+        imageTag: '1.24',
+      };
+      const portainerTrigger = {
+        type: 'portainer',
+        getWatcher: vi.fn(),
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+      mockGetState.mockReturnValue({
+        trigger: { 'portainer.update': portainerTrigger },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(portainerTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error:
+          'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.',
+      });
+    });
+
+    test('should use the Docker action for rollback when Portainer and Docker are both configured', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        imageName: 'library/web',
+        imageTag: '1.24',
+      };
+      const portainerTrigger = {
+        type: 'portainer',
+        getWatcher: vi.fn(),
+      };
+      const currentContainer = {};
+      const containerSpec = { State: { Running: true } };
+      const dockerTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(currentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(containerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+      mockGetState.mockReturnValue({
+        trigger: { 'portainer.update': portainerTrigger, 'docker.update': dockerTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(portainerTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(dockerTrigger.recreateContainer).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should reject a Portainer-originated backup even when Docker rollback is configured', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+      };
+      const portainerBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        imageName: 'library/web',
+        imageTag: '1.24',
+        triggerName: 'portainer.update',
+      };
+      const portainerTrigger = {
+        type: 'portainer',
+        getWatcher: vi.fn(),
+      };
+      const dockerTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(),
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([portainerBackup]);
+      mockGetState.mockReturnValue({
+        trigger: { 'portainer.update': portainerTrigger, 'docker.update': dockerTrigger },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(portainerTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(dockerTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error:
+          'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.',
+      });
+    });
+
     test('should return 404 when a capable agent has no docker trigger registered yet', async () => {
       const handler = getHandler('post', '/:id/rollback');
       mockGetContainer.mockReturnValue({

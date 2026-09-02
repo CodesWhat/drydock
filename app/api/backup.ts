@@ -21,6 +21,12 @@ import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
 
 const log = logger.child({ component: 'backup' });
+const PORTAINER_ROLLBACK_UNSUPPORTED_ERROR =
+  'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.';
+
+function isPortainerOriginatedBackup(backup: { triggerName?: string }): boolean {
+  return typeof backup.triggerName === 'string' && /(^|\.)portainer\./i.test(backup.triggerName);
+}
 
 const router = express.Router();
 
@@ -101,8 +107,22 @@ async function rollbackContainer(req: Request, res: Response) {
     return;
   }
 
-  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
+  const triggers = registry.getState().trigger;
+  if (isPortainerOriginatedBackup(backup)) {
+    sendErrorResponse(res, 409, PORTAINER_ROLLBACK_UNSUPPORTED_ERROR);
+    return;
+  }
+  const trigger = findDockerTriggerForContainer(triggers, container, {
+    triggerTypes: ['docker', 'dockercompose'],
+  });
   if (!trigger) {
+    const portainerTrigger = findDockerTriggerForContainer(triggers, container, {
+      triggerTypes: ['portainer'],
+    });
+    if (portainerTrigger) {
+      sendErrorResponse(res, 409, PORTAINER_ROLLBACK_UNSUPPORTED_ERROR);
+      return;
+    }
     sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
     return;
   }

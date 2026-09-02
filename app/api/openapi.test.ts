@@ -286,6 +286,29 @@ describe('OpenAPI document', () => {
             },
           },
         },
+        portainer: {
+          type: 'object',
+          properties: {
+            stackId: { type: 'integer' },
+            stackName: { type: 'string' },
+            endpointId: { type: 'integer' },
+            service: { type: 'string' },
+            mode: { type: 'string', enum: ['env', 'compose'] },
+            versionVar: { type: 'string' },
+            mutation: {
+              type: 'object',
+              properties: {
+                intent: { type: 'string' },
+                dryRun: { type: 'boolean' },
+                willWrite: { type: 'boolean' },
+              },
+              required: ['intent', 'dryRun', 'willWrite'],
+              additionalProperties: false,
+            },
+          },
+          required: ['stackId', 'service', 'mode', 'mutation'],
+          additionalProperties: false,
+        },
       },
     });
   });
@@ -329,6 +352,11 @@ describe('OpenAPI document', () => {
     expect(previewPath.responses[503].content['application/json'].schema).toEqual({
       $ref: '#/components/schemas/PreviewErrorResponse',
     });
+    expect(openApiDocument.paths['/api/v1/containers/{id}/rollback'].post.responses[409]).toEqual(
+      errorResponse(
+        'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.',
+      ),
+    );
   });
 
   test('should keep agent-scoped component routes with agent as the final path segment', () => {

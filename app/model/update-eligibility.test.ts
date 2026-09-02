@@ -1007,6 +1007,56 @@ describe('computeUpdateEligibility', () => {
       expect(blocker).toBeDefined();
     });
 
+    test('does not count an incompatible Portainer trigger for a generic container', () => {
+      const portainerTrigger = {
+        type: 'portainer',
+        agent: undefined,
+        configuration: {},
+        getId: () => 'portainer.update',
+      };
+      const container = makeContainerWithTagUpdate();
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'portainer.update': portainerTrigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+
+      expect(
+        result.blockers.find((b) => b.reason === 'no-update-trigger-configured'),
+      ).toBeDefined();
+      expect(result.actionPolicy).toBeUndefined();
+    });
+
+    test('does not count a Portainer trigger for a digest candidate', () => {
+      const portainerTrigger = {
+        type: 'portainer',
+        agent: undefined,
+        configuration: {},
+        getId: () => 'portainer.update',
+      };
+      const container = makeContainerWithTagUpdate({
+        updateKind: { kind: 'digest', remoteValue: 'sha256:new' },
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'portainer.update': portainerTrigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+
+      expect(
+        result.blockers.find((b) => b.reason === 'no-update-trigger-configured'),
+      ).toBeDefined();
+      expect(result.actionPolicy).toBeUndefined();
+    });
+
     describe('severity during the trigger registration window (#605)', () => {
       test('downgrades to soft when container is agent-owned and its agent is pending registration', () => {
         const container = makeContainerWithTagUpdate({ agent: 'agent-b' });
