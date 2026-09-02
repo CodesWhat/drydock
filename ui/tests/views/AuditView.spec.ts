@@ -640,6 +640,9 @@ describe('AuditView', () => {
       const bar = filterBarProps(wrapper);
       expect(bar.props('totalCount')).toBe(500);
       expect(bar.props('countLabel')).toBeUndefined();
+      // Whitespace must not filter rows or count as an active filter either.
+      expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('2');
+      expect(bar.props('activeFilterCount')).toBe(0);
     });
   });
 

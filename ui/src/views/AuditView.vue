@@ -128,9 +128,10 @@ const auditViewMode = useViewMode('audit');
 // Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
 // width has already forced cards, so the switcher isn't a dead control at that size.
 const cardReflowForced = ref(false);
+const normalizedSearchQuery = computed(() => searchQuery.value.trim().toLowerCase());
 const activeFilterCount = computed(() => {
   let count = 0;
-  if (searchQuery.value) count++;
+  if (normalizedSearchQuery.value) count++;
   if (actionFilter.value.length > 0) count++;
   if (containerFilter.value) count++;
   if (fromDateFilter.value) count++;
@@ -168,8 +169,8 @@ function clearFilters() {
 
 const filteredEntries = computed(() => {
   let result = entries.value;
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase();
+  if (normalizedSearchQuery.value) {
+    const q = normalizedSearchQuery.value;
     result = result.filter(
       (e) =>
         e.containerName?.toLowerCase().includes(q) ||
@@ -187,7 +188,7 @@ const filteredEntries = computed(() => {
 // as "2/500", which reads as "2 of your 500 entries matched" when it means "2
 // of the 50 on this page, nobody looked at the other 450". While the search is
 // active, count against the page and label it.
-const searchIsPageScoped = computed(() => searchQuery.value.trim().length > 0);
+const searchIsPageScoped = computed(() => normalizedSearchQuery.value.length > 0);
 const filterBarTotal = computed(() =>
   searchIsPageScoped.value ? entries.value.length : total.value,
 );
