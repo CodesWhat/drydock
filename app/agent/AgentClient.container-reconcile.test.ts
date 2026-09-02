@@ -197,5 +197,28 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
       expect(storeContainer.getContainer('old-id')).toBeUndefined();
       expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
     });
+
+    test('does not prune when the agent reports zero containers', async () => {
+      // Prime hasConnectedOnce via a clean (zero-container) handshake, matching how
+      // _doHandshake's own equivalent guard is exercised.
+      vi.mocked(axios.get)
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      await client.handshake();
+
+      seedOldContainerWithPolicy();
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: WATCHER_NAME, name: WATCHER_NAME },
+        containers: [],
+      });
+
+      expect(storeContainer.getContainer('old-id')).toBeDefined();
+      expect(storeContainer.getContainer('old-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Watcher snapshot returned 0 containers'),
+      );
+    });
   });
 });
