@@ -3,6 +3,7 @@
     "loadingAuditLog": "Загрузка журнала аудита...",
     "loadError": "Не удалось загрузить журнал аудита",
     "filterPlaceholder": "Фильтр по цели или событию...",
+    "onThisPage": "на этой странице",
     "containerFilterPlaceholder": "Имя контейнера...",
     "allEvents": "Все события",
     "eventsSelected": "Выбрано событий: {count}",
