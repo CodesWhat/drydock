@@ -11,6 +11,7 @@ const TRIGGER_INFRASTRUCTURE_CONFIG_KEYS = new Set([
   'roomid',
   'apikey',
   'token',
+  'bearer',
   'password',
   'username',
   'user',

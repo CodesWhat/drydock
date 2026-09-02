@@ -84,7 +84,13 @@ export function requireAuthentication(req: AuthRequest, res: Response, next: Nex
     return;
   }
 
-  passport.authenticate(getAllIds(), { session: true })(req, res, next);
+  // Header-authenticated requests (Basic/Bearer) are stateless callers like
+  // wud-card/Homepage pollers; skip req.logIn's session regenerate/save so
+  // they never persist a session row. Cookie-based logins keep session:true
+  // via /auth/login's own route-level middleware.
+  const headerAuth =
+    typeof req.headers?.authorization === 'string' && req.headers.authorization.length > 0;
+  passport.authenticate(getAllIds(), { session: !headerAuth })(req, res, next);
 }
 
 /**

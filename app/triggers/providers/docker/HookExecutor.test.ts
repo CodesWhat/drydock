@@ -459,8 +459,9 @@ describe('HookExecutor', () => {
           },
         }),
       );
-      // $, (, ), | each become _
-      expect(config.hookEnv.DD_IMAGE_TAG).toBe('1.0.0__curl evil.com_sh_');
+      // $, (, ), | each become _, and so does the space that would have split
+      // 'curl' and 'evil.com|sh' into two arguments
+      expect(config.hookEnv.DD_IMAGE_TAG).toBe('1.0.0__curl_evil.com_sh_');
     });
 
     test('sanitizes backtick command substitution in image name', () => {
@@ -473,8 +474,8 @@ describe('HookExecutor', () => {
           },
         }),
       );
-      // backticks become _
-      expect(config.hookEnv.DD_IMAGE_NAME).toBe('registry.io/acme/web_touch /pwned_');
+      // backticks become _, and so does the space
+      expect(config.hookEnv.DD_IMAGE_NAME).toBe('registry.io/acme/web_touch_/pwned_');
     });
 
     test('sanitizes semicolons and ampersands in update-from and update-to values', () => {
@@ -488,8 +489,36 @@ describe('HookExecutor', () => {
           },
         }),
       );
-      expect(config.hookEnv.DD_UPDATE_FROM).toBe('1.0.0_rm -rf /');
-      expect(config.hookEnv.DD_UPDATE_TO).toBe('2.0.0__cat /etc/passwd');
+      expect(config.hookEnv.DD_UPDATE_FROM).toBe('1.0.0_rm_-rf_/');
+      expect(config.hookEnv.DD_UPDATE_TO).toBe('2.0.0__cat_/etc/passwd');
+    });
+
+    test('strips a leading dash so a value cannot parse as an option', () => {
+      const executor = createExecutor();
+      const config = executor.buildHookConfig(
+        createContainer({
+          image: {
+            name: '--privileged registry.io/acme/web',
+            tag: { value: '1.0.0' },
+          },
+        }),
+      );
+
+      expect(config.hookEnv.DD_IMAGE_NAME).toBe('privileged_registry.io/acme/web');
+    });
+
+    test('strips globbing characters so a value cannot expand against the cwd', () => {
+      const executor = createExecutor();
+      const config = executor.buildHookConfig(
+        createContainer({
+          image: {
+            name: 'registry.io/acme/web',
+            tag: { value: '1.0.0*?[a]{b}~' },
+          },
+        }),
+      );
+
+      expect(config.hookEnv.DD_IMAGE_TAG).toBe('1.0.0___a__b__');
     });
 
     test('sanitizes control characters including newline and null byte', () => {

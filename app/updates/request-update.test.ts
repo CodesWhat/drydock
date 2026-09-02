@@ -515,6 +515,69 @@ describe('request-update', () => {
     );
   });
 
+  test.each([
+    ['an active', { id: 'caller-op-uuid', status: 'queued' }],
+    ['a terminal', { id: 'caller-op-uuid', status: 'succeeded' }],
+  ])(
+    'enqueueContainerUpdate rejects a caller-supplied operationId that already names %s operation',
+    async (_label, existingOperation) => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
+      };
+      mockGetOperationById.mockImplementation((id: string) =>
+        id === 'caller-op-uuid' ? existingOperation : undefined,
+      );
+
+      await expect(
+        enqueueContainerUpdate(createContainer(), { trigger, operationId: 'caller-op-uuid' }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: 'Update operation id already exists',
+      });
+
+      expect(mockInsertOperation).not.toHaveBeenCalled();
+    },
+  );
+
+  test('enqueueContainerUpdates rejects an existing operationId on a single-container batch', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    };
+    mockGetOperationById.mockImplementation((id: string) =>
+      id === 'caller-single-op' ? { id: 'caller-single-op', status: 'in-progress' } : undefined,
+    );
+
+    await expect(
+      enqueueContainerUpdates([createContainer({ id: 'c1', name: 'nginx' })], {
+        trigger,
+        operationId: 'caller-single-op',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Update operation id already exists',
+    });
+
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('a generated operationId is not checked against the store', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    };
+    mockGetOperationById.mockReturnValue({ id: 'anything', status: 'queued' });
+
+    const accepted = await enqueueContainerUpdate(createContainer(), { trigger });
+
+    expect(accepted.operationId).toEqual(expect.any(String));
+    expect(mockInsertOperation).toHaveBeenCalledTimes(1);
+  });
+
   test('enqueueContainerUpdates ignores provided operationId for multi-container batches (#289)', async () => {
     const trigger = {
       type: 'docker',

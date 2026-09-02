@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
 import Dockercompose, {
+  testable_getImageRepositoryKey,
   testable_hasExplicitRegistryHost,
   testable_normalizeImplicitLatest,
   testable_normalizePostStartEnvironmentValue,
@@ -369,6 +370,22 @@ describe('Dockercompose Trigger', () => {
 
   test('normalizeImplicitLatest should append latest even when image path ends with slash', () => {
     expect(testable_normalizeImplicitLatest('repo/')).toBe('repo/:latest');
+  });
+
+  test('getImageRepositoryKey should normalize hub aliases and strip tags and digests', () => {
+    expect(testable_getImageRepositoryKey(undefined)).toBe('');
+    expect(testable_getImageRepositoryKey('nginx')).toBe('nginx');
+    expect(testable_getImageRepositoryKey('nginx:1.27.0')).toBe('nginx');
+    expect(testable_getImageRepositoryKey('nginx@sha256:abc')).toBe('nginx');
+    expect(testable_getImageRepositoryKey(' docker.io/library/nginx:1.27.0 ')).toBe('nginx');
+    expect(testable_getImageRepositoryKey('registry-1.docker.io/library/nginx')).toBe('nginx');
+    expect(testable_getImageRepositoryKey('index.docker.io/myorg/nginx')).toBe('myorg/nginx');
+    expect(testable_getImageRepositoryKey('ghcr.io/library/nginx:1.27.0')).toBe(
+      'ghcr.io/library/nginx',
+    );
+    expect(testable_getImageRepositoryKey('registry.example.com:5000/nginx:1.1.0')).toBe(
+      'registry.example.com:5000/nginx',
+    );
   });
 
   test('hasExplicitRegistryHost should detect empty, host:port, and localhost prefixes', () => {

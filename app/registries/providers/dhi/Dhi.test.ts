@@ -32,6 +32,17 @@ describe('DHI Registry', () => {
     expect(dhi.match({ registry: { url: 'docker.io' } })).toBe(false);
   });
 
+  test.each(['evildhi.io', 'dhiXio', 'dhi.io.attacker.com'])(
+    'match should reject the dhi.io lookalike %s',
+    (registryUrl) => {
+      expect(dhi.match({ registry: { url: registryUrl } })).toBe(false);
+    },
+  );
+
+  test.each(['dhi.io', 'sub.dhi.io'])('match should still accept %s', (registryUrl) => {
+    expect(dhi.match({ registry: { url: registryUrl } })).toBe(true);
+  });
+
   test('should normalize image url without adding library prefix', async () => {
     const image = { name: 'python', registry: {} };
     const normalized = dhi.normalizeImage(image);

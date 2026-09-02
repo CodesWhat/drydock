@@ -19,6 +19,7 @@ export interface SelfUpdateContainerSpec {
   Id: string;
   Config?: {
     Image?: string;
+    Env?: unknown[];
   };
   Image?: string;
   HostConfig?: {
@@ -38,6 +39,7 @@ export interface SelfUpdateCreatedContainer {
 
 export interface SelfUpdateHelperContainer {
   start: () => Promise<void>;
+  inspect?: () => Promise<{ State?: { Running?: boolean; ExitCode?: number } }>;
 }
 
 export interface SelfUpdateHelperContainerCreateOptions {

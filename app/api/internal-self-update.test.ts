@@ -14,10 +14,16 @@ import {
 
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
+const mockReleaseRetainedSelfUpdateLifecycle = vi.hoisted(() => vi.fn());
 
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: (...args: unknown[]) => mockGetOperationById(...args),
   markOperationTerminal: (...args: unknown[]) => mockMarkOperationTerminal(...args),
+}));
+
+vi.mock('../updates/update-locks.js', () => ({
+  releaseRetainedSelfUpdateLifecycle: (...args: unknown[]) =>
+    mockReleaseRetainedSelfUpdateLifecycle(...args),
 }));
 
 describe('internal-self-update', () => {
@@ -83,6 +89,7 @@ describe('internal-self-update', () => {
       phase: 'rolled-back',
       lastError: 'health gate failed',
     });
+    expect(mockReleaseRetainedSelfUpdateLifecycle).toHaveBeenCalledWith('op-123');
     expect(res.status).toHaveBeenCalledWith(202);
   });
 
@@ -105,7 +112,46 @@ describe('internal-self-update', () => {
       status: 'succeeded',
       phase: 'succeeded',
     });
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(202);
+  });
+
+  test('releases a matching lease when rollback arrives after the operation is already terminal', () => {
+    mockGetOperationById.mockReturnValue({
+      id: 'op-123',
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      kind: 'self-update',
+    });
+
+    const handler = createFinalizeSelfUpdateHandler();
+    handler(
+      createFinalizeRequest({
+        body: { operationId: 'op-123', status: 'rolled-back' },
+      }),
+      createMockResponse(),
+    );
+
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).toHaveBeenCalledWith('op-123');
+  });
+
+  test('does not release the retained lifecycle when terminalization throws', () => {
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
+    const failure = new Error('store write failed');
+    mockMarkOperationTerminal.mockImplementationOnce(() => {
+      throw failure;
+    });
+
+    expect(() =>
+      createFinalizeSelfUpdateHandler()(
+        createFinalizeRequest({
+          body: { operationId: 'op-123', status: 'rolled-back' },
+        }),
+        createMockResponse(),
+      ),
+    ).toThrow(failure);
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
   });
 
   test('marks an active self-update operation as failed', () => {
@@ -129,6 +175,7 @@ describe('internal-self-update', () => {
       phase: 'failed',
       lastError: 'controller failure',
     });
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(202);
   });
 
@@ -230,6 +277,7 @@ describe('internal-self-update', () => {
     handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
@@ -243,6 +291,7 @@ describe('internal-self-update', () => {
     handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
@@ -259,6 +308,7 @@ describe('internal-self-update', () => {
     handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
@@ -295,6 +345,7 @@ describe('internal-self-update', () => {
     handler(req, res);
 
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(mockReleaseRetainedSelfUpdateLifecycle).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(403);
   });
 

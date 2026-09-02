@@ -95,10 +95,6 @@ const PROVIDER_ORDER = [
   'grype',
   'syft',
 ] as const satisfies readonly ScannerAssetProviderId[];
-// Strip ANSI escapes before sanitizeLogParam removes their leading escape byte.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape stripping
-const ANSI_ESCAPES = /\x1b\[[0-9;]*m/g;
-
 function isSupportedProviderId(value: unknown): value is ScannerAssetProviderId {
   return PROVIDER_ORDER.includes(value as ScannerAssetProviderId);
 }
@@ -142,7 +138,7 @@ function getErrorMessage(error: unknown, auth?: ScannerAssetAuth): string {
       message = message.split(secret).join('[REDACTED]');
     }
   }
-  return sanitizeLogParam(message.replace(ANSI_ESCAPES, '')) || 'Unknown scanner asset error';
+  return sanitizeLogParam(message) || 'Unknown scanner asset error';
 }
 
 function diagnosticsFromStatus(status: ScannerAssetStatus): ScannerAssetAuditDiagnostics {

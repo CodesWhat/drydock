@@ -96,7 +96,7 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
   }
 
   match(image) {
-    return this.matchUrlPattern(image, /^.*\.?ghcr.io$/);
+    return this.matchRegistryHost(image, 'ghcr.io');
   }
 
   normalizeImage(image) {

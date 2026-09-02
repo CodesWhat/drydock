@@ -271,13 +271,60 @@ test('getAuthPull should throw when auth has a trailing character outside the ba
   );
 });
 
-test('matchUrlPattern should test image url against pattern', () => {
+test('matchRegistryHost should accept the base host and its subdomains', () => {
+  expect(baseRegistry.matchRegistryHost({ registry: { url: 'azurecr.io' } }, 'azurecr.io')).toBe(
+    true,
+  );
   expect(
-    baseRegistry.matchUrlPattern({ registry: { url: 'test.azurecr.io' } }, /azurecr\.io$/),
-  ).toBeTruthy();
+    baseRegistry.matchRegistryHost({ registry: { url: 'test.azurecr.io' } }, 'azurecr.io'),
+  ).toBe(true);
   expect(
-    baseRegistry.matchUrlPattern({ registry: { url: 'test.example.com' } }, /azurecr\.io$/),
-  ).toBeFalsy();
+    baseRegistry.matchRegistryHost(
+      { registry: { url: 'https://test.azurecr.io/v2' } },
+      'azurecr.io',
+    ),
+  ).toBe(true);
+  expect(
+    baseRegistry.matchRegistryHost({ registry: { url: 'TEST.AZURECR.IO' } }, 'azurecr.io'),
+  ).toBe(true);
+});
+
+test('matchRegistryHost should reject prefix lookalikes and unrelated hosts', () => {
+  // The regex this replaced was /^.*\.?azurecr.io$/ — optional separator and an
+  // unescaped dot, so every one of these matched and got the credentials.
+  expect(
+    baseRegistry.matchRegistryHost({ registry: { url: 'evilazurecr.io' } }, 'azurecr.io'),
+  ).toBe(false);
+  expect(baseRegistry.matchRegistryHost({ registry: { url: 'azurecrXio' } }, 'azurecr.io')).toBe(
+    false,
+  );
+  expect(
+    baseRegistry.matchRegistryHost({ registry: { url: 'azurecr.io.attacker.com' } }, 'azurecr.io'),
+  ).toBe(false);
+  expect(
+    baseRegistry.matchRegistryHost({ registry: { url: 'test.example.com' } }, 'azurecr.io'),
+  ).toBe(false);
+});
+
+test('matchRegistryHost should reject hosts outside the registry host charset', () => {
+  expect(
+    baseRegistry.matchRegistryHost({ registry: { url: 'te_st.azurecr.io' } }, 'azurecr.io'),
+  ).toBe(false);
+  expect(baseRegistry.matchRegistryHost({ registry: { url: '' } }, 'azurecr.io')).toBe(false);
+  expect(baseRegistry.matchRegistryHost({ registry: {} }, 'azurecr.io')).toBe(false);
+  expect(baseRegistry.matchRegistryHost({}, 'azurecr.io')).toBe(false);
+});
+
+test('matchRegistryHost should accept any of several base hosts', () => {
+  expect(
+    baseRegistry.matchRegistryHost({ registry: { url: 'eu.gcr.io' } }, 'gcr.io', 'pkg.dev'),
+  ).toBe(true);
+  expect(
+    baseRegistry.matchRegistryHost({ registry: { url: 'pkg.dev' } }, 'gcr.io', 'pkg.dev'),
+  ).toBe(true);
+  expect(
+    baseRegistry.matchRegistryHost({ registry: { url: 'evilpkg.dev' } }, 'gcr.io', 'pkg.dev'),
+  ).toBe(false);
 });
 
 test('maskSensitiveFields should mask specified fields', () => {

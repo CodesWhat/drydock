@@ -72,14 +72,40 @@ const DEFAULT_HOOK_TIMEOUT_MS = 60000;
  * passed to a /bin/sh -c invocation. Matches the set used by the Command
  * trigger provider for consistency.
  */
-const HOOK_ENV_UNSAFE_CHARACTERS = new Set(['`', '$', ';', '&', '|', '<', '>', '(', ')']);
+const HOOK_ENV_UNSAFE_CHARACTERS = new Set([
+  '`',
+  '$',
+  ';',
+  '&',
+  '|',
+  '<',
+  '>',
+  '(',
+  ')',
+  // Word-splitting and globbing. Hook values are scalars (container name, id,
+  // image, tag, digest) that a hook script expands as a single argument, so
+  // neither is ever legitimate here.
+  ' ',
+  '*',
+  '?',
+  '[',
+  ']',
+  '{',
+  '}',
+  '~',
+  '\\',
+  '"',
+  "'",
+]);
 const HOOK_ENV_DELETE_CODE_POINT = 0x7f;
 
 /**
  * Sanitize a string value before it is placed in the hook environment.
- * Replaces shell-metacharacters, control codes, and DEL with '_' so that
- * registry-controlled data (image name, tag, update digest) cannot inject
- * commands into hook scripts that expand the variables unquoted.
+ * Replaces shell-metacharacters, word-splitting and globbing characters,
+ * control codes, and DEL with '_', and drops a leading '-' so the value cannot
+ * parse as an option, so that registry-controlled data (image name, tag,
+ * update digest) cannot inject arguments into hook scripts that expand the
+ * variables unquoted.
  *
  * Uses the same character set as Command trigger's sanitizeCommandEnvString.
  */
@@ -87,7 +113,7 @@ function sanitizeHookEnvValue(value: string | undefined | null): string {
   if (value === undefined || value === null) {
     return '';
   }
-  return Array.from(value)
+  const scrubbed = Array.from(value)
     .map((character) => {
       const codePoint = character.codePointAt(0);
       if (
@@ -101,6 +127,7 @@ function sanitizeHookEnvValue(value: string | undefined | null): string {
       return character;
     })
     .join('');
+  return scrubbed.replace(/^-+/u, '');
 }
 
 function parseHookTimeout(rawValue: string | undefined): number {

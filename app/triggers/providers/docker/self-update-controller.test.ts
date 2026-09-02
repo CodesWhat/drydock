@@ -199,6 +199,121 @@ describe('self-update-controller orchestration', () => {
     );
   });
 
+  test('treats old container removal 404 as already removed and completes successfully', async () => {
+    const oldContainer = createOldContainer({
+      remove: vi
+        .fn()
+        .mockRejectedValue(
+          Object.assign(new Error('No such container: old-container-id'), { statusCode: 404 }),
+        ),
+    });
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).resolves.toBeUndefined();
+
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(newContainer.remove).not.toHaveBeenCalled();
+    expect(oldContainer.start).not.toHaveBeenCalled();
+    expect(oldContainer.rename).not.toHaveBeenCalled();
+    expect(newContainer.exec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Env: expect.not.arrayContaining([expect.stringMatching(/^DD_SELF_UPDATE_LAST_ERROR=/)]),
+      }),
+    );
+  });
+
+  test.each([
+    ['message-only', { message: 'No such container: old-container-id' }],
+    ['reason-only', { reason: 'No such container: old-container-id' }],
+    ['json.message', { json: { message: 'No such container: old-container-id' } }],
+  ])(
+    'treats old container removal with %s not-found details as already removed',
+    async (_, error) => {
+      const oldContainer = createOldContainer({
+        remove: vi.fn().mockRejectedValue(error),
+      });
+      const newContainer = createNewContainer();
+      mockDocker(oldContainer, newContainer);
+
+      await expect(runSelfUpdateController()).resolves.toBeUndefined();
+
+      expect(newContainer.remove).not.toHaveBeenCalled();
+      expect(newContainer.exec).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Env: expect.not.arrayContaining([expect.stringMatching(/^DD_SELF_UPDATE_LAST_ERROR=/)]),
+        }),
+      );
+    },
+  );
+
+  test('does not classify a primitive no-such-container rejection as already removed', async () => {
+    const oldContainer = createOldContainer({
+      remove: vi.fn().mockRejectedValue('No such container: old-container-id'),
+    });
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).resolves.toBeUndefined();
+
+    expect(newContainer.remove).not.toHaveBeenCalled();
+    expect(newContainer.exec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Env: expect.arrayContaining([
+          'DD_SELF_UPDATE_LAST_ERROR=cleanup_old_failed: No such container: old-container-id',
+        ]),
+      }),
+    );
+  });
+
+  test('keeps the verified new container when old container removal conflicts', async () => {
+    const oldContainer = createOldContainer({
+      remove: vi.fn().mockRejectedValue(
+        Object.assign(new Error('removal of container old-container-id is already in progress'), {
+          statusCode: 409,
+        }),
+      ),
+    });
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).resolves.toBeUndefined();
+
+    expect(newContainer.remove).not.toHaveBeenCalled();
+    expect(oldContainer.start).not.toHaveBeenCalled();
+    expect(oldContainer.rename).not.toHaveBeenCalled();
+    expect(newContainer.exec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Env: expect.arrayContaining([
+          'DD_SELF_UPDATE_LAST_ERROR=cleanup_old_failed: removal of container old-container-id is already in progress',
+        ]),
+      }),
+    );
+  });
+
+  test('keeps the verified new container when old container removal times out', async () => {
+    const timeoutError = new Error('The operation was aborted due to timeout');
+    timeoutError.name = 'TimeoutError';
+    const oldContainer = createOldContainer({
+      remove: vi.fn().mockRejectedValue(timeoutError),
+    });
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).resolves.toBeUndefined();
+
+    expect(newContainer.remove).not.toHaveBeenCalled();
+    expect(oldContainer.start).not.toHaveBeenCalled();
+    expect(oldContainer.rename).not.toHaveBeenCalled();
+    expect(newContainer.exec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Env: expect.arrayContaining([
+          'DD_SELF_UPDATE_LAST_ERROR=cleanup_old_failed: The operation was aborted due to timeout',
+        ]),
+      }),
+    );
+  });
+
   test('uses default op id and old container name when optional env vars are unset', async () => {
     setControllerEnv({
       DD_SELF_UPDATE_OP_ID: undefined,

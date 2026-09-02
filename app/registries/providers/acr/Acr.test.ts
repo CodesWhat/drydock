@@ -148,3 +148,14 @@ test('normalizeImage should not double-prepend https when url already has it', a
     },
   });
 });
+
+test.each(['evilazurecr.io', 'azurecrXio', 'azurecr.io.attacker.com'])(
+  'match should reject the azurecr.io lookalike %s',
+  (registryUrl) => {
+    expect(acr.match({ registry: { url: registryUrl } })).toBe(false);
+  },
+);
+
+test.each(['azurecr.io', 'test.azurecr.io'])('match should still accept %s', (registryUrl) => {
+  expect(acr.match({ registry: { url: registryUrl } })).toBe(true);
+});

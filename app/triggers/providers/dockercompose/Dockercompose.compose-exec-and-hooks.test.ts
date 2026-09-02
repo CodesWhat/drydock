@@ -788,6 +788,122 @@ describe('Dockercompose Trigger', () => {
     expect(composeUpdateSpy).not.toHaveBeenCalled();
   });
 
+  test('recreateContainer should reject a labeled service with a different image repository before mutation', async () => {
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'db',
+      },
+    });
+    const composeFileContent = ['services:', '  db:', '    image: postgres:16', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ db: { image: 'postgres:16' } }),
+    );
+
+    await expect(
+      trigger.recreateContainer(
+        mockDockerApi,
+        {
+          State: { Running: false },
+          Config: { Image: 'nginx:1.1.0' },
+        },
+        'nginx:1.0.0',
+        container,
+        mockLog,
+      ),
+    ).rejects.toThrow('refusing to rewrite a different repository');
+
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
+  test('recreateContainer should reject a repository changed after service resolution before mutation', async () => {
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+    });
+    const changedComposeFileContent = ['services:', '  nginx:', '    image: postgres:16', ''].join(
+      '\n',
+    );
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(changedComposeFileContent));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const refreshComposeServiceSpy = vi
+      .spyOn(trigger, 'refreshComposeServiceWithDockerApi')
+      .mockResolvedValue();
+
+    await expect(
+      trigger.recreateContainer(
+        mockDockerApi,
+        { State: { Running: false }, Config: { Image: 'nginx:1.1.0' } },
+        'nginx:1.2.0',
+        container,
+        mockLog,
+      ),
+    ).rejects.toThrow('refusing to rewrite a different repository');
+
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(refreshComposeServiceSpy).not.toHaveBeenCalled();
+  });
+
+  test('recreateContainer should update an inherited service image while preserving override fields', async () => {
+    const baseFile = '/opt/drydock/test/stack.yml';
+    const overrideFile = '/opt/drydock/test/stack.override.yml';
+    const container = makeContainer({
+      name: 'nginx',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    vi.spyOn(trigger, 'resolveComposeServiceContext').mockResolvedValue({
+      composeFile: overrideFile,
+      composeFiles: [baseFile, overrideFile],
+      service: 'nginx',
+    });
+    vi.spyOn(trigger, 'getComposeFile').mockImplementation(async (filePath) =>
+      Buffer.from(
+        filePath === overrideFile
+          ? ['services:', '  nginx:', '    environment:', '      FOO: bar', ''].join('\n')
+          : ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n'),
+      ),
+    );
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const refreshComposeServiceSpy = vi
+      .spyOn(trigger, 'refreshComposeServiceWithDockerApi')
+      .mockResolvedValue();
+
+    await trigger.recreateContainer(
+      mockDockerApi,
+      { State: { Running: false }, Config: { Image: 'nginx:1.1.0' } },
+      'nginx:1.2.0',
+      container,
+      mockLog,
+    );
+
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      overrideFile,
+      expect.stringContaining('image: nginx:1.2.0'),
+    );
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      overrideFile,
+      expect.stringContaining('FOO: bar'),
+    );
+    expect(refreshComposeServiceSpy).toHaveBeenCalledWith(
+      overrideFile,
+      'nginx',
+      container,
+      expect.objectContaining({ composeFiles: [baseFile, overrideFile] }),
+    );
+  });
+
   test('recreateContainer should fallback to registry-derived image when current spec image is missing', async () => {
     const container = makeContainer({
       name: 'nginx',
