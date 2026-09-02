@@ -759,3 +759,255 @@ describe('executeSelfUpdateTransition TCP mode', () => {
     expect(call.HostConfig.NetworkMode).toBeUndefined();
   });
 });
+
+describe('SelfUpdateTransitionShared root break-glass env and helper watchdog', () => {
+  function createRunningHelperContext(overrides = {}) {
+    const context = createContext(overrides);
+    context.helperContainer.inspect = vi.fn().mockResolvedValue({ State: { Running: true } });
+    return context;
+  }
+
+  test('forwards the root break-glass pair to the helper when the parent has both set to true', async () => {
+    const context = createRunningHelperContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Config: {
+          Image: 'ghcr.io/acme/drydock:1.0.0',
+          Env: [
+            'DD_LOG_LEVEL=info',
+            'DD_RUN_AS_ROOT=true',
+            'DD_ALLOW_INSECURE_ROOT=true',
+            'MALFORMED_ENTRY',
+            '=leading-equals',
+          ],
+        },
+      }),
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).resolves.toBe(true);
+
+    const helperEnv = context.dockerApi.createContainer.mock.calls[0][0].Env;
+    expect(helperEnv).toContain('DD_RUN_AS_ROOT=true');
+    expect(helperEnv).toContain('DD_ALLOW_INSECURE_ROOT=true');
+    expect(helperEnv).not.toContain('DD_LOG_LEVEL=info');
+  });
+
+  test('ignores non-string entries in the parent env list', async () => {
+    const context = createRunningHelperContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Config: {
+          Env: [42, 'DD_RUN_AS_ROOT=true', 'DD_ALLOW_INSECURE_ROOT=true'],
+        },
+      }),
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), {
+      info: vi.fn(),
+      warn: vi.fn(),
+    });
+
+    const helperEnv = context.dockerApi.createContainer.mock.calls[0][0].Env;
+    expect(helperEnv).toContain('DD_RUN_AS_ROOT=true');
+    expect(helperEnv).toContain('DD_ALLOW_INSECURE_ROOT=true');
+  });
+
+  test.each([
+    ['only DD_RUN_AS_ROOT', ['DD_RUN_AS_ROOT=true']],
+    ['only DD_ALLOW_INSECURE_ROOT', ['DD_ALLOW_INSECURE_ROOT=true']],
+    ['the acknowledgment set to false', ['DD_RUN_AS_ROOT=true', 'DD_ALLOW_INSECURE_ROOT=false']],
+    ['neither', ['DD_LOG_LEVEL=info']],
+  ])('does not forward the root break-glass pair with %s', async (_label, env) => {
+    const context = createRunningHelperContext({
+      currentContainerSpec: createCurrentContainerSpec({ Config: { Env: env } }),
+    });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), {
+      info: vi.fn(),
+      warn: vi.fn(),
+    });
+
+    const helperEnv = context.dockerApi.createContainer.mock.calls[0][0].Env;
+    expect(helperEnv).not.toContain('DD_RUN_AS_ROOT=true');
+    expect(helperEnv).not.toContain('DD_ALLOW_INSECURE_ROOT=true');
+  });
+
+  test('does not forward anything when the parent spec has no env list', async () => {
+    const context = createRunningHelperContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+
+    await executeSelfUpdateTransition(dependencies, context, createContainer(), {
+      info: vi.fn(),
+      warn: vi.fn(),
+    });
+
+    const helperEnv = context.dockerApi.createContainer.mock.calls[0][0].Env;
+    expect(helperEnv).not.toContain('DD_RUN_AS_ROOT=true');
+  });
+
+  test('rolls the rename back when the helper has already exited non-zero', async () => {
+    const context = createContext();
+    context.helperContainer.inspect = vi
+      .fn()
+      .mockResolvedValue({ State: { Running: false, ExitCode: 1 } });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow(/exited with code 1/);
+
+    expect(context.newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+    expect(log.info).not.toHaveBeenCalledWith(
+      'Helper container started — process will terminate when old container stops',
+    );
+  });
+
+  test('rolls the rename back when auto-remove already reaped the exited helper', async () => {
+    const context = createContext();
+    context.helperContainer.inspect = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('no such container'), { statusCode: 404 }));
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow(/auto-removed/);
+
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+  });
+
+  test('reports an unknown exit code when the helper state carries none', async () => {
+    const context = createContext();
+    context.helperContainer.inspect = vi.fn().mockResolvedValue({});
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toThrow(/exited with code unknown/);
+  });
+
+  test('tolerates a best-effort candidate removal failure while rolling back an exited helper', async () => {
+    const context = createContext();
+    context.newContainer.remove = vi.fn().mockRejectedValue(new Error('remove failed'));
+    context.helperContainer.inspect = vi
+      .fn()
+      .mockResolvedValue({ State: { Running: false, ExitCode: 1 } });
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).rejects.toThrow(/exited with code 1/);
+
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+  });
+
+  test('does not roll back when the helper is still running', async () => {
+    const context = createRunningHelperContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).resolves.toBe(true);
+
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
+    expect(context.newContainer.remove).not.toHaveBeenCalled();
+    expect(log.info).toHaveBeenCalledWith(
+      'Helper container started — process will terminate when old container stops',
+    );
+  });
+
+  test('does not roll back when the inspect fails for a reason other than the helper being gone', async () => {
+    const context = createContext();
+    context.helperContainer.inspect = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('server error'), { statusCode: 500 }));
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).resolves.toBe(true);
+
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not roll back when the inspect rejects with a non-object', async () => {
+    const context = createContext();
+    context.helperContainer.inspect = vi.fn().mockRejectedValue('socket hang up');
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      helperExitCheckDelayMs: 0,
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).resolves.toBe(true);
+
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
+  });
+
+  test('skips the watchdog entirely when the helper handle cannot be inspected', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), {
+        info: vi.fn(),
+        warn: vi.fn(),
+      }),
+    ).resolves.toBe(true);
+
+    expect(context.currentContainer.rename).toHaveBeenCalledTimes(1);
+  });
+});

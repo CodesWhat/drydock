@@ -14,13 +14,13 @@ Automatic rollback|No|Yes, on health check failure|self
 Maintenance windows|No|Yes|self
 Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
 Image backup|No|Pre-update backup with retention|self
-Dry-run preview|No|Yes|self
+Dry-run preview|Limited|Yes|self
 Registry providers|Major registries|23 dedicated integrations|self
 Notifications|SMTP, Gotify, ntfy, Pushover, Telegram, Mattermost, Teams, Bark, Signal, Apprise passthrough (80+ services)|20 native trigger integrations|self
-MQTT / Home Assistant|No|Yes|self
+MQTT / Home Assistant|Yes|Yes|tie
 Distributed agents|Yes (headless agents)|Yes (SSE-based agents)|tie
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
-Prometheus metrics|Planned|Full /metrics endpoint + Grafana template|self
+Prometheus metrics|Yes|Full /metrics endpoint + Grafana template|tie
 Audit log|Activity log (free); compliance audit log (Enterprise only)|Yes, free (REST API)|self
 Git-based stack deployment|Yes|Planned|competitor
 Web terminal / shell|Yes|Planned|competitor

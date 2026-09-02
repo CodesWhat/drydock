@@ -4865,6 +4865,241 @@ describe('extracted lifecycle delegation', () => {
       }
     });
 
+    test('marks operation failed with a rollback-failed phase when compose reports a failed rollback', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(
+        new Error('compose refresh failed after replacement start'),
+        {
+          composeRollbackOutcome: {
+            status: 'rollback-failed',
+            phase: 'rollback-failed',
+            rollbackReason: 'compose_runtime_refresh_failed',
+            lastError: 'restoring the previous compose image failed',
+          },
+        },
+      );
+      const run = vi.fn().mockRejectedValue(composeRollbackError);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({
+        id: 'compose-container-id',
+        name: 'web',
+        result: { digest: 'sha256:bad-target' },
+      });
+      (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(container);
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-failed-1',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-failed-1',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-failed-1', {
+          status: 'failed',
+          phase: 'rollback-failed',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: 'restoring the previous compose image failed',
+        });
+        // A failed rollback leaves the container in an unknown state, so the
+        // rolled-back marker must not be persisted: the update-eligibility gate
+        // reads it to decide the target is known-bad and blocks the retry.
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-compose-rollback-failed-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('persists an empty rollback reason when the compose outcome omits one', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          lastError: 'compose refresh failed after replacement start',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      const container = createTriggerContainer({
+        id: 'compose-container-id',
+        name: 'web',
+        result: { digest: 'sha256:bad-target' },
+      });
+      (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(container);
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-no-reason',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-no-reason',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-no-reason', {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          lastError: 'compose refresh failed after replacement start',
+        });
+        const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        expect(saved.updateRollback.reason).toBe('');
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('drops a blank rollback reason from a rollback-failed terminal patch', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'rollback-failed',
+          phase: 'rollback-failed',
+          rollbackReason: '   ',
+          lastError: 'restoring the previous compose image failed',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      const container = createTriggerContainer({ id: 'compose-container-id', name: 'web' });
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-failed-blank',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-failed-blank',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-failed-blank', {
+          status: 'failed',
+          phase: 'rollback-failed',
+          lastError: 'restoring the previous compose image failed',
+        });
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('skips rollback-state persistence when the operation carries no container id', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'compose_runtime_refresh_failed',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      const container = createTriggerContainer({ id: undefined, name: 'web' });
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-no-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-no-container-id',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        // The outcome carries no lastError, so the terminal patch falls back to
+        // the thrown error's own message.
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-compose-rollback-no-container-id',
+          {
+            status: 'rolled-back',
+            phase: 'rolled-back',
+            rollbackReason: 'compose_runtime_refresh_failed',
+            lastError: 'compose refresh failed',
+          },
+        );
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('tolerates an executor with no rollback-state persistence dependency', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const originalPersistRollbackState = docker.containerUpdateExecutor.persistRollbackState;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: '   ',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      docker.containerUpdateExecutor.persistRollbackState = undefined;
+      const container = createTriggerContainer({ id: 'compose-container-id', name: 'web' });
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-no-persist',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-no-persist',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-no-persist', {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: 'compose refresh failed',
+        });
+        expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      } finally {
+        docker.containerUpdateExecutor.persistRollbackState = originalPersistRollbackState;
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
     test('keeps duplicate-style failure failed when only another agent has a recent success', async () => {
       const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
       const docker404Error = Object.assign(new Error('No such container: web'), {
@@ -4909,6 +5144,77 @@ describe('extracted lifecycle delegation', () => {
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
         mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('ignores a compose rollback outcome with an unrecognized status', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(new Error('compose refresh failed'), {
+        composeRollbackOutcome: {
+          status: 'partially-rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: 'compose refresh failed after replacement start',
+        },
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(composeRollbackError) };
+      const container = createTriggerContainer({ id: 'compose-container-id', name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-unknown',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-unknown',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        // An outcome status the mapper doesn't recognize must not be guessed at:
+        // the operation terminalizes through the ordinary failure path instead.
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-unknown', {
+          status: 'failed',
+          phase: 'failed',
+          lastError: 'compose refresh failed',
+        });
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('scopes the duplicate-update lookup by watcher alone for a controller-owned operation', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const docker404Error = Object.assign(new Error('No such container: web'), {
+        statusCode: 404,
+      });
+      docker.updateLifecycleExecutor = { run: vi.fn().mockRejectedValue(docker404Error) };
+      const container = createTriggerContainer({ name: 'web', watcher: 'local' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-404-controller-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+        container: { id: 'c-controller', name: 'web', watcher: 'local' },
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-404-controller-1' }),
+        ).rejects.toThrow('No such container');
+
+        expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
+          'web',
+          expect.any(Number),
+          { watcher: 'local' },
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
       }
     });
 
@@ -5620,7 +5926,7 @@ describe('persistRollbackState callback', () => {
 describe('trigger self-update routing', () => {
   test('should route to executeSelfUpdate for drydock image', async () => {
     stubTriggerFlow({ running: true });
-    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(true);
+    const executeSelfUpdateSpy = vi.spyOn(docker, 'executeSelfUpdate').mockResolvedValue(false);
     const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
 
     await docker.trigger(

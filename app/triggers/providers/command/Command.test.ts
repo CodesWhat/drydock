@@ -1,3 +1,4 @@
+import { execFile as realExecFile } from 'node:child_process';
 import joi from 'joi';
 import { createChildProcessCallbackMock } from '../../../test/notification-provider-mocks.js';
 
@@ -617,4 +618,113 @@ test('validateConfiguration defaults env to empty array when not set', () => {
   const cmd = new Command();
   const result = cmd.validateConfiguration({ cmd: 'echo test' });
   expect(result.env).toStrictEqual([]);
+});
+
+test('trigger should strip word-splitting, globbing and leading dashes from container fields', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  await cmd.trigger({
+    id: '123',
+    name: 'test',
+    watcher: 'local',
+    displayName: 'name with spaces',
+    image: {
+      id: 'image-123',
+      registry: { name: 'hub', url: 'https://registry.example.test' },
+      name: '--registry evil.example/backdoor *',
+      tag: { value: '1.0.0', semver: false },
+      digest: { watch: false },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    result: { tag: 'a b' },
+    updateAvailable: true,
+  });
+
+  expect(capturedEnv?.image_name).toBe('registry_evil.example/backdoor__');
+  expect(capturedEnv?.result_tag).toBe('a_b');
+  expect(capturedEnv?.image_name).not.toMatch(/^-/u);
+  expect(capturedEnv?.image_name).not.toMatch(/[\s*?[\]{}~\\"']/u);
+  expect(capturedEnv?.result_tag).not.toMatch(/\s/u);
+});
+
+test('a sanitized value expands to exactly one word in a real shell', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  await cmd.trigger({
+    id: '123',
+    name: 'test',
+    watcher: 'local',
+    image: {
+      id: 'image-123',
+      registry: { name: 'hub', url: 'https://registry.example.test' },
+      name: '--registry evil.example/backdoor *',
+      tag: { value: '1.0.0', semver: false },
+      digest: { watch: false },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    result: { tag: '2.0.0' },
+    updateAvailable: true,
+  });
+
+  // The point is what a real shell does with the sanitized value, not what the
+  // sanitizer returns. Unquoted, this used to expand to '--registry', then
+  // 'evil.example/backdoor', then one word per file in the working directory.
+  // Hand the captured env to an unmocked execFile.
+  childProcessMockControl.execFileImpl = null;
+  const stdout = await new Promise<string>((resolve, reject) => {
+    realExecFile(
+      '/bin/sh',
+      ['-c', 'printf "[%s]\\n" $image_name'],
+      { env: capturedEnv },
+      (error, stdoutOutput) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(String(stdoutOutput));
+      },
+    );
+  });
+
+  expect(stdout.trim().split('\n')).toEqual(['[registry_evil.example/backdoor__]']);
+});
+
+test('JSON and digest message payloads keep their spaces and quotes', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    pid: 42,
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  await cmd.triggerBatch([{ name: 'c1' }], {
+    title: 'Security scan: 1 finding',
+    body: '- app1: 1 critical',
+  });
+
+  expect(capturedEnv?.dd_title).toBe('Security scan: 1 finding');
+  expect(capturedEnv?.dd_body).toBe('- app1: 1 critical');
+  expect(capturedEnv?.containers_json).toBe('[{"name":"c1"}]');
 });

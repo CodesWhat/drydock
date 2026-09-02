@@ -884,6 +884,247 @@ describe('SSE lifecycle event handlers', () => {
       expect(eventWrite).toMatch(/^id: test-boot-id:\d+\n/);
     });
   });
+
+  describe('container lifecycle security projection', () => {
+    const SSE_MAX_PENDING_BYTES_PER_CLIENT = 256 * 1024;
+
+    function createVulnerability(index: number) {
+      const cve = `CVE-2026-${10000 + index}`;
+      return {
+        id: cve,
+        target: 'usr/lib/x86_64-linux-gnu/libssl.so.3 (debian 12.5)',
+        packageName: `libssl-${index}`,
+        installedVersion: '3.0.11-1~deb12u2',
+        fixedVersion: '3.0.13-1~deb12u1',
+        severity: 'HIGH',
+        title: `openssl: denial of service processing a crafted certificate chain (${cve})`,
+        primaryUrl: `https://avd.aquasec.com/nvd/${cve.toLowerCase()}`,
+        scanners: ['trivy', 'grype'],
+      };
+    }
+
+    function createScan(image: string) {
+      return {
+        scanner: 'trivy',
+        image,
+        imageDigest: 'sha256:aaaabbbbccccddddeeeeffff0000111122223333444455556666777788889999',
+        scannedAt: '2026-08-29T00:00:00.000Z',
+        status: 'unsafe',
+        blockSeverities: ['critical', 'high'],
+        blockingCount: 42,
+        summary: { unknown: 1, low: 120, medium: 300, high: 60, critical: 20 },
+        vulnerabilities: Array.from({ length: 500 }, (_unused, index) =>
+          createVulnerability(index),
+        ),
+        relativeGate: { decision: 'blocked', reason: 'candidate-worse' },
+      };
+    }
+
+    function createSbom(image: string) {
+      return {
+        generator: 'trivy',
+        image,
+        generatedAt: '2026-08-29T00:00:00.000Z',
+        format: 'cyclonedx',
+        componentCount: 500,
+        document: {
+          components: Array.from({ length: 500 }, (_unused, i) => ({ name: `pkg-${i}` })),
+        },
+      };
+    }
+
+    function createSignature(image: string) {
+      return {
+        verifier: 'cosign',
+        image,
+        verifiedAt: '2026-08-29T00:00:00.000Z',
+        status: 'verified',
+        keyless: true,
+        signatures: 1,
+      };
+    }
+
+    function createScannedContainerPayload() {
+      return {
+        id: 'container-1',
+        name: 'nginx',
+        security: {
+          scan: createScan('ghcr.io/acme/web:1.0.0'),
+          updateScan: createScan('ghcr.io/acme/web:1.1.0'),
+          sbom: createSbom('ghcr.io/acme/web:1.0.0'),
+          updateSbom: createSbom('ghcr.io/acme/web:1.1.0'),
+          signature: createSignature('ghcr.io/acme/web:1.0.0'),
+          updateSignature: createSignature('ghcr.io/acme/web:1.1.0'),
+        },
+      };
+    }
+
+    function findEventChunk(res, eventName: string) {
+      return res.write.mock.calls
+        .map(([value]) => value)
+        .find(
+          (value) => typeof value === 'string' && value.includes(`event: ${eventName}\ndata: `),
+        );
+    }
+
+    test('the unprojected payload really does exceed the per-client backpressure budget', () => {
+      const raw = JSON.stringify(createScannedContainerPayload());
+      expect(Buffer.byteLength(raw)).toBeGreaterThan(SSE_MAX_PENDING_BYTES_PER_CLIENT);
+    });
+
+    test('dd:container-updated drops the per-CVE arrays and the detail-only documents', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
+
+      onContainerUpdated(createScannedContainerPayload());
+
+      const chunk = findEventChunk(res, 'dd:container-updated');
+      expect(chunk).toBeDefined();
+      expect(Buffer.byteLength(chunk)).toBeLessThan(SSE_MAX_PENDING_BYTES_PER_CLIENT);
+
+      const payload = parseSseEventPayload(res, 'dd:container-updated');
+      expect(payload.id).toBe('container-1');
+      expect(payload.name).toBe('nginx');
+      expect(payload.security.scan.vulnerabilities).toEqual([]);
+      expect(payload.security.updateScan.vulnerabilities).toEqual([]);
+      expect(payload.security.sbom).toBeUndefined();
+      expect(payload.security.updateSbom).toBeUndefined();
+      expect(payload.security.signature).toBeUndefined();
+      expect(payload.security.updateSignature).toBeUndefined();
+      // Everything the container list mapper reads off the event survives.
+      expect(payload.security.scan.status).toBe('unsafe');
+      expect(payload.security.scan.blockingCount).toBe(42);
+      expect(payload.security.scan.blockSeverities).toEqual(['critical', 'high']);
+      expect(payload.security.scan.scannedAt).toBe('2026-08-29T00:00:00.000Z');
+      expect(payload.security.scan.summary).toEqual({
+        unknown: 1,
+        low: 120,
+        medium: 300,
+        high: 60,
+        critical: 20,
+      });
+      expect(payload.security.scan.relativeGate).toEqual({
+        decision: 'blocked',
+        reason: 'candidate-worse',
+      });
+      expect(payload.security.updateScan.image).toBe('ghcr.io/acme/web:1.1.0');
+    });
+
+    test('dd:container-added is projected the same way', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerAdded = mockRegisterContainerAdded.mock.calls.at(-1)[0];
+
+      onContainerAdded(createScannedContainerPayload());
+
+      const payload = parseSseEventPayload(res, 'dd:container-added');
+      expect(payload.security.scan.vulnerabilities).toEqual([]);
+      expect(payload.security.updateScan.vulnerabilities).toEqual([]);
+      expect(payload.security.sbom).toBeUndefined();
+    });
+
+    test('dd:container-removed is projected the same way', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerRemoved = mockRegisterContainerRemoved.mock.calls.at(-1)[0];
+
+      onContainerRemoved(createScannedContainerPayload());
+
+      const payload = parseSseEventPayload(res, 'dd:container-removed');
+      expect(payload.security.scan.vulnerabilities).toEqual([]);
+      expect(payload.security.signature).toBeUndefined();
+    });
+
+    test('a payload with no security block is passed through unchanged', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
+
+      onContainerUpdated({ id: 'container-1', name: 'nginx' });
+
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'event: dd:container-updated\ndata: {"id":"container-1","name":"nginx"}',
+        ),
+      );
+    });
+
+    test('a security block with neither scan nor updateScan keeps its other fields', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
+
+      onContainerUpdated({
+        id: 'container-1',
+        security: { sbom: createSbom('ghcr.io/acme/web:1.0.0'), scanPolicy: 'block' },
+      });
+
+      const payload = parseSseEventPayload(res, 'dd:container-updated');
+      expect(payload.security.sbom).toBeUndefined();
+      expect(payload.security.scanPolicy).toBe('block');
+      expect(payload.security.scan).toBeUndefined();
+      expect(payload.security.updateScan).toBeUndefined();
+    });
+
+    test('a null or non-object payload is passed through untouched', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
+
+      onContainerUpdated(null);
+      expect(findEventChunk(res, 'dd:container-updated')).toContain('data: {}');
+
+      res.write.mockClear();
+      onContainerUpdated('nginx');
+      expect(findEventChunk(res, 'dd:container-updated')).toContain('data: "nginx"');
+    });
+
+    test('the replay ring holds the projected payload, so a reconnect replays the slim event', () => {
+      const handler = getHandler();
+      connectSseClient(handler);
+      const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
+
+      onContainerUpdated(createScannedContainerPayload());
+
+      const buffered = mockSseEventBuffer._bufferEvents.at(-1);
+      expect(buffered.event).toBe('dd:container-updated');
+      expect(buffered.data.security.scan.vulnerabilities).toEqual([]);
+      expect(buffered.data.security.updateScan.vulnerabilities).toEqual([]);
+      expect(buffered.data.security.sbom).toBeUndefined();
+      expect(Buffer.byteLength(JSON.stringify(buffered.data))).toBeLessThan(
+        SSE_MAX_PENDING_BYTES_PER_CLIENT,
+      );
+
+      mockSseEventBuffer.replaySince.mockReturnValueOnce({ kind: 'replay', events: [buffered] });
+      const replayReq = createSSERequest('127.0.0.2');
+      replayReq.headers = { 'last-event-id': `${mockBootId}:0` };
+      const replayRes = createSSEResponse();
+      handler(replayReq, replayRes);
+
+      const replayChunk = findEventChunk(replayRes, 'dd:container-updated');
+      expect(replayChunk).toBeDefined();
+      expect(Buffer.byteLength(replayChunk)).toBeLessThan(SSE_MAX_PENDING_BYTES_PER_CLIENT);
+      expect(replayChunk).not.toContain('CVE-2026-10000');
+    });
+
+    test('three scan-cycle broadcasts in a row do not disconnect a blocked client', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
+      res.destroy = vi.fn();
+      res.end = vi.fn();
+      res.write.mockReturnValue(false);
+
+      onContainerUpdated(createScannedContainerPayload());
+      onContainerUpdated(createScannedContainerPayload());
+      onContainerUpdated(createScannedContainerPayload());
+
+      expect(res.destroy).not.toHaveBeenCalled();
+      expect(res.end).not.toHaveBeenCalled();
+      expect(sseRouter._clients.has(res)).toBe(true);
+    });
+  });
 });
 
 function getHandler() {

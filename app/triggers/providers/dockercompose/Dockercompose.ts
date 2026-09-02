@@ -256,6 +256,12 @@ type ValidateComposeConfigurationOptions = {
 
 type MutateComposeFileOptions = ValidateComposeConfigurationOptions & {
   captureSnapshot?: boolean;
+  backupFilePath?: string;
+  validateCurrentState?: (
+    composeFileText: string,
+    filePath: string,
+    composeFileChain: string[],
+  ) => Promise<void>;
 };
 
 type ComposeFileMutationSnapshot = {
@@ -378,6 +384,31 @@ function preserveExplicitDockerIoPrefix(
     return targetImageReference;
   }
   return `docker.io/${targetImageReference}`;
+}
+
+const HUB_ALIAS_HOST_PREFIX = /^(?:index\.docker\.io|registry-1\.docker\.io|docker\.io)\//i;
+const HUB_LIBRARY_NAMESPACE_PREFIX = /^library\//;
+
+/**
+ * Reduce an image reference to the repository it names, with the tag, the
+ * digest and the Docker Hub aliases that `Hub.getImageFullName` strips removed,
+ * so `docker.io/library/nginx:1.27.0` and `nginx@sha256:...` compare equal.
+ * @param imageReference
+ * @returns the normalized repository, or '' when there is nothing to compare
+ */
+function getImageRepositoryKey(imageReference: unknown): string {
+  const reference = typeof imageReference === 'string' ? imageReference.trim() : '';
+  const referenceWithoutDigest = reference.split('@')[0];
+  const lastSlashIndex = referenceWithoutDigest.lastIndexOf('/');
+  const lastColonIndex = referenceWithoutDigest.lastIndexOf(':');
+  const repository =
+    lastColonIndex > lastSlashIndex
+      ? referenceWithoutDigest.slice(0, lastColonIndex)
+      : referenceWithoutDigest;
+  const repositoryWithoutHubHost = repository.replace(HUB_ALIAS_HOST_PREFIX, '');
+  return hasExplicitRegistryHost(repositoryWithoutHubHost)
+    ? repositoryWithoutHubHost
+    : repositoryWithoutHubHost.replace(HUB_LIBRARY_NAMESPACE_PREFIX, '');
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -920,7 +951,68 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return registry.getImageFullName(container.image as ContainerImage, container.image.tag.value);
   }
 
+  /**
+   * Refuse to touch a service whose compose `image:` names a different
+   * repository than the container is actually running. `getServiceKey` resolves
+   * the service from the `com.docker.compose.service` label without comparing
+   * images, so a container carrying a label for a service it is not an instance
+   * of would otherwise have that service's `image:` rewritten to its own
+   * repository. Runs in every `reconciliationMode`, `off` included, because a
+   * repository mismatch is not drift to reconcile: the container is not that
+   * service. Tag-only drift keeps its warn/block/off behaviour below.
+   * @param composeFileChainSummary
+   * @param versionMappings
+   */
+  assertComposeRepositoryContinuity(composeFileChainSummary, versionMappings) {
+    for (const mapping of versionMappings) {
+      if (getImageRepositoryKey(mapping.runtimeImage) === getImageRepositoryKey(mapping.current)) {
+        continue;
+      }
+      throw new Error(
+        `Compose service ${mapping.service} in ${composeFileChainSummary} declares image ` +
+          `${mapping.current} but container ${mapping.container?.name} runs ${mapping.runtimeImage}; ` +
+          'refusing to rewrite a different repository',
+      );
+    }
+  }
+
+  async assertComposeRepositoryContinuityFromFreshChain(
+    composeFileChain,
+    composeFilePath,
+    composeFileText,
+    mappings,
+  ) {
+    const composeByFile = new Map<string, unknown>();
+    composeByFile.set(
+      composeFilePath,
+      yaml.parse(composeFileText, {
+        maxAliasCount: YAML_MAX_ALIAS_COUNT,
+      }),
+    );
+    for (const composeFile of composeFileChain) {
+      if (composeFile !== composeFilePath) {
+        composeByFile.set(
+          composeFile,
+          yaml.parse((await this.getComposeFile(composeFile)).toString(), {
+            maxAliasCount: YAML_MAX_ALIAS_COUNT,
+          }),
+        );
+      }
+    }
+    const compose = await this.getComposeFileChainAsObject(composeFileChain, composeByFile);
+    this.assertComposeRepositoryContinuity(
+      composeFileChain.join(', '),
+      mappings.map((mapping) => ({
+        ...mapping,
+        current: isPlainObject(compose?.services?.[mapping.service])
+          ? (compose.services[mapping.service] as { image?: unknown }).image
+          : undefined,
+      })),
+    );
+  }
+
   reconcileComposeMappings(composeFileChainSummary, versionMappings) {
+    this.assertComposeRepositoryContinuity(composeFileChainSummary, versionMappings);
     const reconciliationMode = this.configuration.reconciliationMode || 'warn';
     if (reconciliationMode === 'off') {
       return;
@@ -1190,6 +1282,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       const composeFileText = (await this.getComposeFile(filePath)).toString();
       const composeFileStat = await fs.stat(filePath);
       const composeFileChain = this.normalizeComposeFileChain(filePath, options.composeFiles);
+      if (options.validateCurrentState) {
+        await options.validateCurrentState(composeFileText, filePath, composeFileChain);
+      }
+      if (options.backupFilePath) {
+        await this.backup(filePath, options.backupFilePath);
+      }
       const updatedComposeFileText = updateComposeText(composeFileText, {
         filePath,
         mtimeMs: composeFileStat.mtimeMs,
@@ -1799,12 +1897,6 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     composeFileChain,
     composeByFile,
   ): Promise<ComposeFileMutationSnapshot | undefined> {
-    // Backup docker-compose file
-    if (this.configuration.backup) {
-      const backupFile = `${writableComposeFile}.back`;
-      await this.backup(writableComposeFile, backupFile);
-    }
-
     // Replace only the targeted compose service image values.
     const serviceImageUpdates = this.buildComposeServiceImageUpdates(composeUpdates);
     const parsedComposeFileObject = this.buildUpdatedComposeFileObjectForValidation(
@@ -1827,6 +1919,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         composeFiles: composeFileChain,
         parsedComposeFileObject,
         captureSnapshot: true,
+        backupFilePath: this.configuration.backup ? `${writableComposeFile}.back` : undefined,
+        validateCurrentState: (composeFileText, filePath, currentComposeFileChain) =>
+          this.assertComposeRepositoryContinuityFromFreshChain(
+            currentComposeFileChain,
+            filePath,
+            composeFileText,
+            composeUpdates,
+          ),
       },
     );
     return isPlainObject(mutationResult) &&
@@ -2098,6 +2198,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       );
     }
 
+    this.assertComposeRepositoryContinuity(composeFiles.join(', '), [
+      {
+        container,
+        service,
+        runtimeImage: currentImage,
+        current: (compose as ComposeFileWithServices).services?.[service]?.image,
+      },
+    ]);
     const composeFile = await this.getWritableComposeFileForService(
       composeFiles,
       service,
@@ -2616,6 +2724,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       {
         composeFiles,
         captureSnapshot: true,
+        validateCurrentState: (composeFileText, filePath, currentComposeFileChain) =>
+          this.assertComposeRepositoryContinuityFromFreshChain(
+            currentComposeFileChain,
+            filePath,
+            composeFileText,
+            [{ container, service, runtimeImage: currentImage }],
+          ),
       },
     );
     const mutationSnapshots =
@@ -2797,6 +2912,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 export default Dockercompose;
 
 export {
+  getImageRepositoryKey as testable_getImageRepositoryKey,
   hasExplicitRegistryHost as testable_hasExplicitRegistryHost,
   normalizeImplicitLatest as testable_normalizeImplicitLatest,
   normalizePostStartEnvironmentValue as testable_normalizePostStartEnvironmentValue,

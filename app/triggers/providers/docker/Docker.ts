@@ -57,7 +57,9 @@ import {
   markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
   prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation,
 } from './self-update-operation.js';
-import UpdateLifecycleExecutor from './UpdateLifecycleExecutor.js';
+import UpdateLifecycleExecutor, {
+  type SelfUpdateLifecycleResult,
+} from './UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
@@ -70,14 +72,23 @@ type ComposeRollbackTerminalPatch =
       status: 'rolled-back';
       phase: 'rolled-back';
       rollbackReason?: string;
-      lastError?: string;
+      lastError: string;
     }
   | {
       status: 'failed';
       phase: 'rollback-failed';
       rollbackReason?: string;
-      lastError?: string;
+      lastError: string;
     };
+
+function isSelfUpdateLifecycleResult(value: unknown): value is SelfUpdateLifecycleResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as SelfUpdateLifecycleResult).updated === 'boolean' &&
+    typeof (value as SelfUpdateLifecycleResult).operationId === 'string'
+  );
+}
 
 export interface DockerTriggerConfiguration extends TriggerConfiguration {
   prune: boolean;
@@ -113,12 +124,10 @@ function getComposeRollbackTerminalPatch(error: unknown): ComposeRollbackTermina
   }
 
   const record = outcome as Record<string, unknown>;
-  /* v8 ignore next 7 -- rollback outcome metadata is populated by compose rollback helpers. */
   const rollbackReason =
     typeof record.rollbackReason === 'string' && record.rollbackReason.trim() !== ''
       ? record.rollbackReason
       : undefined;
-  /* v8 ignore next 4 -- rollback outcome metadata normally carries a nonblank lastError. */
   const lastError =
     typeof record.lastError === 'string' && record.lastError.trim() !== ''
       ? record.lastError
@@ -128,13 +137,11 @@ function getComposeRollbackTerminalPatch(error: unknown): ComposeRollbackTermina
     return {
       status: 'rolled-back',
       phase: 'rolled-back',
-      /* v8 ignore next -- blank rollback reasons are omitted from terminal patches. */
       ...(rollbackReason ? { rollbackReason } : {}),
       lastError,
     };
   }
 
-  /* v8 ignore next 9 -- rollback-failed outcomes are integration-covered through compose recovery. */
   if (record.status === 'rollback-failed') {
     return {
       status: 'failed',
@@ -144,7 +151,6 @@ function getComposeRollbackTerminalPatch(error: unknown): ComposeRollbackTermina
     };
   }
 
-  /* v8 ignore next -- unknown rollback outcome statuses are defensive malformed-error handling. */
   return undefined;
 }
 
@@ -174,7 +180,6 @@ function getOperationIdentityFilter(operation: {
         ? operation.agent
         : undefined;
 
-  /* v8 ignore next 4 -- watcher-scoped identity construction is covered by update execution tests. */
   return {
     ...(agent !== undefined ? { agent } : {}),
     watcher,
@@ -1691,13 +1696,23 @@ class Docker<
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    const bypassGlobalCap = this.isSelfUpdate(container) || this.isInfrastructureUpdate(container);
+    const selfUpdate = this.isSelfUpdate(container);
+    const bypassGlobalCap = selfUpdate || this.isInfrastructureUpdate(container);
+    let selfUpdateOperationId: string | undefined;
     return withContainerUpdateLocks(
       this.getUpdateLockKeys(container),
       async () => {
         const requestedOperationId = getRequestedOperationId(container, runtimeContext);
         try {
-          const result: unknown = await this.updateLifecycleExecutor.run(container, runtimeContext);
+          const lifecycleResult: unknown = await this.updateLifecycleExecutor.run(
+            container,
+            runtimeContext,
+          );
+          let result: unknown = lifecycleResult;
+          if (isSelfUpdateLifecycleResult(lifecycleResult)) {
+            selfUpdateOperationId = lifecycleResult.operationId;
+            result = lifecycleResult.updated;
+          }
           if (result !== false && requestedOperationId) {
             const operation = updateOperationStore.getOperationById(requestedOperationId);
             if (
@@ -1751,7 +1766,6 @@ class Docker<
           const composeRollbackPatch = getComposeRollbackTerminalPatch(error);
           if (composeRollbackPatch) {
             updateOperationStore.markOperationTerminal(operation.id, composeRollbackPatch);
-            /* v8 ignore next 11 -- rollback-state persistence is covered through compose recovery tests. */
             if (composeRollbackPatch.status === 'rolled-back') {
               const rollbackContainerId = getRollbackStateContainerId(operation, container);
               if (rollbackContainerId) {
@@ -1760,7 +1774,7 @@ class Docker<
                   'rolled-back',
                   {
                     reason: composeRollbackPatch.rollbackReason ?? '',
-                    lastError: composeRollbackPatch.lastError ?? getErrorMessage(error),
+                    lastError: composeRollbackPatch.lastError,
                   },
                 );
               }
@@ -1790,7 +1804,14 @@ class Docker<
           throw error;
         }
       },
-      { bypassGlobalCap },
+      {
+        bypassGlobalCap,
+        exclusive: selfUpdate,
+        retainExclusiveOnResult: (result) =>
+          result === true && selfUpdateOperationId
+            ? { operationId: selfUpdateOperationId }
+            : undefined,
+      },
     );
   }
 

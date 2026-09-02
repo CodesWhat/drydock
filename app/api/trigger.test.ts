@@ -44,6 +44,7 @@ vi.mock('../util/error', () => ({
 
 import * as agent from '../agent/index.js';
 import * as registry from '../registry/index.js';
+import * as updateOperationStore from '../store/update-operation.js';
 import * as triggerRouter from './trigger.js';
 import { runTrigger } from './trigger.js';
 
@@ -216,6 +217,49 @@ describe('Trigger Router', () => {
       expect(res.status).toHaveBeenCalledWith(202);
       // Response operationId should match what was provided
       expect(res.json).toHaveBeenCalledWith({ operationId: 'caller-op-uuid' });
+    });
+
+    test('should reject a caller-supplied operationId that already exists with 409', async () => {
+      const mockTrigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      mockGetContainer.mockReturnValue({
+        id: 'dup-c1',
+        name: 'dup-nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      });
+      // A foreign container already owns this id, so the per-container
+      // active-operation gate lets the request through and the id check is
+      // what has to stop it.
+      const getOperationByIdSpy = vi
+        .spyOn(updateOperationStore, 'getOperationById')
+        .mockImplementation((id: string) =>
+          id === 'duplicate-op-uuid'
+            ? ({ id, containerId: 'other-container', status: 'queued' } as never)
+            : undefined,
+        );
+
+      const res = createMockResponse();
+      await runTrigger(
+        {
+          params: { type: 'docker', name: 'update' },
+          body: { id: 'dup-c1', operationId: 'duplicate-op-uuid' },
+        },
+        res,
+      );
+      getOperationByIdSpy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Update operation id already exists',
+      });
+      expect(mockTrigger.trigger).not.toHaveBeenCalled();
     });
 
     test('should reject body with empty-string operationId (#289)', async () => {
@@ -924,6 +968,59 @@ describe('Trigger Router', () => {
         'update',
         { operationId: 'caller-remote-op-uuid' },
       );
+    });
+
+    test('should reject a duplicate caller-supplied operationId on the remote route with 409', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi.fn().mockResolvedValue(undefined),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+      const mockTrigger = {
+        type: 'docker',
+        name: 'update',
+        agent: 'my-agent',
+        configuration: {},
+        getId: () => 'my-agent.docker.update',
+        isTriggerIncluded: vi.fn().mockReturnValue(true),
+        isTriggerExcluded: vi.fn().mockReturnValue(false),
+        trigger: vi.fn((container, runtimeContext) =>
+          mockAgentClient.runRemoteTrigger(container, 'docker', 'update', runtimeContext),
+        ),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'my-agent.docker.update': mockTrigger },
+      });
+      mockGetContainer.mockReturnValue({
+        id: 'dup-remote-c1',
+        name: 'dup-remote-nginx',
+        agent: 'my-agent',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      });
+      const getOperationByIdSpy = vi
+        .spyOn(updateOperationStore, 'getOperationById')
+        .mockImplementation((id: string) =>
+          id === 'duplicate-remote-op-uuid'
+            ? ({ id, containerId: 'other-container', status: 'succeeded' } as never)
+            : undefined,
+        );
+
+      const handler = getRemoteTriggerHandler();
+      const res = createMockResponse();
+      await handler(
+        {
+          params: { agent: 'my-agent', type: 'docker', name: 'update' },
+          body: { id: 'dup-remote-c1', operationId: 'duplicate-remote-op-uuid' },
+        },
+        res,
+      );
+      getOperationByIdSpy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Update operation id already exists',
+      });
+      expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
     });
 
     test('should not make a second remote update call when the agent would reject it with 409', async () => {

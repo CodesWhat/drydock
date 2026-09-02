@@ -24,7 +24,7 @@ class Lscr extends Ghcr {
    */
 
   match(image) {
-    return /^.*\.?lscr.io$/.test(image.registry.url);
+    return this.matchRegistryHost(image, 'lscr.io');
   }
 
   /**

@@ -278,11 +278,11 @@ describe('Auth Router', () => {
       expect(next).toHaveBeenCalled();
     });
 
-    test('should call passport.authenticate when user is not authenticated', () => {
+    test('should call passport.authenticate with session:true when user is not authenticated and has no Authorization header', () => {
       const authMiddleware = vi.fn();
       passport.authenticate.mockReturnValue(authMiddleware);
 
-      const req = { isAuthenticated: vi.fn(() => false) };
+      const req = { isAuthenticated: vi.fn(() => false), headers: {} };
       const res = {};
       const next = vi.fn();
 
@@ -300,6 +300,41 @@ describe('Auth Router', () => {
         isAuthenticated: vi.fn(() => false),
         method: 'POST',
         path: '/login',
+        headers: {},
+      };
+      const res = {};
+      const next = vi.fn();
+
+      auth.requireAuthentication(req, res, next);
+
+      expect(passport.authenticate).toHaveBeenCalledWith(auth.getAllIds(), { session: true });
+      expect(authMiddleware).toHaveBeenCalledWith(req, res, next);
+    });
+
+    test('should call passport.authenticate with session:false when the request carries an Authorization header', () => {
+      const authMiddleware = vi.fn();
+      passport.authenticate.mockReturnValue(authMiddleware);
+
+      const req = {
+        isAuthenticated: vi.fn(() => false),
+        headers: { authorization: 'Basic dXNlcjpwYXNz' },
+      };
+      const res = {};
+      const next = vi.fn();
+
+      auth.requireAuthentication(req, res, next);
+
+      expect(passport.authenticate).toHaveBeenCalledWith(auth.getAllIds(), { session: false });
+      expect(authMiddleware).toHaveBeenCalledWith(req, res, next);
+    });
+
+    test('should ignore an empty Authorization header and keep session:true', () => {
+      const authMiddleware = vi.fn();
+      passport.authenticate.mockReturnValue(authMiddleware);
+
+      const req = {
+        isAuthenticated: vi.fn(() => false),
+        headers: { authorization: '' },
       };
       const res = {};
       const next = vi.fn();

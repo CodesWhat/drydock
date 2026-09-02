@@ -4,7 +4,7 @@ import type { ComparisonRouteRawConfig } from "@/lib/comparison-route-data/types
 export const dockgeComparisonRouteData = {
   slug: "dockge",
   comparisonTable: `
-Project status|Actively maintained|Actively maintained|tie
+Project status|Stable releases stalled since March 2025 (master still active)|Actively maintained|self
 Language|TypeScript|TypeScript|tie
 Web UI|Yes|Yes|tie
 Primary focus|Compose stack management|Container update monitoring|tie
@@ -20,7 +20,7 @@ Distributed agents|Yes (requires full Dockge instance per host)|SSE-based lightw
 Audit log|No|Yes, with REST API|self
 Compose file editing|Yes (visual editor)|No (compose updates only)|competitor
 Docker run → compose|Yes|No|competitor
-Multi-language (i18n)|Yes (30+ languages)|Yes (17 languages)|tie
+Multi-language (i18n)|Yes (29 languages)|Yes (17 languages)|tie
 Container start/stop/restart|Yes|Yes|tie
 Container grouping / stacks|Yes|Yes (auto-detected)|tie
 Dark/light theme|Yes|Yes|tie

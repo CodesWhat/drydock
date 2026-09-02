@@ -66,6 +66,11 @@ type UpdateLifecycleContext = {
   };
 };
 
+export interface SelfUpdateLifecycleResult {
+  updated: boolean;
+  operationId: string;
+}
+
 type UpdateLifecycleExecutorCallbacks = {
   getLogger: () => UpdateLifecycleRootLogger | undefined;
   getContainerFullName: (container: UpdateLifecycleContainer) => string;
@@ -367,9 +372,15 @@ class UpdateLifecycleExecutor {
                 `Failed to mark self-update operation ${selfUpdateOperationId} as skipped: ${String((markErr as Error)?.message ?? markErr)}`,
               );
             }
-            return;
+            return {
+              updated,
+              operationId: selfUpdateOperationId,
+            } satisfies SelfUpdateLifecycleResult;
           }
-          return;
+          return {
+            updated,
+            operationId: selfUpdateOperationId,
+          } satisfies SelfUpdateLifecycleResult;
         } catch (e: unknown) {
           const errorMessage = String((e as Error)?.message ?? e);
           try {

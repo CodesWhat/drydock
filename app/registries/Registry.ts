@@ -85,6 +85,114 @@ function isLegacyImageConfig(mediaType: string | undefined): boolean {
  */
 const MAX_MANIFEST_INDEX_DEPTH = 3;
 
+/**
+ * Page bound for tag listing. At the 1000-per-page default this allows 50k
+ * tags, far past any real repository, and stops a registry that returns a
+ * `Link` header on every response from looping forever and growing the tag
+ * array without limit.
+ */
+const MAX_TAG_PAGES = 50;
+
+/**
+ * Split a `Link` header into its link-values.
+ *
+ * A plain `split(',')` is wrong: a comma is a sub-delimiter under RFC 3986, so
+ * a registry may legitimately put one inside a cursor (`?last=a,b`) or inside a
+ * quoted parameter, and splitting there destroys the entry. Commas only
+ * separate link-values when they sit outside both the angle brackets and any
+ * quoted string.
+ */
+function splitLinkHeader(link: string): string[] {
+  const entries: string[] = [];
+  let current = '';
+  let inAngle = false;
+  let inQuote = false;
+  for (const char of link) {
+    if (char === '"') {
+      inQuote = !inQuote;
+    } else if (char === '<' && !inQuote) {
+      inAngle = true;
+    } else if (char === '>' && !inQuote) {
+      inAngle = false;
+    } else if (char === ',' && !inAngle && !inQuote) {
+      entries.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  entries.push(current);
+  return entries;
+}
+
+/**
+ * Whether a link-value's parameters declare the `next` relation.
+ *
+ * `rel` carries a space-separated list of relation types, quoted or bare, so
+ * the value has to be tokenised and matched exactly. A substring test accepts
+ * `rel=next-page`, which is a different relation, and misses `rel="prev next"`,
+ * which is the one we want.
+ */
+function hasNextRelation(parameters: string): boolean {
+  const match = /(?:^|;)\s*rel\s*=\s*"?([^";,]*)"?/iu.exec(parameters);
+  if (match === null) {
+    return false;
+  }
+  return match[1].split(/\s+/u).some((relation) => relation.toLowerCase() === 'next');
+}
+
+/**
+ * Extract the `rel="next"` URL from an RFC 8288 `Link` header.
+ *
+ * Pagination cursors are opaque under the OCI distribution spec: a client is
+ * meant to follow this URL as given rather than rebuild it. Registries differ
+ * in what they put in it, and AWS ECR Public enforces the distinction — a
+ * hand-built `last=<tag-name>` is rejected with 405 and
+ * `Invalid parameter at 'NextToken'`, so every repository past the first page
+ * was unreadable there.
+ */
+function parseNextPageLink(link: string | undefined): string | undefined {
+  if (link === undefined) {
+    return undefined;
+  }
+  for (const entry of splitLinkHeader(link)) {
+    const match = /<([^>]+)>\s*;\s*(.+)/su.exec(entry);
+    if (match === null) {
+      continue;
+    }
+    if (hasNextRelation(match[2])) {
+      return match[1].trim();
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Resolve a `Link` header's next-page URL against the registry base.
+ *
+ * The base carries the API prefix (`https://host/v2`) and registries usually
+ * answer with an absolute path that repeats it, which resolves correctly. The
+ * trailing slash keeps a bare relative path resolving under the prefix rather
+ * than replacing it.
+ *
+ * Returns undefined when the cursor points at a different origin. The request
+ * carries registry credentials, so following one off-origin would hand them to
+ * whatever host the registry named.
+ */
+function resolveNextPageUrl(registryUrl: string, link: string | undefined): string | undefined {
+  const next = parseNextPageLink(link);
+  if (next === undefined) {
+    return undefined;
+  }
+  try {
+    const base = new URL(registryUrl);
+    const resolved = new URL(next, `${registryUrl}/`);
+    return resolved.origin === base.origin ? resolved.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isRedirectError(error: unknown): boolean {
   const status =
     error != null && typeof error === 'object'
@@ -227,6 +335,7 @@ class Registry<
     let page: AxiosResponse<RegistryTagsList> | undefined = undefined;
     let hasNext = true;
     let link: string | undefined = undefined;
+    let pageCount = 0;
     while (hasNext) {
       const lastItem = page?.data?.tags?.slice(-1)?.[0];
 
@@ -235,6 +344,13 @@ class Registry<
       link = page?.headers?.link;
       hasNext = page?.headers?.link !== undefined;
       tags.push(...pageTags);
+      pageCount += 1;
+      if (hasNext && pageCount >= MAX_TAG_PAGES) {
+        this.log.warn(
+          `Stopped listing ${image.name} tags after ${MAX_TAG_PAGES} pages; the registry is still reporting more`,
+        );
+        hasNext = false;
+      }
     }
 
     // Sort tags alphabetically, highest first
@@ -251,11 +367,24 @@ class Registry<
   getTagsPage(
     image: ContainerImage,
     lastItem: string | undefined = undefined,
-    _link: string | undefined = undefined,
+    link: string | undefined = undefined,
   ) {
+    // Follow the registry's own cursor when it gave us one. Rebuilding it from
+    // the previous page's last tag only works on registries that happen to
+    // accept a literal tag name as `last`, and silently truncates the tag list
+    // on the ones that don't.
+    const nextPageUrl = resolveNextPageUrl(image.registry.url, link);
+    if (nextPageUrl !== undefined) {
+      return this.callRegistry<RegistryTagsList>({
+        image,
+        url: nextPageUrl,
+        resolveWithFullResponse: true,
+      });
+    }
+
     // Default items per page (not honoured by all registries)
     const itemsPerPage = 1000;
-    const last = lastItem ? `&last=${lastItem}` : '';
+    const last = lastItem ? `&last=${encodeURIComponent(lastItem)}` : '';
     return this.callRegistry<RegistryTagsList>({
       image,
       url: `${image.registry.url}/${image.name}/tags/list?n=${itemsPerPage}${last}`,

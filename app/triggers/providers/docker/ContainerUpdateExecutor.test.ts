@@ -1322,16 +1322,18 @@ describe('ContainerUpdateExecutor', () => {
     const executor = createExecutor({
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
       stopContainer: vi.fn().mockResolvedValue(undefined),
-      startContainer: vi.fn().mockResolvedValue(undefined),
+      startContainer: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('new start failed'))
+        .mockResolvedValue(undefined),
       hasHealthcheckConfigured: vi.fn(() => false),
-      waitContainerRemoved: vi.fn().mockRejectedValue(new Error('cleanup exploded')),
       isContainerNotFoundError: vi.fn(() => false),
       buildRuntimeConfigCompatibilityError: vi.fn(() => undefined),
     });
     const log = createLog();
 
     await expect(executor.execute(context, createContainer(), log)).rejects.toThrow(
-      'cleanup exploded',
+      'new start failed',
     );
 
     expect(log.warn).toHaveBeenCalledWith(
@@ -1342,7 +1344,7 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
-  test('execute rolls back on cleanup errors and falls back to image tag versions when updateKind values are missing', async () => {
+  test('execute rolls back on start failures and falls back to image tag versions when updateKind values are missing', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
         State: { Running: true },
@@ -1358,12 +1360,15 @@ describe('ContainerUpdateExecutor', () => {
     const executor = createExecutor({
       createContainer: vi.fn().mockResolvedValue(context.newContainer),
       hasHealthcheckConfigured: vi.fn(() => false),
-      waitContainerRemoved: vi.fn().mockRejectedValue(new Error('cleanup exploded')),
+      startContainer: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('new start failed'))
+        .mockResolvedValue(undefined),
       isContainerNotFoundError: vi.fn(() => false),
     });
 
     await expect(executor.execute(context, container, createLog())).rejects.toThrow(
-      'cleanup exploded',
+      'new start failed',
     );
 
     expect(mockInsertOperation).toHaveBeenCalledWith(
@@ -1376,11 +1381,144 @@ describe('ContainerUpdateExecutor', () => {
       expect.objectContaining({
         container,
         outcome: 'success',
-        reason: 'cleanup_old_failed',
-        details: expect.stringContaining('Rollback completed after cleanup_old_failed'),
+        reason: 'start_new_failed',
+        details: expect.stringContaining('Rollback completed after start_new_failed'),
         fromVersion: '1.0.0',
         toVersion: '1.0.0',
       }),
+    );
+  });
+
+  test('execute keeps the health-verified container when auto-remove cleanup of the old one times out', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: true },
+      }),
+    });
+    const timeoutError = new Error('The operation was aborted due to timeout');
+    timeoutError.name = 'TimeoutError';
+    const persistRollbackState = vi.fn();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => true),
+      waitContainerRemoved: vi.fn().mockRejectedValue(timeoutError),
+      isContainerNotFoundError: vi.fn(() => false),
+      persistRollbackState,
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+    expect(executor.waitForContainerHealthy).toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-1', {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    expect(persistRollbackState).toHaveBeenCalledWith('container-id', 'succeeded');
+    expect(context.newContainer.stop).not.toHaveBeenCalled();
+    expect(context.newContainer.remove).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).not.toHaveBeenCalledWith({ name: 'web' });
+    expect(executor.recordRollbackTelemetry).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('it is left stopped for manual removal or prune'),
+    );
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        lastError: 'cleanup_old_failed: The operation was aborted due to timeout',
+      }),
+    );
+  });
+
+  test('execute keeps the health-verified container when removing the old one conflicts', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const conflictError = Object.assign(
+      new Error('removal of container old-container-id is already in progress'),
+      { statusCode: 409 },
+    );
+    const persistRollbackState = vi.fn();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => true),
+      removeContainer: vi.fn().mockRejectedValue(conflictError),
+      isContainerNotFoundError: vi.fn(() => false),
+      persistRollbackState,
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+    expect(executor.waitContainerRemoved).not.toHaveBeenCalled();
+    expect(executor.removeContainer).toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-1', {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    expect(persistRollbackState).toHaveBeenCalledWith('container-id', 'succeeded');
+    expect(context.newContainer.stop).not.toHaveBeenCalled();
+    expect(context.newContainer.remove).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).not.toHaveBeenCalledWith({ name: 'web' });
+    expect(executor.recordRollbackTelemetry).not.toHaveBeenCalled();
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        lastError:
+          'cleanup_old_failed: removal of container old-container-id is already in progress',
+      }),
+    );
+  });
+
+  test('execute keeps the health-verified container when recording the cleanup failure is rejected', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    // The 30-minute active-TTL sweep can terminalise a long-running operation
+    // mid-update, and updateOperation() throws on a terminal row. That throw must
+    // not escape into the rollback this branch exists to avoid.
+    mockUpdateOperation.mockImplementation((_id: string, patch: { lastError?: unknown }) => {
+      if (
+        typeof patch?.lastError === 'string' &&
+        patch.lastError.startsWith('cleanup_old_failed')
+      ) {
+        throw new Error(
+          'updateOperation cannot modify terminal operations; use reopenTerminalOperation() for an explicit restart',
+        );
+      }
+      return undefined;
+    });
+    const persistRollbackState = vi.fn();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => true),
+      removeContainer: vi.fn().mockRejectedValue(new Error('remove blew up')),
+      isContainerNotFoundError: vi.fn(() => false),
+      persistRollbackState,
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+    mockUpdateOperation.mockReset();
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-1', {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    expect(persistRollbackState).toHaveBeenCalledWith('container-id', 'succeeded');
+    expect(context.newContainer.stop).not.toHaveBeenCalled();
+    expect(context.newContainer.remove).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).not.toHaveBeenCalledWith({ name: 'web' });
+    expect(executor.recordRollbackTelemetry).not.toHaveBeenCalled();
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Unable to record the failed cleanup of'),
     );
   });
 
