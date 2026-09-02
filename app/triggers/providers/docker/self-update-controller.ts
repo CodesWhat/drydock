@@ -34,6 +34,10 @@ type SelfUpdateControllerConfig = {
 type ErrorWithStatusCode = {
   statusCode?: number;
   status?: number;
+  reason?: string;
+  json?: {
+    message?: unknown;
+  };
 };
 
 type ContainerInspectState = {
@@ -131,6 +135,26 @@ function isContainerAlreadyStartedError(error: unknown): boolean {
   }
   const message = getErrorMessage(error, '').toLowerCase();
   return message.includes('already started');
+}
+
+function isContainerNotFoundError(error: unknown): boolean {
+  const statusCode = getErrorStatusCode(error);
+  if (statusCode === 404) {
+    return true;
+  }
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const errorWithStatusCode = error as ErrorWithStatusCode;
+  const message = [
+    getErrorMessage(error, ''),
+    errorWithStatusCode.reason,
+    errorWithStatusCode.json?.message,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLowerCase();
+  return message.includes('no such container');
 }
 
 function hasHealthcheck(containerInspect: ContainerInspectState): boolean {
@@ -262,10 +286,23 @@ class SelfUpdateController {
     );
   }
 
-  async commitUpdate(): Promise<void> {
+  async commitUpdate(): Promise<string | undefined> {
     this.logState('COMMIT');
     const oldContainer = this.docker.getContainer(this.config.oldContainerId);
-    await oldContainer.remove({ force: true });
+    try {
+      await oldContainer.remove({ force: true });
+      return undefined;
+    } catch (error: unknown) {
+      const errorMessage = getErrorMessage(error, String(error));
+      if (isContainerNotFoundError(error)) {
+        this.logState('COMMIT_OLD_ALREADY_REMOVED', errorMessage);
+        return undefined;
+      }
+
+      const cleanupError = `cleanup_old_failed: ${errorMessage}`;
+      this.logState('COMMIT_OLD_REMOVE_FAILED', cleanupError);
+      return cleanupError;
+    }
   }
 
   async waitForExecStream(execStream: ContainerExecStream): Promise<void> {
@@ -406,13 +443,14 @@ class SelfUpdateController {
       'PREPARE',
       `old=${this.config.oldContainerName}(${this.config.oldContainerId}), new=${this.config.newContainerId}`,
     );
+    let commitLastError: string | undefined;
     try {
       await this.stopOldContainer();
       await this.waitOldContainerStopped();
       await this.startNewContainer();
       await this.waitNewContainerRunning();
       await this.waitNewContainerHealthy();
-      await this.commitUpdate();
+      commitLastError = await this.commitUpdate();
     } catch (error: unknown) {
       await this.rollback(error);
     }
@@ -420,11 +458,13 @@ class SelfUpdateController {
       await this.finalizeFromHelper({
         status: 'succeeded',
         phase: 'succeeded',
+        ...(commitLastError ? { lastError: commitLastError } : {}),
       });
     } else {
       await this.maybeFinalizeCallbackInContainer(this.config.newContainerId, {
         status: 'succeeded',
         phase: 'succeeded',
+        ...(commitLastError ? { lastError: commitLastError } : {}),
       });
     }
     this.logState('SUCCEEDED');
