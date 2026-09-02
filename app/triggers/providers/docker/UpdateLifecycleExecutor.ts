@@ -403,7 +403,10 @@ class UpdateLifecycleExecutor {
 
       const postPullHook = async (operationId: string, imageIdentity?: string) => {
         const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
-        if (imageIdentity) {
+        // A deferred verification must still run when the caller could not
+        // bind an identity (compose dry-run stops before the pull); it then
+        // verifies the configured reference exactly as the pre-update path did.
+        if (context.deferSignatureVerification) {
           await this.security.verifySignaturePreUpdate(gateContext, container, containerLogger);
         }
         await this.security.scanAndGatePostPull(gateContext, container, containerLogger, {

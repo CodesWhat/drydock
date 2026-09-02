@@ -856,4 +856,43 @@ describe('UpdateLifecycleExecutor', () => {
     );
     expect(capturedPostPullHook).toBeDefined();
   });
+
+  test('deferred signature verification still runs when the hook has no bound identity', async () => {
+    const verifySignaturePreUpdate = vi.fn().mockResolvedValue(undefined);
+    const scanAndGatePostPull = vi.fn().mockResolvedValue(undefined);
+    const mutableImage = 'ghcr.io/acme/web:2.0.0';
+    const harness = createHarness({
+      createTriggerContext: vi
+        .fn()
+        .mockResolvedValue(
+          createContext({ newImage: mutableImage, deferSignatureVerification: true }),
+        ),
+      verifySignaturePreUpdate,
+      scanAndGatePostPull,
+      performContainerUpdate: vi
+        .fn()
+        .mockImplementation(
+          async (_context, _container, _logger, _runtimeContext, postPullHook) => {
+            // Compose dry-run returns before the pull and calls the hook unbound.
+            await postPullHook?.('op-123');
+            return true;
+          },
+        ),
+    });
+
+    await harness.executor.run(createContainer());
+
+    expect(verifySignaturePreUpdate).toHaveBeenCalledTimes(1);
+    expect(verifySignaturePreUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ newImage: mutableImage }),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(scanAndGatePostPull).toHaveBeenCalledWith(
+      expect.objectContaining({ newImage: mutableImage }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
 });
