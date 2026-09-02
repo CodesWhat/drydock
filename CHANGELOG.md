@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` was parsed as an agent named `allow`.** `getAgentConfigurations()` handed the whole `ddEnvVars` map to the generic `dd.agent` prefix parser, and that documented flat flag matches the prefix as `DD_AGENT_ALLOW_INSECURE_SECRET`, producing an `{insecure: {secret: 'true'}}` agent literally named `allow`. Registration then rejected it every boot with `Agent allow failed to register ("host" is required)`, on every install that set the flag regardless of whether any real agents were configured. The flag is now excluded before the map is parsed. Reported by [@depuits](https://github.com/depuits) in [#945](https://github.com/CodesWhat/drydock/issues/945).
+
 ## [1.6.1-rc.6] — 2026-08-28
 
 ### Fixed

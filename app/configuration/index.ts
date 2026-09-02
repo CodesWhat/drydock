@@ -441,10 +441,15 @@ export function getAuthenticationConfigurations() {
 
 /**
  * Get Agent configurations.
+ *
+ * `DD_AGENT_ALLOW_INSECURE_SECRET` is a flat boolean flag (read directly by
+ * `AgentClient`), not a per-agent setting. Excluded here so it doesn't get
+ * parsed as an agent literally named `allow`.
  * @returns {*}
  */
 export function getAgentConfigurations() {
-  return get('dd.agent', ddEnvVars);
+  const { DD_AGENT_ALLOW_INSECURE_SECRET: _ignored, ...agentEnvVars } = ddEnvVars;
+  return get('dd.agent', agentEnvVars);
 }
 
 /**
