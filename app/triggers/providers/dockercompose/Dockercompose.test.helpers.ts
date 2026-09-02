@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 // ---------------------------------------------------------------------------
 // Factory helpers to eliminate repeated object literals
 // ---------------------------------------------------------------------------
@@ -160,7 +161,15 @@ export function spyOnProcessComposeHelpers(
   const writeComposeFileSpy = vi.spyOn(triggerInstance, 'writeComposeFile').mockResolvedValue();
   const composeUpdateSpy = vi
     .spyOn(triggerInstance, 'updateContainerWithCompose')
-    .mockResolvedValue();
+    .mockImplementation(async (_composeFile, _service, container, options = {}) => {
+      const operationId = getRequestedOperationId(container, options.runtimeContext) ?? '';
+      const imageIdentity = options.runtimeContext?.imageIdentity;
+      if (imageIdentity) {
+        await options.postPullHook?.(operationId, imageIdentity);
+      } else {
+        await options.postPullHook?.(operationId);
+      }
+    });
   const hooksSpy = vi.spyOn(triggerInstance, 'runServicePostStartHooks').mockResolvedValue();
   const backupSpy = vi.spyOn(triggerInstance, 'backup').mockResolvedValue();
   // Lifecycle methods inherited from Docker trigger
