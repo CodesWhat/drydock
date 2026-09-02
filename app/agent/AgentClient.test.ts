@@ -9027,7 +9027,11 @@ describe('AgentClient', () => {
           labels: { 'dd.registry.lookup.image': 'library/from-label' },
           image: {
             id: 'sha256:current',
-            registry: { name: 'unknown', url: 'myPrivateRegistry', lookupImage: 'library/nextcloud' },
+            registry: {
+              name: 'unknown',
+              url: 'myPrivateRegistry',
+              lookupImage: 'library/nextcloud',
+            },
             name: 'myPrivateRegistry/nextcloud',
             tag: { value: '32.0.6-apache', semver: false },
             digest: { watch: false },
