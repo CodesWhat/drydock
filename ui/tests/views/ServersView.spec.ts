@@ -435,6 +435,117 @@ describe('ServersView', () => {
     expect(wrapper.find('.data-table').attributes('data-selected-key')).toBe('');
   });
 
+  describe('detail panel resync on refetch', () => {
+    function detailContentText(wrapper: any) {
+      return wrapper.find('.detail-content').text();
+    }
+
+    function refreshButton(wrapper: any) {
+      return wrapper.findAll('button').find((b: any) => b.text().includes('Refresh'));
+    }
+
+    it('updates the open detail panel when a refetch changes the selected server data (regression guard)', async () => {
+      mockGetAllWatchers
+        .mockResolvedValueOnce([
+          {
+            id: 'docker.local',
+            type: 'docker',
+            name: 'local',
+            configuration: {
+              socket: '/var/run/docker.sock',
+              host: '',
+              port: 2375,
+              protocol: 'http',
+            },
+            metadata: { containers: { total: 2, running: 1, stopped: 1 }, images: 3 },
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'docker.local',
+            type: 'docker',
+            name: 'local',
+            configuration: {
+              socket: '/var/run/docker.sock',
+              host: '',
+              port: 2375,
+              protocol: 'http',
+            },
+            metadata: { containers: { total: 9, running: 8, stopped: 1 }, images: 3 },
+          },
+        ]);
+
+      const wrapper = await mountServersView();
+
+      await wrapper.find('.row-click-first').trigger('click');
+      await nextTick();
+      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
+      expect(detailContentText(wrapper)).toContain('2');
+
+      const button = refreshButton(wrapper);
+      expect(button).toBeDefined();
+      await button?.trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
+      expect(detailContentText(wrapper)).toContain('9');
+      expect(detailContentText(wrapper)).toContain('8');
+    });
+
+    it('closes the detail panel when the selected server disappears from a refetch', async () => {
+      mockGetAllWatchers
+        .mockResolvedValueOnce([
+          {
+            id: 'docker.local',
+            type: 'docker',
+            name: 'local',
+            configuration: {
+              socket: '/var/run/docker.sock',
+              host: '',
+              port: 2375,
+              protocol: 'http',
+            },
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'docker.other',
+            type: 'docker',
+            name: 'other',
+            configuration: {
+              socket: '/var/run/docker-other.sock',
+              host: '',
+              port: 2375,
+              protocol: 'http',
+            },
+          },
+        ]);
+
+      const wrapper = await mountServersView();
+
+      await wrapper.find('.row-click-first').trigger('click');
+      await nextTick();
+      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
+
+      const button = refreshButton(wrapper);
+      expect(button).toBeDefined();
+      await button?.trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
+    });
+
+    it('does nothing to the panel when a refetch happens with no server selected', async () => {
+      const wrapper = await mountServersView();
+      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
+
+      await (wrapper.vm as any).fetchServers();
+      await flushPromises();
+
+      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
+    });
+  });
+
   it('caps long host values in compact table and detail surfaces', async () => {
     const longHost =
       'https://very-long-edge-hostname.example.internal:2376/with/a/path/that/should/not/reflow';

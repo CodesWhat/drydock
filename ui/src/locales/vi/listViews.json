@@ -3,6 +3,7 @@
     "loadingAuditLog": "Đang tải nhật ký kiểm tra...",
     "loadError": "Không thể tải nhật ký kiểm tra",
     "filterPlaceholder": "Lọc theo mục tiêu hoặc sự kiện...",
+    "onThisPage": "trên trang này",
     "containerFilterPlaceholder": "Tên container...",
     "allEvents": "Tất cả sự kiện",
     "eventsSelected": "{count} sự kiện đã chọn",
