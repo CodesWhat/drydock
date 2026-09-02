@@ -21,6 +21,9 @@ afterEach(() => {
   configuration.setDetectedServerName(undefined);
   delete configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX;
   delete configuration.ddEnvVars.DD_PORTWING_POLL_INTERVAL;
+  delete configuration.ddEnvVars.DD_AGENT_ALLOW_INSECURE_SECRET;
+  delete configuration.ddEnvVars.DD_AGENT_SWARM01_HOST;
+  delete configuration.ddEnvVars.DD_AGENT_SWARM01_SECRET;
 });
 
 test('getVersion should return dd version', async () => {
@@ -474,9 +477,6 @@ test('getAgentConfigurations should not parse DD_AGENT_ALLOW_INSECURE_SECRET as 
     swarm01: { host: 'h', secret: 's' },
   });
   expect(agentConfigurations).not.toHaveProperty('allow');
-  delete configuration.ddEnvVars.DD_AGENT_ALLOW_INSECURE_SECRET;
-  delete configuration.ddEnvVars.DD_AGENT_SWARM01_HOST;
-  delete configuration.ddEnvVars.DD_AGENT_SWARM01_SECRET;
 });
 
 test('getStoreConfiguration should return configured store', async () => {
