@@ -419,6 +419,41 @@ describe('debug/redact', () => {
     });
   });
 
+  test('redacts provider-specific notification credentials without hiding ordinary URL flags', () => {
+    const redacted = redactDebugDump({
+      DD_NOTIFICATION_APPRISE_LOCAL_URLS: 'slack://TokenA/TokenB/TokenC',
+      DD_NOTIFICATION_APPRISE_ALERTS_URLS: 'sns://AKIA/secret/topic',
+      DD_NOTIFICATION_APPRISE_LOCAL_URL: 'https://apprise.example.com',
+      DD_NOTIFICATION_ROCKETCHAT_MAIN_USER_ID: 'rocket-user-id',
+      DD_NOTIFICATION_TELEGRAM_ALERTS_CHATID: 'telegram-chat-id',
+      env: [
+        {
+          key: 'DD_NOTIFICATION_APPRISE_LOCAL_URLS',
+          value: 'slack://PairTokenA/PairTokenB/PairTokenC',
+        },
+        { key: 'DD_NOTIFICATION_ROCKETCHAT_MAIN_USER_ID', value: 'pair-rocket-user-id' },
+        { key: 'DD_NOTIFICATION_TELEGRAM_ALERTS_CHATID', value: 'pair-telegram-chat-id' },
+        { key: 'DD_NOTIFICATION_ROCKETCHAT_MAIN_PARSE_URLS', value: 'true' },
+      ],
+      parse: { urls: true },
+    }) as Record<string, unknown>;
+
+    expect(redacted).toEqual({
+      DD_NOTIFICATION_APPRISE_LOCAL_URLS: REDACTED_VALUE,
+      DD_NOTIFICATION_APPRISE_ALERTS_URLS: REDACTED_VALUE,
+      DD_NOTIFICATION_APPRISE_LOCAL_URL: REDACTED_VALUE,
+      DD_NOTIFICATION_ROCKETCHAT_MAIN_USER_ID: REDACTED_VALUE,
+      DD_NOTIFICATION_TELEGRAM_ALERTS_CHATID: REDACTED_VALUE,
+      env: [
+        { key: 'DD_NOTIFICATION_APPRISE_LOCAL_URLS', value: REDACTED_VALUE },
+        { key: 'DD_NOTIFICATION_ROCKETCHAT_MAIN_USER_ID', value: REDACTED_VALUE },
+        { key: 'DD_NOTIFICATION_TELEGRAM_ALERTS_CHATID', value: REDACTED_VALUE },
+        { key: 'DD_NOTIFICATION_ROCKETCHAT_MAIN_PARSE_URLS', value: 'true' },
+      ],
+      parse: { urls: true },
+    });
+  });
+
   test('redacts compound pair names and leaves ordinary ones visible', () => {
     const redacted = redactDebugDump({
       env: [
