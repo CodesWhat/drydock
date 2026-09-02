@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **The self-update helper could destroy a health-verified replacement when removing the old controller failed.** The main Docker update path already treated old-container cleanup as best effort after its health gate, but the helper still sent a 409, timeout, or other removal failure into rollback. That rollback force-removed the healthy replacement first and could then fail to restore an old container that Docker had already reaped. The helper now treats a missing old container as already cleaned up and records every other cleanup failure on the successful operation without rolling back the replacement.
+- **A container seen before its registry was configured stayed stamped `unknown` forever.** `shouldRepairStoredImageReference()` only re-derived a stored image reference when the tag was `unknown` or digest-shaped, so a container whose `image.registry.name` was already `unknown` but whose tag was otherwise normal never re-entered the repair path on refresh, and only recovered if it was recreated. The repair now also runs when the stored registry name is `unknown`, re-resolving it from the live image inspect on the next refresh cycle. Reported by [@depuits](https://github.com/depuits) in [#945](https://github.com/CodesWhat/drydock/issues/945).
 
 ## [1.7.0-rc.7] — 2026-08-29
 
