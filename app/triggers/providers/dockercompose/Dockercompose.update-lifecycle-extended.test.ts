@@ -799,6 +799,47 @@ describe('Dockercompose Trigger', () => {
     expect(scanAndGatePostPullSpy).toHaveBeenCalledTimes(2);
   });
 
+  test('processComposeFile should refuse divergent replica targets for one compose-file-once service', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // The compose file already names the first replica's target, so only the
+    // second replica reaches the compose-update list and the existing
+    // conflicting-update guard never fires. The service is still divergent:
+    // one replica wants 1.1.0 and the other wants 1.2.0.
+    const firstContainer = makeContainer({
+      name: 'nginx-a',
+      remoteValue: '1.1.0',
+      updateAvailable: true,
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      name: 'nginx-b',
+      remoteValue: '1.2.0',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [firstContainer, secondContainer]),
+    ).rejects.toThrow(
+      'Compose service nginx resolves to different update targets for its containers ' +
+        '(nginx-a wants nginx:1.1.0, nginx-b wants nginx:1.2.0)',
+    );
+
+    expect(pullImageSpy).not.toHaveBeenCalled();
+    expect(lifecycleSpy).not.toHaveBeenCalled();
+  });
+
   test('processComposeFile should gate every replica before any compose-file-once runtime mutation', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;

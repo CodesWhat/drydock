@@ -2045,6 +2045,44 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return batchResults;
   }
 
+  /**
+   * Resolve the one image a compose-file-once service will be pulled and gated
+   * on, and refuse the batch when its containers disagree. Only the first
+   * container of a service used to be consulted, so per-container tag filters
+   * that resolved two replicas of one service to different candidates got the
+   * first replica's image pulled, bound and gated while the compose file was
+   * written with the last replica's (DR-49).
+   */
+  private resolveComposeFileOnceServiceTarget(
+    service: string,
+    serviceMappings: ComposeRuntimeUpdateMapping[],
+  ): string {
+    let serviceTarget: string | undefined;
+    let serviceTargetContainerName: string | undefined;
+    for (const { container } of serviceMappings) {
+      const logContainer = this.log.child({
+        container: container.name,
+      });
+      const registry = this.resolveRegistryManager(container, logContainer, {
+        allowAnonymousFallback: true,
+      });
+      const containerTarget = this.getNewImageFullName(registry, container);
+      if (serviceTarget === undefined) {
+        serviceTarget = containerTarget;
+        serviceTargetContainerName = container.name;
+        continue;
+      }
+      if (containerTarget !== serviceTarget) {
+        throw new Error(
+          `Compose service ${service} resolves to different update targets for its containers ` +
+            `(${serviceTargetContainerName} wants ${serviceTarget}, ${container.name} wants ${containerTarget}); ` +
+            'align their tag filters or disable compose-file-once mode',
+        );
+      }
+    }
+    return serviceTarget as string;
+  }
+
   private async buildComposeFileOnceRuntimeContextByService(
     mappingsNeedingRuntimeUpdate: ComposeRuntimeUpdateMapping[],
   ): Promise<Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>> {
@@ -2052,14 +2090,23 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       string,
       NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
     >();
-    const firstContainerByService = new Map<string, ComposeRuntimeUpdateMapping>();
+    const mappingsByService = new Map<string, ComposeRuntimeUpdateMapping[]>();
     for (const mapping of mappingsNeedingRuntimeUpdate) {
-      if (!firstContainerByService.has(mapping.service)) {
-        firstContainerByService.set(mapping.service, mapping);
+      const serviceMappings = mappingsByService.get(mapping.service);
+      if (serviceMappings) {
+        serviceMappings.push(mapping);
+      } else {
+        mappingsByService.set(mapping.service, [mapping]);
       }
     }
-    for (const [service, mapping] of firstContainerByService.entries()) {
-      const runtimeContainer = mapping.container;
+    // Agree every service's target before pulling anything, so a divergent
+    // service refuses the batch instead of leaving one service's image pulled.
+    const serviceTargets = [...mappingsByService.entries()].map(([service, serviceMappings]) => ({
+      service,
+      container: serviceMappings[0].container,
+      newImage: this.resolveComposeFileOnceServiceTarget(service, serviceMappings),
+    }));
+    for (const { service, container: runtimeContainer, newImage } of serviceTargets) {
       const logContainer = this.log.child({
         container: runtimeContainer.name,
       });
@@ -2069,7 +2116,6 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         allowAnonymousFallback: true,
       });
       const auth = await registry.getAuthPull();
-      const newImage = this.getNewImageFullName(registry, runtimeContainer);
       await this.pullImage(dockerApi, auth, newImage, logContainer);
       const identityOutcome = await this.capturePulledImageIdentity(
         dockerApi as DockerApiLike,

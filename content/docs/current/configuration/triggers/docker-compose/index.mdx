@@ -119,6 +119,8 @@ Before removing the running container, Drydock verifies that the target image ca
 
 When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock performs one runtime refresh per unique service and skips repeated refreshes for subsequent containers sharing the same service in that batch.
 
+That single refresh pulls one image and writes one `image:` value for the service, so every container sharing a service has to resolve to the same update target. If two of them resolve to different images (per-container tag filters can do this), the batch is refused before anything is pulled, with both container names and both images in the error, instead of pulling one candidate and writing the other into the file.
+
 ## Inherited Docker Trigger Features
 
 The Docker Compose trigger extends the [Docker trigger](/docs/configuration/triggers/docker) and inherits the following features:
