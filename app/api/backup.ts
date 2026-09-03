@@ -8,7 +8,11 @@ import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from '../triggers/providers/docker/created-container-candidate.js';
-import { buildRollbackImageReference, createContainerBackupScope } from '../util/backup.js';
+import {
+  createContainerBackupScope,
+  RollbackDigestRequiredError,
+  resolveRollbackImageReference,
+} from '../util/backup.js';
 import { recordAuditEvent } from './audit-events.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import {
@@ -129,13 +133,23 @@ async function rollbackContainer(req: Request, res: Response) {
   }
 
   const latestBackup = backup;
-  const backupImage = buildRollbackImageReference(latestBackup);
 
   try {
     const watcher = trigger.getWatcher(container);
     const { dockerApi } = watcher;
     const reg = registry.getState().registry[container.image.registry.name];
     const auth = await reg.getAuthPull();
+
+    // Backups written before digest capture carry no imageDigest; resolve one
+    // from the retained local image so a registry retag between the backup
+    // and this rollback can't change what gets deployed (DR-43).
+    const backupImage = await resolveRollbackImageReference(
+      trigger,
+      dockerApi,
+      container,
+      latestBackup,
+      log,
+    );
 
     // Pull the backup image
     await trigger.pullImage(dockerApi, auth, backupImage, log);
@@ -169,6 +183,10 @@ async function rollbackContainer(req: Request, res: Response) {
       backup: latestBackup,
     });
   } catch (e: unknown) {
+    if (e instanceof RollbackDigestRequiredError) {
+      sendErrorResponse(res, 409, e.message);
+      return;
+    }
     // recreateContainer may have created a replacement before a later step
     // (e.g. an additional-network connect) failed. The prior container was
     // already stopped/removed above, so reclaim the orphan so it doesn't
