@@ -259,6 +259,144 @@ describe('updateApproval', () => {
   });
 });
 
+describe('decideApprovalIfPending', () => {
+  test('writes the patch and reports the decided row', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+
+    const transition = approvalStore.decideApprovalIfPending(inserted.id, {
+      decision: 'approved',
+      decidedBy: 'scott',
+      decidedAt: '2026-03-04T00:00:00.000Z',
+    });
+
+    expect(transition).toStrictEqual({
+      status: 'decided',
+      record: expect.objectContaining({ decision: 'approved', decidedBy: 'scott' }),
+    });
+    expect(approvalStore.getApprovalById(inserted.id)?.decision).toBe('approved');
+  });
+
+  test('the second caller loses and the row keeps the first decision', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.decideApprovalIfPending(inserted.id, {
+      decision: 'approved',
+      decidedBy: 'first',
+    });
+
+    const transition = approvalStore.decideApprovalIfPending(inserted.id, {
+      decision: 'rejected',
+      decidedBy: 'second',
+    });
+
+    expect(transition).toStrictEqual({
+      status: 'already-decided',
+      record: expect.objectContaining({ decision: 'approved', decidedBy: 'first' }),
+    });
+    expect(approvalStore.getApprovalById(inserted.id)).toMatchObject({
+      decision: 'approved',
+      decidedBy: 'first',
+    });
+  });
+
+  test('a live deferral is not pending, so a decision on it loses', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.updateApproval(inserted.id, {
+      decision: 'deferred',
+      deferredUntil: '2099-01-01T00:00:00.000Z',
+    });
+
+    expect(
+      approvalStore.decideApprovalIfPending(inserted.id, { decision: 'approved' }),
+    ).toMatchObject({ status: 'already-decided' });
+  });
+
+  test('an expired deferral is pending again, so a decision on it wins', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.updateApproval(inserted.id, {
+      decision: 'deferred',
+      deferredUntil: '2020-01-01T00:00:00.000Z',
+    });
+
+    expect(
+      approvalStore.decideApprovalIfPending(inserted.id, { decision: 'approved' }),
+    ).toMatchObject({ status: 'decided' });
+  });
+
+  test('a resolved row is never pending, whatever its decision reads', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.updateApproval(inserted.id, {
+      resolution: 'superseded',
+      resolvedAt: '2026-03-04T00:00:00.000Z',
+    });
+
+    expect(
+      approvalStore.decideApprovalIfPending(inserted.id, { decision: 'approved' }),
+    ).toMatchObject({ status: 'already-decided' });
+  });
+
+  test('reads the caller clock when one is supplied', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.updateApproval(inserted.id, {
+      decision: 'deferred',
+      deferredUntil: '2026-03-04T00:00:00.000Z',
+    });
+
+    expect(
+      approvalStore.decideApprovalIfPending(
+        inserted.id,
+        { decision: 'approved' },
+        { now: Date.parse('2026-03-03T00:00:00.000Z') },
+      ),
+    ).toMatchObject({ status: 'already-decided' });
+  });
+
+  test('reports not-found for an unknown id', () => {
+    expect(approvalStore.decideApprovalIfPending('nope', { decision: 'approved' })).toStrictEqual({
+      status: 'not-found',
+    });
+  });
+
+  test('reports not-found when the collection has not been created', () => {
+    approvalStore.resetApprovalStoreForTests();
+
+    expect(approvalStore.decideApprovalIfPending('nope', { decision: 'approved' })).toStrictEqual({
+      status: 'not-found',
+    });
+  });
+});
+
+describe('resetApprovalToPending', () => {
+  test('clears every trace of a decision that did not stand', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.decideApprovalIfPending(inserted.id, {
+      decision: 'approved',
+      decidedAt: '2026-03-04T00:00:00.000Z',
+      decidedBy: 'scott',
+      decisionNote: 'ship it',
+      deferredUntil: '2099-01-01T00:00:00.000Z',
+      operationId: 'op-1',
+    });
+
+    const restored = approvalStore.resetApprovalToPending(inserted.id);
+
+    expect(restored).toStrictEqual({
+      ...inserted,
+      decision: 'pending',
+    });
+    expect(approvalStore.getApprovalById(inserted.id)).toStrictEqual(restored);
+  });
+
+  test('returns undefined for an unknown id', () => {
+    expect(approvalStore.resetApprovalToPending('nope')).toBeUndefined();
+  });
+
+  test('returns undefined when the collection has not been created', () => {
+    approvalStore.resetApprovalStoreForTests();
+
+    expect(approvalStore.resetApprovalToPending('nope')).toBeUndefined();
+  });
+});
+
 describe('listApprovals', () => {
   const now = Date.parse('2026-06-01T00:00:00.000Z');
 

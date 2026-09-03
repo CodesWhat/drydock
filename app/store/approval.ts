@@ -43,6 +43,21 @@ const APPROVAL_MUTABLE_FIELDS = [
   'resolution',
 ] as const;
 
+/**
+ * The fields a human decision writes. Cleared wholesale when a reserved decision does not
+ * stand, so a rolled-back approve leaves a row indistinguishable from one nobody touched.
+ * `outcome`, `resolvedAt` and `resolution` are deliberately absent: they describe what
+ * happened to the row rather than what an operator chose, and a row carrying them is not
+ * pending, so no reservation can ever be holding them.
+ */
+const APPROVAL_DECISION_FIELDS = [
+  'decidedAt',
+  'decidedBy',
+  'decisionNote',
+  'deferredUntil',
+  'operationId',
+] as const;
+
 /** Fields written only when the container actually carries them. */
 const APPROVAL_OPTIONAL_INPUT_FIELDS = [
   'agent',
@@ -90,6 +105,17 @@ export interface ApprovalCounts {
 }
 
 export type ApprovalPatch = Partial<Pick<ApprovalRecord, (typeof APPROVAL_MUTABLE_FIELDS)[number]>>;
+
+/**
+ * The outcome of a compare-and-set on a row's semantic pending state.
+ *
+ * `already-decided` carries the row that won, so a caller can answer 409 while still
+ * reporting who holds the decision.
+ */
+export type ApprovalDecisionTransition =
+  | { status: 'decided'; record: ApprovalRecord }
+  | { status: 'already-decided'; record: ApprovalRecord }
+  | { status: 'not-found' };
 
 let approvalCollection: ApprovalCollection | undefined;
 let approvalInsertsSincePrune = 0;
@@ -281,6 +307,62 @@ export function updateApproval(id: string, patch: ApprovalPatch): ApprovalRecord
   }
 
   copyDefinedFields(document, patch, APPROVAL_MUTABLE_FIELDS);
+
+  approvalCollection.update(document);
+  return toApprovalRecord(document);
+}
+
+/**
+ * Compare-and-set on semantic pending state: `decision === 'pending'`, or
+ * `decision === 'deferred'` with an absent, unparseable or expired `deferredUntil`. The
+ * row needs no sweep or normalization write before the compare.
+ *
+ * This is what makes a double decision safe. A decision handler that only read the row,
+ * awaited an admission and then wrote would let two operators both pass the read, and the
+ * second update would fail later on the existing active-operation gate with a message
+ * about queued operations rather than about the queue. Reserving here, before anything is
+ * awaited, means the loser is told the truth: somebody already decided this.
+ * @param id
+ * @param patch
+ * @param options
+ */
+export function decideApprovalIfPending(
+  id: string,
+  patch: ApprovalPatch,
+  options: { now?: number } = {},
+): ApprovalDecisionTransition {
+  const document = approvalCollection?.findOne({ id });
+  if (!document || !approvalCollection) {
+    return { status: 'not-found' };
+  }
+
+  const record = toApprovalRecord(document);
+  if (!isApprovalPending(record, options.now ?? Date.now())) {
+    return { status: 'already-decided', record };
+  }
+
+  copyDefinedFields(document, patch, APPROVAL_MUTABLE_FIELDS);
+  approvalCollection.update(document);
+  return { status: 'decided', record: toApprovalRecord(document) };
+}
+
+/**
+ * Undo a reservation whose work did not go through, putting the row back in the queue
+ * with no trace of the attempt. A patch cannot do this: `updateApproval` copies only the
+ * fields a caller names and has no way to spell "unset", which is correct for a decision
+ * and useless for a rollback.
+ * @param id
+ */
+export function resetApprovalToPending(id: string): ApprovalRecord | undefined {
+  const document = approvalCollection?.findOne({ id });
+  if (!document || !approvalCollection) {
+    return undefined;
+  }
+
+  document.decision = 'pending';
+  for (const field of APPROVAL_DECISION_FIELDS) {
+    delete document[field];
+  }
 
   approvalCollection.update(document);
   return toApprovalRecord(document);
