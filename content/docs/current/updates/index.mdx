@@ -5,6 +5,20 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.6.1-rc.7 Highlights — September 3, 2026
+
+Six fixes: `DD_AGENT_ALLOW_INSECURE_SECRET` no longer registers a phantom
+agent named `allow`; a container seen before its registry was configured no
+longer stays stamped `unknown` forever; the self-update helper no longer
+destroys a health-verified replacement when removing the old controller
+fails; a reconnecting agent reporting zero containers no longer wipes every
+maturity-policy override it holds; debug dumps no longer expose Apprise
+service URLs, Rocket.Chat user IDs, or Telegram chat IDs; and Compose and
+ordinary Docker updates now scan and deploy the exact image that was pulled
+instead of whatever a mutable tag points at next. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md#161-rc7--2026-09-03)
+for the full release notes.
+
 ## v1.6.1-rc.6 Highlights — August 28, 2026
 
 One bug fix: maturity-policy overrides now survive drydock updating itself. The

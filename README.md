@@ -15,7 +15,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.6-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.6.1--rc.7-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -179,6 +179,20 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.6.1-rc.7 highlights</strong></summary>
+
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` no longer registers a phantom agent named `allow`** — the flag matched the generic `dd.agent` prefix parser and produced an `{insecure: {secret: 'true'}}` agent that failed to register on every install setting the flag, whether or not any real agents were configured. Reported by [@depuits](https://github.com/depuits). ([#945](https://github.com/CodesWhat/drydock/issues/945))
+- **A container seen before its registry was configured no longer stays stamped `unknown` forever** — the repair path only re-derived a stored image reference when the tag itself looked unknown or digest-shaped, so a container whose registry name was `unknown` but tag was normal never got picked up until it was recreated. It now re-resolves on the next refresh cycle. ([#945](https://github.com/CodesWhat/drydock/issues/945))
+- **The self-update helper no longer destroys a health-verified replacement when removing the old controller fails** — a 409, timeout, or other removal failure used to trigger a rollback that force-removed the healthy replacement first, and could then fail to restore an old container Docker had already reaped. A missing old container is now treated as already cleaned up.
+- **A reconnecting agent reporting zero containers no longer wipes every maturity-policy override it holds** — three of the four container-list ingestion paths already skipped pruning on an empty list, but the `dd:watcher-snapshot` handler didn't, so an agent restart's legitimately-empty first snapshot looked like a mass removal and deleted policy overrides with nothing left to restore them from. ([#565](https://github.com/CodesWhat/drydock/issues/565))
+- **Debug dumps no longer expose Apprise service URLs, Rocket.Chat user IDs, or Telegram chat IDs** — these provider-specific credential fields are now redacted without hiding ordinary `parse.urls` configuration flags.
+- **Compose and ordinary Docker updates now scan and deploy the exact image that was pulled, not whatever a mutable tag points at next** — both paths used to gate signature verification, vulnerability scanning and SBOM generation against a mutable `repo:tag` reference and only then create the replacement container, so a registry retag landing in that window meant one image was gated and a different one deployed. Both now pin the pulled image's digest before running the gate. ([#952](https://github.com/CodesWhat/drydock/pull/952))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#161-rc7--2026-09-03).
+
+</details>
+
+<details>
 <summary><strong>v1.6.1-rc.6 highlights</strong></summary>
 
 - **Maturity-policy overrides survive drydock updating itself** — the stash that lets a recreated container inherit its predecessor's maturity mode, min-age, skip list and snooze lived only in process memory, so the restart that is drydock's own self-update wiped it before the replacement container could read it and the controller-set policy was silently dropped. It now persists across the restart. Backported from the v1.7 line. ([#565](https://github.com/CodesWhat/drydock/issues/565))
