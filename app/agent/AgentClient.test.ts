@@ -9228,6 +9228,105 @@ describe('AgentClient', () => {
       );
     });
 
+    test('marker-mode inventory falls back to the legacy dd.registry.lookup.url label', async () => {
+      await registerAnonymousHub();
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'nextcloud-update-test',
+          watcher: 'docker',
+          labels: { 'dd.registry.lookup.url': 'library/nextcloud' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'myPrivateRegistry' },
+            name: 'myPrivateRegistry/nextcloud',
+            tag: { value: '32.0.6-apache', semver: false },
+            digest: { watch: false },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            registry: expect.objectContaining({
+              name: 'hub.public',
+              lookupImage: 'library/nextcloud',
+            }),
+          }),
+        }),
+      );
+    });
+
+    test('marker-mode inventory never overwrites a legacy lookupUrl the agent already reported', async () => {
+      await registerAnonymousHub();
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'nextcloud-update-test',
+          watcher: 'docker',
+          labels: { 'dd.registry.lookup.image': 'library/from-label' },
+          image: {
+            id: 'sha256:current',
+            registry: {
+              name: 'unknown',
+              url: 'myPrivateRegistry',
+              lookupUrl: 'library/nextcloud',
+            },
+            name: 'myPrivateRegistry/nextcloud',
+            tag: { value: '32.0.6-apache', semver: false },
+            digest: { watch: false },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            registry: expect.objectContaining({ lookupImage: 'library/nextcloud' }),
+          }),
+        }),
+      );
+    });
+
     test('marker-mode incremental events cannot clear controller-owned update enrichment', async () => {
       const existing = {
         id: 'c1',
