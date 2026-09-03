@@ -32,6 +32,7 @@ The trigger will:
 | `DD_ACTION_PORTAINER_{trigger_name}_PRUNE` | ⚪ | If the old local Docker image must be pruned after upgrade | `true`, `false` | `false` |
 | `DD_ACTION_PORTAINER_{trigger_name}_DRYRUN` | ⚪ | Validate and preview the update without redeploying through Portainer | `true`, `false` | `false` |
 | `DD_ACTION_PORTAINER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
+| `DD_ACTION_PORTAINER_{trigger_name}_PULLTIMEOUT` | ⚪ | Maximum time allowed for an image pull and its progress stream (ms) | Positive integer | `600000` |
 
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).
 
