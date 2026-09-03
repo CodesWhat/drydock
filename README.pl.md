@@ -219,6 +219,18 @@ Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla
 <h2 align="center" id="recent-updates">Ostatnie aktualizacje</h2>
 
 <details open>
+<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.9</strong></summary>
+
+- **`watchFromCron()` działa teraz w trybie single-flight, dzięki czemu nakładające się skany w dużej flocie nie uruchamiają już tego samego wyzwalacza wielokrotnie dla jednej aktualizacji.** Skan, który nigdy się nie kończy, jest teraz uruchamiany z terminem, dzięki czemu nie może zablokować kolejnych cykli crona. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Wyzwalacz `once=true` nie uruchamia się już ponownie godziny później dla aktualizacji tagu, którą już zgłosił, gdy rejestr ogranicza liczbę zapytań o digest**, ponieważ klucz historii powiadomień jest teraz stabilny przy takim błędzie zamiast przełączać się między dwoma formatami skrótu. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Banery przestarzałości w interfejsie dla usuniętych zmiennych środowiskowych `DD_TRIGGER_*` oraz nadpisania healthchecka opartego na curl teraz informują, że te rzeczy już zniknęły**, zamiast wskazywać na termin usunięcia, który już minął. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **Audyt dokumentacji poprawił README, DEPRECATIONS.md oraz dokumentację konfiguracji/wyzwalaczy/rejestrów/API/monitoringu/agentów zgodnie z rzeczywistym kodem tego drzewa**, a fragmenty Get Started na stronie marketingowej wdrażają teraz instancję, która faktycznie staje się zdrowa. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Pełne informacje o wydaniu: [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.8</strong></summary>
 
 - **Ścieżki aktualizacji natywnej Docker i Compose przypinają teraz niezmienny skrót pobranego obrazu przed weryfikacją podpisu, skanowaniem i podmianą**, zamykając okno na zmianę repozytorium rejestru na obu ścieżkach. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))

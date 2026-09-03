@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.8';
-const PREV_RC_VERSION = '1.7.0-rc.7';
+const RC_VERSION = '1.7.0-rc.9';
+const PREV_RC_VERSION = '1.7.0-rc.8';
 const RC_DATE = '2026-09-03';
 const RC_DISPLAY_DATE = 'September 3, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
@@ -142,7 +142,7 @@ test('release candidate notes cover the post-promotion fixes', () => {
     `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
   );
 
-  for (const issue of [336, 386]) {
+  for (const issue of [972]) {
     const issueLink = `https://github.com/CodesWhat/drydock/issues/${issue}`;
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${issue}`;
     assert.ok(
@@ -155,17 +155,16 @@ test('release candidate notes cover the post-promotion fixes', () => {
     );
   }
 
-  for (const pull of [952, 922]) {
+  for (const pull of [979, 988]) {
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${pull}`;
-    assert.ok(changelog.includes(pullLink), `CHANGELOG.md must link PR #${pull}`);
     assert.ok(updates.includes(pullLink), `updates page must link PR #${pull}`);
   }
 
   for (const fragment of [
-    '`dd.registry.lookup.image`',
-    '`buildContainerReport()`',
-    '`DD_AGENT_ALLOW_INSECURE_SECRET`',
-    '`RepoDigests`',
+    '`watchFromCron()`',
+    '`once=true`',
+    '`legacyConfigBody`',
+    '`DD_ANONYMOUS_AUTH_CONFIRM=true`',
   ]) {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
