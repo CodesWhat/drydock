@@ -2593,21 +2593,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       const composeFileOnceApplied =
         composeFileOnceEnabled && composeFileOnceHandledServices.has(service);
       const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
+      // Only a service the preflight actually pulled, bound and gated may skip
+      // the per-container gate. Without that context the batch has to fail
+      // closed and run the ordinary gated path, or a caller that reaches this
+      // method with no preflight would suppress the gate entirely.
+      const composeFileOncePreflighted =
+        composeFileOnceEnabled && composeFileOnceRuntimeContext !== undefined;
       const composeContext: ComposeUpdateLifecycleContext = {
         composeFile,
         composeFiles: composeFileChain,
         service,
         serviceDefinition: compose.services[service],
         composeFileOnceApplied,
-        skipPull:
-          composeFileOnceEnabled &&
-          composeFileOnceApplied !== true &&
-          composeFileOnceRuntimeContext !== undefined,
+        skipPull: composeFileOncePreflighted && composeFileOnceApplied !== true,
         runtimeContext: mergeComposeFileOnceRuntimeContext(
           requestedRuntimeContext,
           composeFileOnceRuntimeContext,
         ),
-        postPullGateCompleted: composeFileOnceEnabled,
+        postPullGateCompleted: composeFileOncePreflighted,
       };
       let runtimeUpdateRecorded = false;
       const recordRuntimeUpdate = () => {

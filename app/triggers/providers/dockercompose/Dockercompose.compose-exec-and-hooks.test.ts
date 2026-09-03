@@ -11,6 +11,7 @@ import {
   makeDockerContainerHandle,
   makeExecMocks,
   setupDockercomposeTestContext,
+  spyOnProcessComposeHelpers,
 } from './Dockercompose.test.helpers.js';
 
 vi.mock('../../../registry', () => ({
@@ -914,6 +915,27 @@ describe('Dockercompose Trigger', () => {
       expect.objectContaining({ runtimeContext: { operationId: 'op-compose-context' } }),
       expect.objectContaining({ lifecycleAlreadyAcquired: false }),
     );
+  });
+
+  test('compose-file-once runtime updates should still gate a service the preflight did not cover', async () => {
+    trigger.configuration.composeFileOnce = true;
+    trigger.configuration.dryrun = false;
+    const { scanAndGateSpy, composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+    const container = makeContainer({ labels: { 'com.docker.compose.service': 'nginx' } });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: {} }),
+      [{ service: 'nginx', container }],
+    );
+
+    // No preflight context for this service, so the ordinary gated path has to
+    // run rather than the batch claiming the gate was already completed.
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
+    const composeUpdateOptions = composeUpdateSpy.mock.calls[0][3];
+    expect(composeUpdateOptions.postPullHook).toEqual(expect.any(Function));
+    expect(composeUpdateOptions.skipPull).toBeUndefined();
   });
 
   test('compose-file-once runtime updates should omit runtime context when neither context is available', async () => {
