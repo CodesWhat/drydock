@@ -3338,6 +3338,42 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Confirm the container that was just created runs the image the pull
+   * resolved to. The create reference stays the operator's `repo:tag` so the
+   * watcher can still read the tag back off `Config.Image`, which means a
+   * local retag between the pull and this create would silently hand the
+   * container a different image, and under compose-file-once it would hand
+   * one replica of a service a different image than another (DR-54). Throwing
+   * here runs inside the recreate's own try, so the candidate is removed and
+   * the previous container is restored by the rollback net.
+   */
+  private async assertReplacementContainerImage(
+    newContainer: unknown,
+    expectedImageId: string | undefined,
+    newImage: string,
+    container: { name: string },
+  ): Promise<void> {
+    if (!expectedImageId) {
+      // Either the create reference is already digest-pinned, which cannot
+      // resolve to a second image, or nothing was resolvable at pull time and
+      // the caller has already warned about it.
+      return;
+    }
+    const inspect = (newContainer as { inspect?: () => Promise<{ Image?: string }> })?.inspect;
+    if (typeof inspect !== 'function') {
+      return;
+    }
+    const createdImageId = (await inspect.call(newContainer))?.Image;
+    if (!createdImageId || createdImageId === expectedImageId) {
+      return;
+    }
+    throw new Error(
+      `Recreated container ${container.name} runs image ${createdImageId} but ${newImage} was pulled as ${expectedImageId}; ` +
+        'the local tag moved between the pull and the recreate',
+    );
+  }
+
   private async recreateReplacementContainerWithCleanup(
     dockerApi,
     currentContainerSpec,
@@ -3345,6 +3381,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     cloneRuntimeConfigOptions,
+    expectedImageId?: string,
   ): Promise<void> {
     const containerToCreateInspect = this.cloneContainer(
       currentContainerSpec,
@@ -3359,6 +3396,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         containerToCreateInspect,
         container.name,
         logContainer,
+      );
+      await this.assertReplacementContainerImage(
+        newContainer,
+        expectedImageId,
+        newImage,
+        container,
       );
 
       if (currentContainerSpec.State.Running) {
@@ -3446,13 +3489,17 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     let imageIdentity = runtimeContext.imageIdentity;
     let securityGateUnboundWarn = runtimeContext.securityGateUnboundWarn === true;
     let securityGateUnboundReason = runtimeContext.securityGateUnboundReason;
-    // The compose-file-once preflight resolved this service's image once,
-    // before any replica was touched, and recorded either the bound digest or
-    // the local image ID of what it pulled. Re-resolving per container would
-    // let a later replica get a different answer for the same tag, so the
-    // preflight's answer wins and the capture only runs when there is none.
-    const preflightPulledImageId = runtimeContext.pulledImageId;
-    if (!imageIdentity && !securityGateUnboundWarn && !preflightPulledImageId) {
+    // What the compose-file-once preflight resolved for this service, before
+    // any replica was touched. A bound digest goes into the create reference
+    // below; a bare local image ID cannot, because the daemon would record it
+    // as Config.Image and the watcher could then never recover the compose
+    // repo:tag from it. It becomes the expectation the recreated container is
+    // checked against instead (DR-54).
+    let expectedImageId = runtimeContext.pulledImageId;
+    // Nothing to re-resolve once the preflight has an answer for the service.
+    // Asking again per replica could bind a digest the preflight never saw,
+    // which is the divergence this check exists to refuse, not to adopt.
+    if (!imageIdentity && !securityGateUnboundWarn && !expectedImageId) {
       const identityOutcome = await this.capturePulledImageIdentity(
         dockerApi as DockerApiLike,
         newImage,
@@ -3462,11 +3509,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       imageIdentity = identityOutcome.imageIdentity;
       securityGateUnboundWarn = identityOutcome.unboundWarn;
       securityGateUnboundReason = identityOutcome.reason;
+      // A preflight whose inspect failed stores no image ID, so the recovery
+      // here is the only one this replica gets. Discarding it would leave the
+      // recreate unverified against anything at all.
+      expectedImageId = identityOutcome.localImageId;
     }
-    // Without a digest the local image ID is the only immutable reference
-    // left, so an unbound compose-file-once service creates every replica
-    // from it rather than from the tag it was pulled under (DR-54).
-    const pinnedImage = imageIdentity || preflightPulledImageId || newImage;
+    const pinnedImage = imageIdentity || newImage;
+    if (!imageIdentity && !expectedImageId) {
+      // Neither a digest to create from nor an image ID to check the recreate
+      // against: the container gets whatever the tag resolves to at create
+      // time, exactly as it did before the check existed.
+      logContainer.warn(
+        `Cannot verify which image ${container.name} is recreated from because ${newImage} was not resolved to a local image ID`,
+      );
+    }
     if (securityGateUnboundWarn) {
       // Compose-file-once already recorded this service's skipped scan in its
       // preflight, so recording it again here would add one audit row per
@@ -3549,6 +3605,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         container,
         logContainer,
         cloneRuntimeConfigOptions,
+        expectedImageId,
       );
     } catch (recreateError: unknown) {
       const rollbackOutcome = await this.attemptRollbackRestoreOldContainer(
