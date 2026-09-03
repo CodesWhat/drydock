@@ -159,6 +159,22 @@ type ComposeRuntimeContext = {
   auth?: RegistryPullAuth;
   newImage?: string;
   imageIdentity?: string;
+  /**
+   * The local image ID the compose-file-once preflight's pull resolved to,
+   * recorded only when the daemon could not bind that pull to a manifest
+   * digest. Every replica of the service is then created from this exact
+   * image instead of from the mutable tag (DR-54).
+   */
+  pulledImageId?: string;
+  /**
+   * Write-back for an image ID a runtime refresh resolved after the
+   * compose-file-once preflight could not. Later replicas of the service read
+   * the preflight's context, so a recovery that stays local to one replica
+   * leaves the next one resolving the mutable tag again, and a tag that moves
+   * mid-batch then splits the service with each replica passing its own
+   * check against its own image (DR-54).
+   */
+  onPulledImageIdResolved?: (pulledImageId: string) => void;
   securityGateUnboundWarn?: boolean;
   securityGateUnboundReason?: string;
   securityGateUnboundWarnRecorded?: boolean;
@@ -1752,6 +1768,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return runtimeContext;
   }
 
+  /**
+   * Compose-file-once binds one pull/gate per service, not per container
+   * (DR-54): a later replica of an already-handled service must still be
+   * recreated, reusing the identity the preflight already bound and gated
+   * for the service, rather than being left running its old image while the
+   * lifecycle reports success.
+   */
   async maybeRunPerServiceComposeRefresh(
     composeCtx: ComposeUpdateLifecycleContext,
     container,
@@ -1759,15 +1782,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       ComposeRuntimeRefreshOptions,
       'composeFiles' | 'skipPull' | 'runtimeContext' | 'postPullHook'
     >,
-  ): Promise<boolean> {
+  ): Promise<void> {
     if (composeCtx.composeFileOnceApplied === true) {
       const logContainer = this.log.child({
         container: container.name,
       });
       logContainer.info(
-        `Skip per-service compose refresh for ${composeCtx.service} because compose-file-once mode already refreshed ${composeCtx.composeFile}`,
+        `Recreate ${container.name} for compose-file-once service ${composeCtx.service} reusing the identity already bound and gated for ${composeCtx.composeFile}`,
       );
-      return false;
     }
 
     await this.updateContainerWithCompose(
@@ -1776,7 +1798,6 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container,
       composeUpdateOptions,
     );
-    return true;
   }
 
   /**
@@ -1817,19 +1838,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       requiredComposeCtx.postPullGateCompleted ? undefined : postPullHook,
     );
 
-    const composeRefreshRan = await this.maybeRunPerServiceComposeRefresh(
+    await this.maybeRunPerServiceComposeRefresh(
       requiredComposeCtx,
       container,
       composeUpdateOptions,
     );
-    if (!composeRefreshRan && !requiredComposeCtx.postPullGateCompleted && postPullHook) {
-      const operationId = getRequestedOperationId(container, runtimeContext) ?? '';
-      if (runtimeContext.imageIdentity) {
-        await postPullHook(operationId, runtimeContext.imageIdentity);
-      } else {
-        await postPullHook(operationId);
-      }
-    }
     if (!this.configuration.dryrun) {
       requiredComposeCtx.onRuntimeUpdateApplied?.();
     }
@@ -2247,7 +2260,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         registry,
         auth,
         newImage,
-        ...(identityOutcome.imageIdentity ? { imageIdentity: identityOutcome.imageIdentity } : {}),
+        // A bound digest is the reference every replica is created from. When
+        // there is none, the local image ID the pull resolved to takes its
+        // place, so the replicas still share one image rather than each
+        // re-resolving a tag that can move under them (DR-54).
+        ...(identityOutcome.imageIdentity
+          ? { imageIdentity: identityOutcome.imageIdentity }
+          : { pulledImageId: identityOutcome.localImageId }),
         ...(identityOutcome.unboundWarn
           ? {
               securityGateUnboundWarn: true,
@@ -2684,6 +2703,35 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Hand a compose-file-once service context a way to record the image ID a
+   * runtime refresh resolved when the preflight's own inspect failed. The
+   * merged context each replica gets is a copy, so without this the first
+   * replica's recovery dies with it and the second replica resolves the tag
+   * again (DR-54).
+   */
+  private attachRecoveredPulledImageIdSink(
+    composeFileOnceRuntimeContextByService: Map<
+      string,
+      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
+    >,
+    service: string,
+    composeFileOnceRuntimeContext: ComposeRuntimeContext | undefined,
+  ): ComposeRuntimeContext | undefined {
+    if (!composeFileOnceRuntimeContext) {
+      return undefined;
+    }
+    return {
+      ...composeFileOnceRuntimeContext,
+      onPulledImageIdResolved: (pulledImageId: string) => {
+        composeFileOnceRuntimeContextByService.set(service, {
+          ...composeFileOnceRuntimeContext,
+          pulledImageId,
+        });
+      },
+    };
+  }
+
   private isComposeFileOnceEnabled(): boolean {
     return this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
   }
@@ -2730,10 +2778,23 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         service,
         serviceDefinition: compose.services[service],
         composeFileOnceApplied,
-        skipPull: composeFileOncePreflighted && composeFileOnceApplied !== true,
+        // Preflight pulls each service's image exactly once, before any
+        // replica's runtime update runs, so every preflighted replica skips
+        // the pull, not just the first one to reach this loop. Re-pulling a
+        // mutable tag for a later replica could resolve a different digest
+        // than the one already bound and gated (DR-54). That holds whether or
+        // not the preflight managed to bind a digest: an unbound service
+        // carries the local image ID of the pull instead, and pulling again
+        // per replica would reintroduce exactly the divergence the recorded
+        // ID exists to prevent.
+        skipPull: composeFileOncePreflighted,
         runtimeContext: mergeComposeFileOnceRuntimeContext(
           requestedRuntimeContext,
-          composeFileOnceRuntimeContext,
+          this.attachRecoveredPulledImageIdSink(
+            composeFileOnceRuntimeContextByService,
+            service,
+            composeFileOnceRuntimeContext,
+          ),
         ),
         postPullGateCompleted: composeFileOncePreflighted,
       };
@@ -3319,6 +3380,42 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Confirm the container that was just created runs the image the pull
+   * resolved to. The create reference stays the operator's `repo:tag` so the
+   * watcher can still read the tag back off `Config.Image`, which means a
+   * local retag between the pull and this create would silently hand the
+   * container a different image, and under compose-file-once it would hand
+   * one replica of a service a different image than another (DR-54). Throwing
+   * here runs inside the recreate's own try, so the candidate is removed and
+   * the previous container is restored by the rollback net.
+   */
+  private async assertReplacementContainerImage(
+    newContainer: unknown,
+    expectedImageId: string | undefined,
+    newImage: string,
+    container: { name: string },
+  ): Promise<void> {
+    if (!expectedImageId) {
+      // Either the create reference is already digest-pinned, which cannot
+      // resolve to a second image, or nothing was resolvable at pull time and
+      // the caller has already warned about it.
+      return;
+    }
+    const inspect = (newContainer as { inspect?: () => Promise<{ Image?: string }> })?.inspect;
+    if (typeof inspect !== 'function') {
+      return;
+    }
+    const createdImageId = (await inspect.call(newContainer))?.Image;
+    if (!createdImageId || createdImageId === expectedImageId) {
+      return;
+    }
+    throw new Error(
+      `Recreated container ${container.name} runs image ${createdImageId} but ${newImage} was pulled as ${expectedImageId}; ` +
+        'the local tag moved between the pull and the recreate',
+    );
+  }
+
   private async recreateReplacementContainerWithCleanup(
     dockerApi,
     currentContainerSpec,
@@ -3326,6 +3423,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     cloneRuntimeConfigOptions,
+    expectedImageId?: string,
   ): Promise<void> {
     const containerToCreateInspect = this.cloneContainer(
       currentContainerSpec,
@@ -3340,6 +3438,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         containerToCreateInspect,
         container.name,
         logContainer,
+      );
+      await this.assertReplacementContainerImage(
+        newContainer,
+        expectedImageId,
+        newImage,
+        container,
       );
 
       if (currentContainerSpec.State.Running) {
@@ -3427,7 +3531,17 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     let imageIdentity = runtimeContext.imageIdentity;
     let securityGateUnboundWarn = runtimeContext.securityGateUnboundWarn === true;
     let securityGateUnboundReason = runtimeContext.securityGateUnboundReason;
-    if (!imageIdentity && !securityGateUnboundWarn) {
+    // What the compose-file-once preflight resolved for this service, before
+    // any replica was touched. A bound digest goes into the create reference
+    // below; a bare local image ID cannot, because the daemon would record it
+    // as Config.Image and the watcher could then never recover the compose
+    // repo:tag from it. It becomes the expectation the recreated container is
+    // checked against instead (DR-54).
+    let expectedImageId = runtimeContext.pulledImageId;
+    // Nothing to re-resolve once the preflight has an answer for the service.
+    // Asking again per replica could bind a digest the preflight never saw,
+    // which is the divergence this check exists to refuse, not to adopt.
+    if (!imageIdentity && !securityGateUnboundWarn && !expectedImageId) {
       const identityOutcome = await this.capturePulledImageIdentity(
         dockerApi as DockerApiLike,
         newImage,
@@ -3437,8 +3551,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       imageIdentity = identityOutcome.imageIdentity;
       securityGateUnboundWarn = identityOutcome.unboundWarn;
       securityGateUnboundReason = identityOutcome.reason;
+      // A preflight whose inspect failed stores no image ID, so the recovery
+      // here is the only one this replica gets. Discarding it would leave the
+      // recreate unverified against anything at all, and keeping it local to
+      // this replica would leave the next one resolving the tag again.
+      expectedImageId = identityOutcome.localImageId;
+      if (expectedImageId) {
+        runtimeContext.onPulledImageIdResolved?.(expectedImageId);
+      }
     }
     const pinnedImage = imageIdentity || newImage;
+    if (!imageIdentity && !expectedImageId) {
+      // Neither a digest to create from nor an image ID to check the recreate
+      // against: the container gets whatever the tag resolves to at create
+      // time, exactly as it did before the check existed.
+      logContainer.warn(
+        `Cannot verify which image ${container.name} is recreated from because ${newImage} was not resolved to a local image ID`,
+      );
+    }
     if (securityGateUnboundWarn) {
       // Compose-file-once already recorded this service's skipped scan in its
       // preflight, so recording it again here would add one audit row per
@@ -3521,6 +3651,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         container,
         logContainer,
         cloneRuntimeConfigOptions,
+        expectedImageId,
       );
     } catch (recreateError: unknown) {
       const rollbackOutcome = await this.attemptRollbackRestoreOldContainer(
