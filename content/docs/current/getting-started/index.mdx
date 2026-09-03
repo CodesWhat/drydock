@@ -193,8 +193,8 @@ By default, triggers fire on every detected update. Use `THRESHOLD` to only noti
 | --- | --- |
 | `all` (default) | Every update |
 | `major` | Any semver change, including prerelease, or a digest-only update |
-| `minor` | Minor, patch, or prerelease changes |
-| `patch` | Patch or prerelease changes |
+| `minor` | Minor, patch, prerelease, or digest-only updates |
+| `patch` | Patch, prerelease, or digest-only updates |
 | `digest` | Digest-only updates |
 
 The threshold controls which range of change magnitudes are allowed through, not a minimum severity floor. For example, `THRESHOLD=major` fires on every semver bump (major, minor, or patch), while `THRESHOLD=minor` fires on minor and smaller changes but skips major version jumps. Digest-only updates pass through `major`, `minor`, and `patch` too, since a plain threshold only caps the semver magnitude and does not filter by update kind; append `-no-digest` (e.g. `minor-no-digest`) to exclude digest-only updates.

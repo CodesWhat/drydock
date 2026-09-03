@@ -104,6 +104,11 @@ function SecureSnippet() {
         {"\n"}
         {"      "}- DD_WATCHER_LOCAL_SOCKET=/var/run/sockguard/sockguard.sock{"\n"}
         {"      "}- DD_AUTH_BASIC_ADMIN_USER=admin{"\n"}
+        {"      "}
+        <span className={com}>
+          # double each $ in the hash as $$ so Compose does not interpolate it
+        </span>
+        {"\n"}
         {"      "}- DD_AUTH_BASIC_ADMIN_HASH=&lt;paste-argon2id-hash&gt;{"\n"}
         {"\n"}
         <span className={key}>volumes</span>:{"\n"}
