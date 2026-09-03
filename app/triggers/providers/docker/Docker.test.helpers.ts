@@ -404,7 +404,7 @@ export function stubTriggerFlow(opts = {}) {
     NetworkSettings: { Networks: {} },
     ...inspectOverrides,
   });
-  vi.spyOn(docker, 'pruneImages').mockResolvedValue();
+  const pruneImagesSpy = vi.spyOn(docker, 'pruneImages').mockResolvedValue();
   vi.spyOn(docker, 'pullImage').mockResolvedValue();
   vi.spyOn(docker, 'cloneContainer').mockReturnValue({ name: 'container-name' });
   vi.spyOn(docker, 'stopContainer').mockResolvedValue();
@@ -421,7 +421,7 @@ export function stubTriggerFlow(opts = {}) {
   vi.spyOn(docker, 'startContainer').mockResolvedValue();
   const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue();
 
-  return { waitSpy, removeImageSpy };
+  return { waitSpy, removeImageSpy, pruneImagesSpy };
 }
 
 /** Create a mock log with common methods */

@@ -1353,6 +1353,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         auth: runtimeContext.auth,
         newImage: runtimeContext.newImage,
         deferSignatureVerification: true,
+        // The compose runtime update runs its gate from several call sites and
+        // skips the hook entirely once the compose-file-once preflight has
+        // gated, so it keeps the original ordering rather than hanging the
+        // pre-update hook and prune/backup off that hook.
+        deferPreRuntimeUpdateLifecycle: false,
         currentContainer: null,
         currentContainerSpec: null,
       };
@@ -1369,6 +1374,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       auth,
       newImage,
       deferSignatureVerification: true,
+      deferPreRuntimeUpdateLifecycle: false,
       currentContainer: null,
       currentContainerSpec: null,
     };

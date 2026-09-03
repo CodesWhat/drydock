@@ -58,6 +58,7 @@ import {
   prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation,
 } from './self-update-operation.js';
 import UpdateLifecycleExecutor, {
+  type PostPullHookOptions,
   type SelfUpdateLifecycleResult,
 } from './UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
@@ -1765,6 +1766,11 @@ class Docker<
       // immutable reference that was actually pulled, not the mutable tag that
       // a registry retag could repoint between verification and creation.
       deferSignatureVerification: true,
+      // Because the gate moved behind the pull, the pre-update hook and the
+      // prune/backup step move behind the gate. Otherwise an image the gate is
+      // about to reject would already have run an operator hook, deleted cached
+      // images and written a rollback row.
+      deferPreRuntimeUpdateLifecycle: true,
       currentContainer,
       currentContainerSpec,
     };
@@ -1814,7 +1820,11 @@ class Docker<
     container,
     logContainer,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ) {
     if (runtimeContext === undefined) {
       return this.containerUpdateExecutor.execute(
@@ -1844,7 +1854,11 @@ class Docker<
     container,
     logContainer,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ) {
     const updated =
       runtimeContext === undefined

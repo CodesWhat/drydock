@@ -402,7 +402,7 @@ function stubTriggerFlow(opts = {}) {
     NetworkSettings: { Networks: {} },
     ...inspectOverrides,
   });
-  vi.spyOn(docker, 'pruneImages').mockResolvedValue();
+  const pruneImagesSpy = vi.spyOn(docker, 'pruneImages').mockResolvedValue();
   vi.spyOn(docker, 'pullImage').mockResolvedValue();
   vi.spyOn(docker, 'cloneContainer').mockReturnValue({ name: 'container-name' });
   vi.spyOn(docker, 'stopContainer').mockResolvedValue();
@@ -419,7 +419,7 @@ function stubTriggerFlow(opts = {}) {
   vi.spyOn(docker, 'startContainer').mockResolvedValue();
   const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue();
 
-  return { waitSpy, removeImageSpy };
+  return { waitSpy, removeImageSpy, pruneImagesSpy };
 }
 
 /** Create a mock log with common methods */
@@ -1557,17 +1557,23 @@ test('trigger should block update when signature verification is unverified', as
       error: 'no matching signatures',
     }),
   );
-  stubTriggerFlow({ running: true });
-  const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
+  docker.configuration = { ...configurationValid, prune: true };
+  const { pruneImagesSpy } = stubTriggerFlow({ running: true });
+  const runPreUpdateHookSpy = vi.spyOn(docker, 'runPreUpdateHook');
+  const insertContainerImageBackupSpy = vi.spyOn(docker, 'insertContainerImageBackup');
 
   await expect(docker.trigger(createTriggerContainer())).rejects.toThrowError(
     'Image signature verification failed',
   );
 
   expect(mockVerifyImageSignature).toHaveBeenCalled();
-  // Signature verification now runs inside executeContainerUpdate (post-pull
-  // hook) so it verifies the pinned digest, so the executor IS entered.
-  expect(executeContainerUpdateSpy).toHaveBeenCalled();
+  // The block has to land before anything irreversible. Verification now runs
+  // post-pull so it can check the pinned digest, so the ordering guarantee that
+  // matters is that nothing with a side effect happened behind it.
+  expect(runPreUpdateHookSpy).not.toHaveBeenCalled();
+  expect(pruneImagesSpy).not.toHaveBeenCalled();
+  expect(insertContainerImageBackupSpy).not.toHaveBeenCalled();
+  expect(docker.cloneContainer).not.toHaveBeenCalled();
 });
 
 test('trigger should generate sbom when enabled', async () => {

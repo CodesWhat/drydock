@@ -12,6 +12,7 @@ import { getErrorMessage } from '../../../util/error.js';
 import { getCreatedContainerCandidate } from './created-container-candidate.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import { buildRollbackCascadeGuardError } from './rollback-cascade-guard.js';
+import type { PostPullHookOptions } from './UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 type ContainerUpdateLogger = {
@@ -617,7 +618,11 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ) {
     const preparedExecution = await this.prepareContainerUpdateExecution(
       context,
@@ -693,7 +698,11 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ): Promise<PreparedContainerUpdateExecution | undefined> {
     const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
     const configuration = this.getConfiguration();
@@ -788,9 +797,12 @@ class ContainerUpdateExecutor {
     }
     const pinnedImage = imageIdentity ?? newImage;
 
-    if (postPullHook && !skipSecurityGate) {
+    // The hook always runs, even when the binding warned instead of failing: it
+    // carries the deferred pre-update hook and prune/backup step as well as the
+    // security gate, and `skipSecurityGate` only suppresses the gate half.
+    if (postPullHook) {
       try {
-        await postPullHook(operation.id, imageIdentity);
+        await postPullHook(operation.id, imageIdentity, { skipSecurityGate });
       } catch (hookError: unknown) {
         updateOperationStore.markOperationTerminal(operation.id, {
           status: 'failed',

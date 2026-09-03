@@ -1957,7 +1957,7 @@ describe('ContainerUpdateExecutor', () => {
         container,
         expect.anything(),
       );
-      expect(postPullHook).toHaveBeenCalledWith('op-1', pinnedImage);
+      expect(postPullHook).toHaveBeenCalledWith('op-1', pinnedImage, { skipSecurityGate: false });
       expect(getCloneRuntimeConfigOptions).toHaveBeenCalledWith(
         context.dockerApi,
         context.currentContainerSpec,
@@ -2002,7 +2002,7 @@ describe('ContainerUpdateExecutor', () => {
       expect(createContainerSpy).not.toHaveBeenCalled();
     });
 
-    test('skips the post-pull gate and keeps the mutable reference when binding only warns', async () => {
+    test('flags the gate as skipped and keeps the mutable reference when binding only warns', async () => {
       const context = createContext();
       const cloneContainer = vi.fn(() => ({ cloned: true }));
       const getCloneRuntimeConfigOptions = vi.fn().mockResolvedValue({ runtime: true });
@@ -2018,7 +2018,9 @@ describe('ContainerUpdateExecutor', () => {
         executor.execute(context, createContainer(), createLog(), undefined, postPullHook),
       ).resolves.toBe(true);
 
-      expect(postPullHook).not.toHaveBeenCalled();
+      // The hook still runs — it also carries the deferred pre-update hook and
+      // prune/backup step — but it is told not to gate a mutable reference.
+      expect(postPullHook).toHaveBeenCalledWith('op-1', undefined, { skipSecurityGate: true });
       expect(getCloneRuntimeConfigOptions).toHaveBeenCalledWith(
         context.dockerApi,
         context.currentContainerSpec,
@@ -2042,7 +2044,7 @@ describe('ContainerUpdateExecutor', () => {
 
       await executor.execute(context, createContainer(), createLog(), undefined, postPullHook);
 
-      expect(postPullHook).toHaveBeenCalledWith('op-1', undefined);
+      expect(postPullHook).toHaveBeenCalledWith('op-1', undefined, { skipSecurityGate: false });
       expect(cloneContainer).toHaveBeenCalledWith(context.currentContainerSpec, mutableImage, {
         runtime: true,
       });

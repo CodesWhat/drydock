@@ -1,7 +1,9 @@
 import {
+  configurationValid,
   createMockLog,
   createSecurityConfiguration,
   createSecurityScanResult,
+  createSignatureVerificationResult,
   createTriggerContainer,
   docker,
   getDockerTestMocks,
@@ -13,9 +15,18 @@ registerCommonDockerBeforeEach();
 const {
   mockGetSecurityConfiguration,
   mockGetState,
+  mockMarkOperationTerminal,
   mockScanImageForVulnerabilities,
   mockSyncComposeFileTag,
+  mockVerifyImageSignature,
 } = getDockerTestMocks();
+
+const SIGNATURE_VERIFY_CONFIGURATION = {
+  signature: {
+    verify: true,
+    cosign: { command: 'cosign', timeout: 60000, key: '', identity: '', issuer: '' },
+  },
+};
 
 const PULLED_DIGEST = `sha256:${'a'.repeat(64)}`;
 const RETAGGED_DIGEST = `sha256:${'b'.repeat(64)}`;
@@ -242,5 +253,133 @@ test('a registry retag after the pull cannot change what gets scanned or deploye
   // The operator-facing reference is unchanged: the compose file keeps the tag.
   expect(mockSyncComposeFileTag).toHaveBeenCalledWith(
     expect.objectContaining({ newImage: 'my-registry/test/test:4.5.6' }),
+  );
+});
+
+function stubWatcherImageInspect(inspectResult) {
+  const registryState = mockGetState();
+  mockGetState.mockReturnValue(registryState);
+  registryState.watcher['docker.test'].dockerApi.getImage = vi.fn(() => ({
+    remove: vi.fn().mockResolvedValue(undefined),
+    inspect: vi.fn().mockResolvedValue(inspectResult),
+  }));
+  return registryState;
+}
+
+test('runs the pre-update hook and prune/backup only after the pinned image clears the gate', async () => {
+  docker.configuration = { ...configurationValid, prune: true };
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration(SIGNATURE_VERIFY_CONFIGURATION),
+  );
+  const calls: string[] = [];
+  mockVerifyImageSignature.mockImplementation(async () => {
+    calls.push('verify-signature');
+    return createSignatureVerificationResult();
+  });
+  mockScanImageForVulnerabilities.mockImplementation(async () => {
+    calls.push('scan');
+    return createSecurityScanResult();
+  });
+  stubTriggerFlow({ running: true });
+  vi.spyOn(docker, 'runPreUpdateHook').mockImplementation(async () => {
+    calls.push('pre-update-hook');
+  });
+  vi.spyOn(docker, 'pruneImages').mockImplementation(async () => {
+    calls.push('prune');
+  });
+  vi.spyOn(docker, 'insertContainerImageBackup').mockImplementation(() => {
+    calls.push('backup');
+  });
+  vi.spyOn(docker, 'cloneContainer').mockImplementation(() => {
+    calls.push('create');
+    return { name: 'container-name' };
+  });
+
+  await expect(docker.trigger(createTriggerContainer())).resolves.toBeUndefined();
+
+  expect(calls).toEqual([
+    'verify-signature',
+    'scan',
+    'pre-update-hook',
+    'prune',
+    'backup',
+    'create',
+  ]);
+});
+
+test('a blocked signature stops before the pre-update hook, prune and backup', async () => {
+  docker.configuration = { ...configurationValid, prune: true };
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration(SIGNATURE_VERIFY_CONFIGURATION),
+  );
+  mockVerifyImageSignature.mockResolvedValue(
+    createSignatureVerificationResult({
+      status: 'unverified',
+      signatures: 0,
+      error: 'no matching signatures',
+    }),
+  );
+  const { pruneImagesSpy } = stubTriggerFlow({ running: true });
+  const runPreUpdateHookSpy = vi.spyOn(docker, 'runPreUpdateHook');
+  const insertBackupSpy = vi.spyOn(docker, 'insertContainerImageBackup');
+
+  await expect(docker.trigger(createTriggerContainer())).rejects.toThrow(
+    'Image signature verification failed',
+  );
+
+  expect(runPreUpdateHookSpy).not.toHaveBeenCalled();
+  expect(pruneImagesSpy).not.toHaveBeenCalled();
+  expect(insertBackupSpy).not.toHaveBeenCalled();
+  expect(docker.cloneContainer).not.toHaveBeenCalled();
+});
+
+test('a required binding failure stops before the pre-update hook, prune and backup', async () => {
+  docker.configuration = { ...configurationValid, prune: true };
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'block' }),
+  );
+  stubWatcherImageInspect({ RepoDigests: [] });
+  const { pruneImagesSpy } = stubTriggerFlow({ running: true });
+  const runPreUpdateHookSpy = vi.spyOn(docker, 'runPreUpdateHook');
+  const insertBackupSpy = vi.spyOn(docker, 'insertContainerImageBackup');
+
+  await expect(docker.trigger(createTriggerContainer())).rejects.toThrow(
+    'Unable to bind security gate to the pulled image for container-name',
+  );
+
+  expect(runPreUpdateHookSpy).not.toHaveBeenCalled();
+  expect(pruneImagesSpy).not.toHaveBeenCalled();
+  expect(insertBackupSpy).not.toHaveBeenCalled();
+  expect(docker.cloneContainer).not.toHaveBeenCalled();
+  expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ status: 'failed', phase: 'failed' }),
+  );
+});
+
+test('an availability-warn skip still runs the pre-update hook and prune/backup', async () => {
+  docker.configuration = { ...configurationValid, prune: true };
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+  );
+  vi.spyOn(docker.log, 'warn').mockImplementation(() => {});
+  stubWatcherImageInspect({
+    Id: LOCAL_IMAGE_ID,
+    RepoDigests: ['my-registry/test/test@not-a-digest'],
+  });
+  const { pruneImagesSpy } = stubTriggerFlow({ running: true });
+  const runPreUpdateHookSpy = vi.spyOn(docker, 'runPreUpdateHook').mockResolvedValue(undefined);
+  const insertBackupSpy = vi.spyOn(docker, 'insertContainerImageBackup');
+
+  await expect(docker.trigger(createTriggerContainer())).resolves.toBeUndefined();
+
+  expect(mockScanImageForVulnerabilities).not.toHaveBeenCalled();
+  expect(runPreUpdateHookSpy).toHaveBeenCalled();
+  expect(pruneImagesSpy).toHaveBeenCalled();
+  expect(insertBackupSpy).toHaveBeenCalled();
+  expect(docker.cloneContainer).toHaveBeenCalledWith(
+    expect.anything(),
+    'my-registry/test/test:4.5.6',
+    expect.anything(),
   );
 });

@@ -298,17 +298,23 @@ test('trigger should block update when signature verification is unverified', as
       error: 'no matching signatures',
     }),
   );
-  stubTriggerFlow({ running: true });
-  const executeContainerUpdateSpy = vi.spyOn(docker, 'executeContainerUpdate');
+  docker.configuration = { ...configurationValid, prune: true };
+  const { pruneImagesSpy } = stubTriggerFlow({ running: true });
+  const runPreUpdateHookSpy = vi.spyOn(docker, 'runPreUpdateHook');
+  const insertBackupSpy = vi.spyOn(docker, 'insertContainerImageBackup');
 
   await expect(docker.trigger(createTriggerContainer())).rejects.toThrowError(
     'Image signature verification failed',
   );
 
   expect(mockVerifyImageSignature).toHaveBeenCalled();
-  // Signature verification now runs inside executeContainerUpdate (post-pull
-  // hook) so it verifies the pinned digest, so the executor IS entered.
-  expect(executeContainerUpdateSpy).toHaveBeenCalled();
+  // The block has to land before anything irreversible. Verification now runs
+  // post-pull so it can check the pinned digest, so the ordering guarantee that
+  // matters is that nothing with a side effect happened behind it.
+  expect(runPreUpdateHookSpy).not.toHaveBeenCalled();
+  expect(pruneImagesSpy).not.toHaveBeenCalled();
+  expect(insertBackupSpy).not.toHaveBeenCalled();
+  expect(docker.cloneContainer).not.toHaveBeenCalled();
 });
 
 test('trigger should generate sbom when enabled', async () => {
