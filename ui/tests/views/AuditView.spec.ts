@@ -25,20 +25,22 @@ vi.mock('@/composables/useBreakpoints', () => ({
   }),
 }));
 
+const auditFilterBarStub = defineComponent({
+  props: ['showFilters', 'filteredCount', 'totalCount', 'countLabel', 'activeFilterCount'],
+  emits: ['update:showFilters'],
+  template: `
+    <div class="data-filter-bar">
+      <slot name="filters" />
+      <slot name="extra-buttons" />
+    </div>
+  `,
+});
+
 const stubs: Record<string, any> = {
   DataViewLayout: defineComponent({
     template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
   }),
-  DataFilterBar: defineComponent({
-    props: ['showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
-    emits: ['update:showFilters'],
-    template: `
-      <div class="data-filter-bar">
-        <slot name="filters" />
-        <slot name="extra-buttons" />
-      </div>
-    `,
-  }),
+  DataFilterBar: auditFilterBarStub,
   DataTable: defineComponent({
     props: ['columns', 'rows', 'rowKey', 'selectedKey', 'hiddenColumnKeys'],
     emits: ['row-click'],
@@ -576,6 +578,71 @@ describe('AuditView', () => {
         page: 1,
         limit: 50,
       });
+    });
+  });
+
+  describe('page-scoped search count', () => {
+    function filterBarProps(wrapper: any) {
+      return wrapper.findComponent(auditFilterBarStub as any);
+    }
+
+    it('counts against the server total with no count label when there is no search', async () => {
+      mockGetAuditLog.mockResolvedValue({
+        entries: [
+          makeEntry({ id: 'e1', containerName: 'nginx' }),
+          makeEntry({ id: 'e2', containerName: 'redis' }),
+        ],
+        total: 500,
+      });
+
+      const wrapper = await mountAuditView();
+
+      const bar = filterBarProps(wrapper);
+      expect(bar.props('totalCount')).toBe(500);
+      expect(bar.props('countLabel')).toBeUndefined();
+    });
+
+    it('counts against the page with the onThisPage label while searching (regression guard)', async () => {
+      mockGetAuditLog.mockResolvedValue({
+        entries: [
+          makeEntry({ id: 'e1', containerName: 'nginx-prod' }),
+          makeEntry({ id: 'e2', containerName: 'redis-cache' }),
+        ],
+        total: 500,
+      });
+
+      const wrapper = await mountAuditView();
+
+      await wrapper.find('input').setValue('redis');
+      await flushPromises();
+
+      const bar = filterBarProps(wrapper);
+      // The page has 2 entries loaded; the server total is 500. A search must count
+      // against the page (2), never the server total (500).
+      expect(bar.props('totalCount')).toBe(2);
+      expect(bar.props('countLabel')).toBe('on this page');
+    });
+
+    it('treats a whitespace-only query as no search', async () => {
+      mockGetAuditLog.mockResolvedValue({
+        entries: [
+          makeEntry({ id: 'e1', containerName: 'nginx' }),
+          makeEntry({ id: 'e2', containerName: 'redis' }),
+        ],
+        total: 500,
+      });
+
+      const wrapper = await mountAuditView();
+
+      await wrapper.find('input').setValue('   ');
+      await flushPromises();
+
+      const bar = filterBarProps(wrapper);
+      expect(bar.props('totalCount')).toBe(500);
+      expect(bar.props('countLabel')).toBeUndefined();
+      // Whitespace must not filter rows or count as an active filter either.
+      expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('2');
+      expect(bar.props('activeFilterCount')).toBe(0);
     });
   });
 

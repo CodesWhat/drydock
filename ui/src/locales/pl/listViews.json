@@ -3,6 +3,7 @@
     "loadingAuditLog": "Ładowanie dziennika kontrolnego...",
     "loadError": "Nie udało się załadować dziennika kontroli",
     "filterPlaceholder": "Filtruj według celu lub zdarzenia...",
+    "onThisPage": "na tej stronie",
     "containerFilterPlaceholder": "Nazwa kontenera...",
     "allEvents": "Wszystkie wydarzenia",
     "eventsSelected": "Wybrano zdarzenia {count}",

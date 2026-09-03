@@ -1299,7 +1299,7 @@ describe('Docker Watcher', () => {
 
     test('should resolve hybrid tag@digest ref without warning when RepoTags is empty', async () => {
       const hybridRef =
-        'docker.io/valkey/valkey:9@sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9';
+        'registry.example:5000/valkey/valkey:9@sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9';
       const container = await setupContainerDetailTest(docker, {
         container: {
           Image: 'sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9',
@@ -1308,29 +1308,19 @@ describe('Docker Watcher', () => {
         imageDetails: {
           RepoTags: [],
           RepoDigests: [
-            'valkey/valkey@sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9',
+            'registry.example:5000/valkey/valkey@sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9',
           ],
           Config: {
             Image: hybridRef,
           },
         },
-        parseImpl: (value) => {
-          if (value === hybridRef) {
-            return {
-              domain: 'docker.io',
-              path: 'valkey/valkey',
-              tag: '9',
-              digest: 'sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9',
-            };
-          }
-          if (value === 'valkey/valkey') {
-            return { path: 'valkey/valkey' };
-          }
-          return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
-        },
         semverValue: { major: 9, minor: 0, patch: 0 },
         validateImpl: (c) => c,
       });
+      const realParse = (
+        await vi.importActual<typeof import('parse-docker-image-name')>('parse-docker-image-name')
+      ).default;
+      hMockParse.mockImplementation(realParse);
 
       // Simulate inspect returning Config.Image = hybrid ref
       mockContainer.inspect.mockResolvedValue({ Config: { Image: hybridRef } });
@@ -1339,6 +1329,7 @@ describe('Docker Watcher', () => {
       const result = await docker.addImageDetailsToContainer(container);
 
       expect(result.image.tag.value).toBe('9');
+      expect(hMockParse).toHaveBeenCalledWith('registry.example:5000/valkey/valkey:9');
       expect(docker.log.warn).not.toHaveBeenCalledWith(
         expect.stringContaining('Cannot get a reliable tag'),
       );
@@ -1476,7 +1467,7 @@ describe('Docker Watcher', () => {
           },
         },
         parseImpl: (value) => {
-          if (value === hybridRef) {
+          if (value === hybridRef || value === 'localhost:5000/image') {
             // Parsed hybrid: no tag (only digest)
             return { domain: 'localhost:5000', path: 'image', digest: 'sha256:abcdef123456' };
           }
@@ -1491,6 +1482,31 @@ describe('Docker Watcher', () => {
       const result = await docker.addImageDetailsToContainer(container);
       expect(result).toBeDefined();
       // Should have fallen through to use RepoTags
+      expect(result.image.tag.value).toBe('stable');
+    });
+
+    test('should use the tag from a hybrid image reference before consulting RepoTags', async () => {
+      const hybridRef = 'localhost:5000/image:stable@sha256:abcdef123456';
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: hybridRef,
+          Names: ['/portimage'],
+        },
+        imageDetails: {
+          RepoTags: ['localhost:5000/image:other'],
+          Config: { Image: hybridRef },
+        },
+        parsedImage: {
+          domain: 'localhost:5000',
+          path: 'image',
+          tag: 'stable',
+          digest: 'sha256:abcdef123456',
+        },
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
       expect(result.image.tag.value).toBe('stable');
     });
 
