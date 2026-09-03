@@ -50,6 +50,7 @@ type UpdateLifecycleContext = {
   auth?: unknown;
   newImage?: string;
   deferSignatureVerification?: boolean;
+  deferPreRuntimeUpdateLifecycle?: boolean;
   operationId?: string;
   currentContainer?: unknown;
   currentContainerSpec?: {
@@ -65,6 +66,16 @@ type UpdateLifecycleContext = {
       Binds?: string[];
     };
   };
+};
+
+/**
+ * Options the runtime update passes back into the post-pull hook. `skipSecurityGate`
+ * is set when the pulled image could not be bound to an immutable digest and the
+ * availability policy is `warn`: the gate must not run against the mutable tag, but
+ * the rest of the deferred lifecycle still has to.
+ */
+export type PostPullHookOptions = {
+  skipSecurityGate?: boolean;
 };
 
 export interface SelfUpdateLifecycleResult {
@@ -139,7 +150,11 @@ type UpdateLifecycleExecutorCallbacks = {
     container: UpdateLifecycleContainer,
     logger: UpdateLifecycleOperationLogger,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ) => Promise<boolean>;
   runPostUpdateHook: (
     container: UpdateLifecycleContainer,
@@ -342,7 +357,19 @@ class UpdateLifecycleExecutor {
 
       const hookConfig = this.hooks.buildHookConfig(container);
       this.hooks.recordHookConfigurationAudit(container, hookConfig);
-      await this.hooks.runPreUpdateHook(container, hookConfig, containerLogger);
+
+      // A runtime update that defers its security gate to the post-pull hook has
+      // to defer the pre-update hook and the prune/backup step behind that gate
+      // too. Running them first lets a candidate the gate goes on to reject fire
+      // an operator hook, delete cached images and add a rollback row before
+      // anything had checked it, and repeated rejections then evict real
+      // rollback points. Self-update and infrastructure updates verify pre-pull
+      // above and never reach the runtime update, so they keep the old order.
+      const deferPreRuntimeUpdateLifecycle =
+        context.deferPreRuntimeUpdateLifecycle === true && !isSpecialUpdate;
+      if (!deferPreRuntimeUpdateLifecycle) {
+        await this.hooks.runPreUpdateHook(container, hookConfig, containerLogger);
+      }
 
       if (isSpecialUpdate) {
         emitFailureFallback = true;
@@ -401,27 +428,44 @@ class UpdateLifecycleExecutor {
         }
       }
 
-      const postPullHook = async (operationId: string, imageIdentity?: string) => {
-        const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
-        // A deferred verification must still run when the caller could not
-        // bind an identity (compose dry-run stops before the pull); it then
-        // verifies the configured reference exactly as the pre-update path did.
-        if (context.deferSignatureVerification) {
-          await this.security.verifySignaturePreUpdate(gateContext, container, containerLogger);
+      const postPullHook = async (
+        operationId: string,
+        imageIdentity?: string,
+        options?: PostPullHookOptions,
+      ) => {
+        if (options?.skipSecurityGate !== true) {
+          const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
+          // A deferred verification must still run when the caller could not
+          // bind an identity (compose dry-run stops before the pull); it then
+          // verifies the configured reference exactly as the pre-update path did.
+          if (context.deferSignatureVerification) {
+            await this.security.verifySignaturePreUpdate(gateContext, container, containerLogger);
+          }
+          await this.security.scanAndGatePostPull(gateContext, container, containerLogger, {
+            setPhase: (phase) => {
+              this.runtimeUpdate.setOperationPhase?.(operationId, phase);
+            },
+          });
         }
-        await this.security.scanAndGatePostPull(gateContext, container, containerLogger, {
-          setPhase: (phase) => {
-            this.runtimeUpdate.setOperationPhase?.(operationId, phase);
-          },
-        });
+        if (deferPreRuntimeUpdateLifecycle) {
+          await this.hooks.runPreUpdateHook(container, hookConfig, containerLogger);
+          await this.runtimeUpdate.runPreRuntimeUpdateLifecycle(
+            context,
+            container,
+            containerLogger,
+            runtimeContext,
+          );
+        }
       };
 
-      await this.runtimeUpdate.runPreRuntimeUpdateLifecycle(
-        context,
-        container,
-        containerLogger,
-        runtimeContext,
-      );
+      if (!deferPreRuntimeUpdateLifecycle) {
+        await this.runtimeUpdate.runPreRuntimeUpdateLifecycle(
+          context,
+          container,
+          containerLogger,
+          runtimeContext,
+        );
+      }
       const updated = await this.runtimeUpdate.performContainerUpdate(
         context,
         container,

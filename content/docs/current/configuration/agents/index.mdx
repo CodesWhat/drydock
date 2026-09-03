@@ -406,6 +406,8 @@ Portwing 0.9.0's controller-owned Docker transport does not use those legacy wat
 
 Because registry enrichment is controller-owned on this path, later Portwing inventory commonly carries the raw defaults `updateAvailable=false` and `updateKind=unknown`. Drydock preserves its stored `result`, update status, policy, security, rollback, and operation fields instead of allowing those raw defaults to erase a controller-enriched result. Portwing's lifecycle events remain authoritative; the delegated native watcher runs with its own Docker event subscription disabled to avoid duplicate streams.
 
+The [Registry lookup image](/docs/configuration/registries#registry-lookup-image-ddregistrylookupimage) label (`dd.registry.lookup.image`, or its legacy alias `dd.registry.lookup.url`) is also honored for containers reported over this path, with `dd.registry.lookup.image` taking precedence when both are set. A `lookupImage` the agent already reported is never overwritten.
+
 ## Features in Agent Mode
 
 - **Watchers**: Traditional agents run watchers locally. A Portwing 0.9.0 watcher with the exact controller-transport marker runs Drydock's native Docker watcher on the Controller through Portwing.

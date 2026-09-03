@@ -1,7 +1,6 @@
 import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import parse from 'parse-docker-image-name';
 import yaml from 'yaml';
 import { buildDependencyGraph, topologicalSort } from '../../../dependencies/dependency-graph.js';
 import type { ContainerImage } from '../../../model/container.js';
@@ -198,12 +197,6 @@ type ComposeRollbackOutcome = {
   phase: 'rolled-back' | 'rollback-failed';
   rollbackReason: 'compose_runtime_refresh_failed';
   lastError: string;
-};
-
-type PulledImageIdentityOutcome = {
-  imageIdentity?: string;
-  unboundWarn: boolean;
-  reason?: string;
 };
 
 type ComposeRollbackError = Error & {
@@ -1581,6 +1574,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         auth: runtimeContext.auth,
         newImage: runtimeContext.newImage,
         deferSignatureVerification: true,
+        // The compose runtime update runs its gate from several call sites and
+        // skips the hook entirely once the compose-file-once preflight has
+        // gated, so it keeps the original ordering rather than hanging the
+        // pre-update hook and prune/backup off that hook.
+        deferPreRuntimeUpdateLifecycle: false,
         currentContainer: null,
         currentContainerSpec: null,
       };
@@ -1597,6 +1595,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       auth,
       newImage,
       deferSignatureVerification: true,
+      deferPreRuntimeUpdateLifecycle: false,
       currentContainer: null,
       currentContainerSpec: null,
     };
@@ -2146,156 +2145,6 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         });
       }
     }
-  }
-
-  private async capturePulledImageIdentity(
-    dockerApi: DockerApiLike,
-    imageReference: string,
-    container,
-    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
-  ): Promise<PulledImageIdentityOutcome> {
-    const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
-    if (typeof dockerApi.getImage !== 'function') {
-      return this.handleMissingPulledImageIdentity(
-        container,
-        bindingPolicy,
-        'Docker image inspection is unavailable',
-      );
-    }
-
-    try {
-      const imageInspect = await dockerApi.getImage(imageReference).inspect();
-      const imageId = imageInspect?.Id?.trim();
-      const imageWithoutDigest = imageReference.split('@', 1)[0];
-      const parsedImage = parse(imageWithoutDigest);
-      const referenceCandidates = this.getPulledImageRepositoryCandidates(parsedImage);
-      const matchingRepoDigest = imageInspect?.RepoDigests?.find((repoDigest) => {
-        const separatorIndex = repoDigest.indexOf('@');
-        if (separatorIndex <= 0 || separatorIndex === repoDigest.length - 1) {
-          return false;
-        }
-        const repo = repoDigest.substring(0, separatorIndex).toLowerCase();
-        const digest = repoDigest.substring(separatorIndex + 1);
-        return referenceCandidates.includes(repo) && /^sha256:[0-9a-f]+$/i.test(digest);
-      });
-      const tag = parsedImage.tag?.trim();
-      if (imageId && matchingRepoDigest && tag) {
-        const separatorIndex = matchingRepoDigest.indexOf('@');
-        const repo = matchingRepoDigest.substring(0, separatorIndex);
-        const manifestDigest = matchingRepoDigest.substring(separatorIndex + 1);
-        const imageIdentity = `${repo}:${tag}@${manifestDigest}`;
-        logContainer.info(
-          `Pinned pulled image ${imageReference} (local ${imageId}) to ${imageIdentity}`,
-        );
-        return { imageIdentity, unboundWarn: false };
-      }
-      if (imageId && matchingRepoDigest && imageReference.includes('@sha256:')) {
-        return { imageIdentity: matchingRepoDigest, unboundWarn: false };
-      }
-    } catch (error: unknown) {
-      return this.handleMissingPulledImageIdentity(
-        container,
-        bindingPolicy,
-        getErrorMessage(error),
-      );
-    }
-
-    return this.handleMissingPulledImageIdentity(
-      container,
-      bindingPolicy,
-      'Docker image inspection returned no local ID and matching manifest digest',
-    );
-  }
-
-  private getPulledImageRepositoryCandidates(parsedImage: { domain?: string; path?: string }) {
-    const path = parsedImage.path?.trim().toLowerCase();
-    if (!path) {
-      return [];
-    }
-    const domain = parsedImage.domain?.trim().toLowerCase();
-    const isDockerHub = !domain || domain === 'docker.io' || domain === 'registry-1.docker.io';
-    if (!isDockerHub) {
-      return [`${domain}/${path}`];
-    }
-    const pathWithoutLibrary = path.startsWith('library/')
-      ? path.substring('library/'.length)
-      : path;
-    return [
-      path,
-      pathWithoutLibrary,
-      `docker.io/${path}`,
-      `docker.io/${pathWithoutLibrary}`,
-      `registry-1.docker.io/${path}`,
-      `registry-1.docker.io/${pathWithoutLibrary}`,
-    ];
-  }
-
-  private handleMissingPulledImageIdentity(
-    container,
-    bindingPolicy: 'required' | 'optional' | 'disabled',
-    reason: string,
-  ): PulledImageIdentityOutcome {
-    if (bindingPolicy === 'required') {
-      throw new Error(
-        `Unable to bind security gate to the pulled image for ${container.name}: ${reason}`,
-      );
-    }
-    if (bindingPolicy === 'optional') {
-      this.log.warn(
-        `Unable to bind security gate to the pulled image for ${container.name}: ${reason}; proceeding without an immutable image reference`,
-      );
-      return { unboundWarn: true, reason };
-    }
-    return { unboundWarn: false };
-  }
-
-  private recordUnboundSecurityWarning(container, reason = 'unknown binding error'): void {
-    this.recordSecurityAudit(
-      'security-scan-skipped',
-      container,
-      'error',
-      `Security scan skipped because the pulled image could not be bound to an immutable digest; update allowed by DD_SECURITY_AVAILABILITY_POLICY=warn: ${reason}`,
-    );
-  }
-
-  private getPostPullIdentityBindingPolicy(container): 'required' | 'optional' | 'disabled' {
-    const securityGate = this.getSecurityGate() as {
-      securityConfig?: {
-        getSecurityConfiguration?: () => {
-          enabled?: boolean;
-          availabilityPolicy?: string;
-          signature?: { verify?: boolean };
-          gate?: { mode?: string };
-        };
-      };
-      shouldRunSecurityGate?: (configuration: { enabled?: boolean }) => boolean;
-      getEffectiveGateMode?: (
-        container: unknown,
-        configuration: {
-          enabled?: boolean;
-          availabilityPolicy?: string;
-          signature?: { verify?: boolean };
-          gate?: { mode?: string };
-        },
-      ) => string;
-    };
-    const securityConfiguration = securityGate.securityConfig?.getSecurityConfiguration?.();
-    if (!securityConfiguration || securityConfiguration.enabled !== true) {
-      return 'disabled';
-    }
-    if (
-      securityGate.shouldRunSecurityGate &&
-      !securityGate.shouldRunSecurityGate(securityConfiguration)
-    ) {
-      return 'disabled';
-    }
-    if (securityConfiguration.signature?.verify === true) {
-      return 'required';
-    }
-    if (securityGate.getEffectiveGateMode?.(container, securityConfiguration) === 'off') {
-      return 'disabled';
-    }
-    return securityConfiguration.availabilityPolicy === 'warn' ? 'optional' : 'required';
   }
 
   async loadComposeProcessingContext(composeFile, composeFiles = [composeFile]) {
