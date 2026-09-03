@@ -41,7 +41,7 @@ function createUnknownUpdateKind(): ContainerUpdateKind {
   };
 }
 
-function isTagUpdateKind(updateKind: ContainerUpdateKind): boolean {
+export function isTagUpdateKind(updateKind: ContainerUpdateKind): boolean {
   return updateKind.kind === UPDATE_KIND_TAG_VALUE;
 }
 
