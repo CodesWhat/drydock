@@ -661,6 +661,23 @@ describe('Docker Watcher', () => {
       expect(mockDebounce).toHaveBeenCalled();
     });
 
+    // watchCronDebounced defaults its reason to 'docker-event' (#972) so a
+    // docker-events-triggered rescan is distinguishable in the "Cron
+    // started" log line from the cron schedule or the startup timer.
+    // Exercises the real wrapper (not a replaced vi.fn()) via
+    // mockDebounce's identity passthrough set up in beforeEach.
+    test('watchCronDebounced defaults the scan reason to docker-event', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        watchevents: true,
+      });
+      docker.watchFromCron = vi.fn().mockResolvedValue([]);
+      await docker.init();
+
+      docker.watchCronDebounced();
+
+      expect(docker.watchFromCron).toHaveBeenCalledWith({ reason: 'docker-event' });
+    });
+
     test('should not setup events when disabled', async () => {
       await docker.register('watcher', 'docker', 'test', {
         watchevents: false,
@@ -2843,6 +2860,7 @@ describe('Docker Watcher', () => {
 
       expect(docker.watchFromCron).toHaveBeenCalledWith({
         ignoreMaintenanceWindow: true,
+        reason: 'maintenance-window',
       });
     });
 

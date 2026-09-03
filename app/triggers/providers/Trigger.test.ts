@@ -3415,6 +3415,83 @@ test('handleContainerReport should debug log when simple mode skips an already-n
   );
 });
 
+// Regression test for #972: two overlapping cron scans could both evaluate the
+// same first-seen candidate for the same trigger before either one's send
+// resolved and recorded history, so both passed the once=true check and both
+// sent. shouldHandleSimpleContainerReport now reserves the history key
+// synchronously (reserveOnceNotificationSlot), so the second concurrent
+// evaluation of the exact same result is turned away instead of racing the
+// send, and handleContainerReport releases the reservation once it's done.
+test('handleContainerReport sends once for two concurrent evaluations of the same once=true history key', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+    result: { tag: '2.29.2-pg17' },
+  };
+
+  let resolveSend: () => void = () => undefined;
+  const sendPromise = new Promise<void>((resolve) => {
+    resolveSend = resolve;
+  });
+  const sendSpy = vi.fn().mockReturnValue(sendPromise);
+  trigger.trigger = sendSpy;
+
+  // Two overlapping scans hand the exact same result to the same trigger,
+  // as two overlapping watchFromCron() runs would before #972 was fixed.
+  const call1 = trigger.handleContainerReport({ changed: true, container });
+  const call2 = trigger.handleContainerReport({ changed: true, container });
+
+  // The synchronous reserve-then-send prefix of call1 runs to completion
+  // (including invoking trigger.trigger()) before call2 is even evaluated,
+  // since calling an async function runs synchronously up to its first
+  // await, so call2 already sees the reservation held.
+  expect(sendSpy).toHaveBeenCalledTimes(1);
+
+  resolveSend();
+  await Promise.all([call1, call2]);
+
+  // Still exactly one send: call2 was turned away by the reservation, not
+  // by a second, slower send.
+  expect(sendSpy).toHaveBeenCalledTimes(1);
+  expect(
+    notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+  ).toBe(notificationHistoryStore.computeResultHash(container));
+});
+
+test('handleContainerReport still sends for a genuinely new result once the previous evaluation is done', async () => {
+  await trigger.register('trigger', 'test', 'trigger1', configurationValid);
+  trigger.init();
+
+  const container = {
+    id: 'c1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.1-pg17' },
+    result: { tag: '2.29.1-pg17' },
+  };
+  trigger.trigger = vi.fn().mockResolvedValue(undefined);
+
+  await trigger.handleContainerReport({ changed: true, container });
+  expect(trigger.trigger).toHaveBeenCalledTimes(1);
+
+  // A later, genuinely different candidate for the same container must not
+  // be blocked by the (already-released) reservation from the first send.
+  const updatedContainer = {
+    ...container,
+    updateKind: { kind: 'tag', semverDiff: 'patch', remoteValue: '2.29.2-pg17' },
+    result: { tag: '2.29.2-pg17' },
+  };
+  await trigger.handleContainerReport({ changed: true, container: updatedContainer });
+  expect(trigger.trigger).toHaveBeenCalledTimes(2);
+});
+
 test('handleContainerReport should debug log when simple mode skips a report without an available update', async () => {
   const debugSpy = vi.spyOn(log, 'debug');
 
