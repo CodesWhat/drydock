@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0-rc.9] — 2026-09-03
+
 ### Security
 
 - **`fflate` override added in `e2e/` for CVE-2026-45820.** `@smithy/middleware-compression` pins `fflate` at 0.8.1 exactly, so the fix had to come through an npm override; `fflate` now resolves to 0.8.3 in `e2e/package-lock.json`, which is the only workspace that carried the vulnerable range. Lockfile-only change, no runtime code touched.
@@ -2683,7 +2685,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.8...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.9...HEAD
+[1.7.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.8...v1.7.0-rc.9
 [1.7.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.7...v1.7.0-rc.8
 [1.7.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.6...v1.7.0-rc.7
 [1.7.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.5...v1.7.0-rc.6

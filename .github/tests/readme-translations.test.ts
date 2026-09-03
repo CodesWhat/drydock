@@ -66,149 +66,128 @@ const localizedSurfaceFragments: Record<
     featureTableHeader: '| | Funktion | Beschreibung |',
     builtWithHeading: '<h2 align="center" id="built-with">Gebaut mit</h2>',
     communityQaHeading: '### Community-QA',
-    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.8</strong></summary>',
+    releaseHeading: '<summary><strong>Highlights von v1.7.0-rc.9</strong></summary>',
   },
   'README.es.md': {
     featureTableHeader: '| | Característica | Descripción |',
     builtWithHeading: '<h2 align="center" id="built-with">Construido con</h2>',
     communityQaHeading: '### Control de calidad de la comunidad',
-    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.8</strong></summary>',
+    releaseHeading: '<summary><strong>Aspectos destacados de v1.7.0-rc.9</strong></summary>',
   },
   'README.fr.md': {
     featureTableHeader: '| | Fonctionnalité | Descriptif |',
     builtWithHeading: '<h2 align="center" id="built-with">Construit avec</h2>',
     communityQaHeading: '### Contrôle qualité de la communauté',
-    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.8</strong></summary>',
+    releaseHeading: '<summary><strong>Points forts de la v1.7.0-rc.9</strong></summary>',
   },
   'README.pl.md': {
     featureTableHeader: '| | Funkcja | Opis |',
     builtWithHeading: '<h2 align="center" id="built-with">Zbudowany z</h2>',
     communityQaHeading: '### Kontrola jakości społeczności',
     releaseHeading:
-      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.8</strong></summary>',
+      '<summary><strong>Najważniejsze informacje w wersji v1.7.0-rc.9</strong></summary>',
   },
   'README.pt-BR.md': {
     featureTableHeader: '| | Recurso | Descrição |',
     builtWithHeading: '<h2 align="center" id="built-with">Construído com</h2>',
     communityQaHeading: '### Controle de qualidade da comunidade',
-    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.8</strong></summary>',
+    releaseHeading: '<summary><strong>Destaques da v1.7.0-rc.9</strong></summary>',
   },
   'README.zh-CN.md': {
     featureTableHeader: '| |特色|描述 |',
     builtWithHeading: '<h2 align="center" id="built-with">技术栈</h2>',
     communityQaHeading: '### 社区质量检查',
-    releaseHeading: '<summary><strong>v1.7.0-rc.8 亮点</strong></summary>',
+    releaseHeading: '<summary><strong>v1.7.0-rc.9 亮点</strong></summary>',
   },
 };
 
 const localizedReleaseFragments: Record<
   string,
   {
-    digestPin: string;
-    selfUpdateCleanup: string;
-    snapshotPrune: string;
-    registryLookup: string;
-    phantomAgent: string;
-    unknownRegistry: string;
-    debugDump: string;
-    qaSweep: string;
+    singleFlight: string;
+    deadline: string;
+    onceKey: string;
+    deprecationBanner: string;
+    docsAudit: string;
+    getStarted: string;
   }
 > = {
   'README.de.md': {
-    digestPin:
-      '**Die Docker-native und die Compose-Update-Pfade pinnen jetzt einen unveränderlichen Digest des gezogenen Images vor Signaturprüfung, Scan und Ersetzung**',
-    selfUpdateCleanup:
-      '**Ein Self-Update macht einen bereits gesundheitsgeprüften Ersatz nicht mehr rückgängig, wenn die Bereinigung des alten Containers fehlschlägt**',
-    snapshotPrune:
-      'der Watcher-Snapshot-Handler behandelt eine leere Container-Liste nicht mehr als Massenentfernung',
-    registryLookup:
-      '**`dd.registry.lookup.image` gilt jetzt auch für Container, die von Controller-Docker-Transport-Agents gemeldet werden**',
-    phantomAgent:
-      '**`DD_AGENT_ALLOW_INSECURE_SECRET` erzeugt keinen Phantom-Agent namens `allow` mehr**',
-    unknownRegistry:
-      'ein Container, der als `unknown` markiert war, bevor seine Registry konfiguriert wurde, erholt sich jetzt bei der Aktualisierung',
-    debugDump:
-      '**Debug-Dumps redigieren jetzt Apprise-Service-URLs, Rocket.Chat-Benutzer-IDs und Telegram-Chat-IDs**',
-    qaSweep: '**Vier Fixes aus dem QA-Sweep von rc.6 landen**',
+    singleFlight:
+      '**`watchFromCron()` ist jetzt Single-Flight, sodass überlappende Scans in einer großen Flotte nicht mehr denselben Trigger mehrfach für ein Update auslösen.**',
+    deadline: 'läuft jetzt gegen eine Frist',
+    onceKey:
+      '**Ein `once=true`-Trigger löst nicht mehr Stunden später erneut für ein bereits gemeldetes Tag-Update aus, wenn eine Registry die Digest-Abfrage ratenbegrenzt**',
+    deprecationBanner:
+      '**Die Deprecation-Banner der UI für die entfernten `DD_TRIGGER_*`-Umgebungsvariablen und die curl-basierte Healthcheck-Überschreibung sagen jetzt, dass diese Dinge bereits entfernt sind**',
+    docsAudit:
+      '**Ein Dokumentations-Audit hat README, DEPRECATIONS.md und die Konfigurations-/Trigger-/Registry-/API-/Monitoring-/Agenten-Dokumentation gegen den tatsächlichen Code dieses Codebaums korrigiert**',
+    getStarted:
+      'die Get-Started-Snippets der Marketing-Website starten jetzt eine Instanz, die tatsächlich gesund wird',
   },
   'README.es.md': {
-    digestPin:
-      '**Las rutas de actualización nativa de Docker y de Compose ahora fijan un digest inmutable de la imagen extraída antes de la verificación de firma, el escaneo y el reemplazo**',
-    selfUpdateCleanup:
-      '**La autoactualización ya no revierte un reemplazo verificado por salud cuando falla la limpieza del contenedor antiguo**',
-    snapshotPrune:
-      'el manejador de instantáneas del watcher deja de tratar una lista de contenedores vacía como una eliminación masiva',
-    registryLookup:
-      '**`dd.registry.lookup.image` ahora se aplica a los contenedores reportados por agentes de transporte Docker del controlador**',
-    phantomAgent:
-      '**`DD_AGENT_ALLOW_INSECURE_SECRET` ya no crea un agente fantasma llamado `allow`**',
-    unknownRegistry:
-      'un contenedor marcado como `unknown` antes de configurar su registro ahora se recupera al actualizar',
-    debugDump:
-      '**Los volcados de depuración redactan las URL de servicio de Apprise, los ID de usuario de Rocket.Chat y los ID de chat de Telegram**',
-    qaSweep: '**Llegan cuatro correcciones del barrido de control de calidad de rc.6**',
+    singleFlight:
+      '**`watchFromCron()` ahora es de ejecución única, de modo que los escaneos superpuestos en una flota grande ya no disparan el mismo activador varias veces para la misma actualización.**',
+    deadline: 'compite contra un plazo límite',
+    onceKey:
+      '**Un activador `once=true` ya no se dispara de nuevo horas después para una actualización de etiqueta que ya había anunciado, cuando un registro limita la tasa de la consulta de digest**',
+    deprecationBanner:
+      '**Los banners de obsolescencia de la interfaz para las variables de entorno `DD_TRIGGER_*` eliminadas y la anulación del healthcheck basada en curl ahora indican que esas cosas ya desaparecieron**',
+    docsAudit:
+      '**Una auditoría de documentación corrigió el README, DEPRECATIONS.md y la documentación de configuración/activadores/registros/API/monitoreo/agentes frente al código real de este árbol**',
+    getStarted:
+      'los fragmentos de Get Started del sitio de marketing ahora despliegan una instancia que realmente queda saludable',
   },
   'README.fr.md': {
-    digestPin:
-      "**Les chemins de mise à jour Docker natif et Compose épinglent désormais un digest immuable de l'image récupérée avant la vérification de signature, l'analyse et le remplacement**",
-    selfUpdateCleanup:
-      "**Une auto-mise à jour n'annule plus un remplacement vérifié par le contrôle de santé lorsque le nettoyage de l'ancien conteneur échoue**",
-    snapshotPrune:
-      "le gestionnaire d'instantané du watcher ne traite plus une liste de conteneurs vide comme une suppression massive",
-    registryLookup:
-      "**`dd.registry.lookup.image` s'applique désormais aux conteneurs signalés par les agents à transport Docker du contrôleur**",
-    phantomAgent: "**`DD_AGENT_ALLOW_INSECURE_SECRET` ne crée plus d'agent fantôme nommé `allow`**",
-    unknownRegistry:
-      "un conteneur marqué `unknown` avant la configuration de son registre se rétablit désormais à l'actualisation",
-    debugDump:
-      '**Les vidages de débogage occultent désormais les URL de service Apprise, les ID utilisateur Rocket.Chat et les ID de discussion Telegram**',
-    qaSweep: '**Quatre correctifs du balayage QA de la rc.6 arrivent**',
+    singleFlight:
+      '**`watchFromCron()` est désormais à exécution unique (single-flight), si bien que des scans qui se chevauchent sur une grande flotte ne déclenchent plus le même déclencheur plusieurs fois pour une seule mise à jour.**',
+    deadline: 'confronté à une échéance',
+    onceKey:
+      "**Un déclencheur `once=true` ne se redéclenche plus des heures plus tard pour une mise à jour de tag déjà annoncée, lorsqu'un registre limite le débit de la recherche de digest**",
+    deprecationBanner:
+      "**Les bannières de dépréciation de l'interface pour les variables d'environnement `DD_TRIGGER_*` supprimées et la surcharge du healthcheck basée sur curl indiquent désormais que ces éléments ont déjà disparu**",
+    docsAudit:
+      '**Un audit de la documentation a corrigé le README, DEPRECATIONS.md et la documentation de configuration/déclencheurs/registres/API/supervision/agents par rapport au code réel de cet arbre**',
+    getStarted:
+      'les extraits Get Started du site marketing déploient désormais une instance qui devient réellement saine',
   },
   'README.pl.md': {
-    digestPin:
-      '**Ścieżki aktualizacji natywnej Docker i Compose przypinają teraz niezmienny skrót pobranego obrazu przed weryfikacją podpisu, skanowaniem i podmianą**',
-    selfUpdateCleanup:
-      '**Samoaktualizacja nie wycofuje już zweryfikowanej pod względem kondycji podmiany, gdy czyszczenie starego kontenera się nie powiedzie**',
-    snapshotPrune:
-      'moduł obsługi migawek watchera przestaje traktować pustą listę kontenerów jako masowe usunięcie',
-    registryLookup:
-      '**`dd.registry.lookup.image` dotyczy teraz kontenerów zgłaszanych przez agentów transportu Docker kontrolera**',
-    phantomAgent:
-      '**`DD_AGENT_ALLOW_INSECURE_SECRET` nie tworzy już agenta widmo o nazwie `allow`**',
-    unknownRegistry:
-      'kontener oznaczony jako `unknown` przed skonfigurowaniem rejestru teraz odzyskuje stan przy odświeżeniu',
-    debugDump:
-      '**Zrzuty debugowania ukrywają teraz adresy URL usługi Apprise, identyfikatory użytkowników Rocket.Chat i identyfikatory czatów Telegram**',
-    qaSweep: '**Cztery poprawki z przeglądu QA rc.6 trafiają do wydania**',
+    singleFlight:
+      '**`watchFromCron()` działa teraz w trybie single-flight, dzięki czemu nakładające się skany w dużej flocie nie uruchamiają już tego samego wyzwalacza wielokrotnie dla jednej aktualizacji.**',
+    deadline: 'jest teraz uruchamiany z terminem',
+    onceKey:
+      '**Wyzwalacz `once=true` nie uruchamia się już ponownie godziny później dla aktualizacji tagu, którą już zgłosił, gdy rejestr ogranicza liczbę zapytań o digest**',
+    deprecationBanner:
+      '**Banery przestarzałości w interfejsie dla usuniętych zmiennych środowiskowych `DD_TRIGGER_*` oraz nadpisania healthchecka opartego na curl teraz informują, że te rzeczy już zniknęły**',
+    docsAudit:
+      '**Audyt dokumentacji poprawił README, DEPRECATIONS.md oraz dokumentację konfiguracji/wyzwalaczy/rejestrów/API/monitoringu/agentów zgodnie z rzeczywistym kodem tego drzewa**',
+    getStarted:
+      'fragmenty Get Started na stronie marketingowej wdrażają teraz instancję, która faktycznie staje się zdrowa',
   },
   'README.pt-BR.md': {
-    digestPin:
-      '**Os caminhos de atualização nativa do Docker e do Compose agora fixam um digest imutável da imagem baixada antes da verificação de assinatura, da varredura e da substituição**',
-    selfUpdateCleanup:
-      '**A autoatualização não reverte mais uma substituição verificada por saúde quando a limpeza do contêiner antigo falha**',
-    snapshotPrune:
-      'o manipulador de snapshot do watcher para de tratar uma lista de contêineres vazia como uma remoção em massa',
-    registryLookup:
-      '**`dd.registry.lookup.image` agora se aplica a contêineres reportados por agentes de transporte Docker do controlador**',
-    phantomAgent:
-      '**`DD_AGENT_ALLOW_INSECURE_SECRET` não cria mais um agente fantasma chamado `allow`**',
-    unknownRegistry:
-      'um contêiner marcado como `unknown` antes de seu registro ser configurado agora se recupera na atualização',
-    debugDump:
-      '**Os dumps de depuração agora redigem URLs de serviço do Apprise, IDs de usuário do Rocket.Chat e IDs de chat do Telegram**',
-    qaSweep: '**Chegam quatro correções da varredura de QA da rc.6**',
+    singleFlight:
+      '**`watchFromCron()` agora é single-flight, de modo que varreduras sobrepostas em uma frota grande não disparam mais o mesmo gatilho várias vezes para a mesma atualização.**',
+    deadline: 'compete contra um prazo',
+    onceKey:
+      '**Um gatilho `once=true` não dispara mais horas depois para uma atualização de tag que já havia anunciado, quando um registro limita a taxa da consulta de digest**',
+    deprecationBanner:
+      '**Os banners de descontinuação da UI para as variáveis de ambiente `DD_TRIGGER_*` removidas e a substituição do healthcheck baseada em curl agora dizem que essas coisas já foram removidas**',
+    docsAudit:
+      '**Uma auditoria de documentação corrigiu o README, o DEPRECATIONS.md e a documentação de configuração/gatilhos/registros/API/monitoramento/agentes em relação ao código real desta árvore**',
+    getStarted:
+      'os trechos de Get Started do site de marketing agora implantam uma instância que realmente fica saudável',
   },
   'README.zh-CN.md': {
-    digestPin:
-      '**Docker 原生和 Compose 更新路径现在会在签名验证、扫描和替换之前锁定已拉取镜像的不可变摘要**',
-    selfUpdateCleanup: '**当旧容器清理失败时，自更新不再回滚已通过健康检查的替换**',
-    snapshotPrune: 'watcher 快照处理器也不再将空容器列表当作批量删除处理',
-    registryLookup: '**`dd.registry.lookup.image` 现在适用于由控制器 Docker 传输代理上报的容器**',
-    phantomAgent: '**`DD_AGENT_ALLOW_INSECURE_SECRET` 不再创建名为 `allow` 的幽灵代理**',
-    unknownRegistry: '在配置注册表之前被标记为 `unknown` 的容器现在会在刷新时恢复',
-    debugDump:
-      '**调试转储现在会对 Apprise 服务 URL、Rocket.Chat 用户 ID 和 Telegram 聊天 ID 进行脱敏**',
-    qaSweep: '**rc.6 QA 排查中的四项修复已合入**',
+    singleFlight:
+      '**`watchFromCron()` 现在是单次并发（single-flight）执行，因此大规模集群中重叠的扫描不会再为同一次更新多次触发同一个触发器。**',
+    deadline: '与截止时间竞争',
+    onceKey:
+      '**当注册表对摘要查询进行限流时，`once=true` 触发器不会再在数小时后为已经通知过的标签更新重新触发**',
+    deprecationBanner:
+      '**界面中针对已移除的 `DD_TRIGGER_*` 环境变量和基于 curl 的健康检查覆盖的弃用横幅现在会说明这些内容已经移除**',
+    docsAudit:
+      '**一次文档审计根据本代码树的实际代码修正了 README、DEPRECATIONS.md 以及配置/触发器/注册表/API/监控/代理相关文档**',
+    getStarted: '营销网站的 Get Started 代码片段现在部署的实例能够真正变为健康状态',
   },
 };
 
@@ -265,6 +244,7 @@ const requiredFragments = [
   './CHANGELOG.md#170-rc6--2026-08-29',
   './CHANGELOG.md#170-rc7--2026-08-29',
   './CHANGELOG.md#170-rc8--2026-09-03',
+  './CHANGELOG.md#170-rc9--2026-09-03',
   'Portwing 0.9.0+',
   'Standard HTTP',
   '`DD_EXPERIMENTAL_PORTWING=false`',
@@ -319,33 +299,25 @@ describe.each(translatedReadmes)('%s', (readme) => {
     const release = localizedReleaseFragments[readme];
     const releaseBlock = getReleaseBlock(content, surface.releaseHeading);
     const releaseBullets = [
-      release.digestPin,
-      release.selfUpdateCleanup,
-      release.registryLookup,
-      release.phantomAgent,
-      release.debugDump,
-      release.qaSweep,
+      release.singleFlight,
+      release.onceKey,
+      release.deprecationBanner,
+      release.docsAudit,
     ].map((fragment) => getBullet(releaseBlock, fragment));
     const getUrls = (bullet: string | undefined) =>
       [...(bullet ?? '').matchAll(/https?:\/\/[^)<>"\s]+/g)].map(([url]) => url);
 
     expect(releaseBullets.every(Boolean)).toBe(true);
-    expect(releaseBullets[1]).toContain(release.snapshotPrune);
-    expect(releaseBullets[3]).toContain(release.unknownRegistry);
+    expect(releaseBullets[0]).toContain(release.deadline);
+    expect(releaseBullets[3]).toContain(release.getStarted);
     expect(releaseBullets.flatMap(getUrls).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/928',
-      'https://github.com/CodesWhat/drydock/pull/929',
-      'https://github.com/CodesWhat/drydock/pull/951',
-      'https://github.com/CodesWhat/drydock/pull/952',
-      'https://github.com/CodesWhat/drydock/pull/953',
-      'https://github.com/CodesWhat/drydock/pull/954',
-      'https://github.com/CodesWhat/drydock/pull/955',
-      'https://github.com/CodesWhat/drydock/pull/956',
-      'https://github.com/CodesWhat/drydock/pull/961',
+      'https://github.com/CodesWhat/drydock/pull/979',
+      'https://github.com/CodesWhat/drydock/pull/979',
+      'https://github.com/CodesWhat/drydock/pull/988',
+      'https://github.com/CodesWhat/drydock/pull/988',
     ]);
-    expect(getUrls(releaseBullets[1]).sort()).toEqual([
-      'https://github.com/CodesWhat/drydock/pull/929',
-      'https://github.com/CodesWhat/drydock/pull/951',
+    expect(getUrls(releaseBullets[0]).sort()).toEqual([
+      'https://github.com/CodesWhat/drydock/pull/979',
     ]);
   });
 

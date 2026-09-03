@@ -219,6 +219,18 @@ Consultez le [Guide de démarrage rapide](https://getdrydock.com/docs/quickstart
 <h2 align="center" id="recent-updates">Mises à jour récentes</h2>
 
 <details open>
+<summary><strong>Points forts de la v1.7.0-rc.9</strong></summary>
+
+- **`watchFromCron()` est désormais à exécution unique (single-flight), si bien que des scans qui se chevauchent sur une grande flotte ne déclenchent plus le même déclencheur plusieurs fois pour une seule mise à jour.** Un scan qui ne se termine jamais est désormais confronté à une échéance pour qu'il ne puisse plus bloquer les cycles cron suivants. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Un déclencheur `once=true` ne se redéclenche plus des heures plus tard pour une mise à jour de tag déjà annoncée, lorsqu'un registre limite le débit de la recherche de digest**, car la clé de l'historique des notifications reste désormais stable face à cet échec au lieu d'alterner entre deux formats de hash. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Les bannières de dépréciation de l'interface pour les variables d'environnement `DD_TRIGGER_*` supprimées et la surcharge du healthcheck basée sur curl indiquent désormais que ces éléments ont déjà disparu**, au lieu de pointer vers une échéance de suppression déjà passée. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **Un audit de la documentation a corrigé le README, DEPRECATIONS.md et la documentation de configuration/déclencheurs/registres/API/supervision/agents par rapport au code réel de cet arbre**, et les extraits Get Started du site marketing déploient désormais une instance qui devient réellement saine. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Notes complètes dans [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>Points forts de la v1.7.0-rc.8</strong></summary>
 
 - **Les chemins de mise à jour Docker natif et Compose épinglent désormais un digest immuable de l'image récupérée avant la vérification de signature, l'analyse et le remplacement**, fermant la fenêtre de retag de registre sur les deux chemins. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))

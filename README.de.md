@@ -219,6 +219,18 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.9</strong></summary>
+
+- **`watchFromCron()` ist jetzt Single-Flight, sodass überlappende Scans in einer großen Flotte nicht mehr denselben Trigger mehrfach für ein Update auslösen.** Ein Scan, der nie abschließt, läuft jetzt gegen eine Frist, damit er spätere Cron-Durchläufe nicht blockiert. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Ein `once=true`-Trigger löst nicht mehr Stunden später erneut für ein bereits gemeldetes Tag-Update aus, wenn eine Registry die Digest-Abfrage ratenbegrenzt**, weil der Schlüssel des Benachrichtigungsverlaufs jetzt bei diesem Fehler stabil bleibt, statt zwischen zwei Hash-Formaten zu wechseln. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Die Deprecation-Banner der UI für die entfernten `DD_TRIGGER_*`-Umgebungsvariablen und die curl-basierte Healthcheck-Überschreibung sagen jetzt, dass diese Dinge bereits entfernt sind**, statt auf eine bereits verstrichene Entfernungsfrist zu verweisen. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **Ein Dokumentations-Audit hat README, DEPRECATIONS.md und die Konfigurations-/Trigger-/Registry-/API-/Monitoring-/Agenten-Dokumentation gegen den tatsächlichen Code dieses Codebaums korrigiert**, und die Get-Started-Snippets der Marketing-Website starten jetzt eine Instanz, die tatsächlich gesund wird. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Vollständige Release-Notes in [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>Highlights von v1.7.0-rc.8</strong></summary>
 
 - **Die Docker-native und die Compose-Update-Pfade pinnen jetzt einen unveränderlichen Digest des gezogenen Images vor Signaturprüfung, Scan und Ersetzung**, wodurch das Registry-Retag-Zeitfenster auf beiden Pfaden geschlossen wird. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))

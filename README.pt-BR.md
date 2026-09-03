@@ -219,6 +219,18 @@ Consulte o [Guia de início rápido](https://getdrydock.com/docs/quickstart) par
 <h2 align="center" id="recent-updates">Atualizações recentes</h2>
 
 <details open>
+<summary><strong>Destaques da v1.7.0-rc.9</strong></summary>
+
+- **`watchFromCron()` agora é single-flight, de modo que varreduras sobrepostas em uma frota grande não disparam mais o mesmo gatilho várias vezes para a mesma atualização.** Uma varredura que nunca termina agora compete contra um prazo, para que não possa travar os próximos ciclos do cron. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Um gatilho `once=true` não dispara mais horas depois para uma atualização de tag que já havia anunciado, quando um registro limita a taxa da consulta de digest**, porque a chave do histórico de notificações agora permanece estável diante dessa falha, em vez de alternar entre dois formatos de hash. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Os banners de descontinuação da UI para as variáveis de ambiente `DD_TRIGGER_*` removidas e a substituição do healthcheck baseada em curl agora dizem que essas coisas já foram removidas**, em vez de apontar para um prazo de remoção que já passou. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **Uma auditoria de documentação corrigiu o README, o DEPRECATIONS.md e a documentação de configuração/gatilhos/registros/API/monitoramento/agentes em relação ao código real desta árvore**, e os trechos de Get Started do site de marketing agora implantam uma instância que realmente fica saudável. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Notas completas em [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>Destaques da v1.7.0-rc.8</strong></summary>
 
 - **Os caminhos de atualização nativa do Docker e do Compose agora fixam um digest imutável da imagem baixada antes da verificação de assinatura, da varredura e da substituição**, fechando a janela de retag de registro em ambos os caminhos. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))

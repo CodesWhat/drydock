@@ -222,6 +222,18 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.9 highlights</strong></summary>
+
+- **`watchFromCron()` is now single-flight, so overlapping scans on a large fleet no longer fire the same trigger multiple times for one update.** A scan that never settles is raced against a deadline so it can't wedge later cron ticks either. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **A `once=true` trigger no longer re-fires hours later for a tag update it already announced when a registry rate-limits the digest lookup**, because the notification-history key is now stable under that failure instead of drifting between two hash formats. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **The UI's deprecation banners for the removed `DD_TRIGGER_*` env vars and the curl-based healthcheck override now say those things are already gone**, instead of pointing at a removal deadline that already passed. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **A docs audit corrected the README, DEPRECATIONS.md, and the configuration/triggers/registries/API/monitoring/agents docs against this tree's actual code**, and the marketing site's Get Started snippets now deploy an instance that actually becomes healthy. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.8 highlights</strong></summary>
 
 - **The Docker-native and Compose update paths now pin an immutable pulled-image digest before signature verification, scanning, and replacement**, closing the registry-retag window on both paths. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))

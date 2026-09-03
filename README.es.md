@@ -219,6 +219,18 @@ Consulte la [guía de inicio rápido](https://getdrydock.com/docs/quickstart) pa
 <h2 align="center" id="recent-updates">Actualizaciones recientes</h2>
 
 <details open>
+<summary><strong>Aspectos destacados de v1.7.0-rc.9</strong></summary>
+
+- **`watchFromCron()` ahora es de ejecución única, de modo que los escaneos superpuestos en una flota grande ya no disparan el mismo activador varias veces para la misma actualización.** Un escaneo que nunca finaliza ahora compite contra un plazo límite para que no pueda bloquear los siguientes ciclos de cron. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Un activador `once=true` ya no se dispara de nuevo horas después para una actualización de etiqueta que ya había anunciado, cuando un registro limita la tasa de la consulta de digest**, porque la clave del historial de notificaciones ahora es estable ante ese fallo en lugar de alternar entre dos formatos de hash. ([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **Los banners de obsolescencia de la interfaz para las variables de entorno `DD_TRIGGER_*` eliminadas y la anulación del healthcheck basada en curl ahora indican que esas cosas ya desaparecieron**, en lugar de señalar una fecha límite de eliminación que ya pasó. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **Una auditoría de documentación corrigió el README, DEPRECATIONS.md y la documentación de configuración/activadores/registros/API/monitoreo/agentes frente al código real de este árbol**, y los fragmentos de Get Started del sitio de marketing ahora despliegan una instancia que realmente queda saludable. ([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+Notas completas de la versión en [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>Aspectos destacados de v1.7.0-rc.8</strong></summary>
 
 - **Las rutas de actualización nativa de Docker y de Compose ahora fijan un digest inmutable de la imagen extraída antes de la verificación de firma, el escaneo y el reemplazo**, cerrando la ventana de reetiquetado de registro en ambas rutas. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))

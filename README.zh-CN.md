@@ -219,6 +219,18 @@ docker run -d \
 <h2 align="center" id="recent-updates">最近更新</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.9 亮点</strong></summary>
+
+- **`watchFromCron()` 现在是单次并发（single-flight）执行，因此大规模集群中重叠的扫描不会再为同一次更新多次触发同一个触发器。** 一个永不结束的扫描现在会与截止时间竞争，以免阻塞后续的 cron 周期。([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **当注册表对摘要查询进行限流时，`once=true` 触发器不会再在数小时后为已经通知过的标签更新重新触发**，因为通知历史的键现在在该故障下保持稳定，而不是在两种哈希格式之间漂移。([#979](https://github.com/CodesWhat/drydock/pull/979))
+- **界面中针对已移除的 `DD_TRIGGER_*` 环境变量和基于 curl 的健康检查覆盖的弃用横幅现在会说明这些内容已经移除**，而不是指向一个已经过去的移除截止日期。([#988](https://github.com/CodesWhat/drydock/pull/988))
+- **一次文档审计根据本代码树的实际代码修正了 README、DEPRECATIONS.md 以及配置/触发器/注册表/API/监控/代理相关文档**，营销网站的 Get Started 代码片段现在部署的实例能够真正变为健康状态。([#988](https://github.com/CodesWhat/drydock/pull/988))
+
+完整发布说明见 [CHANGELOG.md](./CHANGELOG.md#170-rc9--2026-09-03)。
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.8 亮点</strong></summary>
 
 - **Docker 原生和 Compose 更新路径现在会在签名验证、扫描和替换之前锁定已拉取镜像的不可变摘要**，从而在两条路径上关闭注册表重新打标签的窗口。([#961](https://github.com/CodesWhat/drydock/pull/961)，[#952](https://github.com/CodesWhat/drydock/pull/952))
