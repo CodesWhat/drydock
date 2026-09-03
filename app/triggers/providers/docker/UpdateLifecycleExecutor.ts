@@ -49,6 +49,7 @@ type UpdateLifecycleContext = {
   registry: unknown;
   auth?: unknown;
   newImage?: string;
+  deferSignatureVerification?: boolean;
   operationId?: string;
   currentContainer?: unknown;
   currentContainerSpec?: {
@@ -133,7 +134,7 @@ type UpdateLifecycleExecutorCallbacks = {
     container: UpdateLifecycleContainer,
     logger: UpdateLifecycleOperationLogger,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string) => Promise<void>,
+    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
   ) => Promise<boolean>;
   runPostUpdateHook: (
     container: UpdateLifecycleContainer,
@@ -326,16 +327,19 @@ class UpdateLifecycleExecutor {
         return;
       }
 
-      await this.security.verifySignaturePreUpdate(context, container, containerLogger);
+      const isSpecialUpdate =
+        this.selfUpdate.isSelfUpdate(container) ||
+        this.selfUpdate.isInfrastructureUpdate(container);
+
+      if (!context.deferSignatureVerification || isSpecialUpdate) {
+        await this.security.verifySignaturePreUpdate(context, container, containerLogger);
+      }
 
       const hookConfig = this.hooks.buildHookConfig(container);
       this.hooks.recordHookConfigurationAudit(container, hookConfig);
       await this.hooks.runPreUpdateHook(container, hookConfig, containerLogger);
 
-      if (
-        this.selfUpdate.isSelfUpdate(container) ||
-        this.selfUpdate.isInfrastructureUpdate(container)
-      ) {
+      if (isSpecialUpdate) {
         emitFailureFallback = true;
         const selfUpdateOperationId = await this.selfUpdate.prepareSelfUpdateOperation(
           context,
@@ -386,8 +390,15 @@ class UpdateLifecycleExecutor {
         }
       }
 
-      const postPullHook = async (operationId: string) => {
-        await this.security.scanAndGatePostPull(context, container, containerLogger, {
+      const postPullHook = async (operationId: string, imageIdentity?: string) => {
+        const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
+        // A deferred verification must still run when the caller could not
+        // bind an identity (compose dry-run stops before the pull); it then
+        // verifies the configured reference exactly as the pre-update path did.
+        if (context.deferSignatureVerification) {
+          await this.security.verifySignaturePreUpdate(gateContext, container, containerLogger);
+        }
+        await this.security.scanAndGatePostPull(gateContext, container, containerLogger, {
           setPhase: (phase) => {
             this.runtimeUpdate.setOperationPhase?.(operationId, phase);
           },

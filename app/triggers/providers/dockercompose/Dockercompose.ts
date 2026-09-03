@@ -1,11 +1,13 @@
 import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import parse from 'parse-docker-image-name';
 import yaml from 'yaml';
 import type { ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
+import * as updateOperationStore from '../../../store/update-operation.js';
 import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
 import {
@@ -92,6 +94,8 @@ interface DockerApiLike {
   };
   getImage?: (imageRef: string) => {
     inspect: () => Promise<{
+      Id?: string;
+      RepoDigests?: string[];
       Architecture?: string;
       Os?: string;
     }>;
@@ -110,6 +114,7 @@ type HostToContainerBindMount = {
 };
 
 type ComposeContainerReference = {
+  id?: unknown;
   name?: string;
   labels?: Record<string, string>;
   watcher?: string;
@@ -141,6 +146,9 @@ type ComposeRuntimeContext = {
   dockerApi?: unknown;
   auth?: RegistryPullAuth;
   newImage?: string;
+  imageIdentity?: string;
+  securityGateUnboundWarn?: boolean;
+  securityGateUnboundReason?: string;
   operationId?: string;
   registry?: unknown;
 };
@@ -154,6 +162,7 @@ type ComposeUpdateLifecycleContext = {
   onRuntimeUpdateApplied?: () => void;
   skipPull?: boolean;
   runtimeContext?: ComposeRuntimeContext;
+  postPullGateCompleted?: boolean;
 };
 
 type ComposeRuntimeUpdateMapping = {
@@ -169,6 +178,7 @@ type ComposeRuntimeRefreshOptions = {
   forceRecreate?: boolean;
   composeFiles?: string[];
   runtimeContext?: ComposeRuntimeContext;
+  postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>;
 };
 
 type ComposeRollbackOutcome = {
@@ -176,6 +186,12 @@ type ComposeRollbackOutcome = {
   phase: 'rolled-back' | 'rollback-failed';
   rollbackReason: 'compose_runtime_refresh_failed';
   lastError: string;
+};
+
+type PulledImageIdentityOutcome = {
+  imageIdentity?: string;
+  unboundWarn: boolean;
+  reason?: string;
 };
 
 type ComposeRollbackError = Error & {
@@ -1182,6 +1198,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         registry: runtimeContext.registry,
         auth: runtimeContext.auth,
         newImage: runtimeContext.newImage,
+        deferSignatureVerification: true,
         currentContainer: null,
         currentContainerSpec: null,
       };
@@ -1197,6 +1214,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       registry,
       auth,
       newImage,
+      deferSignatureVerification: true,
       currentContainer: null,
       currentContainerSpec: null,
     };
@@ -1231,6 +1249,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     if (context?.newImage !== undefined) {
       runtimeContext.newImage = context.newImage;
     }
+    if (context?.imageIdentity !== undefined) {
+      runtimeContext.imageIdentity = context.imageIdentity;
+    }
     if (context?.operationId !== undefined) {
       runtimeContext.operationId = context.operationId;
     }
@@ -1250,9 +1271,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container,
     composeUpdateOptions: Pick<
       ComposeRuntimeRefreshOptions,
-      'composeFiles' | 'skipPull' | 'runtimeContext'
+      'composeFiles' | 'skipPull' | 'runtimeContext' | 'postPullHook'
     >,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (composeCtx.composeFileOnceApplied === true) {
       const logContainer = this.log.child({
         container: container.name,
@@ -1260,7 +1281,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       logContainer.info(
         `Skip per-service compose refresh for ${composeCtx.service} because compose-file-once mode already refreshed ${composeCtx.composeFile}`,
       );
-      return;
+      return false;
     }
 
     await this.updateContainerWithCompose(
@@ -1269,6 +1290,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container,
       composeUpdateOptions,
     );
+    return true;
   }
 
   /**
@@ -1295,29 +1317,31 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container,
     _logContainer,
     composeCtx?: ComposeUpdateLifecycleContext,
-    postPullHook?: (operationId: string) => Promise<void>,
+    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
   ) {
     const requiredComposeCtx = this.requireComposeUpdateContext(container, composeCtx);
     const runtimeContext = this.buildComposeRuntimeContext(context, requiredComposeCtx);
     const composeUpdateOptions = this.buildPerformContainerUpdateOptions(
       requiredComposeCtx,
       runtimeContext,
+      requiredComposeCtx.postPullGateCompleted ? undefined : postPullHook,
     );
 
-    await this.maybeRunPerServiceComposeRefresh(
+    const composeRefreshRan = await this.maybeRunPerServiceComposeRefresh(
       requiredComposeCtx,
       container,
       composeUpdateOptions,
     );
+    if (!composeRefreshRan && !requiredComposeCtx.postPullGateCompleted && postPullHook) {
+      const operationId = getRequestedOperationId(container, runtimeContext) ?? '';
+      if (runtimeContext.imageIdentity) {
+        await postPullHook(operationId, runtimeContext.imageIdentity);
+      } else {
+        await postPullHook(operationId);
+      }
+    }
     if (!this.configuration.dryrun) {
       requiredComposeCtx.onRuntimeUpdateApplied?.();
-    }
-
-    // Invoke the post-pull security gate (scan + SBOM) after compose pulls the
-    // new image. API-requested compose updates carry a queued operation id in
-    // runtime context; direct trigger runs do not, so setOperationPhase no-ops.
-    if (postPullHook) {
-      await postPullHook(getRequestedOperationId(container, runtimeContext) ?? '');
     }
 
     await this.runServicePostStartHooks(
@@ -1332,10 +1356,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   buildPerformContainerUpdateOptions(
     composeCtx: ComposeUpdateLifecycleContext,
     runtimeContext: ComposeRuntimeContext,
-  ): Pick<ComposeRuntimeRefreshOptions, 'composeFiles' | 'skipPull' | 'runtimeContext'> {
+    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+  ): Pick<
+    ComposeRuntimeRefreshOptions,
+    'composeFiles' | 'skipPull' | 'runtimeContext' | 'postPullHook'
+  > {
     const composeUpdateOptions = {} as Pick<
       ComposeRuntimeRefreshOptions,
-      'composeFiles' | 'skipPull' | 'runtimeContext'
+      'composeFiles' | 'skipPull' | 'runtimeContext' | 'postPullHook'
     >;
 
     if (Array.isArray(composeCtx.composeFiles) && composeCtx.composeFiles.length > 1) {
@@ -1346,6 +1374,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
     if (hasDefinedComposeRuntimeContextValue(runtimeContext)) {
       composeUpdateOptions.runtimeContext = runtimeContext;
+    }
+    if (postPullHook) {
+      composeUpdateOptions.postPullHook = postPullHook;
     }
 
     return composeUpdateOptions;
@@ -1642,15 +1673,247 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       });
       const auth = await registry.getAuthPull();
       const newImage = this.getNewImageFullName(registry, runtimeContainer);
+      await this.pullImage(dockerApi, auth, newImage, logContainer);
+      const identityOutcome = await this.capturePulledImageIdentity(
+        dockerApi as DockerApiLike,
+        newImage,
+        runtimeContainer,
+        logContainer,
+      );
       composeFileOnceRuntimeContextByService.set(service, {
         dockerApi,
         registry,
         auth,
         newImage,
+        ...(identityOutcome.imageIdentity ? { imageIdentity: identityOutcome.imageIdentity } : {}),
+        ...(identityOutcome.unboundWarn
+          ? {
+              securityGateUnboundWarn: true,
+              securityGateUnboundReason: identityOutcome.reason,
+            }
+          : {}),
       });
-      await this.pullImage(dockerApi, auth, newImage, logContainer);
     }
     return composeFileOnceRuntimeContextByService;
+  }
+
+  private async runComposeFileOncePostPullGate(
+    container,
+    composeContext: ComposeUpdateLifecycleContext,
+  ): Promise<void> {
+    const logContainer = this.log.child({
+      container: container.name,
+    });
+    const context = await this.createTriggerContext(container, logContainer, composeContext);
+    if (!context) {
+      throw new Error(
+        `Unable to create update context for compose service ${composeContext.service}`,
+      );
+    }
+
+    const operationId = getRequestedOperationId(container, composeContext.runtimeContext) ?? '';
+    if (composeContext.runtimeContext?.securityGateUnboundWarn) {
+      this.recordUnboundSecurityWarning(
+        container,
+        composeContext.runtimeContext.securityGateUnboundReason,
+      );
+      return;
+    }
+    const imageIdentity = composeContext.runtimeContext?.imageIdentity;
+    const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
+    try {
+      await this.verifySignaturePreUpdate(gateContext, container, logContainer);
+      await this.scanAndGatePostPull(gateContext, container, logContainer, {
+        setPhase: (phase) => {
+          if (operationId) {
+            updateOperationStore.updateOperation(operationId, { phase });
+          }
+        },
+      });
+    } catch (error: unknown) {
+      if (operationId) {
+        updateOperationStore.markOperationTerminal(operationId, {
+          status: 'failed',
+          phase: 'failed',
+          lastError: getErrorMessage(error),
+        });
+      }
+      throw error;
+    }
+  }
+
+  private terminalizeComposeFileOncePreflightOperations(
+    mappings: ComposeRuntimeUpdateMapping[],
+    runtimeContext: Record<string, unknown> | undefined,
+    error: unknown,
+  ): void {
+    const operationIds = new Set<string>();
+    for (const { container } of mappings) {
+      const operationId = getRequestedOperationId(container, runtimeContext);
+      if (operationId) {
+        operationIds.add(operationId);
+      }
+    }
+    for (const operationId of operationIds) {
+      const operation = updateOperationStore.getOperationById(operationId);
+      if (operation?.status === 'queued' || operation?.status === 'in-progress') {
+        updateOperationStore.markOperationTerminal(operationId, {
+          status: 'failed',
+          phase: 'failed',
+          lastError: getErrorMessage(error),
+        });
+      }
+    }
+  }
+
+  private async capturePulledImageIdentity(
+    dockerApi: DockerApiLike,
+    imageReference: string,
+    container,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+  ): Promise<PulledImageIdentityOutcome> {
+    const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
+    if (typeof dockerApi.getImage !== 'function') {
+      return this.handleMissingPulledImageIdentity(
+        container,
+        bindingPolicy,
+        'Docker image inspection is unavailable',
+      );
+    }
+
+    try {
+      const imageInspect = await dockerApi.getImage(imageReference).inspect();
+      const imageId = imageInspect?.Id?.trim();
+      const imageWithoutDigest = imageReference.split('@', 1)[0];
+      const parsedImage = parse(imageWithoutDigest);
+      const referenceCandidates = this.getPulledImageRepositoryCandidates(parsedImage);
+      const matchingRepoDigest = imageInspect?.RepoDigests?.find((repoDigest) => {
+        const separatorIndex = repoDigest.indexOf('@');
+        if (separatorIndex <= 0 || separatorIndex === repoDigest.length - 1) {
+          return false;
+        }
+        const repo = repoDigest.substring(0, separatorIndex).toLowerCase();
+        const digest = repoDigest.substring(separatorIndex + 1);
+        return referenceCandidates.includes(repo) && /^sha256:[0-9a-f]+$/i.test(digest);
+      });
+      const tag = parsedImage.tag?.trim();
+      if (imageId && matchingRepoDigest && tag) {
+        const separatorIndex = matchingRepoDigest.indexOf('@');
+        const repo = matchingRepoDigest.substring(0, separatorIndex);
+        const manifestDigest = matchingRepoDigest.substring(separatorIndex + 1);
+        const imageIdentity = `${repo}:${tag}@${manifestDigest}`;
+        logContainer.info(
+          `Pinned pulled image ${imageReference} (local ${imageId}) to ${imageIdentity}`,
+        );
+        return { imageIdentity, unboundWarn: false };
+      }
+      if (imageId && matchingRepoDigest && imageReference.includes('@sha256:')) {
+        return { imageIdentity: matchingRepoDigest, unboundWarn: false };
+      }
+    } catch (error: unknown) {
+      return this.handleMissingPulledImageIdentity(
+        container,
+        bindingPolicy,
+        getErrorMessage(error),
+      );
+    }
+
+    return this.handleMissingPulledImageIdentity(
+      container,
+      bindingPolicy,
+      'Docker image inspection returned no local ID and matching manifest digest',
+    );
+  }
+
+  private getPulledImageRepositoryCandidates(parsedImage: { domain?: string; path?: string }) {
+    const path = parsedImage.path?.trim().toLowerCase();
+    if (!path) {
+      return [];
+    }
+    const domain = parsedImage.domain?.trim().toLowerCase();
+    const isDockerHub = !domain || domain === 'docker.io' || domain === 'registry-1.docker.io';
+    if (!isDockerHub) {
+      return [`${domain}/${path}`];
+    }
+    const pathWithoutLibrary = path.startsWith('library/')
+      ? path.substring('library/'.length)
+      : path;
+    return [
+      path,
+      pathWithoutLibrary,
+      `docker.io/${path}`,
+      `docker.io/${pathWithoutLibrary}`,
+      `registry-1.docker.io/${path}`,
+      `registry-1.docker.io/${pathWithoutLibrary}`,
+    ];
+  }
+
+  private handleMissingPulledImageIdentity(
+    container,
+    bindingPolicy: 'required' | 'optional' | 'disabled',
+    reason: string,
+  ): PulledImageIdentityOutcome {
+    if (bindingPolicy === 'required') {
+      throw new Error(
+        `Unable to bind security gate to the pulled image for ${container.name}: ${reason}`,
+      );
+    }
+    if (bindingPolicy === 'optional') {
+      this.log.warn(
+        `Unable to bind security gate to the pulled image for ${container.name}: ${reason}; proceeding without an immutable image reference`,
+      );
+      return { unboundWarn: true, reason };
+    }
+    return { unboundWarn: false };
+  }
+
+  private recordUnboundSecurityWarning(container, reason = 'unknown binding error'): void {
+    this.recordSecurityAudit(
+      'security-scan-skipped',
+      container,
+      'error',
+      `Security scan skipped because the pulled image could not be bound to an immutable digest; update allowed by DD_SECURITY_AVAILABILITY_POLICY=warn: ${reason}`,
+    );
+  }
+
+  private getPostPullIdentityBindingPolicy(container): 'required' | 'optional' | 'disabled' {
+    const securityGate = this.getSecurityGate() as {
+      securityConfig?: {
+        getSecurityConfiguration?: () => {
+          enabled?: boolean;
+          availabilityPolicy?: string;
+          signature?: { verify?: boolean };
+          gate?: { mode?: string };
+        };
+      };
+      shouldRunSecurityGate?: (configuration: { enabled?: boolean }) => boolean;
+      getEffectiveGateMode?: (
+        container: unknown,
+        configuration: {
+          enabled?: boolean;
+          availabilityPolicy?: string;
+          signature?: { verify?: boolean };
+          gate?: { mode?: string };
+        },
+      ) => string;
+    };
+    const securityConfiguration = securityGate.securityConfig?.getSecurityConfiguration?.();
+    if (!securityConfiguration || securityConfiguration.enabled !== true) {
+      return 'disabled';
+    }
+    if (
+      securityGate.shouldRunSecurityGate &&
+      !securityGate.shouldRunSecurityGate(securityConfiguration)
+    ) {
+      return 'disabled';
+    }
+    if (securityConfiguration.signature?.verify === true) {
+      return 'required';
+    }
+    if (securityGate.getEffectiveGateMode?.(container, securityConfiguration) === 'off') {
+      return 'disabled';
+    }
+    return securityConfiguration.availabilityPolicy === 'warn' ? 'optional' : 'required';
   }
 
   async loadComposeProcessingContext(composeFile, composeFiles = [composeFile]) {
@@ -1875,13 +2138,47 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const composeFileOnceHandledServices = new Set<string>();
     const composeFileOnceEnabled =
       this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
-    const composeFileOnceRuntimeContextByService = composeFileOnceEnabled
-      ? await this.buildComposeFileOnceRuntimeContextByService(mappingsNeedingRuntimeUpdate)
-      : new Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>();
+    // v1.7 sorts these into dependency-graph order here (#219); v1.6 has no such
+    // ordering, so the preflight and mutation loops both walk discovery order.
+    const orderedMappings = mappingsNeedingRuntimeUpdate;
+    let composeFileOnceRuntimeContextByService = new Map<
+      string,
+      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
+    >();
+    if (composeFileOnceEnabled) {
+      try {
+        composeFileOnceRuntimeContextByService =
+          await this.buildComposeFileOnceRuntimeContextByService(mappingsNeedingRuntimeUpdate);
+        for (const { container, service } of orderedMappings) {
+          const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
+          const composeContext: ComposeUpdateLifecycleContext = {
+            composeFile,
+            composeFiles: composeFileChain,
+            service,
+            serviceDefinition: compose.services[service],
+            runtimeContext:
+              composeFileOnceRuntimeContext || requestedRuntimeContext
+                ? {
+                    ...(requestedRuntimeContext || {}),
+                    ...(composeFileOnceRuntimeContext || {}),
+                  }
+                : undefined,
+          };
+          await this.runComposeFileOncePostPullGate(container, composeContext);
+        }
+      } catch (error: unknown) {
+        this.terminalizeComposeFileOncePreflightOperations(
+          orderedMappings,
+          requestedRuntimeContext,
+          error,
+        );
+        throw error;
+      }
+    }
 
     // Refresh all containers requiring a runtime update via the shared
     // lifecycle orchestrator (security gate, hooks, prune/backup, events).
-    for (const { container, service } of mappingsNeedingRuntimeUpdate) {
+    for (const { container, service } of orderedMappings) {
       const composeFileOnceApplied =
         composeFileOnceEnabled && composeFileOnceHandledServices.has(service);
       const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
@@ -1902,6 +2199,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
                 ...(composeFileOnceRuntimeContext || {}),
               }
             : undefined,
+        postPullGateCompleted: composeFileOnceEnabled,
       };
       let runtimeUpdateRecorded = false;
       const recordRuntimeUpdate = () => {
@@ -2391,12 +2689,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container: container.name,
     });
 
-    const { shouldStart = undefined, skipPull = false, forceRecreate = false } = options;
+    const {
+      shouldStart = undefined,
+      skipPull = false,
+      forceRecreate = false,
+      postPullHook,
+    } = options;
 
     if (this.configuration.dryrun) {
       logContainer.warn(
         `Do not refresh compose service ${service} from ${composeFile} because dry-run mode is enabled`,
       );
+      if (postPullHook) {
+        await postPullHook(getRequestedOperationId(container, options.runtimeContext) ?? '');
+      }
       return;
     }
 
@@ -2437,6 +2743,31 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     } else {
       logContainer.debug(`Skip image pull for ${service} from ${composeFile}`);
     }
+    let imageIdentity = runtimeContext.imageIdentity;
+    let securityGateUnboundWarn = runtimeContext.securityGateUnboundWarn === true;
+    let securityGateUnboundReason = runtimeContext.securityGateUnboundReason;
+    if (!imageIdentity && !securityGateUnboundWarn) {
+      const identityOutcome = await this.capturePulledImageIdentity(
+        dockerApi as DockerApiLike,
+        newImage,
+        container,
+        logContainer,
+      );
+      imageIdentity = identityOutcome.imageIdentity;
+      securityGateUnboundWarn = identityOutcome.unboundWarn;
+      securityGateUnboundReason = identityOutcome.reason;
+    }
+    const pinnedImage = imageIdentity || newImage;
+    if (securityGateUnboundWarn) {
+      this.recordUnboundSecurityWarning(container, securityGateUnboundReason);
+    } else if (postPullHook) {
+      const operationId = getRequestedOperationId(container, runtimeContext) ?? '';
+      if (imageIdentity) {
+        await postPullHook(operationId, imageIdentity);
+      } else {
+        await postPullHook(operationId);
+      }
+    }
     if (forceRecreate) {
       logContainer.debug(
         `Force recreate requested for ${service}; Docker Engine API path always recreates containers`,
@@ -2446,11 +2777,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     // (a) PRE-FLIGHT GUARD — verify the target image is usable on this host
     // before performing any destructive step. On arch mismatch the old
     // container is left running and we throw without touching it.
-    await this.verifyPulledImageCompatibility(dockerApi as DockerApiLike, newImage, logContainer);
+    await this.verifyPulledImageCompatibility(
+      dockerApi as DockerApiLike,
+      pinnedImage,
+      logContainer,
+    );
     const cloneRuntimeConfigOptions = await this.runtimeConfigManager.getCloneRuntimeConfigOptions(
       dockerApi,
       currentContainerSpec,
-      newImage,
+      pinnedImage,
       logContainer,
     );
 
@@ -2488,7 +2823,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       await this.recreateReplacementContainerWithCleanup(
         dockerApi,
         recreationContainerSpec,
-        newImage,
+        pinnedImage,
         container,
         logContainer,
         cloneRuntimeConfigOptions,

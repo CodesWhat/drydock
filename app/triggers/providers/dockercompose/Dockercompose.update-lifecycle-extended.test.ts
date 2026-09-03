@@ -1,6 +1,8 @@
 import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import { getState } from '../../../registry/index.js';
+import * as updateOperationStore from '../../../store/update-operation.js';
+import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import Dockercompose from './Dockercompose.js';
 import {
   makeCompose,
@@ -596,18 +598,34 @@ describe('Dockercompose Trigger', () => {
     const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
     const updateContainerWithComposeSpy = vi
       .spyOn(trigger, 'updateContainerWithCompose')
-      .mockResolvedValue();
+      .mockImplementation(async (_composeFile, _service, container, options = {}) => {
+        const operationId = getRequestedOperationId(container, options.runtimeContext) ?? '';
+        const imageIdentity = options.runtimeContext?.imageIdentity;
+        if (imageIdentity) {
+          await options.postPullHook?.(operationId, imageIdentity);
+        } else {
+          await options.postPullHook?.(operationId);
+        }
+      });
     vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
     vi.spyOn(trigger, 'maybeScanAndGateUpdate').mockResolvedValue();
     vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
     vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
     vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
     vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+    const scanAndGatePostPullSpy = vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
 
-    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [
-      firstContainer,
-      secondContainer,
-    ]);
+    await trigger.processComposeFile(
+      '/opt/drydock/test/stack.yml',
+      [firstContainer, secondContainer],
+      undefined,
+      {
+        operationIds: new Map([
+          ['nginx-a', 'op-compose-a'],
+          ['nginx-b', 'op-compose-b'],
+        ]),
+      },
+    );
 
     expect(pullImageSpy).toHaveBeenCalledTimes(1);
     expect(updateContainerWithComposeSpy).toHaveBeenCalledTimes(1);
@@ -619,6 +637,197 @@ describe('Dockercompose Trigger', () => {
         skipPull: true,
       }),
     );
+    expect(scanAndGatePostPullSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test('processComposeFile should gate every replica before any compose-file-once runtime mutation', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    const firstContainer = makeContainer({
+      id: 'nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      id: 'nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    const originalCompose = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+    const callOrder: string[] = [];
+    const pinnedIdentity = 'nginx:1.1.0@sha256:abcdef123456';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(originalCompose));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockImplementation(async () => {
+      callOrder.push('pull');
+    });
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:compose-file-once-id',
+        RepoDigests: ['nginx@sha256:abcdef123456'],
+      }),
+    });
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    const scanAndGatePostPullSpy = vi
+      .spyOn(trigger, 'scanAndGatePostPull')
+      .mockImplementation(async (context, container) => {
+        callOrder.push(`gate:${container.name}`);
+        expect(context.newImage).toBe(pinnedIdentity);
+        if (container === secondContainer) {
+          throw new Error('second replica blocked');
+        }
+      });
+    vi.spyOn(trigger, 'stopContainer').mockImplementation(async () => {
+      callOrder.push('stop');
+    });
+    vi.spyOn(trigger, 'removeContainer').mockImplementation(async () => {
+      callOrder.push('remove');
+    });
+    vi.spyOn(trigger, 'createContainer').mockImplementation(async () => {
+      callOrder.push('create');
+      return { start: vi.fn().mockResolvedValue(undefined) } as any;
+    });
+    vi.spyOn(trigger, 'startContainer').mockImplementation(async () => {
+      callOrder.push('start');
+    });
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile(composeFile, [firstContainer, secondContainer]),
+    ).rejects.toThrow('second replica blocked');
+
+    expect(callOrder).toEqual(['pull', 'gate:nginx-a', 'gate:nginx-b']);
+    expect(scanAndGatePostPullSpy).toHaveBeenCalledTimes(2);
+    expect(callOrder.some((entry) => ['stop', 'remove', 'create', 'start'].includes(entry))).toBe(
+      false,
+    );
+    expect(writeComposeFileSpy).toHaveBeenLastCalledWith(composeFile, originalCompose);
+  });
+
+  test('compose-file-once preflight failure terminalizes every active mapped operation', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.composeFileOnce = true;
+    const operationStatuses = new Map([
+      ['op-a', 'queued'],
+      ['op-b', 'in-progress'],
+      ['op-terminal', 'succeeded'],
+    ]);
+    const getOperationByIdSpy = vi
+      .spyOn(updateOperationStore, 'getOperationById')
+      .mockImplementation((id) => {
+        const status = operationStatuses.get(id);
+        return status ? ({ id, status } as any) : undefined;
+      });
+    const markOperationTerminalSpy = vi
+      .spyOn(updateOperationStore, 'markOperationTerminal')
+      .mockImplementation((id) => {
+        operationStatuses.set(id, 'failed');
+        return { id, status: 'failed' } as any;
+      });
+    const firstContainer = makeContainer({ id: 'container-a', name: 'nginx-a' });
+    const secondContainer = makeContainer({ id: 'container-b', name: 'redis-b' });
+    const terminalContainer = makeContainer({ id: 'container-c', name: 'postgres-c' });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockRejectedValue(new Error('preflight blocked'));
+
+    await expect(
+      trigger.runRuntimeUpdatesForComposeMappings(
+        '/opt/drydock/test/stack.yml',
+        ['/opt/drydock/test/stack.yml'],
+        makeCompose({ nginx: {}, redis: {}, postgres: {} }),
+        [
+          { service: 'nginx', container: firstContainer },
+          { service: 'redis', container: secondContainer },
+          { service: 'postgres', container: terminalContainer },
+        ],
+        {
+          operationIds: new Map([
+            ['container-a', 'op-a'],
+            ['container-b', 'op-b'],
+            ['container-c', 'op-terminal'],
+          ]),
+        },
+      ),
+    ).rejects.toThrow('preflight blocked');
+
+    expect(getOperationByIdSpy).toHaveBeenCalledWith('op-a');
+    expect(getOperationByIdSpy).toHaveBeenCalledWith('op-b');
+    expect(getOperationByIdSpy).toHaveBeenCalledWith('op-terminal');
+    expect(markOperationTerminalSpy).toHaveBeenCalledTimes(2);
+    expect(markOperationTerminalSpy).toHaveBeenNthCalledWith(
+      1,
+      'op-a',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'preflight blocked',
+      }),
+    );
+    expect(markOperationTerminalSpy).toHaveBeenNthCalledWith(
+      2,
+      'op-b',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'preflight blocked',
+      }),
+    );
+  });
+
+  test('processComposeFile should restore mutations and leave runtime untouched when a post-pull hook rejects', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    const container = makeContainer({
+      id: 'nginx-rejected',
+      name: 'nginx',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    const originalCompose = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(originalCompose));
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const stopContainerSpy = vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    const removeContainerSpy = vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+    const startContainerSpy = vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    const hookError = new Error('post-pull gate blocked');
+    const scanAndGatePostPullSpy = vi
+      .spyOn(trigger, 'scanAndGatePostPull')
+      .mockRejectedValue(hookError);
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await expect(trigger.processComposeFile(composeFile, [container])).rejects.toThrow(
+      'post-pull gate blocked',
+    );
+
+    expect(pullImageSpy).toHaveBeenCalledTimes(1);
+    expect(scanAndGatePostPullSpy).toHaveBeenCalledTimes(1);
+    expect(stopContainerSpy).not.toHaveBeenCalled();
+    expect(removeContainerSpy).not.toHaveBeenCalled();
+    expect(createContainerSpy).not.toHaveBeenCalled();
+    expect(startContainerSpy).not.toHaveBeenCalled();
+    expect(writeComposeFileSpy).toHaveBeenLastCalledWith(composeFile, originalCompose);
   });
 
   test('preview should passthrough base preview errors without compose metadata', async () => {
