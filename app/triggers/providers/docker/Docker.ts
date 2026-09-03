@@ -56,7 +56,7 @@ import {
   markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
   prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation,
 } from './self-update-operation.js';
-import UpdateLifecycleExecutor from './UpdateLifecycleExecutor.js';
+import UpdateLifecycleExecutor, { type PostPullHookOptions } from './UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
@@ -285,6 +285,7 @@ const CONTAINER_UPDATE_ORCHESTRATOR_METHODS = [
   'recordRollbackTelemetry',
   'hasHealthcheckConfigured',
   'waitForContainerHealthy',
+  'bindPulledImageIdentity',
 ] as const;
 const ROLLBACK_MONITOR_ORCHESTRATOR_METHODS = ['getCurrentContainer', 'inspectContainer'] as const;
 const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
@@ -328,6 +329,26 @@ type RollbackTelemetryPayload = {
   details: string;
   fromVersion?: string;
   toVersion?: string;
+};
+
+type PulledImageIdentityOutcome = {
+  imageIdentity?: string;
+  unboundWarn: boolean;
+  reason?: string;
+};
+
+type PulledImageIdentityBinding = {
+  imageIdentity?: string;
+  skipSecurityGate?: boolean;
+};
+
+type PulledImageInspectApi = {
+  getImage?: (imageRef: string) => {
+    inspect: () => Promise<{
+      Id?: string;
+      RepoDigests?: string[];
+    }>;
+  };
 };
 
 function buildOrchestratorCallback<K extends keyof DockerTriggerOrchestrator>(
@@ -1528,6 +1549,183 @@ class Docker<
     await this.getSecurityGate().scanAndGatePostPull(context, container, logContainer, options);
   }
 
+  /**
+   * Resolve the pulled image to an immutable `repo:tag@sha256:...` reference and
+   * decide whether the post-pull security gate can run against it. A registry
+   * retag between the pull and the replacement would otherwise let a different
+   * image be verified, scanned and deployed than the one that was pulled.
+   * Returns `skipSecurityGate` only under availability policy `warn`, where the
+   * caller records the skip and continues without scanning the mutable tag.
+   */
+  async bindPulledImageIdentity(
+    dockerApi: PulledImageInspectApi,
+    imageReference: string,
+    container,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+  ): Promise<PulledImageIdentityBinding> {
+    const outcome = await this.capturePulledImageIdentity(
+      dockerApi,
+      imageReference,
+      container,
+      logContainer,
+    );
+    if (outcome.unboundWarn) {
+      this.recordUnboundSecurityWarning(container, outcome.reason);
+      return { skipSecurityGate: true };
+    }
+    return outcome.imageIdentity ? { imageIdentity: outcome.imageIdentity } : {};
+  }
+
+  protected async capturePulledImageIdentity(
+    dockerApi: PulledImageInspectApi,
+    imageReference: string,
+    container,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+  ): Promise<PulledImageIdentityOutcome> {
+    const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
+    if (typeof dockerApi.getImage !== 'function') {
+      return this.handleMissingPulledImageIdentity(
+        container,
+        bindingPolicy,
+        'Docker image inspection is unavailable',
+      );
+    }
+
+    try {
+      const imageInspect = await dockerApi.getImage(imageReference).inspect();
+      const imageId = imageInspect?.Id?.trim();
+      const imageWithoutDigest = imageReference.split('@', 1)[0];
+      const parsedImage = parse(imageWithoutDigest);
+      const referenceCandidates = this.getPulledImageRepositoryCandidates(parsedImage);
+      const matchingRepoDigest = imageInspect?.RepoDigests?.find((repoDigest) => {
+        const separatorIndex = repoDigest.indexOf('@');
+        if (separatorIndex <= 0 || separatorIndex === repoDigest.length - 1) {
+          return false;
+        }
+        const repo = repoDigest.substring(0, separatorIndex).toLowerCase();
+        const digest = repoDigest.substring(separatorIndex + 1);
+        return referenceCandidates.includes(repo) && /^sha256:[0-9a-f]+$/i.test(digest);
+      });
+      const tag = parsedImage.tag?.trim();
+      if (imageId && matchingRepoDigest && tag) {
+        const separatorIndex = matchingRepoDigest.indexOf('@');
+        const repo = matchingRepoDigest.substring(0, separatorIndex);
+        const manifestDigest = matchingRepoDigest.substring(separatorIndex + 1);
+        const imageIdentity = `${repo}:${tag}@${manifestDigest}`;
+        logContainer.info(
+          `Pinned pulled image ${imageReference} (local ${imageId}) to ${imageIdentity}`,
+        );
+        return { imageIdentity, unboundWarn: false };
+      }
+      if (imageId && matchingRepoDigest && imageReference.includes('@sha256:')) {
+        return { imageIdentity: matchingRepoDigest, unboundWarn: false };
+      }
+    } catch (error: unknown) {
+      return this.handleMissingPulledImageIdentity(
+        container,
+        bindingPolicy,
+        getErrorMessage(error),
+      );
+    }
+
+    return this.handleMissingPulledImageIdentity(
+      container,
+      bindingPolicy,
+      'Docker image inspection returned no local ID and matching manifest digest',
+    );
+  }
+
+  protected getPulledImageRepositoryCandidates(parsedImage: { domain?: string; path?: string }) {
+    const path = parsedImage.path?.trim().toLowerCase();
+    if (!path) {
+      return [];
+    }
+    const domain = parsedImage.domain?.trim().toLowerCase();
+    const isDockerHub = !domain || domain === 'docker.io' || domain === 'registry-1.docker.io';
+    if (!isDockerHub) {
+      return [`${domain}/${path}`];
+    }
+    const pathWithoutLibrary = path.startsWith('library/')
+      ? path.substring('library/'.length)
+      : path;
+    return [
+      path,
+      pathWithoutLibrary,
+      `docker.io/${path}`,
+      `docker.io/${pathWithoutLibrary}`,
+      `registry-1.docker.io/${path}`,
+      `registry-1.docker.io/${pathWithoutLibrary}`,
+    ];
+  }
+
+  protected handleMissingPulledImageIdentity(
+    container,
+    bindingPolicy: 'required' | 'optional' | 'disabled',
+    reason: string,
+  ): PulledImageIdentityOutcome {
+    if (bindingPolicy === 'required') {
+      throw new Error(
+        `Unable to bind security gate to the pulled image for ${container.name}: ${reason}`,
+      );
+    }
+    if (bindingPolicy === 'optional') {
+      this.log.warn(
+        `Unable to bind security gate to the pulled image for ${container.name}: ${reason}; proceeding without an immutable image reference`,
+      );
+      return { unboundWarn: true, reason };
+    }
+    return { unboundWarn: false };
+  }
+
+  protected recordUnboundSecurityWarning(container, reason = 'unknown binding error'): void {
+    this.recordSecurityAudit(
+      'security-scan-skipped',
+      container,
+      'error',
+      `Security scan skipped because the pulled image could not be bound to an immutable digest; update allowed by DD_SECURITY_AVAILABILITY_POLICY=warn: ${reason}`,
+    );
+  }
+
+  protected getPostPullIdentityBindingPolicy(container): 'required' | 'optional' | 'disabled' {
+    const securityGate = this.getSecurityGate() as {
+      securityConfig?: {
+        getSecurityConfiguration?: () => {
+          enabled?: boolean;
+          availabilityPolicy?: string;
+          signature?: { verify?: boolean };
+          gate?: { mode?: string };
+        };
+      };
+      shouldRunSecurityGate?: (configuration: { enabled?: boolean }) => boolean;
+      getEffectiveGateMode?: (
+        container: unknown,
+        configuration: {
+          enabled?: boolean;
+          availabilityPolicy?: string;
+          signature?: { verify?: boolean };
+          gate?: { mode?: string };
+        },
+      ) => string;
+    };
+    const securityConfiguration = securityGate.securityConfig?.getSecurityConfiguration?.();
+    if (!securityConfiguration || securityConfiguration.enabled !== true) {
+      return 'disabled';
+    }
+    if (
+      securityGate.shouldRunSecurityGate &&
+      !securityGate.shouldRunSecurityGate(securityConfiguration)
+    ) {
+      return 'disabled';
+    }
+    if (securityConfiguration.signature?.verify === true) {
+      return 'required';
+    }
+    if (securityGate.getEffectiveGateMode?.(container, securityConfiguration) === 'off') {
+      return 'disabled';
+    }
+    return securityConfiguration.availabilityPolicy === 'warn' ? 'optional' : 'required';
+  }
+
   async createTriggerContext(container, logContainer, _runtimeContext?: unknown) {
     const watcher = this.getWatcher(container);
     const { dockerApi } = watcher;
@@ -1554,6 +1752,15 @@ class Docker<
       registry,
       auth,
       newImage,
+      // Signature verification runs in the post-pull gate so it verifies the
+      // immutable reference that was actually pulled, not the mutable tag that
+      // a registry retag could repoint between verification and creation.
+      deferSignatureVerification: true,
+      // Because the gate moved behind the pull, the pre-update hook and the
+      // prune/backup step move behind the gate. Otherwise an image the gate is
+      // about to reject would already have run an operator hook, deleted cached
+      // images and written a rollback row.
+      deferPreRuntimeUpdateLifecycle: true,
       currentContainer,
       currentContainerSpec,
     };
@@ -1595,7 +1802,11 @@ class Docker<
     container,
     logContainer,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ) {
     if (runtimeContext === undefined) {
       return this.containerUpdateExecutor.execute(
@@ -1625,7 +1836,11 @@ class Docker<
     container,
     logContainer,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ) {
     const updated =
       runtimeContext === undefined
