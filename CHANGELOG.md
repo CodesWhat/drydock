@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`fflate` override added in `e2e/` for CVE-2026-45820.** `@smithy/middleware-compression` pins `fflate` at 0.8.1 exactly, so the fix had to come through an npm override; `fflate` now resolves to 0.8.3 in `e2e/package-lock.json`, which is the only workspace that carried the vulnerable range. Lockfile-only change, no runtime code touched.
+
 ### Fixed
 
 - **`watchFromCron()` had no re-entrancy guard, so overlapping scans on a large fleet fired the same trigger multiple times for one update.** A full scan can take minutes, and the cron schedule, the docker-events debounce, the discovery-settle timer, and the startup timer could all start one while the previous scan was still running. Each overlapping call ran its own `watch()`, and a tag first seen mid-burst passed the `once=true` history check in every one of them before any of them recorded it, so a trigger like Telegram fired once per overlapping scan for the same update. `watchFromCron()` is now single-flight: a request while a scan is running does not start a second one, it records that a rescan was requested, and exactly one follow-up scan runs once the current scan finishes, so a docker event that arrives mid-scan is not lost. The "Cron started" log line now also names what triggered the scan (schedule, docker-event, discovery-settle, startup, or maintenance-window). Reported by [@tarzan77cz](https://github.com/tarzan77cz) in [#972](https://github.com/CodesWhat/drydock/issues/972).
