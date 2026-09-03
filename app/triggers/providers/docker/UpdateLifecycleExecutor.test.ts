@@ -813,6 +813,36 @@ describe('UpdateLifecycleExecutor', () => {
     expect(scanAndGatePostPull).toHaveBeenCalledTimes(1);
   });
 
+  test('a deferred pre-runtime lifecycle still runs when the post-pull gate is skipped', async () => {
+    const harness = createHarness({
+      createTriggerContext: vi.fn().mockResolvedValue(
+        createContext({
+          newImage: 'ghcr.io/acme/web:1.1.0',
+          deferSignatureVerification: true,
+          deferPreRuntimeUpdateLifecycle: true,
+        }),
+      ),
+      performContainerUpdate: vi
+        .fn()
+        .mockImplementation(
+          async (_context, _container, _logger, _runtimeContext, postPullHook) => {
+            // What the caller does when the pulled image could not be bound to a
+            // digest and the availability policy is warn: no gate, but the rest
+            // of the deferred lifecycle still has to run.
+            await postPullHook?.('op-123', undefined, { skipSecurityGate: true });
+            return true;
+          },
+        ),
+    });
+
+    await harness.executor.run(createContainer());
+
+    expect(harness.verifySignaturePreUpdate).not.toHaveBeenCalled();
+    expect(harness.scanAndGatePostPull).not.toHaveBeenCalled();
+    expect(harness.runPreUpdateHook).toHaveBeenCalledTimes(1);
+    expect(harness.runPreRuntimeUpdateLifecycle).toHaveBeenCalledTimes(1);
+  });
+
   test('defers signature verification until post-pull identity is available', async () => {
     let capturedPostPullHook:
       | ((operationId: string, imageIdentity?: string) => Promise<void>)
