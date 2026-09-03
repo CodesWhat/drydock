@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Two deprecation banner strings in the UI still described the legacy `DD_TRIGGER_*` env vars and the curl-based healthcheck override as active with a future removal.** Both were removed outright in v1.7.0; `legacyConfigBody` and `curlHealthcheckBody` (all 17 locales) now say so instead of pointing at a deadline that already passed.
+- **Two deprecation banner strings in the UI still described the legacy `DD_TRIGGER_*` env vars and the curl-based healthcheck override as active with a future removal.** Both were removed outright in v1.7.0; `legacyConfigBody` and `curlHealthcheckBody` (all 17 locales) now say so instead of pointing at a deadline that already passed. The curl banner's `{bin}` slot also rendered the compose migration snippet with a single `$`, which compose expands from the host environment before the container starts; doubled it to `$${DD_SERVER_PORT:-3000}` to match the corrected DEPRECATIONS.md snippet.
 - **The marketing site's Get Started snippets deployed an instance that never became healthy.** Neither the `docker run` quick-start nor the hardened compose preset configured any authentication, so the instance ended up with zero registered auth strategies, which is a deliberate fail-closed state: `/health` stays `503` forever and there's no way to log in. Both presets also skipped a `/store` volume, so container state and audit history didn't survive a restart. The quick preset now sets `DD_ANONYMOUS_AUTH_CONFIRM=true`, the hardened preset sets `DD_AUTH_BASIC_ADMIN_USER`/`HASH`, and both mount `drydock-store:/store`.
 
 ### Documentation

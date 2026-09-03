@@ -1637,7 +1637,7 @@ onUnmounted(() => {
           @dismiss="curlHealthcheckDeprecationBanner.dismissForSession"
           @dismiss-permanent="curlHealthcheckDeprecationBanner.dismissPermanently">
           <i18n-t keypath="appShell.banners.curlHealthcheckBody" tag="span">
-            <template #bin><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck ${DD_SERVER_PORT:-3000}</code></template>
+            <template #bin><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck $${DD_SERVER_PORT:-3000}</code></template>
           </i18n-t>
           <span v-if="curlHealthcheckOverrideSummary?.commandPreview" class="block mt-1 truncate">
             {{ t('appShell.banners.healthcheckCommandLabel', { command: curlHealthcheckOverrideSummary.commandPreview }) }}
