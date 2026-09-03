@@ -143,7 +143,8 @@ export const approvalPaths = {
         403: errorResponse('Container actions feature disabled'),
         404: errorResponse('Approval or container not found'),
         409: errorResponse(
-          'Approval already decided, update mode is notify, or the update is blocked',
+          'Approval already decided, its candidate was superseded, update mode is notify, ' +
+            'or the update is blocked',
         ),
         500: errorResponse('Unable to accept container update'),
       },
@@ -167,7 +168,7 @@ export const approvalPaths = {
         400: errorResponse('Invalid note, or no current update available to skip'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Approval or container not found'),
-        409: errorResponse('Approval already decided'),
+        409: errorResponse('Approval already decided, or its candidate was superseded'),
         500: errorResponse('Internal server error'),
       },
     },
@@ -215,7 +216,7 @@ export const approvalPaths = {
         400: errorResponse('Invalid note, until date, or day count'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Approval or container not found'),
-        409: errorResponse('Approval already decided'),
+        409: errorResponse('Approval already decided, or its candidate was superseded'),
         500: errorResponse('Internal server error'),
       },
     },

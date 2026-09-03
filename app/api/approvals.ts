@@ -23,11 +23,21 @@
  * operators approving at once produce one operation and one 409 rather than two accepted
  * requests whose second update fails later on the active-operation gate. A reservation
  * whose work is then refused is rolled back, leaving the row exactly as it was.
+ *
+ * A decision is bound to the candidate its row names. The container it points at is a
+ * live record the watcher rewrites on every cycle, so between the sighting that minted
+ * the row and the click that decides it the candidate can have moved; deciding anyway
+ * would act on a version the row and the audit entry do not name. A moved candidate is
+ * refused, and the reconciler supersedes the row on the same report that replaced it.
  */
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { announceApprovalEvent } from '../approvals/events.js';
-import type { ApprovalRecord, ApprovalSemverDiff } from '../model/approval.js';
+import {
+  type ApprovalRecord,
+  type ApprovalSemverDiff,
+  getApprovalCandidateRef,
+} from '../model/approval.js';
 import type { AuditEntry } from '../model/audit.js';
 import type { Container } from '../model/container.js';
 import { computeUpdateEligibility, getSoftBlockers } from '../model/update-eligibility.js';
@@ -66,6 +76,7 @@ const APPROVAL_STATUS_FILTERS = new Set<string>(['pending', 'deferred', 'decided
 const APPROVAL_NOTE_MAX_LENGTH = 500;
 const APPROVAL_NOT_FOUND_MESSAGE = 'Approval not found';
 const APPROVAL_ALREADY_DECIDED_MESSAGE = 'Approval already decided';
+const APPROVAL_SUPERSEDED_MESSAGE = 'Approval candidate superseded';
 const INVALID_NOTE_MESSAGE = `Invalid note; expected a string of at most ${APPROVAL_NOTE_MAX_LENGTH} characters`;
 const APPROVAL_SEMVER_DIFFS = new Set<string>(['major', 'minor', 'patch', 'prerelease', 'unknown']);
 // Container ids, agent names and watcher names only. Deliberately not applied to `q`,
@@ -249,15 +260,20 @@ function getValidatedNote(body: Record<string, unknown>): string | undefined | n
 /**
  * Take the row for one decision, or answer why it could not be taken.
  *
- * The reservation is written before the caller does anything that yields, which is what
- * makes a double approve safe: the second request finds the row no longer pending and is
- * told so, instead of both requests passing a read and the second update failing later on
- * the active-operation gate with a message about queued operations.
+ * Everything that can refuse the decision is checked before the row is written, and
+ * nothing between the first read and the reservation yields, so a refusal leaves no trace
+ * at all and the compare-and-set is still the last thing that happens before the caller
+ * awaits anything. That is what makes a double approve safe: the second request finds the
+ * row no longer pending and is told so, instead of both requests passing a read and the
+ * second update failing later on the active-operation gate with a message about queued
+ * operations.
  *
- * The container is resolved after the reservation rather than before, so there is one
- * ordering for every decision and one rollback path. A row whose container is gone has
- * already been resolved `container-removed` by the reconciler in the normal case; this
- * answers the race where it has not.
+ * The candidate check is the decision's binding to a version. A row names one candidate,
+ * and the watcher can store a newer one at any point after the row was minted; deciding
+ * against the container without comparing would dispatch, skip or snooze a version that
+ * neither the row nor its audit entry names. The row is not resolved here — the
+ * reconciler owns resolution and supersedes it on the report that carried the new
+ * candidate, which is also the report that mints its replacement.
  * @param req
  * @param res
  * @param patch
@@ -273,7 +289,27 @@ function reserveApproval(
     return undefined;
   }
 
-  const transition = decideApprovalIfPending(getPathParamValue(req.params.id), {
+  const id = getPathParamValue(req.params.id);
+  const previous = getApprovalById(id);
+  if (previous === undefined) {
+    sendErrorResponse(res, 404, APPROVAL_NOT_FOUND_MESSAGE);
+    return undefined;
+  }
+
+  const container = getContainer(previous.containerId);
+  if (container === undefined) {
+    // A row whose container is gone has already been resolved `container-removed` by the
+    // reconciler in the normal case; this answers the race where it has not.
+    sendErrorResponse(res, 404, CONTAINER_NOT_FOUND_MESSAGE);
+    return undefined;
+  }
+
+  if (getApprovalCandidateRef(container) !== previous.candidateRef) {
+    sendErrorResponse(res, 409, APPROVAL_SUPERSEDED_MESSAGE);
+    return undefined;
+  }
+
+  const transition = decideApprovalIfPending(id, {
     ...patch,
     decidedAt: new Date().toISOString(),
     decidedBy: getDecidedBy(req),
@@ -286,12 +322,6 @@ function reserveApproval(
   }
   if (transition.status === 'already-decided') {
     sendErrorResponse(res, 409, APPROVAL_ALREADY_DECIDED_MESSAGE);
-    return undefined;
-  }
-
-  const container = getContainer(transition.record.containerId);
-  if (container === undefined) {
-    abandonReservation(res, transition.record, 404, CONTAINER_NOT_FOUND_MESSAGE);
     return undefined;
   }
 

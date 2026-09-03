@@ -389,19 +389,34 @@ describe('GET /:id', () => {
 
 describe('decision preconditions', () => {
   beforeEach(() => {
+    mockGetApprovalById.mockReturnValue(createRecord());
     mockGetContainer.mockReturnValue(createContainer());
   });
 
   test.each(DECISION_PATHS)('%s 404s for an id no row carries', async (path) => {
-    mockDecideApprovalIfPending.mockReturnValue({ status: 'not-found' });
+    mockGetApprovalById.mockReturnValue(undefined);
 
     const { status, body } = await callDecision(path);
 
     expect(status).toBe(404);
     expect(body).toStrictEqual({ error: 'Approval not found' });
+    expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
     expect(mockRecordAuditEvent).not.toHaveBeenCalled();
     expect(mockAnnounceApprovalEvent).not.toHaveBeenCalled();
   });
+
+  test.each(DECISION_PATHS)(
+    '%s 404s when the row is gone by the time it is reserved',
+    async (path) => {
+      mockDecideApprovalIfPending.mockReturnValue({ status: 'not-found' });
+
+      const { status, body } = await callDecision(path);
+
+      expect(status).toBe(404);
+      expect(body).toStrictEqual({ error: 'Approval not found' });
+      expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+    },
+  );
 
   test.each(DECISION_PATHS)('%s 409s when somebody already decided the row', async (path) => {
     mockDecideApprovalIfPending.mockReturnValue({
@@ -473,7 +488,7 @@ describe('decision preconditions', () => {
   });
 
   test.each(DECISION_PATHS)(
-    '%s puts the row back and 404s when the container is gone',
+    '%s 404s without reserving anything when the container is gone',
     async (path) => {
       mockGetContainer.mockReturnValue(undefined);
 
@@ -481,14 +496,68 @@ describe('decision preconditions', () => {
 
       expect(status).toBe(404);
       expect(body).toStrictEqual({ error: 'Container not found' });
-      expect(mockResetApprovalToPending).toHaveBeenCalledWith('approval-1');
+      expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
       expect(mockRecordAuditEvent).not.toHaveBeenCalled();
     },
   );
+
+  // The row names one candidate. Deciding it against a container that has moved on would
+  // dispatch, skip or snooze a version the row and the audit entry do not name, so the
+  // decision is refused and the reconciler supersedes the row on the next report.
+  test.each(DECISION_PATHS)(
+    '%s 409s without reserving anything when a newer candidate replaced the one on the row',
+    async (path) => {
+      mockGetContainer.mockReturnValue(
+        createContainer({
+          result: { tag: '1.2.5' },
+          updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '1.2.5' },
+        } as Partial<Container>),
+      );
+
+      const { status, body } = await callDecision(path);
+
+      expect(status).toBe(409);
+      expect(body).toStrictEqual({ error: 'Approval candidate superseded' });
+      expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+      expect(mockRequestContainerUpdate).not.toHaveBeenCalled();
+      expect(mockApplyContainerUpdatePolicyAction).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(DECISION_PATHS)('%s 409s when the candidate has been withdrawn', async (path) => {
+    mockGetContainer.mockReturnValue(createContainer({ result: undefined } as Partial<Container>));
+
+    const { status, body } = await callDecision(path);
+
+    expect(status).toBe(409);
+    expect(body).toStrictEqual({ error: 'Approval candidate superseded' });
+    expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+  });
+
+  // Digest before tag, the same identity `getApprovalCandidateRef` mints a row with — so a
+  // digest-watched container binds on its digest even though its tag is unchanged.
+  test.each(DECISION_PATHS)('%s binds on the digest when the candidate has one', async (path) => {
+    mockGetApprovalById.mockReturnValue(createRecord({ candidateRef: 'sha256:abc' }));
+    mockDecideApprovalIfPending.mockImplementation(
+      (_id: string, patch: Partial<ApprovalRecord>) => ({
+        status: 'decided',
+        record: { ...createRecord({ candidateRef: 'sha256:abc' }), ...patch },
+      }),
+    );
+    mockGetContainer.mockReturnValue(
+      createContainer({ result: { tag: '1.2.4', digest: 'sha256:abc' } } as Partial<Container>),
+    );
+
+    const { status } = await callDecision(path);
+
+    expect(status).not.toBe(409);
+    expect(mockDecideApprovalIfPending).toHaveBeenCalled();
+  });
 });
 
 describe('POST /:id/approve', () => {
   beforeEach(() => {
+    mockGetApprovalById.mockReturnValue(createRecord());
     mockGetContainer.mockReturnValue(createContainer());
   });
 
@@ -618,6 +687,7 @@ describe('POST /:id/approve', () => {
 
 describe('POST /:id/reject', () => {
   beforeEach(() => {
+    mockGetApprovalById.mockReturnValue(createRecord());
     mockGetContainer.mockReturnValue(createContainer());
   });
 
@@ -663,6 +733,7 @@ describe('POST /:id/reject', () => {
 
 describe('POST /:id/defer', () => {
   beforeEach(() => {
+    mockGetApprovalById.mockReturnValue(createRecord());
     mockGetContainer.mockReturnValue(createContainer());
   });
 
@@ -752,6 +823,7 @@ describe('POST /:id/defer', () => {
 // writes that touch no container, so both stay live.
 describe('under updateMode notify', () => {
   beforeEach(() => {
+    mockGetApprovalById.mockReturnValue(createRecord());
     mockGetContainer.mockReturnValue(createContainer());
     mockRequestContainerUpdate.mockRejectedValue(
       new UpdateRequestError(409, 'Update mode is notify; Drydock will not apply updates'),
@@ -863,6 +935,7 @@ describe('OpenAPI contract', () => {
     ['reject', 200],
     ['defer', 200],
   ])('the %s response matches its documented schema', async (action, statusCode) => {
+    mockGetApprovalById.mockReturnValue(createRecord());
     mockGetContainer.mockReturnValue(createContainer());
     const { body } = await callDecision(`/:id/${action}`, {});
 

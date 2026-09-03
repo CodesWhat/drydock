@@ -8,7 +8,7 @@
  * gained a case the other did not — which is the whole failure this exists to catch, since
  * the queue's promise is that it admits exactly what the button admits and nothing else.
  */
-import type { ApprovalRecord } from '../model/approval.js';
+import { type ApprovalRecord, getApprovalCandidateRef } from '../model/approval.js';
 import type { Container } from '../model/container.js';
 import { createMockResponse } from '../test/helpers.js';
 
@@ -18,12 +18,14 @@ const {
   mockRequestContainerUpdate,
   mockGetServerConfiguration,
   mockDecideApprovalIfPending,
+  mockGetApprovalById,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockGetContainer: vi.fn(),
   mockRequestContainerUpdate: vi.fn(),
   mockGetServerConfiguration: vi.fn(() => ({ feature: { containeractions: true } })),
   mockDecideApprovalIfPending: vi.fn(),
+  mockGetApprovalById: vi.fn(),
 }));
 
 vi.mock('express', () => ({ default: { Router: vi.fn(() => mockRouter) } }));
@@ -57,7 +59,7 @@ vi.mock('./audit-events.js', () => ({ recordAuditEvent: vi.fn() }));
 vi.mock('../store/approval.js', () => ({
   listApprovals: vi.fn(),
   countApprovals: vi.fn(),
-  getApprovalById: vi.fn(),
+  getApprovalById: mockGetApprovalById,
   decideApprovalIfPending: mockDecideApprovalIfPending,
   resetApprovalToPending: vi.fn(),
   updateApproval: vi.fn(),
@@ -79,6 +81,9 @@ const CONTAINER: Container = {
   name: 'nginx',
   watcher: 'local',
   image: { name: 'library/nginx' },
+  // The candidate the row below names. Both paths dispatch the container, so this is also
+  // the version each one is asserted to have handed to the admission path.
+  result: { tag: '1.2.4' },
 } as Container;
 
 const APPROVAL: ApprovalRecord = {
@@ -129,11 +134,19 @@ beforeEach(() => {
   mockGetContainer.mockReturnValue(CONTAINER);
   mockGetServerConfiguration.mockReturnValue({ feature: { containeractions: true } });
   mockRequestContainerUpdate.mockResolvedValue({ operationId: 'op-1' });
+  mockGetApprovalById.mockReturnValue(APPROVAL);
   mockDecideApprovalIfPending.mockImplementation((_id: string, patch: Partial<ApprovalRecord>) => ({
     status: 'decided',
     record: { ...APPROVAL, ...patch },
   }));
 });
+
+/** The candidate each call handed the admission path, as `requestContainerUpdate` saw it. */
+function dispatchedCandidates(): Array<string | undefined> {
+  return mockRequestContainerUpdate.mock.calls.map(([container]: [Container]) =>
+    getApprovalCandidateRef(container),
+  );
+}
 
 describe('approve is the manual update button', () => {
   test('an accepted update answers identically', async () => {
@@ -145,6 +158,37 @@ describe('approve is the manual update button', () => {
       status: 202,
       body: { message: 'Container update accepted', operationId: 'op-1' },
     });
+  });
+
+  // Identical answers are not identical dispatches: a queue that answered 202 while
+  // handing the admission path a different container, or a different candidate on the same
+  // container, would pass every assertion above. So the candidate itself is compared.
+  test('both dispatch the same container carrying the candidate the row names', async () => {
+    await updateButton();
+    await queueApprove();
+
+    expect(mockRequestContainerUpdate.mock.calls).toStrictEqual([[CONTAINER], [CONTAINER]]);
+    expect(dispatchedCandidates()).toStrictEqual([APPROVAL.candidateRef, APPROVAL.candidateRef]);
+  });
+
+  // The button is a live action on the container; approve is a promise about one version.
+  // So the one case where they may differ is a container whose candidate moved after the
+  // row was minted: the button dispatches what is there now, approve refuses.
+  test('approve refuses the newer candidate the button would dispatch', async () => {
+    mockGetContainer.mockReturnValue({ ...CONTAINER, result: { tag: '1.2.5' } });
+
+    const button = await updateButton();
+    const approve = await queueApprove();
+
+    expect(button).toStrictEqual({
+      status: 202,
+      body: { message: 'Container update accepted', operationId: 'op-1' },
+    });
+    expect(approve).toStrictEqual({
+      status: 409,
+      body: { error: 'Approval candidate superseded' },
+    });
+    expect(dispatchedCandidates()).toStrictEqual(['1.2.5']);
   });
 
   // One row per rejection the admission path can produce for a container that has a row in
