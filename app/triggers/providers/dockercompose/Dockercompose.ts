@@ -18,6 +18,7 @@ import Docker, {
   type DockerContainerHandle,
   type DockerTriggerConfiguration,
 } from '../docker/Docker.js';
+import type { PostPullHookOptions } from '../docker/UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
 import ComposeFileParser, {
@@ -177,7 +178,11 @@ type ComposeRuntimeRefreshOptions = {
   forceRecreate?: boolean;
   composeFiles?: string[];
   runtimeContext?: ComposeRuntimeContext;
-  postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>;
+  postPullHook?: (
+    operationId: string,
+    imageIdentity?: string,
+    options?: PostPullHookOptions,
+  ) => Promise<void>;
 };
 
 type ComposeRollbackOutcome = {
@@ -1180,6 +1185,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     composeContext?: ComposeUpdateLifecycleContext,
   ) {
     const runtimeContext = composeContext?.runtimeContext;
+    // Behind the gate go the pre-update hook and the prune/backup step, so a
+    // candidate the gate rejects never fires an operator hook, deletes a cached
+    // image or writes a rollback row. The compose-file-once preflight has
+    // already gated every service before its lifecycle runs and passes no
+    // post-pull hook, so that path keeps the original ordering rather than
+    // deferring steps nothing would run.
+    const deferPreRuntimeUpdateLifecycle = composeContext?.postPullGateCompleted !== true;
     if (
       runtimeContext?.dockerApi &&
       runtimeContext?.registry &&
@@ -1192,11 +1204,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         auth: runtimeContext.auth,
         newImage: runtimeContext.newImage,
         deferSignatureVerification: true,
-        // The compose runtime update runs its gate from several call sites and
-        // skips the hook entirely once the compose-file-once preflight has
-        // gated, so it keeps the original ordering rather than hanging the
-        // pre-update hook and prune/backup off that hook.
-        deferPreRuntimeUpdateLifecycle: false,
+        deferPreRuntimeUpdateLifecycle,
         currentContainer: null,
         currentContainerSpec: null,
       };
@@ -1213,7 +1221,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       auth,
       newImage,
       deferSignatureVerification: true,
-      deferPreRuntimeUpdateLifecycle: false,
+      deferPreRuntimeUpdateLifecycle,
       currentContainer: null,
       currentContainerSpec: null,
     };
@@ -1316,7 +1324,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container,
     _logContainer,
     composeCtx?: ComposeUpdateLifecycleContext,
-    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ) {
     const requiredComposeCtx = this.requireComposeUpdateContext(container, composeCtx);
     const runtimeContext = this.buildComposeRuntimeContext(context, requiredComposeCtx);
@@ -1355,7 +1367,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   buildPerformContainerUpdateOptions(
     composeCtx: ComposeUpdateLifecycleContext,
     runtimeContext: ComposeRuntimeContext,
-    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ): Pick<
     ComposeRuntimeRefreshOptions,
     'composeFiles' | 'skipPull' | 'runtimeContext' | 'postPullHook'
@@ -2609,6 +2625,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const pinnedImage = imageIdentity || newImage;
     if (securityGateUnboundWarn) {
       this.recordUnboundSecurityWarning(container, securityGateUnboundReason);
+      if (postPullHook) {
+        // The gate must not run against the mutable tag, but the hook also
+        // carries the deferred pre-update hook and prune/backup step, which
+        // still have to run before the replacement.
+        await postPullHook(getRequestedOperationId(container, runtimeContext) ?? '', undefined, {
+          skipSecurityGate: true,
+        });
+      }
     } else if (postPullHook) {
       const operationId = getRequestedOperationId(container, runtimeContext) ?? '';
       if (imageIdentity) {

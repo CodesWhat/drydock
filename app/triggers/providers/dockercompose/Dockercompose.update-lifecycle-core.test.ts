@@ -187,6 +187,62 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('processComposeFile should gate the candidate before the pre-update hook, prune and backup', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = true;
+
+    const container = makeContainer();
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    const { verifySigSpy, preHookSpy, pruneImagesSpy } = spyOnProcessComposeHelpers(trigger);
+    verifySigSpy.mockRejectedValue(new Error('signature verification failed'));
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('signature verification failed');
+
+    // A candidate the gate rejects must not have fired an operator hook,
+    // deleted cached images or written a rollback row on its way to refusal.
+    expect(preHookSpy).not.toHaveBeenCalled();
+    expect(pruneImagesSpy).not.toHaveBeenCalled();
+    expect(backupStore.insertBackup).not.toHaveBeenCalled();
+  });
+
+  test('processComposeFile should still run the hook, prune and backup once in compose-file-once mode', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = true;
+    trigger.configuration.composeFileOnce = true;
+    // The compose-file-once preflight resolves a registry manager for the pull,
+    // which requires normalizeImage once pruning is enabled.
+    getState().registry.hub.normalizeImage = (image) => image;
+
+    const container = makeContainer();
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    const { scanAndGateSpy, preHookSpy, postHookSpy, pruneImagesSpy, composeUpdateSpy } =
+      spyOnProcessComposeHelpers(trigger);
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger as any, 'capturePulledImageIdentity').mockResolvedValue({
+      imageIdentity: `nginx:1.1.0@sha256:${'a'.repeat(64)}`,
+      unboundWarn: false,
+    });
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+    // The preflight gates once, ahead of the runtime lifecycle, and the
+    // lifecycle keeps its own hook and prune/backup step behind it.
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
+    expect(preHookSpy).toHaveBeenCalledTimes(1);
+    expect(pruneImagesSpy).toHaveBeenCalledTimes(1);
+    expect(backupStore.insertBackup).toHaveBeenCalledTimes(1);
+    expect(composeUpdateSpy).toHaveBeenCalledTimes(1);
+    expect(postHookSpy).toHaveBeenCalledTimes(1);
+  });
+
   test('processComposeFile should run security scanning but skip post-update lifecycle in dryrun mode', async () => {
     trigger.configuration.dryrun = true;
 
