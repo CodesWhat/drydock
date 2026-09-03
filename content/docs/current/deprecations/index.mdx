@@ -157,11 +157,11 @@ Hub/DHI public instances that provide `PUBLIC_TOKEN` without the matching `PUBLI
 
 ### Agent-mode `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` fallback {#agent-secret-fallback}
 
-Agent mode's secret lookup carried its own explicit fallback through v1.5.2, separate from the general `WUD_*` removal above: `DD_AGENT_SECRET` falling back to `WUD_AGENT_SECRET` (and the equivalent for `_FILE`). v1.6.0-rc.1 dropped both fallbacks with no warning release first. An agent configured with only `WUD_AGENT_SECRET` now fails startup with an error that never mentions the `WUD_` variable actually configured.
+Agent mode's secret lookup carried its own explicit fallback through v1.5.2, on top of the general `WUD_*` removal above: `DD_AGENT_SECRET` falling back to `WUD_AGENT_SECRET` (and the equivalent for `_FILE`). The general configuration loader also read `WUD_AGENT_SECRET`/`WUD_AGENT_SECRET_FILE` like every other `WUD_*` variable, remapping them to `DD_*` and logging the same removal warning since v1.4.0, so operators did get a warning release through that generic mechanism, even though this specific fallback's removal at v1.6.0-rc.1 was never separately announced. An agent configured with only `WUD_AGENT_SECRET` now fails startup with an error that never mentions the `WUD_` variable actually configured.
 
 | | |
 | --- | --- |
-| **Deprecated since** | Never, removed directly with no deprecation period |
+| **Deprecated since** | v1.4.0 (via the general `WUD_*` warning; this specific fallback's removal was never separately announced) |
 | **Removed since** | v1.6.0-rc.1 |
 | **Migration** | Rename `WUD_AGENT_SECRET` to `DD_AGENT_SECRET` and `WUD_AGENT_SECRET_FILE` to `DD_AGENT_SECRET_FILE` |
 
@@ -211,7 +211,7 @@ In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons
 
 ### Unversioned `GET /api/auth/methods` alias {#api-auth-methods}
 
-`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It's registered directly on the app, ahead of the `/api` mounts, so it survived the [`/api/*` path removal](#unversioned-api-paths) in v1.6.0 and keeps working on its own separate v1.7.0 timeline. The `Sunset` header advertises 2027-07-01 as a conservative earliest retirement instant; the actual removal ships with the v1.7.0 release.
+`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It's registered directly on the app, ahead of the `/api` mounts, so it survived the [`/api/*` path removal](#unversioned-api-paths) in v1.6.0 and keeps working on its own separate v1.7.0 timeline. The `Sunset` header carries 2027-07-01 only because the header needs a date; that date is not a floor on the removal, which ships in v1.7.0, whose release candidates already return 410.
 
 | | |
 | --- | --- |

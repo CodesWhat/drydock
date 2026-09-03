@@ -30,7 +30,7 @@ The unversioned `/api/settings` path is not a working alias for this endpoint. L
 | **Removal** | v1.7.0 |
 | **Affects** | API consumers using `GET /api/auth/methods` |
 
-`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It logs a deprecation warning on each request, returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers, and points callers directly to `GET /api/v1/auth/status`. It is registered directly on the app, so it survives the general unversioned `/api/*` removal on its own v1.7.0 timeline. `GET /api/auth/status` is a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled. The `Sunset` header advertises 2027-07-01 as a conservative earliest retirement instant; the actual removal ships with the v1.7.0 release.
+`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It logs a deprecation warning on each request, returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers, and points callers directly to `GET /api/v1/auth/status`. It is registered directly on the app, so it survives the general unversioned `/api/*` removal on its own v1.7.0 timeline. `GET /api/auth/status` is a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled. The `Sunset` header carries 2027-07-01 only because the header needs a date; that date is not a floor on the removal, which ships in v1.7.0, whose release candidates already return 410.
 
 **Migration:** Replace `GET /api/auth/methods` with `GET /api/v1/auth/status`.
 
@@ -41,7 +41,7 @@ The unversioned `/api/settings` path is not a working alias for this endpoint. L
 | | |
 | --- | --- |
 | **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.8.0 |
+| **Removal** | v1.8.0 |
 | **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
 
 `GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. Each request now logs a deprecation warning and returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers for its v1.8.0 removal.
@@ -152,11 +152,11 @@ The migration CLI intentionally retains knowledge of the removed WUD names so it
 
 | | |
 | --- | --- |
-| **Deprecated in** | Never, removed directly with no deprecation period |
+| **Deprecated in** | v1.4.0 (via the general `WUD_*` warning; this specific fallback's removal was never separately announced) |
 | **Removed in** | v1.6.0-rc.1 |
 | **Affects** | Agent-mode deployments (`app/agent/api/index.ts`) configured with only `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE`, no `DD_AGENT_SECRET` / `DD_AGENT_SECRET_FILE` |
 
-This is a separate, undocumented removal from the general `WUD_*` table above. Unlike the general configuration loader, which never read `WUD_*` variables at all, agent mode's secret lookup carried its own explicit fallback through v1.5.2: `process.env.DD_AGENT_SECRET ?? process.env.WUD_AGENT_SECRET` (and the equivalent for `_FILE`). v1.6.0-rc.1 dropped both fallbacks with no warning release first. An agent that had only `WUD_AGENT_SECRET` set went straight from authenticating successfully to `init()` throwing `Agent mode requires DD_AGENT_SECRET or DD_AGENT_SECRET_FILE` at startup, an error message that never mentions the `WUD_` variable the operator actually configured. This entry was never recorded at the time of the v1.6.0 release; it is added here retroactively.
+This is a separate, undocumented removal from the general `WUD_*` table above. Agent mode's secret lookup carried its own explicit fallback through v1.5.2, on top of the general configuration loader: `process.env.DD_AGENT_SECRET ?? process.env.WUD_AGENT_SECRET` (and the equivalent for `_FILE`). The general loader did read `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` like every other `WUD_*` variable: it remapped them to `DD_AGENT_SECRET` / `DD_AGENT_SECRET_FILE` and logged the same "deprecated and scheduled for removal in v1.6.0" warning as the rest of the `WUD_*` surface, starting in v1.4.0. So operators relying on the `WUD_` name did get a warning release through that generic mechanism, even though this specific code-level fallback's removal at v1.6.0-rc.1 was never separately announced. An agent that had only `WUD_AGENT_SECRET` set went straight from authenticating successfully to `init()` throwing `Agent mode requires DD_AGENT_SECRET or DD_AGENT_SECRET_FILE` at startup, an error message that never mentions the `WUD_` variable the operator actually configured. This entry was never recorded at the time of the v1.6.0 release; it is added here retroactively.
 
 **Migration:** Rename `WUD_AGENT_SECRET` to `DD_AGENT_SECRET` and `WUD_AGENT_SECRET_FILE` to `DD_AGENT_SECRET_FILE`.
 
