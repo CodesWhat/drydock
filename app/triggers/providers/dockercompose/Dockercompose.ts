@@ -1752,6 +1752,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return runtimeContext;
   }
 
+  /**
+   * Compose-file-once binds one pull/gate per service, not per container
+   * (DR-54): a later replica of an already-handled service must still be
+   * recreated, reusing the identity the preflight already bound and gated
+   * for the service, rather than being left running its old image while the
+   * lifecycle reports success.
+   */
   async maybeRunPerServiceComposeRefresh(
     composeCtx: ComposeUpdateLifecycleContext,
     container,
@@ -1759,15 +1766,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       ComposeRuntimeRefreshOptions,
       'composeFiles' | 'skipPull' | 'runtimeContext' | 'postPullHook'
     >,
-  ): Promise<boolean> {
+  ): Promise<void> {
     if (composeCtx.composeFileOnceApplied === true) {
       const logContainer = this.log.child({
         container: container.name,
       });
       logContainer.info(
-        `Skip per-service compose refresh for ${composeCtx.service} because compose-file-once mode already refreshed ${composeCtx.composeFile}`,
+        `Recreate ${container.name} for compose-file-once service ${composeCtx.service} reusing the identity already bound and gated for ${composeCtx.composeFile}`,
       );
-      return false;
     }
 
     await this.updateContainerWithCompose(
@@ -1776,7 +1782,6 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container,
       composeUpdateOptions,
     );
-    return true;
   }
 
   /**
@@ -1817,19 +1822,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       requiredComposeCtx.postPullGateCompleted ? undefined : postPullHook,
     );
 
-    const composeRefreshRan = await this.maybeRunPerServiceComposeRefresh(
+    await this.maybeRunPerServiceComposeRefresh(
       requiredComposeCtx,
       container,
       composeUpdateOptions,
     );
-    if (!composeRefreshRan && !requiredComposeCtx.postPullGateCompleted && postPullHook) {
-      const operationId = getRequestedOperationId(container, runtimeContext) ?? '';
-      if (runtimeContext.imageIdentity) {
-        await postPullHook(operationId, runtimeContext.imageIdentity);
-      } else {
-        await postPullHook(operationId);
-      }
-    }
     if (!this.configuration.dryrun) {
       requiredComposeCtx.onRuntimeUpdateApplied?.();
     }
@@ -2730,7 +2727,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         service,
         serviceDefinition: compose.services[service],
         composeFileOnceApplied,
-        skipPull: composeFileOncePreflighted && composeFileOnceApplied !== true,
+        // Preflight pulls each service's image exactly once, before any
+        // replica's runtime update runs, so every preflighted replica skips
+        // the pull, not just the first one to reach this loop. Re-pulling a
+        // mutable tag for a later replica could resolve a different digest
+        // than the one already bound and gated (DR-54).
+        skipPull: composeFileOncePreflighted,
         runtimeContext: mergeComposeFileOnceRuntimeContext(
           requestedRuntimeContext,
           composeFileOnceRuntimeContext,

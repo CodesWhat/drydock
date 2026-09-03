@@ -595,7 +595,7 @@ describe('Dockercompose Trigger', () => {
     expect(postStartHookSpy).not.toHaveBeenCalled();
   });
 
-  test('performContainerUpdate should scan a service already refreshed by compose-file-once mode once', async () => {
+  test('performContainerUpdate should recreate a replica already refreshed by compose-file-once mode, reusing its bound identity', async () => {
     trigger.configuration.dryrun = false;
     const updateContainerWithComposeSpy = vi
       .spyOn(trigger, 'updateContainerWithCompose')
@@ -604,7 +604,7 @@ describe('Dockercompose Trigger', () => {
     const postPullHook = vi.fn().mockResolvedValue(undefined);
     const container = makeContainer({ id: 'container-once', name: 'nginx' });
 
-    await trigger.performContainerUpdate(
+    const updated = await trigger.performContainerUpdate(
       {} as any,
       container,
       mockLog,
@@ -618,89 +618,56 @@ describe('Dockercompose Trigger', () => {
       postPullHook,
     );
 
-    expect(updateContainerWithComposeSpy).not.toHaveBeenCalled();
-    expect(postPullHook).toHaveBeenCalledTimes(1);
-    expect(postPullHook).toHaveBeenCalledWith('op-compose-once');
+    expect(updated).toBe(true);
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      container,
+      expect.objectContaining({
+        runtimeContext: expect.objectContaining({ operationId: 'op-compose-once' }),
+        postPullHook,
+      }),
+    );
+    expect(mockLog.info).toHaveBeenCalledWith(
+      expect.stringContaining('Recreate nginx for compose-file-once service nginx'),
+    );
   });
 
-  test('performContainerUpdate should use a per-container operation id for a skipped compose refresh', async () => {
+  test('performContainerUpdate should allow a compose-file-once replica refresh without a post-pull hook', async () => {
     trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const container = makeContainer({ id: 'container-no-hook', name: 'nginx' });
+
+    await trigger.performContainerUpdate({} as any, container, mockLog, {
+      composeFile: '/opt/drydock/test/stack.yml',
+      service: 'nginx',
+      serviceDefinition: {},
+      composeFileOnceApplied: true,
+    });
+
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      container,
+      expect.not.objectContaining({ postPullHook: expect.anything() }),
+    );
+  });
+
+  test('performContainerUpdate should not forward the hook to the compose refresh when the post-pull gate already completed', async () => {
+    trigger.configuration.dryrun = false;
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockResolvedValue();
     vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
     const postPullHook = vi.fn().mockResolvedValue(undefined);
-    const container = makeContainer({ id: 'container-map', name: 'nginx' });
+    const container = makeContainer({ id: 'container-gated', name: 'nginx' });
 
     await trigger.performContainerUpdate(
       {} as any,
       container,
-      mockLog,
-      {
-        composeFile: '/opt/drydock/test/stack.yml',
-        service: 'nginx',
-        serviceDefinition: {},
-        composeFileOnceApplied: true,
-        runtimeContext: {
-          operationIds: new Map([['container-map', 'op-compose-map']]),
-          imageIdentity: 'nginx:1.1.0@sha256:abcdef123456',
-        },
-      },
-      postPullHook,
-    );
-
-    expect(postPullHook).toHaveBeenCalledTimes(1);
-    expect(postPullHook).toHaveBeenCalledWith('op-compose-map', 'nginx:1.1.0@sha256:abcdef123456');
-  });
-
-  test('performContainerUpdate should use an empty operation id when a skipped refresh has none', async () => {
-    trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
-    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
-    const postPullHook = vi.fn().mockResolvedValue(undefined);
-
-    await trigger.performContainerUpdate(
-      {} as any,
-      makeContainer({ id: 'container-no-operation', name: 'nginx' }),
-      mockLog,
-      {
-        composeFile: '/opt/drydock/test/stack.yml',
-        service: 'nginx',
-        serviceDefinition: {},
-        composeFileOnceApplied: true,
-        runtimeContext: { imageIdentity: 'nginx:1.1.0@sha256:abcdef123456' },
-      },
-      postPullHook,
-    );
-
-    expect(postPullHook).toHaveBeenCalledWith('', 'nginx:1.1.0@sha256:abcdef123456');
-  });
-
-  test('performContainerUpdate should allow a skipped compose refresh without a post-pull hook', async () => {
-    trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
-    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
-
-    await trigger.performContainerUpdate(
-      {} as any,
-      makeContainer({ id: 'container-no-hook', name: 'nginx' }),
-      mockLog,
-      {
-        composeFile: '/opt/drydock/test/stack.yml',
-        service: 'nginx',
-        serviceDefinition: {},
-        composeFileOnceApplied: true,
-      },
-    );
-  });
-
-  test('performContainerUpdate should skip the hook when the post-pull gate already completed', async () => {
-    trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
-    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
-    const postPullHook = vi.fn().mockResolvedValue(undefined);
-
-    await trigger.performContainerUpdate(
-      {} as any,
-      makeContainer({ id: 'container-gated', name: 'nginx' }),
       mockLog,
       {
         composeFile: '/opt/drydock/test/stack.yml',
@@ -713,6 +680,12 @@ describe('Dockercompose Trigger', () => {
     );
 
     expect(postPullHook).not.toHaveBeenCalled();
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      container,
+      expect.not.objectContaining({ postPullHook: expect.anything() }),
+    );
   });
 
   test('buildComposeRuntimeContext should retain the pulled image identity', () => {

@@ -446,7 +446,7 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
-  test('performContainerUpdate should skip per-service refresh when compose-file-once is already applied', async () => {
+  test('performContainerUpdate should recreate a later replica when compose-file-once is already applied', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({
       name: 'nginx',
@@ -464,10 +464,15 @@ describe('Dockercompose Trigger', () => {
     } as any);
 
     expect(updated).toBe(true);
-    expect(updateContainerWithComposeSpy).not.toHaveBeenCalled();
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      container,
+      {},
+    );
     expect(hooksSpy).toHaveBeenCalledWith(container, 'nginx', {});
     expect(mockLog.info).toHaveBeenCalledWith(
-      expect.stringContaining('Skip per-service compose refresh for nginx'),
+      expect.stringContaining('Recreate nginx for compose-file-once service nginx'),
     );
   });
 
@@ -787,11 +792,21 @@ describe('Dockercompose Trigger', () => {
     );
 
     expect(pullImageSpy).toHaveBeenCalledTimes(1);
-    expect(updateContainerWithComposeSpy).toHaveBeenCalledTimes(1);
-    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledTimes(2);
+    expect(updateContainerWithComposeSpy).toHaveBeenNthCalledWith(
+      1,
       '/opt/drydock/test/stack.yml',
       'nginx',
       firstContainer,
+      expect.objectContaining({
+        skipPull: true,
+      }),
+    );
+    expect(updateContainerWithComposeSpy).toHaveBeenNthCalledWith(
+      2,
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      secondContainer,
       expect.objectContaining({
         skipPull: true,
       }),
@@ -1007,6 +1022,145 @@ describe('Dockercompose Trigger', () => {
       'nginx-a',
       'nginx-b',
     ]);
+  });
+
+  test('compose-file-once should recreate every replica of a scaled service and report each operation succeeded (DR-54)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    const operationStatuses = new Map([
+      ['op-nginx-a', 'in-progress'],
+      ['op-nginx-b', 'in-progress'],
+    ]);
+    vi.spyOn(updateOperationStore, 'getOperationById').mockImplementation((id) => {
+      const status = operationStatuses.get(id as string);
+      return status ? ({ id, status, kind: 'update' } as any) : undefined;
+    });
+    const markOperationTerminalSpy = vi
+      .spyOn(updateOperationStore, 'markOperationTerminal')
+      .mockImplementation((id, patch) => {
+        operationStatuses.set(id as string, (patch as { status: string }).status);
+        return { id, ...patch } as any;
+      });
+    const firstContainer = makeContainer({
+      id: 'container-nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      id: 'container-nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:nginx-once-id',
+        RepoDigests: ['nginx@sha256:abcdef123456'],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi
+      .spyOn(trigger, 'createContainer')
+      .mockImplementation(async (_dockerApi, containerToCreate) => ({
+        start: vi.fn().mockResolvedValue(undefined),
+        image: (containerToCreate as { Image?: string }).Image,
+      }));
+    vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await trigger.processComposeFile(composeFile, [firstContainer, secondContainer], undefined, {
+      operationIds: new Map([
+        ['container-nginx-a', 'op-nginx-a'],
+        ['container-nginx-b', 'op-nginx-b'],
+      ]),
+    });
+
+    // Both replicas were actually recreated against the digest-pinned
+    // identity the preflight bound and gated once for the service, not just
+    // the first one to reach the runtime-update loop.
+    expect(createContainerSpy).toHaveBeenCalledTimes(2);
+    for (const call of createContainerSpy.mock.calls) {
+      expect((call[1] as { Image?: string }).Image).toBe('nginx:1.1.0@sha256:abcdef123456');
+    }
+    // The security gate ran once per replica during preflight; recreating the
+    // replica afterward must not gate it a second time.
+    expect(trigger.scanAndGatePostPull).toHaveBeenCalledTimes(2);
+    expect(markOperationTerminalSpy).toHaveBeenCalledTimes(2);
+    expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+      'op-nginx-a',
+      expect.objectContaining({ status: 'succeeded', phase: 'succeeded' }),
+    );
+    expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+      'op-nginx-b',
+      expect.objectContaining({ status: 'succeeded', phase: 'succeeded' }),
+    );
+  });
+
+  test('compose-file-once should mutate the compose file exactly once for a scaled service with multiple replicas (DR-54)', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    const firstContainer = makeContainer({
+      id: 'container-nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      id: 'container-nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const composeFile = '/opt/drydock/test/stack.yml';
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+    vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await trigger.processComposeFile(composeFile, [firstContainer, secondContainer]);
+
+    // Two replicas of the same service still produce exactly one write: the
+    // per-container recreate path never touches the compose file itself.
+    expect(writeComposeFileSpy).toHaveBeenCalledTimes(1);
+    expect(writeComposeFileSpy).toHaveBeenCalledWith(
+      composeFile,
+      expect.stringContaining('image: nginx:1.1.0'),
+    );
+    expect(createContainerSpy).toHaveBeenCalledTimes(2);
   });
 
   test('compose-file-once should preflight every service before the compose write and preserve the services it already refreshed', async () => {

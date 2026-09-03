@@ -36,7 +36,7 @@ The trigger will:
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILELABEL` | ⚪ | Container label name used to locate the compose file per container | Label name | `dd.compose.file` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_RECONCILIATIONMODE` | ⚪ | Compose/runtime reconciliation mode before lifecycle (`warn`, `block`, or `off`) | `warn`, `block`, `off` | `warn` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_DIGESTPINNING` | ⚪ | Write digest-pinned compose image references when a digest is available | `true`, `false` | `false` |
-| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILEONCE` | ⚪ | Batch compose runtime refresh to one grouped pull/up pass per compose stack/file | `true`, `false` | `false` |
+| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILEONCE` | ⚪ | Pull, gate, and rewrite the compose file once per service instead of once per container, then recreate every container of that service individually | `true`, `false` | `false` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_MOUNTPREFIXFALLBACK` | ⚪ | Allow compose file matching by trailing project-directory/file path when the Docker label/inspect path and trigger `FILE` differ only by host/container mount prefix | `true`, `false` | `false` |
 
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration), but only supports the `batch` mode.
@@ -117,7 +117,7 @@ Before removing the running container, Drydock verifies that the target image ca
 
 ## Compose-file-once mode
 
-When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock performs one runtime refresh per unique service and skips repeated refreshes for subsequent containers sharing the same service in that batch.
+When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock pulls, gates, and writes the compose file once per unique service rather than once per container. This is not a single grouped `docker compose up` pass: every container belonging to that service is still stopped, removed, and recreated individually, reusing the image identity already pulled and gated for the service instead of pulling or gating it again.
 
 The batch writes at most one `image:` value per affected service, and only when that value has to change, so every container in the batch that needs a runtime refresh for a service must resolve to the same update target. If two of them resolve to different images (per-container tag filters can do this), the batch is refused before anything is pulled, with both container names and both images in the error, instead of pulling one candidate and writing the other into the file.
 
