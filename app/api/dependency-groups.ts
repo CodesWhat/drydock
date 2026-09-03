@@ -20,6 +20,7 @@ import {
 import { resolveDependencyChain } from './container-dependencies.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { sendErrorResponse } from './error-response.js';
+import { scoped } from './route-scopes.js';
 
 const log = logger.child({ component: 'dependency-groups' });
 
@@ -192,7 +193,7 @@ export function init() {
   router.post(
     '/:rootId/update',
     requireDestructiveActionConfirmation('dependency-group-update'),
-    updateDependencyGroup,
+    scoped('containers:update', updateDependencyGroup),
   );
   return router;
 }

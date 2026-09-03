@@ -4,6 +4,7 @@ import { getLogBufferEnabled, getLogLevel } from '../configuration/index.js';
 import { getComponents, getEntries } from '../log/buffer.js';
 import { toDisplayLogEntry } from '../log/display-timestamp.js';
 import { sendErrorResponse } from './error-response.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
@@ -133,8 +134,8 @@ function getLogComponents(_req, res) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getLog);
-  router.get('/entries', getLogEntries);
-  router.get('/components', getLogComponents);
+  router.get('/', scoped('read', getLog));
+  router.get('/entries', scoped('read', getLogEntries));
+  router.get('/components', scoped('read', getLogComponents));
   return router;
 }

@@ -2,3 +2,14 @@ title = "Drydock Gitleaks configuration"
 
 [extend]
 useDefault = true
+
+# Drydock's own scoped API keys (Phase 11.1). The `ddk_` prefix exists so a
+# secret scanner can match the credential shape, and this rule is the reason
+# it is fixed: Drydock's CI catches a leaked Drydock key the same way it
+# catches a leaked AWS key. Kept in sync with API_KEY_PATTERN in
+# app/store/api-key.ts by .github/tests/gitleaks-api-key-rule.test.ts.
+[[rules]]
+id = "drydock-api-key"
+description = "Drydock scoped API key (ddk_<keyId>_<secret>)"
+regex = '''ddk_[0-9a-f]{12}_[A-Za-z0-9_-]{43}'''
+keywords = ["ddk_"]

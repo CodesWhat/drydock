@@ -3,7 +3,68 @@
     "tabs": {
       "general": "Algemeen",
       "appearance": "Uiterlijk",
-      "profile": "Profiel"
+      "profile": "Profiel",
+      "apiKeys": "API-sleutels"
+    },
+    "apiKeys": {
+      "title": "API-sleutels",
+      "description": "Sleutels met een beperkt bereik voor scripts en integraties. Een sleutel authenticeert telkens één verzoek en maakt nooit een sessie aan.",
+      "loading": "API-sleutels laden",
+      "empty": "Nog geen API-sleutels. Maak er een aan om een script toegang te geven zonder een wachtwoord te delen.",
+      "createButton": "Sleutel aanmaken",
+      "never": "Nooit",
+      "revokeButton": "Intrekken",
+      "form": {
+        "title": "Een API-sleutel aanmaken",
+        "name": "Naam",
+        "namePlaceholder": "CI-pipeline",
+        "scopes": "Bereiken",
+        "expires": "Verloopt",
+        "expiresNever": "Laat leeg voor een sleutel die nooit verloopt",
+        "rateLimit": "Aanvragen per 15 minuten",
+        "submit": "Aanmaken"
+      },
+      "scopes": {
+        "read": "Alles lezen",
+        "containersWatch": "Containers controleren op updates",
+        "containersUpdate": "Containers bijwerken en terugdraaien",
+        "triggersTest": "Testmeldingen versturen",
+        "admin": "Volledig beheer",
+        "apiKeysManage": "API-sleutels beheren"
+      },
+      "reveal": {
+        "title": "Kopieer deze sleutel nu",
+        "description": "Dit is de enige keer dat hij wordt getoond. Drydock slaat een digest op, niet de sleutel zelf, dus als je hem kwijtraakt, moet je een nieuwe aanmaken.",
+        "copy": "Kopiëren",
+        "copied": "Gekopieerd"
+      },
+      "columns": {
+        "name": "Naam",
+        "key": "Sleutel",
+        "scopes": "Bereiken",
+        "lastUsed": "Laatst gebruikt",
+        "expires": "Verloopt",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Actief",
+        "revoked": "Ingetrokken",
+        "expired": "Verlopen"
+      },
+      "revoke": {
+        "header": "API-sleutel intrekken",
+        "message": "Het intrekken van {name} trekt ook elke sleutel in die ermee is aangemaakt. Alles wat ze gebruikt, stopt onmiddellijk met werken.",
+        "accept": "Intrekken"
+      },
+      "cascade": "{count} sleutels ingetrokken, inclusief elke sleutel die deze heeft aangemaakt.",
+      "errors": {
+        "load": "Kan API-sleutels niet laden",
+        "create": "Kan de API-sleutel niet aanmaken",
+        "revoke": "Kan de API-sleutel niet intrekken"
+      },
+      "showing": "{shown} van {total} weergegeven",
+      "loadMore": "Meer laden",
+      "loadingMore": "Laden"
     },
     "general": {
       "updateMode": {

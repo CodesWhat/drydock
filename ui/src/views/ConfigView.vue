@@ -8,6 +8,7 @@ import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
 import { useUpdateMode } from '../composables/useUpdateMode';
 import AppTabBar from '../components/AppTabBar.vue';
+import ConfigApiKeysTab from '../components/config/ConfigApiKeysTab.vue';
 import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
 import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
 import ConfigProfileTab from '../components/config/ConfigProfileTab.vue';
@@ -76,9 +77,9 @@ function setFontSize(scale: number) {
   applyFontSize(scale);
 }
 
-type SettingsTab = 'general' | 'appearance' | 'profile';
+type SettingsTab = 'general' | 'appearance' | 'profile' | 'apiKeys';
 
-const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'profile']);
+const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'profile', 'apiKeys']);
 
 function tabFromQuery(): SettingsTab {
   const raw = route.query.tab;
@@ -101,6 +102,7 @@ const settingsTabs = computed(() => [
   { id: 'general' as const, label: t('configView.tabs.general'), icon: 'settings' },
   { id: 'appearance' as const, label: t('configView.tabs.appearance'), icon: 'config' },
   { id: 'profile' as const, label: t('configView.tabs.profile'), icon: 'user' },
+  { id: 'apiKeys' as const, label: t('configView.tabs.apiKeys'), icon: 'key' },
 ]);
 
 const radiusPresets = computed(() =>
@@ -155,7 +157,7 @@ const webhookBaseUrl = computed(() => {
 });
 const webhookExample = computed(
   () =>
-    `curl -X POST ${webhookBaseUrl.value}/api/v1/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`,
+    `curl -X POST ${webhookBaseUrl.value}/api/v1/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`, // gitleaks:allow
 );
 
 // Settings state
@@ -515,5 +517,7 @@ function handleSelectIconLibrary(library: string) {
       :profile-loading="profileLoading"
       :profile-error="profileError"
     />
+
+    <ConfigApiKeysTab v-if="activeSettingsTab === 'apiKeys'" />
   </DataViewLayout>
 </template>

@@ -7,6 +7,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import { getLegacyInputSummary } from '../prometheus/compatibility.js';
 import { getScannerAssetManager, getSecurityRuntimeStatus } from '../security/runtime.js';
 import { getErrorMessage } from '../util/error.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 const log = logger.child({ component: 'server' });
@@ -89,8 +90,8 @@ async function manageSecurityAsset(req, res) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getServer);
-  router.get('/security/runtime', getSecurityRuntime);
-  router.post('/security/assets/:provider/:operation', manageSecurityAsset);
+  router.get('/', scoped('read', getServer));
+  router.get('/security/runtime', scoped('read', getSecurityRuntime));
+  router.post('/security/assets/:provider/:operation', scoped('admin', manageSecurityAsset));
   return router;
 }

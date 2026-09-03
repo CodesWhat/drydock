@@ -138,7 +138,9 @@
           "appearanceTitle": "Appearance Settings",
           "appearanceSubtitle": "Config · Appearance",
           "profileTitle": "Profile Settings",
-          "profileSubtitle": "Config · Profile"
+          "profileSubtitle": "Config · Profile",
+          "apiKeysTitle": "API Keys",
+          "apiKeysSubtitle": "Create and revoke scoped keys"
         }
       },
       "connection": {

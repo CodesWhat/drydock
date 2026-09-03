@@ -217,13 +217,17 @@ function mockActualApiRouterStatsLifecycle() {
 
   const routerModules = [
     './agent.js',
+    './api-keys.js',
     './app.js',
+    './approvals.js',
     './audit.js',
     './authentication.js',
     './backup.js',
     './container.js',
     './container-actions.js',
+    './container-dependencies.js',
     './debug.js',
+    './dependency-groups.js',
     './group.js',
     './icons.js',
     './internal-self-update.js',
@@ -235,6 +239,7 @@ function mockActualApiRouterStatsLifecycle() {
     './preview.js',
     './preferences.js',
     './registry.js',
+    './self-update.js',
     './server.js',
     './settings.js',
     './sse.js',
@@ -247,8 +252,10 @@ function mockActualApiRouterStatsLifecycle() {
   ];
 
   for (const modulePath of routerModules) {
+    // An object, not a string sentinel: api.ts mounts these through
+    // mountRouter, which records the mount path on the router it is handed.
     vi.doMock(modulePath, () => ({
-      init: vi.fn(() => `${modulePath}-router`),
+      init: vi.fn(() => ({ router: `${modulePath}-router` })),
     }));
   }
 

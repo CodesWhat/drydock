@@ -72,6 +72,7 @@ import {
 } from './container-update-dispatch.js';
 import { sendErrorResponse } from './error-response.js';
 import { buildPaginationLinks } from './pagination-links.js';
+import { scoped } from './route-scopes.js';
 import { buildEligibilityContext } from './sse-container-enrichment.js';
 
 const router = express.Router();
@@ -614,12 +615,17 @@ function deferApproval(req: DecisionRequest, res: Response): void {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getApprovals);
+  router.get('/', scoped('read', getApprovals));
   // Ahead of /:id, which would otherwise capture it as an approval id.
-  router.get('/summary', getApprovalSummary);
-  router.get('/:id', getApproval);
-  router.post('/:id/approve', approveApproval);
-  router.post('/:id/reject', rejectApproval);
-  router.post('/:id/defer', deferApproval);
+  router.get('/summary', scoped('read', getApprovalSummary));
+  router.get('/:id', scoped('read', getApproval));
+  // Deciding a queued update is `containers:update`, not `admin`: a key with
+  // that scope can already run the update outright via
+  // POST /containers/:id/update, so approving one it was offered cannot
+  // reasonably require more. Reject and defer are decisions on the same queue
+  // and travel with it — none of the three is reachable with `read` alone.
+  router.post('/:id/approve', scoped('containers:update', approveApproval));
+  router.post('/:id/reject', scoped('containers:update', rejectApproval));
+  router.post('/:id/defer', scoped('containers:update', deferApproval));
   return router;
 }

@@ -14,6 +14,7 @@ import type Watcher from '../watchers/Watcher.js';
 import { type ApiComponent, mapComponentToItem } from './component.js';
 import { normalizeLimitOffsetPagination } from './container/request-helpers.js';
 import { sendErrorResponse } from './error-response.js';
+import { scoped } from './route-scopes.js';
 
 const WATCHER_LIST_MAX_LIMIT = 200;
 
@@ -166,14 +167,23 @@ export function getWatcher(req: Request<WatcherRouteParams>, res: Response): voi
 export function init() {
   const router = express.Router();
   router.use(nocache());
-  router.get('/', (req: Request, res: Response) => {
-    getWatchers(req, res);
-  });
-  router.get('/:type/:name', (req: Request<WatcherRouteParams>, res: Response) => {
-    getWatcher(req, res);
-  });
-  router.get('/:type/:name/:agent', (req: Request<WatcherRouteParams>, res: Response) => {
-    getWatcher(req, res);
-  });
+  router.get(
+    '/',
+    scoped('read', (req: Request, res: Response) => {
+      getWatchers(req, res);
+    }),
+  );
+  router.get(
+    '/:type/:name',
+    scoped('read', (req: Request<WatcherRouteParams>, res: Response) => {
+      getWatcher(req, res);
+    }),
+  );
+  router.get(
+    '/:type/:name/:agent',
+    scoped('read', (req: Request<WatcherRouteParams>, res: Response) => {
+      getWatcher(req, res);
+    }),
+  );
   return router;
 }

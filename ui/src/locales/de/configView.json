@@ -3,7 +3,68 @@
     "tabs": {
       "general": "Allgemein",
       "appearance": "Darstellung",
-      "profile": "Profil"
+      "profile": "Profil",
+      "apiKeys": "API-Schlüssel"
+    },
+    "apiKeys": {
+      "title": "API-Schlüssel",
+      "description": "Bereichsbezogene Schlüssel für Skripte und Integrationen. Ein Schlüssel authentifiziert jeweils eine Anfrage und erstellt niemals eine Sitzung.",
+      "loading": "API-Schlüssel werden geladen",
+      "empty": "Noch keine API-Schlüssel. Erstellen Sie einen, um einem Skript Zugriff zu gewähren, ohne ein Passwort weiterzugeben.",
+      "createButton": "Schlüssel erstellen",
+      "never": "Nie",
+      "revokeButton": "Widerrufen",
+      "form": {
+        "title": "API-Schlüssel erstellen",
+        "name": "Name",
+        "namePlaceholder": "CI-Pipeline",
+        "scopes": "Berechtigungen",
+        "expires": "Läuft ab",
+        "expiresNever": "Leer lassen für einen Schlüssel, der nie abläuft",
+        "rateLimit": "Anfragen pro 15 Minuten",
+        "submit": "Erstellen"
+      },
+      "scopes": {
+        "read": "Alles lesen",
+        "containersWatch": "Container auf Updates prüfen",
+        "containersUpdate": "Container aktualisieren und zurücksetzen",
+        "triggersTest": "Testbenachrichtigungen senden",
+        "admin": "Vollständige Administration",
+        "apiKeysManage": "API-Schlüssel verwalten"
+      },
+      "reveal": {
+        "title": "Diesen Schlüssel jetzt kopieren",
+        "description": "Er wird nur dieses eine Mal angezeigt. Drydock speichert einen Hash, nicht den Schlüssel selbst, daher bedeutet der Verlust, dass ein neuer erstellt werden muss.",
+        "copy": "Kopieren",
+        "copied": "Kopiert"
+      },
+      "columns": {
+        "name": "Name",
+        "key": "Schlüssel",
+        "scopes": "Berechtigungen",
+        "lastUsed": "Zuletzt verwendet",
+        "expires": "Läuft ab",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Aktiv",
+        "revoked": "Widerrufen",
+        "expired": "Abgelaufen"
+      },
+      "revoke": {
+        "header": "API-Schlüssel widerrufen",
+        "message": "Das Widerrufen von {name} widerruft auch jeden damit erstellten Schlüssel. Alles, was sie verwendet, funktioniert sofort nicht mehr.",
+        "accept": "Widerrufen"
+      },
+      "cascade": "{count} Schlüssel widerrufen, einschließlich aller damit erstellten Schlüssel.",
+      "errors": {
+        "load": "API-Schlüssel konnten nicht geladen werden",
+        "create": "API-Schlüssel konnte nicht erstellt werden",
+        "revoke": "API-Schlüssel konnte nicht widerrufen werden"
+      },
+      "showing": "{shown} von {total} angezeigt",
+      "loadMore": "Mehr laden",
+      "loadingMore": "Wird geladen"
     },
     "general": {
       "updateMode": {

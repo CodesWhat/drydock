@@ -4,13 +4,15 @@ const {
   mockExpressJson,
   mockJsonMiddleware,
   mockRateLimit,
+  mockRateLimitMiddleware,
   mockRouterCallLog,
-  mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  mockCreateOuterApiRateLimitKeyGenerator,
   mockIsIdentityAwareRateLimitKeyingEnabled,
   mockIsRequestAuthenticated,
   resetMockRouterCallLog,
 } = vi.hoisted(() => {
   const jsonMiddleware = vi.fn();
+  const outerApiRateLimitKeyGenerator = vi.fn(() => 'ip:127.0.0.1');
   const rateLimitMiddleware = vi.fn((_, __, next) => next());
   const mockRouterCallLog: Array<{ arg: unknown; type: 'get' | 'post' | 'use' }> = [];
 
@@ -37,8 +39,9 @@ const {
     mockJsonMiddleware: jsonMiddleware,
     mockExpressJson: vi.fn(() => jsonMiddleware),
     mockRateLimit: vi.fn(() => rateLimitMiddleware),
+    mockRateLimitMiddleware: rateLimitMiddleware,
     mockRouterCallLog,
-    mockCreateAuthenticatedRouteRateLimitKeyGenerator: vi.fn(() => undefined),
+    mockCreateOuterApiRateLimitKeyGenerator: vi.fn(() => outerApiRateLimitKeyGenerator),
     mockIsIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
     mockIsRequestAuthenticated: vi.fn(
       (req: { principal?: unknown }) => req.principal !== undefined,
@@ -90,12 +93,16 @@ vi.mock('./auth', () => ({
 vi.mock('./csrf', () => ({
   requireSameOriginForMutations: vi.fn((req, res, next) => next()),
 }));
+vi.mock('./outer-api-rate-limit-key.js', () => ({
+  createOuterApiRateLimitKeyGenerator: mockCreateOuterApiRateLimitKeyGenerator,
+}));
 vi.mock('./rate-limit-key.js', () => ({
-  createAuthenticatedRouteRateLimitKeyGenerator: mockCreateAuthenticatedRouteRateLimitKeyGenerator,
+  getAuthenticatedRouteRateLimitKey: mockGetAuthenticatedRouteRateLimitKey,
   isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
   isRequestAuthenticated: mockIsRequestAuthenticated,
 }));
 
+const mockGetAuthenticatedRouteRateLimitKey = vi.hoisted(() => vi.fn(() => 'ip:127.0.0.1'));
 const mockGetExperimentalPortwingEnabled = vi.hoisted(() => vi.fn(() => false));
 vi.mock('../configuration/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../configuration/index.js')>();
@@ -114,7 +121,6 @@ describe('API Router', () => {
     vi.clearAllMocks();
     resetMockRouterCallLog();
     mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
-    mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
     mockGetExperimentalPortwingEnabled.mockReturnValue(false);
     vi.resetModules();
     api = await import('./api.js');
@@ -140,7 +146,12 @@ describe('API Router', () => {
         index < appMountIndex &&
         typeof c[0] === 'function' &&
         c[0] !== auth.requireAuthentication &&
-        c[0] !== csrf.requireSameOriginForMutations
+        c[0] !== csrf.requireSameOriginForMutations &&
+        // Phase 11.1 mounts a second rate limiter, the per-API-key budget,
+        // between requireAuthentication and the routers. Both limiters are the
+        // same mock function, so they are excluded by identity here rather
+        // than by position.
+        c[0] !== mockRateLimitMiddleware
       );
     });
     expect(mutationMiddlewares).toHaveLength(2);
@@ -184,7 +195,12 @@ describe('API Router', () => {
         index < appMountIndex &&
         typeof c[0] === 'function' &&
         c[0] !== auth.requireAuthentication &&
-        c[0] !== csrf.requireSameOriginForMutations
+        c[0] !== csrf.requireSameOriginForMutations &&
+        // Phase 11.1 mounts a second rate limiter, the per-API-key budget,
+        // between requireAuthentication and the routers. Both limiters are the
+        // same mock function, so they are excluded by identity here rather
+        // than by position.
+        c[0] !== mockRateLimitMiddleware
       );
     });
     expect(mutationMiddlewares).toHaveLength(2);
@@ -418,6 +434,24 @@ describe('API Router', () => {
     expect(internalIndex).toBeLessThan(authIndex);
   });
 
+  test('should mount the webhook routers before requireAuthentication middleware', async () => {
+    // The webhook routers carry their own bearer scheme. Mounting them ahead of
+    // the chain is what keeps the API key authenticator out of their path, so a
+    // webhook token is never offered to it and never has to survive it.
+    const auth = await import('./auth.js');
+    const useCalls = router.use.mock.calls;
+
+    const authIndex = useCalls.findIndex((c) => c[0] === auth.requireAuthentication);
+    const webhookIndex = useCalls.findIndex((c) => c[0] === '/webhook');
+    const webhooksIndex = useCalls.findIndex((c) => c[0] === '/webhooks');
+
+    expect(authIndex).toBeGreaterThan(-1);
+    expect(webhookIndex).toBeGreaterThan(-1);
+    expect(webhooksIndex).toBeGreaterThan(-1);
+    expect(webhookIndex).toBeLessThan(authIndex);
+    expect(webhooksIndex).toBeLessThan(authIndex);
+  });
+
   test('should use CSRF middleware', async () => {
     const csrf = await import('./csrf.js');
     expect(router.use).toHaveBeenCalledWith(csrf.requireSameOriginForMutations);
@@ -467,15 +501,22 @@ describe('API Router', () => {
     });
   });
 
-  test('should include identity-aware key generator in API rate limiter when enabled', async () => {
-    const keyGenerator = vi.fn(() => 'session:test');
-    mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(true);
-    mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(keyGenerator);
+  test.each([
+    ['identity keying is off', false],
+    ['identity keying is on', true],
+  ])('keys the outer API limiter by presented key even when %s', async (_label, enabled) => {
+    // Unconditional, unlike the identity-aware generator it replaced: with the
+    // flag off the outer limiter was purely IP-keyed, so every integration
+    // behind one reverse proxy shared its budget.
+    const keyGenerator = vi.fn(() => 'ip:198.51.100.7');
+    mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(enabled);
+    mockCreateOuterApiRateLimitKeyGenerator.mockReturnValue(keyGenerator);
 
     vi.resetModules();
     const isolatedApi = await import('./api.js');
     isolatedApi.init();
 
+    expect(mockCreateOuterApiRateLimitKeyGenerator).toHaveBeenCalledWith(enabled);
     expect(mockRateLimit).toHaveBeenCalledWith(
       expect.objectContaining({
         keyGenerator,
@@ -494,8 +535,12 @@ describe('API Router', () => {
     const configuration = await import('../configuration/index.js');
     configuration.ddEnvVars.DD_SERVER_RATELIMIT_MAX = '10000';
     try {
+      // The outer limiter is built first and the per-key limiter after it, so
+      // the assertion names the call rather than taking the last one.
+      mockRateLimit.mockClear();
       api.init();
-      expect(mockRateLimit).toHaveBeenLastCalledWith(
+      expect(mockRateLimit).toHaveBeenNthCalledWith(
+        1,
         expect.objectContaining({
           max: 10000,
         }),
@@ -547,6 +592,61 @@ describe('API Router', () => {
     expect(await limiterOptions.skip({ ...authenticated, method: 'GET', path: '/icons' })).toBe(
       false,
     );
+  });
+
+  describe('the per-key rate limiter', () => {
+    // The outer IP limiter is built first and this one second, so the index is
+    // the identity of the limiter under test, not an arbitrary pick.
+    function perKeyOptions() {
+      return mockRateLimit.mock.calls[1]?.[0];
+    }
+
+    const apiKeyRequest = (rateLimitMax?: number) => ({
+      principal: { kind: 'api-key', keyId: 'abcdef012345', name: 'ci', rateLimitMax },
+    });
+
+    test('is registered after the outer one', () => {
+      expect(mockRateLimit).toHaveBeenCalledTimes(2);
+      expect(perKeyOptions()).toMatchObject({
+        windowMs: 15 * 60 * 1000,
+        requestPropertyName: 'apiKeyRateLimit',
+      });
+    });
+
+    test('spends the per-key ceiling when the key carries one', () => {
+      expect(perKeyOptions().limit(apiKeyRequest(25))).toBe(25);
+    });
+
+    test('falls back to the server-wide maximum when the key carries none', () => {
+      expect(perKeyOptions().limit(apiKeyRequest())).toBe(1000);
+    });
+
+    test('leaves a non-key principal on the server-wide maximum', () => {
+      expect(perKeyOptions().limit({ principal: { kind: 'basic', username: 'alice' } })).toBe(1000);
+    });
+
+    test('skips every principal that is not a key, including none at all', () => {
+      expect(perKeyOptions().skip(apiKeyRequest())).toBe(false);
+      expect(perKeyOptions().skip({ principal: { kind: 'session', username: 'alice' } })).toBe(
+        true,
+      );
+      expect(perKeyOptions().skip({})).toBe(true);
+    });
+
+    test('buckets on the key rather than the client IP, whatever the keying flag says', () => {
+      // Unconditional by design: with DD_SERVER_RATELIMIT_IDENTITYKEYING off,
+      // IP keying would put every integration behind one reverse proxy in the
+      // same bucket, which is the deployment this limiter exists for.
+      // A sentinel rather than a realistic `apikey:<keyId>` bucket name: what
+      // this test owns is that the limiter delegates to the shared generator,
+      // and a credential-shaped literal here trips the repository's own secret
+      // scan. The real bucket format is pinned in rate-limit-key.test.ts.
+      const bucket = 'bucket-from-the-shared-generator';
+      mockGetAuthenticatedRouteRateLimitKey.mockReturnValue(bucket);
+
+      expect(perKeyOptions().keyGenerator(apiKeyRequest())).toBe(bucket);
+      expect(mockIsIdentityAwareRateLimitKeyingEnabled).toHaveReturnedWith(false);
+    });
   });
 
   test('should mount only /portwing router when DD_EXPERIMENTAL_PORTWING is enabled', async () => {

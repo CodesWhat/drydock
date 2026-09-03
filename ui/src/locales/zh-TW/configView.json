@@ -3,7 +3,68 @@
     "tabs": {
       "general": "通用",
       "appearance": "外觀",
-      "profile": "個人資料"
+      "profile": "個人資料",
+      "apiKeys": "API 金鑰"
+    },
+    "apiKeys": {
+      "title": "API 金鑰",
+      "description": "供指令碼與整合使用的限定範圍金鑰。每支金鑰一次僅驗證一個請求，且絕不會建立工作階段。",
+      "loading": "正在載入 API 金鑰",
+      "empty": "尚無 API 金鑰。建立一個即可讓指令碼取得存取權，而不必分享密碼。",
+      "createButton": "建立金鑰",
+      "never": "永不",
+      "revokeButton": "撤銷",
+      "form": {
+        "title": "建立 API 金鑰",
+        "name": "名稱",
+        "namePlaceholder": "CI 流水線",
+        "scopes": "範圍",
+        "expires": "到期時間",
+        "expiresNever": "留空表示金鑰永不過期",
+        "rateLimit": "每 15 分鐘的請求數",
+        "submit": "建立"
+      },
+      "scopes": {
+        "read": "讀取所有內容",
+        "containersWatch": "檢查容器更新",
+        "containersUpdate": "更新並回復容器",
+        "triggersTest": "傳送測試通知",
+        "admin": "完整管理權限",
+        "apiKeysManage": "管理 API 金鑰"
+      },
+      "reveal": {
+        "title": "立即複製此金鑰",
+        "description": "此金鑰僅會顯示這一次。Drydock 儲存的是摘要而非金鑰本身，因此一旦遺失就必須重新建立一個。",
+        "copy": "複製",
+        "copied": "已複製"
+      },
+      "columns": {
+        "name": "名稱",
+        "key": "金鑰",
+        "scopes": "範圍",
+        "lastUsed": "最後使用時間",
+        "expires": "到期時間",
+        "status": "狀態"
+      },
+      "status": {
+        "active": "有效",
+        "revoked": "已撤銷",
+        "expired": "已過期"
+      },
+      "revoke": {
+        "header": "撤銷 API 金鑰",
+        "message": "撤銷 {name} 也會撤銷由它建立的每一支金鑰。任何使用這些金鑰的項目都會立即停止運作。",
+        "accept": "撤銷"
+      },
+      "cascade": "已撤銷 {count} 支金鑰，包括此金鑰建立的每一支金鑰。",
+      "errors": {
+        "load": "無法載入 API 金鑰",
+        "create": "無法建立 API 金鑰",
+        "revoke": "無法撤銷 API 金鑰"
+      },
+      "showing": "顯示 {total} 個中的 {shown} 個",
+      "loadMore": "載入更多",
+      "loadingMore": "載入中"
     },
     "general": {
       "updateMode": {

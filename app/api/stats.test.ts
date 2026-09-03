@@ -34,6 +34,7 @@ vi.mock('./container/stats.js', () => ({
 
 import { createContainerStatsAggregator } from '../stats/aggregator.js';
 import { createSummaryStatsHandlers } from './container/stats.js';
+import { getRouteScope } from './route-scopes.js';
 import * as statsRouter from './stats.js';
 
 describe('Stats Router', () => {
@@ -90,11 +91,21 @@ describe('Stats Router', () => {
     expect(createSummaryStatsHandlers).toHaveBeenCalledWith({ aggregator: mockAggregator });
   });
 
-  test('init() registers /summary and /summary/stream and applies nocache', () => {
+  test('init() registers /summary and /summary/stream at read scope and applies nocache', () => {
     const router = statsRouter.init();
     expect(router).toBe(mockRouter);
     expect(mockRouter.use).toHaveBeenCalledWith('nocache-middleware');
-    expect(mockRouter.get).toHaveBeenCalledWith('/summary', mockHandlers.getStatsSummary);
-    expect(mockRouter.get).toHaveBeenCalledWith('/summary/stream', mockHandlers.streamStatsSummary);
+
+    const registered = new Map<string, (...args: never[]) => unknown>(
+      mockRouter.get.mock.calls as [string, (...args: never[]) => unknown][],
+    );
+    expect([...registered.keys()]).toStrictEqual(['/summary', '/summary/stream']);
+    expect(getRouteScope(registered.get('/summary'))).toBe('read');
+    expect(getRouteScope(registered.get('/summary/stream'))).toBe('read');
+
+    registered.get('/summary')?.('req' as never, 'res' as never);
+    expect(mockHandlers.getStatsSummary).toHaveBeenCalledWith('req', 'res');
+    registered.get('/summary/stream')?.('req' as never, 'res' as never);
+    expect(mockHandlers.streamStatsSummary).toHaveBeenCalledWith('req', 'res');
   });
 });

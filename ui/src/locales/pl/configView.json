@@ -3,7 +3,68 @@
     "tabs": {
       "general": "Ogólne",
       "appearance": "Wygląd",
-      "profile": "Profil"
+      "profile": "Profil",
+      "apiKeys": "Klucze API"
+    },
+    "apiKeys": {
+      "title": "Klucze API",
+      "description": "Klucze o ograniczonym zakresie dla skryptów i integracji. Klucz uwierzytelnia jedno żądanie naraz i nigdy nie tworzy sesji.",
+      "loading": "Wczytywanie kluczy API",
+      "empty": "Nie ma jeszcze żadnych kluczy API. Utwórz jeden, aby dać skryptowi dostęp bez udostępniania hasła.",
+      "createButton": "Utwórz klucz",
+      "never": "Nigdy",
+      "revokeButton": "Odwołaj",
+      "form": {
+        "title": "Utwórz klucz API",
+        "name": "Nazwa",
+        "namePlaceholder": "Potok CI",
+        "scopes": "Zakresy",
+        "expires": "Wygasa",
+        "expiresNever": "Pozostaw puste, aby klucz nigdy nie wygasał",
+        "rateLimit": "Żądania na 15 minut",
+        "submit": "Utwórz"
+      },
+      "scopes": {
+        "read": "Odczyt wszystkiego",
+        "containersWatch": "Sprawdzanie aktualizacji kontenerów",
+        "containersUpdate": "Aktualizowanie i wycofywanie kontenerów",
+        "triggersTest": "Wysyłanie powiadomień testowych",
+        "admin": "Pełna administracja",
+        "apiKeysManage": "Zarządzanie kluczami API"
+      },
+      "reveal": {
+        "title": "Skopiuj ten klucz teraz",
+        "description": "To jedyny moment, w którym jest on wyświetlany. Drydock przechowuje skrót, a nie sam klucz, więc jego utrata oznacza konieczność utworzenia kolejnego.",
+        "copy": "Kopiuj",
+        "copied": "Skopiowano"
+      },
+      "columns": {
+        "name": "Nazwa",
+        "key": "Klucz",
+        "scopes": "Zakresy",
+        "lastUsed": "Ostatnio użyty",
+        "expires": "Wygasa",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Aktywny",
+        "revoked": "Odwołany",
+        "expired": "Wygasły"
+      },
+      "revoke": {
+        "header": "Odwołaj klucz API",
+        "message": "Odwołanie {name} odwołuje też każdy klucz utworzony za jego pomocą. Wszystko, co ich używa, przestaje działać natychmiast.",
+        "accept": "Odwołaj"
+      },
+      "cascade": "Odwołano {count} kluczy, w tym każdy klucz utworzony przez ten klucz.",
+      "errors": {
+        "load": "Nie udało się wczytać kluczy API",
+        "create": "Nie udało się utworzyć klucza API",
+        "revoke": "Nie udało się odwołać klucza API"
+      },
+      "showing": "Wyświetlono {shown} z {total}",
+      "loadMore": "Załaduj więcej",
+      "loadingMore": "Ładowanie"
     },
     "general": {
       "updateMode": {

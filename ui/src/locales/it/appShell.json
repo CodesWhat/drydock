@@ -138,7 +138,9 @@
           "appearanceTitle": "Impostazioni aspetto",
           "appearanceSubtitle": "Config · Aspetto",
           "profileTitle": "Impostazioni profilo",
-          "profileSubtitle": "Config · Profilo"
+          "profileSubtitle": "Config · Profilo",
+          "apiKeysTitle": "Chiavi API",
+          "apiKeysSubtitle": "Crea e revoca chiavi con ambito limitato"
         }
       },
       "connection": {

@@ -10,6 +10,7 @@ import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
 } from './rate-limit-key.js';
+import { SESSION_ONLY, scoped } from './route-scopes.js';
 
 const router = express.Router();
 
@@ -73,7 +74,7 @@ export function init() {
       message: 'Debug dump rate limit exceeded. Max 5 per 60 seconds.',
       ...identityAwareRateLimitOptions,
     }),
-    getDebugDump,
+    scoped(SESSION_ONLY, getDebugDump),
   );
   return router;
 }

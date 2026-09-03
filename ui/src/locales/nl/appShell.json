@@ -138,7 +138,9 @@
           "appearanceTitle": "Uiterlijkinstellingen",
           "appearanceSubtitle": "Configuratie · Uiterlijk",
           "profileTitle": "Profielinstellingen",
-          "profileSubtitle": "Configuratie · Profiel"
+          "profileSubtitle": "Configuratie · Profiel",
+          "apiKeysTitle": "API-sleutels",
+          "apiKeysSubtitle": "API-sleutels met een beperkt bereik aanmaken en intrekken"
         }
       },
       "connection": {

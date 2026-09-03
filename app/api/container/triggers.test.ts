@@ -91,9 +91,10 @@ async function callGetContainerTriggers(
 async function callRunTrigger(
   handlers: ReturnType<typeof createTriggerHandlers>,
   params: Record<string, string | string[]>,
+  principal?: Record<string, unknown>,
 ) {
   const res = createMockResponse();
-  await handlers.runTrigger({ params } as any, res as any);
+  await handlers.runTrigger({ params, principal } as any, res as any);
   return res;
 }
 
@@ -541,6 +542,32 @@ describe('api/container/triggers', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.getTriggers).not.toHaveBeenCalled();
     });
+
+    test.each([
+      ['docker', 'containers:update', ['triggers:test']],
+      ['slack', 'triggers:test', ['containers:update']],
+    ])(
+      'refuses a %s trigger to a key without %s, before the container is looked up',
+      async (triggerType, requiredScope, heldScopes) => {
+        // The check runs ahead of the container lookup on purpose: answering
+        // 404 for an unknown id and 403 for a known one would hand a key that
+        // holds neither scope a container-existence oracle.
+        const harness = createHarness();
+
+        const res = await callRunTrigger(
+          harness.handlers,
+          { id: 'c1', triggerType, triggerName: 'notify' },
+          { kind: 'api-key', keyId: 'abcdef012345', name: 'ci', scopes: heldScopes },
+        );
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'API key is missing the required scope',
+          details: { requiredScope },
+        });
+        expect(harness.storeContainer.getContainer).not.toHaveBeenCalled();
+      },
+    );
 
     test('blocks local docker trigger execution for remote containers', async () => {
       const harness = createHarness({

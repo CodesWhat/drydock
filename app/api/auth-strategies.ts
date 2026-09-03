@@ -4,12 +4,13 @@ import type { StrategyDescription } from '../authentications/providers/Authentic
 import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
+import { apiKeyAuthenticator } from './api-key-auth.js';
 import {
   clearAuthenticators,
   getAuthenticators,
   registerAuthenticator,
 } from './authenticator-chain.js';
-import { SESSION_AUTHENTICATOR_ID, sessionAuthenticator } from './session-principal.js';
+import { sessionAuthenticator } from './session-principal.js';
 
 interface AuthStatusResponse {
   providers: StrategyDescription[];
@@ -47,6 +48,12 @@ function useAuthenticator(authentication: Authentication, app: Application): voi
  */
 export function registerAuthenticators(app: Application): void {
   clearAuthenticators();
+  // First, ahead of every provider. A request carrying both a session cookie
+  // and a `ddk_` bearer therefore resolves as the key: a background
+  // integration must not silently inherit a browser session's identity or its
+  // permissions, and a revoked key must not keep working because a cookie
+  // rode along with it.
+  registerAuthenticator(apiKeyAuthenticator);
   const authentications = Object.values(registry.getState().authentication);
   const categorized = authentications.map((authentication: Authentication) => ({
     authentication,
@@ -64,13 +71,18 @@ export function registerAuthenticators(app: Application): void {
 /**
  * Whether anything can actually authenticate a caller yet.
  *
- * The session authenticator does not count: it can only restore an identity
- * some other authenticator established, so a chain holding nothing else can
- * never admit a first request. This is the readiness signal /health gates on,
- * and it answers the same question the old `getAllIds().length > 0` did.
+ * Authenticators that only re-present an identity something else established
+ * do not count — the session, and API keys, which cannot exist until somebody
+ * authenticated to mint one. A chain holding only those can never admit a
+ * first request. This is the readiness signal /health gates on, and it answers
+ * the same question the old `getAllIds().length > 0` did.
+ *
+ * The exclusion is read off `countsTowardReadiness` rather than matched
+ * against a list of ids here, so adding a third such authenticator cannot
+ * accidentally report an unguarded install as ready.
  */
 export function isAuthenticationReady(): boolean {
-  return getAuthenticators().some((authenticator) => authenticator.id !== SESSION_AUTHENTICATOR_ID);
+  return getAuthenticators().some((authenticator) => authenticator.countsTowardReadiness !== false);
 }
 
 function getUniqueStrategies(): StrategyDescription[] {

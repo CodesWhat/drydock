@@ -3,7 +3,68 @@
     "tabs": {
       "general": "Generale",
       "appearance": "Aspetto",
-      "profile": "Profilo"
+      "profile": "Profilo",
+      "apiKeys": "Chiavi API"
+    },
+    "apiKeys": {
+      "title": "Chiavi API",
+      "description": "Chiavi con ambito limitato per script e integrazioni. Una chiave autentica una richiesta alla volta e non crea mai una sessione.",
+      "loading": "Caricamento chiavi API",
+      "empty": "Nessuna chiave API ancora. Creane una per dare a uno script l'accesso senza condividere una password.",
+      "createButton": "Crea chiave",
+      "never": "Mai",
+      "revokeButton": "Revoca",
+      "form": {
+        "title": "Crea una chiave API",
+        "name": "Nome",
+        "namePlaceholder": "Pipeline CI",
+        "scopes": "Ambiti",
+        "expires": "Scadenza",
+        "expiresNever": "Lascia vuoto per una chiave che non scade mai",
+        "rateLimit": "Richieste ogni 15 minuti",
+        "submit": "Crea"
+      },
+      "scopes": {
+        "read": "Leggi tutto",
+        "containersWatch": "Controlla gli aggiornamenti dei container",
+        "containersUpdate": "Aggiorna e ripristina i container",
+        "triggersTest": "Invia notifiche di prova",
+        "admin": "Amministrazione completa",
+        "apiKeysManage": "Gestisci chiavi API"
+      },
+      "reveal": {
+        "title": "Copia questa chiave ora",
+        "description": "Questa è l'unica volta in cui viene mostrata. Drydock memorizza un digest, non la chiave, quindi perderla significa crearne un'altra.",
+        "copy": "Copia",
+        "copied": "Copiato"
+      },
+      "columns": {
+        "name": "Nome",
+        "key": "Chiave",
+        "scopes": "Ambiti",
+        "lastUsed": "Ultimo utilizzo",
+        "expires": "Scadenza",
+        "status": "Stato"
+      },
+      "status": {
+        "active": "Attiva",
+        "revoked": "Revocata",
+        "expired": "Scaduta"
+      },
+      "revoke": {
+        "header": "Revoca chiave API",
+        "message": "Revocare {name} revoca anche ogni chiave creata con essa. Tutto ciò che le utilizza smette di funzionare immediatamente.",
+        "accept": "Revoca"
+      },
+      "cascade": "Revocate {count} chiavi, incluse tutte quelle create da questa.",
+      "errors": {
+        "load": "Impossibile caricare le chiavi API",
+        "create": "Impossibile creare la chiave API",
+        "revoke": "Impossibile revocare la chiave API"
+      },
+      "showing": "Visualizzati {shown} di {total}",
+      "loadMore": "Carica altri",
+      "loadingMore": "Caricamento"
     },
     "general": {
       "updateMode": {

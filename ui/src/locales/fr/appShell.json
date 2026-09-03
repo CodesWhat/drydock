@@ -138,7 +138,9 @@
           "appearanceTitle": "Paramètres d'Apparence",
           "appearanceSubtitle": "Configuration · Apparence",
           "profileTitle": "Paramètres de Profil",
-          "profileSubtitle": "Configuration · Profil"
+          "profileSubtitle": "Configuration · Profil",
+          "apiKeysTitle": "Clés API",
+          "apiKeysSubtitle": "Créer et révoquer des clés à portée limitée"
         }
       },
       "connection": {

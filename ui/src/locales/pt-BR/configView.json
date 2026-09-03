@@ -3,7 +3,68 @@
     "tabs": {
       "general": "Geral",
       "appearance": "Aparência",
-      "profile": "Perfil"
+      "profile": "Perfil",
+      "apiKeys": "Chaves de API"
+    },
+    "apiKeys": {
+      "title": "Chaves de API",
+      "description": "Chaves com escopo limitado para scripts e integrações. Uma chave autentica uma solicitação de cada vez e nunca cria uma sessão.",
+      "loading": "Carregando chaves de API",
+      "empty": "Ainda não há chaves de API. Crie uma para dar acesso a um script sem compartilhar uma senha.",
+      "createButton": "Criar chave",
+      "never": "Nunca",
+      "revokeButton": "Revogar",
+      "form": {
+        "title": "Criar uma chave de API",
+        "name": "Nome",
+        "namePlaceholder": "Pipeline de CI",
+        "scopes": "Escopos",
+        "expires": "Expira",
+        "expiresNever": "Deixe em branco para uma chave que nunca expira",
+        "rateLimit": "Solicitações a cada 15 minutos",
+        "submit": "Criar"
+      },
+      "scopes": {
+        "read": "Ler tudo",
+        "containersWatch": "Verificar atualizações dos containers",
+        "containersUpdate": "Atualizar e reverter containers",
+        "triggersTest": "Enviar notificações de teste",
+        "admin": "Administração completa",
+        "apiKeysManage": "Gerenciar chaves de API"
+      },
+      "reveal": {
+        "title": "Copie esta chave agora",
+        "description": "Esta é a única vez que ela é exibida. O Drydock armazena um digest, não a chave, então perdê-la significa criar outra.",
+        "copy": "Copiar",
+        "copied": "Copiado"
+      },
+      "columns": {
+        "name": "Nome",
+        "key": "Chave",
+        "scopes": "Escopos",
+        "lastUsed": "Último uso",
+        "expires": "Expira",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Ativa",
+        "revoked": "Revogada",
+        "expired": "Expirada"
+      },
+      "revoke": {
+        "header": "Revogar chave de API",
+        "message": "Revogar {name} também revoga toda chave criada com ela. Tudo o que as usa para de funcionar imediatamente.",
+        "accept": "Revogar"
+      },
+      "cascade": "{count} chaves revogadas, incluindo toda chave que esta criou.",
+      "errors": {
+        "load": "Não foi possível carregar as chaves de API",
+        "create": "Não foi possível criar a chave de API",
+        "revoke": "Não foi possível revogar a chave de API"
+      },
+      "showing": "Mostrando {shown} de {total}",
+      "loadMore": "Carregar mais",
+      "loadingMore": "Carregando"
     },
     "general": {
       "updateMode": {

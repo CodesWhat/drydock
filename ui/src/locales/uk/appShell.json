@@ -138,7 +138,9 @@
           "appearanceTitle": "Налаштування вигляду",
           "appearanceSubtitle": "Конфігурація · Вигляд",
           "profileTitle": "Налаштування профілю",
-          "profileSubtitle": "Конфігурація · Профіль"
+          "profileSubtitle": "Конфігурація · Профіль",
+          "apiKeysTitle": "Ключі API",
+          "apiKeysSubtitle": "Створення та відкликання ключів з обмеженою областю дії"
         }
       },
       "connection": {

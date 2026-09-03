@@ -5,6 +5,7 @@ import logger from '../log/index.js';
 import * as settingsStore from '../store/settings.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 const log = logger.child({ component: 'settings' });
@@ -74,9 +75,9 @@ function updateSettingsDeprecatedPut(req: Request, res: Response): void {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getSettings);
-  router.patch('/', updateSettings);
+  router.get('/', scoped('read', getSettings));
+  router.patch('/', scoped('admin', updateSettings));
   // Backward compatibility alias: retained temporarily, prefer PATCH semantics.
-  router.put('/', updateSettingsDeprecatedPut);
+  router.put('/', scoped('admin', updateSettingsDeprecatedPut));
   return router;
 }

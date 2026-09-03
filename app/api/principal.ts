@@ -36,12 +36,21 @@ interface AnonymousPrincipal extends PrincipalBase {
   readonly kind: 'anonymous';
 }
 
-/** Identity proven by a scoped API key. Populated by Phase 11.1. */
+/**
+ * Identity proven by a scoped API key.
+ *
+ * `username` is the operator-supplied key name, which is not unique — two keys
+ * may share one. `keyId` is the identity anything that must distinguish them
+ * keys on, which is why the rate limiter buckets on it rather than on the name.
+ */
 interface ApiKeyPrincipal extends PrincipalBase {
   readonly kind: 'api-key';
   readonly keyId: string;
   readonly scopes: readonly string[];
-  readonly parentKeyId?: string;
+  /** Null for a key minted from a human session; those never cascade. */
+  readonly parentKeyId: string | null;
+  /** Per-key request ceiling; falls back to the global limit when absent. */
+  readonly rateLimitMax?: number;
 }
 
 /**

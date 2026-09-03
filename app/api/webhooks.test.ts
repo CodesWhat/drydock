@@ -1,9 +1,15 @@
-const { mockRouter, mockRegistryRouterInit } = vi.hoisted(() => ({
-  mockRouter: {
-    use: vi.fn(),
-  },
-  mockRegistryRouterInit: vi.fn(() => 'registry-webhook-router'),
-}));
+const { mockRouter, mockRegistryWebhookRouter, mockRegistryRouterInit } = vi.hoisted(() => {
+  // An object, not a string sentinel: webhooks.ts mounts through mountRouter,
+  // which records the mount path on the router it is handed.
+  const registryWebhookRouter = { router: 'registry-webhook-router' };
+  return {
+    mockRouter: {
+      use: vi.fn(),
+    },
+    mockRegistryWebhookRouter: registryWebhookRouter,
+    mockRegistryRouterInit: vi.fn(() => registryWebhookRouter),
+  };
+});
 
 vi.mock('express', () => ({
   default: {
@@ -26,6 +32,6 @@ describe('api/webhooks', () => {
     webhooksRouter.init();
 
     expect(mockRegistryRouterInit).toHaveBeenCalledTimes(1);
-    expect(mockRouter.use).toHaveBeenCalledWith('/registry', 'registry-webhook-router');
+    expect(mockRouter.use).toHaveBeenCalledWith('/registry', mockRegistryWebhookRouter);
   });
 });

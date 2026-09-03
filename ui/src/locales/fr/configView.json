@@ -3,7 +3,68 @@
     "tabs": {
       "general": "Général",
       "appearance": "Apparence",
-      "profile": "Profil"
+      "profile": "Profil",
+      "apiKeys": "Clés API"
+    },
+    "apiKeys": {
+      "title": "Clés API",
+      "description": "Clés à portée limitée pour les scripts et les intégrations. Une clé authentifie une requête à la fois et ne crée jamais de session.",
+      "loading": "Chargement des clés API",
+      "empty": "Aucune clé API pour le moment. Créez-en une pour donner l'accès à un script sans partager de mot de passe.",
+      "createButton": "Créer une clé",
+      "never": "Jamais",
+      "revokeButton": "Révoquer",
+      "form": {
+        "title": "Créer une clé API",
+        "name": "Nom",
+        "namePlaceholder": "Pipeline CI",
+        "scopes": "Portées",
+        "expires": "Expire",
+        "expiresNever": "Laisser vide pour une clé qui n'expire jamais",
+        "rateLimit": "Requêtes par 15 minutes",
+        "submit": "Créer"
+      },
+      "scopes": {
+        "read": "Tout lire",
+        "containersWatch": "Vérifier les mises à jour des conteneurs",
+        "containersUpdate": "Mettre à jour et revenir en arrière sur les conteneurs",
+        "triggersTest": "Envoyer des notifications de test",
+        "admin": "Administration complète",
+        "apiKeysManage": "Gérer les clés API"
+      },
+      "reveal": {
+        "title": "Copiez cette clé maintenant",
+        "description": "C'est la seule fois où elle est affichée. Drydock stocke une empreinte, pas la clé elle-même, donc la perdre signifie en créer une autre.",
+        "copy": "Copier",
+        "copied": "Copié"
+      },
+      "columns": {
+        "name": "Nom",
+        "key": "Clé",
+        "scopes": "Portées",
+        "lastUsed": "Dernière utilisation",
+        "expires": "Expire",
+        "status": "Statut"
+      },
+      "status": {
+        "active": "Active",
+        "revoked": "Révoquée",
+        "expired": "Expirée"
+      },
+      "revoke": {
+        "header": "Révoquer la clé API",
+        "message": "Révoquer {name} révoque aussi chaque clé créée avec elle. Tout ce qui les utilise cesse de fonctionner immédiatement.",
+        "accept": "Révoquer"
+      },
+      "cascade": "{count} clés révoquées, y compris chaque clé créée par celle-ci.",
+      "errors": {
+        "load": "Impossible de charger les clés API",
+        "create": "Impossible de créer la clé API",
+        "revoke": "Impossible de révoquer la clé API"
+      },
+      "showing": "Affichage de {shown} sur {total}",
+      "loadMore": "Charger plus",
+      "loadingMore": "Chargement"
     },
     "general": {
       "updateMode": {

@@ -37,6 +37,17 @@ vi.mock('@/preferences/sync', () => ({
   pushInitialSync: (...args: any[]) => mockPushInitialSync(...args),
 }));
 
+const mockListApiKeys = vi.fn();
+vi.mock('@/services/api-key', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/api-key')>();
+  return {
+    ...actual,
+    listApiKeys: (...args: any[]) => mockListApiKeys(...args),
+    createApiKey: vi.fn(),
+    revokeApiKey: vi.fn(),
+  };
+});
+
 const mockDisableIconifyApi = vi.fn();
 vi.mock('@/boot/icons', () => ({
   disableIconifyApi: (...args: any[]) => mockDisableIconifyApi(...args),
@@ -947,6 +958,32 @@ describe('ConfigView', () => {
       const text = w.text();
       expect(text).toContain('Username');
       expect(text).toContain('Active Sessions');
+    });
+  });
+
+  describe('api keys tab', () => {
+    beforeEach(() => {
+      mockListApiKeys.mockResolvedValue({ data: [], total: 0, hasMore: false });
+      mockGetServer.mockResolvedValue({ configuration: {} });
+    });
+
+    it('offers the tab alongside the others', async () => {
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+
+      expect(w.findAll('button').some((b) => b.text().includes('API Keys'))).toBe(true);
+    });
+
+    it('selects the api keys tab from the query param and loads the keys', async () => {
+      mockRouteQuery.value = { tab: 'apiKeys' };
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockListApiKeys).toHaveBeenCalled());
+      await nextTick();
+      await nextTick();
+
+      expect(w.text()).toContain('No API keys yet');
     });
   });
 });

@@ -138,7 +138,9 @@
           "appearanceTitle": "Cài đặt giao diện",
           "appearanceSubtitle": "Cấu hình · Giao diện",
           "profileTitle": "Cài đặt hồ sơ",
-          "profileSubtitle": "Cấu hình · Hồ sơ"
+          "profileSubtitle": "Cấu hình · Hồ sơ",
+          "apiKeysTitle": "Khóa API",
+          "apiKeysSubtitle": "Tạo và thu hồi khóa có phạm vi giới hạn"
         }
       },
       "connection": {

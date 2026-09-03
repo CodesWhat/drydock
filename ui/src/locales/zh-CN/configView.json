@@ -3,7 +3,68 @@
     "tabs": {
       "general": "通用",
       "appearance": "外观",
-      "profile": "个人资料"
+      "profile": "个人资料",
+      "apiKeys": "API 密钥"
+    },
+    "apiKeys": {
+      "title": "API 密钥",
+      "description": "用于脚本和集成的限定作用域密钥。密钥每次仅验证一个请求，并且从不创建会话。",
+      "loading": "正在加载 API 密钥",
+      "empty": "尚无 API 密钥。创建一个即可让脚本获得访问权限，而无需共享密码。",
+      "createButton": "创建密钥",
+      "never": "从不",
+      "revokeButton": "吊销",
+      "form": {
+        "title": "创建 API 密钥",
+        "name": "名称",
+        "namePlaceholder": "CI 流水线",
+        "scopes": "作用域",
+        "expires": "过期时间",
+        "expiresNever": "留空表示密钥永不过期",
+        "rateLimit": "每 15 分钟的请求数",
+        "submit": "创建"
+      },
+      "scopes": {
+        "read": "读取全部内容",
+        "containersWatch": "检查容器更新",
+        "containersUpdate": "更新并回滚容器",
+        "triggersTest": "发送测试通知",
+        "admin": "完全管理权限",
+        "apiKeysManage": "管理 API 密钥"
+      },
+      "reveal": {
+        "title": "立即复制此密钥",
+        "description": "此密钥仅显示这一次。Drydock 存储的是摘要而非密钥本身，因此一旦丢失就必须重新创建一个。",
+        "copy": "复制",
+        "copied": "已复制"
+      },
+      "columns": {
+        "name": "名称",
+        "key": "密钥",
+        "scopes": "作用域",
+        "lastUsed": "最后使用时间",
+        "expires": "过期时间",
+        "status": "状态"
+      },
+      "status": {
+        "active": "有效",
+        "revoked": "已吊销",
+        "expired": "已过期"
+      },
+      "revoke": {
+        "header": "吊销 API 密钥",
+        "message": "吊销 {name} 也会吊销由它创建的每一个密钥。任何使用这些密钥的东西都会立即停止工作。",
+        "accept": "吊销"
+      },
+      "cascade": "已吊销 {count} 个密钥，包括此密钥创建的每一个密钥。",
+      "errors": {
+        "load": "无法加载 API 密钥",
+        "create": "无法创建 API 密钥",
+        "revoke": "无法吊销 API 密钥"
+      },
+      "showing": "显示 {total} 个中的 {shown} 个",
+      "loadMore": "加载更多",
+      "loadingMore": "加载中"
     },
     "general": {
       "updateMode": {

@@ -41,7 +41,7 @@ function getTrimmedString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function getIpRateLimitKey(
+export function getIpRateLimitKey(
   request: Pick<IdentityAwareRateLimitRequestLike, 'ip' | 'socket'>,
 ): string {
   const requestIp = getTrimmedString(request.ip) || getTrimmedString(request.socket?.remoteAddress);
@@ -56,6 +56,14 @@ function getAuthenticatedIdentityRateLimitKey(
 ): string | undefined {
   if (!isRequestAuthenticated(request)) {
     return undefined;
+  }
+
+  // First branch, and unconditional. A key is never bucketed by its display
+  // name (two keys may share one) nor by an express-session id attached before
+  // authentication. This applies whether or not identity-aware keying is
+  // enabled: see the inner limiter in api.ts, which always supplies this key.
+  if (request.principal?.kind === 'api-key') {
+    return `apikey:${request.principal.keyId}`;
   }
 
   const sessionId =

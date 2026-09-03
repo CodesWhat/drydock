@@ -29,10 +29,12 @@ import {
   registerUpdateOperationChanged,
 } from '../event/index.js';
 import log from '../log/index.js';
+import { findApiKeyById, isApiKeyExpired } from '../store/api-key.js';
 import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { hashToken } from '../util/crypto.js';
 import { stripContainerDetailOnlySecurityFields } from './container/container-projection.js';
 import { sendErrorResponse } from './error-response.js';
+import { scoped } from './route-scopes.js';
 import {
   type ActiveSseClient,
   ActiveSseClientRegistry,
@@ -202,7 +204,7 @@ function clearResponsePressureState(response: FlushableResponse): void {
   responsePressureStates.delete(response);
 }
 
-function disconnectBackpressuredResponse(response: FlushableResponse): void {
+function forceDisconnectResponse(response: FlushableResponse): void {
   const cleanup = responsePressureStates.get(response)?.cleanup;
   if (cleanup) {
     cleanup();
@@ -234,6 +236,15 @@ function installDrainHandler(response: FlushableResponse, state: SseResponsePres
     if (responsePressureStates.get(response) !== state) {
       return;
     }
+    if (isSseClientApiKeyDead(response, new Date())) {
+      // Drop the queue rather than deliver it. These frames were authorised by
+      // a credential that has since died, and the writes below go straight to
+      // the socket without passing through `writeSseChunk`.
+      state.pendingRetainedChunks.length = 0;
+      state.pendingBytes = 0;
+      forceDisconnectResponse(response);
+      return;
+    }
     state.drainHandler = undefined;
     state.blocked = false;
     while (state.pendingRetainedChunks.length > 0) {
@@ -254,12 +265,82 @@ function installDrainHandler(response: FlushableResponse, state: SseResponsePres
   response.once?.('drain', drainHandler);
 }
 
+/**
+ * Read a stream's key expiry off the store once, at connect.
+ *
+ * Nothing edits an existing key — the API mints and revokes, it never extends —
+ * so the expiry a stream is born with is the expiry it dies on, and re-reading
+ * the store on every broadcast would buy nothing for a lookup per event.
+ * Revocation and a record that disappears later are still caught by the
+ * heartbeat sweep, which does re-read.
+ * @param principal
+ */
+function apiKeyClientFields(
+  principal: Request['principal'],
+): Pick<ActiveSseClient, 'apiKeyId' | 'apiKeyExpiresAtMs'> {
+  if (principal?.kind !== 'api-key') {
+    return {};
+  }
+  const record = findApiKeyById(principal.keyId);
+  if (record === null) {
+    return { apiKeyId: principal.keyId, apiKeyExpiresAtMs: 0 };
+  }
+  if (record.expiresAt === null) {
+    return { apiKeyId: principal.keyId };
+  }
+  const expiresAtMs = Date.parse(record.expiresAt);
+  return {
+    apiKeyId: principal.keyId,
+    apiKeyExpiresAtMs: Number.isNaN(expiresAtMs) ? 0 : expiresAtMs,
+  };
+}
+
+function isClientApiKeyExpired(response: FlushableResponse, nowMs: number): boolean {
+  const expiresAtMs = sseClientRegistry.getByResponse(response)?.apiKeyExpiresAtMs;
+  return expiresAtMs !== undefined && nowMs >= expiresAtMs;
+}
+
+/**
+ * Is the key that opened this stream dead right now?
+ *
+ * The per-frame check in `writeSseChunk` reads the expiry captured at connect
+ * and touches no store, because it runs once per client per broadcast. This one
+ * runs once per backpressure episode, so it can afford the store read that also
+ * catches revocation and a record that disappeared: a stream stays blocked for
+ * as long as its client is slow, which is long enough for the key to die while
+ * frames sit in the queue.
+ * @param response
+ * @param now
+ */
+function isSseClientApiKeyDead(response: FlushableResponse, now: Date): boolean {
+  const activeClient = sseClientRegistry.getByResponse(response);
+  if (activeClient === undefined || activeClient.apiKeyId === undefined) {
+    return false;
+  }
+  if (
+    activeClient.apiKeyExpiresAtMs !== undefined &&
+    now.getTime() >= activeClient.apiKeyExpiresAtMs
+  ) {
+    return true;
+  }
+  const record = findApiKeyById(activeClient.apiKeyId);
+  return record === null || record.revokedAt !== null || isApiKeyExpired(record, now);
+}
+
 function writeSseChunk(
   response: FlushableResponse,
   chunk: string,
   retainWhileBlocked: boolean,
   flush = true,
 ): void {
+  // Every byte this router sends goes through here, so checking expiry at the
+  // write is what stops a broadcast, a replayed event or the handshake itself
+  // from reaching a key that died since the last heartbeat. The sweep on the
+  // 15-second heartbeat is a floor, not the guarantee.
+  if (isClientApiKeyExpired(response, Date.now())) {
+    forceDisconnectResponse(response);
+    return;
+  }
   const state = getResponsePressureState(response);
   if (state.blocked) {
     if (!retainWhileBlocked) {
@@ -267,7 +348,7 @@ function writeSseChunk(
     }
     const chunkBytes = Buffer.byteLength(chunk);
     if (state.pendingBytes + chunkBytes > SSE_MAX_PENDING_BYTES_PER_CLIENT) {
-      disconnectBackpressuredResponse(response);
+      forceDisconnectResponse(response);
       return;
     }
     state.pendingRetainedChunks.push({ chunk, flush });
@@ -295,11 +376,67 @@ function writeHeartbeat(response: FlushableResponse): void {
   writeSseChunk(response, 'event: dd:heartbeat\ndata: {}\n\n', false, false);
 }
 
+/**
+ * Close every open stream that authenticated with one of these keys.
+ *
+ * Called with the full cascade a revocation produced, so revoking a parent
+ * takes down the streams its children opened as well. A stream authenticates
+ * once at connect and then stays open indefinitely, so without this a revoked
+ * key kept receiving container, agent and update events for as long as the
+ * client held the socket — the one credential state change that a long-lived
+ * connection cannot notice on its own.
+ * @param revokedKeyIds
+ * @returns how many streams were closed
+ */
+export function closeSseClientsForRevokedApiKeys(revokedKeyIds: readonly string[]): number {
+  if (revokedKeyIds.length === 0) {
+    return 0;
+  }
+  const revoked = new Set(revokedKeyIds);
+  let closed = 0;
+  // Snapshotted because the teardown removes entries from the map being walked.
+  for (const activeClient of [...sseClientRegistry.listClients()]) {
+    if (activeClient.apiKeyId !== undefined && revoked.has(activeClient.apiKeyId)) {
+      forceDisconnectResponse(activeClient.response);
+      closed += 1;
+    }
+  }
+  return closed;
+}
+
+/**
+ * Drop any stream whose key stopped being valid since it connected.
+ *
+ * Expiry has no event to hook — a key simply stops authenticating at a
+ * timestamp — so it has to be swept for, and the heartbeat is already the
+ * clock that visits every client. Revocation is closed synchronously by
+ * `closeSseClientsForRevokedApiKeys`; re-checking `revokedAt` here means the
+ * store stays the single source of truth even if a future revocation path
+ * forgets to call it. A key missing from the store fails closed for the same
+ * reason the authenticator does: no record is not permission to keep reading.
+ * @param now
+ */
+function disconnectClientsWithInvalidApiKeys(now: Date): void {
+  for (const activeClient of [...sseClientRegistry.listClients()]) {
+    const apiKeyId = activeClient.apiKeyId;
+    if (apiKeyId === undefined) {
+      continue;
+    }
+    const record = findApiKeyById(apiKeyId);
+    if (record === null || record.revokedAt !== null || isApiKeyExpired(record, now)) {
+      forceDisconnectResponse(activeClient.response);
+    }
+  }
+}
+
 function startSharedHeartbeatIntervalIfNeeded(): void {
   if (sharedHeartbeatIntervalHandle || clients.size === 0) {
     return;
   }
   sharedHeartbeatIntervalHandle = globalThis.setInterval(() => {
+    // Before the writes, so a stream whose key just died gets closed rather
+    // than sent one more heartbeat.
+    disconnectClientsWithInvalidApiKeys(new Date());
     for (const client of clients) {
       writeHeartbeat(client);
     }
@@ -405,6 +542,7 @@ function eventsHandler(req: Request, res: Response): void {
 
   const clientToken = issueServerClientId('sse-token');
   const clientTokenHash = hashToken(clientToken);
+  const principal = req.principal;
   const activeClient: ActiveSseClient = {
     clientId: issueServerClientId('sse-client'),
     clientToken,
@@ -412,6 +550,7 @@ function eventsHandler(req: Request, res: Response): void {
     clientTokenHashHex: clientTokenHash.toString('hex'),
     response: client,
     connectedAtMs: Date.now(),
+    ...apiKeyClientFields(principal),
   };
   sseClientRegistry.add(activeClient);
 
@@ -848,8 +987,8 @@ export function init(): express.Router {
     ),
   );
 
-  router.get('/', eventsHandler);
-  router.post('/self-update/:operationId/ack', acknowledgeSelfUpdate);
+  router.get('/', scoped('read', eventsHandler));
+  router.post('/self-update/:operationId/ack', scoped('admin', acknowledgeSelfUpdate));
   return router;
 }
 

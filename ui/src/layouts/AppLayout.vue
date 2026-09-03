@@ -222,6 +222,16 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
       kind: 'setting',
       searchable: 'profile settings config account user',
     },
+    {
+      id: 'settings:api-keys',
+      title: t('appShell.layout.search.settings.apiKeysTitle'),
+      subtitle: t('appShell.layout.search.settings.apiKeysSubtitle'),
+      icon: 'key',
+      route: ROUTES.CONFIG,
+      query: { tab: 'apiKeys' },
+      kind: 'setting',
+      searchable: 'api keys credentials scopes automation integration',
+    },
   ];
 
   return [...pageResults, ...settingsResults];

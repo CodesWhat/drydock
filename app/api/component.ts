@@ -6,6 +6,7 @@ import * as registry from '../registry/index.js';
 import { redactTriggerConfigurationInfrastructureDetails } from '../registry/trigger-config-redaction.js';
 import { normalizeLimitOffsetPagination } from './container/request-helpers.js';
 import { sendErrorResponse } from './error-response.js';
+import { scoped } from './route-scopes.js';
 
 export interface ApiComponent {
   id: string;
@@ -154,12 +155,17 @@ export function getById(req: Request<ComponentRouteParams>, res: Response, kind:
 export function init(kind: ComponentKind) {
   const router = express.Router();
   router.use(nocache());
-  router.get('/', (req: Request, res: Response) => getAll(req, res, kind));
-  router.get('/:type/:name', (req: Request<ComponentRouteParams>, res: Response) =>
-    getById(req, res, kind),
+  router.get(
+    '/',
+    scoped('read', (req: Request, res: Response) => getAll(req, res, kind)),
   );
-  router.get('/:type/:name/:agent', (req: Request<ComponentRouteParams>, res: Response) =>
-    getById(req, res, kind),
+  router.get(
+    '/:type/:name',
+    scoped('read', (req: Request<ComponentRouteParams>, res: Response) => getById(req, res, kind)),
+  );
+  router.get(
+    '/:type/:name/:agent',
+    scoped('read', (req: Request<ComponentRouteParams>, res: Response) => getById(req, res, kind)),
   );
   return router;
 }

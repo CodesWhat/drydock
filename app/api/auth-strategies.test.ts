@@ -29,6 +29,7 @@ vi.mock('../log/index.js', () => ({
   },
 }));
 
+import { API_KEY_AUTHENTICATOR_ID } from './api-key-auth.js';
 import {
   getAuthStatus,
   getLogoutRedirectUrl,
@@ -89,7 +90,11 @@ describe('auth-strategies', () => {
 
       registerAuthenticators({} as Application);
 
-      expect(getRegisteredIds()).toEqual(['basic.local', SESSION_AUTHENTICATOR_ID]);
+      expect(getRegisteredIds()).toEqual([
+        API_KEY_AUTHENTICATOR_ID,
+        'basic.local',
+        SESSION_AUTHENTICATOR_ID,
+      ]);
     });
 
     test('registers multiple providers in registry order', () => {
@@ -105,7 +110,12 @@ describe('auth-strategies', () => {
 
       registerAuthenticators({} as Application);
 
-      expect(getRegisteredIds()).toEqual(['basic.local', 'oidc.google', SESSION_AUTHENTICATOR_ID]);
+      expect(getRegisteredIds()).toEqual([
+        API_KEY_AUTHENTICATOR_ID,
+        'basic.local',
+        'oidc.google',
+        SESSION_AUTHENTICATOR_ID,
+      ]);
     });
 
     test('puts credentialless anonymous authentication after the session fallback', () => {
@@ -126,6 +136,7 @@ describe('auth-strategies', () => {
       registerAuthenticators({} as Application);
 
       expect(getRegisteredIds()).toEqual([
+        API_KEY_AUTHENTICATOR_ID,
         'basic.local',
         'oidc.google',
         SESSION_AUTHENTICATOR_ID,
@@ -143,7 +154,7 @@ describe('auth-strategies', () => {
 
       registerAuthenticators({} as Application);
 
-      expect(getRegisteredIds()).toEqual([SESSION_AUTHENTICATOR_ID]);
+      expect(getRegisteredIds()).toEqual([API_KEY_AUTHENTICATOR_ID, SESSION_AUTHENTICATOR_ID]);
       expect(mockWarn).toHaveBeenCalledWith(
         'Unable to apply authentication broken.auth (strategy error)',
       );
@@ -163,7 +174,11 @@ describe('auth-strategies', () => {
 
       registerAuthenticators({} as Application);
 
-      expect(getRegisteredIds()).toEqual(['basic.local', SESSION_AUTHENTICATOR_ID]);
+      expect(getRegisteredIds()).toEqual([
+        API_KEY_AUTHENTICATOR_ID,
+        'basic.local',
+        SESSION_AUTHENTICATOR_ID,
+      ]);
     });
 
     test('hands the express app to each provider so it can mount its routes', () => {
@@ -200,7 +215,7 @@ describe('auth-strategies', () => {
 
       registerAuthenticators({} as Application);
 
-      expect(getRegisteredIds()).toEqual([SESSION_AUTHENTICATOR_ID]);
+      expect(getRegisteredIds()).toEqual([API_KEY_AUTHENTICATOR_ID, SESSION_AUTHENTICATOR_ID]);
       expect(isAuthenticationReady()).toBe(false);
     });
 
@@ -341,7 +356,7 @@ describe('auth-strategies', () => {
       });
       mockGetState.mockReturnValue({ authentication: { local: auth } });
       registerAuthenticators({} as Application);
-      expect(getAuthenticators()).toHaveLength(2);
+      expect(getAuthenticators()).toHaveLength(3);
 
       resetAuthenticatorsForTests();
 

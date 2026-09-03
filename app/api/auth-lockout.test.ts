@@ -76,6 +76,11 @@ vi.mock('./auth-audit.js', () => ({
 
 vi.mock('./authenticator-chain.js', () => ({
   authenticateRequest: mockAuthenticateRequest,
+  // The real predicate, not a stub: authenticateLogin branches on it, so a
+  // mock that always answered false would hide a rejection being treated as a
+  // successful login.
+  isAuthenticationRejection: (outcome: unknown) =>
+    outcome !== undefined && (outcome as { rejected?: boolean }).rejected === true,
 }));
 
 vi.mock('./error-response.js', () => ({

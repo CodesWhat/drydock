@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getOperationById, toApiUpdateOperation } from '../store/update-operation.js';
 import { sendErrorResponse } from './error-response.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 
@@ -23,6 +24,6 @@ function getUpdateOperationById(req: Request, res: Response) {
 
 export function init() {
   router.use(nocache());
-  router.get('/:id', getUpdateOperationById);
+  router.get('/:id', scoped('read', getUpdateOperationById));
   return router;
 }

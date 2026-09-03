@@ -119,6 +119,9 @@ export function clearSessionPrincipal(req: AuthRequest): void {
 export const sessionAuthenticator: Authenticator = {
   id: SESSION_AUTHENTICATOR_ID,
   persistsSession: true,
+  // It can only restore an identity another authenticator established, so a
+  // chain holding nothing else can never admit a first request.
+  countsTowardReadiness: false,
   authenticate: (req: AuthRequest) => Promise.resolve(readSessionPrincipal(req)),
 };
 

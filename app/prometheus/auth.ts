@@ -8,12 +8,18 @@ const METRIC_LOGIN_DURATION = 'drydock_auth_login_duration_seconds';
 const METRIC_USERNAME_MISMATCH = 'drydock_auth_username_mismatch_total';
 const METRIC_ACCOUNT_LOCKED = 'drydock_auth_account_locked_total';
 const METRIC_IP_LOCKED = 'drydock_auth_ip_locked_total';
+// API key authentication failures. The audit trail records at most one entry
+// per source key per minute so a sprayer cannot fill the collection; this
+// counter takes every attempt, including the suppressed ones, so the audit
+// throttle never hides the volume of an attack.
+const METRIC_API_KEY_FAILURE = 'drydock_auth_api_key_failure_total';
 
 let authLoginCounter: Counter<string> | undefined;
 let authLoginDurationHistogram: Histogram<string> | undefined;
 let authUsernameMismatchCounter: Counter<string> | undefined;
 let authAccountLockedGauge: Gauge<string> | undefined;
 let authIpLockedGauge: Gauge<string> | undefined;
+let authApiKeyFailureCounter: Counter<string> | undefined;
 
 export function init() {
   if (authLoginCounter) {
@@ -58,6 +64,14 @@ export function init() {
     name: METRIC_IP_LOCKED,
     help: 'Current number of locked IPs',
   });
+
+  if (authApiKeyFailureCounter) {
+    register.removeSingleMetric(METRIC_API_KEY_FAILURE);
+  }
+  authApiKeyFailureCounter = new Counter({
+    name: METRIC_API_KEY_FAILURE,
+    help: 'API key authentication failures, including those suppressed by the audit throttle',
+  });
 }
 
 export function getAuthLoginCounter() {
@@ -92,8 +106,16 @@ export function observeAuthLoginDuration(
   authLoginDurationHistogram?.observe({ outcome, provider }, durationSeconds);
 }
 
+export function getAuthApiKeyFailureCounter() {
+  return authApiKeyFailureCounter;
+}
+
 export function recordAuthUsernameMismatch(): void {
   authUsernameMismatchCounter?.inc();
+}
+
+export function recordAuthApiKeyFailure(): void {
+  authApiKeyFailureCounter?.inc();
 }
 
 export function setAuthAccountLockedTotal(total: number): void {
@@ -120,10 +142,14 @@ export function _resetAuthPrometheusStateForTests(): void {
   if (authIpLockedGauge) {
     register.removeSingleMetric(METRIC_IP_LOCKED);
   }
+  if (authApiKeyFailureCounter) {
+    register.removeSingleMetric(METRIC_API_KEY_FAILURE);
+  }
 
   authLoginCounter = undefined;
   authLoginDurationHistogram = undefined;
   authUsernameMismatchCounter = undefined;
   authAccountLockedGauge = undefined;
   authIpLockedGauge = undefined;
+  authApiKeyFailureCounter = undefined;
 }
