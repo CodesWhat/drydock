@@ -2182,6 +2182,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 
   private async buildComposeFileOnceRuntimeContextByService(
     mappingsNeedingRuntimeUpdate: ComposeRuntimeUpdateMapping[],
+    versionMappings: ComposeRuntimeUpdateMapping[] = mappingsNeedingRuntimeUpdate,
   ): Promise<Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>> {
     const composeFileOnceRuntimeContextByService = new Map<
       string,
@@ -2196,12 +2197,33 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         mappingsByService.set(mapping.service, [mapping]);
       }
     }
+    // Divergence has to be judged against every replica of the service, not
+    // just the ones needing a runtime update: an already-current replica
+    // still shares the compose file's single image, so a filter that
+    // resolves it to a different target than a divergent replica must still
+    // refuse the batch, or preflight only sees the divergent target, pulls
+    // and gates it, and writes it over the up-to-date replica's target too.
+    const allMappingsByService = new Map<string, ComposeRuntimeUpdateMapping[]>();
+    for (const mapping of versionMappings) {
+      const serviceMappings = allMappingsByService.get(mapping.service);
+      if (serviceMappings) {
+        serviceMappings.push(mapping);
+      } else {
+        allMappingsByService.set(mapping.service, [mapping]);
+      }
+    }
     // Agree every service's target before pulling anything, so a divergent
     // service refuses the batch instead of leaving one service's image pulled.
+    // Every service here came from mappingsNeedingRuntimeUpdate, and
+    // versionMappings is always a superset of it, so the lookup below is
+    // never empty.
     const serviceTargets = [...mappingsByService.entries()].map(([service, serviceMappings]) => ({
       service,
       container: serviceMappings[0].container,
-      newImage: this.resolveComposeFileOnceServiceTarget(service, serviceMappings),
+      newImage: this.resolveComposeFileOnceServiceTarget(
+        service,
+        allMappingsByService.get(service) as ComposeRuntimeUpdateMapping[],
+      ),
     }));
     for (const { service, container: runtimeContainer, newImage } of serviceTargets) {
       const logContainer = this.log.child({
@@ -2623,10 +2645,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     compose,
     orderedMappings: ComposeRuntimeUpdateMapping[],
     requestedRuntimeContext: Record<string, unknown> | undefined,
+    versionMappings: ComposeRuntimeUpdateMapping[] = orderedMappings,
   ): Promise<Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>> {
     try {
       const composeFileOnceRuntimeContextByService =
-        await this.buildComposeFileOnceRuntimeContextByService(orderedMappings);
+        await this.buildComposeFileOnceRuntimeContextByService(orderedMappings, versionMappings);
       for (const { container, service } of orderedMappings) {
         const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
         const composeContext: ComposeUpdateLifecycleContext = {
@@ -2759,6 +2782,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     lifecycleAlreadyAcquired = false,
     onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void,
     lifecycleClassifications?: Map<object, 'current' | 'peer' | 'indeterminate'>,
+    versionMappings: ComposeRuntimeUpdateMapping[] = mappingsNeedingRuntimeUpdate,
   ): Promise<boolean> {
     const requestedRuntimeContext =
       runtimeContext && typeof runtimeContext === 'object'
@@ -2774,6 +2798,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           compose,
           sortMappingsByDependencyOrder(mappingsNeedingRuntimeUpdate),
           requestedRuntimeContext,
+          versionMappings,
         )
       : undefined;
     const mutationSnapshots = await this.maybeApplyComposeFileMutations(
@@ -2936,6 +2961,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           true,
           onSelfUpdateOperationId,
           lifecycleClassifications,
+          versionMappings,
         );
       },
       {

@@ -840,6 +840,52 @@ describe('Dockercompose Trigger', () => {
     expect(lifecycleSpy).not.toHaveBeenCalled();
   });
 
+  test('processComposeFile should refuse a divergent replica even when it is already up to date', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // The first replica already matches the compose file's target (1.1.0) and
+    // needs no runtime update at all, so it is excluded from
+    // mappingsNeedingRuntimeUpdate. The second replica's filter resolves a
+    // different target (1.2.0). Preflight must still see the first replica's
+    // target when validating divergence, or it silently pulls, gates and
+    // writes 1.2.0 into the shared service definition -- changing the image
+    // out from under the replica whose filter wanted 1.1.0.
+    const firstContainer = makeContainer({
+      name: 'nginx-a',
+      tagValue: '1.1.0',
+      remoteValue: '1.1.0',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      name: 'nginx-b',
+      tagValue: '1.0.0',
+      remoteValue: '1.2.0',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n')),
+    );
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [firstContainer, secondContainer]),
+    ).rejects.toThrow(
+      'Compose service nginx resolves to different update targets for its containers ' +
+        '(nginx-a wants nginx:1.1.0, nginx-b wants nginx:1.2.0)',
+    );
+
+    expect(pullImageSpy).not.toHaveBeenCalled();
+    expect(lifecycleSpy).not.toHaveBeenCalled();
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
   test('processComposeFile should gate every replica before any compose-file-once runtime mutation', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;
