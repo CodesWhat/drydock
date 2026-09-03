@@ -43,8 +43,17 @@ fi
 
 run_related_tests() {
 	local workspace="$1"
+	local related_files
+	local list_exit=0
+	related_files=$(cd "${workspace}" && npx vitest list --changed HEAD --filesOnly) || list_exit=$?
+
+	if [ "${list_exit}" -ne 0 ]; then
+		echo "${workspace}: failed to discover related test files." >&2
+		return 1
+	fi
+
 	local related
-	related=$(cd "${workspace}" && npx vitest list --changed HEAD --filesOnly 2>/dev/null | { grep -c . || true; })
+	related=$(printf '%s\n' "${related_files}" | { grep -c . || true; })
 
 	if [ "${related}" -eq 0 ]; then
 		echo "${workspace}: no test files relate to the staged changes; skipping."

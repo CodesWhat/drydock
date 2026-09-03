@@ -25,6 +25,10 @@ function runHook({ staged, related, env = {} }) {
       '#!/usr/bin/env bash',
       'echo "$(basename "$PWD"): $*" >> "$CALLS_LOG"',
       'if [ "$2" = "list" ]; then',
+      '  if [ "${FAKE_LIST_EXIT:-0}" -ne 0 ]; then',
+      '    echo "fake vitest list crashed" >&2',
+      '    exit "${FAKE_LIST_EXIT}"',
+      '  fi',
       '  i=0',
       '  while [ "$i" -lt "${FAKE_RELATED:-0}" ]; do i=$((i + 1)); echo "test-$i.test.ts"; done',
       '  exit 0',
@@ -106,6 +110,17 @@ test('skips the run when nothing relates to the staged files', () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /ui: no test files relate to the staged changes; skipping/);
   assert.deepEqual(result.calls, ['ui: vitest list --changed HEAD --filesOnly']);
+});
+
+test('a failing test-discovery list fails the commit without running vitest', () => {
+  const result = runHook({
+    staged: ['app/api/backup.ts'],
+    related: 2,
+    env: { FAKE_LIST_EXIT: '1' },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /app: failed to discover related test files\./);
+  assert.deepEqual(result.calls, ['app: vitest list --changed HEAD --filesOnly']);
 });
 
 test('a failing related run still fails the commit', () => {
