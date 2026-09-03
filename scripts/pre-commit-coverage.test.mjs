@@ -1,101 +1,138 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const scriptPath = fileURLToPath(new URL('pre-commit-coverage.sh', import.meta.url));
+const SCRIPT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'pre-commit-coverage.sh');
 
-// Git hooks (this repo's own pre-commit/pre-push included) invoke their
-// commands with GIT_DIR/GIT_WORK_TREE/etc. set so the hook script's git
-// commands land on the real repo regardless of its own cwd tricks. Those
-// vars are inherited by any child process that doesn't override them, so
-// when this test's setup runs *under* a git hook (e.g. this very suite
-// running inside the pre-push gate), an unguarded `git init` in a temp
-// directory would silently operate on the real repository instead. Strip
-// them so every git command below is genuinely confined to `workdir`.
-function isolatedGitEnv() {
-  const env = { ...process.env };
-  for (const key of [
-    'GIT_DIR',
-    'GIT_WORK_TREE',
-    'GIT_INDEX_FILE',
-    'GIT_COMMON_DIR',
-    'GIT_OBJECT_DIRECTORY',
-    'GIT_ALTERNATE_OBJECT_DIRECTORIES',
-    'GIT_CEILING_DIRECTORIES',
-    'GIT_PREFIX',
-  ]) {
-    delete env[key];
-  }
-  return env;
-}
-
-function makeRepo() {
-  const workdir = mkdtempSync(join(tmpdir(), 'drydock-pre-commit-coverage-'));
-  const run = (cmd, args) =>
-    execFileSync(cmd, args, { cwd: workdir, encoding: 'utf8', env: isolatedGitEnv() });
-  // Pin the initial branch name so the test doesn't depend on the runner's
-  // init.defaultBranch config.
-  run('git', ['init', '--quiet', '--initial-branch=main']);
-  run('git', ['config', 'user.email', 'test@example.com']);
-  run('git', ['config', 'user.name', 'Test']);
-  writeFileSync(join(workdir, 'README.md'), 'placeholder\n');
-  run('git', ['add', 'README.md']);
-  run('git', ['commit', '--quiet', '-m', 'init']);
-  return { workdir, run };
-}
-
-function runScript(workdir, args) {
-  return execFileSync('bash', [scriptPath, ...args], {
-    cwd: workdir,
-    encoding: 'utf8',
-    env: isolatedGitEnv(),
-  });
-}
-
-test('a merge in progress (MERGE_HEAD present) skips the test gate without invoking vitest', () => {
-  const { workdir, run } = makeRepo();
+// Runs the hook inside a scratch directory with a fake `npx` on PATH. The shim
+// answers `vitest list` with one line per entry in FAKE_RELATED and records
+// every invocation, so the tests can assert what the hook decided to run
+// without touching a real vitest.
+function runHook({ staged, related, env = {} }) {
+  const root = mkdtempSync(path.join(tmpdir(), 'pre-commit-coverage-'));
+  const bin = path.join(root, 'bin');
+  const calls = path.join(root, 'calls.log');
+  mkdirSync(bin);
+  mkdirSync(path.join(root, 'app'));
+  mkdirSync(path.join(root, 'ui'));
+  writeFileSync(
+    path.join(bin, 'npx'),
+    [
+      '#!/usr/bin/env bash',
+      'echo "$(basename "$PWD"): $*" >> "$CALLS_LOG"',
+      'if [ "$2" = "list" ]; then',
+      '  if [ "${FAKE_LIST_EXIT:-0}" -ne 0 ]; then',
+      '    echo "fake vitest list crashed" >&2',
+      '    exit "${FAKE_LIST_EXIT}"',
+      '  fi',
+      '  i=0',
+      '  while [ "$i" -lt "${FAKE_RELATED:-0}" ]; do i=$((i + 1)); echo "test-$i.test.ts"; done',
+      '  exit 0',
+      'fi',
+      'exit "${FAKE_RUN_EXIT:-0}"',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
   try {
-    // Diverge two branches so merging them leaves a real MERGE_HEAD rather
-    // than fast-forwarding, matching what happens merging a dev branch into
-    // a feature branch.
-    run('git', ['checkout', '--quiet', '-b', 'feature']);
-    writeFileSync(join(workdir, 'feature.txt'), 'feature\n');
-    run('git', ['add', 'feature.txt']);
-    run('git', ['commit', '--quiet', '-m', 'feature change']);
-
-    run('git', ['checkout', '--quiet', 'main']);
-    writeFileSync(join(workdir, 'base.txt'), 'base\n');
-    run('git', ['add', 'base.txt']);
-    run('git', ['commit', '--quiet', '-m', 'base change']);
-
-    // --no-commit --no-ff leaves MERGE_HEAD set without completing the
-    // merge, which is exactly the state lefthook's pre-commit hook runs in.
-    run('git', ['merge', '--quiet', '--no-commit', '--no-ff', 'feature']);
-
-    // Pass a staged app/ file that would normally trigger vitest, to prove
-    // the merge guard exits before workspace detection ever runs.
-    const stdout = runScript(workdir, ['app/src/index.ts']);
-
-    assert.match(
-      stdout,
-      /Merge commit; skipping pre-commit tests \(pre-push coverage and CI cover merged commits\)\.$/m,
-    );
+    const result = spawnSync('bash', [SCRIPT, ...staged], {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH}`,
+        CALLS_LOG: calls,
+        FAKE_RELATED: String(related),
+        ...env,
+      },
+    });
+    let recorded = '';
+    try {
+      recorded = readFileSync(calls, 'utf8');
+    } catch {
+      recorded = '';
+    }
+    return { ...result, calls: recorded.trim().split('\n').filter(Boolean) };
   } finally {
-    rmSync(workdir, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
   }
+}
+
+test('skips when no app or ui files are staged', () => {
+  const result = runHook({ staged: ['scripts/foo.sh', 'README.md'], related: 3 });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /No app\/ or ui\/ files staged/);
+  assert.deepEqual(result.calls, []);
 });
 
-test('no merge in progress and no app/ or ui/ files staged reaches workspace detection', () => {
-  const { workdir } = makeRepo();
-  try {
-    const stdout = runScript(workdir, []);
+test('runs the related tests when the fan-out is under the cap', () => {
+  const result = runHook({ staged: ['app/api/backup.ts'], related: 4 });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /app: running 4 related test file\(s\)/);
+  assert.deepEqual(result.calls, [
+    'app: vitest list --changed HEAD --filesOnly',
+    'app: vitest run --changed HEAD --reporter=dot',
+  ]);
+});
 
-    assert.match(stdout, /No app\/ or ui\/ files staged; skipping tests\.$/m);
-  } finally {
-    rmSync(workdir, { recursive: true, force: true });
-  }
+test('skips the run when a hub module fans out past the cap', () => {
+  // DR-58: app/util/backup.ts is imported by every Docker-family trigger, so
+  // `vitest --changed` resolved 24 suites and the hook was killed at its
+  // timeout on every attempt, which left the change uncommittable without
+  // bypassing the hook.
+  const result = runHook({ staged: ['app/util/backup.ts'], related: 24 });
+  assert.equal(result.status, 0);
+  assert.match(
+    result.stdout,
+    /app: 24 related test files exceed the pre-commit cap of 10; skipping/,
+  );
+  assert.match(result.stdout, /pre-push coverage runs the full suite/);
+  assert.deepEqual(result.calls, ['app: vitest list --changed HEAD --filesOnly']);
+});
+
+test('the cap is overridable per commit', () => {
+  const result = runHook({
+    staged: ['app/util/backup.ts'],
+    related: 24,
+    env: { PRE_COMMIT_MAX_RELATED_TESTS: '30' },
+  });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /app: running 24 related test file\(s\)/);
+  assert.equal(result.calls.length, 2);
+});
+
+test('skips the run when nothing relates to the staged files', () => {
+  const result = runHook({ staged: ['ui/src/foo.vue'], related: 0 });
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /ui: no test files relate to the staged changes; skipping/);
+  assert.deepEqual(result.calls, ['ui: vitest list --changed HEAD --filesOnly']);
+});
+
+test('a failing test-discovery list fails the commit without running vitest', () => {
+  const result = runHook({
+    staged: ['app/api/backup.ts'],
+    related: 2,
+    env: { FAKE_LIST_EXIT: '1' },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /app: failed to discover related test files\./);
+  assert.deepEqual(result.calls, ['app: vitest list --changed HEAD --filesOnly']);
+});
+
+test('a failing related run still fails the commit', () => {
+  const result = runHook({
+    staged: ['app/api/backup.ts', 'ui/src/foo.vue'],
+    related: 2,
+    env: { FAKE_RUN_EXIT: '1' },
+  });
+  assert.equal(result.status, 1);
+  // Fails fast on the first workspace, so ui never runs.
+  assert.deepEqual(result.calls, [
+    'app: vitest list --changed HEAD --filesOnly',
+    'app: vitest run --changed HEAD --reporter=dot',
+  ]);
 });
