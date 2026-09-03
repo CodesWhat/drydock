@@ -161,6 +161,7 @@ type ComposeRuntimeContext = {
   imageIdentity?: string;
   securityGateUnboundWarn?: boolean;
   securityGateUnboundReason?: string;
+  securityGateUnboundWarnRecorded?: boolean;
   operationId?: string;
   registry?: unknown;
 };
@@ -197,12 +198,21 @@ type ComposeRuntimeRefreshOptions = {
   ) => Promise<void>;
 };
 
+/**
+ * The rollback reason every compose runtime-refresh rollback records. Also the
+ * identity marker the restore-failure correction path matches on, so it can
+ * only rewrite a row this provider's own rollback produced.
+ */
+const COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON = 'compose_runtime_refresh_failed';
+
 type ComposeRollbackOutcome = {
   status: 'rolled-back' | 'rollback-failed';
   phase: 'rolled-back' | 'rollback-failed';
-  rollbackReason: 'compose_runtime_refresh_failed';
+  rollbackReason: typeof COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON;
   lastError: string;
 };
+
+type StoredUpdateOperation = NonNullable<ReturnType<typeof updateOperationStore.getOperationById>>;
 
 type ComposeRollbackError = Error & {
   composeRollbackOutcome?: ComposeRollbackOutcome;
@@ -210,6 +220,93 @@ type ComposeRollbackError = Error & {
 
 function hasDefinedComposeRuntimeContextValue(runtimeContext: ComposeRuntimeContext): boolean {
   return Object.values(runtimeContext).some((value) => value !== undefined);
+}
+
+/**
+ * Layer a compose-file-once service's preflight context (pulled image, auth,
+ * bound identity) over the runtime context the caller requested, leaving the
+ * context undefined when there is neither.
+ */
+function mergeComposeFileOnceRuntimeContext(
+  requestedRuntimeContext: Record<string, unknown> | undefined,
+  composeFileOnceRuntimeContext: ComposeRuntimeContext | undefined,
+): ComposeRuntimeContext | undefined {
+  if (!composeFileOnceRuntimeContext && !requestedRuntimeContext) {
+    return undefined;
+  }
+  return {
+    ...(requestedRuntimeContext || {}),
+    ...(composeFileOnceRuntimeContext || {}),
+  };
+}
+
+/**
+ * A compose file left holding the candidate image because its restore failed
+ * needs manual repair, so the restore failure travels with the error the
+ * caller records rather than only reaching the log (DR-47). The original error
+ * object is kept whenever there is one, so rollback details already attached
+ * to it survive.
+ */
+function withComposeRestoreFailure(runtimeError: unknown, restoreError: unknown): unknown {
+  const restoreDetail = `compose file restore failed: ${getErrorMessage(restoreError)}`;
+  if (runtimeError instanceof Error) {
+    runtimeError.message = `${runtimeError.message} (${restoreDetail})`;
+    return runtimeError;
+  }
+  // A non-Error rejection has to be replaced rather than amended, so carry the
+  // original across: the compose rollback outcome is what tells a caller the
+  // container was restored, and losing it would downgrade the report.
+  const replacement: Error & { composeRollbackOutcome?: unknown } = new Error(
+    `${getErrorMessage(runtimeError)} (${restoreDetail})`,
+    { cause: runtimeError },
+  );
+  const composeRollbackOutcome = isPlainObject(runtimeError)
+    ? runtimeError.composeRollbackOutcome
+    : undefined;
+  if (composeRollbackOutcome !== undefined) {
+    replacement.composeRollbackOutcome = composeRollbackOutcome;
+  }
+  return replacement;
+}
+
+/**
+ * Collect the distinct update-operation ids requested for a set of compose
+ * runtime mappings. Several replicas of one service can share a mapping list,
+ * so the set is what callers want rather than one entry per container.
+ */
+/**
+ * Whether a stored operation is the record this provider's rollback just wrote
+ * for `container`. An update request for a single container carries a bare
+ * `operationId` that every mapping in the batch resolves to, so the id alone
+ * does not say which container the row belongs to; the container id, the kind
+ * and the compose rollback reason together do.
+ */
+function isComposeRollbackRecordFor(
+  operation: StoredUpdateOperation | undefined,
+  container: ComposeRuntimeUpdateMapping['container'],
+): operation is StoredUpdateOperation {
+  return (
+    operation !== undefined &&
+    operation.status === 'rolled-back' &&
+    operation.kind !== 'self-update' &&
+    typeof container.id === 'string' &&
+    operation.containerId === container.id &&
+    operation.rollbackReason === COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON
+  );
+}
+
+function collectComposeOperationIds(
+  mappings: ComposeRuntimeUpdateMapping[],
+  runtimeContext: Record<string, unknown> | undefined,
+): Set<string> {
+  const operationIds = new Set<string>();
+  for (const { container } of mappings) {
+    const operationId = getRequestedOperationId(container, runtimeContext);
+    if (operationId) {
+      operationIds.add(operationId);
+    }
+  }
+  return operationIds;
 }
 
 /**
@@ -2045,21 +2142,90 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return batchResults;
   }
 
+  /**
+   * Resolve the one image a compose-file-once service will be pulled and gated
+   * on, and refuse the batch when its containers disagree. Only the first
+   * container of a service used to be consulted, so per-container tag filters
+   * that resolved two replicas of one service to different candidates got the
+   * first replica's image pulled, bound and gated while the compose file was
+   * written with the last replica's (DR-49).
+   */
+  private resolveComposeFileOnceServiceTarget(
+    service: string,
+    serviceMappings: ComposeRuntimeUpdateMapping[],
+  ): string {
+    let serviceTarget: string | undefined;
+    let serviceTargetContainerName: string | undefined;
+    for (const { container } of serviceMappings) {
+      const logContainer = this.log.child({
+        container: container.name,
+      });
+      const registry = this.resolveRegistryManager(container, logContainer, {
+        allowAnonymousFallback: true,
+      });
+      const containerTarget = this.getNewImageFullName(registry, container);
+      if (serviceTarget === undefined) {
+        serviceTarget = containerTarget;
+        serviceTargetContainerName = container.name;
+        continue;
+      }
+      if (containerTarget !== serviceTarget) {
+        throw new Error(
+          `Compose service ${service} resolves to different update targets for its containers ` +
+            `(${serviceTargetContainerName} wants ${serviceTarget}, ${container.name} wants ${containerTarget}); ` +
+            'align their tag filters or disable compose-file-once mode',
+        );
+      }
+    }
+    return serviceTarget as string;
+  }
+
   private async buildComposeFileOnceRuntimeContextByService(
     mappingsNeedingRuntimeUpdate: ComposeRuntimeUpdateMapping[],
+    versionMappings: ComposeRuntimeUpdateMapping[] = mappingsNeedingRuntimeUpdate,
   ): Promise<Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>> {
     const composeFileOnceRuntimeContextByService = new Map<
       string,
       NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
     >();
-    const firstContainerByService = new Map<string, ComposeRuntimeUpdateMapping>();
+    const mappingsByService = new Map<string, ComposeRuntimeUpdateMapping[]>();
     for (const mapping of mappingsNeedingRuntimeUpdate) {
-      if (!firstContainerByService.has(mapping.service)) {
-        firstContainerByService.set(mapping.service, mapping);
+      const serviceMappings = mappingsByService.get(mapping.service);
+      if (serviceMappings) {
+        serviceMappings.push(mapping);
+      } else {
+        mappingsByService.set(mapping.service, [mapping]);
       }
     }
-    for (const [service, mapping] of firstContainerByService.entries()) {
-      const runtimeContainer = mapping.container;
+    // Divergence has to be judged against every replica of the service, not
+    // just the ones needing a runtime update: an already-current replica
+    // still shares the compose file's single image, so a filter that
+    // resolves it to a different target than a divergent replica must still
+    // refuse the batch, or preflight only sees the divergent target, pulls
+    // and gates it, and writes it over the up-to-date replica's target too.
+    const allMappingsByService = new Map<string, ComposeRuntimeUpdateMapping[]>();
+    for (const mapping of versionMappings) {
+      const serviceMappings = allMappingsByService.get(mapping.service);
+      if (serviceMappings) {
+        serviceMappings.push(mapping);
+      } else {
+        allMappingsByService.set(mapping.service, [mapping]);
+      }
+    }
+    // Agree every service's target before pulling anything, so a divergent
+    // service refuses the batch instead of leaving one service's image pulled.
+    // Every service here came from mappingsNeedingRuntimeUpdate, and
+    // versionMappings is always a superset of it, so the lookup below is
+    // never empty.
+    const serviceTargets = [...mappingsByService.entries()].map(([service, serviceMappings]) => ({
+      service,
+      container: serviceMappings[0].container,
+      newImage: this.resolveComposeFileOnceServiceTarget(
+        service,
+        allMappingsByService.get(service) as ComposeRuntimeUpdateMapping[],
+      ),
+    }));
+    for (const { service, container: runtimeContainer, newImage } of serviceTargets) {
       const logContainer = this.log.child({
         container: runtimeContainer.name,
       });
@@ -2069,7 +2235,6 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         allowAnonymousFallback: true,
       });
       const auth = await registry.getAuthPull();
-      const newImage = this.getNewImageFullName(registry, runtimeContainer);
       await this.pullImage(dockerApi, auth, newImage, logContainer);
       const identityOutcome = await this.capturePulledImageIdentity(
         dockerApi as DockerApiLike,
@@ -2094,10 +2259,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return composeFileOnceRuntimeContextByService;
   }
 
+  /**
+   * @returns whether the unbound-image security warning was recorded here, so
+   *   the service's runtime refresh does not record a second row for the same
+   *   skipped scan (DR-50).
+   */
   private async runComposeFileOncePostPullGate(
     container,
     composeContext: ComposeUpdateLifecycleContext,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const logContainer = this.log.child({
       container: container.name,
     });
@@ -2114,7 +2284,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         container,
         composeContext.runtimeContext.securityGateUnboundReason,
       );
-      return;
+      return true;
     }
     const imageIdentity = composeContext.runtimeContext?.imageIdentity;
     const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
@@ -2137,6 +2307,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       }
       throw error;
     }
+    return false;
   }
 
   private terminalizeComposeFileOncePreflightOperations(
@@ -2144,14 +2315,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     runtimeContext: Record<string, unknown> | undefined,
     error: unknown,
   ): void {
-    const operationIds = new Set<string>();
-    for (const { container } of mappings) {
-      const operationId = getRequestedOperationId(container, runtimeContext);
-      if (operationId) {
-        operationIds.add(operationId);
-      }
-    }
-    for (const operationId of operationIds) {
+    for (const operationId of collectComposeOperationIds(mappings, runtimeContext)) {
       const operation = updateOperationStore.getOperationById(operationId);
       if (operation?.status === 'queued' || operation?.status === 'in-progress') {
         updateOperationStore.markOperationTerminal(operationId, {
@@ -2160,6 +2324,53 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           lastError: getErrorMessage(error),
         });
       }
+    }
+  }
+
+  /**
+   * Bring update operations back in line with the compose file after a restore
+   * failure. The runtime rollback has already terminalized them as
+   * `rolled-back`, and `markOperationTerminal` refuses to rewrite a terminal
+   * row, so without this the record would keep claiming a clean rollback while
+   * the compose file is still mutated. Reopen those rows and terminalize them
+   * again as a failed rollback carrying the combined error, which also emits a
+   * superseding lifecycle event. Rows that already record a failed rollback are
+   * left alone: they are not lying, and re-terminalizing them would only send a
+   * duplicate notification.
+   */
+  private correctRolledBackOperationsAfterComposeRestoreFailure(
+    mappings: ComposeRuntimeUpdateMapping[],
+    runtimeContext: Record<string, unknown> | undefined,
+    error: unknown,
+  ): void {
+    const lastError = getErrorMessage(error);
+    const correctedOperationIds = new Set<string>();
+    for (const { container } of mappings) {
+      const operationId = getRequestedOperationId(container, runtimeContext);
+      if (!operationId || correctedOperationIds.has(operationId)) {
+        continue;
+      }
+      const operation = updateOperationStore.getOperationById(operationId);
+      if (!isComposeRollbackRecordFor(operation, container)) {
+        continue;
+      }
+      correctedOperationIds.add(operationId);
+      // Reopening clears the batch fields, so carry them across: without them
+      // the corrected row detaches from its batch and the superseding
+      // update-failed event loses its batch id.
+      updateOperationStore.reopenTerminalOperation(operationId, {
+        status: 'in-progress',
+        phase: 'rollback-started',
+        batchId: operation.batchId,
+        queuePosition: operation.queuePosition,
+        queueTotal: operation.queueTotal,
+      });
+      updateOperationStore.markOperationTerminal(operationId, {
+        status: 'failed',
+        phase: 'rollback-failed',
+        rollbackReason: operation.rollbackReason,
+        lastError,
+      });
     }
   }
 
@@ -2421,6 +2632,62 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Pull, bind and gate every compose-file-once service in the batch. Runs
+   * before `maybeApplyComposeFileMutations` so a candidate the gate rejects
+   * leaves neither a rewritten compose file nor a stray `.back` behind
+   * (DR-47); the contexts it returns are what the container updates then
+   * refresh from, so nothing is pulled or bound twice.
+   */
+  private async runComposeFileOncePreflight(
+    composeFile,
+    composeFileChain,
+    compose,
+    orderedMappings: ComposeRuntimeUpdateMapping[],
+    requestedRuntimeContext: Record<string, unknown> | undefined,
+    versionMappings: ComposeRuntimeUpdateMapping[] = orderedMappings,
+  ): Promise<Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>> {
+    try {
+      const composeFileOnceRuntimeContextByService =
+        await this.buildComposeFileOnceRuntimeContextByService(orderedMappings, versionMappings);
+      for (const { container, service } of orderedMappings) {
+        const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
+        const composeContext: ComposeUpdateLifecycleContext = {
+          composeFile,
+          composeFiles: composeFileChain,
+          service,
+          serviceDefinition: compose.services[service],
+          runtimeContext: mergeComposeFileOnceRuntimeContext(
+            requestedRuntimeContext,
+            composeFileOnceRuntimeContext,
+          ),
+        };
+        const recordedUnboundWarning = await this.runComposeFileOncePostPullGate(
+          container,
+          composeContext,
+        );
+        if (recordedUnboundWarning) {
+          composeFileOnceRuntimeContextByService.set(service, {
+            ...composeFileOnceRuntimeContext,
+            securityGateUnboundWarnRecorded: true,
+          });
+        }
+      }
+      return composeFileOnceRuntimeContextByService;
+    } catch (error: unknown) {
+      this.terminalizeComposeFileOncePreflightOperations(
+        orderedMappings,
+        requestedRuntimeContext,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  private isComposeFileOnceEnabled(): boolean {
+    return this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
+  }
+
   async runRuntimeUpdatesForComposeMappings(
     composeFile,
     composeFileChain,
@@ -2431,49 +2698,18 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     lifecycleAlreadyAcquired = false,
     onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void,
     lifecycleClassifications?: Map<object, 'current' | 'peer' | 'indeterminate'>,
+    composeFileOnceRuntimeContextByService: Map<
+      string,
+      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
+    > = new Map(),
   ): Promise<void> {
     const requestedRuntimeContext =
       runtimeContext && typeof runtimeContext === 'object'
         ? (runtimeContext as Record<string, unknown>)
         : undefined;
     const composeFileOnceHandledServices = new Set<string>();
-    const composeFileOnceEnabled =
-      this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
+    const composeFileOnceEnabled = this.isComposeFileOnceEnabled();
     const orderedMappings = sortMappingsByDependencyOrder(mappingsNeedingRuntimeUpdate);
-    let composeFileOnceRuntimeContextByService = new Map<
-      string,
-      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
-    >();
-    if (composeFileOnceEnabled) {
-      try {
-        composeFileOnceRuntimeContextByService =
-          await this.buildComposeFileOnceRuntimeContextByService(mappingsNeedingRuntimeUpdate);
-        for (const { container, service } of orderedMappings) {
-          const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
-          const composeContext: ComposeUpdateLifecycleContext = {
-            composeFile,
-            composeFiles: composeFileChain,
-            service,
-            serviceDefinition: compose.services[service],
-            runtimeContext:
-              composeFileOnceRuntimeContext || requestedRuntimeContext
-                ? {
-                    ...(requestedRuntimeContext || {}),
-                    ...(composeFileOnceRuntimeContext || {}),
-                  }
-                : undefined,
-          };
-          await this.runComposeFileOncePostPullGate(container, composeContext);
-        }
-      } catch (error: unknown) {
-        this.terminalizeComposeFileOncePreflightOperations(
-          orderedMappings,
-          requestedRuntimeContext,
-          error,
-        );
-        throw error;
-      }
-    }
 
     // Refresh all containers requiring a runtime update via the shared
     // lifecycle orchestrator (security gate, hooks, prune/backup, events), in
@@ -2482,24 +2718,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       const composeFileOnceApplied =
         composeFileOnceEnabled && composeFileOnceHandledServices.has(service);
       const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
+      // Only a service the preflight actually pulled, bound and gated may skip
+      // the per-container gate. Without that context the batch has to fail
+      // closed and run the ordinary gated path, or a caller that reaches this
+      // method with no preflight would suppress the gate entirely.
+      const composeFileOncePreflighted =
+        composeFileOnceEnabled && composeFileOnceRuntimeContext !== undefined;
       const composeContext: ComposeUpdateLifecycleContext = {
         composeFile,
         composeFiles: composeFileChain,
         service,
         serviceDefinition: compose.services[service],
         composeFileOnceApplied,
-        skipPull:
-          composeFileOnceEnabled &&
-          composeFileOnceApplied !== true &&
-          composeFileOnceRuntimeContext !== undefined,
-        runtimeContext:
-          composeFileOnceRuntimeContext || requestedRuntimeContext
-            ? {
-                ...(requestedRuntimeContext || {}),
-                ...(composeFileOnceRuntimeContext || {}),
-              }
-            : undefined,
-        postPullGateCompleted: composeFileOnceEnabled,
+        skipPull: composeFileOncePreflighted && composeFileOnceApplied !== true,
+        runtimeContext: mergeComposeFileOnceRuntimeContext(
+          requestedRuntimeContext,
+          composeFileOnceRuntimeContext,
+        ),
+        postPullGateCompleted: composeFileOncePreflighted,
       };
       let runtimeUpdateRecorded = false;
       const recordRuntimeUpdate = () => {
@@ -2524,7 +2760,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         onSelfUpdateOperationId: selfUpdateOperationIdHandler,
       });
       recordRuntimeUpdate();
-      if (composeFileOnceEnabled && !composeFileOnceApplied) {
+      // Only a preflighted service may be marked handled. On the fail-closed
+      // fallback each container runs the ordinary gated refresh, and marking
+      // the service handled would make a later replica skip that refresh, and
+      // with it the post-pull gate that runs inside it.
+      if (composeFileOncePreflighted) {
         composeFileOnceHandledServices.add(service);
       }
     }
@@ -2542,7 +2782,25 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     lifecycleAlreadyAcquired = false,
     onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void,
     lifecycleClassifications?: Map<object, 'current' | 'peer' | 'indeterminate'>,
+    versionMappings: ComposeRuntimeUpdateMapping[] = mappingsNeedingRuntimeUpdate,
   ): Promise<boolean> {
+    const requestedRuntimeContext =
+      runtimeContext && typeof runtimeContext === 'object'
+        ? (runtimeContext as Record<string, unknown>)
+        : undefined;
+    // Compose-file-once gates the whole batch before the compose file is
+    // touched, so a rejected candidate leaves no rewritten file and no `.back`
+    // to clean up (DR-47).
+    const composeFileOnceRuntimeContextByService = this.isComposeFileOnceEnabled()
+      ? await this.runComposeFileOncePreflight(
+          composeFile,
+          composeFileChain,
+          compose,
+          sortMappingsByDependencyOrder(mappingsNeedingRuntimeUpdate),
+          requestedRuntimeContext,
+          versionMappings,
+        )
+      : undefined;
     const mutationSnapshots = await this.maybeApplyComposeFileMutations(
       composeFileChain,
       composeByFile,
@@ -2561,14 +2819,22 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         lifecycleAlreadyAcquired,
         onSelfUpdateOperationId,
         lifecycleClassifications,
+        composeFileOnceRuntimeContextByService,
       );
     } catch (runtimeError: unknown) {
       if (completedRuntimeUpdates.length === 0) {
         try {
           await this.restoreComposeFileMutations(mutationSnapshots);
-        } catch {
-          // restoreComposeFileMutations already logged the restore failure. Keep the
-          // original runtime error as the operation error surfaced to callers.
+        } catch (restoreError: unknown) {
+          // restoreComposeFileMutations already logged the restore failure; carry it
+          // on the runtime error so the caller records that the file needs repair.
+          const failure = withComposeRestoreFailure(runtimeError, restoreError);
+          this.correctRolledBackOperationsAfterComposeRestoreFailure(
+            mappingsNeedingRuntimeUpdate,
+            requestedRuntimeContext,
+            failure,
+          );
+          throw failure;
         }
       } else {
         /* v8 ignore next 4 -- service is a fallback for malformed runtime update payloads. */
@@ -2586,9 +2852,16 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
               completedServiceNames.has(service),
             ),
           });
-        } catch {
-          // restoreComposeFileMutations already logged the restore failure. Keep the
-          // original runtime error as the operation error surfaced to callers.
+        } catch (restoreError: unknown) {
+          // restoreComposeFileMutations already logged the restore failure; carry it
+          // on the runtime error rather than claiming a restore that did not happen.
+          const failure = withComposeRestoreFailure(runtimeError, restoreError);
+          this.correctRolledBackOperationsAfterComposeRestoreFailure(
+            mappingsNeedingRuntimeUpdate,
+            requestedRuntimeContext,
+            failure,
+          );
+          throw failure;
         }
         this.log.warn(
           `Restored compose file mutations for ${composeFileChainSummary} after failed runtime refresh while ` +
@@ -2688,6 +2961,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           true,
           onSelfUpdateOperationId,
           lifecycleClassifications,
+          versionMappings,
         );
       },
       {
@@ -3002,7 +3276,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return {
         status: 'rolled-back',
         phase: 'rolled-back',
-        rollbackReason: 'compose_runtime_refresh_failed',
+        rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
         lastError,
       };
     } catch (rollbackError: unknown) {
@@ -3023,7 +3297,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return {
         status: 'rollback-failed',
         phase: 'rollback-failed',
-        rollbackReason: 'compose_runtime_refresh_failed',
+        rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
         lastError,
       };
     }
@@ -3166,7 +3440,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
     const pinnedImage = imageIdentity || newImage;
     if (securityGateUnboundWarn) {
-      this.recordUnboundSecurityWarning(container, securityGateUnboundReason);
+      // Compose-file-once already recorded this service's skipped scan in its
+      // preflight, so recording it again here would add one audit row per
+      // batch on top of the one per container (DR-50).
+      if (runtimeContext.securityGateUnboundWarnRecorded !== true) {
+        this.recordUnboundSecurityWarning(container, securityGateUnboundReason);
+      }
       if (postPullHook) {
         // The gate must not run against the mutable tag, but the hook also
         // carries the deferred pre-update hook and prune/backup step, which
@@ -3339,7 +3618,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         Dockercompose.attachComposeRollbackOutcome(runtimeError, {
           status: 'rollback-failed',
           phase: 'rollback-failed',
-          rollbackReason: 'compose_runtime_refresh_failed',
+          rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
           lastError: getErrorMessage(runtimeError),
         });
       }
