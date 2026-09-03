@@ -241,19 +241,39 @@ describe('DashboardGrid', () => {
     } as DOMRect);
     const resizers = wrapper.findAll('.dd-grid-resizer');
 
-    resizers[0]!.element.dispatchEvent(pointerEvent('pointerdown', { clientX: 0, clientY: 0 }));
-    window.dispatchEvent(pointerEvent('pointermove', { clientX: 500, clientY: 200 }));
-    window.dispatchEvent(pointerEvent('pointercancel', {}));
-    const cancelledLayout = wrapper.emitted('update:layout')?.at(-1)?.[0] as Array<{
-      w: number;
-      h: number;
-    }>;
-    expect(cancelledLayout[0]).toMatchObject({ w: 4, h: 5 });
+    // Vue's DOM event invoker guards against re-firing a listener that was
+    // attached mid-dispatch: it stamps the first invoker to see an event with
+    // `event._vts = Date.now()` and any later invoker on the same event skips
+    // running its handler if `event._vts <= invoker.attached` (also captured
+    // via `Date.now()`, at listener-attach/mount time). Both timestamps are
+    // millisecond-resolution, so a pointerdown dispatched in the same
+    // millisecond as mount can collide with the resizer's own invoker attach
+    // time and get silently dropped. This test dispatches on the resizer
+    // button, which sits behind the grid item's capture-phase pointerdown
+    // listener, so it is exactly the "later invoker on the same event"
+    // Vue is guarding against. Advancing a fake clock past mount guarantees
+    // the dispatch timestamp is unambiguously later, independent of how fast
+    // this test happens to run.
+    vi.useFakeTimers();
+    try {
+      vi.advanceTimersByTime(1);
+      resizers[0]!.element.dispatchEvent(pointerEvent('pointerdown', { clientX: 0, clientY: 0 }));
+      window.dispatchEvent(pointerEvent('pointermove', { clientX: 500, clientY: 200 }));
+      window.dispatchEvent(pointerEvent('pointercancel', {}));
+      const cancelledLayout = wrapper.emitted('update:layout')?.at(-1)?.[0] as Array<{
+        w: number;
+        h: number;
+      }>;
+      expect(cancelledLayout[0]).toMatchObject({ w: 4, h: 5 });
 
-    resizers[1]!.element.dispatchEvent(pointerEvent('pointerdown', { clientX: 0, clientY: 0 }));
-    window.dispatchEvent(pointerEvent('pointermove', { clientX: 100, clientY: 50 }));
-    window.dispatchEvent(pointerEvent('pointerup', {}));
-    expect(wrapper.emitted('update:layout')?.length).toBeGreaterThan(1);
+      vi.advanceTimersByTime(1);
+      resizers[1]!.element.dispatchEvent(pointerEvent('pointerdown', { clientX: 0, clientY: 0 }));
+      window.dispatchEvent(pointerEvent('pointermove', { clientX: 100, clientY: 50 }));
+      window.dispatchEvent(pointerEvent('pointerup', {}));
+      expect(wrapper.emitted('update:layout')?.length).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('observes container breakpoint changes and disconnects cleanly', async () => {
