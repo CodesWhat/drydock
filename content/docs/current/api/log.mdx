@@ -28,9 +28,9 @@ curl http://drydock:3000/api/v1/log/entries
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `level` | string | Filter by log level (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) |
-| `component` | string | Filter by component name |
-| `tail` | integer | Number of most recent entries to return |
+| `level` | string | Minimum level filter (`trace`, `debug`, `info`, `warn`, `error`, `fatal`); returns entries at or above this severity, not just exact matches |
+| `component` | string | Substring filter for component name |
+| `tail` | integer | Number of most recent entries to return (default: `100`, independent of the 1,000-entry buffer size) |
 | `since` | integer | Unix timestamp (milliseconds) — only return entries after this time |
 
 Invalid `level` or `component` values return `400 Bad Request`.

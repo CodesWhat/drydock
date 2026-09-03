@@ -88,6 +88,8 @@
 
 **Recommended: use a socket proxy** to restrict which Docker API endpoints Drydock can access. This avoids giving the container full access to the Docker socket.
 
+> **Note:** Compose treats `$` as variable interpolation syntax, so an argon2id hash pasted with single `$` reaches Drydock mangled. Double every `$` to `$$` when you paste the real hash, for example `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
+
 ```yaml
 services:
   drydock:
@@ -95,6 +97,8 @@ services:
     depends_on:
       socket-proxy:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
@@ -121,12 +125,17 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 <details>
 <summary>Alternative: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> socket proxy</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) is a default-deny Docker socket filter from the same CodesWhat ecosystem, with a preset built for drydock:
+
+> **Note:** Compose treats `$` as variable interpolation syntax, so an argon2id hash pasted with single `$` reaches Drydock mangled. Double every `$` to `$$` when you paste the real hash, for example `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
 
 ```yaml
 services:
@@ -135,6 +144,8 @@ services:
     depends_on:
       sockguard:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=sockguard
       - DD_WATCHER_LOCAL_PORT=2375
@@ -157,6 +168,9 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 See sockguard's [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml) preset for a starting `sockguard.yaml` (the same preset portwing ships in its own examples).
@@ -171,12 +185,15 @@ docker run -d \
   --name drydock \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v drydock-store:/store \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
-  -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>" \
+  -e 'DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>' \
   codeswhat/drydock:latest
 ```
 
 > **Warning:** Direct socket access grants the container full control over the Docker daemon. Use the socket proxy setup above for production deployments. See the [Docker Socket Security guide](https://getdrydock.com/docs/configuration/watchers#docker-socket-security) for all options including remote TLS and rootless Docker.
+>
+> Use single quotes around the hash value, as shown. Double quotes still let the shell expand `$` before docker ever sees it, mangling a real argon2id hash.
 
 </details>
 

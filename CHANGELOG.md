@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`fflate` override added in `e2e/` for CVE-2026-45820.** `@smithy/middleware-compression` pins `fflate` at 0.8.1 exactly, so the fix had to come through an npm override; `fflate` now resolves to 0.8.3 in `e2e/package-lock.json`, which is the only workspace that carried the vulnerable range. Lockfile-only change, no runtime code touched.
+
+### Fixed
+
+- **Two deprecation banner strings in the UI still described the legacy `DD_TRIGGER_*` env vars and the curl-based healthcheck override as active with a future removal.** Both were removed outright in v1.7.0; `legacyConfigBody` and `curlHealthcheckBody` (all 17 locales) now say so instead of pointing at a deadline that already passed. The curl banner's `{bin}` slot also rendered the compose migration snippet with a single `$`, which compose expands from the host environment before the container starts; doubled it to `$${DD_SERVER_PORT:-3000}` to match the corrected DEPRECATIONS.md snippet.
+- **The marketing site's Get Started snippets deployed an instance that never became healthy.** Neither the `docker run` quick-start nor the hardened compose preset configured any authentication, so the instance ended up with zero registered auth strategies, which is a deliberate fail-closed state: `/health` stays `503` forever and there's no way to log in. Both presets also skipped a `/store` volume, so container state and audit history didn't survive a restart. The quick preset now sets `DD_ANONYMOUS_AUTH_CONFIRM=true`, the hardened preset sets `DD_AUTH_BASIC_ADMIN_USER`/`HASH`, and both mount `drydock-store:/store`.
+
+### Documentation
+
+- **A docs audit turned up a batch of claims in the README, DEPRECATIONS.md, and the configuration/triggers/registries/API/monitoring/agents docs that no longer matched this tree's code.** Compose examples that mangled a pasted argon2id hash and omitted the `/store` volume; translated READMEs with mistranslated provider names and a backwards roadmap pointer; a deprecation entry using the wrong removal-status label plus four missing DEPRECATIONS.md entries; hook, threshold, and rollback documentation describing behavior the code doesn't have (a `major` threshold letting digest-only updates through unfiltered, an allowlist that's exact-match rather than basename, a third rollback path that doesn't exist); trigger docs missing template variables and shared config keys; registry docs describing a routing mechanism and a rate-limit scope that don't exist and missing the `public.ecr.aws` rate row; API docs with a stale audit action list, wrong log-filter semantics, a nonexistent SSE event, and a rate limit bypass that isn't real; and feature docs conflating the docker trigger's health gate with `dd.rollback.auto`, describing a malformed signing key as a graceful skip when it crashes the controller, and framing a fail-closed `/health` 503 as a transient startup state. All of it corrected against this tree's actual code, not against v1.8's.
+
 ## [1.7.0-rc.8] — 2026-09-03
 
 ### Fixed

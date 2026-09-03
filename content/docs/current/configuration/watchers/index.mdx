@@ -799,8 +799,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.inspect.tag.version-only` | ⚪ | When `dd.inspect.tag.path` is set, route the extracted value to `image.softwareVersion` only instead of overwriting the image tag. Default behavior (tag overwrite) is unchanged when this label is absent or `false`. | `true`, `false` | `false` |
 | `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
 | `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
-| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | Valid JavaScript Regex | |
-| `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
+| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
+| `dd.tag.include` | ⚪ | Regex to include specific tags only | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
 | `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
@@ -824,7 +824,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.hook.post` | ⚪ | Shell command to run after a container update | Valid shell command | |
 | `dd.hook.pre.abort` | ⚪ | Abort the update if the pre-hook exits non-zero | Valid Boolean | `true` |
 | `dd.hook.timeout` | ⚪ | Timeout in milliseconds for hook execution | integer | `60000` |
-| `dd.rollback.auto` | ⚪ | Automatically rollback the container if the health check fails after an update | Valid Boolean | `false` |
+| `dd.rollback.auto` | ⚪ | Keep polling health after the update is finalized and roll back a failure during `dd.rollback.window`. The initial health gate runs regardless for a running container with a `HEALTHCHECK` | Valid Boolean | `false` |
 | `dd.rollback.window` | ⚪ | Health monitoring window in milliseconds after an update (how long to watch for failures) | integer | `300000` |
 | `dd.rollback.interval` | ⚪ | Health polling interval in milliseconds during the rollback window | integer | `10000` |
 | `dd.depends_on` | ⚪ | Comma-separated list of container names this container depends on. Overrides compose-file `depends_on` detection entirely (no merge) — when set, drydock uses exactly this list. Setting it to an empty value declares "no dependencies" and also suppresses compose detection. A self-reference is dropped with a warning. | CSV container names | Detected from the compose file's `depends_on` when the container is compose-managed; otherwise none |
