@@ -59,7 +59,21 @@ vi.mock('../../../security/scan.js', () => ({
   clearDigestScanCache: vi.fn(),
   getDigestScanCacheSize: vi.fn().mockReturnValue(0),
   updateDigestScanCache: vi.fn(),
-  scanImageWithDedup: vi.fn(),
+  // Mirrors the real dedup wrapper: a cache miss delegates to the scanner.
+  scanImageWithDedup: vi.fn(async (options: any) => ({
+    scanResult: await mockScanImageForVulnerabilities(options),
+    fromCache: false,
+  })),
+}));
+
+const mockGetTrivyDatabaseStatus = vi.hoisted(() => vi.fn());
+vi.mock('../../../security/runtime.js', () => ({
+  getTrivyDatabaseStatus: (...args: any[]) => mockGetTrivyDatabaseStatus(...args),
+}));
+
+const mockGetSchedulerScanIntervalMs = vi.hoisted(() => vi.fn());
+vi.mock('../../../security/scheduler.js', () => ({
+  getSchedulerScanIntervalMs: (...args: any[]) => mockGetSchedulerScanIntervalMs(...args),
 }));
 
 vi.mock('../../../store/container.js', () => ({
@@ -207,15 +221,25 @@ vi.mock('../../../registry', () => ({
               }
               return Promise.reject(new Error('Error when pulling image'));
             },
-            getImage: (image) =>
-              Promise.resolve({
-                remove: () => {
-                  if (image === 'test/test:1.2.3') {
-                    return Promise.resolve();
-                  }
-                  return Promise.reject(new Error('Error when removing image'));
-                },
-              }),
+            getImage: (image) => ({
+              remove: () => {
+                if (image === 'test/test:1.2.3') {
+                  return Promise.resolve();
+                }
+                return Promise.reject(new Error('Error when removing image'));
+              },
+              // dockerode returns the image handle synchronously. The post-pull identity
+              // binding inspects it for the manifest digest of the image actually pulled.
+              inspect: () =>
+                Promise.resolve({
+                  Id: `sha256:${'1'.repeat(64)}`,
+                  RepoDigests: [
+                    `${String(image)
+                      .split('@')[0]
+                      .replace(/:[^:/]+$/, '')}@sha256:${'2'.repeat(64)}`,
+                  ],
+                }),
+            }),
             modem: {
               followProgress: (pullStream, res) => res(),
             },
@@ -412,6 +436,8 @@ beforeEach(async () => {
   docker.configuration = configurationValid;
   docker.log = log;
   mockGetServerConfiguration.mockReturnValue({ port: 3000 });
+  mockGetTrivyDatabaseStatus.mockResolvedValue(undefined);
+  mockGetSchedulerScanIntervalMs.mockReturnValue(86_400_000);
   mockGetSecurityConfiguration.mockReturnValue({
     enabled: false,
     scanner: '',
@@ -1539,7 +1565,9 @@ test('trigger should block update when signature verification is unverified', as
   );
 
   expect(mockVerifyImageSignature).toHaveBeenCalled();
-  expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
+  // Signature verification now runs inside executeContainerUpdate (post-pull
+  // hook) so it verifies the pinned digest, so the executor IS entered.
+  expect(executeContainerUpdateSpy).toHaveBeenCalled();
 });
 
 test('trigger should generate sbom when enabled', async () => {

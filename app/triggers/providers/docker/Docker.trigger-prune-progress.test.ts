@@ -306,7 +306,9 @@ test('trigger should block update when signature verification is unverified', as
   );
 
   expect(mockVerifyImageSignature).toHaveBeenCalled();
-  expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
+  // Signature verification now runs inside executeContainerUpdate (post-pull
+  // hook) so it verifies the pinned digest, so the executor IS entered.
+  expect(executeContainerUpdateSpy).toHaveBeenCalled();
 });
 
 test('trigger should generate sbom when enabled', async () => {

@@ -1918,6 +1918,137 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  describe('pulled image identity binding', () => {
+    const mutableImage = 'ghcr.io/acme/web:1.0.1';
+    const pulledDigest = `sha256:${'a'.repeat(64)}`;
+    const retaggedDigest = `sha256:${'b'.repeat(64)}`;
+    const pinnedImage = `${mutableImage}@${pulledDigest}`;
+
+    test('pins the pulled digest for the gate, the config lookup, and the create', async () => {
+      const context = createContext();
+      // What `repo:tag` resolves to in the registry. It is repointed mid-flight
+      // to model a retag landing between the pull and the replacement create.
+      let registryDigest = pulledDigest;
+      const bindPulledImageIdentity = vi.fn(async () => ({
+        imageIdentity: `${mutableImage}@${registryDigest}`,
+      }));
+      const getCloneRuntimeConfigOptions = vi.fn(async () => {
+        registryDigest = retaggedDigest;
+        return { runtime: true };
+      });
+      const cloneContainer = vi.fn(() => ({ cloned: true }));
+      const executor = createExecutor({
+        bindPulledImageIdentity,
+        getCloneRuntimeConfigOptions,
+        cloneContainer,
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      });
+      const postPullHook = vi.fn().mockResolvedValue(undefined);
+      const container = createContainer();
+
+      await expect(
+        executor.execute(context, container, createLog(), undefined, postPullHook),
+      ).resolves.toBe(true);
+
+      expect(bindPulledImageIdentity).toHaveBeenCalledTimes(1);
+      expect(bindPulledImageIdentity).toHaveBeenCalledWith(
+        context.dockerApi,
+        mutableImage,
+        container,
+        expect.anything(),
+      );
+      expect(postPullHook).toHaveBeenCalledWith('op-1', pinnedImage);
+      expect(getCloneRuntimeConfigOptions).toHaveBeenCalledWith(
+        context.dockerApi,
+        context.currentContainerSpec,
+        pinnedImage,
+        expect.anything(),
+      );
+      expect(cloneContainer).toHaveBeenCalledWith(context.currentContainerSpec, pinnedImage, {
+        runtime: true,
+      });
+      // The operator-facing target stays the tag they configured.
+      expect(mockInsertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({ targetImage: mutableImage }),
+      );
+    });
+
+    test('terminalizes before rename or create when a required identity cannot be bound', async () => {
+      const context = createContext();
+      const bindingError = new Error(
+        'Unable to bind security gate to the pulled image for web: manifest unavailable',
+      );
+      const createContainerSpy = vi.fn().mockResolvedValue(context.newContainer);
+      const executor = createExecutor({
+        bindPulledImageIdentity: vi.fn().mockRejectedValue(bindingError),
+        createContainer: createContainerSpy,
+      });
+      const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+      await expect(
+        executor.execute(context, createContainer(), createLog(), undefined, postPullHook),
+      ).rejects.toThrow('Unable to bind security gate to the pulled image for web');
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({
+          status: 'failed',
+          phase: 'failed',
+          lastError: bindingError.message,
+        }),
+      );
+      expect(postPullHook).not.toHaveBeenCalled();
+      expect(context.currentContainer.rename).not.toHaveBeenCalled();
+      expect(createContainerSpy).not.toHaveBeenCalled();
+    });
+
+    test('skips the post-pull gate and keeps the mutable reference when binding only warns', async () => {
+      const context = createContext();
+      const cloneContainer = vi.fn(() => ({ cloned: true }));
+      const getCloneRuntimeConfigOptions = vi.fn().mockResolvedValue({ runtime: true });
+      const executor = createExecutor({
+        bindPulledImageIdentity: vi.fn().mockResolvedValue({ skipSecurityGate: true }),
+        cloneContainer,
+        getCloneRuntimeConfigOptions,
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      });
+      const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+      await expect(
+        executor.execute(context, createContainer(), createLog(), undefined, postPullHook),
+      ).resolves.toBe(true);
+
+      expect(postPullHook).not.toHaveBeenCalled();
+      expect(getCloneRuntimeConfigOptions).toHaveBeenCalledWith(
+        context.dockerApi,
+        context.currentContainerSpec,
+        mutableImage,
+        expect.anything(),
+      );
+      expect(cloneContainer).toHaveBeenCalledWith(context.currentContainerSpec, mutableImage, {
+        runtime: true,
+      });
+    });
+
+    test('keeps the mutable reference when the binder resolves no identity', async () => {
+      const context = createContext();
+      const cloneContainer = vi.fn(() => ({ cloned: true }));
+      const executor = createExecutor({
+        bindPulledImageIdentity: vi.fn().mockResolvedValue({}),
+        cloneContainer,
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      });
+      const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+      await executor.execute(context, createContainer(), createLog(), undefined, postPullHook);
+
+      expect(postPullHook).toHaveBeenCalledWith('op-1', undefined);
+      expect(cloneContainer).toHaveBeenCalledWith(context.currentContainerSpec, mutableImage, {
+        runtime: true,
+      });
+    });
+  });
+
   describe('persistRollbackState integration', () => {
     test('calls persistRollbackState with succeeded when update completes successfully', async () => {
       const persistRollbackState = vi.fn();
