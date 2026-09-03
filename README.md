@@ -208,6 +208,7 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <summary><strong>v1.7.0-rc.8 highlights</strong></summary>
 
 - **The Docker-native and Compose update paths now pin an immutable pulled-image digest before signature verification, scanning, and replacement**, closing the registry-retag window on both paths. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))
+- **Compose updates now run that gate before the pre-update hook, the image prune, and the backup record**, so a candidate the gate rejects no longer fires an operator hook or evicts a real rollback point on its way to being refused.
 - **Self-update no longer rolls back a health-verified replacement when old-container cleanup fails**, and the watcher-snapshot handler stops treating an empty container list as a mass removal. ([#951](https://github.com/CodesWhat/drydock/pull/951), [#929](https://github.com/CodesWhat/drydock/pull/929))
 - **`dd.registry.lookup.image` now applies to containers reported by controller-Docker-transport agents**, so Portwing-reported containers honor the same registry override as locally watched ones. ([#956](https://github.com/CodesWhat/drydock/pull/956))
 - **`DD_AGENT_ALLOW_INSECURE_SECRET` no longer creates a phantom agent named `allow`**, and a container stamped `unknown` before its registry was configured now recovers on refresh. ([#954](https://github.com/CodesWhat/drydock/pull/954), [#955](https://github.com/CodesWhat/drydock/pull/955))

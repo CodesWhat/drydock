@@ -389,7 +389,10 @@ describe('Dockercompose Trigger', () => {
       },
     );
 
-    expect(postPullHook).not.toHaveBeenCalled();
+    // The gate half is suppressed because there is no immutable reference to
+    // gate, but the hook also carries the deferred pre-update hook and the
+    // prune/backup step, which still have to run before the replacement.
+    expect(postPullHook).toHaveBeenCalledWith('', undefined, { skipSecurityGate: true });
     expect(securityAuditSpy).toHaveBeenCalledWith(
       'security-scan-skipped',
       expect.anything(),
@@ -404,6 +407,45 @@ describe('Dockercompose Trigger', () => {
     );
     expect(mockLog.warn).toHaveBeenCalledWith(
       expect.stringContaining('proceeding without an immutable image reference'),
+    );
+  });
+
+  test('compose-file-once refresh should proceed on a carried unbound warning with no post-pull hook', async () => {
+    trigger.configuration.dryrun = false;
+    const securityAuditSpy = vi.spyOn(trigger, 'recordSecurityAudit');
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    // The compose-file-once preflight already pulled, already recorded its own
+    // verdict, and passes no post-pull hook to the per-service refresh.
+    await trigger.updateContainerWithCompose(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      makeContainer(),
+      {
+        skipPull: true,
+        runtimeContext: {
+          dockerApi: mockDockerApi,
+          auth: {},
+          newImage: 'nginx:9.9.9',
+          securityGateUnboundWarn: true,
+          securityGateUnboundReason: 'manifest unavailable',
+        },
+      },
+    );
+
+    expect(securityAuditSpy).toHaveBeenCalledWith(
+      'security-scan-skipped',
+      expect.anything(),
+      'error',
+      expect.stringContaining('manifest unavailable'),
+    );
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:9.9.9' }),
+      'nginx',
+      expect.anything(),
     );
   });
 
