@@ -412,6 +412,63 @@ describe('Backup Store', () => {
       );
     });
 
+    // A local inspect that answers without an `Id`, or without a body at all,
+    // proves nothing about whether the retained tag still points at the backup
+    // image, so it cannot be treated as a same-tag hazard. Both shapes have to
+    // reach the binder and be decided by the binding policy like any other
+    // unresolvable digest.
+    test('falls back to the tag with a warning under an optional policy when the local inspect reports no image id', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi.fn().mockResolvedValue({}),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('optional'),
+      };
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue({}) })),
+      };
+      const container = { image: { id: 'sha256:running' } };
+
+      await expect(
+        resolveRollbackImageReference(trigger, dockerApi, container, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3');
+      expect(trigger.bindPulledImageIdentity).toHaveBeenCalledWith(
+        dockerApi,
+        'registry.example/app:1.2.3',
+        container,
+        logContainer,
+      );
+      expect(trigger.getRollbackIdentityBindingPolicy).not.toHaveBeenCalled();
+      expect(logContainer.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'No digest could be established for the rollback of registry.example/app:1.2.3',
+        ),
+      );
+    });
+
+    test('refuses the rollback under a required policy when the local inspect returns no body', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi.fn().mockRejectedValue(new Error('policy required')),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('required'),
+      };
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue(undefined) })),
+      };
+      const container = { image: { id: 'sha256:running' } };
+
+      const promise = resolveRollbackImageReference(
+        trigger,
+        dockerApi,
+        container,
+        backupRecord,
+        logContainer,
+      );
+      await expect(promise).rejects.toBeInstanceOf(RollbackDigestRequiredError);
+      await expect(promise).rejects.toThrow(
+        'Cannot roll back registry.example/app:1.2.3 to an immutable reference: policy required',
+      );
+      expect(trigger.bindPulledImageIdentity).toHaveBeenCalled();
+      expect(trigger.getRollbackIdentityBindingPolicy).not.toHaveBeenCalled();
+    });
+
     test('still resolves through the binder when the container carries no running image id', async () => {
       const trigger = {
         bindPulledImageIdentity: vi
