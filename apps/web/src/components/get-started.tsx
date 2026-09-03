@@ -38,6 +38,8 @@ function QuickSnippet() {
         <span className="text-[#C4FF00]">docker run</span> -d \{"\n"}
         {"  "}--name drydock \{"\n"}
         {"  "}-v /var/run/docker.sock:/var/run/docker.sock \{"\n"}
+        {"  "}-v drydock-store:/store \{"\n"}
+        {"  "}-e DD_ANONYMOUS_AUTH_CONFIRM=true \{"\n"}
         {"  "}-p 3000:3000 \{"\n"}
         {"  "}
         {SITE_CONFIG.dockerImage}
@@ -94,16 +96,21 @@ function SecureSnippet() {
         <span className={key}>volumes</span>:{"\n"}
         {"      "}- sockguard-socket:/var/run/sockguard:<span className={val}>ro</span>
         {"\n"}
+        {"      "}- drydock-store:/store{"\n"}
         {"    "}
         <span className={key}>environment</span>:{"\n"}
         {"      "}
         <span className={com}># no raw docker.sock — just sockguard&apos;s scoped socket</span>
         {"\n"}
         {"      "}- DD_WATCHER_LOCAL_SOCKET=/var/run/sockguard/sockguard.sock{"\n"}
+        {"      "}- DD_AUTH_BASIC_ADMIN_USER=admin{"\n"}
+        {"      "}- DD_AUTH_BASIC_ADMIN_HASH=&lt;paste-argon2id-hash&gt;{"\n"}
         {"\n"}
         <span className={key}>volumes</span>:{"\n"}
         {"  "}
-        <span className={key}>sockguard-socket</span>:
+        <span className={key}>sockguard-socket</span>:{"\n"}
+        {"  "}
+        <span className={key}>drydock-store</span>:
       </code>
     </CodeCard>
   );
