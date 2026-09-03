@@ -947,6 +947,26 @@ describe('SSE lifecycle event handlers', () => {
       },
     );
 
+    // DR-4, the half that dropping fields does not cover: `id` and `name` on a container
+    // carry no maximum length (app/model/container.ts), so a field the projection keeps is
+    // as able to blow the 256 KB pending-byte cap as one it drops — and this frame is
+    // retained in the replay ring, so it would do it again on reconnect.
+    test('bounds the strings it keeps, not just the fields it drops', () => {
+      const res = emitApproval('created', {
+        containerId: 'c'.repeat(300 * 1024),
+        containerName: 'n'.repeat(300 * 1024),
+      });
+
+      const write = res.write.mock.calls
+        .map(([value]) => value)
+        .find((value: string) => value.includes('dd:approval-created'));
+      expect(write.length).toBeLessThan(256 * 1024);
+      const payload = parseSseEventPayload(res, 'dd:approval-created');
+      expect(payload.containerId).toBe('c'.repeat(256));
+      expect(payload.containerName).toBe('n'.repeat(256));
+      expect(payload.id).toBe('approval-1');
+    });
+
     // DR-4: a lifecycle payload carrying a container snapshot disconnects every client at
     // the 256 KB backpressure cap. Nothing the reconciler can hand this builder puts a
     // container in the payload, so a 500-vulnerability container cannot reach the wire.

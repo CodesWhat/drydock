@@ -705,16 +705,30 @@ function projectContainerLifecyclePayload(
 }
 
 /**
+ * Longest container id or name this event will put on the wire. Comfortably past a Docker
+ * id (64 hex) or any name a person types, and short enough that the whole frame stays a
+ * rounding error against the per-client budget.
+ */
+const APPROVAL_SSE_TEXT_MAX_LENGTH = 256;
+
+/**
  * Five scalars, built by naming each field rather than by stripping a container. There is
  * no projection to keep in step with the container schema and no way for a vulnerability
  * array, an SBOM or a release-notes body to reach a client through this event: everything
  * the queue view needs beyond the count is fetched from `/api/v1/approvals`.
+ *
+ * The two container-supplied strings are bounded as well as named. Neither `id` nor `name`
+ * carries a maximum length in the container schema, and an agent supplies both, so naming
+ * the fields alone still leaves a frame that can exceed the 256 KB pending-byte cap and
+ * disconnect a backpressured client — then do it again when the ring buffer replays. The
+ * row's own `id` is not bounded: it is a generated UUID, and it is the key a client uses
+ * to fetch the row, so truncating it would break the lookup it exists for.
  */
 function buildApprovalSsePayload(payload: ApprovalEventPayload): Record<string, unknown> {
   return {
     id: payload.id,
-    containerId: payload.containerId,
-    containerName: payload.containerName,
+    containerId: payload.containerId.slice(0, APPROVAL_SSE_TEXT_MAX_LENGTH),
+    containerName: payload.containerName.slice(0, APPROVAL_SSE_TEXT_MAX_LENGTH),
     decision: payload.decision,
     pendingCount: payload.pendingCount,
   };
