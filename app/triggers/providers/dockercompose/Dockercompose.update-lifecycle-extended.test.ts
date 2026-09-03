@@ -799,6 +799,93 @@ describe('Dockercompose Trigger', () => {
     expect(scanAndGatePostPullSpy).toHaveBeenCalledTimes(2);
   });
 
+  test('processComposeFile should refuse divergent replica targets for one compose-file-once service', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // The compose file already names the first replica's target, so only the
+    // second replica reaches the compose-update list and the existing
+    // conflicting-update guard never fires. The service is still divergent:
+    // one replica wants 1.1.0 and the other wants 1.2.0.
+    const firstContainer = makeContainer({
+      name: 'nginx-a',
+      remoteValue: '1.1.0',
+      updateAvailable: true,
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      name: 'nginx-b',
+      remoteValue: '1.2.0',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [firstContainer, secondContainer]),
+    ).rejects.toThrow(
+      'Compose service nginx resolves to different update targets for its containers ' +
+        '(nginx-a wants nginx:1.1.0, nginx-b wants nginx:1.2.0)',
+    );
+
+    expect(pullImageSpy).not.toHaveBeenCalled();
+    expect(lifecycleSpy).not.toHaveBeenCalled();
+  });
+
+  test('processComposeFile should refuse a divergent replica even when it is already up to date', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // The first replica already matches the compose file's target (1.1.0) and
+    // needs no runtime update at all, so it is excluded from
+    // mappingsNeedingRuntimeUpdate. The second replica's filter resolves a
+    // different target (1.2.0). Preflight must still see the first replica's
+    // target when validating divergence, or it silently pulls, gates and
+    // writes 1.2.0 into the shared service definition -- changing the image
+    // out from under the replica whose filter wanted 1.1.0.
+    const firstContainer = makeContainer({
+      name: 'nginx-a',
+      tagValue: '1.1.0',
+      remoteValue: '1.1.0',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      name: 'nginx-b',
+      tagValue: '1.0.0',
+      remoteValue: '1.2.0',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n')),
+    );
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [firstContainer, secondContainer]),
+    ).rejects.toThrow(
+      'Compose service nginx resolves to different update targets for its containers ' +
+        '(nginx-a wants nginx:1.1.0, nginx-b wants nginx:1.2.0)',
+    );
+
+    expect(pullImageSpy).not.toHaveBeenCalled();
+    expect(lifecycleSpy).not.toHaveBeenCalled();
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
   test('processComposeFile should gate every replica before any compose-file-once runtime mutation', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;
@@ -869,7 +956,139 @@ describe('Dockercompose Trigger', () => {
     expect(callOrder.some((entry) => ['stop', 'remove', 'create', 'start'].includes(entry))).toBe(
       false,
     );
-    expect(writeComposeFileSpy).toHaveBeenLastCalledWith(composeFile, originalCompose);
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+  });
+
+  test('compose-file-once should record one skipped-scan audit per replica, not one extra for the refreshed service', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // The pulled image cannot be bound to a manifest digest and availability
+    // policy `warn` allows the update to proceed without a scan.
+    vi.spyOn(trigger as any, 'capturePulledImageIdentity').mockResolvedValue({
+      unboundWarn: true,
+      reason: 'manifest digest unavailable',
+    });
+    const firstContainer = makeContainer({
+      id: 'nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      id: 'nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const recordUnboundWarningSpy = vi.spyOn(trigger, 'recordUnboundSecurityWarning');
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    vi.spyOn(trigger.runtimeConfigManager, 'getCloneRuntimeConfigOptions').mockResolvedValue({});
+    vi.spyOn(trigger as any, 'recreateReplacementContainerWithCleanup').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [
+      firstContainer,
+      secondContainer,
+    ]);
+
+    expect(recordUnboundWarningSpy.mock.calls.map(([container]) => container.name)).toEqual([
+      'nginx-a',
+      'nginx-b',
+    ]);
+  });
+
+  test('compose-file-once should preflight every service before the compose write and preserve the services it already refreshed', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    const composeFile = '/opt/drydock/test/stack.yml';
+    const originalCompose = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.0.0',
+      '  redis:',
+      '    image: redis:7.0.0',
+      '',
+    ].join('\n');
+    const containers = [
+      makeContainer({
+        name: 'nginx',
+        updateAvailable: true,
+        labels: { 'com.docker.compose.service': 'nginx' },
+      }),
+      makeContainer({
+        name: 'redis',
+        imageName: 'redis',
+        tagValue: '7.0.0',
+        remoteValue: '7.2.0',
+        updateAvailable: true,
+        labels: { 'com.docker.compose.service': 'redis' },
+      }),
+    ];
+    const callOrder: string[] = [];
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({
+        nginx: { image: 'nginx:1.0.0' },
+        redis: { image: 'redis:7.0.0' },
+      }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(originalCompose));
+    const writeComposeFileSpy = vi
+      .spyOn(trigger, 'writeComposeFile')
+      .mockImplementation(async () => {
+        callOrder.push('write');
+      });
+    vi.spyOn(trigger, 'pullImage').mockImplementation(async () => {
+      callOrder.push('pull');
+    });
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockImplementation(async (_context, container) => {
+      callOrder.push(`gate:${container.name}`);
+    });
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockImplementation(
+      async (_container, composeContext) => {
+        callOrder.push(`refresh:${composeContext.service}`);
+        expect(composeContext.skipPull).toBe(true);
+        expect(composeContext.postPullGateCompleted).toBe(true);
+        if (composeContext.service === 'redis') {
+          throw new Error('redis runtime refresh failed');
+        }
+      },
+    );
+
+    await expect(trigger.processComposeFile(composeFile, containers)).rejects.toThrow(
+      'redis runtime refresh failed',
+    );
+
+    expect(callOrder).toEqual([
+      'pull',
+      'pull',
+      'gate:nginx',
+      'gate:redis',
+      'write',
+      'refresh:nginx',
+      'refresh:redis',
+      'write',
+    ]);
+    const partiallyRestoredComposeText = writeComposeFileSpy.mock.calls.at(-1)?.[1] as string;
+    expect(partiallyRestoredComposeText).toContain('nginx:1.1.0');
+    expect(partiallyRestoredComposeText).toContain('redis:7.0.0');
+    expect(partiallyRestoredComposeText).not.toContain('redis:7.2.0');
+    expect(trigger.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('preserving completed services (nginx)'),
+    );
   });
 
   test('compose-file-once preflight failure terminalizes every active mapped operation', async () => {
@@ -899,10 +1118,13 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'scanAndGatePostPull').mockRejectedValue(new Error('preflight blocked'));
 
     await expect(
-      trigger.runRuntimeUpdatesForComposeMappings(
+      trigger.applyComposeMutationsAndRuntimeUpdates(
         '/opt/drydock/test/stack.yml',
         ['/opt/drydock/test/stack.yml'],
+        new Map(),
+        '/opt/drydock/test/stack.yml',
         makeCompose({ nginx: {}, redis: {}, postgres: {} }),
+        [],
         [
           { service: 'nginx', container: firstContainer },
           { service: 'redis', container: secondContainer },
@@ -942,10 +1164,11 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
-  test('processComposeFile should restore mutations and leave runtime untouched when a post-pull hook rejects', async () => {
+  test('processComposeFile should leave the compose file and its backup untouched when a post-pull hook rejects', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;
     trigger.configuration.composeFileOnce = true;
+    trigger.configuration.backup = true;
     const container = makeContainer({
       id: 'nginx-rejected',
       name: 'nginx',
@@ -958,6 +1181,7 @@ describe('Dockercompose Trigger', () => {
     );
     vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(originalCompose));
     const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    const backupSpy = vi.spyOn(trigger, 'backup').mockResolvedValue();
     const pullImageSpy = vi.spyOn(trigger, 'pullImage').mockResolvedValue();
     const stopContainerSpy = vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
     const removeContainerSpy = vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
@@ -986,7 +1210,8 @@ describe('Dockercompose Trigger', () => {
     expect(removeContainerSpy).not.toHaveBeenCalled();
     expect(createContainerSpy).not.toHaveBeenCalled();
     expect(startContainerSpy).not.toHaveBeenCalled();
-    expect(writeComposeFileSpy).toHaveBeenLastCalledWith(composeFile, originalCompose);
+    expect(writeComposeFileSpy).not.toHaveBeenCalled();
+    expect(backupSpy).not.toHaveBeenCalled();
   });
 
   test('preview should passthrough base preview errors without compose metadata', async () => {
