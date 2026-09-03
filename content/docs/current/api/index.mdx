@@ -348,7 +348,7 @@ Scope: `read`. Defaults to `status=pending`. Supports `status` (`pending`, `defe
 curl http://drydock:3000/api/v1/approvals/summary
 ```
 
-Scope: `read`. Returns 200 with the pending/deferred/decided counts used for the nav badge and dashboard tile.
+Scope: `read`. Returns 200 with `{ pending, deferred, decidedToday }` — `decidedToday` counts decisions since UTC midnight, not the running total of decided approvals — used for the nav badge and dashboard tile.
 
 ### Get a single approval
 
@@ -356,7 +356,7 @@ Scope: `read`. Returns 200 with the pending/deferred/decided counts used for the
 curl http://drydock:3000/api/v1/approvals/approval-id
 ```
 
-Scope: `read`. Returns 200 with `{ approval, eligibility, holdReasons }` (`holdReasons` is empty when the approval's container no longer exists), or 404 if the approval does not exist.
+Scope: `read`. Returns 200 with `{ approval, eligibility, holdReasons }` (`eligibility` is omitted and `holdReasons` is empty when the approval's container no longer exists), or 404 if the approval does not exist.
 
 ### Approve a queued update
 
