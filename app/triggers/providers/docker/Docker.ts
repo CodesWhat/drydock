@@ -1885,7 +1885,7 @@ class Docker<
       const imageWithoutDigest = imageReference.split('@', 1)[0];
       const parsedImage = parse(imageWithoutDigest);
       const referenceCandidates = this.getPulledImageRepositoryCandidates(parsedImage);
-      const matchingRepoDigest = imageInspect?.RepoDigests?.find((repoDigest) => {
+      const matchingRepoDigests = (imageInspect?.RepoDigests ?? []).filter((repoDigest) => {
         const separatorIndex = repoDigest.indexOf('@');
         if (separatorIndex <= 0 || separatorIndex === repoDigest.length - 1) {
           return false;
@@ -1894,6 +1894,11 @@ class Docker<
         const digest = repoDigest.substring(separatorIndex + 1);
         return referenceCandidates.includes(repo) && /^sha256:[0-9a-f]+$/i.test(digest);
       });
+      const matchingRepoDigest = await this.selectPulledRepoDigest(
+        matchingRepoDigests,
+        container,
+        logContainer,
+      );
       const tag = parsedImage.tag?.trim();
       if (imageId && matchingRepoDigest && tag) {
         const separatorIndex = matchingRepoDigest.indexOf('@');
@@ -1921,6 +1926,65 @@ class Docker<
       bindingPolicy,
       'Docker image inspection returned no local ID and matching manifest digest',
     );
+  }
+
+  /**
+   * Disambiguate multiple `RepoDigests` entries that match the pulled image's
+   * repository. Docker never drops a stale entry: when a multi-arch index is
+   * republished without touching this platform's layers, the local image ID
+   * can carry both the old and the new manifest digest for the same repo
+   * (`[repo@OLD, repo@NEW]`). Picking the wrong one pins the security gate,
+   * cosign verification and the scan to a manifest that was never the one
+   * gated for this update, while the operation still reports success.
+   *
+   * Prefers the digest the watcher already resolved for this candidate
+   * (`container.result.digest`, set during discovery — no extra lookup).
+   * Falls back to a registry manifest lookup, which is cheap when the same
+   * image was already resolved earlier in the same poll cycle (BaseRegistry
+   * caches it). Otherwise picks deterministically and logs every candidate
+   * so the ambiguity is visible instead of silently picked.
+   */
+  protected async selectPulledRepoDigest(
+    candidates: string[],
+    container,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+  ): Promise<string | undefined> {
+    if (candidates.length <= 1) {
+      return candidates[0];
+    }
+
+    const digestOf = (repoDigest: string) => repoDigest.substring(repoDigest.indexOf('@') + 1);
+    const resolvedDigest = container?.result?.digest;
+    if (typeof resolvedDigest === 'string' && /^sha256:[0-9a-f]+$/i.test(resolvedDigest)) {
+      const preferred = candidates.find((candidate) => digestOf(candidate) === resolvedDigest);
+      if (preferred) {
+        return preferred;
+      }
+    }
+
+    try {
+      const registry = this.resolveRegistryManager(container, logContainer, {
+        allowAnonymousFallback: true,
+      });
+      if (registry && typeof registry.getImageManifestDigest === 'function') {
+        const manifest = await registry.getImageManifestDigest(container.image);
+        if (typeof manifest?.digest === 'string') {
+          const resolved = candidates.find((candidate) => digestOf(candidate) === manifest.digest);
+          if (resolved) {
+            return resolved;
+          }
+        }
+      }
+    } catch {
+      // Best-effort disambiguation only — fall through to the deterministic pick.
+    }
+
+    const sorted = [...candidates].sort();
+    const chosen = sorted[0];
+    logContainer.warn(
+      `Multiple manifest digests match the pulled image repository for ${container?.name}: [${candidates.join(', ')}]; picked ${chosen}`,
+    );
+    return chosen;
   }
 
   protected getPulledImageRepositoryCandidates(parsedImage: { domain?: string; path?: string }) {
@@ -2019,6 +2083,17 @@ class Docker<
       return 'disabled';
     }
     return securityConfiguration.availabilityPolicy === 'warn' ? 'optional' : 'required';
+  }
+
+  /**
+   * Public alias of {@link getPostPullIdentityBindingPolicy} for callers
+   * outside this class, such as the manual rollback API in
+   * `app/util/backup.ts`, which needs the same required/optional/disabled
+   * decision to know whether an unresolvable rollback digest should refuse
+   * the rollback or fall back to the mutable tag with a warning.
+   */
+  getRollbackIdentityBindingPolicy(container): 'required' | 'optional' | 'disabled' {
+    return this.getPostPullIdentityBindingPolicy(container);
   }
 
   async createTriggerContext(container, logContainer, _runtimeContext?: unknown) {
