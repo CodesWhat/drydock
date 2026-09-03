@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **`DD_AGENT_ALLOW_INSECURE_SECRET` was parsed as an agent named `allow`.** `getAgentConfigurations()` handed the whole `ddEnvVars` map to the generic `dd.agent` prefix parser, and that documented flat flag matches the prefix as `DD_AGENT_ALLOW_INSECURE_SECRET`, producing an `{insecure: {secret: 'true'}}` agent literally named `allow`. Registration then rejected it every boot with `Agent allow failed to register ("host" is required)`, on every install that set the flag regardless of whether any real agents were configured. The flag is now excluded before the map is parsed. Reported by [@depuits](https://github.com/depuits) in [#945](https://github.com/CodesWhat/drydock/issues/945).
+- **A container seen before its registry was configured stayed stamped `unknown` forever.** `shouldRepairStoredImageReference()` only re-derived a stored image reference when the tag was `unknown` or digest-shaped, so a container whose `image.registry.name` was already `unknown` but whose tag was otherwise normal never re-entered the repair path on refresh, and only recovered if it was recreated. The repair now also runs when the stored registry name is `unknown`, re-resolving it from the live image inspect on the next refresh cycle. Reported by [@depuits](https://github.com/depuits) in [#945](https://github.com/CodesWhat/drydock/issues/945).
 
 ## [1.6.1-rc.6] — 2026-08-28
 
