@@ -87,7 +87,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A compose rollback that itself fails was mapped to a terminal state no test ever drove.** `getComposeRollbackTerminalPatch` turns a `rollback-failed` compose outcome into `{status: failed, phase: rollback-failed}`, but the whole branch sat under a `v8 ignore` claiming it was integration-covered through compose recovery, and nothing drove that status through `runContainerUpdateLifecycle`: the one lifecycle test used `rolled-back`, and the compose-side test stops at the throw. A regression mapping it to `rolled-back`, or letting it fall through to the duplicate-update `expired` reclassification, would have shipped at 100% coverage. The second ignore in that path, over the rollback-state persistence, was stale the other way: the rolled-back lifecycle test has been exercising it all along. Seven new lifecycle cases now cover both statuses plus the blank-reason, absent-`lastError`, unrecognized-status, no-container-id, no-persistence-dependency and watcher-only-identity paths, which retires seven of the file's thirteen `v8 ignore` blocks. The terminal patch's `lastError` is also typed as always present, which it always was, so its dead fallback is gone. The six ignores left each name a specific unreachable input instead of claiming coverage that lives somewhere else.
 
-
 ## [1.7.0-rc.6] — 2026-08-29
 
 ### Added
