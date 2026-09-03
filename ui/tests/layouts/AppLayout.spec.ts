@@ -586,7 +586,7 @@ describe('AppLayout', () => {
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('custom curl-based healthcheck override');
     expect(banner.text()).toContain('v1.7.0');
-    expect(banner.text()).toContain('/bin/healthcheck');
+    expect(banner.text()).toContain('/bin/healthcheck $${DD_SERVER_PORT:-3000}');
     expect(banner.text()).toContain('View migration guide');
 
     const link = wrapper.find('[data-testid="curl-healthcheck-deprecation-banner-link"]');
