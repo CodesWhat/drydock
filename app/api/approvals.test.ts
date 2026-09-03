@@ -448,10 +448,14 @@ describe('decision preconditions', () => {
     expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
   });
 
-  test.each(DECISION_PATHS)('%s treats a null note as no note at all', async (path) => {
-    await callDecision(path, { body: { note: null } });
+  test.each(DECISION_PATHS)('%s rejects a null note', async (path) => {
+    const { status, body } = await callDecision(path, { body: { note: null } });
 
-    expect(getReservedPatch()).not.toHaveProperty('decisionNote');
+    expect(status).toBe(400);
+    expect(body).toStrictEqual({
+      error: 'Invalid note; expected a string of at most 500 characters',
+    });
+    expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
   });
 
   test.each(DECISION_PATHS)('%s treats a blank note as no note at all', async (path) => {
@@ -460,10 +464,52 @@ describe('decision preconditions', () => {
     expect(getReservedPatch()).not.toHaveProperty('decisionNote');
   });
 
-  test.each(DECISION_PATHS)('%s survives a body that is not an object', async (path) => {
-    const { status } = await callDecision(path, { body: 'not-json' });
+  test.each(DECISION_PATHS)('%s decides with no body at all', async (path) => {
+    const { status } = await callDecision(path, { body: undefined });
 
     expect(status).not.toBe(400);
+    expect(mockDecideApprovalIfPending).toHaveBeenCalled();
+  });
+
+  // Express's JSON parser is strict, so a literal `null` payload never reaches a handler;
+  // an absent body does, and the schema marks the whole body optional.
+  test.each(DECISION_PATHS)('%s reads a null body as an absent one', async (path) => {
+    const { status } = await callDecision(path, { body: null });
+
+    expect(status).not.toBe(400);
+  });
+
+  test.each([
+    ['/:id/approve', 'not-json'],
+    ['/:id/approve', 42],
+    ['/:id/approve', []],
+    ['/:id/reject', 'not-json'],
+    ['/:id/defer', 'not-json'],
+    ['/:id/defer', []],
+  ])('%s rejects a body that is not an object: %o', async (path, body) => {
+    const { status, body: responseBody } = await callDecision(path, { body });
+
+    expect(status).toBe(400);
+    expect(responseBody).toStrictEqual({
+      error: 'Invalid request body; expected a JSON object',
+    });
+    expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['/:id/approve', { until: '2999-01-01T00:00:00.000Z' }, 'note'],
+    ['/:id/approve', { days: 3 }, 'note'],
+    ['/:id/reject', { snoozeUntil: '2999-01-01T00:00:00.000Z' }, 'note'],
+    ['/:id/defer', { snoozeUntil: '2999-01-01T00:00:00.000Z' }, 'until, days, note'],
+    ['/:id/defer', { ids: ['approval-2'] }, 'until, days, note'],
+  ])('%s rejects %o as a property it does not take', async (path, body, allowed) => {
+    const { status, body: responseBody } = await callDecision(path, { body });
+
+    expect(status).toBe(400);
+    expect(responseBody).toStrictEqual({
+      error: `Invalid request body; the allowed properties are ${allowed}`,
+    });
+    expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
   });
 
   test.each(DECISION_PATHS)('%s reads the first value of a repeated id', async (path) => {
@@ -754,9 +800,19 @@ describe('POST /:id/reject', () => {
 });
 
 describe('POST /:id/defer', () => {
+  // Every expiry below is relative to a fixed now, so a bound that is real today (an
+  // `until` in the future, an `until` inside the one-year ceiling) is still real in a year.
+  const NOW = '2026-09-02T00:00:00.000Z';
+
   beforeEach(() => {
     mockGetApprovalById.mockReturnValue(createRecord());
     mockGetContainer.mockReturnValue(createContainer());
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse(NOW));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   // Decision 4: one value, written to both, so the row and the `snoozed` soft blocker can
@@ -788,42 +844,83 @@ describe('POST /:id/defer', () => {
   });
 
   test('takes a day count', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(Date.parse('2026-09-02T00:00:00.000Z'));
-
-    try {
-      await callDecision('/:id/defer', { body: { days: 3 } });
-    } finally {
-      vi.useRealTimers();
-    }
+    await callDecision('/:id/defer', { body: { days: 3 } });
 
     expect(getReservedPatch()).toMatchObject({ deferredUntil: '2026-09-05T00:00:00.000Z' });
   });
 
-  test('defaults to the snooze primitive default of seven days', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(Date.parse('2026-09-02T00:00:00.000Z'));
-
-    try {
-      await callDecision('/:id/defer', { body: {} });
-    } finally {
-      vi.useRealTimers();
-    }
+  test('defaults to seven days', async () => {
+    await callDecision('/:id/defer', { body: {} });
 
     expect(getReservedPatch()).toMatchObject({ deferredUntil: '2026-09-09T00:00:00.000Z' });
   });
 
+  // The row and the container hold one instant, so the offset is resolved here rather than
+  // stored as written: `deferredUntil` and `snoozeUntil` have to compare equal as strings.
+  test('normalizes an offset to UTC before writing either side', async () => {
+    await callDecision('/:id/defer', { body: { until: '2026-09-09T02:00:00+02:00' } });
+
+    expect(getReservedPatch()).toMatchObject({ deferredUntil: '2026-09-09T00:00:00.000Z' });
+    expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledWith(expect.anything(), 'snooze', {
+      snoozeUntil: '2026-09-09T00:00:00.000Z',
+    });
+  });
+
+  test('prefers until over days when both are given', async () => {
+    await callDecision('/:id/defer', { body: { until: '2026-09-20T00:00:00.000Z', days: 3 } });
+
+    expect(getReservedPatch()).toMatchObject({ deferredUntil: '2026-09-20T00:00:00.000Z' });
+  });
+
+  // The documented schema is a full RFC 3339 instant, and the handler used to take
+  // anything `new Date()` would swallow: a bare date (midnight in whatever zone the server
+  // runs in), a past instant (a deferral that expires before it is written), a fractional
+  // day count, a numeric string. Each one is a defer that silently did something else.
   test.each([
-    [{ until: 'not-a-date' }, 'Invalid snoozeUntil date'],
-    [{ days: 0 }, 'Invalid snooze days value'],
-    [{ days: 366 }, 'Invalid snooze days value'],
-    [{ days: 'soon' }, 'Invalid snooze days value'],
-  ])('refuses %o with the snooze primitive message', async (body, message) => {
+    [{ until: '2026-09-09' }],
+    [{ until: '2026-09-09T00:00:00' }],
+    [{ until: 'not-a-date' }],
+    [{ until: 12 }],
+    [{ until: '2026-13-09T00:00:00.000Z' }],
+    [{ until: '2026-09-01T23:59:59.000Z' }],
+    [{ until: '2026-09-02T00:00:00.000Z' }],
+    [{ until: '2027-09-03T00:00:00.000Z' }],
+  ])('refuses %o as an until', async (body) => {
     const { status, body: responseBody } = await callDecision('/:id/defer', { body });
 
     expect(status).toBe(400);
-    expect(responseBody).toStrictEqual({ error: message });
+    expect(responseBody).toStrictEqual({
+      error:
+        'Invalid until; expected an RFC 3339 date-time in the future, at most 365 days from now',
+    });
     expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+  });
+
+  test.each([[{ days: 0 }], [{ days: 366 }], [{ days: 0.5 }], [{ days: '7' }], [{ days: null }]])(
+    'refuses %o as a day count',
+    async (body) => {
+      const { status, body: responseBody } = await callDecision('/:id/defer', { body });
+
+      expect(status).toBe(400);
+      expect(responseBody).toStrictEqual({
+        error: 'Invalid days; expected an integer between 1 and 365',
+      });
+      expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([[1], [365]])('takes %i as a day count', async (days) => {
+    const { status } = await callDecision('/:id/defer', { body: { days } });
+
+    expect(status).toBe(200);
+  });
+
+  test('takes an until one year out to the second', async () => {
+    const { status } = await callDecision('/:id/defer', {
+      body: { until: '2027-09-02T00:00:00.000Z' },
+    });
+
+    expect(status).toBe(200);
   });
 
   test('puts the row back when the policy layer refuses the snooze', async () => {
@@ -863,10 +960,10 @@ describe('under updateMode notify', () => {
   });
 
   test.each([
-    ['/:id/reject', 'skip-current'],
-    ['/:id/defer', 'snooze'],
-  ])('%s still writes policy and returns 200', async (path, action) => {
-    const { status } = await callDecision(path, { body: { days: 1 } });
+    ['/:id/reject', 'skip-current', {}],
+    ['/:id/defer', 'snooze', { days: 1 }],
+  ])('%s still writes policy and returns 200', async (path, action, body) => {
+    const { status } = await callDecision(path, { body });
 
     expect(status).toBe(200);
     expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledWith(

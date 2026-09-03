@@ -138,7 +138,9 @@ export const approvalPaths = {
         202: jsonResponse('Container update accepted', {
           $ref: '#/components/schemas/ContainerUpdateAcceptedResponse',
         }),
-        400: errorResponse('Invalid note, or no update available for this container'),
+        400: errorResponse(
+          'Invalid request body or note, or no update available for this container',
+        ),
         401: errorResponse('Authentication required'),
         403: errorResponse('Container actions feature disabled'),
         404: errorResponse('Approval or container not found'),
@@ -165,7 +167,7 @@ export const approvalPaths = {
         200: jsonResponse('Approval rejected', {
           $ref: '#/components/schemas/ApprovalDecisionResult',
         }),
-        400: errorResponse('Invalid note, or no current update available to skip'),
+        400: errorResponse('Invalid request body or note, or no current update available to skip'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Approval or container not found'),
         409: errorResponse('Approval already decided, or its candidate was superseded'),
@@ -194,7 +196,10 @@ export const approvalPaths = {
                 until: {
                   type: 'string',
                   format: 'date-time',
-                  description: 'Explicit expiry. Takes precedence over days.',
+                  description:
+                    'Explicit expiry, as an RFC 3339 date-time with an offset. Must be in ' +
+                    'the future and at most 365 days from now, the same ceiling days has. ' +
+                    'Takes precedence over days.',
                 },
                 days: {
                   type: 'integer',
@@ -213,7 +218,7 @@ export const approvalPaths = {
         200: jsonResponse('Approval deferred', {
           $ref: '#/components/schemas/ApprovalDecisionResult',
         }),
-        400: errorResponse('Invalid note, until date, or day count'),
+        400: errorResponse('Invalid request body, note, until date, or day count'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Approval or container not found'),
         409: errorResponse('Approval already decided, or its candidate was superseded'),

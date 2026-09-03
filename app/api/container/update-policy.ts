@@ -412,26 +412,6 @@ function recordOverrideAuditEvents(
 }
 
 /**
- * Resolve the snooze expiry a `snooze` action payload names, without writing anything.
- *
- * The approval queue's defer decision has to know the timestamp before it reserves the
- * row, and the row's `deferredUntil` has to be the same value the container's
- * `updatePolicy.snoozeUntil` ends up holding — the existing `snoozed` soft blocker stays
- * the single source of truth for whether a candidate is being held. Both throws below
- * carry a client-safe message by construction, so there is nothing to classify here.
- * @param payload
- */
-export function resolveSnoozeUntilFromPayload(
-  payload: Record<string, unknown>,
-): { snoozeUntil: string } | { error: string } {
-  try {
-    return { snoozeUntil: getSnoozeUntilFromActionPayload(payload) };
-  } catch (error: unknown) {
-    return { error: (error as Error).message };
-  }
-}
-
-/**
  * Apply one policy action to a container and persist it, reporting the stored container or
  * a client-safe reason it was refused.
  *

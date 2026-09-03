@@ -18,6 +18,13 @@
  * - defer writes the container's existing snooze, and mirrors the expiry onto the row so
  *   the queue and the `snoozed` soft blocker cannot disagree.
  *
+ * What the routes will not delegate is validation. Each body is checked against the shape
+ * the OpenAPI document publishes — an object, no properties the route does not read, a
+ * note that is a string, an expiry that is a real instant inside the same bounds the day
+ * count has — because a primitive refusing what it happens to refuse is not the same as
+ * the documented contract, and the gap between the two is where a request that looks
+ * accepted quietly does something else.
+ *
  * Every decision reserves the row before it does any of that. The reservation is a
  * compare-and-set on semantic pending state, taken before anything is awaited, so two
  * operators approving at once produce one operation and one 409 rather than two accepted
@@ -40,6 +47,7 @@ import {
 } from '../model/approval.js';
 import type { AuditEntry } from '../model/audit.js';
 import type { Container } from '../model/container.js';
+import { daysToMs } from '../model/maturity-policy.js';
 import { computeUpdateEligibility, getSoftBlockers } from '../model/update-eligibility.js';
 import {
   type ApprovalPatch,
@@ -54,7 +62,6 @@ import {
 import { getContainer } from '../store/container.js';
 import { recordAuditEvent } from './audit-events.js';
 import { getPathParamValue, normalizeLimitOffsetPagination } from './container/request-helpers.js';
-import { resolveSnoozeUntilFromPayload } from './container/update-policy.js';
 import { applyContainerUpdatePolicyAction } from './container/update-policy-writer.js';
 import {
   areContainerActionsEnabled,
@@ -78,6 +85,18 @@ const APPROVAL_NOT_FOUND_MESSAGE = 'Approval not found';
 const APPROVAL_ALREADY_DECIDED_MESSAGE = 'Approval already decided';
 const APPROVAL_SUPERSEDED_MESSAGE = 'Approval candidate superseded';
 const INVALID_NOTE_MESSAGE = `Invalid note; expected a string of at most ${APPROVAL_NOTE_MAX_LENGTH} characters`;
+const INVALID_BODY_MESSAGE = 'Invalid request body; expected a JSON object';
+const APPROVAL_DEFER_DEFAULT_DAYS = 7;
+const APPROVAL_DEFER_MAX_DAYS = 365;
+const INVALID_UNTIL_MESSAGE = `Invalid until; expected an RFC 3339 date-time in the future, at most ${APPROVAL_DEFER_MAX_DAYS} days from now`;
+const INVALID_DAYS_MESSAGE = `Invalid days; expected an integer between 1 and ${APPROVAL_DEFER_MAX_DAYS}`;
+const DECISION_BODY_FIELDS = ['note'] as const;
+const DEFER_BODY_FIELDS = ['until', 'days', 'note'] as const;
+// A full RFC 3339 instant: date, time to the second, explicit offset. `new Date()` accepts
+// far more than that — a bare `2026-09-09` is midnight in whatever zone the process runs
+// in, which is not an instant an operator chose.
+// Stryker disable next-line Regex: validation behavior is covered by route tests, but module-scope regex mutants survive under the vitest runner.
+const RFC_3339_PATTERN = /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/;
 const APPROVAL_SEMVER_DIFFS = new Set<string>(['major', 'minor', 'patch', 'prerelease', 'unknown']);
 // Container ids, agent names and watcher names only. Deliberately not applied to `q`,
 // which is a free-text needle matched with a lowercase substring test rather than a
@@ -232,10 +251,6 @@ interface ReservedApproval {
   container: Container;
 }
 
-function getDecisionBody(body: unknown): Record<string, unknown> {
-  return body !== null && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-}
-
 /**
  * The operator this decision is recorded against. `req.user` is undefined for a real
  * anonymous session — passport-anonymous passes with no arguments rather than
@@ -246,17 +261,100 @@ function getDecidedBy(req: DecisionRequest): string {
   return req.user?.username?.trim() || 'anonymous';
 }
 
-/** `null` means present and invalid, which the caller turns into a 400. */
-function getValidatedNote(body: Record<string, unknown>): string | undefined | null {
-  const note = body.note;
-  if (note === undefined || note === null) {
+/** A decision body that passed validation: the raw object, plus the note if it carries one. */
+interface DecisionRequestBody {
+  body: Record<string, unknown>;
+  note?: string;
+}
+
+/**
+ * Read a decision body, or answer why it is not one.
+ *
+ * The handler validates what the OpenAPI schema documents rather than trusting the
+ * primitives underneath to refuse what they happen to refuse. A property nobody reads is
+ * the case that matters: `POST /defer {"snoozeUntil": …}` looks like it worked, answers
+ * 200, and defers the row by the default seven days instead of the fortnight the caller
+ * asked for. Naming the allowed properties back is what turns that into a fixable error.
+ * @param res
+ * @param raw
+ * @param fields
+ */
+function readDecisionRequest(
+  res: Response,
+  raw: unknown,
+  fields: readonly string[],
+): DecisionRequestBody | undefined {
+  // An absent body is the documented default for all three routes. A literal `null`
+  // payload never gets this far — express's JSON parser is strict and refuses it — so the
+  // only way to see one is an internal caller, and reading it as absent is the safe answer.
+  if (raw !== undefined && raw !== null && (typeof raw !== 'object' || Array.isArray(raw))) {
+    sendErrorResponse(res, 400, INVALID_BODY_MESSAGE);
     return undefined;
   }
-  if (typeof note !== 'string' || note.length > APPROVAL_NOTE_MAX_LENGTH) {
-    return null;
+
+  const body = (raw ?? {}) as Record<string, unknown>;
+  if (Object.keys(body).some((key) => !fields.includes(key))) {
+    sendErrorResponse(
+      res,
+      400,
+      `Invalid request body; the allowed properties are ${fields.join(', ')}`,
+    );
+    return undefined;
   }
+
+  const note = body.note;
+  if (note === undefined) {
+    return { body };
+  }
+  if (typeof note !== 'string' || note.length > APPROVAL_NOTE_MAX_LENGTH) {
+    sendErrorResponse(res, 400, INVALID_NOTE_MESSAGE);
+    return undefined;
+  }
+
   const trimmed = note.trim();
-  return trimmed === '' ? undefined : trimmed;
+  return trimmed === '' ? { body } : { body, note: trimmed };
+}
+
+/**
+ * Resolve the instant a deferral runs to, from `until` or a day count.
+ *
+ * One value, resolved once, written to both the row's `deferredUntil` and the container's
+ * `updatePolicy.snoozeUntil`, so the queue and the `snoozed` soft blocker cannot disagree
+ * about when the hold ends. It is normalized to UTC here rather than stored as written,
+ * because the policy writer normalizes what it stores and the two have to compare equal as
+ * strings. The bounds are the ones the day count already had: a deferral to the past is a
+ * deferral that expires before it is written, and one past the ceiling is a rejection
+ * wearing a deferral's clothes.
+ * @param body
+ * @param nowMs
+ */
+function resolveDeferralExpiry(
+  body: Record<string, unknown>,
+  nowMs: number,
+): { deferredUntil: string } | { error: string } {
+  const maxMs = nowMs + daysToMs(APPROVAL_DEFER_MAX_DAYS);
+  const until = body.until;
+  if (until !== undefined) {
+    if (typeof until !== 'string' || !RFC_3339_PATTERN.test(until)) {
+      return { error: INVALID_UNTIL_MESSAGE };
+    }
+    const untilMs = Date.parse(until);
+    if (!Number.isFinite(untilMs) || untilMs <= nowMs || untilMs > maxMs) {
+      return { error: INVALID_UNTIL_MESSAGE };
+    }
+    return { deferredUntil: new Date(untilMs).toISOString() };
+  }
+
+  const days = body.days === undefined ? APPROVAL_DEFER_DEFAULT_DAYS : body.days;
+  if (
+    typeof days !== 'number' ||
+    !Number.isInteger(days) ||
+    days < 1 ||
+    days > APPROVAL_DEFER_MAX_DAYS
+  ) {
+    return { error: INVALID_DAYS_MESSAGE };
+  }
+  return { deferredUntil: new Date(nowMs + daysToMs(days)).toISOString() };
 }
 
 /**
@@ -284,13 +382,8 @@ function reserveApproval(
   req: DecisionRequest,
   res: Response,
   patch: ApprovalPatch,
+  note: string | undefined,
 ): ReservedApproval | undefined {
-  const note = getValidatedNote(getDecisionBody(req.body));
-  if (note === null) {
-    sendErrorResponse(res, 400, INVALID_NOTE_MESSAGE);
-    return undefined;
-  }
-
   const id = getPathParamValue(req.params.id);
   const previous = getApprovalById(id);
   if (previous === undefined) {
@@ -426,7 +519,12 @@ async function approveApproval(req: DecisionRequest, res: Response): Promise<voi
     return;
   }
 
-  const reserved = reserveApproval(req, res, { decision: 'approved' });
+  const request = readDecisionRequest(res, req.body, DECISION_BODY_FIELDS);
+  if (request === undefined) {
+    return;
+  }
+
+  const reserved = reserveApproval(req, res, { decision: 'approved' }, request.note);
   if (reserved === undefined) {
     return;
   }
@@ -454,7 +552,12 @@ async function approveApproval(req: DecisionRequest, res: Response): Promise<voi
  * @param res
  */
 function rejectApproval(req: DecisionRequest, res: Response): void {
-  const reserved = reserveApproval(req, res, { decision: 'rejected' });
+  const request = readDecisionRequest(res, req.body, DECISION_BODY_FIELDS);
+  if (request === undefined) {
+    return;
+  }
+
+  const reserved = reserveApproval(req, res, { decision: 'rejected' }, request.note);
   if (reserved === undefined) {
     return;
   }
@@ -470,29 +573,35 @@ function rejectApproval(req: DecisionRequest, res: Response): void {
  * Defer a queued update by snoozing the container until the same instant the row is
  * deferred to.
  *
- * The expiry is resolved before the row is reserved so both carry one value, and it is
- * resolved by the snooze primitive's own parser, so a payload the container panel would
- * refuse is refused here with the same message. There is no sweep and no timer: a row is
- * deferred while `deferredUntil` is in the future and pending again the moment it is not.
+ * The expiry is resolved before the row is reserved, so the row and the container are
+ * written one value rather than two that agree today. There is no sweep and no timer: a
+ * row is deferred while `deferredUntil` is in the future and pending again the moment it
+ * is not, which is also why an expiry in the past is refused rather than stored.
  * @param req
  * @param res
  */
 function deferApproval(req: DecisionRequest, res: Response): void {
-  const body = getDecisionBody(req.body);
-  const snooze = resolveSnoozeUntilFromPayload({ snoozeUntil: body.until, days: body.days });
-  if ('error' in snooze) {
-    sendErrorResponse(res, 400, snooze.error);
+  const request = readDecisionRequest(res, req.body, DEFER_BODY_FIELDS);
+  if (request === undefined) {
     return;
   }
 
-  const reserved = reserveApproval(req, res, {
-    decision: 'deferred',
-    deferredUntil: snooze.snoozeUntil,
-  });
+  const expiry = resolveDeferralExpiry(request.body, Date.now());
+  if ('error' in expiry) {
+    sendErrorResponse(res, 400, expiry.error);
+    return;
+  }
+
+  const reserved = reserveApproval(
+    req,
+    res,
+    { decision: 'deferred', deferredUntil: expiry.deferredUntil },
+    request.note,
+  );
   if (reserved === undefined) {
     return;
   }
-  if (!writeDecisionPolicy(res, reserved, 'snooze', { snoozeUntil: snooze.snoozeUntil })) {
+  if (!writeDecisionPolicy(res, reserved, 'snooze', { snoozeUntil: expiry.deferredUntil })) {
     return;
   }
 
