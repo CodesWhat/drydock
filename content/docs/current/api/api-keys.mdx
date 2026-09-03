@@ -1,0 +1,122 @@
+---
+title: "API Keys API"
+description: "Create, list and revoke scoped API keys."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<Callout type="info">[What API keys are and how scopes work](/docs/configuration/authentications/api-keys)</Callout>
+
+Every route below is declared `api-keys:manage`. A logged-in session reaches them; an API key reaches them only if it holds that scope outright. `admin` does not imply it.
+
+## Create an API key
+
+```bash
+curl -X POST http://drydock:3000/api/v1/api-keys \
+  -H "Content-Type: application/json" \
+  -d '{"name":"CI pipeline","scopes":["read","containers:watch"]}'
+
+{
+  "keyId": "a1b2c3d4e5f6",
+  "name": "CI pipeline",
+  "displayPrefix": "ddk_a1b2c3d4e5f6…",
+  "scopes": ["read", "containers:watch"],
+  "status": "active",
+  "createdAt": "2026-09-02T12:00:00.000Z",
+  "createdBy": "user:scott",
+  "parentKeyId": null,
+  "expiresAt": null,
+  "lastUsedAt": null,
+  "revokedAt": null,
+  "apiKey": "ddk_a1b2c3d4e5f6_<secret>"
+}
+```
+
+<Callout type="warn">`apiKey` appears in this response and nowhere else. Drydock stores a digest, so no later call can reproduce it — a client that loses it has to create another key.</Callout>
+
+| Field | Required | Description |
+| --- | :---: | --- |
+| `name` | 🔴 | Human-readable name |
+| `scopes` | 🔴 | Array of scope names. An unknown name is rejected with `400` |
+| `expiresAt` | ⚪ | ISO-8601 expiry. Omit or send `null` for a key that never expires |
+| `rateLimitMax` | ⚪ | Per-key request ceiling per 15 minutes. Omit to use the server-wide limit |
+
+Responses:
+
+| Status | Meaning |
+| --- | --- |
+| `201` | Created — the body carries the credential |
+| `400` | Unknown scope, missing name, or an invalid expiry |
+| `403` | The calling key lacks `api-keys:manage`, or the request exceeds its scope or expiry ceiling |
+
+When the caller is itself a key, two ceilings apply. It can't grant a scope it doesn't hold, and it can't mint a key that outlives it. A session isn't subject to either.
+
+## List API keys
+
+```bash
+curl http://drydock:3000/api/v1/api-keys
+
+{
+  "data": [
+    {
+      "keyId": "a1b2c3d4e5f6",
+      "name": "CI pipeline",
+      "displayPrefix": "ddk_a1b2c3d4e5f6…",
+      "scopes": ["read", "containers:watch"],
+      "status": "active",
+      "createdAt": "2026-09-02T12:00:00.000Z",
+      "createdBy": "user:scott",
+      "parentKeyId": null,
+      "expiresAt": null,
+      "lastUsedAt": "2026-09-02T12:05:11.000Z",
+      "revokedAt": null
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "hasMore": false
+}
+```
+
+Returns active, expired and revoked keys, newest first. Supports `limit` (1–200, default 50) and `cursor`.
+
+Paging is on a cursor, not an offset. Keys sort newest first, so one minted while you are walking the list inserts at the head and shifts every unread row down; an offset walk skips whatever that pushes past the page boundary and can finish reporting `hasMore: false` having never returned it. When there is another page the response carries `nextCursor`; pass it back as `cursor` and keep going until `hasMore` is false.
+
+```bash
+curl "http://drydock:3000/api/v1/api-keys?limit=50&cursor=MjAyNi0wOS0wMlQxMjowMDowMC4wMDBafGExYjJjM2Q0ZTVmNg" \
+  -H "Authorization: Bearer ddk_a1b2c3d4e5f6_<secret>"
+```
+
+The cursor is opaque: build one only from a `nextCursor` the server handed you. It's matched byte for byte, so trailing characters, added padding and any other re-spelling of the same value are refused with a `400` rather than silently restarting the walk, which would loop a paging client forever.
+
+No response from this endpoint contains key material. `status` is derived at read time from `revokedAt` and `expiresAt`; `createdBy` reads `user:<username>` for a session-minted key and `api-key:<keyId>` for a child key.
+
+## Revoke an API key
+
+```bash
+curl -X DELETE http://drydock:3000/api/v1/api-keys/a1b2c3d4e5f6 \
+  -H "X-DD-Confirm-Action: api-key-revoke"
+
+{
+  "keyId": "a1b2c3d4e5f6",
+  "revokedKeyIds": ["a1b2c3d4e5f6", "b2c3d4e5f6a1"],
+  "cascadeCount": 2
+}
+```
+
+Revocation cascades: `revokedKeyIds` lists the named key followed by every key it minted, transitively, and `cascadeCount` is how many keys stopped working.
+
+| Status | Meaning |
+| --- | --- |
+| `200` | Revoked, with the full cascade |
+| `403` | The calling key lacks `api-keys:manage`, or is trying to revoke itself or its parent |
+| `404` | No key with that id |
+| `428` | The `X-DD-Confirm-Action: api-key-revoke` header is missing |
+
+There is no rotate verb. Rotation is create-then-revoke: two keys can be valid at once, so you cut over and then revoke the old one.
+
+## Authentication failures
+
+A request whose `Authorization: Bearer ddk_…` credential doesn't check out gets `401` and stops there — it is not retried against a session cookie riding along on the same request, so a revoked key can't be rescued by a stale browser session.
+
+Every failure returns the same `401`, whatever the cause. Unknown key, wrong secret, revoked, expired and malformed are indistinguishable to the caller, so the endpoint can't be used to enumerate key ids or read the state of somebody else's key.

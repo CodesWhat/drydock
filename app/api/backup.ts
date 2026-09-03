@@ -19,6 +19,7 @@ import {
 } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
+import { scoped } from './route-scopes.js';
 
 const log = logger.child({ component: 'backup' });
 const PORTAINER_ROLLBACK_UNSUPPORTED_ERROR =
@@ -191,12 +192,12 @@ async function rollbackContainer(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/backups', getBackups);
-  router.get('/:id/backups', getContainerBackups);
+  router.get('/backups', scoped('read', getBackups));
+  router.get('/:id/backups', scoped('read', getContainerBackups));
   router.post(
     '/:id/rollback',
     requireDestructiveActionConfirmation('container-rollback'),
-    rollbackContainer,
+    scoped('containers:update', rollbackContainer),
   );
   return router;
 }

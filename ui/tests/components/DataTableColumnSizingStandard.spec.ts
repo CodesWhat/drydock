@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const DATA_TABLE_CALLERS = [
+  'src/components/config/ConfigApiKeysTab.vue',
   'src/components/config/ConfigGeneralTab.vue',
   'src/views/NotificationOutboxView.vue',
   'src/views/WatchersView.vue',

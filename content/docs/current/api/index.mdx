@@ -35,8 +35,10 @@ All error responses (HTTP 4xx/5xx) return a consistent JSON structure:
 
 ## Authentication
 
-When [authentication](/docs/configuration/authentications) is enabled, all API endpoints require a valid session (cookie-based via Basic or OIDC login).
+When [authentication](/docs/configuration/authentications) is enabled, all API endpoints require either a valid session (cookie-based via Basic or OIDC login) or a [scoped API key](/docs/configuration/authentications/api-keys).
 For cross-domain OIDC providers, keep `DD_SERVER_COOKIE_SAMESITE=lax` (default) unless you have a specific same-site policy requirement.
+
+A scoped API key is sent as `Authorization: Bearer ddk_<keyId>_<secret>`. It authenticates a single request, never creates a session, and therefore isn't subject to the same-origin CSRF checks that apply to cookie auth. Each route is reachable at exactly one scope; a key without it gets `403`. A handful of routes are session-only and unreachable with a key at any scope. Manage keys through the [API Keys API](/docs/api/api-keys).
 
 The [webhook endpoints](/docs/configuration/webhooks) use a separate Bearer token authentication.
 
@@ -53,6 +55,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/containers/:id/rollback` | `POST` | `X-DD-Confirm-Action: container-rollback` |
 | `/api/v1/containers/:id` | `DELETE` | `X-DD-Confirm-Action: container-delete` |
 | `/api/v1/dependency-groups/:rootId/update` | `POST` | `X-DD-Confirm-Action: dependency-group-update` |
+| `/api/v1/api-keys/:keyId` | `DELETE` | `X-DD-Confirm-Action: api-key-revoke` |
 
 ## Endpoint overview
 
@@ -63,6 +66,7 @@ If the header is missing or does not match the expected token, the API responds 
 | [Agents](/docs/api/agent) | `GET /api/v1/agents` | Remote agent status and logs |
 | [Logs](/docs/api/log) | `GET /api/v1/log`, `GET /api/v1/log/entries`, `WS /api/v1/log/stream` | Application logger config, buffered entries, and live stream |
 | [Authentications](/docs/api/authentication) | `GET /api/v1/authentications` | Authentication provider configurations |
+| [API Keys](/docs/api/api-keys) | `GET /api/v1/api-keys`, `POST`, `DELETE /:keyId` | Scoped API key management (`api-keys:manage`) |
 | [Registries](/docs/api/registry) | `GET /api/v1/registries` | Registry configurations |
 | [Store](/docs/api/store) | `GET /api/v1/store` | Data store info |
 | [Triggers](/docs/api/trigger) | `GET /api/v1/triggers` | Trigger configurations |

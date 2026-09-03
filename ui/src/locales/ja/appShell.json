@@ -138,7 +138,9 @@
           "appearanceTitle": "外観設定",
           "appearanceSubtitle": "設定 · 外観",
           "profileTitle": "プロフィール設定",
-          "profileSubtitle": "設定 · プロフィール"
+          "profileSubtitle": "設定 · プロフィール",
+          "apiKeysTitle": "APIキー",
+          "apiKeysSubtitle": "スコープ付きキーの作成と取り消し"
         }
       },
       "connection": {

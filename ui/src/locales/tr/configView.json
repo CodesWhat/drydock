@@ -3,7 +3,68 @@
     "tabs": {
       "general": "Genel",
       "appearance": "Görünüm",
-      "profile": "Profil"
+      "profile": "Profil",
+      "apiKeys": "API Anahtarları"
+    },
+    "apiKeys": {
+      "title": "API Anahtarları",
+      "description": "Betikler ve entegrasyonlar için kapsamı sınırlı anahtarlar. Bir anahtar seferde yalnızca bir isteği doğrular ve hiçbir zaman oturum oluşturmaz.",
+      "loading": "API anahtarları yükleniyor",
+      "empty": "Henüz API anahtarı yok. Bir şifre paylaşmadan bir betiğe erişim vermek için bir tane oluşturun.",
+      "createButton": "Anahtar Oluştur",
+      "never": "Asla",
+      "revokeButton": "İptal Et",
+      "form": {
+        "title": "Bir API anahtarı oluştur",
+        "name": "Ad",
+        "namePlaceholder": "CI iş hattı",
+        "scopes": "Kapsamlar",
+        "expires": "Son kullanma",
+        "expiresNever": "Asla süresi dolmayan bir anahtar için boş bırakın",
+        "rateLimit": "15 dakikada istek sayısı",
+        "submit": "Oluştur"
+      },
+      "scopes": {
+        "read": "Her şeyi oku",
+        "containersWatch": "Konteynerlerde güncelleme kontrolü",
+        "containersUpdate": "Konteynerleri güncelle ve geri al",
+        "triggersTest": "Test bildirimleri gönder",
+        "admin": "Tam yönetim",
+        "apiKeysManage": "API anahtarlarını yönet"
+      },
+      "reveal": {
+        "title": "Bu anahtarı şimdi kopyalayın",
+        "description": "Bu, gösterildiği tek andır. Drydock anahtarın kendisini değil bir özet (digest) değerini saklar, bu yüzden onu kaybetmek başka bir tane oluşturmak anlamına gelir.",
+        "copy": "Kopyala",
+        "copied": "Kopyalandı"
+      },
+      "columns": {
+        "name": "Ad",
+        "key": "Anahtar",
+        "scopes": "Kapsamlar",
+        "lastUsed": "Son kullanım",
+        "expires": "Son kullanma",
+        "status": "Durum"
+      },
+      "status": {
+        "active": "Etkin",
+        "revoked": "İptal edildi",
+        "expired": "Süresi doldu"
+      },
+      "revoke": {
+        "header": "API anahtarını iptal et",
+        "message": "{name} anahtarını iptal etmek, onunla oluşturulan her anahtarı da iptal eder. Bunları kullanan her şey hemen çalışmayı durdurur.",
+        "accept": "İptal Et"
+      },
+      "cascade": "{count} anahtar iptal edildi; bu anahtarın oluşturduğu her anahtar dahil.",
+      "errors": {
+        "load": "API anahtarları yüklenemedi",
+        "create": "API anahtarı oluşturulamadı",
+        "revoke": "API anahtarı iptal edilemedi"
+      },
+      "showing": "{total} anahtardan {shown} tanesi gösteriliyor",
+      "loadMore": "Daha fazla yükle",
+      "loadingMore": "Yükleniyor"
     },
     "general": {
       "updateMode": {

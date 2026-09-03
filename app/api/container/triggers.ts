@@ -12,6 +12,7 @@ import type { ApiComponent } from '../component.js';
 import { isTriggerAssociatedWithContainer } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
 import { sanitizePreviewErrorReason } from '../preview-errors.js';
+import { enforceApiKeyScope } from '../route-scopes.js';
 import { getPathParamValue } from './request-helpers.js';
 
 interface TriggerStoreContainerApi {
@@ -239,6 +240,22 @@ function createRunTriggerHandler({
     const triggerAgent = getPathParamValue(req.params.triggerAgent);
     const triggerType = getPathParamValue(req.params.triggerType);
     const triggerName = getPathParamValue(req.params.triggerName);
+
+    // The one route whose required scope depends on a path parameter, so the
+    // check runs here rather than as static route middleware: running a
+    // docker/dockercompose trigger against a container updates it, while
+    // running a notification trigger only sends a message. Resolved with the
+    // same getTriggerCategoryForType the label taxonomy uses, so the two
+    // cannot drift.
+    //
+    // It runs before the container lookup on purpose. Checking afterwards
+    // would answer 404 for an unknown id and 403 for a known one, handing a
+    // key that holds neither scope a container-existence oracle.
+    const requiredScope =
+      getTriggerCategoryForType(triggerType) === 'action' ? 'containers:update' : 'triggers:test';
+    if (!enforceApiKeyScope(req, res, requiredScope)) {
+      return;
+    }
 
     const containerToTrigger = storeContainer.getContainer(id);
     if (!containerToTrigger) {

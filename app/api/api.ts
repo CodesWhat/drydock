@@ -3,6 +3,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { getExperimentalPortwingEnabled, getServerConfiguration } from '../configuration/index.js';
 import * as agentRouter from './agent.js';
+import * as apiKeysRouter from './api-keys.js';
 import * as appRouter from './app.js';
 import * as approvalsRouter from './approvals.js';
 import * as auditRouter from './audit.js';
@@ -24,16 +25,20 @@ import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
 import * as notificationOutboxRouter from './notification-outbox.js';
+import { withRouteScopes } from './openapi-scopes.js';
 import * as operationRouter from './operation.js';
+import { createOuterApiRateLimitKeyGenerator } from './outer-api-rate-limit-key.js';
 import * as portwingRouter from './portwing.js';
 import * as preferencesRouter from './preferences.js';
 import * as previewRouter from './preview.js';
+import { getPrincipal } from './principal.js';
 import {
-  createAuthenticatedRouteRateLimitKeyGenerator,
+  getAuthenticatedRouteRateLimitKey,
   isIdentityAwareRateLimitKeyingEnabled,
   isRequestAuthenticated,
 } from './rate-limit-key.js';
 import * as registryRouter from './registry.js';
+import { mountRouter, scoped } from './route-scopes.js';
 import * as selfUpdateRouter from './self-update.js';
 import * as serverRouter from './server.js';
 import * as settingsRouter from './settings.js';
@@ -58,7 +63,7 @@ function shouldSkipOuterApiRateLimit(req: Request): boolean {
 export function init(): express.Router {
   const router = express.Router();
   const serverConfiguration = getServerConfiguration() as Record<string, unknown>;
-  const identityAwareRateLimitKeyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(
+  const outerApiRateLimitKeyGenerator = createOuterApiRateLimitKeyGenerator(
     isIdentityAwareRateLimitKeyingEnabled(serverConfiguration),
   );
   const apiRateLimitMaximum =
@@ -75,9 +80,11 @@ export function init(): express.Router {
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false },
-    ...(identityAwareRateLimitKeyGenerator
-      ? { keyGenerator: identityAwareRateLimitKeyGenerator }
-      : {}),
+    // Always supplied, unlike before: identity-aware keying stays behind
+    // DD_SERVER_RATELIMIT_IDENTITYKEYING, but splitting a presented key onto
+    // its own bucket is not optional, because with it off every integration
+    // behind one reverse proxy shared this budget.
+    keyGenerator: outerApiRateLimitKeyGenerator,
   });
   router.use(apiLimiter);
 
@@ -96,133 +103,181 @@ export function init(): express.Router {
   });
 
   // Mount webhook router (uses its own bearer token auth)
-  router.use('/webhook', webhookRouter.init());
-  router.use('/webhooks', webhooksRouter.init());
+  mountRouter(router, '/webhook', webhookRouter.init());
+  mountRouter(router, '/webhooks', webhooksRouter.init());
 
   // Public OpenAPI document for integrations and API clients.
   // The document is static (built at module-load time), so we serialize it
   // once and serve a cached buffer on every request instead of re-serializing
-  // the full document tree per call.
+  // the full document tree per call. The scope annotations are applied on the
+  // first request rather than at module load, because they are read off this
+  // router and it is still being built here.
   let cachedOpenApiJson: string | undefined;
-  router.get('/openapi.json', async (_req: Request, res: Response) => {
-    if (!cachedOpenApiJson) {
-      const { openApiDocument } = await import('./openapi.js');
-      cachedOpenApiJson = JSON.stringify(openApiDocument);
-    }
-    res.type('application/json').send(cachedOpenApiJson);
-  });
+  router.get(
+    '/openapi.json',
+    scoped('read', async (_req: Request, res: Response) => {
+      if (!cachedOpenApiJson) {
+        const { openApiDocument } = await import('./openapi.js');
+        cachedOpenApiJson = JSON.stringify(withRouteScopes(openApiDocument, router));
+      }
+      res.type('application/json').send(cachedOpenApiJson);
+    }),
+  );
 
   // Internal self-update finalize callback used by the surviving Drydock
   // process after helper-container handoff. Guarded by loopback-only checks
   // plus a per-process shared secret in the sub-router, so it must remain
   // ahead of session auth.
-  router.use('/internal', internalSelfUpdateRouter.init());
+  mountRouter(router, '/internal', internalSelfUpdateRouter.init());
 
   // Public self-update status endpoint — the UI polls this while Drydock replaces
   // its own container; the session may be unavailable mid-restart. The operation
   // UUID acts as the capability token; the response is minimal (no secrets, no
   // container snapshot). The global apiLimiter still applies.
-  router.use('/self-update', selfUpdateRouter.init());
+  mountRouter(router, '/self-update', selfUpdateRouter.init());
+
+  // The post-authentication API key budget.
+  //
+  // The outer apiLimiter above stays exactly as it was: it is the
+  // pre-authentication IP abuse ceiling, and an invalid key spends that budget
+  // and fails before ever reaching this one. This second limiter skips every
+  // principal that is not a key, so sessions, Basic, OIDC and anonymous
+  // traverse only the outer one.
+  //
+  // Keying is unconditional, unlike the outer limiter's, which is opt-in
+  // behind DD_SERVER_RATELIMIT_IDENTITYKEYING. With that flag off every key
+  // would otherwise be bucketed by IP, so several integrations behind one
+  // reverse proxy would share a single budget — the exact deployment this
+  // feature exists for.
+  //
+  // requestPropertyName is distinct so this limiter cannot overwrite the outer
+  // limiter's state on the same request.
+  const apiKeyLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: (req: Request) => {
+      const principal = getPrincipal(req);
+      return principal?.kind === 'api-key'
+        ? (principal.rateLimitMax ?? apiRateLimitMaximum)
+        : apiRateLimitMaximum;
+    },
+    skip: (req: Request) => getPrincipal(req)?.kind !== 'api-key',
+    keyGenerator: (req: Request) => getAuthenticatedRouteRateLimitKey(req),
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    requestPropertyName: 'apiKeyRateLimit',
+  });
 
   // Routes to protect after this line
   router.use(requireAuthentication);
+  router.use(apiKeyLimiter);
   router.use(requireSameOriginForMutations);
 
   // Mount app router (authenticated — exposes version info)
-  router.use('/app', appRouter.init());
+  mountRouter(router, '/app', appRouter.init());
 
   // Mount SSE events endpoint (authenticated — UI sends session cookie)
-  router.use('/events/ui', sseRouter.init());
+  mountRouter(router, '/events/ui', sseRouter.init());
 
   // Mount log router
-  router.use('/log', logRouter.init());
+  mountRouter(router, '/log', logRouter.init());
 
   // Mount store router
-  router.use('/store', storeRouter.init());
+  mountRouter(router, '/store', storeRouter.init());
 
   // Mount debug dump router
-  router.use('/debug', debugRouter.init());
+  mountRouter(router, '/debug', debugRouter.init());
 
   // Mount server router
-  router.use('/server', serverRouter.init());
+  mountRouter(router, '/server', serverRouter.init());
 
   // Mount container groups router BEFORE container router (/:id would shadow /groups)
-  router.use('/containers', groupRouter.init());
+  mountRouter(router, '/containers', groupRouter.init());
 
   // Mount backup router BEFORE container router (/:id would shadow /backups)
-  router.use('/containers', backupRouter.init());
+  mountRouter(router, '/containers', backupRouter.init());
 
   // Mount container dependencies router BEFORE container router (/:id would shadow /dependencies)
-  router.use('/containers', containerDependenciesRouter.init());
+  mountRouter(router, '/containers', containerDependenciesRouter.init());
 
   // Mount container router
-  router.use('/containers', containerRouter.init());
+  mountRouter(router, '/containers', containerRouter.init());
 
   // Mount preview router (container preview/dry-run)
-  router.use('/containers', previewRouter.init());
+  mountRouter(router, '/containers', previewRouter.init());
 
   // Mount container actions router (start/stop/restart)
-  router.use('/containers', containerActionsRouter.init());
+  mountRouter(router, '/containers', containerActionsRouter.init());
 
   // Mount fleet-aggregate stats router (dashboard summary, sibling of /containers)
-  router.use('/stats', statsRouter.init());
+  mountRouter(router, '/stats', statsRouter.init());
 
   // Mount dependency groups router (bulk dependency-chain update, sibling of /containers)
-  router.use('/dependency-groups', dependencyGroupsRouter.init());
+  mountRouter(router, '/dependency-groups', dependencyGroupsRouter.init());
 
   // Mount update-operations router (single-operation lookup by id)
-  router.use('/update-operations', updateOperationsRouter.init());
+  mountRouter(router, '/update-operations', updateOperationsRouter.init());
 
   // Mount trigger router
-  router.use('/triggers', triggerRouter.init());
+  mountRouter(router, '/triggers', triggerRouter.init());
 
   // Mount notification rules router
-  router.use('/notifications', notificationRouter.init());
+  mountRouter(router, '/notifications', notificationRouter.init());
 
   // Mount notification outbox (DLQ) router
-  router.use('/notifications/outbox', notificationOutboxRouter.init());
+  mountRouter(router, '/notifications/outbox', notificationOutboxRouter.init());
 
   // Mount operations router (cancel queued operations)
-  router.use('/operations', operationRouter.init());
+  mountRouter(router, '/operations', operationRouter.init());
 
   // Mount watcher router
-  router.use('/watchers', watcherRouter.init());
+  mountRouter(router, '/watchers', watcherRouter.init());
 
   // Mount registry router
-  router.use('/registries', registryRouter.init());
+  mountRouter(router, '/registries', registryRouter.init());
 
   // Mount auth
-  router.use('/authentications', authenticationRouter.init());
+  mountRouter(router, '/authentications', authenticationRouter.init());
 
   // Mount agents
-  router.use('/agents', agentRouter.init());
+  mountRouter(router, '/agents', agentRouter.init());
 
   // Mount Portwing key management (edge agent auth registry). It is enabled by
   // default after edge graduation and can be disabled explicitly for emergency
   // rollback with DD_EXPERIMENTAL_PORTWING=false.
   if (getExperimentalPortwingEnabled()) {
-    router.use('/portwing', portwingRouter.init());
+    mountRouter(router, '/portwing', portwingRouter.init());
   }
 
   // Mount the pending-approval queue (read-only in this slice)
-  router.use('/approvals', approvalsRouter.init());
+  mountRouter(router, '/approvals', approvalsRouter.init());
 
   // Mount audit log
-  router.use('/audit', auditRouter.init());
+  mountRouter(router, '/audit', auditRouter.init());
 
   // Mount icons proxy (CDN cache)
-  router.use('/icons', iconsRouter.init());
+  mountRouter(router, '/icons', iconsRouter.init());
 
   // Mount settings
-  router.use('/settings', settingsRouter.init());
+  mountRouter(router, '/settings', settingsRouter.init());
 
   // Mount preferences (per-user synced UI preferences, #220)
-  router.use('/preferences', preferencesRouter.init());
+  mountRouter(router, '/preferences', preferencesRouter.init());
 
-  // All other API routes => 404
-  router.get('/{*path}', (_req: Request, res: Response) => {
-    sendErrorResponse(res, 404, 'Route not found');
-  });
+  // Mount API key management. Declared `api-keys:manage`, which `admin` never
+  // implies, so an ordinary admin key gets 403 here while a session does not.
+  mountRouter(router, '/api-keys', apiKeysRouter.init());
+
+  // All other API routes => 404. Declared `read` rather than denied: it is a
+  // terminal not-found handler, and answering an unmatched path with 403
+  // instead of 404 would tell a caller less while reading as a permissions
+  // bug. It exposes nothing — there is no route behind it.
+  router.get(
+    '/{*path}',
+    scoped('read', (_req: Request, res: Response) => {
+      sendErrorResponse(res, 404, 'Route not found');
+    }),
+  );
 
   return router;
 }

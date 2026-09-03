@@ -44,7 +44,10 @@ export interface AuditEntry {
     | 'update-approved'
     | 'update-rejected'
     | 'update-deferred'
-    | 'mqtt-command-update';
+    | 'mqtt-command-update'
+    | 'api-key-created'
+    | 'api-key-revoked'
+    | 'api-key-auth-failed';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;

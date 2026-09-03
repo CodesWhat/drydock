@@ -138,7 +138,9 @@
           "appearanceTitle": "외관 설정",
           "appearanceSubtitle": "설정 · 외관",
           "profileTitle": "프로필 설정",
-          "profileSubtitle": "설정 · 프로필"
+          "profileSubtitle": "설정 · 프로필",
+          "apiKeysTitle": "API 키",
+          "apiKeysSubtitle": "범위가 지정된 키 생성 및 취소"
         }
       },
       "connection": {

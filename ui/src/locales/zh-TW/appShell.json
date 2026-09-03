@@ -138,7 +138,9 @@
           "appearanceTitle": "外觀設定",
           "appearanceSubtitle": "設定 · 外觀",
           "profileTitle": "個人資料設定",
-          "profileSubtitle": "設定 · 個人資料"
+          "profileSubtitle": "設定 · 個人資料",
+          "apiKeysTitle": "API 金鑰",
+          "apiKeysSubtitle": "建立與撤銷限定範圍的金鑰"
         }
       },
       "connection": {

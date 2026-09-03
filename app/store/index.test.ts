@@ -123,6 +123,7 @@ const {
         : actual;
     });
     vi.doMock('./agent-keys', createAgentKeysMock);
+    vi.doMock('./api-key', createCollectionsMock);
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./approval', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
@@ -171,6 +172,7 @@ vi.mock('./name-bindings', createCollectionsMock);
 vi.mock('./notification', createCollectionsMock);
 vi.mock('./notification-history', createCollectionsMock);
 vi.mock('./agent-keys', createAgentKeysMock);
+vi.mock('./api-key', createCollectionsMock);
 vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
@@ -205,6 +207,7 @@ describe('Store Module', () => {
     expect(fs.chmodSync).toHaveBeenCalledWith('/test/store', 0o700);
     expect(fs.chmodSync).toHaveBeenCalledWith('/test/store/test.json', 0o600);
 
+    const apiKey = await import('./api-key.js');
     const app = await import('./app.js');
     const container = await import('./container.js');
     const notification = await import('./notification.js');
@@ -214,6 +217,7 @@ describe('Store Module', () => {
     const updateOperation = await import('./update-operation.js');
     const updatePolicyRetentionCache = await import('./update-policy-retention-cache.js');
 
+    expect(apiKey.createCollections).toHaveBeenCalled();
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
@@ -319,12 +323,14 @@ describe('Store Module', () => {
 
     expect(storeMemory.isMemoryStore()).toBe(true);
 
+    const apiKey = await import('./api-key.js');
     const app = await import('./app.js');
     const container = await import('./container.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
     const uiPreferences = await import('./ui-preferences.js');
     const updateOperation = await import('./update-operation.js');
+    expect(apiKey.createCollections).toHaveBeenCalled();
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();

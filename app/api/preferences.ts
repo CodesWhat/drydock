@@ -6,6 +6,7 @@ import type { AuthRequest } from './auth-types.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 import { ANONYMOUS_USERNAME, getIdentityUsername } from './principal.js';
+import { scoped } from './route-scopes.js';
 import { broadcastPreferencesUpdated } from './sse.js';
 
 const router = express.Router();
@@ -122,7 +123,7 @@ function updatePreferences(req: AuthRequest, res: Response): void {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getPreferences);
-  router.patch('/', updatePreferences);
+  router.get('/', scoped('read', getPreferences));
+  router.patch('/', scoped('admin', updatePreferences));
   return router;
 }

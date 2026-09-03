@@ -1,6 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import * as storeContainer from '../store/container.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 
@@ -68,6 +69,6 @@ function getGroups(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/groups', getGroups);
+  router.get('/groups', scoped('read', getGroups));
   return router;
 }

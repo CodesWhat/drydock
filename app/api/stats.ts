@@ -7,6 +7,7 @@ import {
 } from '../stats/aggregator.js';
 import * as storeContainer from '../store/container.js';
 import { createSummaryStatsHandlers } from './container/stats.js';
+import { scoped } from './route-scopes.js';
 
 let containerStatsAggregator: ContainerStatsAggregator | undefined;
 let statsAggregationStarted = false;
@@ -45,7 +46,7 @@ export function init() {
   });
 
   router.use(nocache());
-  router.get('/summary', summaryStatsHandlers.getStatsSummary);
-  router.get('/summary/stream', summaryStatsHandlers.streamStatsSummary);
+  router.get('/summary', scoped('read', summaryStatsHandlers.getStatsSummary));
+  router.get('/summary/stream', scoped('read', summaryStatsHandlers.streamStatsSummary));
   return router;
 }

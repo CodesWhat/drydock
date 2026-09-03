@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import type { AuthenticatedPrincipal } from './principal.js';
+
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   getAuthenticatedRouteRateLimitKey,
@@ -131,7 +132,10 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     ).toBe('ip:203.0.113.11');
   });
 
-  test('should use the resolved header identity after authentication', () => {
+  test('should bucket an authenticated API key on its keyId, not its name', () => {
+    // Two keys may share a name, and a name is operator-supplied. Bucketing on
+    // it would let one key's traffic exhaust another's budget, so keyId is the
+    // only identity this may key on.
     expect(
       getAuthenticatedRouteRateLimitKey({
         ip: '203.0.113.11',
@@ -142,9 +146,26 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
           username: 'automation',
           keyId: 'abcdef012345',
           scopes: [],
+          parentKeyId: null,
         },
       }),
-    ).toBe('user:automation');
+    ).toBe('apikey:abcdef012345'); // gitleaks:allow — a bucket name, not a credential
+  });
+
+  test('should give two keys sharing one name independent buckets', () => {
+    const keyed = (keyId: string) =>
+      getAuthenticatedRouteRateLimitKey({
+        ip: '203.0.113.11',
+        principal: {
+          kind: 'api-key',
+          username: 'dashboard',
+          keyId,
+          scopes: [],
+          parentKeyId: null,
+        },
+      });
+
+    expect(keyed('aaaaaaaaaaaa')).not.toBe(keyed('bbbbbbbbbbbb'));
   });
 
   test('should prefer normalized request ip over proxy socket address for unauthenticated requests', async () => {

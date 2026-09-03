@@ -9,6 +9,7 @@ import {
   notificationRuleIdPathParam,
   operationIdPathParam,
 } from '../common.js';
+import { apiKeyPaths } from './api-keys.js';
 import { approvalPaths } from './approvals.js';
 import { authPaths } from './auth.js';
 import { componentReadPaths } from './component-read.js';
@@ -188,6 +189,7 @@ export const openApiPaths = {
       },
     },
   },
+  ...apiKeyPaths,
   ...authPaths,
   '/api/v1/events/ui': {
     get: {

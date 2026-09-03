@@ -138,7 +138,9 @@
           "appearanceTitle": "Darstellungseinstellungen",
           "appearanceSubtitle": "Config · Darstellung",
           "profileTitle": "Profileinstellungen",
-          "profileSubtitle": "Config · Profil"
+          "profileSubtitle": "Config · Profil",
+          "apiKeysTitle": "API-Schlüssel",
+          "apiKeysSubtitle": "Bereichsbezogene Schlüssel erstellen und widerrufen"
         }
       },
       "connection": {

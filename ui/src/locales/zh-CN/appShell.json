@@ -138,7 +138,9 @@
           "appearanceTitle": "外观设置",
           "appearanceSubtitle": "配置 · 外观",
           "profileTitle": "个人资料设置",
-          "profileSubtitle": "配置 · 个人资料"
+          "profileSubtitle": "配置 · 个人资料",
+          "apiKeysTitle": "API 密钥",
+          "apiKeysSubtitle": "创建和吊销限定作用域的密钥"
         }
       },
       "connection": {

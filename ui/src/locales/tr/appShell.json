@@ -138,7 +138,9 @@
           "appearanceTitle": "Görünüm Ayarları",
           "appearanceSubtitle": "Yapılandırma · Görünüm",
           "profileTitle": "Profil Ayarları",
-          "profileSubtitle": "Yapılandırma · Profil"
+          "profileSubtitle": "Yapılandırma · Profil",
+          "apiKeysTitle": "API Anahtarları",
+          "apiKeysSubtitle": "Kapsamı sınırlı anahtarlar oluşturun ve iptal edin"
         }
       },
       "connection": {

@@ -28,6 +28,7 @@ import {
 } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
+import { scoped } from './route-scopes.js';
 
 const log = logger.child({ component: 'container-actions' });
 
@@ -295,10 +296,10 @@ async function updateContainers(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.post('/update', updateContainers);
-  router.post('/:id/start', startContainer);
-  router.post('/:id/stop', stopContainer);
-  router.post('/:id/restart', restartContainer);
-  router.post('/:id/update', updateContainer);
+  router.post('/update', scoped('containers:update', updateContainers));
+  router.post('/:id/start', scoped('admin', startContainer));
+  router.post('/:id/stop', scoped('admin', stopContainer));
+  router.post('/:id/restart', scoped('admin', restartContainer));
+  router.post('/:id/update', scoped('containers:update', updateContainer));
   return router;
 }

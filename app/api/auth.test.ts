@@ -90,7 +90,16 @@ vi.mock('../registry', () => ({
   getAuthenticationRegistrationErrors: vi.fn(() => []),
 }));
 
-vi.mock('../log', () => ({ default: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
+// child() is reached through auth-strategies -> api-key-auth -> store/api-key,
+// which builds a component-scoped logger at module load.
+vi.mock('../log', () => ({
+  default: {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    child: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }),
+  },
+}));
 
 vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),

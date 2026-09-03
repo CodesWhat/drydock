@@ -1,0 +1,145 @@
+---
+title: "API Keys"
+description: "Scoped API keys let a script talk to Drydock without a password or a session."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+A scoped API key authenticates a single request. It carries only the permissions you granted it, it never creates a session, and revoking it takes effect on the next request.
+
+Use one wherever you'd otherwise put a password in a script: a CI job that watches for updates, a status card that reads container state, a webhook receiver that triggers an update.
+
+<Callout type="info">Keys are managed from **Settings → API Keys** in the dashboard, or through the [API Keys API](/docs/api/api-keys). There is no environment variable that creates a key — the first one is minted by a logged-in human.</Callout>
+
+## Using a key
+
+Send it as a bearer credential:
+
+```bash
+curl http://drydock:3000/api/v1/containers \
+  -H "Authorization: Bearer ddk_a1b2c3d4e5f6_<secret>"
+```
+
+The scheme is case-insensitive. A credential always starts with `ddk_`.
+
+Because a key request carries no cookie, it isn't subject to the same-origin CSRF checks that apply to session auth, and it doesn't consume a session slot. Fifty key-authenticated requests leave zero sessions behind.
+
+### Home Assistant wud-card
+
+wud-card's Bearer option takes the credential directly. Pair it with [`DD_COMPAT_WUDCARD=true`](/docs/configuration/server#wud-card-compatibility), which the card needs regardless of how it authenticates:
+
+```yaml
+type: custom:wud-card
+wud_api:
+  url: https://drydock.example.com
+  auth: "Bearer ddk_a1b2c3d4e5f6_<secret>"
+```
+
+A key travels in a header rather than a cookie, so it completes cross-origin where a session cookie never could. Scope it to `read` and `containers:watch` — enough to list containers and refresh them, and nothing else.
+
+### Homepage
+
+Homepage proxies server-side, so no CORS setup is needed. If your Homepage version's `whatsupdocker` widget exposes a `key` field, use it:
+
+```yaml
+- Drydock:
+    icon: whats-up-docker.png
+    href: https://drydock.example.com
+    widget:
+      type: whatsupdocker
+      url: https://drydock.example.com
+      key: ddk_a1b2c3d4e5f6_<secret>
+```
+
+The `customapi` widget works on any version and sends the header itself:
+
+```yaml
+- Drydock:
+    widget:
+      type: customapi
+      url: https://drydock.example.com/api/v1/containers/summary
+      headers:
+        Authorization: Bearer ddk_a1b2c3d4e5f6_<secret>
+      mappings:
+        - field: updateAvailable
+          label: Updates
+```
+
+## Scopes
+
+A key holds one or more scopes. Every route is reachable at exactly one declared scope, and a key without it gets `403`.
+
+| Scope | Grants |
+| --- | --- |
+| `read` | Read every GET route — containers, logs, registries, stats, audit |
+| `containers:watch` | Trigger a watch or a scan, preview an update |
+| `containers:update` | Update, roll back, restart, cancel operations, and approve, reject or defer a queued update |
+| `triggers:test` | Fire a trigger by hand and retry a queued notification |
+| `admin` | Every route the other scopes reach, plus settings and deletion |
+| `api-keys:manage` | Create, list and revoke API keys |
+
+`admin` implies every scope **except** `api-keys:manage`. That one is always granted on its own, so an automation key with full administrative reach still can't mint itself a different key or revoke the key you'd use to shut it down.
+
+Some routes aren't reachable with a key at any scope, because they only make sense for a signed-in human: the debug dump, the environment-variable reveal, the Portwing key registry, the webhook endpoints, and the self-update internals. Those return `403` with `This route is not reachable with an API key`.
+
+### Trigger routes
+
+Both `POST /api/v1/containers/:id/triggers/:type/:name` and `POST /api/v1/triggers/:type/:name` resolve their scope from the trigger you name, along with their agent-qualified forms. An **action** provider (`docker`, `dockercompose`, `portainer`, `command`) does something to the host, so firing one needs `containers:update`. A **notification** provider only sends a message, so it needs `triggers:test`. `triggers:test` never reaches an action provider on either route.
+
+The check runs before the container and agent lookups, so an unauthorized caller gets `403` whether or not the container exists and whichever agents are enrolled.
+
+### The metrics endpoint
+
+`/metrics` sits outside `/api/v1`, but a key still needs `read` to scrape it. It exposes the same container and image inventory `GET /api/v1/containers` does, so a key that can't read the API can't read it out of Prometheus either. Setting `DD_SERVER_METRICS_TOKEN` keeps its own bearer as the only way in and API keys don't apply; leave it unset and the endpoint accepts a session or a `read` key.
+
+## Expiry
+
+A key can carry an expiry. After it passes, the key stops authenticating; it isn't deleted, and it shows in the list as **Expired** so you can see what broke.
+
+A key minting another key cannot give the child a longer life than its own. There is no verb that edits an existing key, so without that rule a key could extend its own reach indefinitely by minting a longer-lived child and switching to it.
+
+## Revocation cascades
+
+Revoking a key also revokes every key it created, and every key those created, all the way down. The response reports how many keys went with it.
+
+Authentication checks the whole chain too, not just the key presented. A key stops working the moment anything above it is revoked or expired, so a cascade that was interrupted part-way through can't leave a live key under a dead one.
+
+That's what makes a leaked automation key recoverable in one call. It also means a key minted by a human session — which has no parent — is never taken out by someone else's revocation.
+
+Open event streams go with it. A `/api/v1/events/ui` connection authenticates once and then stays open, so revoking a key closes every stream it or any of its children had running, and an expired key's streams are closed at the next send rather than delivered to. A stream can't outlive the credential that opened it, down to the event.
+
+Two refusals go with it:
+
+- A key can't revoke **itself**.
+- A key can't revoke **anything in its own ancestry** — the key that minted it, the key that minted that one, and so on to the root.
+
+Either would let a compromised key cut the branch it's being hunted from. The
+second covers the whole chain rather than just the immediate parent, because
+revocation cascades downward: taking out a grandparent would revoke the caller
+too, along with every sibling branch under it.
+
+## Minting from another key
+
+A key that holds `api-keys:manage` can create more keys, but only within its own limits: it can't grant a scope it doesn't hold, and it can't grant `api-keys:manage` off the back of `admin`. A logged-in human isn't subject to either ceiling.
+
+## Rate limiting
+
+Each key gets its own rate-limit bucket, keyed on the key rather than the client IP. Several integrations behind one reverse proxy therefore don't share a budget. The bucket is earned by the whole credential, not the id in it, so a request presenting an id Drydock never issued and a request presenting a real id with the wrong secret are charged the same address budget and read back identical `RateLimit` headers.
+
+That holds for the pre-authentication IP limit too. It runs before anything has verified the credential, so it splits its bucket on the key id in the header alone — but only when the id is one this instance issued. A made-up id falls back to the address bucket, so a spray is charged as one caller rather than handed a fresh budget per request.
+
+Failed key authentications are capped separately, at 30 a minute per client address, answered with `429`. Successful requests are never charged, so a working integration can't be throttled by it no matter how often it polls.
+
+Set a per-key ceiling when you create the key to give a chatty integration less room than the server-wide limit. Leave it unset and the global limit applies.
+
+## What's stored
+
+Only a digest. Drydock keeps `base64(sha256(secret))` and compares in constant time; the credential itself exists exactly once, in the response to the create call. If you lose it, mint another key — there's no way to read it back.
+
+The list view shows a truncated `ddk_<keyId>…` prefix, which is safe to display and to paste into a support thread.
+
+## Audit trail
+
+Creation and revocation each write an audit row naming the key and who did it. Failed authentication writes one row per source per minute, and no more than 100 rows a minute in total, so a spray of made-up key ids can't fill the audit trail and bury the entry you're looking for. Every attempt increments `drydock_auth_api_key_failure_total` whether or not it wrote a row, so throttling never hides the volume of an attack.
+
+Drydock's own secret scanning knows the credential format, so a key committed to this repository fails CI.

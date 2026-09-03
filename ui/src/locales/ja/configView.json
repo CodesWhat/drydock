@@ -3,7 +3,68 @@
     "tabs": {
       "general": "一般",
       "appearance": "外観",
-      "profile": "プロフィール"
+      "profile": "プロフィール",
+      "apiKeys": "APIキー"
+    },
+    "apiKeys": {
+      "title": "APIキー",
+      "description": "スクリプトや連携用のスコープ付きキーです。キーは一度に1つのリクエストのみを認証し、セッションを作成することはありません。",
+      "loading": "APIキーを読み込み中",
+      "empty": "APIキーはまだありません。パスワードを共有せずにスクリプトにアクセス権を与えるには、キーを作成してください。",
+      "createButton": "キーを作成",
+      "never": "なし",
+      "revokeButton": "取り消す",
+      "form": {
+        "title": "APIキーを作成",
+        "name": "名前",
+        "namePlaceholder": "CIパイプライン",
+        "scopes": "スコープ",
+        "expires": "有効期限",
+        "expiresNever": "有効期限を設定しないキーにする場合は空欄のままにしてください",
+        "rateLimit": "15分あたりのリクエスト数",
+        "submit": "作成"
+      },
+      "scopes": {
+        "read": "すべて読み取り",
+        "containersWatch": "コンテナの更新を確認",
+        "containersUpdate": "コンテナの更新とロールバック",
+        "triggersTest": "テスト通知を送信",
+        "admin": "フル管理権限",
+        "apiKeysManage": "APIキーの管理"
+      },
+      "reveal": {
+        "title": "このキーを今すぐコピーしてください",
+        "description": "表示されるのはこの一度だけです。Drydockはキー自体ではなくダイジェストを保存するため、失うと新しいキーを作り直す必要があります。",
+        "copy": "コピー",
+        "copied": "コピーしました"
+      },
+      "columns": {
+        "name": "名前",
+        "key": "キー",
+        "scopes": "スコープ",
+        "lastUsed": "最終使用",
+        "expires": "有効期限",
+        "status": "ステータス"
+      },
+      "status": {
+        "active": "有効",
+        "revoked": "取り消し済み",
+        "expired": "期限切れ"
+      },
+      "revoke": {
+        "header": "APIキーを取り消す",
+        "message": "{name} を取り消すと、このキーで作成されたすべてのキーも取り消されます。それらを使用しているものは即座に動作しなくなります。",
+        "accept": "取り消す"
+      },
+      "cascade": "{count} 件のキーを取り消しました。このキーが作成したすべてのキーを含みます。",
+      "errors": {
+        "load": "APIキーを読み込めませんでした",
+        "create": "APIキーを作成できませんでした",
+        "revoke": "APIキーを取り消せませんでした"
+      },
+      "showing": "{total} 件中 {shown} 件を表示",
+      "loadMore": "さらに読み込む",
+      "loadingMore": "読み込み中"
     },
     "general": {
       "updateMode": {

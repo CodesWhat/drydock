@@ -3,7 +3,68 @@
     "tabs": {
       "general": "Tổng quan",
       "appearance": "Giao diện",
-      "profile": "Hồ sơ"
+      "profile": "Hồ sơ",
+      "apiKeys": "Khóa API"
+    },
+    "apiKeys": {
+      "title": "Khóa API",
+      "description": "Các khóa có phạm vi giới hạn dành cho script và tích hợp. Một khóa chỉ xác thực một yêu cầu tại một thời điểm và không bao giờ tạo phiên đăng nhập.",
+      "loading": "Đang tải khóa API",
+      "empty": "Chưa có khóa API nào. Tạo một khóa để cấp cho script quyền truy cập mà không cần chia sẻ mật khẩu.",
+      "createButton": "Tạo khóa",
+      "never": "Không bao giờ",
+      "revokeButton": "Thu hồi",
+      "form": {
+        "title": "Tạo khóa API",
+        "name": "Tên",
+        "namePlaceholder": "Pipeline CI",
+        "scopes": "Phạm vi",
+        "expires": "Hết hạn",
+        "expiresNever": "Để trống nếu muốn khóa không bao giờ hết hạn",
+        "rateLimit": "Số yêu cầu mỗi 15 phút",
+        "submit": "Tạo"
+      },
+      "scopes": {
+        "read": "Đọc mọi thứ",
+        "containersWatch": "Kiểm tra cập nhật cho container",
+        "containersUpdate": "Cập nhật và khôi phục container",
+        "triggersTest": "Gửi thông báo thử nghiệm",
+        "admin": "Toàn quyền quản trị",
+        "apiKeysManage": "Quản lý khóa API"
+      },
+      "reveal": {
+        "title": "Sao chép khóa này ngay bây giờ",
+        "description": "Đây là lần duy nhất khóa được hiển thị. Drydock chỉ lưu bản băm (digest), không lưu chính khóa, nên nếu mất khóa bạn sẽ phải tạo khóa khác.",
+        "copy": "Sao chép",
+        "copied": "Đã sao chép"
+      },
+      "columns": {
+        "name": "Tên",
+        "key": "Khóa",
+        "scopes": "Phạm vi",
+        "lastUsed": "Lần dùng cuối",
+        "expires": "Hết hạn",
+        "status": "Trạng thái"
+      },
+      "status": {
+        "active": "Đang hoạt động",
+        "revoked": "Đã thu hồi",
+        "expired": "Đã hết hạn"
+      },
+      "revoke": {
+        "header": "Thu hồi khóa API",
+        "message": "Thu hồi {name} cũng sẽ thu hồi mọi khóa được tạo từ khóa này. Mọi thứ đang dùng chúng sẽ ngừng hoạt động ngay lập tức.",
+        "accept": "Thu hồi"
+      },
+      "cascade": "Đã thu hồi {count} khóa, bao gồm mọi khóa mà khóa này đã tạo ra.",
+      "errors": {
+        "load": "Không thể tải khóa API",
+        "create": "Không thể tạo khóa API",
+        "revoke": "Không thể thu hồi khóa API"
+      },
+      "showing": "Hiển thị {shown} trên {total}",
+      "loadMore": "Tải thêm",
+      "loadingMore": "Đang tải"
     },
     "general": {
       "updateMode": {

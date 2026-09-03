@@ -31,7 +31,12 @@ import {
   resetAuthenticatorsForTests,
 } from './auth-strategies.js';
 import type { AuthRequest } from './auth-types.js';
-import { authenticateRequest, getAuthenticationFailureStatus } from './authenticator-chain.js';
+import {
+  type AuthenticationOutcome,
+  authenticateRequest,
+  getAuthenticationFailureStatus,
+  isAuthenticationRejection,
+} from './authenticator-chain.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { sendErrorResponse } from './error-response.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
@@ -100,10 +105,10 @@ export function _resetAuthenticatorsForTests(): void {
  * browsers never raised the native credential prompt, and no authenticator
  * names one, so no challenge header is sent either.
  */
-function rejectUnauthenticated(req: AuthRequest, res: Response): void {
-  const status = getAuthenticationFailureStatus(req);
-  res.statusCode = status;
-  res.end(STATUS_CODES[status]);
+function rejectUnauthenticated(req: AuthRequest, res: Response, status?: number): void {
+  const resolved = status ?? getAuthenticationFailureStatus(req);
+  res.statusCode = resolved;
+  res.end(STATUS_CODES[resolved]);
 }
 
 export async function requireAuthentication(
@@ -116,15 +121,23 @@ export async function requireAuthentication(
     return;
   }
 
-  let principal: AuthenticatedPrincipal | undefined;
+  let outcome: AuthenticationOutcome;
   try {
-    principal = await authenticateRequest(req);
+    outcome = await authenticateRequest(req);
   } catch (error: unknown) {
     next(error);
     return;
   }
 
-  if (principal === undefined) {
+  // A terminal rejection answers with the status the authenticator named and
+  // never consults the rest of the chain, so a bad API key cannot be rescued
+  // by a session cookie riding along on the same request.
+  if (isAuthenticationRejection(outcome)) {
+    rejectUnauthenticated(req, res, outcome.status);
+    return;
+  }
+
+  if (outcome === undefined) {
     rejectUnauthenticated(req, res);
     return;
   }

@@ -14,6 +14,7 @@ import {
   sendPreviewError,
   TRIGGER_ACTION,
 } from './preview-errors.js';
+import { scoped } from './route-scopes.js';
 
 const log = logger.child({ component: 'preview' });
 
@@ -104,6 +105,6 @@ async function previewContainer(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.post('/:id/preview', previewContainer);
+  router.post('/:id/preview', scoped('containers:watch', previewContainer));
   return router;
 }

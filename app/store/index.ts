@@ -12,6 +12,7 @@ const log = logger.child({ component: 'store' });
 import { getPortwingAuthorizedKeysPath, getStoreConfiguration } from '../configuration/index.js';
 
 import * as agentKeys from './agent-keys.js';
+import * as apiKey from './api-key.js';
 import * as app from './app.js';
 import * as approval from './approval.js';
 import * as audit from './audit.js';
@@ -94,6 +95,7 @@ function enforceStorePermissions(storeDirectory: string, storePath: string): voi
 
 function createCollections() {
   agentKeys.createCollections(db);
+  apiKey.createCollections(db);
   app.createCollections(db);
   approval.createCollections(db);
   audit.createCollections(db);

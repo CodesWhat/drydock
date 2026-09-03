@@ -13,7 +13,9 @@ import {
   clearAuthenticators,
   getAuthenticationFailureStatus,
   getAuthenticators,
+  isAuthenticationRejection,
   registerAuthenticator,
+  rejectAuthentication,
 } from './authenticator-chain.js';
 import type { AuthenticatedPrincipal } from './principal.js';
 
@@ -182,6 +184,92 @@ describe('authenticator-chain', () => {
       );
 
       expect(getAuthenticationFailureStatus(createRequest())).toBe(400);
+    });
+  });
+});
+
+describe('terminal rejection', () => {
+  // This block sits outside the suite above, so it owns its own reset. Without
+  // it the chain leaks between tests and whichever authenticator was
+  // registered first keeps answering.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearAuthenticators();
+  });
+
+  afterEach(() => {
+    clearAuthenticators();
+  });
+
+  const rejection = { rejected: true, status: 401 } as const;
+
+  function createRejectingAuthenticator(id: string, status = 401): Authenticator {
+    return {
+      id,
+      persistsSession: false,
+      authenticate: vi.fn(async () => ({ rejected: true, status }) as const),
+    };
+  }
+
+  test('isAuthenticationRejection separates a rejection from a principal', () => {
+    expect(isAuthenticationRejection(rejection)).toBe(true);
+    expect(isAuthenticationRejection(undefined)).toBe(false);
+    expect(isAuthenticationRejection({ kind: 'session', username: 'scott' })).toBe(false);
+  });
+
+  test('rejectAuthentication defaults to 401', () => {
+    expect(rejectAuthentication()).toStrictEqual({ rejected: true, status: 401 });
+  });
+
+  test('rejectAuthentication carries an explicit status', () => {
+    expect(rejectAuthentication(400)).toStrictEqual({ rejected: true, status: 400 });
+  });
+
+  test('stops the chain, so nothing behind it can admit the request', async () => {
+    const behind = createAuthenticator('behind', { kind: 'session', username: 'scott' });
+    registerAuthenticator(createRejectingAuthenticator('rejecter'));
+    registerAuthenticator(behind);
+
+    const outcome = await authenticateRequest(createRequest());
+
+    expect(outcome).toStrictEqual(rejection);
+    expect(behind.authenticate).not.toHaveBeenCalled();
+  });
+
+  test('leaves the request unauthenticated rather than half-authenticated', async () => {
+    registerAuthenticator(createRejectingAuthenticator('rejecter'));
+    const req = createRequest();
+
+    await authenticateRequest(req);
+
+    expect(req.principal).toBeUndefined();
+  });
+
+  test('never writes a session, even from a session-persisting authenticator', async () => {
+    registerAuthenticator({
+      id: 'rejecter',
+      persistsSession: true,
+      authenticate: async () => ({ rejected: true, status: 401 }) as const,
+    });
+
+    await authenticateRequest(createRequest());
+
+    expect(mockWriteSessionPrincipal).not.toHaveBeenCalled();
+  });
+
+  test('an earlier undefined still falls through to a later rejection', async () => {
+    registerAuthenticator(createAuthenticator('declines', undefined));
+    registerAuthenticator(createRejectingAuthenticator('rejecter'));
+
+    await expect(authenticateRequest(createRequest())).resolves.toStrictEqual(rejection);
+  });
+
+  test('carries a non-default status through to the caller', async () => {
+    registerAuthenticator(createRejectingAuthenticator('rejecter', 403));
+
+    await expect(authenticateRequest(createRequest())).resolves.toStrictEqual({
+      rejected: true,
+      status: 403,
     });
   });
 });

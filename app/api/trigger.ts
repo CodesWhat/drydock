@@ -7,10 +7,12 @@ import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import Trigger from '../triggers/providers/Trigger.js';
+import { getTriggerCategoryForType } from '../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
 import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizePreviewErrorReason } from './preview-errors.js';
+import { DYNAMIC_SCOPE, enforceApiKeyScope, scoped } from './route-scopes.js';
 
 const log = logger.child({ component: 'trigger' });
 
@@ -52,6 +54,29 @@ const triggerRequestBodySchema = joi
 
 const INVALID_TRIGGER_REQUEST_BODY_ERROR = 'Invalid trigger request body';
 const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
+
+/**
+ * The scope these two routes are reachable at depends on the trigger named in
+ * the path, so it cannot be static route middleware.
+ *
+ * An action provider does something to the host: docker, dockercompose and
+ * portainer dispatch a real container update through `requestContainerUpdate`,
+ * and command executes a configured host command. Firing one is not a test, so
+ * it takes `containers:update`. A notification provider only sends a message,
+ * which is what `triggers:test` is for.
+ *
+ * Resolved through `getTriggerCategoryForType`, the same helper the label
+ * taxonomy and `api/container/triggers.ts` use, so one trigger type cannot end
+ * up needing different scopes on two routes. Note this is a wider set than
+ * `UPDATE_TRIGGER_TYPES` below, deliberately: command never reaches
+ * `requestContainerUpdate`, but running an operator-configured shell command is
+ * not a test-fire either.
+ */
+function requiredScopeForTriggerType(triggerType: string) {
+  return getTriggerCategoryForType(triggerType) === 'action'
+    ? 'containers:update'
+    : 'triggers:test';
+}
 
 function validateTriggerRequestBody(body: unknown): {
   value?: TriggerRequestBody;
@@ -138,6 +163,14 @@ function getRouteAgentOwnershipError(agentName: string, container: Container): s
 export async function runTrigger(req: Request<RunTriggerParams>, res: Response) {
   const triggerType = req.params.type;
   const triggerName = req.params.name;
+
+  // Ahead of body validation and every lookup below it, so a key that holds
+  // neither scope cannot read a container id or a trigger name out of the
+  // status code it gets back.
+  if (!enforceApiKeyScope(req, res, requiredScopeForTriggerType(triggerType))) {
+    return;
+  }
+
   const validationResult = validateTriggerRequestBody(req.body);
   if (validationResult.error || !validationResult.value) {
     log.warn(
@@ -241,6 +274,12 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
 async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Response) {
   const { agent: agentName, type: triggerType, name: triggerName } = req.params;
 
+  // Before the agent lookup, for the same reason: a 404 here would otherwise
+  // tell an unauthorized caller which agents are enrolled.
+  if (!enforceApiKeyScope(req, res, requiredScopeForTriggerType(triggerType))) {
+    return;
+  }
+
   const agentClient = agent.getAgent(agentName);
   if (!agentClient) {
     sendErrorResponse(res, 404, `Agent ${agentName} not found`);
@@ -341,7 +380,7 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
  */
 export function init() {
   const router = component.init('trigger');
-  router.post('/:type/:name', runTrigger);
-  router.post('/:type/:name/:agent', runRemoteTrigger);
+  router.post('/:type/:name', scoped(DYNAMIC_SCOPE, runTrigger));
+  router.post('/:type/:name/:agent', scoped(DYNAMIC_SCOPE, runRemoteTrigger));
   return router;
 }

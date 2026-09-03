@@ -10,6 +10,7 @@ test('auth prometheus metrics should be properly configured', () => {
   const loginCounter = auth.getAuthLoginCounter();
   const loginDuration = auth.getAuthLoginDurationHistogram();
   const usernameMismatchCounter = auth.getAuthUsernameMismatchCounter();
+  const apiKeyFailureCounter = auth.getAuthApiKeyFailureCounter();
   const accountLockedGauge = auth.getAuthAccountLockedGauge();
   const ipLockedGauge = auth.getAuthIpLockedGauge();
 
@@ -22,6 +23,9 @@ test('auth prometheus metrics should be properly configured', () => {
   expect(usernameMismatchCounter?.name).toBe('drydock_auth_username_mismatch_total');
   expect(usernameMismatchCounter?.labelNames).toEqual([]);
 
+  expect(apiKeyFailureCounter?.name).toBe('drydock_auth_api_key_failure_total');
+  expect(apiKeyFailureCounter?.labelNames).toEqual([]);
+
   expect(accountLockedGauge?.name).toBe('drydock_auth_account_locked_total');
   expect(accountLockedGauge?.labelNames).toEqual([]);
 
@@ -33,6 +37,7 @@ test('helpers should no-op before metrics initialization', () => {
   expect(() => auth.recordAuthLogin('invalid', 'basic')).not.toThrow();
   expect(() => auth.observeAuthLoginDuration('invalid', 'basic', 0.123)).not.toThrow();
   expect(() => auth.recordAuthUsernameMismatch()).not.toThrow();
+  expect(() => auth.recordAuthApiKeyFailure()).not.toThrow();
   expect(() => auth.setAuthAccountLockedTotal(1)).not.toThrow();
   expect(() => auth.setAuthIpLockedTotal(2)).not.toThrow();
 });
@@ -43,6 +48,7 @@ test('helpers should record values after initialization', () => {
   const loginCounter = auth.getAuthLoginCounter();
   const loginDuration = auth.getAuthLoginDurationHistogram();
   const usernameMismatchCounter = auth.getAuthUsernameMismatchCounter();
+  const apiKeyFailureCounter = auth.getAuthApiKeyFailureCounter();
   const accountLockedGauge = auth.getAuthAccountLockedGauge();
   const ipLockedGauge = auth.getAuthIpLockedGauge();
 
@@ -55,6 +61,7 @@ test('helpers should record values after initialization', () => {
     usernameMismatchCounter as { inc: () => void },
     'inc',
   );
+  const apiKeyFailureCounterIncSpy = vi.spyOn(apiKeyFailureCounter as { inc: () => void }, 'inc');
   const accountLockedGaugeSetSpy = vi.spyOn(
     accountLockedGauge as { set: (value: number) => void },
     'set',
@@ -64,6 +71,7 @@ test('helpers should record values after initialization', () => {
   auth.recordAuthLogin('success', 'basic');
   auth.observeAuthLoginDuration('success', 'basic', 0.042);
   auth.recordAuthUsernameMismatch();
+  auth.recordAuthApiKeyFailure();
   auth.setAuthAccountLockedTotal(3);
   auth.setAuthIpLockedTotal(5);
 
@@ -73,6 +81,7 @@ test('helpers should record values after initialization', () => {
     0.042,
   );
   expect(usernameMismatchCounterIncSpy).toHaveBeenCalledTimes(1);
+  expect(apiKeyFailureCounterIncSpy).toHaveBeenCalledTimes(1);
   expect(accountLockedGaugeSetSpy).toHaveBeenCalledWith(3);
   expect(ipLockedGaugeSetSpy).toHaveBeenCalledWith(5);
 });
@@ -83,6 +92,7 @@ test('init should replace existing auth metrics when called twice', () => {
   const firstLoginCounter = auth.getAuthLoginCounter();
   const firstLoginDuration = auth.getAuthLoginDurationHistogram();
   const firstUsernameMismatchCounter = auth.getAuthUsernameMismatchCounter();
+  const firstApiKeyFailureCounter = auth.getAuthApiKeyFailureCounter();
   const firstAccountLockedGauge = auth.getAuthAccountLockedGauge();
   const firstIpLockedGauge = auth.getAuthIpLockedGauge();
 
@@ -92,6 +102,7 @@ test('init should replace existing auth metrics when called twice', () => {
   expect(auth.getAuthLoginCounter()).not.toBe(firstLoginCounter);
   expect(auth.getAuthLoginDurationHistogram()).not.toBe(firstLoginDuration);
   expect(auth.getAuthUsernameMismatchCounter()).not.toBe(firstUsernameMismatchCounter);
+  expect(auth.getAuthApiKeyFailureCounter()).not.toBe(firstApiKeyFailureCounter);
   expect(auth.getAuthAccountLockedGauge()).not.toBe(firstAccountLockedGauge);
   expect(auth.getAuthIpLockedGauge()).not.toBe(firstIpLockedGauge);
 });

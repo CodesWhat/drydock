@@ -12,7 +12,11 @@ import { getErrorMessage } from '../util/error.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import type { AuthRequest } from './auth-types.js';
-import { authenticateRequest } from './authenticator-chain.js';
+import {
+  type AuthenticationOutcome,
+  authenticateRequest,
+  isAuthenticationRejection,
+} from './authenticator-chain.js';
 import { sendErrorResponse } from './error-response.js';
 import { getFirstHeaderValue } from './header-value.js';
 import { type AuthenticatedPrincipal, isLoginSessionEligible } from './principal.js';
@@ -551,9 +555,9 @@ export async function authenticateLogin(
   // forward here and nothing that could persist a session on the way past:
   // the login route establishes the session itself, once, after the concurrent
   // session limit has been enforced.
-  let principal: AuthenticatedPrincipal | undefined;
+  let outcome: AuthenticationOutcome;
   try {
-    principal = await authenticateRequest(req);
+    outcome = await authenticateRequest(req);
   } catch (error: unknown) {
     finishAttempt();
     next(error);
@@ -561,10 +565,14 @@ export async function authenticateLogin(
   }
 
   finishAttempt();
-  if (principal === undefined) {
+  // A terminal rejection is a failed login like any other. Logging in with an
+  // API key is not a thing: the login route mints a session, and a key must
+  // never be able to trade itself for one.
+  if (outcome === undefined || isAuthenticationRejection(outcome)) {
     rejectFailedLogin();
     return;
   }
+  const principal: AuthenticatedPrincipal = outcome;
 
   if (
     !isLoginSessionEligible(principal) ||

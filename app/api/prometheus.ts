@@ -6,6 +6,7 @@ import nocache from 'nocache';
 import { getServerConfiguration } from '../configuration/index.js';
 import { output } from '../prometheus/index.js';
 import * as auth from './auth.js';
+import { scoped } from './route-scopes.js';
 
 /**
  * Prometheus Metrics router.
@@ -111,6 +112,14 @@ export function init() {
     router.use(auth.requireAuthentication);
   }
 
-  router.get('/', outputMetrics);
+  // `read` rather than a scope of its own. /metrics is mounted on the app, not
+  // under /api/v1, so the route-scope walk never sees it and nothing else puts a
+  // scope on it: on the fallback branch `requireAuthentication` accepted any
+  // valid key, and a triggers:test-only key could scrape the container and image
+  // inventory it is refused on GET /api/v1/containers. That endpoint is already
+  // `read` and exposes strictly more, so `read` is the fitting scope; `admin`
+  // implies it. Session and metrics-credential callers are not key principals,
+  // so the guard is a no-op for them.
+  router.get('/', scoped('read', outputMetrics));
   return router;
 }

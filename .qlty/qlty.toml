@@ -113,6 +113,16 @@ name = "trufflehog"
 [[plugin]]
 name = "yamllint"
 
+# checkov CKV_SECRET_6 fires on any JSON key containing "apiKey" whose value has
+# base64-like entropy; the Dutch UI catalog's "API-sleutels" label trips it while
+# the other sixteen translations of the same key do not. These are translated UI
+# strings, not credentials, and every locale carries the key by design. checkov's
+# other checks target IaC, so excluding the plugin from the catalogs loses nothing;
+# gitleaks and trufflehog still scan them for real secrets.
+[[exclude]]
+file_patterns = ["ui/src/locales/**"]
+plugins = ["checkov"]
+
 # markdownlint table style is low-signal for this repository's docs format
 [[triage]]
 match.rules = ["markdownlint:MD060"]

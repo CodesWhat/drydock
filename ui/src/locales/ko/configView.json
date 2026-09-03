@@ -3,7 +3,68 @@
     "tabs": {
       "general": "일반",
       "appearance": "외관",
-      "profile": "프로필"
+      "profile": "프로필",
+      "apiKeys": "API 키"
+    },
+    "apiKeys": {
+      "title": "API 키",
+      "description": "스크립트와 통합을 위한 범위가 지정된 키입니다. 키는 한 번에 하나의 요청만 인증하며 세션을 생성하지 않습니다.",
+      "loading": "API 키를 불러오는 중",
+      "empty": "아직 API 키가 없습니다. 비밀번호를 공유하지 않고 스크립트에 접근 권한을 부여하려면 키를 만드세요.",
+      "createButton": "키 생성",
+      "never": "없음",
+      "revokeButton": "취소",
+      "form": {
+        "title": "API 키 생성",
+        "name": "이름",
+        "namePlaceholder": "CI 파이프라인",
+        "scopes": "범위",
+        "expires": "만료",
+        "expiresNever": "만료되지 않는 키로 만들려면 비워 두세요",
+        "rateLimit": "15분당 요청 수",
+        "submit": "생성"
+      },
+      "scopes": {
+        "read": "모두 읽기",
+        "containersWatch": "컨테이너 업데이트 확인",
+        "containersUpdate": "컨테이너 업데이트 및 롤백",
+        "triggersTest": "테스트 알림 전송",
+        "admin": "전체 관리 권한",
+        "apiKeysManage": "API 키 관리"
+      },
+      "reveal": {
+        "title": "지금 이 키를 복사하세요",
+        "description": "이 키가 표시되는 것은 이번이 유일합니다. Drydock은 키 자체가 아니라 다이제스트를 저장하므로, 키를 분실하면 새로 만들어야 합니다.",
+        "copy": "복사",
+        "copied": "복사됨"
+      },
+      "columns": {
+        "name": "이름",
+        "key": "키",
+        "scopes": "범위",
+        "lastUsed": "마지막 사용",
+        "expires": "만료",
+        "status": "상태"
+      },
+      "status": {
+        "active": "활성",
+        "revoked": "취소됨",
+        "expired": "만료됨"
+      },
+      "revoke": {
+        "header": "API 키 취소",
+        "message": "{name}을(를) 취소하면 이 키로 생성된 모든 키도 함께 취소됩니다. 이를 사용하는 항목은 즉시 작동을 멈춥니다.",
+        "accept": "취소"
+      },
+      "cascade": "{count}개의 키가 취소되었습니다. 이 키가 생성한 모든 키를 포함합니다.",
+      "errors": {
+        "load": "API 키를 불러오지 못했습니다",
+        "create": "API 키를 생성하지 못했습니다",
+        "revoke": "API 키를 취소하지 못했습니다"
+      },
+      "showing": "{total}개 중 {shown}개 표시 중",
+      "loadMore": "더 불러오기",
+      "loadingMore": "불러오는 중"
     },
     "general": {
       "updateMode": {

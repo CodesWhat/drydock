@@ -11,6 +11,21 @@ export interface ActiveSseClient {
   clientTokenHashHex: string;
   response: FlushableResponse;
   connectedAtMs: number;
+  /**
+   * The API key this stream authenticated with, when it authenticated with one.
+   * Undefined for a session, basic or OIDC principal, which have their own
+   * revocation paths. A stream authenticates once and then stays open, so this
+   * is what lets a revoked or expired key be chased down its live connections.
+   */
+  apiKeyId?: string;
+  /**
+   * When the API key that opened this stream stops authenticating, as epoch
+   * milliseconds. Undefined means there is nothing to expire: either the
+   * principal is not a key, or the key has no expiry. `0` fails the stream
+   * closed on its next write, which is what a key that has already vanished
+   * from the store gets.
+   */
+  apiKeyExpiresAtMs?: number;
 }
 
 export class ActiveSseClientRegistry {

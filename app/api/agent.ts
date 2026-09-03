@@ -8,6 +8,7 @@ import {
   projectStatsBucket,
 } from '../util/container-summary.js';
 import { sendErrorResponse } from './error-response.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
@@ -227,7 +228,7 @@ async function getAgentLogEntries(
 }
 
 export function init() {
-  router.get('/', getAgentsList);
-  router.get('/:name/log/entries', getAgentLogEntries);
+  router.get('/', scoped('read', getAgentsList));
+  router.get('/:name/log/entries', scoped('read', getAgentLogEntries));
   return router;
 }

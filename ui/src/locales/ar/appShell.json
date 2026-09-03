@@ -138,7 +138,9 @@
           "appearanceTitle": "إعدادات المظهر",
           "appearanceSubtitle": "إعداد · المظهر",
           "profileTitle": "إعدادات الملف الشخصي",
-          "profileSubtitle": "إعداد · الملف الشخصي"
+          "profileSubtitle": "إعداد · الملف الشخصي",
+          "apiKeysTitle": "مفاتيح API",
+          "apiKeysSubtitle": "إنشاء مفاتيح محددة النطاق وإلغاؤها"
         }
       },
       "connection": {
