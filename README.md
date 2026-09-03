@@ -10,7 +10,7 @@
 
 <h1>drydock</h1>
 
-**Container image update watcher — 23 registries, 20 notification and action providers.**
+**Container image update watcher — 23 registries, 21 notification and action providers.**
 
 </div>
 
@@ -386,7 +386,7 @@ Fully interactive — real UI, mock data, no install required. Runs entirely in-
 
 Container images drift out of date silently. A base image patches a CVE, an app cuts a release, a tag moves. Unless you're watching every registry by hand, your running containers fall behind until something breaks or gets exploited.
 
-Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and restart with little visibility or control, and are now largely unmaintained. The dashboards (Portainer) manage containers but aren't built for update intelligence. Drydock is **monitor-first**: it watches 23 registries and tells you exactly what changed (major, minor, patch, or digest) before anything happens, then acts only when you let it. And it goes further than any of them. Trivy/Grype vulnerability scanning blocks unsafe updates, cosign verifies signatures, pre-update image backups roll back automatically on health-check failure, distributed agents cover remote hosts, and 20 notification and action integrations close the loop. The full update lifecycle, with a web UI and a REST API.
+Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and restart with little visibility or control, and are now largely unmaintained. The dashboards (Portainer) manage containers but aren't built for update intelligence. Drydock is **monitor-first**: it watches 23 registries and tells you exactly what changed (major, minor, patch, or digest) before anything happens, then acts only when you let it. And it goes further than any of them. Trivy/Grype vulnerability scanning blocks unsafe updates, cosign verifies signatures, pre-update image backups roll back automatically on health-check failure, distributed agents cover remote hosts, and 21 notification and action integrations close the loop. The full update lifecycle, with a web UI and a REST API.
 
 <hr>
 
@@ -396,7 +396,7 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 |---|---|---|
 | 🔭 | **Monitor-First Detection** | Watches every running container and classifies each available update as major, minor, patch, or digest before anything happens. Nothing changes until you say so. |
 | 📦 | **23 Registry Providers** | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and 12 more. Public and private, cloud and self-hosted, with per-registry TLS and auth. |
-| 🔔 | **20 Triggers** | 17 notification channels (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy, and more) plus Docker, Docker Compose, and Command actions, with per-event/provider templates, live preview, threshold filtering, and batch mode. |
+| 🔔 | **21 Triggers** | 17 notification channels (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy, and more) plus Docker, Docker Compose, Portainer, and Command actions, with per-event/provider templates, live preview, threshold filtering, and batch mode. |
 | 🥊 | **Update Bouncer** | Trivy/Grype vulnerability scanning blocks unsafe updates before they deploy, with cosign signature verification and SBOM generation (CycloneDX and SPDX). |
 | ↩️ | **Image Backup & Auto Rollback** | Pre-update image snapshots with configurable retention, automatic rollback on health-check failure, and one-click manual rollback from the UI. |
 | 🪝 | **Lifecycle Hooks** | Pre and post-update shell commands via container labels, with per-hook timeouts and abort-on-failure control. |
@@ -418,9 +418,9 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
 
-### Actions (3)
+### Actions (4)
 
-Docker · Docker Compose · Command
+Docker · Docker Compose · Portainer · Command
 
 ### Notifications (17)
 
@@ -471,7 +471,7 @@ Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they
 <tr><td>Audit log</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>RBAC / multi-user roles</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Trigger / notification channels</td><td align="center">20</td><td align="center">17</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>Trigger / notification channels</td><td align="center">21</td><td align="center">17</td><td align="center">17</td><td align="center">~20</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
 <tr><td>Registry providers</td><td align="center">23</td><td align="center">12</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
@@ -513,7 +513,7 @@ Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they
 <tr><td>Audit log</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>RBAC / multi-user roles</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Trigger / notification channels</td><td align="center">20</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
+<tr><td>Trigger / notification channels</td><td align="center">21</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Registry providers</td><td align="center">23</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
