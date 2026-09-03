@@ -52,19 +52,22 @@ ALICR, Codeberg, DHI, DOCR, ECR (public.ecr.aws), GAR, GCR, GHCR, HUB, IBMCR, LS
 When multiple instances of the same registry type are configured (one anonymous and one credentialed), drydock gives explicit priority to credentialed instances. The previous silent anonymous fallback on 401/403 is removed — an auth rejection now surfaces as an actionable "Check failed" badge in the UI instead of silently retrying as a public caller.
 
 <Callout type="warn" title="Credentialed instances take priority">
-If you configure both a credentialed and an anonymous instance of the same registry type, drydock will always route image lookups through the credentialed instance. To use anonymous access for specific images, register a separate anonymous instance with a distinct `{INSTANCE}` name and route those containers explicitly.
+If you configure both a credentialed and an anonymous instance of the same registry type, drydock will always route image lookups through the credentialed instance. There is no label or setting to pin a specific container to the anonymous instance instead; when more than one instance matches an image, the credentialed one always wins, and among instances of the same tier (credentialed or anonymous) the one whose `{INSTANCE}` name sorts first alphabetically is used.
 </Callout>
 
 ## Rate limiting and retry
 
-drydock applies a per-host token bucket to all outbound registry calls and automatically retries on 429 and 503 responses. Default rates:
+drydock applies a per-host token bucket to most outbound registry calls and automatically retries on 429 and 503 responses. Default rates:
 
 | Host | Rate | Burst |
 | --- | --- | --- |
 | `ghcr.io` | 2 req/s | 10 |
 | `registry-1.docker.io` (Docker Hub) | 2 req/s | 10 |
 | `api.github.com` | 1 req/s | 3 |
+| `public.ecr.aws` | 2 req/s | 10 |
 | All other hosts | 5 req/s | 10 |
+
+GHCR's publish-date lookup (used to populate `getImagePublishedAt`) calls the GitHub packages API directly and does not go through this bucket, so it is not subject to the `api.github.com` rate above.
 
 On a 429 or 503 response, drydock honors the upstream `Retry-After` header (both seconds and HTTP-date forms) and falls back to exponential backoff (1 s → 2 s → 4 s, capped at 60 s), up to 3 retries per call.
 
