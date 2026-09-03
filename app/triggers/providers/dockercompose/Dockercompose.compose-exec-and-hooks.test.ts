@@ -819,6 +819,12 @@ describe('Dockercompose Trigger', () => {
         path: 'library/nginx',
       }),
     ).toContain('nginx');
+    expect(
+      (trigger as any).getPulledImageRepositoryCandidates({
+        domain: 'index.docker.io',
+        path: 'library/nginx',
+      }),
+    ).toContain('nginx');
   });
 
   test('post-pull identity binding should disable the gate when security execution is unavailable', () => {
