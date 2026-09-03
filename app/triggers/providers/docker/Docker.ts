@@ -1595,7 +1595,7 @@ class Docker<
     container,
     logContainer,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string) => Promise<void>,
+    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
   ) {
     if (runtimeContext === undefined) {
       return this.containerUpdateExecutor.execute(
@@ -1625,7 +1625,7 @@ class Docker<
     container,
     logContainer,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string) => Promise<void>,
+    postPullHook?: (operationId: string, imageIdentity?: string) => Promise<void>,
   ) {
     const updated =
       runtimeContext === undefined

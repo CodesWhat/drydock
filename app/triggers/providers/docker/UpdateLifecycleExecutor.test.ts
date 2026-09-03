@@ -416,6 +416,64 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.performContainerUpdate).not.toHaveBeenCalled();
   });
 
+  test.each(['self', 'infrastructure'] as const)(
+    'verifies deferred signature before %s self-update execution',
+    async (updatePath) => {
+      const callOrder: string[] = [];
+      const verifySignaturePreUpdate = vi.fn().mockImplementation(async () => {
+        callOrder.push('verifySignaturePreUpdate');
+      });
+      const executeSelfUpdate = vi.fn().mockImplementation(async () => {
+        callOrder.push('executeSelfUpdate');
+        return true;
+      });
+      const harness = createHarness({
+        createTriggerContext: vi
+          .fn()
+          .mockResolvedValue(createContext({ deferSignatureVerification: true })),
+        verifySignaturePreUpdate,
+        executeSelfUpdate,
+        ...(updatePath === 'self'
+          ? { isSelfUpdate: vi.fn(() => true) }
+          : { isInfrastructureUpdate: vi.fn(() => true) }),
+      });
+
+      await harness.executor.run(createContainer());
+
+      expect(verifySignaturePreUpdate).toHaveBeenCalledTimes(1);
+      expect(executeSelfUpdate).toHaveBeenCalledTimes(1);
+      expect(callOrder.indexOf('verifySignaturePreUpdate')).toBeLessThan(
+        callOrder.indexOf('executeSelfUpdate'),
+      );
+    },
+  );
+
+  test.each(['self', 'infrastructure'] as const)(
+    'rejects deferred signature failure before %s self-update execution',
+    async (updatePath) => {
+      const signatureFailure = new Error('signature verification failed');
+      const verifySignaturePreUpdate = vi.fn().mockRejectedValue(signatureFailure);
+      const executeSelfUpdate = vi.fn().mockResolvedValue(true);
+      const harness = createHarness({
+        createTriggerContext: vi
+          .fn()
+          .mockResolvedValue(createContext({ deferSignatureVerification: true })),
+        verifySignaturePreUpdate,
+        executeSelfUpdate,
+        ...(updatePath === 'self'
+          ? { isSelfUpdate: vi.fn(() => true) }
+          : { isInfrastructureUpdate: vi.fn(() => true) }),
+      });
+
+      await expect(harness.executor.run(createContainer())).rejects.toThrow(
+        'signature verification failed',
+      );
+
+      expect(verifySignaturePreUpdate).toHaveBeenCalledTimes(1);
+      expect(executeSelfUpdate).not.toHaveBeenCalled();
+    },
+  );
+
   test('runs non-self-update path and emits fallback update-applied telemetry without operation id', async () => {
     const container = createContainer();
     const context = createContext();
@@ -733,5 +791,88 @@ describe('UpdateLifecycleExecutor', () => {
     expect(capturedPostPullHook).toBeDefined();
     await capturedPostPullHook?.('op-123');
     expect(scanAndGatePostPull).toHaveBeenCalledTimes(1);
+  });
+
+  test('defers signature verification until post-pull identity is available', async () => {
+    let capturedPostPullHook:
+      | ((operationId: string, imageIdentity?: string) => Promise<void>)
+      | undefined;
+    const verifySignaturePreUpdate = vi.fn().mockResolvedValue(undefined);
+    const scanAndGatePostPull = vi.fn().mockResolvedValue(undefined);
+    const mutableImage = 'ghcr.io/acme/web:2.0.0';
+    const immutableImage = `${mutableImage}@sha256:${'a'.repeat(64)}`;
+    const harness = createHarness({
+      createTriggerContext: vi
+        .fn()
+        .mockResolvedValue(
+          createContext({ newImage: mutableImage, deferSignatureVerification: true }),
+        ),
+      verifySignaturePreUpdate,
+      scanAndGatePostPull,
+      performContainerUpdate: vi
+        .fn()
+        .mockImplementation(
+          async (_context, _container, _logger, _runtimeContext, postPullHook) => {
+            capturedPostPullHook = postPullHook;
+            await postPullHook?.('op-123', immutableImage);
+            return true;
+          },
+        ),
+    });
+
+    await harness.executor.run(createContainer());
+
+    expect(verifySignaturePreUpdate).toHaveBeenCalledTimes(1);
+    expect(verifySignaturePreUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ newImage: immutableImage }),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(scanAndGatePostPull).toHaveBeenCalledWith(
+      expect.objectContaining({ newImage: immutableImage }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(capturedPostPullHook).toBeDefined();
+  });
+
+  test('deferred signature verification still runs when the hook has no bound identity', async () => {
+    const verifySignaturePreUpdate = vi.fn().mockResolvedValue(undefined);
+    const scanAndGatePostPull = vi.fn().mockResolvedValue(undefined);
+    const mutableImage = 'ghcr.io/acme/web:2.0.0';
+    const harness = createHarness({
+      createTriggerContext: vi
+        .fn()
+        .mockResolvedValue(
+          createContext({ newImage: mutableImage, deferSignatureVerification: true }),
+        ),
+      verifySignaturePreUpdate,
+      scanAndGatePostPull,
+      performContainerUpdate: vi
+        .fn()
+        .mockImplementation(
+          async (_context, _container, _logger, _runtimeContext, postPullHook) => {
+            // Compose dry-run returns before the pull and calls the hook unbound.
+            await postPullHook?.('op-123');
+            return true;
+          },
+        ),
+    });
+
+    await harness.executor.run(createContainer());
+
+    expect(verifySignaturePreUpdate).toHaveBeenCalledTimes(1);
+    expect(verifySignaturePreUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ newImage: mutableImage }),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(scanAndGatePostPull).toHaveBeenCalledWith(
+      expect.objectContaining({ newImage: mutableImage }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });
