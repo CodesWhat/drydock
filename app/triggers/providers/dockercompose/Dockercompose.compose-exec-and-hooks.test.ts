@@ -11,6 +11,7 @@ import {
   makeDockerContainerHandle,
   makeExecMocks,
   setupDockercomposeTestContext,
+  spyOnProcessComposeHelpers,
 } from './Dockercompose.test.helpers.js';
 
 vi.mock('../../../registry', () => ({
@@ -898,8 +899,6 @@ describe('Dockercompose Trigger', () => {
   test('compose-file-once runtime updates should preserve requested context without a preflight context', async () => {
     trigger.configuration.composeFileOnce = true;
     trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'buildComposeFileOnceRuntimeContextByService').mockResolvedValue(new Map());
-    vi.spyOn(trigger, 'runComposeFileOncePostPullGate').mockResolvedValue();
     const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
     const container = makeContainer({ labels: { 'com.docker.compose.service': 'nginx' } });
 
@@ -918,11 +917,59 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('compose-file-once runtime updates should still gate a service the preflight did not cover', async () => {
+    trigger.configuration.composeFileOnce = true;
+    trigger.configuration.dryrun = false;
+    const { scanAndGateSpy, composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+    const container = makeContainer({ labels: { 'com.docker.compose.service': 'nginx' } });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: {} }),
+      [{ service: 'nginx', container }],
+    );
+
+    // No preflight context for this service, so the ordinary gated path has to
+    // run rather than the batch claiming the gate was already completed.
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
+    const composeUpdateOptions = composeUpdateSpy.mock.calls[0][3];
+    expect(composeUpdateOptions.postPullHook).toEqual(expect.any(Function));
+    expect(composeUpdateOptions.skipPull).toBeUndefined();
+  });
+
+  test('compose-file-once runtime updates should gate every replica of a service the preflight did not cover', async () => {
+    trigger.configuration.composeFileOnce = true;
+    trigger.configuration.dryrun = false;
+    const { scanAndGateSpy, composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+    const labels = { 'com.docker.compose.service': 'nginx' };
+    const first = makeContainer({ id: 'nginx-1', name: 'nginx-1', labels });
+    const second = makeContainer({ id: 'nginx-2', name: 'nginx-2', labels });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: {} }),
+      [
+        { service: 'nginx', container: first },
+        { service: 'nginx', container: second },
+      ],
+    );
+
+    // Compose-file-once only earns the one-refresh-per-service shortcut off a
+    // preflight. Without one, marking the service handled after the first
+    // replica would make the second wrongly skip its own compose refresh,
+    // assuming the first replica's refresh already covered it. It would
+    // still be gated, through the postPullHook fallback that runs whenever
+    // postPullGateCompleted is false, but it would never get pulled or
+    // recreated.
+    expect(composeUpdateSpy).toHaveBeenCalledTimes(2);
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(2);
+  });
+
   test('compose-file-once runtime updates should omit runtime context when neither context is available', async () => {
     trigger.configuration.composeFileOnce = true;
     trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'buildComposeFileOnceRuntimeContextByService').mockResolvedValue(new Map());
-    vi.spyOn(trigger, 'runComposeFileOncePostPullGate').mockResolvedValue();
     const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
     const container = makeContainer({ labels: { 'com.docker.compose.service': 'nginx' } });
 
@@ -1973,6 +2020,137 @@ describe('Dockercompose Trigger', () => {
       '/opt/drydock/test/stack.yml',
       composeFileContent,
     ]);
+  });
+
+  test('processComposeFile should surface a failed compose restore on the runtime error', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx', updateAvailable: true });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockRejectedValue(
+      new Error('runtime refresh failed'),
+    );
+
+    const thrownError = await trigger
+      .processComposeFile('/opt/drydock/test/stack.yml', [container])
+      .catch((error) => error);
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe(
+      'runtime refresh failed (compose file restore failed: Failed to restore compose file mutations ' +
+        '(/opt/drydock/test/stack.yml: compose restore write failed))',
+    );
+  });
+
+  test('processComposeFile should surface a failed compose restore on a non-Error runtime failure', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx', updateAvailable: true });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockRejectedValue('runtime refresh exploded');
+
+    const thrownError = await trigger
+      .processComposeFile('/opt/drydock/test/stack.yml', [container])
+      .catch((error) => error);
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toContain('runtime refresh exploded');
+    expect(thrownError.message).toContain('compose restore write failed');
+  });
+
+  test('processComposeFile should keep the rollback outcome of a non-Error runtime failure', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx', updateAvailable: true });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+    const composeRollbackOutcome = {
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      rollbackReason: 'compose_runtime_refresh_failed',
+      lastError: 'runtime refresh failed',
+    };
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    const runtimeFailure = { message: 'runtime refresh failed', composeRollbackOutcome };
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockRejectedValue(runtimeFailure);
+
+    const thrownError = await trigger
+      .processComposeFile('/opt/drydock/test/stack.yml', [container])
+      .catch((error) => error);
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe(
+      'runtime refresh failed (compose file restore failed: Failed to restore compose file mutations ' +
+        '(/opt/drydock/test/stack.yml: compose restore write failed))',
+    );
+    expect(thrownError.composeRollbackOutcome).toEqual(composeRollbackOutcome);
+    expect(thrownError.cause).toBe(runtimeFailure);
+  });
+
+  test('processComposeFile should surface a failed partial compose restore instead of claiming it restored', async () => {
+    trigger.configuration.dryrun = false;
+    const containers = [
+      makeContainer({ name: 'nginx', updateAvailable: true }),
+      makeContainer({
+        name: 'redis',
+        imageName: 'redis',
+        tagValue: '7.0.0',
+        remoteValue: '7.2.0',
+        updateAvailable: true,
+      }),
+    ];
+    const composeFileContent = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.0.0',
+      '  redis:',
+      '    image: redis:7.0.0',
+      '',
+    ].join('\n');
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({
+        nginx: { image: 'nginx:1.0.0' },
+        redis: { image: 'redis:7.0.0' },
+      }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle')
+      .mockResolvedValueOnce(true)
+      .mockRejectedValueOnce(new Error('redis runtime refresh failed'));
+
+    const thrownError = await trigger
+      .processComposeFile('/opt/drydock/test/stack.yml', containers)
+      .catch((error) => error);
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toContain('redis runtime refresh failed');
+    expect(thrownError.message).toContain('compose restore write failed');
+    expect(trigger.log.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Restored compose file mutations'),
+    );
   });
 
   test('processComposeFile should not restore the whole compose file after an earlier service succeeds', async () => {

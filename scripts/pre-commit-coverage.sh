@@ -9,6 +9,14 @@
 
 set -euo pipefail
 
+# Merge commits stage every file the merged branch changed, so the related-test
+# set balloons to most of the trigger suites and blows the pre-commit timeout.
+# Pre-push coverage and CI already run full coverage on merge commits, so skip.
+if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+	echo "Merge commit; skipping pre-commit tests (pre-push coverage and CI cover merged commits)."
+	exit 0
+fi
+
 # Determine which workspace(s) have staged ts/vue files
 has_app=false
 has_ui=false
