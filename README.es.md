@@ -431,7 +431,7 @@ Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Muelle · LSCR · Pu
 
 ### Acciones (4)
 
-Docker · Docker Compose · Portainer · Comando
+Docker · Docker Compose · Portainer · Command
 
 ### Notificaciones (17)
 
