@@ -700,6 +700,12 @@ class Trigger<
   private readonly recentlyAppliedContainerKeys: Map<string, number> = new Map();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
   private readonly notificationRuleWarningsSeen: Set<string> = new Set();
+  /**
+   * Reservations for a `once=true` history key currently being evaluated for
+   * send, keyed by triggerId::containerId::eventKind::resultHash. See
+   * `reserveOnceNotificationSlot` / `releaseOnceNotificationSlot` (#972).
+   */
+  private readonly inFlightOnceNotificationKeys: Set<string> = new Set();
   private readonly autoUpdateBlockedSeen: Set<string> = new Set();
   private readonly autoTriggerErrorSuppressor = new RecentSignatureSuppressor({
     seenAt: this.autoTriggerErrorSeenAt,
@@ -1488,6 +1494,65 @@ class Trigger<
   }
 
   /**
+   * Atomic check-and-reserve for the `once=true` history gate on the simple
+   * update-available path. `hasAlreadyNotifiedForResult` is a pure read, and
+   * the write (`recordNotifiedForResult`) only lands after the trigger's send
+   * resolves, an `await` away. Two overlapping cron scans (#972) can both
+   * evaluate the same first-seen candidate for the same trigger in that
+   * window: both read "not notified yet" and both send, one every few hours
+   * whenever a transient digest 429 happened to straddle the scans.
+   *
+   * This closes the window by adding the reservation key synchronously, in
+   * the same call that does the "already notified" read, nothing can run
+   * between those two statements in JS, so a second concurrent evaluation of
+   * the exact same (trigger, container, event, result) sees the key already
+   * held and is turned away here rather than racing the send. The caller
+   * MUST release the reservation via `releaseOnceNotificationSlot` once this
+   * evaluation is done, whether or not it actually sent, so a later
+   * genuinely-new result (different resultHash) is never blocked by it.
+   * @returns {boolean} true if this evaluation may proceed to send.
+   */
+  private reserveOnceNotificationSlot(
+    container: Container,
+    eventKind: notificationHistoryStore.NotificationEventKind,
+  ): boolean {
+    if (this.hasAlreadyNotifiedForResult(container, eventKind)) {
+      return false;
+    }
+    const containerId =
+      typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
+    if (!containerId) {
+      // No stable id to key a reservation on, same permissive fallback as
+      // hasAlreadyNotifiedForResult; nothing to dedup against.
+      return true;
+    }
+    const key = `${this.getId()}::${containerId}::${eventKind}::${notificationHistoryStore.computeResultHash(container)}`;
+    if (this.inFlightOnceNotificationKeys.has(key)) {
+      return false;
+    }
+    this.inFlightOnceNotificationKeys.add(key);
+    return true;
+  }
+
+  /**
+   * Release a reservation taken by `reserveOnceNotificationSlot`. Safe to
+   * call even when no reservation was taken (e.g. `once=false`, or no stable
+   * container id), deleting an absent key is a no-op.
+   */
+  private releaseOnceNotificationSlot(
+    container: Container,
+    eventKind: notificationHistoryStore.NotificationEventKind,
+  ): void {
+    const containerId =
+      typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
+    if (!containerId) {
+      return;
+    }
+    const key = `${this.getId()}::${containerId}::${eventKind}::${notificationHistoryStore.computeResultHash(container)}`;
+    this.inFlightOnceNotificationKeys.delete(key);
+  }
+
+  /**
    * Seed notification history from the persisted container store on init so
    * that containers already showing `updateAvailable=true` before this trigger
    * came online are NOT re-notified on the first scan cycle after a restart
@@ -1746,7 +1811,12 @@ class Trigger<
     if (!this.configuration.once) {
       return true;
     }
-    return !this.hasAlreadyNotifiedForResult(container, 'update-available');
+    // Reserve, not just check: closes the race documented on
+    // reserveOnceNotificationSlot() where two overlapping scans both read
+    // "not notified yet" for the same candidate (#972). The caller
+    // (handleContainerReport) releases this in a finally once the
+    // evaluation is done.
+    return this.reserveOnceNotificationSlot(container, 'update-available');
   }
 
   private shouldHandleDigestContainerReport(
@@ -2146,6 +2216,11 @@ class Trigger<
       this.handleUpdateAvailableSimpleTriggerError(e, container, logContainer);
     } finally {
       this.incrementTriggerCounter(status);
+      // Release the reservation taken by shouldHandleSimpleContainerReport()
+      // regardless of how this evaluation ended (sent, threshold/gate
+      // declined without sending, or errored) so a later genuinely-new
+      // result for this container is never blocked by it.
+      this.releaseOnceNotificationSlot(container, 'update-available');
     }
   }
 
@@ -2890,6 +2965,7 @@ class Trigger<
     this.autoUpdateBlockedTracker.clear();
     this.notificationRuleWarningsSeen.clear();
     this.recentlyAppliedContainerKeys.clear();
+    this.inFlightOnceNotificationKeys.clear();
   }
 
   /**
