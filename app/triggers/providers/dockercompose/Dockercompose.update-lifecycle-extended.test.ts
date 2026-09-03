@@ -913,6 +913,56 @@ describe('Dockercompose Trigger', () => {
     expect(writeComposeFileSpy).not.toHaveBeenCalled();
   });
 
+  test('compose-file-once should record one skipped-scan audit per replica, not one extra for the refreshed service', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = false;
+    trigger.configuration.composeFileOnce = true;
+    // The pulled image cannot be bound to a manifest digest and availability
+    // policy `warn` allows the update to proceed without a scan.
+    vi.spyOn(trigger as any, 'capturePulledImageIdentity').mockResolvedValue({
+      unboundWarn: true,
+      reason: 'manifest digest unavailable',
+    });
+    const firstContainer = makeContainer({
+      id: 'nginx-a',
+      name: 'nginx-a',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const secondContainer = makeContainer({
+      id: 'nginx-b',
+      name: 'nginx-b',
+      labels: { 'com.docker.compose.service': 'nginx' },
+    });
+    const recordUnboundWarningSpy = vi.spyOn(trigger, 'recordUnboundSecurityWarning');
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
+      Buffer.from(['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n')),
+    );
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    vi.spyOn(trigger.runtimeConfigManager, 'getCloneRuntimeConfigOptions').mockResolvedValue({});
+    vi.spyOn(trigger as any, 'recreateReplacementContainerWithCleanup').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
+    vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
+    vi.spyOn(trigger, 'maybeStartAutoRollbackMonitor').mockResolvedValue();
+
+    await trigger.processComposeFile('/opt/drydock/test/stack.yml', [
+      firstContainer,
+      secondContainer,
+    ]);
+
+    expect(recordUnboundWarningSpy.mock.calls.map(([container]) => container.name)).toEqual([
+      'nginx-a',
+      'nginx-b',
+    ]);
+  });
+
   test('compose-file-once should preflight every service before the compose write and preserve the services it already refreshed', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.prune = false;

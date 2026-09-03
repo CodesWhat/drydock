@@ -161,6 +161,7 @@ type ComposeRuntimeContext = {
   imageIdentity?: string;
   securityGateUnboundWarn?: boolean;
   securityGateUnboundReason?: string;
+  securityGateUnboundWarnRecorded?: boolean;
   operationId?: string;
   registry?: unknown;
 };
@@ -2174,10 +2175,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return composeFileOnceRuntimeContextByService;
   }
 
+  /**
+   * @returns whether the unbound-image security warning was recorded here, so
+   *   the service's runtime refresh does not record a second row for the same
+   *   skipped scan (DR-50).
+   */
   private async runComposeFileOncePostPullGate(
     container,
     composeContext: ComposeUpdateLifecycleContext,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const logContainer = this.log.child({
       container: container.name,
     });
@@ -2194,7 +2200,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         container,
         composeContext.runtimeContext.securityGateUnboundReason,
       );
-      return;
+      return true;
     }
     const imageIdentity = composeContext.runtimeContext?.imageIdentity;
     const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
@@ -2217,6 +2223,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       }
       throw error;
     }
+    return false;
   }
 
   private terminalizeComposeFileOncePreflightOperations(
@@ -2530,7 +2537,16 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
             composeFileOnceRuntimeContext,
           ),
         };
-        await this.runComposeFileOncePostPullGate(container, composeContext);
+        const recordedUnboundWarning = await this.runComposeFileOncePostPullGate(
+          container,
+          composeContext,
+        );
+        if (recordedUnboundWarning) {
+          composeFileOnceRuntimeContextByService.set(service, {
+            ...composeFileOnceRuntimeContext,
+            securityGateUnboundWarnRecorded: true,
+          });
+        }
       }
       return composeFileOnceRuntimeContextByService;
     } catch (error: unknown) {
@@ -3277,7 +3293,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
     const pinnedImage = imageIdentity || newImage;
     if (securityGateUnboundWarn) {
-      this.recordUnboundSecurityWarning(container, securityGateUnboundReason);
+      // Compose-file-once already recorded this service's skipped scan in its
+      // preflight, so recording it again here would add one audit row per
+      // batch on top of the one per container (DR-50).
+      if (runtimeContext.securityGateUnboundWarnRecorded !== true) {
+        this.recordUnboundSecurityWarning(container, securityGateUnboundReason);
+      }
       if (postPullHook) {
         // The gate must not run against the mutable tag, but the hook also
         // carries the deferred pre-update hook and prune/backup step, which
