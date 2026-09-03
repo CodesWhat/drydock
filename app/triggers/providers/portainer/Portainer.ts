@@ -1100,8 +1100,10 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     // disabled, so the tag has to still resolve to the scanned image at the
     // moment the stack is handed over. This cannot bind the redeploy to that
     // image the way the Docker path's own create does, because Portainer
-    // performs the create; a swap after this point is caught by the
-    // convergence check below and the stack is restored.
+    // performs the create. A move after this point is only detected after the
+    // fact: the redeploy fails to converge on the scanned image ID, so an
+    // unscanned container runs until the timeout expires, and the restore below
+    // is an attempt whose own failure is reported in the error.
     const verifiedTargetImageId = await this.capturePulledImageId(
       context.dockerApi,
       context.newImage,
