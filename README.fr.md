@@ -70,7 +70,7 @@
 | Démarrage rapide          | [Démarrage rapide](https://getdrydock.com/docs/quickstart)                                                               |
 | Journal des modifications | [`CHANGELOG.md`](CHANGELOG.md)                                                                                           |
 | Dépréciations             | [`DEPRECATIONS.md`](DEPRECATIONS.md)                                                                                     |
-| Feuille de route          | Voir la section [Roadmap](#roadmap) ci-dessus                                                                            |
+| Feuille de route          | Voir la section [Roadmap](#roadmap) ci-dessous                                                                            |
 | Contribuer                | [`CONTRIBUTING.md`](CONTRIBUTING.md)                                                                                     |
 | Code de conduite          | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)                                                                               |
 | Gouvernance               | [`GOVERNANCE.md`](GOVERNANCE.md)                                                                                         |
@@ -85,6 +85,8 @@
 
 **Recommandé : utilisez un proxy de socket** pour restreindre les points de terminaison de l'API Docker auxquels Drydock peut accéder. Cela évite de donner au conteneur un accès complet au socket Docker.
 
+> **Remarque :** Compose traite `$` comme une syntaxe d'interpolation de variables, donc un hash argon2id collé avec un seul `$` arrive corrompu chez Drydock. Doublez chaque `$` en `$$` lorsque vous collez le hash réel, par exemple `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
+
 ```yaml
 services:
   drydock:
@@ -92,6 +94,8 @@ services:
     depends_on:
       socket-proxy:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
@@ -118,12 +122,17 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 <details>
 <summary>Alternative : <a href="https://github.com/CodesWhat/sockguard">sockguard</a> proxy de socket</summary>
 
 [sockguard](https://github.com/CodesWhat/sockguard) est un filtre de socket Docker à refus par défaut du même écosystème CodesWhat, avec un préréglage conçu pour drydock :
+
+> **Remarque :** Compose traite `$` comme une syntaxe d'interpolation de variables, donc un hash argon2id collé avec un seul `$` arrive corrompu chez Drydock. Doublez chaque `$` en `$$` lorsque vous collez le hash réel, par exemple `$$argon2id$$v=19$$m=65536,t=3,p=4$$salt$$hash`.
 
 ```yaml
 services:
@@ -132,6 +141,8 @@ services:
     depends_on:
       sockguard:
         condition: service_healthy
+    volumes:
+      - drydock-store:/store
     environment:
       - DD_WATCHER_LOCAL_HOST=sockguard
       - DD_WATCHER_LOCAL_PORT=2375
@@ -154,6 +165,9 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  drydock-store:
 ```
 
 Voir le préréglage [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml) de sockguard pour un `sockguard.yaml` de départ (le même préréglage portwing est livré dans ses propres exemples).
@@ -168,12 +182,15 @@ docker run -d \
   --name drydock \
   -p 3000:3000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v drydock-store:/store \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
-  -e "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>" \
+  -e 'DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>' \
   codeswhat/drydock:latest
 ```
 
 > **Avertissement :** L'accès direct au socket accorde au conteneur un contrôle total sur le démon Docker. Utilisez la configuration du proxy de socket ci-dessus pour les déploiements de production. Consultez le [Docker Socket Security guide](https://getdrydock.com/docs/configuration/watchers#docker-socket-security) pour toutes les options, y compris TLS distant et Docker sans racine.
+>
+> Utilisez des guillemets simples autour de la valeur du hash, comme indiqué. Les guillemets doubles laissent le shell développer `$` avant que docker ne le voie, corrompant un vrai hash argon2id.
 
 </details>
 
@@ -441,7 +458,7 @@ La plupart des outils imposent un compromis. Les mises à jour automatiques (Wat
 
 ### Registres (23)
 
-Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Port · Artefact · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personnalisé · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
+Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personnalisé · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
 
 ### Actions (3)
 
