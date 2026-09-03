@@ -758,6 +758,29 @@ describe('SecurityGate', () => {
     );
   });
 
+  test('should pass the immutable hybrid image reference to signature verification', async () => {
+    const hybridImage =
+      'ghcr.io/acme/web:2.0.0@sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+    const { gate, verifyImageSignature } = createGateHarness({
+      securityConfiguration: {
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: true },
+      },
+    });
+
+    await gate.verifySignaturePreUpdate(
+      createContext({ newImage: hybridImage }),
+      createContainer(),
+      createLog(),
+    );
+
+    expect(verifyImageSignature).toHaveBeenCalledWith({
+      image: hybridImage,
+      auth: expect.any(Object),
+    });
+  });
+
   test('maybeScanAndGateUpdate should emit alerts and block updates for blocked scan results', async () => {
     const harness = createGateHarness({
       scanImageForVulnerabilities: vi.fn().mockResolvedValue({
@@ -1793,6 +1816,33 @@ describe('SecurityGate', () => {
       await gate.scanAndGatePostPull(createContext(), createContainer(), createLog(), { setPhase });
       expect(setPhase).toHaveBeenCalledWith('scanning');
       expect(setPhase).toHaveBeenCalledWith('sbom-generating');
+    });
+
+    test('should pass the immutable hybrid image reference to scan and SBOM providers', async () => {
+      const hybridImage =
+        'ghcr.io/acme/web:2.0.0@sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+      const { gate, scanImageForVulnerabilities, generateImageSbom } = createGateHarness({
+        securityConfiguration: {
+          enabled: true,
+          scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: true, formats: ['spdx-json'] },
+          gate: { mode: 'on' },
+        },
+      });
+
+      await gate.scanAndGatePostPull(
+        createContext({ newImage: hybridImage }),
+        createContainer(),
+        createLog(),
+      );
+
+      expect(scanImageForVulnerabilities).toHaveBeenCalledWith(
+        expect.objectContaining({ image: hybridImage }),
+      );
+      expect(generateImageSbom).toHaveBeenCalledWith(
+        expect.objectContaining({ image: hybridImage }),
+      );
     });
 
     test('should call setPhase with only scanning when sbom is disabled', async () => {

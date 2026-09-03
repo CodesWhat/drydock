@@ -3,6 +3,7 @@
     "loadingAuditLog": "Cargando registro de auditoría...",
     "loadError": "No se pudo cargar el registro de auditoría",
     "filterPlaceholder": "Filtrar por destino o evento...",
+    "onThisPage": "en esta página",
     "containerFilterPlaceholder": "Nombre del contenedor...",
     "allEvents": "Todos los eventos",
     "eventsSelected": "{count} eventos seleccionados",

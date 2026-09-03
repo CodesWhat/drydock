@@ -709,9 +709,17 @@ function extractRegistryDomainForMatching(url: string | undefined): string | und
 
 function shouldRepairStoredImageReference(containerInStore: Container) {
   const currentTag = containerInStore.image?.tag?.value;
-  return (
-    typeof currentTag === 'string' && (currentTag === 'unknown' || currentTag.startsWith('sha256:'))
-  );
+  const hasUnresolvedTag =
+    typeof currentTag === 'string' &&
+    (currentTag === 'unknown' || currentTag.startsWith('sha256:'));
+  // A container first seen before its registry was configured is stamped
+  // `image.registry.name: 'unknown'` by normalizeContainer's no-match branch
+  // and otherwise never revisits this repair path, so it stays unknown
+  // forever unless the container is recreated. Re-running the repair
+  // re-derives the registry from the live image inspect, exactly as it
+  // already does for the unresolved-tag cases above.
+  const hasUnknownRegistry = containerInStore.image?.registry?.name === 'unknown';
+  return hasUnresolvedTag || hasUnknownRegistry;
 }
 
 function warnWhenUntrackableImage(

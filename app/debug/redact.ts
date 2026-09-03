@@ -27,10 +27,15 @@ const ENV_SENSITIVE_KEY_SEGMENTS = new Set(['auth', 'bearer', 'login', 'url']);
 
 // A field name that is a credential for one provider and ordinary data for the
 // rest. Pushover's `user` is its 30-character user key; SMTP's `user` is a
-// mailbox address. Widening the name list to catch the first would hide the
-// second for no reason, so this is resolved by the provider segment instead.
+// mailbox address. Apprise's `urls`, Rocket.Chat's `id`, and Telegram's
+// `chatid` carry credentials, while similarly named fields elsewhere do not.
+// Widening the name list to catch these would hide ordinary data for no reason,
+// so this is resolved by the provider segment instead.
 const PROVIDER_SPECIFIC_SENSITIVE_ENV_FIELDS = new Map<string, ReadonlySet<string>>([
   ['pushover', new Set(['user'])],
+  ['apprise', new Set(['urls'])],
+  ['rocketchat', new Set(['id'])],
+  ['telegram', new Set(['chatid'])],
 ]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
