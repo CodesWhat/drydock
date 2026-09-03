@@ -29,7 +29,7 @@ Rollback is available in three ways:
 - **UI** -- on the container detail page, select a previous backup and click **Rollback**. A shortcut is also available directly from the container's actions menu (the `...` menu on each row).
 - **API** -- send a `POST` request to `/api/v1/containers/:id/rollback`, where `:id` is the container ID.
 
-Rollback uses a stop-remove-recreate strategy: drydock stops the current container, removes it, and creates a new container with the original name using the backup image.
+Rollback uses a stop-remove-recreate strategy: drydock stops the current container, removes it, and creates a new container with the original name using the backup image. The image is pulled and created from an immutable `repo:tag@sha256:...` reference whenever a digest can be established, so a registry retag between the backup and the rollback can't change what gets deployed. Backups written before digest capture existed resolve one from the retained local image at rollback time; if none can be established and the security policy requires one, the rollback is refused with an error instead of deploying the mutable tag.
 
 <Callout type="info">Automatic updates (via Docker trigger) use a more sophisticated rename-first strategy with health gates — see [Updates](/docs/updates) for details. Manual rollback uses the simpler approach described here.</Callout>
 

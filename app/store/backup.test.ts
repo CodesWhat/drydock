@@ -2,7 +2,12 @@ vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
 }));
 
-import { buildRollbackImageReference, createContainerBackupScope } from '../util/backup.js';
+import {
+  buildRollbackImageReference,
+  createContainerBackupScope,
+  RollbackDigestRequiredError,
+  resolveRollbackImageReference,
+} from '../util/backup.js';
 import * as backup from './backup.js';
 
 function getPathValue(document: Record<string, any>, path: string) {
@@ -173,6 +178,314 @@ describe('Backup Store', () => {
     expect(
       buildRollbackImageReference({ imageName: 'registry.example/app', imageTag: '1.2.3' }),
     ).toBe('registry.example/app:1.2.3');
+  });
+
+  test('buildRollbackImageReference keeps the tag alongside a recorded digest', () => {
+    expect(
+      buildRollbackImageReference({
+        imageName: 'registry.example/app',
+        imageTag: '1.2.3',
+        imageDigest: 'sha256:aaa',
+      }),
+    ).toBe('registry.example/app:1.2.3@sha256:aaa');
+  });
+
+  test('buildRollbackImageReference uses a fallback digest when none was recorded', () => {
+    expect(
+      buildRollbackImageReference(
+        { imageName: 'registry.example/app', imageTag: '1.2.3' },
+        'sha256:fallback',
+      ),
+    ).toBe('registry.example/app:1.2.3@sha256:fallback');
+  });
+
+  test('buildRollbackImageReference drops the tag when the record carries no tag', () => {
+    expect(
+      buildRollbackImageReference({
+        imageName: 'registry.example/app',
+        imageTag: '',
+        imageDigest: 'sha256:aaa',
+      }),
+    ).toBe('registry.example/app@sha256:aaa');
+  });
+
+  describe('resolveRollbackImageReference', () => {
+    const backupRecord = { imageName: 'registry.example/app', imageTag: '1.2.3' };
+    const logContainer = { info: vi.fn(), warn: vi.fn() };
+
+    beforeEach(() => {
+      logContainer.info.mockClear();
+      logContainer.warn.mockClear();
+    });
+
+    test('uses the recorded digest without consulting the trigger', async () => {
+      const trigger = { bindPulledImageIdentity: vi.fn() };
+
+      await expect(
+        resolveRollbackImageReference(
+          trigger,
+          {},
+          {},
+          { ...backupRecord, imageDigest: 'sha256:recorded' },
+          logContainer,
+        ),
+      ).resolves.toBe('registry.example/app:1.2.3@sha256:recorded');
+      expect(trigger.bindPulledImageIdentity).not.toHaveBeenCalled();
+    });
+
+    test('falls back to the tag with a warning when the trigger exposes no identity binder', async () => {
+      const trigger = {};
+
+      await expect(
+        resolveRollbackImageReference(trigger, {}, {}, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3');
+      expect(logContainer.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No digest recorded for the backup of registry.example/app:1.2.3'),
+      );
+    });
+
+    test('resolves an older record through the identity binder', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi
+          .fn()
+          .mockResolvedValue({ imageIdentity: 'registry.example/app:1.2.3@sha256:resolved' }),
+      };
+      const dockerApi = {};
+      const container = { name: 'app' };
+
+      await expect(
+        resolveRollbackImageReference(trigger, dockerApi, container, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3@sha256:resolved');
+      expect(trigger.bindPulledImageIdentity).toHaveBeenCalledWith(
+        dockerApi,
+        'registry.example/app:1.2.3',
+        container,
+        logContainer,
+      );
+    });
+
+    test('falls back to the tag with a warning when the identity binder returns a reference with no digest separator', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi
+          .fn()
+          .mockResolvedValue({ imageIdentity: 'registry.example/app:1.2.3' }),
+      };
+
+      await expect(
+        resolveRollbackImageReference(trigger, {}, {}, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3');
+      expect(logContainer.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'No digest could be established for the rollback of registry.example/app:1.2.3',
+        ),
+      );
+    });
+
+    test('falls back to the tag with a warning when the identity binder finds no digest', async () => {
+      const trigger = { bindPulledImageIdentity: vi.fn().mockResolvedValue({}) };
+
+      await expect(
+        resolveRollbackImageReference(trigger, {}, {}, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3');
+      expect(logContainer.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'No digest could be established for the rollback of registry.example/app:1.2.3',
+        ),
+      );
+    });
+
+    test('refuses the rollback when the identity binder refuses under a required policy', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi.fn().mockRejectedValue(new Error('policy required')),
+      };
+
+      const promise = resolveRollbackImageReference(trigger, {}, {}, backupRecord, logContainer);
+      await expect(promise).rejects.toBeInstanceOf(RollbackDigestRequiredError);
+      await expect(promise).rejects.toThrow(
+        'Cannot roll back registry.example/app:1.2.3 to an immutable reference: policy required',
+      );
+    });
+
+    test('refuses the rollback under a required policy when the local tag now points at the running image', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi.fn(),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('required'),
+      };
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue({ Id: 'sha256:running' }) })),
+      };
+      const container = { image: { id: 'sha256:running' } };
+
+      const promise = resolveRollbackImageReference(
+        trigger,
+        dockerApi,
+        container,
+        backupRecord,
+        logContainer,
+      );
+      await expect(promise).rejects.toBeInstanceOf(RollbackDigestRequiredError);
+      await expect(promise).rejects.toThrow(
+        'Cannot roll back registry.example/app:1.2.3 to an immutable reference: the local tag now points at the running image, not the retained backup',
+      );
+      expect(trigger.bindPulledImageIdentity).not.toHaveBeenCalled();
+    });
+
+    test('falls back to the tag with a warning under an optional policy when the local tag now points at the running image', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi.fn(),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('optional'),
+      };
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue({ Id: 'sha256:running' }) })),
+      };
+      const container = { image: { id: 'sha256:running' } };
+
+      await expect(
+        resolveRollbackImageReference(trigger, dockerApi, container, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3');
+      expect(trigger.bindPulledImageIdentity).not.toHaveBeenCalled();
+      expect(logContainer.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'The local registry.example/app:1.2.3 tag now points at the running image',
+        ),
+      );
+    });
+
+    test('treats a same-tag hazard as disabled when the trigger exposes no rollback binding policy method', async () => {
+      const trigger = { bindPulledImageIdentity: vi.fn() };
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue({ Id: 'sha256:running' }) })),
+      };
+      const container = { image: { id: 'sha256:running' } };
+
+      await expect(
+        resolveRollbackImageReference(trigger, dockerApi, container, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3');
+      expect(trigger.bindPulledImageIdentity).not.toHaveBeenCalled();
+      expect(logContainer.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'The local registry.example/app:1.2.3 tag now points at the running image',
+        ),
+      );
+    });
+
+    test('still resolves through the binder when the local image inspect fails', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi
+          .fn()
+          .mockResolvedValue({ imageIdentity: 'registry.example/app:1.2.3@sha256:resolved' }),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('required'),
+      };
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockRejectedValue(new Error('no such image')) })),
+      };
+      const container = { image: { id: 'sha256:running' } };
+
+      await expect(
+        resolveRollbackImageReference(trigger, dockerApi, container, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3@sha256:resolved');
+      expect(trigger.bindPulledImageIdentity).toHaveBeenCalled();
+    });
+
+    test('still resolves through the binder when the local tag points at a different, retained image', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi
+          .fn()
+          .mockResolvedValue({ imageIdentity: 'registry.example/app:1.2.3@sha256:resolved' }),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('required'),
+      };
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockResolvedValue({ Id: 'sha256:retained-old' }),
+        })),
+      };
+      const container = { image: { id: 'sha256:running' } };
+
+      await expect(
+        resolveRollbackImageReference(trigger, dockerApi, container, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3@sha256:resolved');
+      expect(trigger.bindPulledImageIdentity).toHaveBeenCalledWith(
+        dockerApi,
+        'registry.example/app:1.2.3',
+        container,
+        logContainer,
+      );
+    });
+
+    // A local inspect that answers without an `Id`, or without a body at all,
+    // proves nothing about whether the retained tag still points at the backup
+    // image, so it cannot be treated as a same-tag hazard. Both shapes have to
+    // reach the binder and be decided by the binding policy like any other
+    // unresolvable digest.
+    test('falls back to the tag with a warning under an optional policy when the local inspect reports no image id', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi.fn().mockResolvedValue({}),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('optional'),
+      };
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue({}) })),
+      };
+      const container = { image: { id: 'sha256:running' } };
+
+      await expect(
+        resolveRollbackImageReference(trigger, dockerApi, container, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3');
+      expect(trigger.bindPulledImageIdentity).toHaveBeenCalledWith(
+        dockerApi,
+        'registry.example/app:1.2.3',
+        container,
+        logContainer,
+      );
+      expect(trigger.getRollbackIdentityBindingPolicy).not.toHaveBeenCalled();
+      expect(logContainer.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'No digest could be established for the rollback of registry.example/app:1.2.3',
+        ),
+      );
+    });
+
+    test('refuses the rollback under a required policy when the local inspect returns no body', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi.fn().mockRejectedValue(new Error('policy required')),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('required'),
+      };
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue(undefined) })),
+      };
+      const container = { image: { id: 'sha256:running' } };
+
+      const promise = resolveRollbackImageReference(
+        trigger,
+        dockerApi,
+        container,
+        backupRecord,
+        logContainer,
+      );
+      await expect(promise).rejects.toBeInstanceOf(RollbackDigestRequiredError);
+      await expect(promise).rejects.toThrow(
+        'Cannot roll back registry.example/app:1.2.3 to an immutable reference: policy required',
+      );
+      expect(trigger.bindPulledImageIdentity).toHaveBeenCalled();
+      expect(trigger.getRollbackIdentityBindingPolicy).not.toHaveBeenCalled();
+    });
+
+    test('still resolves through the binder when the container carries no running image id', async () => {
+      const trigger = {
+        bindPulledImageIdentity: vi
+          .fn()
+          .mockResolvedValue({ imageIdentity: 'registry.example/app:1.2.3@sha256:resolved' }),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('required'),
+      };
+      const dockerApi = {
+        getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue({ Id: 'sha256:running' }) })),
+      };
+      const container = {};
+
+      await expect(
+        resolveRollbackImageReference(trigger, dockerApi, container, backupRecord, logContainer),
+      ).resolves.toBe('registry.example/app:1.2.3@sha256:resolved');
+      expect(trigger.bindPulledImageIdentity).toHaveBeenCalled();
+    });
   });
 
   test('getBackupsForContainer isolates same-named containers by canonical identity', () => {

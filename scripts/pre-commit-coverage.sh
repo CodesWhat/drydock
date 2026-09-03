@@ -17,6 +17,14 @@ if git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
 	exit 0
 fi
 
+# Hub modules fan out the same way a merge does. `app/util/backup.ts` or
+# `app/triggers/providers/docker/Docker.ts` is imported by every Docker-family
+# trigger, so `vitest --changed` resolves 20+ suites for a one-file edit and
+# Docker.test.ts alone takes over a minute. Past this cap the related run can't
+# finish inside the hook timeout, so skip it and let pre-push coverage own it.
+# Override per commit with PRE_COMMIT_MAX_RELATED_TESTS=<n>.
+max_related="${PRE_COMMIT_MAX_RELATED_TESTS:-10}"
+
 # Determine which workspace(s) have staged ts/vue files
 has_app=false
 has_ui=false
@@ -33,12 +41,38 @@ if ! "${has_app}" && ! "${has_ui}"; then
 	exit 0
 fi
 
+run_related_tests() {
+	local workspace="$1"
+	local related_files
+	local list_exit=0
+	related_files=$(cd "${workspace}" && npx vitest list --changed HEAD --filesOnly) || list_exit=$?
+
+	if [ "${list_exit}" -ne 0 ]; then
+		echo "${workspace}: failed to discover related test files." >&2
+		return 1
+	fi
+
+	local related
+	related=$(printf '%s\n' "${related_files}" | { grep -c . || true; })
+
+	if [ "${related}" -eq 0 ]; then
+		echo "${workspace}: no test files relate to the staged changes; skipping."
+		return 0
+	fi
+
+	if [ "${related}" -gt "${max_related}" ]; then
+		echo "${workspace}: ${related} related test files exceed the pre-commit cap of ${max_related}; skipping (pre-push coverage runs the full suite)."
+		return 0
+	fi
+
+	echo "${workspace}: running ${related} related test file(s)..."
+	(cd "${workspace}" && npx vitest run --changed HEAD --reporter=dot)
+}
+
 if "${has_app}"; then
-	echo "app: running tests on changed files..."
-	(cd app && npx vitest run --changed HEAD --reporter=dot)
+	run_related_tests app
 fi
 
 if "${has_ui}"; then
-	echo "ui: running tests on changed files..."
-	(cd ui && npx vitest run --changed HEAD --reporter=dot)
+	run_related_tests ui
 fi

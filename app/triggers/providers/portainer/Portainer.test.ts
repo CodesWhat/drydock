@@ -1,5 +1,6 @@
 import DockerBase from '../docker/Docker.js';
 import Portainer, {
+  testable_extractPinnedTagValue,
   testable_extractTagVariable,
   testable_getComposeConfigFiles,
   testable_getComposeProjectPaths,
@@ -129,6 +130,20 @@ test('extractTagVariable detects a compose tag variable with fallback', () => {
   expect(testable_extractTagVariable('pihole/pihole')).toBeUndefined();
 });
 
+test('extractPinnedTagValue reduces a bound identity to the tag half of an env-mode image', () => {
+  expect(testable_extractPinnedTagValue(`pihole/pihole:2026.07.2@${IMAGE_A_DIGEST}`)).toBe(
+    `2026.07.2@${IMAGE_A_DIGEST}`,
+  );
+  expect(testable_extractPinnedTagValue(`registry:5000/app:1.2.3@${IMAGE_A_DIGEST}`)).toBe(
+    `1.2.3@${IMAGE_A_DIGEST}`,
+  );
+  // A bare RepoDigest carries no tag of its own, so there is nothing an env
+  // variable that renders the tag could be set to.
+  expect(testable_extractPinnedTagValue(`pihole/pihole@${IMAGE_A_DIGEST}`)).toBeUndefined();
+  expect(testable_extractPinnedTagValue(`@${IMAGE_A_DIGEST}`)).toBeUndefined();
+  expect(testable_extractPinnedTagValue('pihole/pihole:2026.07.2@')).toBeUndefined();
+});
+
 test('Portainer defaults to HTTPS and normalizes the allowHttp alias', () => {
   const trigger = new Portainer();
   const secure = trigger.validateConfiguration({ url: 'https://portainer.lan', apikey: 'secret' });
@@ -256,8 +271,14 @@ test('image and service helpers reject ambiguous or incomplete identity', () => 
   expect(testable_normalizeImageRepository('${REPO}/app:1')).toBeUndefined();
   expect(testable_normalizeImageReference(undefined)).toBeUndefined();
   expect(testable_normalizeImageReference('/')).toBeUndefined();
+  // A digest is ignored rather than folded into the identity, so a pinned
+  // `repo:tag@sha256:...` reference and its plain `repo:tag` name the same
+  // original image across an update cycle.
   expect(testable_normalizeImageReference('repo/image@sha256:ABC')).toBe(
-    'docker.io/repo/image@sha256:abc',
+    'docker.io/repo/image:latest',
+  );
+  expect(testable_normalizeImageReference('repo/image:1@sha256:ABC')).toBe(
+    testable_normalizeImageReference('repo/image:1'),
   );
   expect(testable_normalizeImageReference('repo/image@')).toBeUndefined();
   expect(testable_normalizeImageReference('repo/image')).toBe('docker.io/repo/image:latest');
@@ -1472,11 +1493,11 @@ function makeResolvedUpdate() {
   return {
     mode: 'compose' as const,
     stack: { Id: 12, Name: 'pihole', EndpointId: 1 },
-    stackFileContent: 'services: {}',
+    stackFileContent: 'services:\n  pihole:\n    image: pihole/pihole:2026.05.0\n',
     service: 'pihole',
     originalImage: 'pihole/pihole:2026.05.0',
     targetImage: 'pihole/pihole:2026.07.2',
-    updatedStackFileContent: 'services: {}',
+    updatedStackFileContent: 'services:\n  pihole:\n    image: pihole/pihole:2026.07.2\n',
     updatedEnv: [],
   };
 }
@@ -1585,7 +1606,7 @@ test('performContainerUpdate pins the post-pull gate to the digest that was pull
     }),
     listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
   };
-  vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
   vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
   const hook = vi.fn().mockResolvedValue(undefined);
 
@@ -1597,10 +1618,426 @@ test('performContainerUpdate pins the post-pull gate to the digest that was pull
     hook,
   );
 
+  const pinnedReference = `pihole/pihole:2026.07.2@${IMAGE_A_DIGEST}`;
   expect(result).toBe(true);
-  expect(hook).toHaveBeenCalledWith('', `pihole/pihole:2026.07.2@${IMAGE_A_DIGEST}`, {
-    skipSecurityGate: false,
-  });
+  expect(hook).toHaveBeenCalledWith('', pinnedReference, { skipSecurityGate: false });
+  // The stack content sent in the PUT pins the service image to the bound
+  // digest instead of carrying the mutable tag, under binding policy
+  // `required` (the default here, since availabilityPolicy is not `warn`).
+  expect(redeploy).toHaveBeenCalledWith(
+    resolved.stack,
+    `services:\n  pihole:\n    image: ${pinnedReference}\n`,
+    resolved.updatedEnv,
+  );
+  expect(resolved.updatedStackFileContent).toBe(
+    `services:\n  pihole:\n    image: ${pinnedReference}\n`,
+  );
+});
+
+test('performContainerUpdate refuses to redeploy the mutable tag when required binding produced no identity', async () => {
+  // bindPulledImageIdentity already throws under policy `required` whenever it
+  // cannot capture an identity, so this exercises the pinning code's own
+  // defensive refusal rather than relying on that upstream throw, which would
+  // otherwise leave this branch unreachable by any real binding outcome.
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  const resolved = makeResolvedUpdate();
+  // Unset so the error message falls back to the stack id, covering both
+  // halves of that fallback.
+  resolved.stack.Name = undefined;
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  vi.spyOn(trigger as any, 'getPostPullIdentityBindingPolicy').mockReturnValue('required');
+  vi.spyOn(trigger, 'bindPulledImageIdentity').mockResolvedValue({});
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Id: 'sha256:new' }),
+    }),
+    listContainers: vi.fn(),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+
+  await expect(
+    trigger.performContainerUpdate(
+      { dockerApi, auth: undefined, newImage: resolved.targetImage },
+      makeContainer(),
+      trigger.log,
+    ),
+  ).rejects.toThrow(
+    'Unable to pin Portainer stack 12 service pihole to the bound image digest: no immutable image identity was captured',
+  );
+  expect(redeploy).not.toHaveBeenCalled();
+  expect(dockerApi.listContainers).not.toHaveBeenCalled();
+});
+
+test('performContainerUpdate leaves the stack content unpinned under an optional policy when digest pinning is off', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+  );
+  vi.spyOn(trigger, 'recordSecurityAudit').mockReturnValue(undefined);
+  const resolved = makeResolvedUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Id: 'sha256:new' }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  expect(result).toBe(true);
+  expect(redeploy).toHaveBeenCalledWith(
+    resolved.stack,
+    resolved.updatedStackFileContent,
+    resolved.updatedEnv,
+  );
+  expect(resolved.updatedStackFileContent).toBe(
+    'services:\n  pihole:\n    image: pihole/pihole:2026.07.2\n',
+  );
+});
+
+test('performContainerUpdate pins the stack content under an optional policy when the operator enables digest pinning', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  trigger.configuration.digestPinning = true;
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+  );
+  vi.spyOn(trigger, 'recordSecurityAudit').mockReturnValue(undefined);
+  const resolved = makeResolvedUpdate();
+  // Unset so the pin log message falls back to the stack id, covering both
+  // halves of that fallback.
+  resolved.stack.Name = undefined;
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
+      }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  const pinnedReference = `pihole/pihole:2026.07.2@${IMAGE_A_DIGEST}`;
+  expect(result).toBe(true);
+  expect(redeploy).toHaveBeenCalledWith(
+    resolved.stack,
+    `services:\n  pihole:\n    image: ${pinnedReference}\n`,
+    resolved.updatedEnv,
+  );
+});
+
+test('performContainerUpdate leaves the stack content unpinned when digest pinning is enabled but no identity could be bound under a non-required policy', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  trigger.configuration.digestPinning = true;
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+  );
+  vi.spyOn(trigger, 'recordSecurityAudit').mockReturnValue(undefined);
+  const resolved = makeResolvedUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    // No RepoDigests entry matches the pulled reference, so binding cannot
+    // produce an identity; under `optional` this warns and continues instead
+    // of throwing.
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Id: 'sha256:new' }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  expect(result).toBe(true);
+  expect(redeploy).toHaveBeenCalledWith(
+    resolved.stack,
+    resolved.updatedStackFileContent,
+    resolved.updatedEnv,
+  );
+  expect(resolved.updatedStackFileContent).toBe(
+    'services:\n  pihole:\n    image: pihole/pihole:2026.07.2\n',
+  );
+  expect(trigger.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining('redeploying without a pinned image reference'),
+  );
+});
+
+// An env-mode stack's `image:` line is a template the operator owns: the tag is
+// a stack env variable and the update is that variable's value. Pinning has to
+// go through the variable, because rewriting the image line would delete the
+// `${VAR}` reference, leave `updatedEnv` writing a variable nothing reads, and
+// silently move the stack to compose mode on the next `auto` cycle.
+function makeResolvedEnvUpdate(overrides: Record<string, unknown> = {}) {
+  const template = 'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n';
+  return {
+    mode: 'env' as const,
+    stack: {
+      Id: 12,
+      Name: 'pihole',
+      EndpointId: 1,
+      Env: [{ name: 'PIHOLE_TAG', value: '2026.05.0' }],
+    },
+    stackFileContent: template,
+    service: 'pihole',
+    serviceImage: 'pihole/pihole:${PIHOLE_TAG:-2026.05.0}',
+    versionVar: 'PIHOLE_TAG',
+    originalImage: 'pihole/pihole:2026.05.0',
+    targetImage: 'pihole/pihole:2026.07.2',
+    targetTag: '2026.07.2',
+    updatedStackFileContent: template,
+    updatedEnv: [{ name: 'PIHOLE_TAG', value: '2026.07.2' }],
+    ...overrides,
+  };
+}
+
+test('performContainerUpdate pins an env-mode stack through the version variable and leaves the template alone', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const resolved = makeResolvedEnvUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
+      }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  expect(result).toBe(true);
+  // The rendered reference is the bound identity, the stack text is untouched,
+  // and the `${PIHOLE_TAG}` reference survives for the next cycle.
+  expect(redeploy).toHaveBeenCalledWith(resolved.stack, resolved.stackFileContent, [
+    { name: 'PIHOLE_TAG', value: `2026.07.2@${IMAGE_A_DIGEST}` },
+  ]);
+  expect(redeploy.mock.calls[0][1]).toContain('${PIHOLE_TAG:-2026.05.0}');
+  expect(resolved.updatedStackFileContent).toBe(resolved.stackFileContent);
+});
+
+test('performContainerUpdate refuses an env-mode pin the version variable cannot express under a required policy', async () => {
+  // `resolvePortainerUpdate` already refuses an env-mode stack whose variable
+  // is not the whole image tag, so this exercises the pin block's own refusal
+  // rather than depending on that upstream validation staying where it is.
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const resolved = makeResolvedEnvUpdate({ serviceImage: 'pihole/pihole:v${PIHOLE_TAG}' });
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
+      }),
+    }),
+    listContainers: vi.fn(),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+
+  await expect(
+    trigger.performContainerUpdate(
+      { dockerApi, auth: undefined, newImage: resolved.targetImage },
+      makeContainer(),
+      trigger.log,
+      undefined,
+      vi.fn().mockResolvedValue(undefined),
+    ),
+  ).rejects.toThrow(
+    `Unable to pin Portainer stack pihole service pihole to the bound image digest in env mode: pihole/pihole:2026.07.2@${IMAGE_A_DIGEST} cannot be expressed as the value of a version env variable that renders the whole image tag`,
+  );
+  expect(redeploy).not.toHaveBeenCalled();
+  expect(dockerApi.listContainers).not.toHaveBeenCalled();
+});
+
+test('performContainerUpdate warns and redeploys unpinned when an env-mode pin cannot be expressed under an optional policy', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  trigger.configuration.digestPinning = true;
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+  );
+  vi.spyOn(trigger, 'recordSecurityAudit').mockReturnValue(undefined);
+  const resolved = makeResolvedEnvUpdate({ serviceImage: 'pihole/pihole:v${PIHOLE_TAG}' });
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
+      }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  expect(result).toBe(true);
+  expect(trigger.log.warn).toHaveBeenCalledWith(expect.stringContaining('in env mode'));
+  expect(redeploy).toHaveBeenCalledWith(resolved.stack, resolved.stackFileContent, [
+    { name: 'PIHOLE_TAG', value: '2026.07.2' },
+  ]);
+});
+
+test('performContainerUpdate treats a running replica pinned by a previous cycle as the same original image', async () => {
+  // The prior redeploy under `required` left the running container's Image
+  // field as `repo:tag@sha256:...`; the freshly resolved originalImage from
+  // the registry is the plain `repo:tag`. The shared-identity guard has to
+  // treat these as the same original image or every second cycle would refuse
+  // to update a stack it had just pinned.
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  const resolved = makeResolvedUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Id: 'sha256:new' }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([
+      {
+        State: 'running',
+        ImageID: 'sha256:old',
+        Image: `pihole/pihole:2026.05.0@${IMAGE_A_DIGEST}`,
+        Labels: {
+          'com.docker.compose.project': 'pihole',
+          'com.docker.compose.service': 'pihole',
+        },
+      },
+    ]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+  );
+
+  expect(result).toBe(true);
+  expect(resolved.originalImageId).toBe('sha256:old');
+  expect(redeploy).toHaveBeenCalledOnce();
+});
+
+test('performContainerUpdate never lets a retag after the PUT reach the container Portainer creates when the stack is pinned', async () => {
+  // Demonstrates the fix directly: the mutable tag is retagged to a different
+  // image after the PUT is issued (simulating a registry retag racing the
+  // redeploy), but because the stack content carries the pinned digest rather
+  // than the tag, the container Portainer creates still matches the image the
+  // gate scanned and convergence succeeds. Contrast with
+  // `makeSwapDuringRedeployScenario`, which reproduces the unpinned failure.
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const resolved = makeResolvedUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+
+  const pinnedReference = `pihole/pihole:2026.07.2@${IMAGE_A_DIGEST}`;
+  const labels = {
+    'com.docker.compose.project': 'pihole',
+    'com.docker.compose.service': 'pihole',
+  };
+  const previousReplica = {
+    State: 'running',
+    ImageID: ORIGINAL_IMAGE_ID,
+    Image: 'pihole/pihole:2026.05.0',
+    Labels: labels,
+  };
+  // What Portainer creates from the pinned stack content: the digest the gate
+  // scanned, never whatever the mutable tag is retagged to afterward.
+  const pinnedReplica = {
+    State: 'running',
+    ImageID: IMAGE_A_ID,
+    Image: pinnedReference,
+    Labels: labels,
+  };
+  let running = previousReplica;
+  let tagRetagged = false;
+  const dockerApi = {
+    getImage: vi.fn((reference: string) => ({
+      inspect: vi
+        .fn()
+        .mockResolvedValue(
+          reference === 'pihole/pihole:2026.07.2' && tagRetagged
+            ? { Id: IMAGE_B_ID, RepoDigests: [`pihole/pihole@${IMAGE_B_DIGEST}`] }
+            : { Id: IMAGE_A_ID, RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`] },
+        ),
+    })),
+    listContainers: vi.fn(async () => [running]),
+  };
+  const redeploy = vi
+    .spyOn(trigger, 'redeployPortainerStack')
+    .mockImplementation(async (_stack, stackFileContent) => {
+      // The retag lands after the PUT, while Portainer is still resolving the
+      // redeploy against the stack content already sent.
+      tagRetagged = true;
+      running = (stackFileContent as string).includes(pinnedReference)
+        ? pinnedReplica
+        : previousReplica;
+    });
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  expect(result).toBe(true);
+  expect(redeploy).toHaveBeenCalledOnce();
+  expect((redeploy.mock.calls[0][1] as string).includes(pinnedReference)).toBe(true);
+  expect(running).toBe(pinnedReplica);
+  expect(running.ImageID).toBe(IMAGE_A_ID);
 });
 
 test('performContainerUpdate fails closed when the pulled image cannot be pinned', async () => {
