@@ -35,6 +35,7 @@ interface PortainerTriggerConfiguration extends DockerTriggerConfiguration {
   updateModeLabel: string;
   pruneStack: boolean;
   redeployTimeout: number;
+  digestPinning: boolean;
 }
 
 interface PortainerStackSummary {
@@ -223,18 +224,24 @@ function normalizeImageRepository(image: string | undefined): string | undefined
   return `${registry}/${parts.join('/')}`.toLowerCase();
 }
 
+// Ignores the digest rather than folding it into the returned identity. A
+// caller pinning the stack image to `repo:tag@sha256:...` and a runtime tag
+// `repo:tag` name the same original image across an update cycle: the digest
+// only records which manifest that tag resolved to at pin time, not a
+// different identity to compare on. A dangling `@` with nothing after it is
+// still rejected as malformed input.
 function normalizeImageReference(image: string | undefined): string | undefined {
   if (typeof image !== 'string' || image.trim() === '') {
     return undefined;
   }
   const trimmed = image.trim();
   const [reference, digest] = trimmed.split('@', 2);
+  if (digest !== undefined && !digest.trim()) {
+    return undefined;
+  }
   const repository = normalizeImageRepository(reference);
   if (!repository) {
     return undefined;
-  }
-  if (digest !== undefined) {
-    return digest.trim() ? `${repository}@${digest.trim().toLowerCase()}` : undefined;
   }
   const lastSlash = reference.lastIndexOf('/');
   const lastColon = reference.indexOf(':', lastSlash + 1);
@@ -613,6 +620,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         updateModeLabel: this.joi.string().default(DEFAULT_UPDATE_MODE_LABEL),
         pruneStack: this.joi.boolean().default(false),
         redeployTimeout: this.joi.number().integer().min(1).default(DEFAULT_REDEPLOY_TIMEOUT_MS),
+        digestPinning: this.joi.boolean().default(false),
       })
       .rename('updatemode', 'updateMode', {
         ignoreUndefined: true,
@@ -631,6 +639,10 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         override: true,
       })
       .rename('redeploytimeout', 'redeployTimeout', {
+        ignoreUndefined: true,
+        override: true,
+      })
+      .rename('digestpinning', 'digestPinning', {
         ignoreUndefined: true,
         override: true,
       })
@@ -1097,13 +1109,14 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       );
     }
     // Portainer redeploys from the reference in the stack file with pullImage
-    // disabled, so the tag has to still resolve to the scanned image at the
-    // moment the stack is handed over. This cannot bind the redeploy to that
-    // image the way the Docker path's own create does, because Portainer
+    // disabled, so an unpinned tag has to still resolve to the scanned image at
+    // the moment the stack is handed over. This cannot bind the redeploy to
+    // that image the way the Docker path's own create does, because Portainer
     // performs the create. A move after this point is only detected after the
     // fact: the redeploy fails to converge on the scanned image ID, so an
     // unscanned container runs until the timeout expires, and the restore below
-    // is an attempt whose own failure is reported in the error.
+    // is an attempt whose own failure is reported in the error. Pinning the
+    // stack content below closes that window instead of only detecting it.
     const verifiedTargetImageId = await this.capturePulledImageId(
       context.dockerApi,
       context.newImage,
@@ -1115,6 +1128,35 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     if (this.configuration.dryrun) {
       logContainer.info('Skip Portainer stack redeploy and verification in dry-run mode');
       return false;
+    }
+
+    // A binding policy of `required` forces the stack content itself to carry
+    // the pinned `repo:tag@sha256:...` identity, mirroring what the compose
+    // action's own `digestPinning` option does when the operator opts in. With
+    // the mutable tag never appearing in what gets PUT, a retag after this
+    // point cannot reach the container Portainer creates: `pullImage:false`
+    // means it has to use the image already tagged locally with that digest,
+    // and moving the bare tag elsewhere does not change what that reference
+    // resolves to. Optional/disabled policies keep today's unpinned redeploy
+    // unless the operator has enabled `digestPinning` themselves.
+    const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
+    if (this.configuration.digestPinning === true || bindingPolicy === 'required') {
+      if (!binding.imageIdentity) {
+        if (bindingPolicy === 'required') {
+          throw new Error(
+            `Unable to pin Portainer stack ${resolved.stack.Name || resolved.stack.Id} service ${resolved.service} to the bound image digest: no immutable image identity was captured`,
+          );
+        }
+      } else {
+        resolved.updatedStackFileContent = updateComposeServiceImageInText(
+          resolved.stackFileContent,
+          resolved.service,
+          binding.imageIdentity,
+        );
+        logContainer.info(
+          `Pin Portainer stack ${resolved.stack.Name || resolved.stack.Id} service ${resolved.service} image to ${binding.imageIdentity}`,
+        );
+      }
     }
 
     const dockerApi = context.dockerApi as DockerApiWithListContainers | undefined;
