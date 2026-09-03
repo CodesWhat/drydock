@@ -389,6 +389,14 @@ type RollbackTelemetryPayload = {
 
 type PulledImageIdentityOutcome = {
   imageIdentity?: string;
+  /**
+   * The local image ID the pull resolved to, carried on the outcomes that
+   * could not be bound to a manifest digest. It is not a security binding and
+   * the gate still refuses to run against it, but it is an immutable handle on
+   * the exact image that was pulled, which is what lets a caller recreate
+   * several containers from one image without a digest (DR-54).
+   */
+  localImageId?: string;
   unboundWarn: boolean;
   reason?: string;
 };
@@ -1879,9 +1887,11 @@ class Docker<
       );
     }
 
+    let localImageId: string | undefined;
     try {
       const imageInspect = await dockerApi.getImage(imageReference).inspect();
       const imageId = imageInspect?.Id?.trim();
+      localImageId = imageId;
       const imageWithoutDigest = imageReference.split('@', 1)[0];
       const parsedImage = parse(imageWithoutDigest);
       const referenceCandidates = this.getPulledImageRepositoryCandidates(parsedImage);
@@ -1916,11 +1926,14 @@ class Docker<
       );
     }
 
-    return this.handleMissingPulledImageIdentity(
-      container,
-      bindingPolicy,
-      'Docker image inspection returned no local ID and matching manifest digest',
-    );
+    return {
+      ...this.handleMissingPulledImageIdentity(
+        container,
+        bindingPolicy,
+        'Docker image inspection returned no local ID and matching manifest digest',
+      ),
+      localImageId,
+    };
   }
 
   protected getPulledImageRepositoryCandidates(parsedImage: { domain?: string; path?: string }) {

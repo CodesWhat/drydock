@@ -159,6 +159,13 @@ type ComposeRuntimeContext = {
   auth?: RegistryPullAuth;
   newImage?: string;
   imageIdentity?: string;
+  /**
+   * The local image ID the compose-file-once preflight's pull resolved to,
+   * recorded only when the daemon could not bind that pull to a manifest
+   * digest. Every replica of the service is then created from this exact
+   * image instead of from the mutable tag (DR-54).
+   */
+  pulledImageId?: string;
   securityGateUnboundWarn?: boolean;
   securityGateUnboundReason?: string;
   securityGateUnboundWarnRecorded?: boolean;
@@ -2244,7 +2251,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         registry,
         auth,
         newImage,
-        ...(identityOutcome.imageIdentity ? { imageIdentity: identityOutcome.imageIdentity } : {}),
+        // A bound digest is the reference every replica is created from. When
+        // there is none, the local image ID the pull resolved to takes its
+        // place, so the replicas still share one image rather than each
+        // re-resolving a tag that can move under them (DR-54).
+        ...(identityOutcome.imageIdentity
+          ? { imageIdentity: identityOutcome.imageIdentity }
+          : { pulledImageId: identityOutcome.localImageId }),
         ...(identityOutcome.unboundWarn
           ? {
               securityGateUnboundWarn: true,
@@ -2731,7 +2744,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         // replica's runtime update runs, so every preflighted replica skips
         // the pull, not just the first one to reach this loop. Re-pulling a
         // mutable tag for a later replica could resolve a different digest
-        // than the one already bound and gated (DR-54).
+        // than the one already bound and gated (DR-54). That holds whether or
+        // not the preflight managed to bind a digest: an unbound service
+        // carries the local image ID of the pull instead, and pulling again
+        // per replica would reintroduce exactly the divergence the recorded
+        // ID exists to prevent.
         skipPull: composeFileOncePreflighted,
         runtimeContext: mergeComposeFileOnceRuntimeContext(
           requestedRuntimeContext,
@@ -3429,7 +3446,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     let imageIdentity = runtimeContext.imageIdentity;
     let securityGateUnboundWarn = runtimeContext.securityGateUnboundWarn === true;
     let securityGateUnboundReason = runtimeContext.securityGateUnboundReason;
-    if (!imageIdentity && !securityGateUnboundWarn) {
+    // The compose-file-once preflight resolved this service's image once,
+    // before any replica was touched, and recorded either the bound digest or
+    // the local image ID of what it pulled. Re-resolving per container would
+    // let a later replica get a different answer for the same tag, so the
+    // preflight's answer wins and the capture only runs when there is none.
+    const preflightPulledImageId = runtimeContext.pulledImageId;
+    if (!imageIdentity && !securityGateUnboundWarn && !preflightPulledImageId) {
       const identityOutcome = await this.capturePulledImageIdentity(
         dockerApi as DockerApiLike,
         newImage,
@@ -3440,7 +3463,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       securityGateUnboundWarn = identityOutcome.unboundWarn;
       securityGateUnboundReason = identityOutcome.reason;
     }
-    const pinnedImage = imageIdentity || newImage;
+    // Without a digest the local image ID is the only immutable reference
+    // left, so an unbound compose-file-once service creates every replica
+    // from it rather than from the tag it was pulled under (DR-54).
+    const pinnedImage = imageIdentity || preflightPulledImageId || newImage;
     if (securityGateUnboundWarn) {
       // Compose-file-once already recorded this service's skipped scan in its
       // preflight, so recording it again here would add one audit row per

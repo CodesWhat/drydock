@@ -119,6 +119,8 @@ Before removing the running container, Drydock verifies that the target image ca
 
 When `COMPOSEFILEONCE=true` and multiple services in the same compose stack/file require runtime refresh, Drydock pulls, gates, and writes the compose file once per unique service rather than once per container. This is not a single grouped `docker compose up` pass: every container belonging to that service is still stopped, removed, and recreated individually, reusing the image identity already pulled and gated for the service instead of pulling or gating it again.
 
+The identity the replicas are recreated from is normally the `repo:tag@sha256:...` reference the pull was bound to, so a tag that moves mid-batch cannot change what the second replica gets. When the daemon cannot bind that digest and `DD_SECURITY_AVAILABILITY_POLICY=warn` lets the update continue anyway, Drydock recreates every replica from the local image ID of the pull instead, which keeps them on one image without a digest to gate. The compose file still gets the tag either way.
+
 The batch writes at most one `image:` value per affected service, and only when that value has to change, so every container in the batch that needs a runtime refresh for a service must resolve to the same update target. If two of them resolve to different images (per-container tag filters can do this), the batch is refused before anything is pulled, with both container names and both images in the error, instead of pulling one candidate and writing the other into the file.
 
 ## Inherited Docker Trigger Features

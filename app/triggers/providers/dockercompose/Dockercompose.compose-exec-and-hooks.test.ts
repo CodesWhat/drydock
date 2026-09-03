@@ -809,7 +809,7 @@ describe('Dockercompose Trigger', () => {
         makeContainer(),
         mockLog,
       ),
-    ).resolves.toEqual({ unboundWarn: false });
+    ).resolves.toEqual({ unboundWarn: false, localImageId: 'sha256:local-image' });
   });
 
   test('capturePulledImageIdentity should use the missing-identity policy when inspection fails', async () => {
