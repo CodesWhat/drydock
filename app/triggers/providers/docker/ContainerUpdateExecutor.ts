@@ -12,6 +12,7 @@ import { getErrorMessage } from '../../../util/error.js';
 import { getCreatedContainerCandidate } from './created-container-candidate.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import { buildRollbackCascadeGuardError } from './rollback-cascade-guard.js';
+import type { PostPullHookOptions } from './UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 type ContainerUpdateLogger = {
@@ -213,6 +214,19 @@ type ContainerUpdateExecutorDependencies = {
     targetImage: string,
     rollbackSucceeded: boolean,
   ) => Error | undefined;
+  /**
+   * Resolve the just-pulled image to an immutable `repo:tag@sha256:...` reference.
+   * Throws when the security policy requires a bound identity and none is
+   * available; returns `skipSecurityGate` when availability policy `warn` allows
+   * the update to continue without scanning a mutable tag. Optional — omitting it
+   * keeps the mutable reference (e.g. in tests that don't need identity binding).
+   */
+  bindPulledImageIdentity?: (
+    dockerApi: unknown,
+    imageReference: string,
+    container: ContainerForUpdate,
+    logContainer: ContainerUpdateLogger,
+  ) => Promise<{ imageIdentity?: string; skipSecurityGate?: boolean }>;
   hasHealthcheckConfigured: (currentContainerSpec: ContainerSpecLike) => boolean;
   waitForContainerHealthy: (
     container: DockerContainerHandle,
@@ -315,6 +329,8 @@ class ContainerUpdateExecutor {
   recordRollbackTelemetry: ContainerUpdateExecutorDependencies['recordRollbackTelemetry'];
 
   buildRuntimeConfigCompatibilityError: ContainerUpdateExecutorDependencies['buildRuntimeConfigCompatibilityError'];
+
+  bindPulledImageIdentity?: ContainerUpdateExecutorDependencies['bindPulledImageIdentity'];
 
   hasHealthcheckConfigured: ContainerUpdateExecutorDependencies['hasHealthcheckConfigured'];
 
@@ -602,7 +618,11 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ) {
     const preparedExecution = await this.prepareContainerUpdateExecution(
       context,
@@ -678,7 +698,11 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
     runtimeContext?: unknown,
-    postPullHook?: (operationId: string) => Promise<void>,
+    postPullHook?: (
+      operationId: string,
+      imageIdentity?: string,
+      options?: PostPullHookOptions,
+    ) => Promise<void>,
   ): Promise<PreparedContainerUpdateExecution | undefined> {
     const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
     const configuration = this.getConfiguration();
@@ -745,9 +769,40 @@ class ContainerUpdateExecutor {
       throw pullError;
     }
 
+    // Pin the mutable `repo:tag` to the digest that was actually pulled. Every
+    // step after this point — signature verification, scan/SBOM, the runtime
+    // config lookup and the replacement create — uses the pinned reference, so a
+    // registry retag between the pull and the create cannot swap what is
+    // verified for what is deployed.
+    let imageIdentity: string | undefined;
+    let skipSecurityGate = false;
+    if (this.bindPulledImageIdentity) {
+      try {
+        const binding = await this.bindPulledImageIdentity(
+          dockerApi,
+          newImage,
+          container,
+          logContainer,
+        );
+        imageIdentity = binding.imageIdentity;
+        skipSecurityGate = binding.skipSecurityGate === true;
+      } catch (identityError: unknown) {
+        updateOperationStore.markOperationTerminal(operation.id, {
+          status: 'failed',
+          phase: 'failed',
+          lastError: getErrorMessage(identityError),
+        });
+        throw identityError;
+      }
+    }
+    const pinnedImage = imageIdentity ?? newImage;
+
+    // The hook always runs, even when the binding warned instead of failing: it
+    // carries the deferred pre-update hook and prune/backup step as well as the
+    // security gate, and `skipSecurityGate` only suppresses the gate half.
     if (postPullHook) {
       try {
-        await postPullHook(operation.id);
+        await postPullHook(operation.id, imageIdentity, { skipSecurityGate });
       } catch (hookError: unknown) {
         updateOperationStore.markOperationTerminal(operation.id, {
           status: 'failed',
@@ -784,7 +839,7 @@ class ContainerUpdateExecutor {
       cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
         dockerApi,
         currentContainerSpec,
-        newImage,
+        pinnedImage,
         logContainer,
       );
 
@@ -826,7 +881,7 @@ class ContainerUpdateExecutor {
 
     return {
       dockerApi,
-      newImage,
+      newImage: pinnedImage,
       currentContainer,
       currentContainerSpec,
       cloneRuntimeConfigOptions,

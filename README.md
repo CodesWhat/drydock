@@ -205,6 +205,21 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">Recent Updates</h2>
 
 <details open>
+<summary><strong>v1.7.0-rc.8 highlights</strong></summary>
+
+- **The Docker-native and Compose update paths now pin an immutable pulled-image digest before signature verification, scanning, and replacement**, closing the registry-retag window on both paths. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))
+- **Compose updates now run that gate before the pre-update hook, the image prune, and the backup record**, so a candidate the gate rejects no longer fires an operator hook or evicts a real rollback point on its way to being refused.
+- **Self-update no longer rolls back a health-verified replacement when old-container cleanup fails**, and the watcher-snapshot handler stops treating an empty container list as a mass removal. ([#951](https://github.com/CodesWhat/drydock/pull/951), [#929](https://github.com/CodesWhat/drydock/pull/929))
+- **`dd.registry.lookup.image` now applies to containers reported by controller-Docker-transport agents**, so Portwing-reported containers honor the same registry override as locally watched ones. ([#956](https://github.com/CodesWhat/drydock/pull/956))
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` no longer creates a phantom agent named `allow`**, and a container stamped `unknown` before its registry was configured now recovers on refresh. ([#954](https://github.com/CodesWhat/drydock/pull/954), [#955](https://github.com/CodesWhat/drydock/pull/955))
+- **Debug dumps redact Apprise service URLs, Rocket.Chat user IDs, and Telegram chat IDs**, closing the last provider-specific credential gap in that endpoint. ([#953](https://github.com/CodesWhat/drydock/pull/953))
+- **Four fixes from the rc.6 QA sweep land**: a corrected Trivy advisory, a real 404 page, accurate audit search counts, and a servers panel that respects its own Refresh button. ([#928](https://github.com/CodesWhat/drydock/pull/928))
+
+Full release notes in [CHANGELOG.md](./CHANGELOG.md#170-rc8--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>v1.7.0-rc.7 highlights</strong></summary>
 
 - **Registry pagination now follows each registry's own cursor**, preventing update checks from skipping pages or stopping early. ([#927](https://github.com/CodesWhat/drydock/pull/927))

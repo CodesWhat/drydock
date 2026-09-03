@@ -3,6 +3,7 @@
     "loadingAuditLog": "正在載入稽核日誌……",
     "loadError": "無法載入稽核日誌",
     "filterPlaceholder": "按目標或事件篩選……",
+    "onThisPage": "本頁內",
     "containerFilterPlaceholder": "容器名稱……",
     "allEvents": "所有事件",
     "eventsSelected": "已選擇 {count} 個事件",

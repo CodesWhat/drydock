@@ -3,6 +3,7 @@
     "loadingAuditLog": "Завантаження журналу аудиту...",
     "loadError": "Не вдалося завантажити журнал аудиту",
     "filterPlaceholder": "Фільтр за цільовим об'єктом або подією...",
+    "onThisPage": "на цій сторінці",
     "containerFilterPlaceholder": "Назва контейнера...",
     "allEvents": "Всі події",
     "eventsSelected": "{count} подій вибрано",

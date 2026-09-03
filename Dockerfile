@@ -23,7 +23,7 @@ HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_E
 RUN apk add --no-cache \
     bash=5.3.9-r1 \
     git=2.54.0-r0 \
-    jq=1.8.1-r0 \
+    jq=1.8.2-r0 \
     openssl=3.5.8-r0 \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \

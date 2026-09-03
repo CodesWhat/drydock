@@ -3,6 +3,7 @@
     "loadingAuditLog": "正在加载审计日志...",
     "loadError": "无法加载审计日志",
     "filterPlaceholder": "按目标或事件筛选...",
+    "onThisPage": "本页内",
     "containerFilterPlaceholder": "容器名称...",
     "allEvents": "所有事件",
     "eventsSelected": "已选择 {count} 个事件",

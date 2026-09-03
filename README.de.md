@@ -202,6 +202,20 @@ Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und al
 <h2 align="center" id="recent-updates">Aktuelle Updates</h2>
 
 <details open>
+<summary><strong>Highlights von v1.7.0-rc.8</strong></summary>
+
+- **Die Docker-native und die Compose-Update-Pfade pinnen jetzt einen unveränderlichen Digest des gezogenen Images vor Signaturprüfung, Scan und Ersetzung**, wodurch das Registry-Retag-Zeitfenster auf beiden Pfaden geschlossen wird. ([#961](https://github.com/CodesWhat/drydock/pull/961), [#952](https://github.com/CodesWhat/drydock/pull/952))
+- **Ein Self-Update macht einen bereits gesundheitsgeprüften Ersatz nicht mehr rückgängig, wenn die Bereinigung des alten Containers fehlschlägt**, und der Watcher-Snapshot-Handler behandelt eine leere Container-Liste nicht mehr als Massenentfernung. ([#951](https://github.com/CodesWhat/drydock/pull/951), [#929](https://github.com/CodesWhat/drydock/pull/929))
+- **`dd.registry.lookup.image` gilt jetzt auch für Container, die von Controller-Docker-Transport-Agents gemeldet werden**, sodass von Portwing gemeldete Container dieselbe Registry-Umleitung erhalten wie lokal beobachtete. ([#956](https://github.com/CodesWhat/drydock/pull/956))
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` erzeugt keinen Phantom-Agent namens `allow` mehr**, und ein Container, der als `unknown` markiert war, bevor seine Registry konfiguriert wurde, erholt sich jetzt bei der Aktualisierung. ([#954](https://github.com/CodesWhat/drydock/pull/954), [#955](https://github.com/CodesWhat/drydock/pull/955))
+- **Debug-Dumps redigieren jetzt Apprise-Service-URLs, Rocket.Chat-Benutzer-IDs und Telegram-Chat-IDs**, womit die letzte anbieterspezifische Anmeldedatenlücke in diesem Endpunkt geschlossen wird. ([#953](https://github.com/CodesWhat/drydock/pull/953))
+- **Vier Fixes aus dem QA-Sweep von rc.6 landen**: eine korrigierte Trivy-Empfehlung, eine echte 404-Seite, korrekte Audit-Suchzähler und ein Server-Panel, das seinen eigenen Refresh-Button respektiert. ([#928](https://github.com/CodesWhat/drydock/pull/928))
+
+Vollständige Release-Notes in [CHANGELOG.md](./CHANGELOG.md#170-rc8--2026-09-03).
+
+</details>
+
+<details open>
 <summary><strong>Highlights von v1.7.0-rc.7</strong></summary>
 
 - **Die Registry-Paginierung folgt jetzt dem Cursor jeder Registry**, damit Prüfungen keine Seiten überspringen oder zu früh enden. ([#927](https://github.com/CodesWhat/drydock/pull/927))

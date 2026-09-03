@@ -12,7 +12,7 @@ curl http://drydock:3000/api/v1/app
 
 {
   "name":"drydock",
-  "version":"1.7.0-rc.7"
+  "version":"1.7.0-rc.8"
 }
 ```
 
@@ -126,6 +126,7 @@ Redaction works on the key name, and the exact rule matters — a key that falls
 - `pass`, `key` and `pat` only match a whole word segment, so `COMPASS_MODE`, `KEYFILE` and `DISPATCH` stay visible.
 - Environment-style keys (uppercase with underscores) additionally redact on the segments `AUTH`, `BEARER`, `LOGIN` and `URL`, which covers webhook URLs with an embedded secret. `DD_PUBLIC_URL` is redacted along with them, deliberately.
 - Any string value carrying URL credentials (`postgres://user:pass@host`) is redacted whatever its key is called.
+- A few provider-specific fields are redacted by name even though they don't match any of the rules above: Apprise `URLS`, Pushover `USER`, Rocket.Chat `USER_ID`, and Telegram `CHATID`.
 - Container runtime environment variables come from the same redactor `GET /containers` uses, so the dump is never a laxer view of them than the API is.
 
 Names are always kept; only values are replaced with `[REDACTED]`. Downloads are recorded in the audit log as `debug-dump` and the route is limited to 5 requests per minute.
