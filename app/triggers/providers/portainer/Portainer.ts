@@ -582,6 +582,23 @@ function getTargetTag(container): string | undefined {
   return typeof resultTag === 'string' && resultTag.trim() !== '' ? resultTag : undefined;
 }
 
+// The env-mode pin is written into the stack env variable that renders the tag
+// half of a `repo:${VAR}` image, so the bound `repo:tag@sha256:...` identity has
+// to be reduced to `tag@sha256:...`. An identity carrying no tag of its own
+// cannot be expressed that way: the inherited binding falls back to the bare
+// `repo@sha256:...` RepoDigest when the pulled reference already carried a
+// digest, and dropping that into the variable would render `repo:repo@sha256:...`
+// rather than a reference to anything.
+function extractPinnedTagValue(imageIdentity: string): string | undefined {
+  const separatorIndex = imageIdentity.indexOf('@');
+  const reference = separatorIndex > 0 ? imageIdentity.slice(0, separatorIndex) : '';
+  const digest = imageIdentity.slice(separatorIndex + 1).trim();
+  const lastSlash = reference.lastIndexOf('/');
+  const lastColon = reference.indexOf(':', lastSlash + 1);
+  const tag = lastColon > lastSlash ? reference.slice(lastColon + 1).trim() : '';
+  return tag && digest ? `${tag}@${digest}` : undefined;
+}
+
 function upsertStackEnv(
   env: PortainerStackEnv[] | undefined,
   name: string,
@@ -1054,6 +1071,78 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     await super.runPreRuntimeUpdateLifecycle(context, container, logContainer, runtimeContext);
   }
 
+  /**
+   * Pin what the redeploy resolves to without changing which mutation the mode
+   * owns. `compose` mode already writes a literal reference into the stack
+   * file, so the pin rewrites that `image:` line to `repo:tag@sha256:...`.
+   * `env` mode leaves the stack file alone and updates a Portainer stack env
+   * variable that is the whole tag of the service image, so the pin goes into
+   * that variable's value as `tag@sha256:...` and Portainer renders the same
+   * bound identity while the stack text stays an env template. Rewriting the
+   * `image:` line in env mode instead would delete the `${VAR}` reference the
+   * stack is built on, leave the env update writing a variable nothing reads,
+   * and silently turn the stack into a compose-mode stack on the next `auto`
+   * cycle. A pin that cannot be expressed fails closed under `required` and
+   * warns under the other policies rather than redeploying a mutable tag
+   * while claiming it was pinned.
+   */
+  applyPortainerDigestPin(
+    resolved: ResolvedPortainerUpdate,
+    imageIdentity: string | undefined,
+    bindingPolicy: 'required' | 'optional' | 'disabled',
+    logContainer,
+  ): void {
+    const stackLabel = `${resolved.stack.Name || resolved.stack.Id} service ${resolved.service}`;
+    if (!imageIdentity) {
+      this.refusePortainerDigestPin(
+        bindingPolicy,
+        `Unable to pin Portainer stack ${stackLabel} to the bound image digest: no immutable image identity was captured`,
+        logContainer,
+      );
+      return;
+    }
+
+    if (resolved.mode === 'env') {
+      const { versionVar } = resolved;
+      const pinnedTagValue = extractPinnedTagValue(imageIdentity);
+      if (
+        !versionVar ||
+        extractTagVariable(resolved.serviceImage) !== versionVar ||
+        !pinnedTagValue
+      ) {
+        this.refusePortainerDigestPin(
+          bindingPolicy,
+          `Unable to pin Portainer stack ${stackLabel} to the bound image digest in env mode: ${imageIdentity} cannot be expressed as the value of a version env variable that renders the whole image tag`,
+          logContainer,
+        );
+        return;
+      }
+      resolved.updatedEnv = upsertStackEnv(resolved.updatedEnv, versionVar, pinnedTagValue);
+      logContainer.info(
+        `Pin Portainer stack ${stackLabel} env variable ${versionVar} to ${pinnedTagValue}`,
+      );
+      return;
+    }
+
+    resolved.updatedStackFileContent = updateComposeServiceImageInText(
+      resolved.stackFileContent,
+      resolved.service,
+      imageIdentity,
+    );
+    logContainer.info(`Pin Portainer stack ${stackLabel} image to ${imageIdentity}`);
+  }
+
+  refusePortainerDigestPin(
+    bindingPolicy: 'required' | 'optional' | 'disabled',
+    message: string,
+    logContainer,
+  ): void {
+    if (bindingPolicy === 'required') {
+      throw new Error(message);
+    }
+    logContainer.warn(`${message}; redeploying without a pinned image reference`);
+  }
+
   async performContainerUpdate(
     context,
     container,
@@ -1115,8 +1204,8 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     // performs the create. A move after this point is only detected after the
     // fact: the redeploy fails to converge on the scanned image ID, so an
     // unscanned container runs until the timeout expires, and the restore below
-    // is an attempt whose own failure is reported in the error. Pinning the
-    // stack content below closes that window instead of only detecting it.
+    // is an attempt whose own failure is reported in the error. Pinning what
+    // gets PUT below closes that window instead of only detecting it.
     const verifiedTargetImageId = await this.capturePulledImageId(
       context.dockerApi,
       context.newImage,
@@ -1130,33 +1219,18 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       return false;
     }
 
-    // A binding policy of `required` forces the stack content itself to carry
-    // the pinned `repo:tag@sha256:...` identity, mirroring what the compose
-    // action's own `digestPinning` option does when the operator opts in. With
-    // the mutable tag never appearing in what gets PUT, a retag after this
-    // point cannot reach the container Portainer creates: `pullImage:false`
-    // means it has to use the image already tagged locally with that digest,
-    // and moving the bare tag elsewhere does not change what that reference
-    // resolves to. Optional/disabled policies keep today's unpinned redeploy
-    // unless the operator has enabled `digestPinning` themselves.
+    // A binding policy of `required` forces what gets PUT to carry the pinned
+    // `repo:tag@sha256:...` identity, mirroring what the compose action's own
+    // `digestPinning` option does when the operator opts in. With the mutable
+    // tag never appearing in what Portainer resolves, a retag after this point
+    // cannot reach the container it creates: `pullImage:false` means it has to
+    // use the image already tagged locally with that digest, and moving the
+    // bare tag elsewhere does not change what that reference resolves to.
+    // Optional/disabled policies keep today's unpinned redeploy unless the
+    // operator has enabled `digestPinning` themselves.
     const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
     if (this.configuration.digestPinning === true || bindingPolicy === 'required') {
-      if (!binding.imageIdentity) {
-        if (bindingPolicy === 'required') {
-          throw new Error(
-            `Unable to pin Portainer stack ${resolved.stack.Name || resolved.stack.Id} service ${resolved.service} to the bound image digest: no immutable image identity was captured`,
-          );
-        }
-      } else {
-        resolved.updatedStackFileContent = updateComposeServiceImageInText(
-          resolved.stackFileContent,
-          resolved.service,
-          binding.imageIdentity,
-        );
-        logContainer.info(
-          `Pin Portainer stack ${resolved.stack.Name || resolved.stack.Id} service ${resolved.service} image to ${binding.imageIdentity}`,
-        );
-      }
+      this.applyPortainerDigestPin(resolved, binding.imageIdentity, bindingPolicy, logContainer);
     }
 
     const dockerApi = context.dockerApi as DockerApiWithListContainers | undefined;
@@ -1290,6 +1364,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
 export default Portainer;
 
 export {
+  extractPinnedTagValue as testable_extractPinnedTagValue,
   extractTagVariable as testable_extractTagVariable,
   getComposeConfigFiles as testable_getComposeConfigFiles,
   getComposeProjectPaths as testable_getComposeProjectPaths,

@@ -1,5 +1,6 @@
 import DockerBase from '../docker/Docker.js';
 import Portainer, {
+  testable_extractPinnedTagValue,
   testable_extractTagVariable,
   testable_getComposeConfigFiles,
   testable_getComposeProjectPaths,
@@ -127,6 +128,20 @@ test('extractTagVariable detects a compose tag variable with fallback', () => {
   expect(testable_extractTagVariable(undefined)).toBeUndefined();
   expect(testable_extractTagVariable('pihole/pihole@sha256:abc')).toBeUndefined();
   expect(testable_extractTagVariable('pihole/pihole')).toBeUndefined();
+});
+
+test('extractPinnedTagValue reduces a bound identity to the tag half of an env-mode image', () => {
+  expect(testable_extractPinnedTagValue(`pihole/pihole:2026.07.2@${IMAGE_A_DIGEST}`)).toBe(
+    `2026.07.2@${IMAGE_A_DIGEST}`,
+  );
+  expect(testable_extractPinnedTagValue(`registry:5000/app:1.2.3@${IMAGE_A_DIGEST}`)).toBe(
+    `1.2.3@${IMAGE_A_DIGEST}`,
+  );
+  // A bare RepoDigest carries no tag of its own, so there is nothing an env
+  // variable that renders the tag could be set to.
+  expect(testable_extractPinnedTagValue(`pihole/pihole@${IMAGE_A_DIGEST}`)).toBeUndefined();
+  expect(testable_extractPinnedTagValue(`@${IMAGE_A_DIGEST}`)).toBeUndefined();
+  expect(testable_extractPinnedTagValue('pihole/pihole:2026.07.2@')).toBeUndefined();
 });
 
 test('Portainer defaults to HTTPS and normalizes the allowHttp alias', () => {
@@ -1772,6 +1787,145 @@ test('performContainerUpdate leaves the stack content unpinned when digest pinni
   expect(resolved.updatedStackFileContent).toBe(
     'services:\n  pihole:\n    image: pihole/pihole:2026.07.2\n',
   );
+  expect(trigger.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining('redeploying without a pinned image reference'),
+  );
+});
+
+// An env-mode stack's `image:` line is a template the operator owns: the tag is
+// a stack env variable and the update is that variable's value. Pinning has to
+// go through the variable, because rewriting the image line would delete the
+// `${VAR}` reference, leave `updatedEnv` writing a variable nothing reads, and
+// silently move the stack to compose mode on the next `auto` cycle.
+function makeResolvedEnvUpdate(overrides: Record<string, unknown> = {}) {
+  const template = 'services:\n  pihole:\n    image: pihole/pihole:${PIHOLE_TAG:-2026.05.0}\n';
+  return {
+    mode: 'env' as const,
+    stack: {
+      Id: 12,
+      Name: 'pihole',
+      EndpointId: 1,
+      Env: [{ name: 'PIHOLE_TAG', value: '2026.05.0' }],
+    },
+    stackFileContent: template,
+    service: 'pihole',
+    serviceImage: 'pihole/pihole:${PIHOLE_TAG:-2026.05.0}',
+    versionVar: 'PIHOLE_TAG',
+    originalImage: 'pihole/pihole:2026.05.0',
+    targetImage: 'pihole/pihole:2026.07.2',
+    targetTag: '2026.07.2',
+    updatedStackFileContent: template,
+    updatedEnv: [{ name: 'PIHOLE_TAG', value: '2026.07.2' }],
+    ...overrides,
+  };
+}
+
+test('performContainerUpdate pins an env-mode stack through the version variable and leaves the template alone', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const resolved = makeResolvedEnvUpdate();
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
+      }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  expect(result).toBe(true);
+  // The rendered reference is the bound identity, the stack text is untouched,
+  // and the `${PIHOLE_TAG}` reference survives for the next cycle.
+  expect(redeploy).toHaveBeenCalledWith(resolved.stack, resolved.stackFileContent, [
+    { name: 'PIHOLE_TAG', value: `2026.07.2@${IMAGE_A_DIGEST}` },
+  ]);
+  expect(redeploy.mock.calls[0][1]).toContain('${PIHOLE_TAG:-2026.05.0}');
+  expect(resolved.updatedStackFileContent).toBe(resolved.stackFileContent);
+});
+
+test('performContainerUpdate refuses an env-mode pin the version variable cannot express under a required policy', async () => {
+  // `resolvePortainerUpdate` already refuses an env-mode stack whose variable
+  // is not the whole image tag, so this exercises the pin block's own refusal
+  // rather than depending on that upstream validation staying where it is.
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const resolved = makeResolvedEnvUpdate({ serviceImage: 'pihole/pihole:v${PIHOLE_TAG}' });
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
+      }),
+    }),
+    listContainers: vi.fn(),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+
+  await expect(
+    trigger.performContainerUpdate(
+      { dockerApi, auth: undefined, newImage: resolved.targetImage },
+      makeContainer(),
+      trigger.log,
+      undefined,
+      vi.fn().mockResolvedValue(undefined),
+    ),
+  ).rejects.toThrow(
+    `Unable to pin Portainer stack pihole service pihole to the bound image digest in env mode: pihole/pihole:2026.07.2@${IMAGE_A_DIGEST} cannot be expressed as the value of a version env variable that renders the whole image tag`,
+  );
+  expect(redeploy).not.toHaveBeenCalled();
+  expect(dockerApi.listContainers).not.toHaveBeenCalled();
+});
+
+test('performContainerUpdate warns and redeploys unpinned when an env-mode pin cannot be expressed under an optional policy', async () => {
+  const trigger = makeTrigger({ skipEndpointVerification: true });
+  trigger.configuration.digestPinning = true;
+  mockGetSecurityConfiguration.mockReturnValue(
+    createSecurityConfiguration({ availabilityPolicy: 'warn' }),
+  );
+  vi.spyOn(trigger, 'recordSecurityAudit').mockReturnValue(undefined);
+  const resolved = makeResolvedEnvUpdate({ serviceImage: 'pihole/pihole:v${PIHOLE_TAG}' });
+  vi.spyOn(trigger, 'resolvePortainerUpdate').mockResolvedValue(resolved);
+  vi.spyOn(trigger, 'pullImage').mockResolvedValue(undefined);
+  const dockerApi = {
+    getImage: vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:new',
+        RepoDigests: [`pihole/pihole@${IMAGE_A_DIGEST}`],
+      }),
+    }),
+    listContainers: vi.fn().mockResolvedValue([makeRunningReplica()]),
+  };
+  const redeploy = vi.spyOn(trigger, 'redeployPortainerStack').mockResolvedValue(undefined);
+  vi.spyOn(trigger, 'waitForPortainerRedeploy').mockResolvedValue(undefined);
+
+  const result = await trigger.performContainerUpdate(
+    { dockerApi, auth: undefined, newImage: resolved.targetImage },
+    makeContainer(),
+    trigger.log,
+    undefined,
+    vi.fn().mockResolvedValue(undefined),
+  );
+
+  expect(result).toBe(true);
+  expect(trigger.log.warn).toHaveBeenCalledWith(expect.stringContaining('in env mode'));
+  expect(redeploy).toHaveBeenCalledWith(resolved.stack, resolved.stackFileContent, [
+    { name: 'PIHOLE_TAG', value: '2026.07.2' },
+  ]);
 });
 
 test('performContainerUpdate treats a running replica pinned by a previous cycle as the same original image', async () => {
