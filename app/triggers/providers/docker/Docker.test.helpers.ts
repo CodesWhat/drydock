@@ -86,7 +86,11 @@ vi.mock('../../../security/scan.js', () => ({
   clearDigestScanCache: vi.fn(),
   getDigestScanCacheSize: vi.fn().mockReturnValue(0),
   updateDigestScanCache: vi.fn(),
-  scanImageWithDedup: vi.fn(),
+  // Mirrors the real dedup wrapper: a cache miss delegates to the scanner.
+  scanImageWithDedup: vi.fn(async (options: any) => ({
+    scanResult: await mockScanImageForVulnerabilities(options),
+    fromCache: false,
+  })),
 }));
 
 vi.mock('../../../store/container.js', () => ({
@@ -224,15 +228,25 @@ function createDefaultRegistryState() {
             }
             return Promise.reject(new Error('Error when pulling image'));
           },
-          getImage: (image) =>
-            Promise.resolve({
-              remove: () => {
-                if (image === 'test/test:1.2.3') {
-                  return Promise.resolve();
-                }
-                return Promise.reject(new Error('Error when removing image'));
-              },
-            }),
+          getImage: (image) => ({
+            remove: () => {
+              if (image === 'test/test:1.2.3') {
+                return Promise.resolve();
+              }
+              return Promise.reject(new Error('Error when removing image'));
+            },
+            // dockerode returns the image handle synchronously. The post-pull identity
+            // binding inspects it for the manifest digest of the image actually pulled.
+            inspect: () =>
+              Promise.resolve({
+                Id: `sha256:${'1'.repeat(64)}`,
+                RepoDigests: [
+                  `${String(image)
+                    .split('@')[0]
+                    .replace(/:[^:/]+$/, '')}@sha256:${'2'.repeat(64)}`,
+                ],
+              }),
+          }),
           modem: {
             followProgress: (pullStream, res) => res(),
           },
@@ -396,7 +410,7 @@ export function stubTriggerFlow(opts = {}) {
     NetworkSettings: { Networks: {} },
     ...inspectOverrides,
   });
-  vi.spyOn(docker, 'pruneImages').mockResolvedValue();
+  const pruneImagesSpy = vi.spyOn(docker, 'pruneImages').mockResolvedValue();
   vi.spyOn(docker, 'pullImage').mockResolvedValue();
   vi.spyOn(docker, 'cloneContainer').mockReturnValue({ name: 'container-name' });
   vi.spyOn(docker, 'stopContainer').mockResolvedValue();
@@ -413,7 +427,7 @@ export function stubTriggerFlow(opts = {}) {
   vi.spyOn(docker, 'startContainer').mockResolvedValue();
   const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue();
 
-  return { waitSpy, removeImageSpy };
+  return { waitSpy, removeImageSpy, pruneImagesSpy };
 }
 
 /** Create a mock log with common methods */
