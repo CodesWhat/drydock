@@ -843,6 +843,30 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.runPreRuntimeUpdateLifecycle).toHaveBeenCalledTimes(1);
   });
 
+  test('fails a deferred update whose runtime override never invokes the post-pull hook', async () => {
+    const harness = createHarness({
+      createTriggerContext: vi.fn().mockResolvedValue(
+        createContext({
+          newImage: 'ghcr.io/acme/web:1.1.0',
+          deferSignatureVerification: true,
+          deferPreRuntimeUpdateLifecycle: true,
+        }),
+      ),
+      // A subclass that replaces the runtime update wholesale and forgets the
+      // hook would otherwise skip the security gate, the pre-update hook and
+      // the prune/backup step without a single message.
+      performContainerUpdate: vi.fn().mockResolvedValue(true),
+    });
+
+    await expect(harness.executor.run(createContainer())).rejects.toThrow(
+      'never invoked the post-pull hook',
+    );
+    expect(harness.scanAndGatePostPull).not.toHaveBeenCalled();
+    expect(harness.runPreUpdateHook).not.toHaveBeenCalled();
+    expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
+    expect(harness.runPostUpdateHook).not.toHaveBeenCalled();
+  });
+
   test('defers signature verification until post-pull identity is available', async () => {
     let capturedPostPullHook:
       | ((operationId: string, imageIdentity?: string) => Promise<void>)
