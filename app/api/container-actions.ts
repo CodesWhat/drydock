@@ -10,11 +10,16 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import {
   type RejectedContainerUpdateRequest,
-  requestContainerUpdate,
   requestContainerUpdates,
-  UpdateRequestError,
 } from '../updates/request-update.js';
 import { recordAuditEvent } from './audit-events.js';
+import {
+  areContainerActionsEnabled,
+  CONTAINER_ACTIONS_DISABLED_MESSAGE,
+  CONTAINER_NOT_FOUND_MESSAGE,
+  dispatchManualContainerUpdate,
+  sendContainerUpdateDispatchOutcome,
+} from './container-update-dispatch.js';
 import {
   AGENT_LIFECYCLE_UNSUPPORTED_ERROR,
   findDockerTriggerForContainer,
@@ -213,38 +218,19 @@ async function restartContainer(req: Request, res: Response) {
  * Update a container by pulling the new image and recreating the container.
  */
 async function updateContainer(req: Request, res: Response) {
-  const serverConfiguration = getServerConfiguration();
-  if (!serverConfiguration.feature.containeractions) {
-    sendErrorResponse(res, 403, 'Container actions are disabled');
+  if (!areContainerActionsEnabled()) {
+    sendErrorResponse(res, 403, CONTAINER_ACTIONS_DISABLED_MESSAGE);
     return;
   }
 
   const id = req.params.id as string;
   const container = storeContainer.getContainer(id);
   if (!container) {
-    sendErrorResponse(res, 404, 'Container not found');
+    sendErrorResponse(res, 404, CONTAINER_NOT_FOUND_MESSAGE);
     return;
   }
 
-  try {
-    const accepted = await requestContainerUpdate(container);
-    getContainerActionsCounter()?.inc({ action: 'container-update' });
-    res
-      .status(202)
-      .json({ message: 'Container update accepted', operationId: accepted.operationId });
-  } catch (error: unknown) {
-    if (error instanceof UpdateRequestError) {
-      sendErrorResponse(res, error.statusCode, error.message);
-      return;
-    }
-
-    log.warn(
-      `Unexpected error accepting update for container ${sanitizeLogParam(id)} (${sanitizeLogParam(
-        error instanceof Error ? error.message : String(error),
-      )})`,
-    );
-    sendErrorResponse(res, 500, 'Unable to accept container update');
-  }
+  sendContainerUpdateDispatchOutcome(res, await dispatchManualContainerUpdate(container));
 }
 
 async function updateContainers(req: Request, res: Response) {
