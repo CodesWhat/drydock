@@ -1938,7 +1938,7 @@ class Docker<
    * gated for this update, while the operation still reports success.
    *
    * Prefers the digest the watcher already resolved for this candidate
-   * (`container.result.digest`, set during discovery — no extra lookup).
+   * (`container.result.digest`, set during discovery, no extra lookup).
    * Falls back to a registry manifest lookup, which is cheap when the same
    * image was already resolved earlier in the same poll cycle (BaseRegistry
    * caches it). Otherwise picks deterministically and logs every candidate
@@ -1976,7 +1976,7 @@ class Docker<
         }
       }
     } catch {
-      // Best-effort disambiguation only — fall through to the deterministic pick.
+      // Best-effort disambiguation only. Fall through to the deterministic pick.
     }
 
     const sorted = [...candidates].sort();
