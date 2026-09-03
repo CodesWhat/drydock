@@ -16,7 +16,7 @@ Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
 Image backup|No|Pre-update backup with retention|self
 Dry-run preview|Limited|Yes|self
 Registry providers|Major registries|23 dedicated integrations|self
-Notifications|SMTP, Gotify, ntfy, Pushover, Telegram, Mattermost, Teams, Bark, Signal, Apprise passthrough (80+ services)|21 native trigger integrations|self
+Trigger integrations|SMTP, Gotify, ntfy, Pushover, Telegram, Mattermost, Teams, Bark, Signal, Apprise passthrough (80+ services)|21 native trigger integrations|self
 MQTT / Home Assistant|Yes|Yes|tie
 Distributed agents|Yes (headless agents)|Yes (SSE-based agents)|tie
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie

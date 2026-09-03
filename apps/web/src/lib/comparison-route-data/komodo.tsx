@@ -15,7 +15,7 @@ Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
 Image backup|No|Pre-update backup with retention|self
 Security scanning (Trivy)|No|Trivy + SBOM + cosign verification|self
 Registry providers|Limited|23 dedicated integrations|self
-Notification services|Slack, Discord, Ntfy, Pushover|21 native trigger integrations|self
+Trigger integrations|Slack, Discord, Ntfy, Pushover|21 native trigger integrations|self
 MQTT / Home Assistant|No|Yes|self
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
 Passkey / TOTP 2FA|Yes|Planned|competitor

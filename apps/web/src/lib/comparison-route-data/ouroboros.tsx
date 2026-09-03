@@ -10,7 +10,7 @@ Web UI|None (CLI only)|Full dashboard|self
 Auto-update containers|Yes|Yes (optional, monitor-first)|self
 Docker Compose updates|No|Yes, pull & recreate|self
 Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
-Notifications|Apprise passthrough (150+ platforms via Apprise URLs)|21 native trigger integrations|self
+Trigger integrations|Apprise passthrough (150+ platforms via Apprise URLs)|21 native trigger integrations|self
 Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|None|Authelia, Auth0, Authentik|self
 REST API|None|Full REST API|self

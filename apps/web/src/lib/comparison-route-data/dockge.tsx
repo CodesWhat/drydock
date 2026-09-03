@@ -10,7 +10,7 @@ Web UI|Yes|Yes|tie
 Primary focus|Compose stack management|Container update monitoring|tie
 Image update detection|No|Yes, across 23 registries|self
 Auto-update containers|No|Yes (optional, monitor-first)|self
-Notifications on updates|No|21 native trigger integrations|self
+Trigger integrations|No|21 native trigger integrations|self
 Security scanning|No|Trivy + SBOM + cosign verification|self
 Automatic rollback|No|Yes, on health check failure|self
 Image backup|No|Pre-update backup with retention|self

@@ -13,7 +13,7 @@ Auto-update containers|No|Yes (optional, monitor-first)|self
 Security scanning|No|Trivy + SBOM + cosign verification|self
 Automatic rollback|No|Yes, on health check failure|self
 Image backup|No|Pre-update backup with retention|self
-Notifications|Slack, Discord, Ntfy, webhooks|21 native trigger integrations|self
+Trigger integrations|Slack, Discord, Ntfy, webhooks|21 native trigger integrations|self
 MQTT / Home Assistant|No|Yes|self
 Prometheus metrics|No|Full /metrics endpoint + Grafana template|self
 Audit log|No|Yes, with REST API|self

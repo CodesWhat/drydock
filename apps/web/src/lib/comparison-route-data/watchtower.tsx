@@ -11,7 +11,7 @@ Update approach|Auto-pulls & restarts|Monitor + notify (optional update)|self
 Monitor-only mode|Flag exists; pulls images anyway due to Docker API limits|Core design — monitor-first|self
 Dry-run preview|No|Yes|self
 Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
-Notifications|Via Shoutrrr (~20 services)|21 native trigger integrations|tie
+Trigger integrations|Via Shoutrrr (~20 services)|21 native trigger integrations|tie
 Security scanning|None|Trivy + SBOM + cosign verification|self
 Per-container scheduling|No|Yes (per-watcher CRON)|self
 Include/exclude patterns|Labels only|Labels, regex, image sets|self

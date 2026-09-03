@@ -15,7 +15,7 @@ Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
 Image backup & dry-run|No|Pre-update backup + dry-run preview|self
 Security scanning|No|Trivy + SBOM + cosign (free)|self
 Registry providers|Major registries|23 dedicated integrations|self
-Notifications|Slack, Teams (BE only)|21 native trigger integrations|self
+Trigger integrations|Slack, Teams (BE only)|21 native trigger integrations|self
 MQTT / Home Assistant|No|Yes|self
 Grafana dashboard|No|Yes, importable template|self
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
