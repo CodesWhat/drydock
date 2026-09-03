@@ -2679,7 +2679,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.6...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.7...HEAD
+[1.7.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.6...v1.7.0-rc.7
 [1.7.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.5...v1.7.0-rc.6
 [1.7.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.4...v1.7.0-rc.5
 [1.7.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.3...v1.7.0-rc.4
