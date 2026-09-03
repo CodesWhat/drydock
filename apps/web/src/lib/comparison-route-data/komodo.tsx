@@ -68,8 +68,8 @@ lock|Fully Open Source|Every Drydock feature is free and open source. Both Drydo
       <strong className="text-neutral-900 dark:text-neutral-200">
         safe container update monitoring
       </strong>{" "}
-      with rollback, maintenance windows, security scanning, and 23 registry integrations plus 21
-      notification services.
+      with rollback, maintenance windows, security scanning, and 23 registry integrations plus 17
+      notification services and 4 update actions.
     </p>
   ),
   migrationTitle: "Considering Komodo?",

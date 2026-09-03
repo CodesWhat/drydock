@@ -72,7 +72,7 @@ rotate|Works Great Together|Dozzle for deep log analysis and Drydock for update 
   ),
   migrationTitle: "Using Dozzle?",
   migrationDescription:
-    "Drydock and Dozzle are complementary tools. Use Dozzle for real-time log viewing and Drydock for monitoring container updates, applying them safely, and getting notified across 21 services. One Docker command to add Drydock.",
+    "Drydock and Dozzle are complementary tools. Use Dozzle for real-time log viewing and Drydock for monitoring container updates, applying them safely, and getting notified across 17 services with 4 more that can apply the update directly. One Docker command to add Drydock.",
   jsonLdName: "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
   jsonLdDescription: "Compare Dozzle and Drydock for Docker container management.",
 } satisfies ComparisonRouteRawConfig;

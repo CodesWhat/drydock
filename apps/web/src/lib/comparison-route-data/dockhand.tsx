@@ -46,7 +46,7 @@ lock|Fully Open Source|Every Drydock feature is free and open source. Dockhand g
   },
   metadataTitle: "Dockhand vs Drydock — Container Update Monitoring Comparison",
   metadataDescription:
-    "Compare Dockhand and Drydock for container update monitoring. See how Drydock's 23 registries, 21 notification triggers, automatic rollback, and distributed agents compare to Dockhand's approach.",
+    "Compare Dockhand and Drydock for container update monitoring. See how Drydock's 23 registries, 17 notification services and 4 update actions, automatic rollback, and distributed agents compare to Dockhand's approach.",
   metadataKeywords: [
     "dockhand vs drydock",
     "dockhand alternative",
