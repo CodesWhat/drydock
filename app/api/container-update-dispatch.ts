@@ -26,7 +26,7 @@ import { sendErrorResponse } from './error-response.js';
 
 const log = logger.child({ component: 'container-update-dispatch' });
 
-export const CONTAINER_UPDATE_ACCEPTED_MESSAGE = 'Container update accepted';
+const CONTAINER_UPDATE_ACCEPTED_MESSAGE = 'Container update accepted';
 export const CONTAINER_ACTIONS_DISABLED_MESSAGE = 'Container actions are disabled';
 export const CONTAINER_NOT_FOUND_MESSAGE = 'Container not found';
 const CONTAINER_UPDATE_UNAVAILABLE_MESSAGE = 'Unable to accept container update';

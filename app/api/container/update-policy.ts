@@ -46,7 +46,7 @@ const SAFE_CLIENT_ERRORS = new Set([
 
 type UpdatePolicyActionResult = { policy: ContainerUpdatePolicy } | { error: string };
 /** The stored container, or a message safe to hand a client verbatim. */
-export type ContainerUpdatePolicyWriteResult = { container: Container } | { error: string };
+type ContainerUpdatePolicyWriteResult = { container: Container } | { error: string };
 type UniqStringsFn = UpdatePolicyHandlerDependencies['uniqStrings'];
 type AuditedUpdatePolicyField = DeclarativeUpdatePolicyField | 'snoozeUntil';
 
