@@ -13,7 +13,7 @@ Auto-update containers|No|Yes (optional, monitor-first)|self
 Security scanning|No|Trivy + SBOM + cosign verification|self
 Automatic rollback|No|Yes, on health check failure|self
 Image backup|No|Pre-update backup with retention|self
-Notifications|Slack, Discord, Ntfy, webhooks|20 native trigger integrations|self
+Notifications|Slack, Discord, Ntfy, webhooks|21 native trigger integrations|self
 MQTT / Home Assistant|No|Yes|self
 Prometheus metrics|No|Full /metrics endpoint + Grafana template|self
 Audit log|No|Yes, with REST API|self
@@ -32,7 +32,7 @@ License|MIT|AGPL-3.0|tie
 eye|Image Update Detection|Dozzle is a log viewer — it doesn't monitor for image updates. Drydock continuously checks 23 registries and notifies you when new versions are available.
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation, and cosign signature verification before updates are applied. Dozzle has no image security capabilities — no vulnerability scanning, SBOM generation, or signature verification.
 rotate|Safe Update Pipeline|Dry-run preview, pre-update backup, automatic rollback on health check failure, and maintenance windows. Dozzle doesn't manage container updates at all.
-bell|20 Trigger Integrations|Drydock notifies across 17 native channels — Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more — plus Docker, Docker Compose, and Command actions. Dozzle sends runtime alerts (log patterns, CPU/memory spikes, container crashes) via webhooks to Slack, Discord, or ntfy.
+bell|21 Trigger Integrations|Drydock notifies across 17 native channels, Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more, plus Docker, Docker Compose, Portainer, and Command actions. Dozzle sends runtime alerts (log patterns, CPU/memory spikes, container crashes) via webhooks to Slack, Discord, or ntfy.
 radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more.
 rotate|Works Great Together|Dozzle for deep log analysis and Drydock for update monitoring — they solve different problems and can run side-by-side in your Docker stack.
 `,
@@ -72,7 +72,7 @@ rotate|Works Great Together|Dozzle for deep log analysis and Drydock for update 
   ),
   migrationTitle: "Using Dozzle?",
   migrationDescription:
-    "Drydock and Dozzle are complementary tools. Use Dozzle for real-time log viewing and Drydock for monitoring container updates, applying them safely, and getting notified across 20 services. One Docker command to add Drydock.",
+    "Drydock and Dozzle are complementary tools. Use Dozzle for real-time log viewing and Drydock for monitoring container updates, applying them safely, and getting notified across 21 services. One Docker command to add Drydock.",
   jsonLdName: "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
   jsonLdDescription: "Compare Dozzle and Drydock for Docker container management.",
 } satisfies ComparisonRouteRawConfig;
