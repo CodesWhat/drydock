@@ -17,6 +17,19 @@ const SENSITIVE_KEY_TOKENS = new Set([
 ]);
 const ENV_SENSITIVE_KEY_TOKENS = new Set(['auth', 'bearer', 'login', 'url']);
 
+// A field name that is a credential for one provider and ordinary data for the
+// rest. Pushover's `user` is its 30-character user key; SMTP's `user` is a
+// mailbox address. Apprise's `urls`, Rocket.Chat's `id`, and Telegram's
+// `chatid` carry credentials, while similarly named fields elsewhere do not.
+// Widening the name list to catch these would hide ordinary data for no reason,
+// so this is resolved by the provider segment instead.
+const PROVIDER_SPECIFIC_SENSITIVE_ENV_FIELDS = new Map<string, ReadonlySet<string>>([
+  ['pushover', new Set(['user'])],
+  ['apprise', new Set(['urls'])],
+  ['rocketchat', new Set(['id'])],
+  ['telegram', new Set(['chatid'])],
+]);
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return false;
@@ -37,6 +50,19 @@ function isEnvStyleKey(key: string): boolean {
   return key.includes('_') && key === key.toUpperCase();
 }
 
+// The provider segment is matched anywhere in the key, so the legacy
+// `DD_TRIGGER_*` prefix resolves the same way the current `DD_NOTIFICATION_*`
+// one does.
+function isProviderSpecificSensitiveEnvField(tokens: string[]): boolean {
+  const field = tokens.at(-1);
+  if (field === undefined) {
+    return false;
+  }
+  return tokens.some(
+    (token) => PROVIDER_SPECIFIC_SENSITIVE_ENV_FIELDS.get(token)?.has(field) === true,
+  );
+}
+
 function isSensitiveKey(key: string): boolean {
   const tokens = getKeyTokens(key);
   if (tokens.some((token) => SENSITIVE_KEY_TOKENS.has(token))) {
@@ -45,7 +71,10 @@ function isSensitiveKey(key: string): boolean {
   if (!isEnvStyleKey(key)) {
     return false;
   }
-  return tokens.some((token) => ENV_SENSITIVE_KEY_TOKENS.has(token));
+  if (tokens.some((token) => ENV_SENSITIVE_KEY_TOKENS.has(token))) {
+    return true;
+  }
+  return isProviderSpecificSensitiveEnvField(tokens);
 }
 
 function redactMatchedValue(value: unknown): unknown {
