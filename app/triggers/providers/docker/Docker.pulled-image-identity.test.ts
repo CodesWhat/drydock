@@ -88,6 +88,43 @@ test('keeps the operator tag when rebinding a Docker Hub short reference', async
   ).resolves.toEqual({ imageIdentity: `nginx:1.1.0@${PULLED_DIGEST}` });
 });
 
+test('binds an index.docker.io reference to the short repository digest the daemon records', async () => {
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  // The daemon rewrites the index.docker.io alias to docker.io and records Hub
+  // images under their short name, so the pulled reference and the RepoDigests
+  // entry never spell the repository the same way.
+  const dockerApi = createImageApi({
+    Id: LOCAL_IMAGE_ID,
+    RepoDigests: [`nginx@${PULLED_DIGEST}`],
+  });
+
+  await expect(
+    docker.bindPulledImageIdentity(
+      dockerApi,
+      'index.docker.io/nginx:1.27',
+      createTriggerContainer(),
+      createLogContainer(),
+    ),
+  ).resolves.toEqual({ imageIdentity: `nginx:1.27@${PULLED_DIGEST}` });
+});
+
+test('binds an index.docker.io library reference to the same short repository digest', async () => {
+  mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+  const dockerApi = createImageApi({
+    Id: LOCAL_IMAGE_ID,
+    RepoDigests: [`nginx@${PULLED_DIGEST}`],
+  });
+
+  await expect(
+    docker.bindPulledImageIdentity(
+      dockerApi,
+      'index.docker.io/library/nginx:1.27',
+      createTriggerContainer(),
+      createLogContainer(),
+    ),
+  ).resolves.toEqual({ imageIdentity: `nginx:1.27@${PULLED_DIGEST}` });
+});
+
 test('leaves a digest-only reference alone because it is already immutable', async () => {
   mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
   const dockerApi = createImageApi({

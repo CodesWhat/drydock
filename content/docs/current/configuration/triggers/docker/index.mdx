@@ -26,7 +26,7 @@ If **any step fails**, the trigger automatically rolls back:
 2. Rename the old container back to the original name
 3. Restart the old container (if it was previously running)
 
-If Drydock restarts while an update is in progress, it automatically reconciles the interrupted operation on startup — restoring the old container or cleaning up stale temporaries as needed. When [Update Bouncer](/docs/configuration/security) is configured, candidate images are scanned for vulnerabilities before the update proceeds. If the scan finds blocking issues, the update is aborted and recorded in the audit log; a `security-alert` notification is sent whenever the scan finds critical or high vulnerabilities, whether or not they block.
+If Drydock restarts while an update is in progress, it automatically reconciles the interrupted operation on startup — restoring the old container or cleaning up stale temporaries as needed. When [Update Bouncer](/docs/configuration/security) is configured, candidate images are scanned for vulnerabilities before the update proceeds. If the scan finds blocking issues, the update is aborted and recorded in the audit log; a `security-alert` notification is sent whenever the scan finds critical or high vulnerabilities, whether or not they block. If the daemon can't bind a pulled image to a digest, `block` mode and signature verification fail closed; `DD_SECURITY_AVAILABILITY_POLICY=warn` instead records a `security-scan-skipped` audit entry and proceeds without scanning the mutable tag, and only while signature verification is off: with verification enabled the update fails closed whatever the availability policy says.
 
 ## Variables
 
